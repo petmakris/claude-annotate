@@ -1,0 +1,15 @@
+{
+  "name": "claude-annotate",
+  "owner": {
+    "name": "Petros Makris",
+    "url": "https://github.com/petmakris"
+  },
+  "plugins": [
+    {
+      "name": "claude-annotate",
+      "version": "0.1.0",
+      "source": "./",
+      "description": "Read Claude's long answers in a browser and comment on any block; Claude rewrites that block in place."
+    }
+  ]
+}
