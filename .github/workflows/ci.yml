@@ -1,0 +1,32 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pytest
+      - run: python3 -m pytest skills -q
+
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+      # check-vendor.sh worktrees the engine at the SHA recorded in
+      # VENDOR.txt, so it needs full history — not a shallow clone.
+      - uses: actions/checkout@v4
+        with:
+          repository: petmakris/web-companion
+          path: engine
+          fetch-depth: 0
+      - name: Verify vendored engine matches its recorded SHA
+        run: ./engine/check-vendor.sh "$GITHUB_WORKSPACE/plugin"
