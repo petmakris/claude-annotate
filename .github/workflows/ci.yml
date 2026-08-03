@@ -19,14 +19,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: plugin
-      # check-vendor.sh worktrees the engine at the SHA recorded in
-      # VENDOR.txt, so it needs full history — not a shallow clone.
-      - uses: actions/checkout@v4
-        with:
-          repository: petmakris/web-companion
-          path: engine
-          fetch-depth: 0
-      - name: Verify vendored engine matches its recorded SHA
-        run: ./engine/check-vendor.sh "$GITHUB_WORKSPACE/plugin"
+      # Verified against the checksum manifest rather than by cloning
+      # petmakris/web-companion: GITHUB_TOKEN is scoped to this repository, so
+      # a cross-repo checkout fails outright while the engine repo is private.
+      # sync-vendor.sh writes VENDOR.sha256; the engine repo's check-vendor.sh
+      # is the stronger local check that this tree also matches its upstream SHA.
+      - name: Verify the vendored engine has not been hand-edited
+        working-directory: skills/_shared
+        run: |
+          shasum -a 256 -c VENDOR.sha256
+          # shasum -c only checks files the manifest lists, so an ADDED file
+          # would slip through. Compare counts to catch that too.
+          listed=$(wc -l < VENDOR.sha256)
+          actual=$(find . -type f ! -name 'VENDOR.sha256' -not -path '*/__pycache__/*' | wc -l)
+          if [ "$listed" -ne "$actual" ]; then
+            echo "vendored tree has $actual files, manifest lists $listed — re-run sync-vendor.sh" >&2
+            exit 1
+          fi

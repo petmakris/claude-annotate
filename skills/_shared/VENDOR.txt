@@ -1,2 +1,2 @@
 source=petmakris/web-companion
-commit=a5d46aa597366dc56dc57eb60f8e52395c623984
+commit=76af9c0ca63f2436a151ed91a7560a01363eb674
