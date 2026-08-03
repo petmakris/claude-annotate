@@ -45,7 +45,7 @@ What to do:
 The server is a long-lived singleton shared across all Claude Code sessions. Each turn, run this **once** before composing a response:
 
 ```bash
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.claude/plugins/known_marketplaces.json")))["petros-skills"]["installLocation"])')}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.claude/plugins/known_marketplaces.json")))["claude-annotate"]["installLocation"])')}"
 "$PLUGIN_ROOT/skills/annotate/ensure_server.sh"
 ```
 
