@@ -1,0 +1,15 @@
+{
+  "description": "progress_publish.py on PostToolUse — publishes a coarse, sanitized live-progress label to the annotate web companion while Claude is rewriting a block. Runs entirely outside the model loop, so it costs zero tokens. Only allowlisted labels are ever written; no paths, arguments or tool output can reach the browser.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skills/annotate/hooks/progress_publish.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
