@@ -42,7 +42,7 @@ Run this once at the top of every invocation, before anything else:
 ```bash
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(python3 -c '
 import json, os, sys
-NAME, MARKER = "claude-ide-review", "skills/walkthrough/ensure_server.sh"
+NAME, MARKER = "claude-annotate", "skills/walkthrough/ensure_server.sh"
 ok = lambda r: bool(r) and os.path.isfile(os.path.join(r, MARKER))
 for entry in os.environ.get("PATH", "").split(os.pathsep):
     if os.path.basename(entry) == "bin" and ok(os.path.dirname(entry)):
@@ -62,7 +62,7 @@ if ok(root):
     print(root); sys.exit()
 sys.exit(f"could not locate the {NAME} plugin root")
 ')}"
-[ -n "$PLUGIN_ROOT" ] || { echo "claude-ide-review: plugin root not found" >&2; exit 1; }
+[ -n "$PLUGIN_ROOT" ] || { echo "claude-annotate: plugin root not found" >&2; exit 1; }
 "$PLUGIN_ROOT/skills/walkthrough/ensure_server.sh"
 ```
 

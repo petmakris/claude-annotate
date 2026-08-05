@@ -38,7 +38,7 @@ The server is a long-lived singleton shared across all Claude Code sessions. Run
 ```bash
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(python3 -c '
 import json, os, sys
-NAME, MARKER = "claude-ide-review", "skills/interactive_review/ensure_server.sh"
+NAME, MARKER = "claude-annotate", "skills/interactive_review/ensure_server.sh"
 ok = lambda r: bool(r) and os.path.isfile(os.path.join(r, MARKER))
 for entry in os.environ.get("PATH", "").split(os.pathsep):
     if os.path.basename(entry) == "bin" and ok(os.path.dirname(entry)):
@@ -58,7 +58,7 @@ if ok(root):
     print(root); sys.exit()
 sys.exit(f"could not locate the {NAME} plugin root")
 ')}"
-[ -n "$PLUGIN_ROOT" ] || { echo "claude-ide-review: plugin root not found" >&2; exit 1; }
+[ -n "$PLUGIN_ROOT" ] || { echo "claude-annotate: plugin root not found" >&2; exit 1; }
 "$PLUGIN_ROOT/skills/interactive_review/ensure_server.sh"
 ```
 
