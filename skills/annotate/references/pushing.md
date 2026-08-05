@@ -45,11 +45,32 @@ What to do:
 The server is a long-lived singleton shared across all Claude Code sessions. Each turn, run this **once** before composing a response:
 
 ```bash
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.claude/plugins/known_marketplaces.json")))["claude-annotate"]["installLocation"])')}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(python3 -c '
+import json, os, sys
+NAME, MARKER = "claude-annotate", "skills/annotate/ensure_server.sh"
+ok = lambda r: bool(r) and os.path.isfile(os.path.join(r, MARKER))
+for entry in os.environ.get("PATH", "").split(os.pathsep):
+    if os.path.basename(entry) == "bin" and ok(os.path.dirname(entry)):
+        print(os.path.dirname(entry)); sys.exit()
+try:
+    root = json.load(open(os.path.expanduser("~/.claude/annotate/server.json")))["plugin_root"]
+except Exception:
+    root = None
+if ok(root):
+    print(root); sys.exit()
+try:
+    root = json.load(open(os.path.expanduser("~/.claude/plugins/known_marketplaces.json")))[NAME]["installLocation"]
+except Exception:
+    root = None
+if ok(root):
+    print(root); sys.exit()
+sys.exit(f"could not locate the {NAME} plugin root")
+')}"
+[ -n "$PLUGIN_ROOT" ] || { echo "claude-annotate: plugin root not found" >&2; exit 1; }
 "$PLUGIN_ROOT/skills/annotate/ensure_server.sh"
 ```
 
-`$CLAUDE_PLUGIN_ROOT` is **not** exported into the Bash tool's shell, so it is resolved here from the plugin marketplace registry as a fallback. It's idempotent and fast (<100 ms when the server is already up). Internally it delegates to `skills/_shared/web_companion/ensure_server.sh` — no need to call that directly. Do **not** use `run_in_background: true` — wait for it to return. If it exits non-zero, surface the stderr to the user and stop.
+`$CLAUDE_PLUGIN_ROOT` is **not** exported into the Bash tool's shell, so the root is resolved by probing, in order: every `bin/` directory on `PATH` (Claude Code adds `<plugin-root>/bin` for both `--plugin-dir` and marketplace installs, even when that directory does not exist), then a server this plugin already started, then the marketplace registry. Each candidate must actually contain `ensure_server.sh` — the check is a marker file, not a directory name, so it survives being cloned under any name. It's idempotent and fast (<100 ms when the server is already up). Internally it delegates to `skills/_shared/web_companion/ensure_server.sh` — no need to call that directly. Do **not** use `run_in_background: true` — wait for it to return. If it exits non-zero, surface the stderr to the user and stop.
 
 ## Create-or-attach a workspace for this conversation
 
