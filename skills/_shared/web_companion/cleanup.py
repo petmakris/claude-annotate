@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """Startup garbage-collection for web_companion state.
 
 Session state accumulated without bound: every push created a per-session

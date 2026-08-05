@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 from pathlib import Path
 from skills._shared.web_companion.sessions import Registry
 from skills._shared.web_companion.server import create_or_attach, list_rows

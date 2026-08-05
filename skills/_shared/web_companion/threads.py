@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """Per-anchor append-only thread persistence for interactive-review.
 
 Each thread lives in <state_dir>/threads/<encoded_anchor>.json with shape:

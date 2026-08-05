@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 # skills/_shared/web_companion/tests/test_sessions_list.py
 from pathlib import Path
 from skills._shared.web_companion.sessions import Registry

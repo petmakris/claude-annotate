@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 # Persistent per-session watcher.  Emits one stdout banner per event in
 # $EVENTS_DIR; exits when $STATE_DIR/finished or $STATE_DIR/cancelled exists.
 #

@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """Session registry shared by all web_companion skills.
 
 Migrated from skills/annotate/server.py:67-163. Each instance is

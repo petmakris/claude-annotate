@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """Tests for the session-browser landing page served at `/`."""
 import json
 import threading

@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """Handlers protocol that skills implement.
 
 The shared server dispatches requests it can't handle itself (root, static,

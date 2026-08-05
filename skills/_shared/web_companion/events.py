@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """Event queue helpers for web_companion.
 
 Skills enqueue events by calling append(); the watcher script reads them in

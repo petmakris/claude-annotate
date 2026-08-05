@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """One-command reply+ack for watcher-event handling.
 
 SKILL.md used to inline a heredoc that imported append_message and asked the

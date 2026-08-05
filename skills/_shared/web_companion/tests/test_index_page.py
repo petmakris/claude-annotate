@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """The workspace index has to work after a reboot, from another device.
 
 A workspace outlives every Claude session that touched it and survives a

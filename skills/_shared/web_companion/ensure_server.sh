@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 # Shared idempotent launcher.  Each skill ships a thin wrapper that exports
 # SKILL, MODULE, BANNER, then sources this file.
 #

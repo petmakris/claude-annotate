@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 from pathlib import Path
 from skills._shared.web_companion.sessions import Registry
 

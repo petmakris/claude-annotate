@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import MagicMock

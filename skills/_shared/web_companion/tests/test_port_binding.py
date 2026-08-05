@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """A fixed port has to stay fixed, or it is not worth having.
 
 The whole value of a memorable port is that the URL keeps working. Drifting to

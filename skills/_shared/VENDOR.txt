@@ -1,2 +1,0 @@
-source=petmakris/web-companion
-commit=7bc498803dce31fb358d8e9c499698f1240eb989
