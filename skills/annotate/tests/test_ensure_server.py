@@ -21,6 +21,7 @@ class EnsureServerTests(unittest.TestCase):
         self.env["HOME"] = str(self.home)
         self.env["PYTHONPATH"] = str(REPO_ROOT)
         # Keep idle timeout long enough that the server is alive across test steps.
+        self.env["ANNOTATE_PORT"] = "0"
         self.env["ANNOTATE_SHUTDOWN_SECONDS"] = "60"
         # Pin announced URLs to localhost so tests don't depend on Tailscale state.
         self.env["ANNOTATE_PUBLIC_HOST"] = "localhost"

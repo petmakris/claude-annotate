@@ -312,17 +312,87 @@ def _is_loopback(addr: str) -> bool:
         return False
 
 
+def _port_holder(port: int) -> str:
+    """Best-effort description of whatever already owns the port.
+
+    "Port 3080 is taken" sends you hunting; "taken by node (pid 4821)" does
+    not. Never let the diagnostic itself fail the startup path.
+    """
+    try:
+        out = subprocess.check_output(
+            ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-Fcp"],
+            timeout=2, text=True, stderr=subprocess.DEVNULL)
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        return ""
+    pid = cmd = ""
+    for line in out.splitlines():
+        if line.startswith("p"):
+            pid = line[1:]
+        elif line.startswith("c"):
+            cmd = line[1:]
+    if cmd and pid:
+        return f" It is held by {cmd} (pid {pid})."
+    return ""
+
+
+def _port_in_use(port: int) -> bool:
+    """Is something already listening here?
+
+    bind() alone does not answer this. We set SO_REUSEADDR so a restart is not
+    blocked by TIME_WAIT, and on BSD/macOS that also lets a bind to a SPECIFIC
+    address succeed while another process holds the same port on the WILDCARD
+    address. Two servers then listen on one port and requests are split between
+    them at random — which is how the fixed-port guarantee failed the first
+    time it was tested, and why an earlier idle-shutdown test hung.
+
+    Connecting is the reliable question: if something answers, the port is
+    taken no matter which address it bound.
+    """
+    for family, addr in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+        s = socket.socket(family, socket.SOCK_STREAM)
+        s.settimeout(0.25)
+        try:
+            if s.connect_ex((addr, port)) == 0:
+                return True
+        except OSError:
+            pass
+        finally:
+            s.close()
+    return False
+
+
 def _bind_first_available_port(port_range: range, bind_addr: str) -> tuple[socket.socket, int]:
+    """Bind the first free port, or fail loudly.
+
+    A single-port range is the normal case: the whole value of a fixed port is
+    that the URL you memorised keeps working, and silently drifting to the next
+    one destroys exactly that. Worse, the address you then reach may be someone
+    else's service. So when the range is exhausted we say what is in the way
+    and stop, rather than landing somewhere unpredictable.
+    """
     for port in port_range:
+        if port and _port_in_use(port):
+            continue
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind((bind_addr, port))
-            return s, port
+            # Report what the socket actually got, not what we asked for. They
+            # differ for port 0, which asks the OS to pick a free one — the
+            # only sane way for a test to start a server while the real one
+            # holds the fixed port.
+            return s, s.getsockname()[1]
         except OSError:
             s.close()
             continue
-    raise OSError(f"No free port in range {port_range.start}-{port_range.stop - 1}")
+    if len(port_range) == 1:
+        port = port_range.start
+        raise OSError(
+            f"Port {port} is not available.{_port_holder(port)} "
+            f"Free it, or set the port explicitly and restart.")
+    raise OSError(
+        f"No free port in range {port_range.start}-{port_range.stop - 1}."
+        f"{_port_holder(port_range.start)}")
 
 
 class _ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -338,6 +408,17 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
     if shutdown_after_seconds is None:
         shutdown_after_seconds = int(os.environ.get(
             f"{skill_name.upper()}_SHUTDOWN_SECONDS", 24 * 60 * 60))
+
+    # The escape hatch for the rare clash, so a fixed port never becomes a
+    # reason to edit source. Same {SKILL}_ convention as the timeout above.
+    port_override = os.environ.get(f"{skill_name.upper()}_PORT")
+    if port_override:
+        try:
+            fixed = int(port_override)
+        except ValueError:
+            raise SystemExit(
+                f"{skill_name.upper()}_PORT must be a port number, got {port_override!r}")
+        port_range = range(fixed, fixed + 1)
 
     # A Tailscale/public hostname in `url` is only truthful when the socket
     # actually listens beyond loopback; otherwise advertise loopback.

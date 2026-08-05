@@ -27,6 +27,10 @@ def _http_get(host: str, port: int, path: str, timeout: float = 2.0):
 def _start_server(fake_home: Path) -> tuple[subprocess.Popen, dict]:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(REPO_ROOT)
+    # Port 0 asks the OS for a free one. The skill now pins a single fixed
+    # port, so a test that inherited it would collide with the real server
+    # the moment one is running on this machine.
+    env["ANNOTATE_PORT"] = "0"
     env["ANNOTATE_SHUTDOWN_SECONDS"] = "60"
     env["HOME"] = str(fake_home)
     # Pin announced URLs to localhost so tests don't depend on Tailscale state.
@@ -1026,6 +1030,7 @@ class ServerIdleShutdownTests(unittest.TestCase):
         self.fake_home = Path(tempfile.mkdtemp(prefix="annotate-home-"))
         env = os.environ.copy()
         env["PYTHONPATH"] = str(REPO_ROOT)
+        env["ANNOTATE_PORT"] = "0"
         env["ANNOTATE_SHUTDOWN_SECONDS"] = "2"
         env["HOME"] = str(self.fake_home)
         self.proc = subprocess.Popen(

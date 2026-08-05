@@ -28,7 +28,19 @@ from skills.annotate.diagrams.flowchart import render as render_flowchart
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 SHARED_STATIC_DIR = Path(__file__).resolve().parent.parent / "_shared" / "web_companion" / "static"
 
-PORT_RANGE = range(54580, 54601)
+# One fixed, memorable port — not a range.
+#
+# The old 54580-54600 window sat inside macOS's ephemeral range (49152-65535),
+# which the kernel hands out to OUTGOING connections. Any browser tab or curl
+# could be assigned 54580 while the server was down and keep it, moving the
+# server somewhere unpredictable for no visible reason. 3080 is outside that
+# range, so nothing can take it by accident.
+#
+# A single port rather than a window is the point: a URL you can memorise is
+# only useful if it cannot silently drift. If 3080 is occupied the server
+# refuses to start and names what is holding it (see _bind_first_available_port);
+# ANNOTATE_PORT overrides it for the rare clash.
+PORT_RANGE = range(3080, 3081)
 BANNER = "annotate-server v1"
 
 # The four controls, stated once for the reader. Three of them are messages to
