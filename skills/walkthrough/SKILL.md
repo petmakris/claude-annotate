@@ -12,6 +12,9 @@ allowed-tools:
 
 # /walkthrough — guided code tours in IntelliJ
 
+> Requires the companion IntelliJ plugin. Without it this skill has nowhere to
+> render — install the `.zip` from the repository's Releases page first.
+
 Turn a question about a codebase into a path through it: 5–12 ordered steps, each
 anchored to a real `file:line`, walked step-by-step in IntelliJ. The user steps
 forward and backward, and can ask a question on any step; you answer into that

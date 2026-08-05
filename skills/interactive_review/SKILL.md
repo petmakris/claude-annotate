@@ -11,6 +11,9 @@ allowed-tools:
 
 # /interactive-review — per-line threaded Q&A on a PR diff
 
+> Requires the companion IntelliJ plugin. Without it this skill has nowhere to
+> render — install the `.zip` from the repository's Releases page first.
+
 Surface a GitHub PR diff in IntelliJ (via the IDE plugin) where the user clicks any changed line to open a threaded conversation on it. Claude answers in that thread; the IDE refreshes the thread in place. No code is modified — this is a tool for *understanding* a PR, not rewriting it.
 
 Use this when you want to walk through a PR line-by-line, ask questions about specific changes, or discuss a diff with a collaborator. The session is anchored to a diff snapshot taken at session-open. The conversation persists as a thread file per anchor so you can return to earlier questions.
