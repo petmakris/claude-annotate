@@ -19,7 +19,7 @@ That registers the marketplace, which publishes two plugins. Install either or b
 grab the `.zip` from [Releases](https://github.com/petmakris/claude-annotate/releases)
 and install it via **Settings → Plugins → ⚙ → Install Plugin from Disk…**
 
-Both plugins drive the same local server, which lives once in this repository at
+Both plugins drive the same local server engine, which lives once in this repository at
 `skills/_shared/web_companion/`.
 
 ## Use
@@ -50,11 +50,11 @@ not over a LAN hostname.
 
 ## Related
 
-Both plugins drive the same local HTTP server. The engine lives here in
+Both plugins drive the same local server engine. The engine lives here in
 `skills/_shared/web_companion/` and is edited in place. The separate repositories
 [web-companion](https://github.com/petmakris/web-companion) and
-[claude-ide-review](https://github.com/petmakris/claude-ide-review) are archived;
-they are kept for their history only.
+[claude-ide-review](https://github.com/petmakris/claude-ide-review) are superseded
+by this repository; they are kept for their history only.
 
 ## License
 

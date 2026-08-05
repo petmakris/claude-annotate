@@ -94,3 +94,23 @@ def test_no_root_plugin_json():
     # Two plugins cannot share one plugin.json; their metadata lives in the
     # marketplace entries instead.
     assert not (ROOT / ".claude-plugin" / "plugin.json").exists()
+
+
+BANNER = "GENERATED FILE"
+
+
+def test_no_vendoring_artifacts():
+    shared = ROOT / "skills" / "_shared"
+    assert not (shared / "VENDOR.txt").exists()
+    assert not (shared / "VENDOR.sha256").exists()
+
+
+def test_engine_is_not_marked_generated():
+    # The engine is edited here now. A "DO NOT EDIT" banner would send the
+    # next reader looking for an upstream that no longer exists.
+    offenders = [
+        str(p.relative_to(ROOT))
+        for p in (ROOT / "skills" / "_shared").rglob("*")
+        if p.suffix in {".py", ".sh"} and BANNER in p.read_text(encoding="utf-8")
+    ]
+    assert not offenders, f"still marked generated: {offenders}"

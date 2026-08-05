@@ -6,7 +6,7 @@ Per-line threaded Q&A on a GitHub PR diff, surfaced in IntelliJ via the IDE plug
 
 Fetches a PR diff and exposes per-line threads through the IntelliJ plugin, where every changed line is clickable. The user clicks a line, types a question, and Claude's answer appears as an inline threaded reply. No code is modified — the view is read-only. The goal is *understanding* a PR through targeted conversation, not reviewing it comprehensively in one pass.
 
-The IDE client lives in `intellij-plugin-spike/` (a sibling of this repo's `skills/`). This server is headless — it has no browser review page; IntelliJ is the only review surface.
+The IDE client lives in `ide-plugin/` (a sibling of this repo's `skills/`). This server is headless — it has no browser review page; IntelliJ is the only review surface.
 
 ## How to invoke
 
