@@ -110,10 +110,13 @@ def test_the_index_offers_a_resume_command():
 
 def test_closed_workspaces_get_no_resume_command():
     """Attaching to a closed workspace reopens the directory but still renders
-    'this round is closed', so offering the command would be a dead end."""
+    'this round is closed', so offering the command would be a dead end. The
+    button stays present but disabled, so the column stays aligned."""
     html = SESSIONS_HTML.read_text()
-    assert 'row.status !== "done"' in html, \
+    assert 'st === "done"' in html, \
         "closed workspaces are being offered a resume command"
+    assert 'act-cmd" disabled' in html, \
+        "the resume cell is dropped rather than disabled, breaking alignment"
 
 
 def test_both_links_are_copyable():
@@ -156,3 +159,29 @@ def test_the_local_link_follows_the_origin_you_are_browsing():
         "the local link is being reconstructed instead of taken from the origin"
     assert '"//localhost:"' not in html, \
         "the local link still hardcodes localhost, which breaks behind a proxy"
+
+
+# ── Layout: one line per row, one element per cell ────────────────────────
+
+def test_the_index_is_a_real_table():
+    html = SESSIONS_HTML.read_text()
+    assert "<table class=\"sessions\">" in html, "the list is not a table"
+    assert "<thead>" in html and "<tbody>" in html, "the table has no header/body split"
+    assert "table-layout: fixed" in html, \
+        "without a fixed layout the columns do not line up down the page"
+
+
+def test_nothing_wraps_and_nothing_stacks():
+    """A row must be one line. Long values clip with an ellipsis and keep the
+    full text in a tooltip rather than reflowing onto a second line."""
+    html = SESSIONS_HTML.read_text()
+    assert "white-space: nowrap" in html, "cells may wrap"
+    assert "text-overflow: ellipsis" in html, "clipped cells have no ellipsis"
+    assert ".acts {" not in html, \
+        "the stacked action strip is back — cells must hold a single element"
+
+
+def test_a_narrow_window_scrolls_instead_of_reflowing():
+    html = SESSIONS_HTML.read_text()
+    assert "overflow-x: auto" in html, "the table cannot scroll sideways"
+    assert "min-width:" in html, "nothing stops the columns from being squeezed"

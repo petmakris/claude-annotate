@@ -22,7 +22,10 @@ body {
   font-family: "Bricolage Grotesque", system-ui, sans-serif;
   color: #1d1d1f;
 }
-.wrap { max-width: 940px; margin: 0 auto; }
+/* Wide enough that all ten columns fit without sideways scrolling on an
+   ordinary laptop — at 940px the Share and Open columns fell off the edge and
+   you had to discover them by scrolling. */
+.wrap { max-width: 1320px; margin: 0 auto; }
 .hd {
   display: flex;
   align-items: baseline;
@@ -73,67 +76,70 @@ select.proj-select {
   color: #3a3d44;
   font-family: inherit;
 }
+/* One row is one line. Every cell holds exactly one element, nothing stacks
+   vertically, and nothing wraps — a row you can scan across beats a row you
+   have to read. Long values are clipped with an ellipsis and keep the full
+   text in a title attribute; when the columns no longer fit, the TABLE
+   scrolls sideways rather than the text reflowing. */
 .list {
   background: #fff;
   border: 1px solid #d4d8e0;
   border-radius: 14px;
-  overflow: hidden;
+  overflow-x: auto;
 }
-.row {
-  display: grid;
-  grid-template-columns: 96px 1fr 130px 150px 74px;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
+table.sessions {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+  min-width: 1080px;
+}
+table.sessions th,
+table.sessions td {
+  padding: 0 12px;
+  height: 44px;
   border-bottom: 1px solid #eef0f4;
-  cursor: pointer;
-  transition: background .1s;
-}
-.row:last-child { border-bottom: 0; }
-.row:hover { background: #f8f9fb; }
-.acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
-.act {
-  border: 1px solid #d4d8e0;
-  background: #fff;
-  color: #83868f;
-  border-radius: 7px;
-  padding: 3px 9px;
-  font-size: 11.5px;
-  font-family: inherit;
-  cursor: pointer;
-  line-height: 1.5;
-  transition: color .12s, border-color .12s;
-}
-.act:hover { color: #0071e3; border-color: #0071e3; }
-.act.ok { color: #047857; border-color: #047857; }
-.act.bad { color: #b91c1c; border-color: #b91c1c; }
-.act code {
-  font-family: "Monaspace Radon", ui-monospace, Menlo, monospace;
-  font-size: 11px;
-  color: inherit;
-}
-/* The resume command is the primary action on a row, so it reads as a command
-   rather than as one chip among several. */
-.act-cmd { background: #eef0f4; border-color: #c9cdd6; color: #3a3d44; }
-.act-cmd:hover { background: #fff; }
-.dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: 7px;
+  text-align: left;
   vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+table.sessions thead th {
+  height: 34px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: #9aa3b0;
+  background: #fbfcfd;
+  border-bottom: 1px solid #d4d8e0;
+  position: sticky;
+  top: 0;
+}
+table.sessions tbody tr:last-child td { border-bottom: 0; }
+table.sessions tbody tr { cursor: pointer; transition: background .1s; }
+table.sessions tbody tr:hover { background: #f8f9fb; }
+
+/* Fixed widths, so every row's columns line up down the page. */
+.w-status { width: 68px; }
+.w-slug   { width: 300px; }
+.w-title  { width: auto; }   /* the flexible one: it absorbs the leftover */
+.w-proj   { width: 150px; }
+.w-num    { width: 66px;  text-align: right !important; }
+.w-time   { width: 92px;  text-align: right !important; }
+.w-act    { width: 84px; }
+.w-open   { width: 84px;  text-align: right !important; }
+
 .stag { font-size: 9.5px; font-weight: 700; letter-spacing: .8px; }
 .slug {
   font-family: "Monaspace Radon", monospace;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   color: #0071e3;
 }
-.title { font-size: 12.5px; color: #83868f; margin-top: 3px; }
+.title { font-size: 12.5px; color: #3a3d44; }
 .proj {
-  font-size: 12px;
+  font-size: 11.5px;
   color: #3a3d44;
   background: #eef0f4;
   border: 1px solid #d4d8e0;
@@ -141,17 +147,31 @@ select.proj-select {
   padding: 2px 8px;
   font-family: "Monaspace Radon", monospace;
 }
-.c-meta {
-  font-size: 11.5px;
+.cm, .last { font-size: 11.5px; color: #83868f; }
+.act {
+  border: 1px solid #d4d8e0;
+  background: #fff;
   color: #83868f;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  text-align: right;
+  border-radius: 7px;
+  padding: 3px 0;
+  width: 100%;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  line-height: 1.5;
+  white-space: nowrap;
+  transition: color .12s, border-color .12s, background .12s;
 }
-.c-meta .cm { font-size: 11px; }
-.c-go { text-align: right; color: #0071e3; font-size: 13px; font-weight: 600; opacity: .5; }
-.row:hover .c-go { opacity: 1; }
+.act:hover { color: #0071e3; border-color: #0071e3; }
+.act.ok { color: #047857; border-color: #047857; }
+.act.bad { color: #b91c1c; border-color: #b91c1c; }
+/* The resume command is the primary action on a row, so it reads as one. */
+.act-cmd { background: #eef0f4; border-color: #c9cdd6; color: #3a3d44; }
+.act-cmd:hover { background: #fff; }
+.act[disabled] { opacity: .3; cursor: default; border-style: dashed; }
+.act[disabled]:hover { color: #83868f; border-color: #d4d8e0; }
+.c-go { color: #0071e3; font-size: 12.5px; font-weight: 600; opacity: .5; }
+tbody tr:hover .c-go { opacity: 1; }
 .foot { color: #83868f; font-size: 11.5px; margin-top: 12px; text-align: center; }
 .empty {
   padding: 48px 18px;
@@ -222,52 +242,44 @@ function escapeHtml(s) {
   });
 }
 
+// One <tr>, one line, one element per <td>. Values that can be long (title,
+// slug, project) are clipped by CSS and carry the full text as a tooltip
+// rather than wrapping onto a second line.
 function rowHtml(row) {
   var st = row.status || "idle";
-  var dotStyle = "background:" + statusColor(st) + ";" +
-    (st === "live" ? "box-shadow:0 0 0 3px rgba(4,120,87,0.2);" : "");
   var slug = escapeHtml(row.slug || row.sid || "");
   var title = escapeHtml(row.title || "");
   var project = escapeHtml(row.project || "");
   var commentCount = row.comment_count || 0;
   var last = relativeTime(row.last_active);
+  var cmd = SKILL_CMD + " resume " + (row.slug || row.sid || "");
   return (
-    '<div class="row" data-slug="' + slug + '">' +
-      '<div class="c-status"><span class="dot" style="' + dotStyle + '"></span>' +
-        '<span class="stag" style="color:' + statusColor(st) + '">' + statusLabel(st) + '</span></div>' +
-      '<div class="c-name"><span class="slug">' + slug + '</span>' +
-        '<div class="title">' + title + '</div>' +
-        actionsHtml(row, slug) +
-      '</div>' +
-      (row.project ? '<div class="c-proj"><span class="proj">' + project + '</span></div>' : '') +
-      '<div class="c-meta"><span class="cm">💬 ' + commentCount + '</span>' + (last ? '<span class="last">' + last + '</span>' : '') + '</div>' +
-      '<div class="c-go">Open →</div>' +
-    '</div>'
+    '<tr data-slug="' + slug + '">' +
+      '<td class="w-status"><span class="stag" style="color:' + statusColor(st) + '">' +
+        statusLabel(st) + '</span></td>' +
+      '<td class="w-slug" title="' + slug + '"><span class="slug">' + slug + '</span></td>' +
+      '<td class="w-title" title="' + title + '"><span class="title">' + title + '</span></td>' +
+      '<td class="w-proj" title="' + project + '">' +
+        (project ? '<span class="proj">' + project + '</span>' : '') + '</td>' +
+      '<td class="w-num"><span class="cm">' + commentCount + '</span></td>' +
+      '<td class="w-time"><span class="last">' + (last || "") + '</span></td>' +
+      // A closed workspace gets no resume command: attaching to one reopens
+      // the directory but the page still renders "this round is closed", so
+      // the command would be a dead end. Disabled rather than absent, so the
+      // column stays aligned down the page.
+      '<td class="w-act">' + (st === "done"
+        ? '<button class="act act-cmd" disabled title="This workspace is closed — it cannot be resumed">resume</button>'
+        : '<button class="act act-cmd" data-copy="' + escapeHtml(cmd) +
+          '" title="Copy: ' + escapeHtml(cmd) + '">resume</button>') + '</td>' +
+      '<td class="w-act"><button class="act" data-copy="' + escapeHtml(localUrl(slug)) +
+        '" title="Copy the local link (this machine only)">link</button></td>' +
+      '<td class="w-act">' + (HOSTS.shareable
+        ? '<button class="act" data-copy="' + escapeHtml(publicUrl(slug)) +
+          '" title="Copy the shareable link — read-only for anyone but you">share</button>'
+        : '') + '</td>' +
+      '<td class="w-open"><span class="c-go">Open →</span></td>' +
+    '</tr>'
   );
-}
-
-// Per-row actions. The resume command is the reason this page exists after a
-// reboot: the workspace outlives every Claude session that ever touched it,
-// and this is the one string that gets a fresh session back into it.
-//
-// A closed workspace gets no resume command on purpose — attaching to one
-// reopens the directory but the page still renders "this round is closed", so
-// offering the command would be offering a dead end.
-function actionsHtml(row, slug) {
-  var out = [];
-  if (row.status !== "done") {
-    var cmd = SKILL_CMD + " resume " + (row.slug || row.sid || "");
-    out.push('<button class="act act-cmd" data-copy="' + escapeHtml(cmd) + '"' +
-             ' title="Copy the command that reattaches a fresh Claude session to this workspace">' +
-             '<code>' + escapeHtml(cmd) + '</code></button>');
-  }
-  out.push('<button class="act" data-copy="' + escapeHtml(localUrl(slug)) +
-           '" title="Copy the local link (this machine only)">local link</button>');
-  if (HOSTS.shareable) {
-    out.push('<button class="act" data-copy="' + escapeHtml(publicUrl(slug)) +
-             '" title="Copy the shareable link — read-only for anyone but you">shareable link</button>');
-  }
-  return '<div class="acts">' + out.join("") + '</div>';
 }
 
 // Whatever origin you are actually browsing on — NOT a rebuilt
@@ -291,7 +303,8 @@ function copyText(text, btn) {
   function done(ok) {
     var original = btn.getAttribute("data-label") || btn.innerHTML;
     btn.setAttribute("data-label", original);
-    btn.innerHTML = ok ? "copied ✓" : "copy failed";
+    // Kept short: the action columns are fixed-width and must not wrap.
+    btn.innerHTML = ok ? "copied ✓" : "failed";
     btn.classList.add(ok ? "ok" : "bad");
     setTimeout(function () {
       btn.innerHTML = original;
@@ -373,10 +386,22 @@ function render() {
     return;
   }
 
-  listEl.innerHTML = rows.map(rowHtml).join("");
+  listEl.innerHTML =
+    '<table class="sessions"><thead><tr>' +
+      '<th class="w-status">Status</th>' +
+      '<th class="w-slug">Workspace</th>' +
+      '<th class="w-title">Title</th>' +
+      '<th class="w-proj">Project</th>' +
+      '<th class="w-num">Notes</th>' +
+      '<th class="w-time">Updated</th>' +
+      '<th class="w-act">Resume</th>' +
+      '<th class="w-act">Link</th>' +
+      '<th class="w-act">' + (HOSTS.shareable ? "Share" : "") + '</th>' +
+      '<th class="w-open"></th>' +
+    '</tr></thead><tbody>' + rows.map(rowHtml).join("") + '</tbody></table>';
   footEl.textContent = rows.length + (rows.length === 1 ? " workspace" : " workspaces") + " · sorted by last activity";
 
-  Array.prototype.forEach.call(listEl.querySelectorAll(".row"), function (el) {
+  Array.prototype.forEach.call(listEl.querySelectorAll("tbody tr"), function (el) {
     el.addEventListener("click", function () {
       openRow(el.getAttribute("data-slug"));
     });
