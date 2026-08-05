@@ -170,6 +170,22 @@ main.prose th {
 [data-block-id][data-engaged-type="reject"]:hover   { background: color-mix(in srgb, var(--type-reject-wash) 55%, var(--hover-tint)); }
 [data-block-id][data-engaged-type="comment"]:hover  { background: color-mix(in srgb, var(--type-comment-wash) 55%, var(--hover-tint)); }
 
+/* === Read-only mode ==================================================
+   A shared link renders the document and the reading aids, and nothing that
+   would be refused. The three round controls, the round dock and the comment
+   composers go away; the fold control deliberately stays, because folding is
+   private to the reader's browser and never reaches the server. That is the
+   one thing a guest can still "do", and it is the thing that makes a long
+   document readable. */
+body.read-only .hover-actions .hover-read { opacity: 1; pointer-events: auto; }
+body.read-only .hover-actions button:not(.hover-read),
+body.read-only .unit-strip button:not(.unit-read),
+body.read-only #round-dock,
+body.read-only .unit-composer,
+body.read-only .comment-card { display: none; }
+/* The strip would otherwise be an empty box hovering next to every title. */
+body.read-only section.block:not([data-read="1"]) .hover-actions { border: none; }
+
 /* === Legend ==========================================================
    Collapsed to a chip by default — it is reference material, not chrome the
    reader needs on every visit. Open state persists nowhere on purpose: it is

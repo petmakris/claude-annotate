@@ -11,8 +11,10 @@ HandlersProtocol.
 from __future__ import annotations
 
 import http.server
+import ipaddress
 import json
 import os
+import secrets
 import socket
 import shutil
 import socketserver
@@ -279,12 +281,35 @@ def _resolve_public_host() -> str:
 def _resolve_bind_addr() -> str:
     """Loopback unless explicitly opened up.
 
-    The server is unauthenticated, so binding every interface exposes
-    session-create (which runs gh/git in an attacker-chosen cwd) and event
-    submission to the whole LAN. Sharing across devices (Tailscale) is an
-    explicit opt-in: WEBCOMPANION_BIND=0.0.0.0 (or a specific interface IP).
+    Sharing across devices (LAN, Tailscale) is an explicit opt-in:
+    WEBCOMPANION_BIND=0.0.0.0 (or a specific interface IP). Opening the bind
+    is safe for *reading* — see WRITE_TOKEN_HEADER for what guards writes —
+    but it is still a deliberate act, so it stays off by default.
     """
     return os.environ.get("WEBCOMPANION_BIND", "127.0.0.1")
+
+
+# Every request that changes something carries this header. Reads never need
+# it. See _Handler._is_owner for the two ways to satisfy the gate.
+WRITE_TOKEN_HEADER = "X-WebCompanion-Token"
+
+
+def _resolve_write_token() -> str:
+    """The capability that lets a non-loopback client write.
+
+    Minted fresh per server start and published in ~/.claude/<skill>/server.json
+    (mode 0600), so anything running as this user can read it and nothing else
+    can. Overridable via WEBCOMPANION_TOKEN when a caller needs a stable value
+    across restarts.
+    """
+    return os.environ.get("WEBCOMPANION_TOKEN") or secrets.token_urlsafe(32)
+
+
+def _is_loopback(addr: str) -> bool:
+    try:
+        return ipaddress.ip_address(addr.split("%", 1)[0]).is_loopback
+    except ValueError:
+        return False
 
 
 def _bind_first_available_port(port_range: range, bind_addr: str) -> tuple[socket.socket, int]:
@@ -319,6 +344,8 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
     public_host = (_resolve_public_host()
                    if _resolve_bind_addr() not in ("127.0.0.1", "localhost")
                    else "127.0.0.1")
+
+    write_token = _resolve_write_token()
 
     state_root = Path(os.path.expanduser(f"~/.claude/{skill_name}"))
 
@@ -385,6 +412,22 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
+
+        def _is_owner(self) -> bool:
+            """Two ways to be the owner, and no third.
+
+            Loopback is the owner by construction — nobody else can reach it,
+            so the Claude session driving this server and the browser on this
+            machine both pass without configuration. Everyone else needs the
+            capability token, which is handed out only through the owner URL.
+
+            The token is compared with compare_digest so a wrong guess takes
+            the same time as any other wrong guess.
+            """
+            if _is_loopback(self.client_address[0]):
+                return True
+            supplied = self.headers.get(WRITE_TOKEN_HEADER) or ""
+            return bool(supplied) and secrets.compare_digest(supplied, write_token)
 
         def _content_length(self) -> int | None:
             """Parse Content-Length, rejecting missing/negative/non-integer.
@@ -462,7 +505,19 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
             if self.path == "/health":
                 self._send_text(200, f"{banner} fp={code_fp}")
                 return
+            # Lets the page decide whether to render its controls at all,
+            # instead of showing them and failing the click with a 403.
+            if self.path == "/api/whoami":
+                self._send_json(200, {"writable": self._is_owner()})
+                return
+            # The index lists every workspace on this machine, across every
+            # project. Someone handed a link to one review should reach that
+            # review and nothing else, so the directory is owner-only even
+            # though the individual pages it lists are not.
             if self.path == "/":
+                if not self._is_owner():
+                    self._send_text(403, "read-only: the workspace index is not shared")
+                    return
                 static_serve.serve(self, "sessions.html", static_dirs)
                 return
             if self.path.startswith("/static/"):
@@ -483,6 +538,10 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
                 handlers.serve_data(self, dirs_with_sid, query)
                 return
             if self.path.startswith("/api/sessions"):
+                # Same reasoning as "/" — this is the data behind the index.
+                if not self._is_owner():
+                    self._send_text(403, "read-only: the workspace index is not shared")
+                    return
                 from urllib.parse import urlparse, parse_qs
                 qs = parse_qs(urlparse(self.path).query)
                 cwd = (qs.get("cwd") or [""])[0]
@@ -499,6 +558,13 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
 
         def _dispatch_post(self):
             touch()
+            # Every write goes through here, so the gate lives here and not on
+            # the seven individual routes — a route added later is guarded by
+            # default rather than by whoever remembers. Reads are deliberately
+            # ungated: a shared link is meant to be readable.
+            if not self._is_owner():
+                self._send_text(403, "read-only: this link does not carry write access")
+                return
             if self.path == "/api/sessions":
                 self._handle_create_session()
                 return
@@ -608,11 +674,19 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
                 "sid": sid,
                 "slug": slug,
                 "created": _created,
+                # The shareable, READ-ONLY link. Handing this to a colleague
+                # lets them read and comment on nothing.
                 "url": f"http://{public_host}:{port}/s/{slug}/",
                 # Always-secure-context loopback URL. Browser features that need
                 # a secure context (e.g. voice dictation) work here but not over
                 # the public_host URL when it's plain-HTTP.
                 "localhost_url": f"http://localhost:{port}/s/{slug}/",
+                # The same page with write access, for the owner on another
+                # device. The token rides in the URL fragment, which browsers
+                # never put on the wire and never write to server logs; the
+                # page moves it into sessionStorage and strips it from the
+                # address bar on arrival. Do not paste this one into chat.
+                "owner_url": f"http://{public_host}:{port}/s/{slug}/#k={write_token}",
                 "response_dir": str(dirs["response_dir"]),
                 "annotations_dir": str(dirs["annotations_dir"]),
                 "state_dir": str(dirs["state_dir"]),
@@ -667,11 +741,21 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
 
     info = {"type": "server-started", "skill": skill_name, "port": port,
             "url": f"http://{public_host}:{port}",
+            "write_token": write_token,
             "plugin_root": os.environ.get("PLUGIN_ROOT", "")}
     home_info_dir = Path(os.path.expanduser(f"~/.claude/{skill_name}"))
     home_info_dir.mkdir(parents=True, exist_ok=True)
-    (home_info_dir / "server.json").write_text(json.dumps(info))
-    sys.stdout.write(json.dumps(info) + "\n")
+    info_path = home_info_dir / "server.json"
+    # 0600 before the token is in it: this file is now a credential, and a
+    # world-readable moment between write and chmod is a real window on a
+    # shared machine.
+    info_path.touch(mode=0o600, exist_ok=True)
+    info_path.chmod(0o600)
+    info_path.write_text(json.dumps(info))
+    # stdout goes to the server log, which is not 0600 — publish everything
+    # except the credential there.
+    sys.stdout.write(json.dumps({k: v for k, v in info.items()
+                                 if k != "write_token"}) + "\n")
     sys.stdout.flush()
 
     stop_event = threading.Event()

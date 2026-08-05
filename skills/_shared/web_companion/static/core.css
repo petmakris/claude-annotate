@@ -549,3 +549,27 @@ body {
   font-family: inherit;
 }
 .locked-action:hover { filter: brightness(1.1); }
+
+/* === Read-only mode ==================================================
+   A shared link reads the document and changes nothing. The controls are
+   removed rather than disabled, because a greyed-out trash can invites a
+   click and then explains itself with a 403 — a reader should simply see a
+   clean document. The server enforces this regardless; hiding the chrome is
+   about not offering what will be refused. */
+body.read-only .general-composer,
+body.read-only .done-btn { display: none; }
+
+.read-only-badge { display: none; }
+body.read-only .read-only-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}

@@ -143,6 +143,7 @@ curl -sf -X POST "$SERVER_URL/api/sessions" \
 {"sid":"...","slug":"...","created":true,
  "url":"http://HOST:PORT/s/SLUG/",
  "localhost_url":"http://localhost:PORT/s/SLUG/",
+ "owner_url":"http://HOST:PORT/s/SLUG/#k=TOKEN",
  "response_dir":"...","annotations_dir":"...","state_dir":"...",
  "events_dir":"...","consumed_dir":"..."}
 ```
@@ -155,14 +156,27 @@ place, not a new one each time.
 
 Save `sid`, `slug`, `url`, `localhost_url`, `response_dir`, `state_dir`,
 `events_dir`, `consumed_dir` for the rest of this turn. Announce **the slug
-URL** — `url`/`localhost_url` are now built from `slug`, not `sid`
-(`/s/<slug>/`), so that's what the user should bookmark or type into
-`/annotate resume`. `url` uses the public/Tailscale host (shareable across the
-LAN); `localhost_url` is the always-secure-context loopback URL — browser
-features that require a secure context (voice dictation) only work there. When
-the two are identical (no Tailscale host configured, `url` already on a
-loopback host), announce just one. (`annotations_dir` is no longer used by the
-annotate skill but is still returned by the server.)
+URL** — the URLs are built from `slug`, not `sid` (`/s/<slug>/`), so that's
+what the user should bookmark or type into `/annotate resume`. When two of
+them are identical (no Tailscale host configured, `url` already on a loopback
+host), announce just one. (`annotations_dir` is no longer used by the annotate
+skill but is still returned by the server.)
+
+**Three URLs, and they are not interchangeable.** Writes require either a
+loopback connection or the capability token; reads never do.
+
+| Field | Who it's for | Can it change the document? |
+|-------|--------------|------------------------------|
+| `localhost_url` | the user, on this machine | yes — loopback is the owner |
+| `url` | **shareable** — a colleague on the LAN/Tailnet | no, read-only |
+| `owner_url` | the user, from another of their devices | yes — carries the token |
+
+Announce `localhost_url` first (browser features needing a secure context,
+like voice dictation, only work there). Offer `url` when the user wants to
+share, and say plainly that it is read-only.
+
+**Never print `owner_url` unless the user asked to work from another device.**
+It carries the write token; treat it like a credential, not like a link.
 
 To resume a previously-closed conversation's workspace (`/annotate resume
 <slug>`, or no arg to list candidates), see `references/resuming.md` — it sets
