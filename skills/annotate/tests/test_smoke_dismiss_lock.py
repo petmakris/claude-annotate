@@ -42,14 +42,21 @@ def test_pending_delete_is_reversible():
         "style.css has no pending sub-unit-delete styling"
 
 
-def test_block_controls_live_in_the_card_header():
-    """Block scope is taught by position: header strip, body left for units.
+def test_block_controls_live_next_to_the_card_title():
+    """Block scope is taught by position: a strip hugging the title, body left
+    for units.
+
+    The strip mounts directly after the title rather than at the header's far
+    right. The title is what reveals it, and a trigger 600px from the thing it
+    reveals reads as nothing happening.
 
     (What reveals the strip is asserted in test_smoke_subunits.py — it must
     be title hover specifically, not the full-width header row.)"""
     src = SCRIPT_JS.read_text()
-    assert "head.appendChild(wrap)" in src, \
-        "hover-actions strip is not mounted in the card header"
+    assert 'titleEl.insertAdjacentElement("afterend", wrap)' in src, \
+        "hover-actions strip is not mounted next to the card title"
+    assert "head.appendChild(wrap)" not in src, \
+        "hover-actions strip is back at the far end of the header row"
     assert 'head.querySelector(".card-title")' in src, \
         "hover listeners are not scoped to the card title"
 

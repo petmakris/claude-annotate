@@ -90,13 +90,15 @@
         if (hideTimer) clearTimeout(hideTimer);
         hideTimer = setTimeout(() => { delete wrap.dataset.visible; hideTimer = null; }, HOVER_LINGER_MS);
       };
-      // Scoped to the TITLE, not the header row: .card-head spans the full
-      // card width, so listening there lit the controls with the pointer
-      // nowhere near the title. The linger timer covers the gap between
-      // leaving the title and reaching the buttons.
+      // The whole header row is the trigger. Scoping it to the title alone
+      // was tried and rejected: it makes a bold-text-width target that the
+      // pointer keeps missing. That scoping only existed because the strip
+      // used to sit at the far right, which is no longer true — the buttons
+      // now mount beside the title (below), so a band-wide trigger reveals
+      // controls the user is already looking at.
       const titleEl = head.querySelector(".card-title") || head;
-      titleEl.addEventListener("mouseenter", show);
-      titleEl.addEventListener("mouseleave", scheduleHide);
+      head.addEventListener("mouseenter", show);
+      head.addEventListener("mouseleave", scheduleHide);
       wrap.addEventListener("mouseenter", show);
       wrap.addEventListener("mouseleave", scheduleHide);
       for (const t of ACTION_TYPES) {
@@ -117,7 +119,27 @@
         });
         wrap.appendChild(b);
       }
-      head.appendChild(wrap);
+      // The fold control sits apart from the three round controls because it
+      // answers a different question — "do I still need to look at this?"
+      // rather than "what should Claude do with this?". It is private to this
+      // browser and is never submitted, so it is also not gated on is-busy.
+      const readBtn = document.createElement("button");
+      readBtn.type = "button";
+      readBtn.className = "hover-read";
+      readBtn.dataset.type = "read";
+      readBtn.innerHTML = window.AnnotateSubunits?.READ_ICON || "";
+      readBtn.title = window.AnnotateSubunits?.READ_TITLE || "Fold";
+      readBtn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        show();
+        window.AnnotateSubunits?.toggleBlockRead(block.dataset.blockId);
+      });
+      wrap.appendChild(readBtn);
+      // Directly after the title, not at the far right of the header: the
+      // title is what reveals the strip, and a trigger 600px from the thing
+      // it reveals reads as nothing happening.
+      titleEl.insertAdjacentElement("afterend", wrap);
     });
   }
 
@@ -339,7 +361,6 @@
     renderHoverActions();
     renderComments();
     applyEngagedStyling();
-    showFirstTimeToast();
   }
 
   // Header title for a block's card. Claude may author a `title`; otherwise we
@@ -633,9 +654,11 @@
     let collapsed = false;
     try { collapsed = localStorage.getItem(collapseKey(blk.id)) === "1"; } catch (_) {}
     applyCollapsed(section, chev, collapsed);
-    head.addEventListener("click", (ev) => {
-      // Don't toggle when interacting with the version chip.
-      if (ev.target && ev.target.closest && ev.target.closest(".section-pill")) return;
+    // Only the chevron collapses. The rest of the header carries the title
+    // (a hover trigger) and the control strip, so a click anywhere else used
+    // to fold the card away under the pointer that was reaching for it.
+    chev.addEventListener("click", (ev) => {
+      ev.stopPropagation();
       const next = !section.classList.contains("collapsed");
       applyCollapsed(section, chev, next);
       try { localStorage.setItem(collapseKey(blk.id), next ? "1" : "0"); } catch (_) {}
@@ -1464,25 +1487,6 @@
     setCardTitle(section, blk);
     clearUpdatingOverlay(section);
     return section;
-  }
-
-  // ── First-time toast ───────────────────────────────────────────────────────
-
-  function showFirstTimeToast() {
-    try {
-      if (localStorage.getItem("annotate.welcomed") === "1") return;
-    } catch (_) {}
-    const toast = document.createElement("div");
-    toast.className = "first-time-toast";
-    toast.innerHTML = `
-      <span>👋 Hover a card's <b>title</b> for whole-section controls, or any <b>sentence</b> for that line. Delete · Keep · Comment — nothing is sent until you submit the round.</span>
-      <button type="button" class="dismiss" aria-label="Dismiss">×</button>
-    `;
-    document.body.appendChild(toast);
-    toast.querySelector(".dismiss").addEventListener("click", () => {
-      try { localStorage.setItem("annotate.welcomed", "1"); } catch (_) {}
-      toast.remove();
-    });
   }
 
   // ── Boot ───────────────────────────────────────────────────────────────────

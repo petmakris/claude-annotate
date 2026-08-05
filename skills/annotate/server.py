@@ -31,6 +31,66 @@ SHARED_STATIC_DIR = Path(__file__).resolve().parent.parent / "_shared" / "web_co
 PORT_RANGE = range(54580, 54601)
 BANNER = "annotate-server v1"
 
+# The four controls, stated once for the reader. Three of them are messages to
+# Claude that travel with the round; the fourth is a private reading aid that
+# never leaves the browser. Confusing those two is the specific mistake this
+# table exists to prevent — a reader who folds with the trash can loses the
+# passage from the document instead of merely from their screen.
+#
+# The glyphs are the real ones, copied from static/script.js (ICON) and
+# static/subunits.js (READ_ICON), not emoji stand-ins: a legend the reader
+# cannot match to the button they are looking at is worse than none.
+def _legend_icon(paths: str) -> str:
+    return (f'<svg class="legend-icon" viewBox="0 0 24 24" aria-hidden="true">'
+            f'{paths}</svg>')
+
+
+_ICON_TRASH = _legend_icon(
+    '<polyline points="3 6 5 6 21 6"/>'
+    '<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'
+    '<line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>')
+_ICON_CHECK = _legend_icon('<polyline points="20 6 9 17 4 12"/>')
+_ICON_COMMENT = _legend_icon(
+    '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21'
+    'l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>')
+_ICON_FOLD = _legend_icon(
+    '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>'
+    '<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>'
+    '<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>'
+    '<line x1="1" y1="1" x2="23" y2="23"/>')
+
+_LEGEND_HTML = (
+    '<details class="legend">'
+    '<summary class="legend-summary">'
+    '<span class="legend-chip">?</span>'
+    'What do the buttons do?'
+    '</summary>'
+    '<div class="legend-body">'
+    '<table class="legend-table">'
+    '<thead><tr><th>Button</th><th>What it tells Claude</th>'
+    '<th>What happens to the content</th></tr></thead>'
+    '<tbody>'
+    f'<tr><td class="legend-btn">{_ICON_TRASH}<span>Trash</span></td>'
+    '<td>&ldquo;This is irrelevant &mdash; cut it&rdquo;</td>'
+    '<td>Removed from the document for good, and Claude is told never to bring it back</td></tr>'
+    f'<tr><td class="legend-btn">{_ICON_CHECK}<span>Check</span></td>'
+    '<td>&ldquo;This is fine &mdash; don&rsquo;t touch it&rdquo;</td>'
+    '<td>Stays exactly as written; Claude skips rewriting it</td></tr>'
+    f'<tr><td class="legend-btn">{_ICON_COMMENT}<span>Comment</span></td>'
+    '<td>&ldquo;Respond to this&rdquo;</td>'
+    '<td>Stays, rewritten to fold Claude&rsquo;s answer into the prose</td></tr>'
+    f'<tr class="legend-private"><td class="legend-btn">{_ICON_FOLD}<span>Fold</span></td>'
+    '<td><em>Nothing &mdash; Claude is never told</em></td>'
+    '<td>Nothing. Collapses on your screen only, private to this browser, '
+    'click the stub to bring it back</td></tr>'
+    '</tbody></table>'
+    '<p class="legend-note">The first three are feedback and are sent when you '
+    'submit the round. Folding is just a reading aid &mdash; use it on the parts '
+    'you have read and are happy with, so what stays on screen is what still '
+    'needs you. A folded section springs back open if Claude rewrites it.</p>'
+    '</div></details>'
+)
+
 WAITING_HTML = """<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><title>Waiting</title>
 <link rel="stylesheet" href="/static/core.css">
@@ -231,6 +291,7 @@ class Handlers:
             f'    <button id="general-send" type="button" class="general-send-btn" disabled>Send</button>'
             f'  </div>'
             f'</section>'
+            + _LEGEND_HTML +
             f'<main class="prose"></main>'
         )
         head = ('<link rel="stylesheet" href="/static/style.css">'

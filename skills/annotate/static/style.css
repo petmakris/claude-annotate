@@ -170,29 +170,103 @@ main.prose th {
 [data-block-id][data-engaged-type="reject"]:hover   { background: color-mix(in srgb, var(--type-reject-wash) 55%, var(--hover-tint)); }
 [data-block-id][data-engaged-type="comment"]:hover  { background: color-mix(in srgb, var(--type-comment-wash) 55%, var(--hover-tint)); }
 
+/* === Legend ==========================================================
+   Collapsed to a chip by default — it is reference material, not chrome the
+   reader needs on every visit. Open state persists nowhere on purpose: it is
+   cheap to reopen and a permanently-expanded table would push the document
+   down the page for someone who already knows the controls. */
+.legend {
+  max-width: var(--content-max);
+  margin: 0 auto 14px;
+  padding: 0 var(--content-gutter);
+}
+.legend-summary {
+  display: inline-flex; align-items: center; gap: 8px;
+  cursor: pointer; user-select: none;
+  font-size: 12.5px; font-weight: 600;
+  color: var(--text-dim);
+  padding: 5px 12px 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  transition: color 140ms ease, border-color 140ms ease;
+  list-style: none;
+}
+.legend-summary::-webkit-details-marker { display: none; }
+.legend-summary:hover { color: var(--text-strong); border-color: var(--accent); }
+.legend-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 17px; height: 17px; border-radius: 50%;
+  background: var(--surface-soft); border: 1px solid var(--border);
+  font-size: 11px; font-weight: 700;
+}
+.legend-body {
+  margin-top: 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+.legend-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+.legend-table th, .legend-table td {
+  text-align: left;
+  padding: 7px 12px 7px 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.legend-table th {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--text-dim); font-weight: 700;
+}
+.legend-table tbody tr:last-child td { border-bottom: none; }
+.legend-btn {
+  white-space: nowrap; font-weight: 600; color: var(--text-strong);
+  padding-right: 20px;
+}
+.legend-btn .legend-icon {
+  width: 14px; height: 14px;
+  vertical-align: -2px; margin-right: 8px;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+/* The private row is set apart because its whole point is that it does not
+   behave like the three above it. */
+.legend-private td { color: var(--text-dim); }
+.legend-private .legend-btn { color: var(--text-dim); }
+.legend-note {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
 /* === Hover action buttons ============================================ */
-/* Block-scope controls live in the card header and reveal on header hover
-   only. The card BODY is reserved for per-sentence controls, so the two
-   scopes never overlap and position alone tells the user what a click will
-   affect. Static in the header's flex row (not absolute) so it cannot cover
-   the version/comment chips. */
+/* Block-scope controls sit in the card header, immediately after the title
+   that reveals them. The card BODY is reserved for per-sentence controls, so
+   the two scopes never overlap and position alone tells the user what a click
+   will affect. Static in the header's flex row (not absolute) so it cannot
+   cover the version/comment chips, which keep the right edge. */
 .hover-actions {
   display: flex;
   flex-direction: row;
+  flex: none;
   gap: 6px;
-  margin-right: 8px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 140ms ease;
 }
-/* Revealed by hovering the TITLE specifically — not the whole header band.
-   .card-head stretches the full card width (it holds a flex spacer), so
-   keying off it lit the controls up with the pointer nowhere near the
-   title, which reads as "these belong to whatever I'm pointing at".
-   The `~` works because .hover-actions is appended after .card-title in the
-   header's child order. Hovering the strip itself keeps it open, so the
-   trip from title to buttons doesn't dismiss it. */
-.card-head .card-title:hover ~ .hover-actions,
+/* The whole header band reveals the strip. Scoping the trigger to
+   .card-title alone was tried and rejected — it makes a target only as wide
+   as the bold text, which the pointer keeps missing. That scoping was a
+   workaround for the strip sitting at the far right of the band; now that
+   the buttons mount beside the title, a band-wide trigger reveals controls
+   the user is already looking at. */
+.card-head:hover .hover-actions,
 .hover-actions:hover,
 .hover-actions[data-visible="1"] { opacity: 1; pointer-events: auto; }
 .hover-actions button {
@@ -399,8 +473,6 @@ section.block.card {
   align-items: center;
   gap: 12px;
   padding: 13px 18px;
-  cursor: pointer;
-  user-select: none;
 }
 .card-head:hover { background: var(--hover-tint); }
 .card-title {
@@ -408,6 +480,7 @@ section.block.card {
   font-weight: 700;
   color: var(--text-strong);
   letter-spacing: -0.01em;
+  user-select: none;
 }
 .card-head-spacer { flex: 1; }
 .card-body {
@@ -884,7 +957,60 @@ body.is-busy .comment-card {
   font-size: 11px; line-height: 1; cursor: pointer;
 }
 .unit-strip button:hover { border-color: var(--accent); color: var(--accent); }
-body.is-busy .unit-strip { display: none; }
+/* The round controls go away while a round is in flight — they'd be editing
+   a document that is mid-rewrite. The fold control stays: it changes nothing
+   Claude will ever see, so there is no reason to take reading aids away. */
+body.is-busy .unit-strip button:not(.unit-read) { display: none; }
+
+/* === Fold (read marker) ==============================================
+   A private, reversible "I'm done looking at this". It is NOT feedback: it
+   is never submitted and Claude is never told about it, which is exactly
+   why it must not look or behave like the three round controls. Solid
+   border against their dashed one, and a gap so the eye reads two groups. */
+.unit-strip .unit-read {
+  margin-left: 5px;
+  border-style: solid;
+  border-radius: 50%;
+}
+.unit-strip .unit-read svg,
+.hover-actions .hover-read svg {
+  width: 13px; height: 13px;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.hover-actions .hover-read {
+  margin-left: 6px;
+  border-style: solid;
+}
+.hover-actions .hover-read:hover { color: var(--text-strong); border-color: var(--text-strong); }
+
+/* A folded unit is a one-line stub that fades out at the bottom edge, so it
+   reads as "there is more here" rather than as truncated prose. Its strip
+   goes with it — clicking the stub anywhere is the way back, which is what
+   the zoom-in cursor promises. A pending mark's tint survives the fold, so
+   feedback you already left can never be hidden by folding. */
+.sub-unit[data-read="1"] {
+  max-height: 1.6em;
+  overflow: hidden;
+  opacity: .45;
+  cursor: zoom-in;
+  -webkit-mask-image: linear-gradient(to bottom, #000 45%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 45%, transparent 100%);
+  transition: opacity 120ms ease;
+}
+.sub-unit[data-read="1"]:hover { opacity: .7; }
+.sub-unit[data-read="1"] .unit-strip { display: none; }
+
+/* A folded card keeps its header and drops its body. The strip stays lit so
+   the way back is visible without hunting, the same treatment a pending mark
+   gets. */
+section.block[data-read="1"] .card-body { display: none; }
+section.block[data-read="1"] .card-title { color: var(--text-dim); }
+section.block[data-read="1"] .hover-actions { opacity: 1; pointer-events: auto; }
+section.block[data-read="1"] .hover-actions .hover-read {
+  color: var(--text-strong);
+  border-color: currentColor;
+}
 
 .sub-unit[data-mark="keep"] {
   background: color-mix(in srgb, #16a34a 8%, transparent);

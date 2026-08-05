@@ -116,12 +116,15 @@ def test_the_two_strips_cannot_overlap():
         "the obsolete unit-over-block pointer-priority override is back"
 
 
-def test_block_controls_reveal_on_title_hover_only():
-    """The reveal must key off .card-title, not .card-head: the header row
-    spans the full card width, so keying off it lights the controls up with
-    the pointer nowhere near the title."""
+def test_block_controls_reveal_from_anywhere_in_the_header():
+    """The reveal keys off .card-head, not .card-title.
+
+    Title-only scoping was tried and rejected: it makes a target only as wide
+    as the bold text, which the pointer keeps missing. It only ever existed to
+    stop a far-right strip lighting up from a distant pointer, and the strip
+    now mounts beside the title, so the band-wide trigger is the correct one."""
     css = STYLE_CSS.read_text()
-    assert ".card-head .card-title:hover ~ .hover-actions" in css, \
-        "block controls no longer reveal from title hover"
-    assert ".card-head:hover .hover-actions" not in css, \
-        "block controls still reveal from anywhere in the header row"
+    assert ".card-head:hover .hover-actions" in css, \
+        "block controls no longer reveal from header hover"
+    assert ".card-head .card-title:hover ~ .hover-actions" not in css, \
+        "block controls are back to the title-only trigger that was rejected"
