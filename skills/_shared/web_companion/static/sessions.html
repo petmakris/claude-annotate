@@ -91,6 +91,31 @@ select.proj-select {
 }
 .row:last-child { border-bottom: 0; }
 .row:hover { background: #f8f9fb; }
+.acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.act {
+  border: 1px solid #d4d8e0;
+  background: #fff;
+  color: #83868f;
+  border-radius: 7px;
+  padding: 3px 9px;
+  font-size: 11.5px;
+  font-family: inherit;
+  cursor: pointer;
+  line-height: 1.5;
+  transition: color .12s, border-color .12s;
+}
+.act:hover { color: #0071e3; border-color: #0071e3; }
+.act.ok { color: #047857; border-color: #047857; }
+.act.bad { color: #b91c1c; border-color: #b91c1c; }
+.act code {
+  font-family: "Monaspace Radon", ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  color: inherit;
+}
+/* The resume command is the primary action on a row, so it reads as a command
+   rather than as one chip among several. */
+.act-cmd { background: #eef0f4; border-color: #c9cdd6; color: #3a3d44; }
+.act-cmd:hover { background: #fff; }
 .dot {
   display: inline-block;
   width: 8px;
@@ -141,11 +166,12 @@ select.proj-select {
   <div class="hd">
     <h1 id="page-title">Annotate sessions</h1>
   </div>
-  <div class="sub">Named workspaces persist across Claude sessions. Reopen any to continue where you left off.</div>
+  <div class="sub">Workspaces outlive the Claude session that made them, and survive a reboot. Open one to read it, or copy its resume command to pick it up in a fresh session.</div>
   <div class="tools">
     <input id="search" class="search" placeholder="Search name, title, project…">
     <div class="seg" id="seg">
       <button class="on" data-seg="all">All</button>
+      <button data-seg="open">Open</button>
       <button data-seg="live">Live</button>
     </div>
     <select id="proj-select" class="proj-select">
@@ -158,6 +184,14 @@ select.proj-select {
 <script>
 var ALL = [];
 var segment = "all";
+// Filled from /api/whoami before the first render — the page cannot derive
+// the shareable host from window.location, since the owner normally browses
+// on localhost.
+var HOSTS = { port: location.port, public_host: "", shareable: false };
+// The resume command is skill-specific ("/annotate resume <slug>"), and this
+// page is served by every web_companion skill. Derived from the /health
+// banner, same source as the page title.
+var SKILL_CMD = "/annotate";
 
 function statusColor(s) {
   if (s === "live") return "#047857";
@@ -202,12 +236,81 @@ function rowHtml(row) {
       '<div class="c-status"><span class="dot" style="' + dotStyle + '"></span>' +
         '<span class="stag" style="color:' + statusColor(st) + '">' + statusLabel(st) + '</span></div>' +
       '<div class="c-name"><span class="slug">' + slug + '</span>' +
-        '<div class="title">' + title + '</div></div>' +
+        '<div class="title">' + title + '</div>' +
+        actionsHtml(row, slug) +
+      '</div>' +
       (row.project ? '<div class="c-proj"><span class="proj">' + project + '</span></div>' : '') +
       '<div class="c-meta"><span class="cm">💬 ' + commentCount + '</span>' + (last ? '<span class="last">' + last + '</span>' : '') + '</div>' +
       '<div class="c-go">Open →</div>' +
     '</div>'
   );
+}
+
+// Per-row actions. The resume command is the reason this page exists after a
+// reboot: the workspace outlives every Claude session that ever touched it,
+// and this is the one string that gets a fresh session back into it.
+//
+// A closed workspace gets no resume command on purpose — attaching to one
+// reopens the directory but the page still renders "this round is closed", so
+// offering the command would be offering a dead end.
+function actionsHtml(row, slug) {
+  var out = [];
+  if (row.status !== "done") {
+    var cmd = SKILL_CMD + " resume " + (row.slug || row.sid || "");
+    out.push('<button class="act act-cmd" data-copy="' + escapeHtml(cmd) + '"' +
+             ' title="Copy the command that reattaches a fresh Claude session to this workspace">' +
+             '<code>' + escapeHtml(cmd) + '</code></button>');
+  }
+  out.push('<button class="act" data-copy="' + escapeHtml(localUrl(slug)) +
+           '" title="Copy the local link (this machine only)">local link</button>');
+  if (HOSTS.shareable) {
+    out.push('<button class="act" data-copy="' + escapeHtml(publicUrl(slug)) +
+             '" title="Copy the shareable link — read-only for anyone but you">shareable link</button>');
+  }
+  return '<div class="acts">' + out.join("") + '</div>';
+}
+
+function localUrl(slug) {
+  return location.protocol + "//localhost:" + (HOSTS.port || location.port) +
+         "/s/" + slug + "/";
+}
+function publicUrl(slug) {
+  return "http://" + HOSTS.public_host + ":" + HOSTS.port + "/s/" + slug + "/";
+}
+
+// navigator.clipboard needs a secure context. localhost qualifies; a LAN or
+// Tailscale address over plain HTTP does not — and browsing this page from
+// another device is exactly when copying matters most. Hence the fallback.
+function copyText(text, btn) {
+  function done(ok) {
+    var original = btn.getAttribute("data-label") || btn.innerHTML;
+    btn.setAttribute("data-label", original);
+    btn.innerHTML = ok ? "copied ✓" : "copy failed";
+    btn.classList.add(ok ? "ok" : "bad");
+    setTimeout(function () {
+      btn.innerHTML = original;
+      btn.classList.remove("ok", "bad");
+    }, 1200);
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(function () { done(true); },
+                                             function () { done(false); });
+    return;
+  }
+  try {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    done(ok);
+  } catch (e) {
+    done(false);
+  }
 }
 
 function openRow(slug) {
@@ -239,7 +342,11 @@ function render() {
   var footEl = document.getElementById("foot");
 
   var rows = ALL.filter(function (row) {
+    // "all" shows everything the server still holds — live, idle and closed.
+    // Workspaces past retention are already gone from the response, so there
+    // is nothing deleted to filter out here.
     if (segment === "live" && row.status !== "live") return false;
+    if (segment === "open" && row.status === "done") return false;
     if (selectedProject && row.project !== selectedProject) return false;
     if (searchText) {
       var haystack = (
@@ -268,6 +375,15 @@ function render() {
       openRow(el.getAttribute("data-slug"));
     });
   });
+  // Bound after the row handler and stopping propagation, so copying a link
+  // does not also navigate away from the page you wanted to copy it from.
+  Array.prototype.forEach.call(listEl.querySelectorAll(".act"), function (btn) {
+    btn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      ev.preventDefault();
+      copyText(btn.getAttribute("data-copy"), btn);
+    });
+  });
 }
 
 document.getElementById("search").addEventListener("input", render);
@@ -286,20 +402,37 @@ Array.prototype.forEach.call(document.querySelectorAll("#seg button"), function 
 // (annotate, interactive-review, …). Derive the label from the server banner
 // ("<skill>-server vN") so a non-annotate skill isn't mislabeled. Falls back
 // to the hardcoded "Annotate sessions" if /health is unreachable.
-fetch("/health")
+// Both of these feed the rows (the skill name becomes the resume command, the
+// hosts become the copyable links), so the list waits for them rather than
+// rendering once with placeholders and re-rendering a frame later. Neither is
+// allowed to fail the page: a rejected probe degrades to a sensible default.
+var skillReady = fetch("/health")
   .then(function (r) { return r.text(); })
   .then(function (banner) {
     var skill = (banner || "").trim().replace(/-server\b.*$/, "");
     if (!skill) return;
+    SKILL_CMD = "/" + skill;
     var words = skill.replace(/-/g, " ");
     var label = words.charAt(0).toUpperCase() + words.slice(1) + " sessions";
     document.title = label;
     var h = document.getElementById("page-title");
     if (h) h.textContent = label;
   })
-  .catch(function () { /* keep the default title */ });
+  .catch(function () { /* keep the default title and command prefix */ });
 
-fetch("/api/sessions?scope=all")
+var hostsReady = fetch("/api/whoami")
+  .then(function (r) { return r.json(); })
+  .then(function (info) {
+    HOSTS = {
+      port: info.port || location.port,
+      public_host: info.public_host || "",
+      shareable: !!info.shareable,
+    };
+  })
+  .catch(function () { /* keep local-only links */ });
+
+Promise.all([skillReady, hostsReady])
+  .then(function () { return fetch("/api/sessions?scope=all"); })
   .then(function (r) { return r.json(); })
   .then(function (rows) {
     ALL = rows || [];

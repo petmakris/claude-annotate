@@ -507,8 +507,19 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
                 return
             # Lets the page decide whether to render its controls at all,
             # instead of showing them and failing the click with a 403.
+            #
+            # Also carries the two host names, because only the server knows
+            # them: the index page has to offer a loopback link for the owner
+            # AND a shareable one, and it cannot derive the second from
+            # window.location (the owner usually browses on localhost).
             if self.path == "/api/whoami":
-                self._send_json(200, {"writable": self._is_owner()})
+                port = server_holder['server'].server_address[1]
+                self._send_json(200, {
+                    "writable": self._is_owner(),
+                    "port": port,
+                    "public_host": public_host,
+                    "shareable": public_host not in ("127.0.0.1", "localhost"),
+                })
                 return
             # The index lists every workspace on this machine, across every
             # project. Someone handed a link to one review should reach that
