@@ -64,3 +64,33 @@ def test_probe_failure_messages_name_the_real_marketplace():
         if name != expected
     ]
     assert not wrong, f"failure messages must say {expected!r}: {wrong}"
+
+
+def test_marketplace_publishes_two_plugins_from_one_root():
+    plugins = _marketplace()["plugins"]
+    assert [p["name"] for p in plugins] == ["claude-annotate", "claude-ide-review"]
+    for plugin in plugins:
+        # One root, shared. The skills array is what separates the plugins;
+        # a subdirectory source would force a second copy of _shared.
+        assert plugin["source"] == "./", plugin["name"]
+        assert plugin["strict"] is False, plugin["name"]
+        assert plugin["skills"], plugin["name"]
+        assert plugin["description"], plugin["name"]
+
+
+def test_plugin_skill_lists_partition_the_skills_tree():
+    listed = [s for p in _marketplace()["plugins"] for s in p["skills"]]
+    assert len(listed) == len(set(listed)), f"a skill is claimed twice: {listed}"
+    # A skill directory is one with a SKILL.md; _shared and tests have none.
+    on_disk = {
+        f"./skills/{d.name}"
+        for d in (ROOT / "skills").iterdir()
+        if d.is_dir() and (d / "SKILL.md").is_file()
+    }
+    assert set(listed) == on_disk
+
+
+def test_no_root_plugin_json():
+    # Two plugins cannot share one plugin.json; their metadata lives in the
+    # marketplace entries instead.
+    assert not (ROOT / ".claude-plugin" / "plugin.json").exists()
