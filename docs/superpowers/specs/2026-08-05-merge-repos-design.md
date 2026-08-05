@@ -188,16 +188,44 @@ Additional manual checks, neither covered by pytest:
 
 ## Migration
 
-A single commit:
+"Fresh copy" describes how the *history* arrives — the trees are copied rather
+than merged with `--allow-unrelated-histories`, so neither source repository's
+commits are grafted on. It does not mean the work lands as one commit. Each step
+below carries its own test gate and is worth reviewing on its own, so each is its
+own commit:
 
 1. Copy `skills/interactive_review/` and `skills/walkthrough/` from
-   claude-ide-review.
-2. Copy `ide-plugin/` from claude-ide-review.
-3. Delete the vendoring artifacts and strip the banners.
-4. Rewrite `.claude-plugin/marketplace.json`; delete `.claude-plugin/plugin.json`.
+   claude-ide-review, and `ide-plugin/` with it. Confirm 729 tests pass.
+2. Repoint the absorbed skills' plugin-root probe at this marketplace.
+3. Rewrite `.claude-plugin/marketplace.json`; delete `.claude-plugin/plugin.json`.
+4. Delete the vendoring artifacts and strip the banners.
 5. Merge the CI workflows; add `release.yml` with the retagged trigger.
 6. Update `README.md` to describe a repository that ships two plugins.
-7. Run `python3 -m pytest skills -q` and confirm 729.
+
+### The absorbed skills need repointing
+
+Each skill resolves its own installed directory by looking its marketplace up in
+`~/.claude/plugins/known_marketplaces.json`, which is keyed by **marketplace**
+name:
+
+```python
+NAME, MARKER = "claude-ide-review", "skills/interactive_review/ensure_server.sh"
+```
+
+After the merge the only key is `claude-annotate`, so both absorbed skills abort
+with "plugin root not found" until `NAME` is changed. This is the one functional
+break the merge causes, and it is invisible until install time — so it gets a
+test that derives the expected name from `marketplace.json` rather than hardcoding
+it.
+
+### The root hooks file reaches both plugins
+
+`hooks/hooks.json` sits at the repository root and both plugins claim that root,
+so installing `claude-ide-review` alone probably also registers annotate's
+PostToolUse hook. `progress_publish.py` returns immediately when the session has
+no pending annotate rounds and always exits 0, so the effect is a spare `python3`
+spawn per tool call rather than a malfunction. Verified during implementation and
+recorded; not worth pre-emptive work.
 
 Afterwards, archive `petmakris/claude-ide-review` and `petmakris/web-companion`,
 each with a README line pointing here.
