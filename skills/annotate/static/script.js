@@ -90,8 +90,13 @@
         if (hideTimer) clearTimeout(hideTimer);
         hideTimer = setTimeout(() => { delete wrap.dataset.visible; hideTimer = null; }, HOVER_LINGER_MS);
       };
-      head.addEventListener("mouseenter", show);
-      head.addEventListener("mouseleave", scheduleHide);
+      // Scoped to the TITLE, not the header row: .card-head spans the full
+      // card width, so listening there lit the controls with the pointer
+      // nowhere near the title. The linger timer covers the gap between
+      // leaving the title and reaching the buttons.
+      const titleEl = head.querySelector(".card-title") || head;
+      titleEl.addEventListener("mouseenter", show);
+      titleEl.addEventListener("mouseleave", scheduleHide);
       wrap.addEventListener("mouseenter", show);
       wrap.addEventListener("mouseleave", scheduleHide);
       for (const t of ACTION_TYPES) {

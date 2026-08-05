@@ -43,12 +43,15 @@ def test_pending_delete_is_reversible():
 
 
 def test_block_controls_live_in_the_card_header():
-    """Block scope is taught by position: header strip, body left for units."""
+    """Block scope is taught by position: header strip, body left for units.
+
+    (What reveals the strip is asserted in test_smoke_subunits.py — it must
+    be title hover specifically, not the full-width header row.)"""
     src = SCRIPT_JS.read_text()
-    assert ".card-head:hover .hover-actions" in STYLE_CSS.read_text(), \
-        "hover-actions no longer reveal on card-header hover"
     assert "head.appendChild(wrap)" in src, \
         "hover-actions strip is not mounted in the card header"
+    assert 'head.querySelector(".card-title")' in src, \
+        "hover listeners are not scoped to the card title"
 
 
 def test_busy_lock_consumed_in_script():

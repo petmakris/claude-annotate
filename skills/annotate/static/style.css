@@ -185,7 +185,14 @@ main.prose th {
   pointer-events: none;
   transition: opacity 140ms ease;
 }
-.card-head:hover .hover-actions,
+/* Revealed by hovering the TITLE specifically — not the whole header band.
+   .card-head stretches the full card width (it holds a flex spacer), so
+   keying off it lit the controls up with the pointer nowhere near the
+   title, which reads as "these belong to whatever I'm pointing at".
+   The `~` works because .hover-actions is appended after .card-title in the
+   header's child order. Hovering the strip itself keeps it open, so the
+   trip from title to buttons doesn't dismiss it. */
+.card-head .card-title:hover ~ .hover-actions,
 .hover-actions:hover,
 .hover-actions[data-visible="1"] { opacity: 1; pointer-events: auto; }
 .hover-actions button {
@@ -264,6 +271,8 @@ section.block[data-block-mark="delete"] .card-title {
 @media (hover: none) {
   .hover-actions { opacity: 0.4; pointer-events: auto; }
   .card-head:focus-within .hover-actions { opacity: 1; }
+  /* No hover on touch, so the title-scoped rule above can never fire —
+     keep the strip reachable. */
 }
 
 /* === General composer (page-level comment) =========================== */
@@ -862,17 +871,12 @@ body.is-busy .comment-card {
   opacity: 0; transition: opacity .12s ease;
 }
 .sub-unit:hover .unit-strip { opacity: 1; }
-/* Granular strip wins over the block-level strip when hovering a unit —
-   both are right-aligned (.hover-actions: top:4px/right:6px; .unit-strip:
-   top:2px/right:4px) and overlap on the first unit, so the block strip
-   would otherwise intercept clicks meant for the unit strip underneath it.
-   :has(.sub-unit:hover) only matches while the pointer is actually over a
-   .sub-unit, so hovering other block chrome (card head, margins, non-unit
-   content) is unaffected and the block strip still works there. */
-section.block:has(.sub-unit:hover) .hover-actions {
-  opacity: 0;
-  pointer-events: none;
-}
+/* No pointer-priority rule is needed between the two strips any more: the
+   block strip lives in the card header and the unit strip in the card body,
+   so they cannot occupy the same pixels. The previous
+   `:has(.sub-unit:hover)` override would now be actively harmful — it would
+   blank a pending block mark's indicator whenever the pointer entered a
+   sentence. */
 .unit-strip button {
   width: 22px; height: 22px; padding: 0;
   border: 1px solid var(--border); border-radius: 5px;

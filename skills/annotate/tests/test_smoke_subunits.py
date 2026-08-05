@@ -103,10 +103,25 @@ def test_one_vocabulary_at_both_scopes():
             f"subunits.js still uses the retired {gone!r} vocabulary"
 
 
-def test_style_css_unit_strip_wins_pointer_priority():
-    """The block-level .hover-actions strip and the granular .unit-strip are
-    both right-aligned and overlap on a block's first unit — the block strip
-    must yield pointer priority while a .sub-unit is actually hovered."""
+def test_the_two_strips_cannot_overlap():
+    """Block controls live in the card header, unit controls in the body, so
+    they occupy disjoint pixels and need no pointer-priority override.
+
+    The old `:has(.sub-unit:hover)` rule blanked the block strip whenever a
+    sentence was hovered. With the header split that is both unnecessary and
+    harmful — it would hide a pending block mark's indicator on hover — so
+    its absence is the thing worth guarding."""
     css = STYLE_CSS.read_text()
-    assert ":has(.sub-unit:hover)" in css, \
-        "style.css missing the unit-strip-wins-over-block-strip :has() rule"
+    assert "section.block:has(.sub-unit:hover) .hover-actions" not in css, \
+        "the obsolete unit-over-block pointer-priority override is back"
+
+
+def test_block_controls_reveal_on_title_hover_only():
+    """The reveal must key off .card-title, not .card-head: the header row
+    spans the full card width, so keying off it lights the controls up with
+    the pointer nowhere near the title."""
+    css = STYLE_CSS.read_text()
+    assert ".card-head .card-title:hover ~ .hover-actions" in css, \
+        "block controls no longer reveal from title hover"
+    assert ".card-head:hover .hover-actions" not in css, \
+        "block controls still reveal from anywhere in the header row"
