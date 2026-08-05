@@ -50,11 +50,11 @@ not over a LAN hostname.
 
 ## Related
 
-The engine underneath lives in
-[web-companion](https://github.com/petmakris/web-companion) and is vendored here
-under `skills/_shared/`. Those files are generated — fix bugs upstream.
-[claude-ide-review](https://github.com/petmakris/claude-ide-review) applies the
-same idea to PR diffs and code walkthroughs inside IntelliJ.
+Both plugins drive the same local HTTP server. The engine lives here in
+`skills/_shared/web_companion/` and is edited in place. The separate repositories
+[web-companion](https://github.com/petmakris/web-companion) and
+[claude-ide-review](https://github.com/petmakris/claude-ide-review) are archived;
+they are kept for their history only.
 
 ## License
 
