@@ -171,18 +171,21 @@ main.prose th {
 [data-block-id][data-engaged-type="comment"]:hover  { background: color-mix(in srgb, var(--type-comment-wash) 55%, var(--hover-tint)); }
 
 /* === Hover action buttons ============================================ */
+/* Block-scope controls live in the card header and reveal on header hover
+   only. The card BODY is reserved for per-sentence controls, so the two
+   scopes never overlap and position alone tells the user what a click will
+   affect. Static in the header's flex row (not absolute) so it cannot cover
+   the version/comment chips. */
 .hover-actions {
-  position: absolute;
-  top: 4px;
-  right: 6px;
   display: flex;
   flex-direction: row;
   gap: 6px;
+  margin-right: 8px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 140ms ease;
 }
-[data-block-id]:hover .hover-actions,
+.card-head:hover .hover-actions,
 .hover-actions:hover,
 .hover-actions[data-visible="1"] { opacity: 1; pointer-events: auto; }
 .hover-actions button {
@@ -217,16 +220,50 @@ main.prose th {
   border-style: solid;
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
-.hover-actions button[data-type="reject"]:hover {
+.hover-actions button[data-type="keep"]:hover {
+  color: var(--mark-keep-fg, #1a7f4b);
+  border-color: currentColor;
+  border-style: solid;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.hover-actions button[data-type="delete"]:hover {
   color: var(--type-reject-fg);
   border-color: var(--type-reject-fg);
   border-style: solid;
   background: color-mix(in srgb, var(--type-reject-fg) 10%, transparent);
 }
 
+/* A pending mark keeps its control lit while the strip is idle, so you can
+   see what a card is carrying without hovering it. */
+section.block[data-block-mark] .hover-actions { opacity: 1; pointer-events: auto; }
+section.block[data-block-mark="keep"] .hover-actions button[data-type="keep"],
+section.block[data-block-mark="delete"] .hover-actions button[data-type="delete"],
+section.block[data-block-mark="comment"] .hover-actions button[data-type="comment"] {
+  border-style: solid;
+  color: var(--text-strong);
+  border-color: currentColor;
+}
+
+/* Pending delete: greyed and struck through, NOT removed. Nothing is actually
+   deleted until the round is submitted, so the card has to look reversible —
+   clicking the lit trash again un-marks it. The header stays legible so the
+   undo affordance is findable. */
+section.block[data-block-mark="delete"] .card-body {
+  opacity: .45;
+  text-decoration: line-through;
+}
+section.block[data-block-mark="delete"] .card-body .unit-strip,
+section.block[data-block-mark="delete"] .card-body .unit-chip {
+  text-decoration: none;
+}
+section.block[data-block-mark="delete"] .card-title {
+  text-decoration: line-through;
+  color: var(--text-dim);
+}
+
 @media (hover: none) {
   .hover-actions { opacity: 0.4; pointer-events: auto; }
-  [data-block-id]:focus-within .hover-actions { opacity: 1; }
+  .card-head:focus-within .hover-actions { opacity: 1; }
 }
 
 /* === General composer (page-level comment) =========================== */
@@ -723,11 +760,11 @@ main.prose mark.search-hit {
 .statstrip .tone-warn { color: #c98a14; }
 .statstrip .tone-hot  { color: #c1432f; }
 
-/* ── Dismiss affordance ───────────────────────────────────────────────── */
-.hover-actions button[data-type="dismiss"] {
+/* ── Delete affordance ────────────────────────────────────────────────── */
+.hover-actions button[data-type="delete"] {
   color: var(--text-dim);
 }
-.hover-actions button[data-type="dismiss"]:hover {
+.hover-actions button[data-type="delete"]:hover {
   color: #c1432f; /* matches the diagram error-pill red used elsewhere */
 }
 
@@ -845,20 +882,33 @@ section.block:has(.sub-unit:hover) .hover-actions {
 .unit-strip button:hover { border-color: var(--accent); color: var(--accent); }
 body.is-busy .unit-strip { display: none; }
 
-.sub-unit[data-mark="agree"] {
+.sub-unit[data-mark="keep"] {
   background: color-mix(in srgb, #16a34a 8%, transparent);
 }
-.sub-unit[data-mark="agree"] .unit-strip button[data-kind="agree"] {
+.sub-unit[data-mark="keep"] .unit-strip button[data-kind="keep"] {
   background: #16a34a; border-color: #16a34a; color: #fff;
 }
-.sub-unit[data-mark="dismiss"] { opacity: .45; text-decoration: line-through; }
-.sub-unit[data-mark="dismiss"] .unit-strip,
-.sub-unit[data-mark="dismiss"] .unit-chip { text-decoration: none; }
-.sub-unit[data-mark="dismiss"] .unit-strip button[data-kind="dismiss"] {
+/* Struck through but still present and still clickable — a pending delete is
+   undoable until the round is submitted. */
+.sub-unit[data-mark="delete"] { opacity: .45; text-decoration: line-through; }
+.sub-unit[data-mark="delete"] .unit-strip,
+.sub-unit[data-mark="delete"] .unit-chip { text-decoration: none; }
+.sub-unit[data-mark="delete"] .unit-strip button[data-kind="delete"] {
   background: #dc2626; border-color: #dc2626; color: #fff;
 }
 .sub-unit[data-mark="comment"] {
   background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+/* "I disagree" — a flag on a comment, at both scopes. */
+.unit-composer-stance {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin: 0 6px; font-size: 11px; color: var(--text-dim);
+  white-space: nowrap; cursor: pointer;
+}
+.card-stance {
+  display: flex; align-items: center; gap: 6px;
+  margin: 6px 0 0; font-size: 12px; color: var(--text-dim); cursor: pointer;
 }
 
 .unit-chip {

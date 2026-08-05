@@ -1,10 +1,31 @@
-// annotate skill — granular sub-unit marks + batched review rounds.
+// annotate skill — the review round: every piece of content feedback on the
+// page, batched into one submission.
 //
-// Decorates rendered markdown blocks with per-unit hover strips
-// (✓ agree / ✕ dismiss / 💬 comment). Marks are LOCAL — stored in
-// localStorage, nothing wakes Claude — until the user hits the round
-// dock's Submit, which sends ONE {type:"round", reactions:[...]} event.
-// Claude applies the whole round in a single pass and acks once.
+// THREE CONTROLS, one vocabulary, at every scope. Each answers two questions:
+// does the content survive, and if so what should Claude do to it?
+//
+//   delete   content is REMOVED from blocks.json, references re-threaded,
+//            and treated as out of scope from then on. The only destructive
+//            control. Reversible locally until Submit.
+//   keep     content survives UNTOUCHED — an explicit "do not rewrite this",
+//            which is what protects a line while its neighbours change.
+//   comment  content survives and is REWRITTEN to fold in a response. An
+//            optional `disagree` flag turns it into a push-back, which tells
+//            Claude to concede or defend rather than assume agreement.
+//
+// TWO SCOPES, distinguished by where you hover, not by which icon you get:
+//   scope "block"  — the card header. Applies to the whole block.
+//   scope "unit"   — a paragraph/bullet/row/fence inside the card body.
+//                    Carries selected_text (+ prefix/suffix when ambiguous).
+//   A unit-scope mark may also carry step_id for diagram/flowchart nodes and
+//   authored data-annotate-id sub-units, which anchor by id rather than text.
+//
+// ONE TIMING MODEL. Every mark is LOCAL — localStorage, nothing wakes Claude
+// — until the round dock's Submit sends ONE {type:"round", reactions:[...]}
+// event. Claude applies the whole round in a single pass and acks once.
+// (Choice picks and the general comment box are NOT feedback on content —
+// they are an answer and a conversation turn — so they still submit
+// immediately.)
 //
 // Unit identity on the wire is the existing span format: the unit's
 // plain text as selected_text, plus prefix/suffix disambiguation (picked
@@ -51,6 +72,18 @@
   }
   function markKey(blockId, text, ordinal) {
     return `${blockId}::${text}::${ordinal}`;
+  }
+  // Block-scope marks have no text to key on, and a block can carry at most
+  // one — marking a block "keep" replaces a pending "delete" rather than
+  // stacking. The sentinel can't collide with a unit key: unit keys always
+  // carry a numeric ordinal in the third segment.
+  function blockMarkKey(blockId) {
+    return `${blockId}::__block__`;
+  }
+  // Step-scope marks (diagram/flowchart nodes, authored data-annotate-id
+  // sub-units) anchor by id, not by text position.
+  function stepMarkKey(blockId, stepId) {
+    return `${blockId}::__step__::${stepId}`;
   }
 
   // 0-based position of `el` among its block's sub-units that share the
@@ -147,6 +180,13 @@
         pruned = true;
         continue;
       }
+      // Block- and step-scope marks have no text anchor to re-resolve: a live
+      // block_id is the whole liveness test for them. (A step_id that vanished
+      // from a re-rendered diagram is left alone deliberately — the server
+      // only rejects unknown block_ids, and Claude treats an unresolvable
+      // step as a per-reaction no-op.)
+      if (m.scope && m.scope !== "unit") continue;
+      if (m.step_id) continue;
       const content = contentByBlock.get(m.block_id);
       if (content && typeof m.ordinal === "number") {
         const same = Array.from(content.querySelectorAll(".sub-unit"))
@@ -159,6 +199,19 @@
     }
     if (pruned) saveMarks();
   }
+
+  // The three controls, in one place so the card header and the sub-unit
+  // strip can never drift apart. Same order, same meaning, same glyphs at
+  // both scopes — position is what tells the user the scope, not the icon.
+  // Tooltips name the consequence, not the gesture: "delete" has to read as
+  // destructive-but-undoable, and "keep" has to read as a protection rather
+  // than applause, or we are back to the vocabulary that confused everyone.
+  const CONTROL_SPECS = [
+    ["delete",  "🗑", "Delete — removed for good (undo until you submit)"],
+    ["keep",    "✓", "Keep — don't rewrite this"],
+    ["comment", "💬", "Comment — fold a response into this"],
+  ];
+  const CONTROLS = { unit: CONTROL_SPECS, block: CONTROL_SPECS };
 
   // The four sub-unit types (spec decision: all four, one DOM walk).
   // Top-level only: a nested list belongs to its parent bullet's unit.
@@ -190,11 +243,7 @@
       el.classList.add("sub-unit");
       const strip = document.createElement("span");
       strip.className = "unit-strip";
-      for (const [kind, glyph, title] of [
-        ["agree", "✓", "Agree (no rewrite)"],
-        ["dismiss", "✕", "Remove this item"],
-        ["comment", "💬", "Comment on this item"],
-      ]) {
+      for (const [kind, glyph, title] of CONTROLS.unit) {
         const b = document.createElement("button");
         b.type = "button";
         b.dataset.kind = kind;
@@ -216,6 +265,10 @@
       el.appendChild(strip);
       applyMarkState(content, el, blockId);
     });
+    // A re-render replaces the section element, dropping the data attribute a
+    // pending block mark painted onto it — restore it here, where we already
+    // know the DOM has just been rebuilt.
+    paintBlock(blockId);
     renderDock();
   }
 
@@ -253,7 +306,8 @@
     const selected = unitText(stripClone(el));
     // `ordinal` is stored for internal bookkeeping only — never copied onto
     // the wire payload (see submitRound's explicit field list).
-    const mark = { block_id: blockId, kind, selected_text: selected, ordinal };
+    const mark = { scope: "unit", block_id: blockId, kind,
+                   selected_text: selected, ordinal };
     if (text) mark.text = text;
     if (root) {
       const blockText = unitText(stripClone(root));
@@ -283,7 +337,7 @@
       chip.className = "unit-chip";
       const label = document.createElement("span");
       label.className = "unit-chip-text";
-      label.textContent = "💬 " + m.text;
+      label.textContent = (m.disagree ? "👎 " : "💬 ") + m.text;
       const rm = document.createElement("button");
       rm.type = "button";
       rm.className = "unit-chip-remove";
@@ -317,14 +371,30 @@
     input.type = "text";
     input.placeholder = "Ask or push back on this item…";
     input.value = (existing && existing.kind === "comment" && existing.text) || "";
+    // Disagreement is a flag on a comment, not a fourth control: under the
+    // hood both keep the content and both make Claude rewrite it. The only
+    // difference is the instruction — a disagree tells Claude to concede or
+    // defend rather than quietly fold the note in as agreement.
+    const stanceId = `unit-disagree-${Math.random().toString(36).slice(2, 9)}`;
+    const stance = document.createElement("label");
+    stance.className = "unit-composer-stance";
+    stance.htmlFor = stanceId;
+    const stanceBox = document.createElement("input");
+    stanceBox.type = "checkbox";
+    stanceBox.id = stanceId;
+    stanceBox.checked = !!(existing && existing.disagree);
+    stance.append(stanceBox, document.createTextNode(" I disagree"));
     const pin = document.createElement("button");
     pin.type = "button";
     pin.textContent = "Pin";
     const commit = () => {
       const v = input.value.trim();
       const key = markKey(blockId, text, ordinal);
-      if (v) marks[key] = buildMark(root, el, blockId, "comment", ordinal, v);
-      else delete marks[key];
+      if (v) {
+        const m = buildMark(root, el, blockId, "comment", ordinal, v);
+        if (stanceBox.checked) m.disagree = true;
+        marks[key] = m;
+      } else delete marks[key];
       saveMarks();
       closeComposer();
       applyMarkState(root, el, blockId);
@@ -335,7 +405,7 @@
       if (ev.key === "Enter") { ev.preventDefault(); commit(); }
       if (ev.key === "Escape") { ev.preventDefault(); closeComposer(); }
     });
-    wrap.append(input, pin);
+    wrap.append(input, stance, pin);
     el.appendChild(wrap);
     openComposerEl = wrap;
     input.focus();
@@ -382,9 +452,11 @@
     pruneMarks();                              // never submit an orphaned block_id
     if (pendingRound) return;                  // synchronous double-click guard
     const reactions = Object.values(marks).map((m) => {
-      const r = { kind: m.kind, block_id: m.block_id,
-                  selected_text: m.selected_text,
-                  text: m.text || "", images: [] };
+      const r = { scope: m.scope || "unit", kind: m.kind, block_id: m.block_id,
+                  selected_text: m.selected_text || "",
+                  text: m.text || "", images: m.images || [] };
+      if (m.step_id) r.step_id = m.step_id;
+      if (m.disagree) r.disagree = true;
       if (m.prefix !== undefined) r.prefix = m.prefix;
       if (m.suffix !== undefined) r.suffix = m.suffix;
       return r;
@@ -422,7 +494,69 @@
       delete el.dataset.mark;
       el.querySelector(".unit-chip")?.remove();
     });
+    document.querySelectorAll("section.block[data-block-mark]").forEach(s => {
+      delete s.dataset.blockMark;
+    });
     renderDock();
+  }
+
+  // ── Block scope ───────────────────────────────────────────────────────────
+  //
+  // Driven by the card header strip in script.js. A block carries at most one
+  // mark, so re-marking replaces rather than stacks, and clicking the same
+  // control twice is the undo. Painting is a data attribute on the section —
+  // CSS greys and strikes a pending delete, so "removed for good" still reads
+  // as reversible right up until Submit.
+
+  function paintBlock(blockId) {
+    const section = document.querySelector(
+      `section.block[data-block-id="${CSS.escape(blockId)}"]`);
+    if (!section) return;
+    const m = marks[blockMarkKey(blockId)];
+    if (m) section.dataset.blockMark = m.kind;
+    else delete section.dataset.blockMark;
+  }
+
+  function toggleBlockMark(blockId, kind) {
+    if (!blockId) return;
+    const key = blockMarkKey(blockId);
+    const existing = marks[key];
+    if (existing && existing.kind === kind) delete marks[key];
+    else marks[key] = { scope: "block", block_id: blockId, kind };
+    saveMarks();
+    paintBlock(blockId);
+    renderDock();
+  }
+
+  // Pin a comment that the rich editor in script.js composed. `step_id` is
+  // set for diagram/flowchart nodes and authored data-annotate-id sub-units;
+  // absent means the comment is about the whole block.
+  function pinComment({ block_id, step_id, text, disagree, images,
+                        selected_text, prefix, suffix }) {
+    if (!block_id || !text) return;
+    const key = step_id ? stepMarkKey(block_id, step_id) : blockMarkKey(block_id);
+    const m = { scope: step_id ? "unit" : "block", block_id, kind: "comment", text };
+    if (step_id) m.step_id = step_id;
+    if (disagree) m.disagree = true;
+    if (images && images.length) m.images = images;
+    if (selected_text) m.selected_text = selected_text;
+    if (prefix !== undefined) m.prefix = prefix;
+    if (suffix !== undefined) m.suffix = suffix;
+    marks[key] = m;
+    saveMarks();
+    if (!step_id) paintBlock(block_id);
+    renderDock();
+  }
+
+  function blockMark(blockId) {
+    return marks[blockMarkKey(blockId)] || null;
+  }
+
+  // Re-apply block painting after a re-render replaced the section element.
+  function repaintBlocks() {
+    for (const m of Object.values(marks)) {
+      if (m.scope === "block") paintBlock(m.block_id);
+    }
   }
 
   // Poll integration: disable the dock while busy; clear marks when our
@@ -447,5 +581,10 @@
     renderDock();
   }
 
-  window.AnnotateSubunits = { decorate, onPoll };
+  window.AnnotateSubunits = {
+    decorate, onPoll,
+    // Block/step scope, driven by the card header strip in script.js.
+    toggleBlockMark, pinComment, blockMark, repaintBlocks, renderDock,
+    CONTROLS,
+  };
 })();

@@ -82,10 +82,25 @@ def test_server_page_includes_subunits_script():
 
 def test_style_css_has_subunit_styles():
     css = STYLE_CSS.read_text()
-    for needle in (".sub-unit", ".unit-strip", '[data-mark="dismiss"]',
-                   '[data-mark="agree"]', ".unit-chip", "#round-dock",
+    for needle in (".sub-unit", ".unit-strip", '[data-mark="delete"]',
+                   '[data-mark="keep"]', ".unit-chip", "#round-dock",
                    "body.is-busy .unit-strip"):
         assert needle in css, f"style.css missing {needle!r}"
+
+
+def test_one_vocabulary_at_both_scopes():
+    """The card header and the sub-unit strip must offer the same three
+    controls. The original confusion was two overlapping strips with
+    different verbs (comment/reject/dismiss vs agree/dismiss/comment), so
+    a drift back to different verb sets is the regression to catch."""
+    subunits = SUBUNITS_JS.read_text()
+    script = SCRIPT_JS.read_text()
+    for kind in ("delete", "keep", "comment"):
+        assert f'"{kind}"' in subunits, f"subunits.js lost the {kind!r} control"
+        assert f'id: "{kind}"' in script, f"script.js header strip lost {kind!r}"
+    for gone in ("agree", "reject"):
+        assert f'"{gone}"' not in subunits, \
+            f"subunits.js still uses the retired {gone!r} vocabulary"
 
 
 def test_style_css_unit_strip_wins_pointer_priority():

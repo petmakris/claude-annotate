@@ -304,6 +304,12 @@ class Handlers:
         selected_text = payload.get("selected_text")
         step_id = payload.get("step_id")  # None for whole-diagram or non-diagram comments
         images = payload.get("images", [])
+        # `choice` is a pick, and a block_id-less `comment` is the general
+        # chat box — neither is content feedback, so both still submit
+        # immediately. `reject` and `dismiss` are LEGACY: the current client
+        # routes all content feedback through a round, and only a browser tab
+        # opened before that change can still send these. Accepted so an
+        # in-flight page isn't wedged; removable with the round-kind shim.
         if comment_type not in ("comment", "reject", "choice", "dismiss"):
             _send_text(h, 400, "bad type")
             return
@@ -391,7 +397,17 @@ class Handlers:
         eid = events_module.append(Path(dirs["events_dir"]), evt)
         _send_json(h, 202, {"event_id": eid, "status": "queued"})
 
-    _ROUND_KINDS = ("agree", "dismiss", "comment")
+    # The three controls, one vocabulary at every scope. `delete` removes the
+    # content; `keep` protects it from rewrite; `comment` folds a response in
+    # (with an optional `disagree` flag telling Claude to concede or defend
+    # rather than assume agreement).
+    _ROUND_KINDS = ("delete", "keep", "comment")
+    # Compatibility shim: a browser tab opened before the rename is still
+    # running the old client and will submit the old names. Translate rather
+    # than 422 so an in-flight page isn't wedged. Removable once no
+    # pre-rename tab can plausibly still be open.
+    _LEGACY_ROUND_KINDS = {"dismiss": "delete", "agree": "keep"}
+    _ROUND_SCOPES = ("block", "unit")
     _ROUND_MAX_REACTIONS = 200
 
     def _handle_round(self, h: BaseHTTPRequestHandler, dirs: dict, payload: dict) -> None:
@@ -414,9 +430,15 @@ class Handlers:
             if not isinstance(r, dict):
                 _send_text(h, 422, f"reaction {i}: not an object")
                 return
-            kind = r.get("kind")
+            kind = self._LEGACY_ROUND_KINDS.get(r.get("kind"), r.get("kind"))
             if kind not in self._ROUND_KINDS:
                 _send_text(h, 422, f"reaction {i}: bad kind {kind!r}")
+                return
+            # Absent scope means a pre-rename client, which only ever sent
+            # sub-unit reactions.
+            scope = r.get("scope", "unit")
+            if scope not in self._ROUND_SCOPES:
+                _send_text(h, 422, f"reaction {i}: bad scope {scope!r}")
                 return
             block_id = r.get("block_id")
             try:
@@ -424,8 +446,18 @@ class Handlers:
             except KeyError:
                 _send_text(h, 422, f"reaction {i}: unknown block_id {block_id!r}")
                 return
-            selected_text = r.get("selected_text")
-            if not isinstance(selected_text, str) or not selected_text.strip():
+            step_id = r.get("step_id")
+            if step_id is not None and not isinstance(step_id, str):
+                _send_text(h, 422, f"reaction {i}: bad step_id")
+                return
+            selected_text = r.get("selected_text", "")
+            if not isinstance(selected_text, str):
+                _send_text(h, 422, f"reaction {i}: bad selected_text")
+                return
+            # A block-scope reaction is anchored by block_id alone, and a
+            # step-scope one by step_id — only a text-anchored unit reaction
+            # actually needs selected_text to be resolvable.
+            if scope == "unit" and not step_id and not selected_text.strip():
                 _send_text(h, 422, f"reaction {i}: selected_text required")
                 return
             text = r.get("text", "")
@@ -439,9 +471,13 @@ class Handlers:
             if not _images_ok(images, Path(dirs["state_dir"])):
                 _send_text(h, 422, f"reaction {i}: invalid image path(s)")
                 return
-            out = {"kind": kind, "block_id": block_id,
+            out = {"scope": scope, "kind": kind, "block_id": block_id,
                    "selected_text": selected_text, "text": text,
                    "images": images}
+            if step_id:
+                out["step_id"] = step_id
+            if r.get("disagree") is True:
+                out["disagree"] = True
             for key in ("prefix", "suffix"):
                 if isinstance(r.get(key), str):
                     out[key] = r[key]

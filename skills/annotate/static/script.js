@@ -39,40 +39,46 @@
   }
 
   // ── Rendering ──────────────────────────────────────────────────────────────
-  const PLACEHOLDER_TEXT = { reject: "Optional note…", comment: "Your comment…" };
+  const PLACEHOLDER_TEXT = { comment: "Your comment…" };
 
-  // Feather-style line icons, one per action. Distinct metaphors so reject and
-  // dismiss can't be confused: speech-bubble (talk), thumbs-down (disagree),
-  // trash (delete). Stroke/size come from CSS (.hover-actions button svg).
+  // Feather-style line icons for the card-header strip. The three controls are
+  // the same three the sub-unit strip offers (AnnotateSubunits.CONTROLS) —
+  // scope is communicated by WHERE the strip lives (header = whole block,
+  // body = one paragraph), never by giving the two scopes different verbs.
   const ICON = {
     comment: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>',
-    reject: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z"/><path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>',
-    dismiss: '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
+    keep: '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>',
+    delete: '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
   };
   const ACTION_TYPES = [
-    { id: "comment", title: "Comment" },
-    { id: "reject",  title: "Reject"  },
+    { id: "delete",  title: "Delete — removed for good (undo until you submit)" },
+    { id: "keep",    title: "Keep — don't rewrite this section" },
+    { id: "comment", title: "Comment — fold a response into this section" },
   ];
 
   const HOVER_LINGER_MS = 500;
 
   function renderHoverActions() {
-    // Wire hover-action buttons onto every <section class="block"> that's
-    // NOT a sequence diagram. Markdown blocks get the hover strip; diagram
-    // blocks use direct-click-on-step (wired in createBlockSection) so that
-    // the click event's target is an SVG node and step_id resolves correctly.
-    // We also have to skip SVG <g class="step-row"> elements — they carry
+    // The block-scope strip lives in the CARD HEADER and appears only when the
+    // header is hovered. That is load-bearing, not cosmetic: the card body is
+    // reserved exclusively for per-sentence feedback, so the two scopes can
+    // never fight for the same pixels or leave the user guessing which one a
+    // click will hit. Position teaches scope.
+    //
+    // Every block kind gets this strip — including sequence/diagram/flowchart/
+    // choice, which previously had none and so could not be deleted at all.
+    // Their bodies keep their own click behaviour (step comments, option
+    // picks); only the whole-block controls live up here.
+    //
+    // We still have to skip SVG <g class="step-row"> elements: they carry
     // data-block-id too (for the submit payload) but are not block containers.
     const HEADING_TAGS = new Set(["H1", "H2", "H3", "H4", "H5", "H6"]);
     document.querySelectorAll("[data-block-id]").forEach(block => {
       if (block.tagName !== "SECTION") return;
-      if (block.dataset.kind === "sequence") return;
-      // Choice blocks are answered by picking an option, not by commenting —
-      // suppress the comment/reject strip the same way diagrams do.
-      if (block.dataset.kind === "choice") return;
-      if (block.dataset.kind === "flowchart") return;
       if (HEADING_TAGS.has(block.tagName)) return;
       if (block.querySelector(".hover-actions")) return;
+      const head = block.querySelector(".card-head");
+      if (!head) return;
       const wrap = document.createElement("div");
       wrap.className = "hover-actions";
       let hideTimer = null;
@@ -84,8 +90,8 @@
         if (hideTimer) clearTimeout(hideTimer);
         hideTimer = setTimeout(() => { delete wrap.dataset.visible; hideTimer = null; }, HOVER_LINGER_MS);
       };
-      block.addEventListener("mouseenter", show);
-      block.addEventListener("mouseleave", scheduleHide);
+      head.addEventListener("mouseenter", show);
+      head.addEventListener("mouseleave", scheduleHide);
       wrap.addEventListener("mouseenter", show);
       wrap.addEventListener("mouseleave", scheduleHide);
       for (const t of ACTION_TYPES) {
@@ -95,25 +101,18 @@
         b.innerHTML = ICON[t.id];
         b.title = t.title;
         b.addEventListener("click", (ev) => {
+          // The header toggles collapse on click — a control click must not
+          // also fold the card away under the cursor.
           ev.stopPropagation();
+          ev.preventDefault();
           show();
-          onHoverAction(block, t.id, ev);
+          if (document.body.classList.contains("is-busy")) return;
+          if (t.id === "comment") onHoverAction(block, "comment", ev);
+          else window.AnnotateSubunits?.toggleBlockMark(block.dataset.blockId, t.id);
         });
         wrap.appendChild(b);
       }
-      // Dismiss (delete-as-irrelevant). Unlike comment/reject it opens no
-      // editor — it submits a dismiss event straight away.
-      const del = document.createElement("button");
-      del.type = "button";
-      del.dataset.type = "dismiss";
-      del.innerHTML = ICON.dismiss;
-      del.title = "Remove section (irrelevant)";
-      del.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        onDismiss(block);
-      });
-      wrap.appendChild(del);
-      (block.querySelector(".card-body") || block).appendChild(wrap);
+      head.appendChild(wrap);
     });
   }
 
@@ -163,31 +162,6 @@
     return text.length > 60 ? text.slice(0, 59).trimEnd() + "…" : text;
   }
 
-  function onDismiss(block) {
-    // Guard: the lock states make dismiss a no-op while another submission is
-    // in flight or an editor is open. (CSS also disables the button, but the
-    // guard covers programmatic/edge calls.)
-    if (document.body.classList.contains("is-busy") ||
-        document.body.classList.contains("is-editing")) return;
-    const blockId = block.dataset.blockId;
-    if (!blockId) return;
-    const payload = {
-      block_id: blockId,
-      step_id: null,
-      type: "dismiss",
-      text: "",
-      selected_text: "",
-      images: [],
-    };
-    WebCompanion.api.submit(payload).then((res) => {
-      const eventId = res && res.event_id;
-      if (eventId) pendingEvents.set(String(eventId), { blockId });
-      // Immediate feedback; the block is actually removed by reconcile() once
-      // Claude acks and /raw no longer lists it.
-      startUpdatingOverlay(block);
-    }).catch(() => { /* swallow — page stays usable */ });
-  }
-
   function onHoverAction(block, type, event) {
     const sel = window.getSelection();
     let selectedText = "";
@@ -227,11 +201,10 @@
     const selectedText = opts.selectedText || "";
     const sel = opts.selection || null;
     // Single input per target: if a draft already exists for this
-    // (block, step), reuse it instead of stacking a second card. The 💬 / ✗
-    // icons then just switch that one card's intent (comment ↔ reject) and
-    // keep any text already typed. Without this, clicking both icons on a
-    // block opens two separate inputs — confusing, and the submit intent is
-    // ambiguous.
+    // (block, step), reuse it instead of stacking a second card, keeping any
+    // text already typed. There is no longer a comment↔reject intent switch —
+    // disagreement is a checkbox on the one card, because both outcomes keep
+    // the content and both make Claude rewrite it.
     const blockId = block.dataset.blockId;
     const norm = (s) => (s == null ? null : s);
     const existingId = Object.keys(annotations).find((k) => {
@@ -934,17 +907,34 @@
     // Auto-grow once on initial render so a card with prior content shows it all.
     queueMicrotask(autoGrow);
 
-    // ── Per-comment Submit button ──────────────────────────────────────────
+    // ── Stance + Add button ────────────────────────────────────────────────
+    // "I disagree" is a flag on the comment rather than a separate control:
+    // both keep the content and both make Claude rewrite it, and the only
+    // real difference is whether Claude may treat the note as agreement.
+    const stanceRow = document.createElement("label");
+    stanceRow.className = "card-stance";
+    const stanceBox = document.createElement("input");
+    stanceBox.type = "checkbox";
+    stanceBox.checked = !!annotations[id]?.disagree;
+    stanceBox.addEventListener("change", () => {
+      annotations[id].disagree = stanceBox.checked;
+      saveDrafts();
+    });
+    stanceRow.append(stanceBox, document.createTextNode(" I disagree with this"));
+    card.appendChild(stanceRow);
+
     const submitRow = document.createElement("div");
     submitRow.className = "card-submit-row";
     const hint = document.createElement("span");
     hint.className = "card-submit-hint";
-    hint.innerHTML = '<kbd>⌘</kbd><kbd>↩</kbd> to submit · paste an image to attach';
+    // The button pins into the round; nothing is sent until the round dock's
+    // Submit, so the label must not promise delivery.
+    hint.innerHTML = '<kbd>⌘</kbd><kbd>↩</kbd> to add · paste an image to attach';
     submitRow.appendChild(hint);
     const submitBtn = document.createElement("button");
     submitBtn.type = "button";
     submitBtn.className = "card-submit-btn";
-    submitBtn.textContent = "Submit";
+    submitBtn.textContent = "Add to round";
     // ⌘/Ctrl+Enter submits from the textarea.
     ta.addEventListener("keydown", (ev) => {
       if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") {
@@ -955,38 +945,26 @@
     submitBtn.addEventListener("click", () => {
       const text = annotations[id]?.comment || "";
       const images = annotations[id]?.images || [];
-      const payload = {
-        block_id: a.block_id || null,
+      if (!text.trim()) return;
+      // Pin into the review round instead of submitting. Nothing wakes Claude
+      // until the round dock's Submit — one timing model for every piece of
+      // content feedback, so a click never has an invisible "this one sends
+      // now" exception.
+      window.AnnotateSubunits?.pinComment({
+        block_id: a.block_id,
         step_id: a.step_id ?? null,
-        type: a.type || "comment",
         text,
-        selected_text: a.selected_text || "",
+        disagree: !!annotations[id]?.disagree,
         images,
-      };
-      if (a.prefix !== undefined) payload.prefix = a.prefix;
-      if (a.suffix !== undefined) payload.suffix = a.suffix;
-      if (a.block_id) {
-        const snippet = blockSnippet(a.block_id);
-        if (snippet) payload.block_snippet = snippet;
-      }
-      submitBtn.disabled = true;
-      WebCompanion.api.submit(payload).then((res) => {
-        // Remove the card; the block itself gets the updating overlay so the
-        // user has visible feedback while Claude responds.
-        const eventId = res && res.event_id;
-        // Track the pending event so the overlay clears when Claude acks it,
-        // regardless of which block (if any) gets rewritten in response.
-        if (eventId) pendingEvents.set(String(eventId), { blockId: a.block_id });
-        delete annotations[id];
-        saveDrafts();
-        document.body.classList.toggle("is-editing", Object.keys(annotations).length > 0);
-        card.remove();
-        applyEngagedStyling();
-        const section = document.querySelector(`section.block[data-block-id="${cssEsc(a.block_id)}"]`);
-        startUpdatingOverlay(section);
-      }).catch(() => {
-        submitBtn.disabled = false;
+        selected_text: a.selected_text || "",
+        prefix: a.prefix,
+        suffix: a.suffix,
       });
+      delete annotations[id];
+      saveDrafts();
+      document.body.classList.toggle("is-editing", Object.keys(annotations).length > 0);
+      card.remove();
+      applyEngagedStyling();
     });
     submitRow.appendChild(submitBtn);
     card.appendChild(submitRow);
@@ -1492,7 +1470,7 @@
     const toast = document.createElement("div");
     toast.className = "first-time-toast";
     toast.innerHTML = `
-      <span>👋 Hover any block to comment, reject, or delete it. Unmarked blocks are approved.</span>
+      <span>👋 Hover a card's <b>title</b> for whole-section controls, or any <b>sentence</b> for that line. Delete · Keep · Comment — nothing is sent until you submit the round.</span>
       <button type="button" class="dismiss" aria-label="Dismiss">×</button>
     `;
     document.body.appendChild(toast);
