@@ -10,7 +10,17 @@ block* — not the whole answer, not a fresh reply appended below it.
 
     /plugin marketplace add petmakris/claude-annotate
 
-Python 3 standard library only. Nothing to `pip install`.
+That registers the marketplace, which publishes two plugins. Install either or both:
+
+    /plugin install claude-annotate      # read long answers in a browser, comment on any block
+    /plugin install claude-ide-review    # ask questions on a PR diff line or walkthrough step, in IntelliJ
+
+`claude-ide-review` also needs the IntelliJ half, which is a separate download —
+grab the `.zip` from [Releases](https://github.com/petmakris/claude-annotate/releases)
+and install it via **Settings → Plugins → ⚙ → Install Plugin from Disk…**
+
+Both plugins drive the same local server engine, which lives once in this repository at
+`skills/_shared/web_companion/`.
 
 ## Use
 
@@ -40,11 +50,11 @@ not over a LAN hostname.
 
 ## Related
 
-The engine underneath lives in
-[web-companion](https://github.com/petmakris/web-companion) and is vendored here
-under `skills/_shared/`. Those files are generated — fix bugs upstream.
-[claude-ide-review](https://github.com/petmakris/claude-ide-review) applies the
-same idea to PR diffs and code walkthroughs inside IntelliJ.
+Both plugins drive the same local server engine. The engine lives here in
+`skills/_shared/web_companion/` and is edited in place. The separate repositories
+[web-companion](https://github.com/petmakris/web-companion) and
+[claude-ide-review](https://github.com/petmakris/claude-ide-review) are superseded
+by this repository; they are kept for their history only.
 
 ## License
 

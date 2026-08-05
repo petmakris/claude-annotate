@@ -1,0 +1,75 @@
+<idea-plugin>
+    <id>com.petros.claude-ide-review</id>
+    <name>Claude IDE Review</name>
+    <vendor url="https://github.com/petmakris">Petros Makris</vendor>
+
+    <description><![CDATA[
+        IDE companion for the <a href="https://github.com/petmakris/claude-ide-review">claude-ide-review</a>
+        Claude Code plugin. Ask Claude a question on any line of a GitHub PR diff
+        (<code>/interactive-review</code>) and get a threaded answer in place, or walk a
+        codebase through anchored steps with Claude answering inline
+        (<code>/walkthrough</code>).
+        <br/><br/>
+        Requires the Claude Code plugin to be installed separately — this plugin is the
+        IDE surface, not the whole tool.
+    ]]></description>
+
+    <idea-version since-build="242" until-build="261.*"/>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+    <!-- Bundled GitHub plugin: lets us open the real PR diff view via
+         GHPRProjectViewModel.openPullRequestDiff (with inline PR comments). -->
+    <depends>org.jetbrains.plugins.github</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <diff.DiffExtension implementation="com.petros.ireview.SpikeDiffExtension"/>
+        <editorFactoryListener implementation="com.petros.ireview.WorkingCopyAskGutter"/>
+        <editorFactoryListener implementation="com.petros.ireview.WalkthroughGutter"/>
+        <projectService serviceImplementation="com.petros.ireview.ReviewSessionService"/>
+        <statusBarWidgetFactory id="com.petros.ireview.statusbar"
+                                implementation="com.petros.ireview.ReviewStatusBarWidgetFactory"/>
+        <toolWindow id="Review Annotations"
+                    anchor="right"
+                    icon="/icons/annotation_yellow.svg"
+                    factoryClass="com.petros.ireview.AnnotationsToolWindowFactory"/>
+        <projectService serviceImplementation="com.petros.ireview.WalkthroughService"/>
+        <toolWindow id="Walkthrough"
+                    anchor="right"
+                    icon="/icons/comment.svg"
+                    factoryClass="com.petros.ireview.WalkthroughToolWindowFactory"/>
+        <statusBarWidgetFactory id="com.petros.ireview.walkthrough.mode"
+                                implementation="com.petros.ireview.WalkthroughModeWidgetFactory"/>
+    </extensions>
+
+    <actions>
+        <action id="com.petros.ireview.WalkthroughNext"
+                class="com.petros.ireview.WalkthroughActions$Next"
+                text="Walkthrough: Next Step"
+                description="Move to the next step of the active walkthrough.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="control alt shift RIGHT"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="control alt shift RIGHT"/>
+        </action>
+        <action id="com.petros.ireview.WalkthroughPrev"
+                class="com.petros.ireview.WalkthroughActions$Prev"
+                text="Walkthrough: Previous Step"
+                description="Move to the previous step of the active walkthrough.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="control alt shift LEFT"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="control alt shift LEFT"/>
+        </action>
+        <action id="com.petros.ireview.WalkthroughAsk"
+                class="com.petros.ireview.WalkthroughActions$Ask"
+                text="Walkthrough: Ask About This Step"
+                description="Ask Claude a question about the active walkthrough step.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="control alt shift A"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="control alt shift A"/>
+        </action>
+        <action id="com.petros.ireview.WalkthroughToggleMode"
+                class="com.petros.ireview.WalkthroughActions$ToggleMode"
+                text="Walkthrough: Show/Hide Inline Card"
+                description="Show or hide the walkthrough's inline step card in the editor.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="control alt shift W"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="control alt shift W"/>
+        </action>
+    </actions>
+</idea-plugin>

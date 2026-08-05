@@ -9,7 +9,22 @@
       "name": "claude-annotate",
       "version": "0.1.0",
       "source": "./",
-      "description": "Read Claude's long answers in a browser and comment on any block; Claude rewrites that block in place."
+      "strict": false,
+      "description": "Read Claude's long answers in a browser and comment on any block; Claude rewrites that block in place.",
+      "skills": [
+        "./skills/annotate"
+      ]
+    },
+    {
+      "name": "claude-ide-review",
+      "version": "0.1.0",
+      "source": "./",
+      "strict": false,
+      "description": "Ask Claude questions on a PR diff line or a code walkthrough step, inside IntelliJ. Requires the companion IDE plugin.",
+      "skills": [
+        "./skills/interactive_review",
+        "./skills/walkthrough"
+      ]
     }
   ]
 }

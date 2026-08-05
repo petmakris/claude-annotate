@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """Paste-image upload handler. Extracted from annotate/server.py:613-653.
 
 The endpoint is unchanged: POST <session>/api/upload with a raw image body

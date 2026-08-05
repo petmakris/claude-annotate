@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """Integration tests for GET /api/sessions?cwd= route in web_companion server."""
 import json
 import threading

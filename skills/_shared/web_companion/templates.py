@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """Shared HTML shell templates used by skill renderers."""
 from __future__ import annotations
 

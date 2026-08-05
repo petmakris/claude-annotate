@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """Stdlib-only shared HTTP companion library used by the annotate and
 interactive-review skills.
 

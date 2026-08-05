@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """Shared HTTP server entrypoint.
 
 Each skill calls server.run(skill_name=..., port_range=..., handlers=...,

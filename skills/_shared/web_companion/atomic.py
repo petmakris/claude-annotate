@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """Atomic file writes — safe under concurrent writers.
 
 The naive `tmp = path.with_suffix(".tmp"); tmp.write_text(...); tmp.replace(path)`

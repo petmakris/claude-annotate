@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """The read/write split: anyone may read a shared link, only the owner writes.
 
 The server is meant to be safe to expose on a LAN or a Tailnet. That is only

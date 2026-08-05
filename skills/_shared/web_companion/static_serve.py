@@ -1,4 +1,3 @@
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 """Path-traversal-safe static asset serving for web_companion.
 
 Extracted from annotate/server.py:460-481. Extended to accept a list of dirs

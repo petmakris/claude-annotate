@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# GENERATED FILE — DO NOT EDIT. Source: github.com/petmakris/web-companion
 # Smoke test for watcher.sh.  Fakes events and asserts the banner format.
 set -euo pipefail
 
