@@ -270,9 +270,15 @@ function actionsHtml(row, slug) {
   return '<div class="acts">' + out.join("") + '</div>';
 }
 
+// Whatever origin you are actually browsing on — NOT a rebuilt
+// "localhost:<port>". This page can be reached three ways: straight at the
+// server (http://localhost:3080), through a local reverse proxy that
+// terminates TLS on 443 (https://annotate), or at a LAN/Tailscale address.
+// Reconstructing the origin got the proxy case wrong in a way that looked
+// right: it produced https://localhost:3080, and the raw server speaks plain
+// HTTP there, so the copied link simply failed to load.
 function localUrl(slug) {
-  return location.protocol + "//localhost:" + (HOSTS.port || location.port) +
-         "/s/" + slug + "/";
+  return location.origin + "/s/" + slug + "/";
 }
 function publicUrl(slug) {
   return "http://" + HOSTS.public_host + ":" + HOSTS.port + "/s/" + slug + "/";

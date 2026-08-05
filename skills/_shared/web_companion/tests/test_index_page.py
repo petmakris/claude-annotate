@@ -144,3 +144,15 @@ def test_closed_workspaces_are_still_listed():
     html = SESSIONS_HTML.read_text()
     assert 'data-seg="open"' in html, "no way to hide closed workspaces"
     assert 'data-seg="all"' in html, "the all-inclusive default is gone"
+
+
+def test_the_local_link_follows_the_origin_you_are_browsing():
+    """Regression: behind a TLS-terminating local proxy (devdomains/Caddy),
+    rebuilding the origin as "<protocol>//localhost:<port>" produced
+    https://localhost:3080 — the raw server speaks plain HTTP there, so the
+    copied link failed to load while looking perfectly plausible."""
+    html = SESSIONS_HTML.read_text()
+    assert "location.origin" in html, \
+        "the local link is being reconstructed instead of taken from the origin"
+    assert '"//localhost:"' not in html, \
+        "the local link still hardcodes localhost, which breaks behind a proxy"
