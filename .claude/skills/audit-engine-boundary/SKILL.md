@@ -28,7 +28,7 @@ Report only what these do not enforce, plus anywhere either has gone stale.
 
 ## The rules
 
-- **Rule 1 — the engine is imported, never reimplemented.** A skill that hand-rolls behaviour the engine already provides is a **Critical** Violation: its own atomic write instead of `atomic.py`, its own SSE framing instead of `events.py`, its own session-directory walk instead of `sessions.py`, its own thread store instead of `threads.py`. This is how two copies come back without a single banner reappearing. The fix is always the same: import it.
+- **Rule 1 — the engine is imported, never reimplemented.** A skill that hand-rolls behaviour the engine already provides is a **Critical** Violation: its own atomic write instead of `atomic.py`, its own on-disk event queue instead of `events.py` (the queue the watcher reads to wake Claude — not a browser-facing SSE transport), its own session-directory walk instead of `sessions.py`, its own thread store instead of `threads.py`. This is how two copies come back without a single banner reappearing. The fix is always the same: import it.
 - **Rule 2 — no import reaches the engine by another path.** Every engine import must read `skills._shared.web_companion.*`. A `sys.path` manipulation, a relative import climbing out of a skill, or a duplicated module file is **Critical**.
 - **Rule 3 — vendoring stays dead.** Any resurrected `VENDOR*` file, `GENERATED FILE` banner, or sync/check script anywhere in the tree is **Critical**. The covering tests above catch the two known filenames; this rule covers the rest of the shape, including a new script under `tools/` or a CI job that re-derives the tree.
 - **Rule 4 — port ranges stay disjoint.** `PORT_RANGE` in the three skill servers must not overlap. Today: annotate 3080, interactive-review 54620–54640, walkthrough 54660–54680. An overlap is **Critical** — two skills race for a port and the loser reports a stale one.
@@ -42,7 +42,9 @@ Report only what these do not enforce, plus anywhere either has gone stale.
 3. `skills/_shared/web_companion/tests/` naming engine internals — that is its job.
 4. This audit suite (`.claude/skills/audit*/`) naming engine modules to describe them.
 5. The spec and plan documents under `docs/superpowers/`, which describe the vendoring that was removed.
-6. Any line carrying `# engine-exempt: <reason>`.
+6. Each skill's `_serve_stream` HTTP transport framing — the browser-facing SSE loop in `skills/interactive_review/server.py` and `skills/walkthrough/server.py`. The engine has no SSE-serving module for either to reimplement, so this is skill-owned, not a Rule 1 Violation. Duplication between the two belongs to `/audit-code-health`'s Rule 5, not to this audit.
+7. Importing through a same-repo compatibility shim that is documented as a deliberate, migratable re-export — for example `skills/interactive_review/threads.py`, whose docstring says "Import sites can migrate at leisure; this alias keeps both old module paths working" — is a **Decision** (migrate now or later), not a Rule 2 Violation. Rule 2 still applies in full to `sys.path` manipulation, a relative import climbing out of a skill, and a duplicated module file, all of which stay Critical.
+8. Any line carrying `# engine-exempt: <reason>`, or, for a Rule 1 finding, an explicit in-code statement elsewhere in the same file (prose in a docstring or comment) that the duplication is deliberate and why. The marker is preferred because it is greppable, but its absence is not itself a finding when the file already states the justification in prose.
 
 ## Step 2 — scan
 

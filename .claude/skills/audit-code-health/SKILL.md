@@ -43,20 +43,26 @@ anywhere, not that a specific function lacks a direct unit test.
   deliberate and says so, in which case it is not a Violation at all. The
   justification must be explicit that failure is absorbed on purpose (for
   example "best-effort," "never raises," "must never stop the caller"), and
-  it may live in either of two places: the enclosing function's own
-  docstring, or a comment immediately preceding the `try` block — an
-  ordinary undocumented `except: pass` gets neither exemption. `_port_holder`
-  in the engine (`skills/_shared/web_companion/server.py`) documents it in
-  its docstring ("best-effort description... never let the diagnostic itself
-  fail the startup path"). The `cleanup.sweep_state(...)` call inside
-  `run()` in the same file documents it the other way — a comment
-  immediately above the `try` ("Best-effort: a sweep failure must never stop
-  the server from starting") rather than in `run()`'s own docstring, which
-  is about being the server entrypoint and says nothing about this swallow.
-  Both are allowlisted; a swallow with no comment and no docstring statement
-  either way is still Critical or Medium as above. In Java, a `catch` block
-  with an empty body is the same finding, exempted only under the same
-  either-form rule.
+  it may live in any of four places: the enclosing function's own docstring,
+  the module's own docstring, a comment immediately preceding the `try`
+  block, or a comment anywhere inside the `catch`/`except` block — an
+  ordinary undocumented `except: pass` gets none of these exemptions.
+  `_port_holder` in the engine (`skills/_shared/web_companion/server.py`)
+  documents it in its docstring ("best-effort description... never let the
+  diagnostic itself fail the startup path"). The `cleanup.sweep_state(...)`
+  call inside `run()` in the same file documents it a second way — a
+  comment immediately above the `try` ("Best-effort: a sweep failure must
+  never stop the server from starting") rather than in `run()`'s own
+  docstring, which is about being the server entrypoint and says nothing
+  about this swallow. `BuildInfo.java:40` documents it a third way — a
+  comment inside the `catch` body itself ("never throw into the UI").
+  `skills/annotate/hooks/progress_publish.py:134` documents it a fourth way
+  — the module's own docstring ("Always exit 0... so a hook failure never
+  disturbs the user's tool flow"), not the enclosing function's. All four
+  are allowlisted; a swallow with no comment and no docstring statement in
+  any of these positions is still Critical or Medium as above. In Java, a
+  `catch` block with an empty body is the same finding, exempted only under
+  the same four-form rule.
 - **Rule 2 — network and subprocess calls carry a timeout.** An
   `http.client`, `urllib`, or `subprocess` call with no timeout is
   **Critical**: it hangs the caller forever with no way out. This applies to
@@ -98,8 +104,14 @@ anywhere, not that a specific function lacks a direct unit test.
    swallow, justified the other way: a comment immediately above the `try`
    ("Best-effort: a sweep failure must never stop the server from
    starting"), not `run()`'s own docstring. Any other function or call site
-   whose docstring or immediately-preceding comment makes the same claim is
-   covered by this same allowlist entry, not just these four named ones.
+   whose docstring (function or module), immediately-preceding comment, or
+   comment anywhere inside the `catch`/`except` block makes the same claim
+   is covered by this same allowlist entry — for example
+   `ide-plugin/src/main/java/com/petros/ireview/BuildInfo.java:40` (comment
+   inside the `catch` body: "never throw into the UI") and
+   `skills/annotate/hooks/progress_publish.py:134` (module docstring:
+   "Always exit 0... so a hook failure never disturbs the user's tool
+   flow") — not just the four named at the top of this entry.
 2. Generated or vendored third-party assets:
    `skills/_shared/web_companion/static/markdown-it.min.js`, the fonts,
    `ide-plugin/gradle/wrapper/gradle-wrapper.jar`.
@@ -115,6 +127,14 @@ anywhere, not that a specific function lacks a direct unit test.
    not this one's, and identical (undrifted) copies are a Decision under
    Rule 5 regardless.
 6. Any line carrying `# health-exempt: <reason>`.
+7. A swallow around closing or releasing a resource during teardown —
+   `close()`/`shutdown()`-shaped calls in a cleanup path, where the
+   operation being abandoned is already finished or already failing — is
+   not a Violation even with no comment, e.g.
+   `ide-plugin/src/main/java/com/petros/ireview/SseClient.java:81,115`'s
+   `catch (RuntimeException ignored) {}` around `Stream.close()`. Keep this
+   narrow: it covers teardown-only close/shutdown calls, not ordinary
+   operations.
 
 ## Step 2 — scan
 
