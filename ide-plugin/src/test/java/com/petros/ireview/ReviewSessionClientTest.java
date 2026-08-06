@@ -211,6 +211,35 @@ class ReviewSessionClientTest {
     }
 
     @Test
+    void deleteThreadPostsToThreadsDelete() throws Exception {
+        try (FakeReviewServer server = new FakeReviewServer()) {
+            server.sessionsJson =
+                "[{\"sid\":\"abc\",\"pr_ref\":\"PR1\",\"title\":\"t\","
+              + "\"state_dir\":\"/tmp/x\"}]";
+            server.watcherSeenAt = System.currentTimeMillis() / 1000; // fresh → active
+            CountDownLatch attached = new CountDownLatch(1);
+            ReviewSessionClient client = new ReviewSessionClient(
+                server.baseUrl(),
+                "/proj/acme-shop",
+                Duration.ofMillis(100));
+            client.addListener(new ReviewSessionClient.Listener() {
+                @Override public void onAttached(ReviewSessionClient.SessionInfo info) {
+                    attached.countDown();
+                }
+            });
+            client.start();
+            assertTrue(attached.await(2, TimeUnit.SECONDS), "should attach first");
+
+            client.deleteThread("foo:R:1").get(2, TimeUnit.SECONDS);
+            assertEquals(1, server.deleteThreadCount.get(),
+                "should POST /api/threads/delete once");
+            assertTrue(server.lastDeleteThreadBody.contains("foo:R:1"),
+                "delete body should carry the anchor");
+            client.stop();
+        }
+    }
+
+    @Test
     void receivesThreadChangedEvent() throws Exception {
         try (FakeReviewServer server = new FakeReviewServer()) {
             server.sessionsJson =

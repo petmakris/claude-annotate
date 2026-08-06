@@ -59,6 +59,11 @@ public final class FakeReviewServer implements AutoCloseable {
     /** Count of POSTs that reached /api/cancel. */
     public final java.util.concurrent.atomic.AtomicInteger cancelCount =
         new java.util.concurrent.atomic.AtomicInteger();
+    /** Count of POSTs that reached /api/threads/delete. */
+    public final java.util.concurrent.atomic.AtomicInteger deleteThreadCount =
+        new java.util.concurrent.atomic.AtomicInteger();
+    /** Raw body of the last POST that reached /api/threads/delete. */
+    public volatile String lastDeleteThreadBody = null;
     /** Count of SSE /stream connections opened. */
     public final java.util.concurrent.atomic.AtomicInteger streamOpens =
         new java.util.concurrent.atomic.AtomicInteger();
@@ -153,6 +158,13 @@ public final class FakeReviewServer implements AutoCloseable {
             // A cancelled session goes terminal — the real server drops it
             // from /api/sessions, so mirror that here.
             sessionsJson = "[]";
+            ex.sendResponseHeaders(200, -1);
+            ex.close();
+            return;
+        }
+        if (path.endsWith("/api/threads/delete")) {
+            lastDeleteThreadBody = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            deleteThreadCount.incrementAndGet();
             ex.sendResponseHeaders(200, -1);
             ex.close();
             return;
