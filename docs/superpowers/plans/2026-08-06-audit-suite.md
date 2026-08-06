@@ -388,8 +388,8 @@ Body sections, in order:
 
 **`## Step 1 — load the sources of truth`**
 
-1. `skills/_shared/web_companion/server.py` — the shared path dispatch, and `_is_owner` at the write gate.
-2. `skills/interactive_review/server.py` and `skills/walkthrough/server.py` — per-skill handlers.
+1. `skills/_shared/web_companion/server.py` — the shared path dispatch, `_match_session` (the session-scoped route matcher), and `_is_owner` at the write gate.
+2. `skills/annotate/server.py`, `skills/interactive_review/server.py`, and `skills/walkthrough/server.py` — the three per-skill `Handlers` classes.
 3. `ide-plugin/src/main/java/com/petros/ireview/ReviewSessionClient.java` and `WalkthroughSessionClient.java` — every path the client requests.
 4. `ide-plugin/src/test/java/com/petros/ireview/FakeReviewServer.java` — the test double.
 
@@ -397,7 +397,7 @@ Body sections, in order:
 
 - **Rule 1 — every route the client calls exists.** A path requested by either Java client with no matching branch server-side is **Critical**: the feature fails at runtime and no test catches it, because the Java tests run against the fake.
 - **Rule 2 — the fake covers what the client uses.** A path the client calls that `FakeReviewServer` does not implement is **Critical**. Known instance at the time of writing: `ReviewSessionClient.java` calls `/api/threads/delete`, the engine implements it at `skills/_shared/web_companion/server.py:708`, and the fake does not. A fake that diverges from its subject makes every Java test that touches it meaningless.
-- **Rule 3 — every mutating route is gated.** Any branch that writes — creates a session, submits an event, deletes a thread, acknowledges, cancels — must call `_is_owner` before mutating. An ungated write is **Critical**: the gate is the only thing between a non-loopback client and a write. Read paths must **not** be gated; a gated read is **Medium**, since it breaks sharing for no benefit.
+- **Rule 3 — every mutating route is gated.** Any branch that writes — creates a session, submits an event, deletes a thread, acknowledges, cancels — must call `_is_owner` before mutating. An ungated write is **Critical**: the gate is the only thing between a non-loopback client and a write. A gated read is correct, not a Violation, **when the read exposes data across sessions** — `GET /` and `/api/sessions` are the standing examples, each listing every workspace on the machine, and must never be flagged. A gated read that exposes only its own session's data is **Medium**, since it breaks sharing for no benefit.
 - **Rule 4 — one route, one implementation.** The same path handled in both the engine and a per-skill handler is **Medium** — the resolution order decides which wins and the loser is dead code that reads as live.
 - **Rule 5 — no hand-maintained route list elsewhere.** A constant array of paths in the Java client, a switch in the frontend JS, or a table in a doc that enumerates routes is **Medium**. Describing the mechanism is fine; enumerating the routes is a second list.
 - **Rule 6 — a server route no client calls.** **Decision**, not a Violation — it may be a deliberate API for a future client or for `reply_cli.py`. Surface it and ask.
@@ -409,9 +409,10 @@ Body sections, in order:
 3. `skills/_shared/web_companion/tests/test_write_gate.py` naming routes on purpose.
 4. This audit suite naming routes to describe them.
 5. The `/s/<session>/` prefix — a routing prefix, not a route.
-6. Any line carrying `# route-exempt: <reason>`.
+6. `GET /` and `/api/sessions` being gated reads — the workspace index and the data behind it, deliberately owner-only because both list every session on the machine.
+7. Any line carrying `# route-exempt: <reason>`.
 
-**`## Step 2 — scan`** — extract every `self.path ==` and `self.path.startswith(` literal from the engine and the three handler modules; extract every path string from both Java clients and from `FakeReviewServer`; diff the three sets pairwise; for each mutating branch, check whether `_is_owner` is called before the mutation; build the file universe from `git ls-files`.
+**`## Step 2 — scan`** — routes come in two forms and both must be extracted: top-level `self.path ==` / `self.path.startswith(` literals in the engine and the three handler modules, and session-scoped `rest ==` literals inside the `_match_session("/s/")` branch (a session-scoped route's full path is `/s/<session>/<rest>`, so a client calling `/s/abc/api/threads/delete` is calling the route recorded as `rest == "/api/threads/delete"`). Extract every path string from both Java clients and from `FakeReviewServer`, normalizing session-scoped client calls the same way; diff the three sets pairwise; for each mutating branch, check whether `_is_owner` is called before the mutation; build the file universe from `git ls-files`.
 
 **`## Step 3 — severity`** — Critical for a route the client calls that is missing server-side or from the fake, and for an ungated write; Medium for a double implementation, a gated read, or a shadow list; Decision for an uncalled server route.
 
