@@ -35,7 +35,7 @@ Creates the suite's home, the guard that keeps it coherent, the umbrella, and th
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `skills/tests/test_audit_suite.py` with module constants `ROOT: Path` (repository root), `SUITE: Path` (`.claude/skills`), `REQUIRED_SECTIONS: tuple[str, ...]`, and helpers `_audit_dirs() -> list[Path]` and `_frontmatter(md: Path) -> dict[str, str]`. Later tasks add no tests; they rely on `test_umbrella_dispatch_table_matches_disk` and `test_sub_audits_carry_the_required_sections` to enforce their work.
+- Produces: `skills/tests/test_audit_suite.py` with module constants `ROOT: Path` (repository root), `SUITE: Path` (`.claude/skills`), `REQUIRED_SECTIONS: tuple[str, ...]`, and helpers `_audit_dirs() -> list[Path]` and `_frontmatter(md: Path) -> dict[str, str]`. Later tasks add no tests; they rely on `test_umbrella_dispatch_table_matches_disk` and `test_sub_audits_carry_the_required_sections` to enforce their work. `test_umbrella_dispatch_table_matches_disk` scopes its regex to the `## Sub-audits` table in the umbrella's body — not the whole file — so the frontmatter `description` alone can never satisfy it; see Step 2's implementation below.
 
 - [ ] **Step 1: Un-ignore the suite**
 
@@ -126,8 +126,23 @@ def test_umbrella_dispatch_table_matches_disk():
     # The umbrella's whole job is dispatch. A sub-audit it forgets is a
     # silent hole in the full sweep; one it names but that does not exist
     # is a broken run.
+    #
+    # Scoped to the `## Sub-audits` table in the body, not the whole file.
+    # The frontmatter `description` also lists every sub-audit by
+    # convention, but that convention has no enforcement of its own — if
+    # this test scanned the whole file, a body that forgot every sub-audit
+    # (dispatch table, Sub-audits section, Workflow, all of it) would still
+    # pass as long as the frontmatter still named them, which defeats the
+    # point of a sync test. Only the table counts.
     umbrella = SUITE / "audit" / "SKILL.md"
-    named = set(re.findall(r"`/(audit-[a-z-]+)`", umbrella.read_text(encoding="utf-8")))
+    text = umbrella.read_text(encoding="utf-8")
+    assert text.startswith("---\n"), f"{umbrella} has no frontmatter"
+    body = text.split("---\n", 2)[2]
+    assert "## Sub-audits" in body, f"{umbrella} has no ## Sub-audits section"
+    table = body.split("## Sub-audits", 1)[1]
+    if "## Workflow" in table:
+        table = table.split("## Workflow", 1)[0]
+    named = set(re.findall(r"`/(audit-[a-z-]+)`", table))
     on_disk = {d.name for d in _audit_dirs() if d.name != "audit"}
     assert named == on_disk, (
         f"umbrella dispatches {sorted(named)} but disk has {sorted(on_disk)}"
@@ -185,6 +200,8 @@ The body must contain, in this order:
 
    **In Task 1 this table contains only the `/audit-engine-boundary` row.** Each later task adds its own row. The sync test fails if a row names a sub-audit that does not exist yet.
 
+   `test_umbrella_dispatch_table_matches_disk` (see Step 2 below) checks only this table against disk, never the frontmatter `description`. Keep the two in sync by convention anyway — add a sub-audit to both the description and this table together — and say so in the umbrella's own text immediately after the table, since nothing enforces it: a sub-audit named in the table but missing from the description would pass the test and still mislead whoever reads the description to decide whether to invoke `/audit`.
+
 4. **`## Workflow`** — three numbered steps: dispatch each sub-audit (one Explore agent each, in parallel, with the prompt `"Follow the instructions in .claude/skills/<sub-audit>/SKILL.md exactly and produce that skill's report. Do not deviate from the format defined there. When done, return your full report verbatim — no preamble, no summary, no commentary."`, falling back to inline sequential runs when subagents are unavailable, never skipping one silently); wait for every report before formatting anything; compose the master report.
 
 5. **`## Output template`** — a fenced block matching this shape exactly:
@@ -212,7 +229,12 @@ Nothing actionable from: {audits that came back clean}.
 Want detail on any item? Say "explain {sub-audit} N" (e.g. "explain http-surface 2") and I'll show the file:line and the fix as concrete steps.
 ```
 
-   Follow it with the severity mapping table: Critical/High → **Critical**; Warning/Medium → **Medium**; Info/Low → **Low**; Decisions and promotion candidates → **Optional**.
+   Immediately after the fenced block, define the two things the template leaves open, since neither has an obvious source:
+
+   - `{M}` is the repository-wide tracked-file count, `git ls-files | wc -l`. No sub-audit reports a uniform file count of its own — engine-boundary counts modules, http-surface counts routes, docs-truth counts claims, code-health counts Python and Java files separately — so this is not a sum of theirs; count the tree directly.
+   - The verdict line names the single strongest finding. When several items tie at the highest severity across sub-reports, name the one from the sub-audit listed first in the `## Sub-audits` table (dispatch-table order) and do not rank or comment on the others — a fixed merge rule, not a re-judgment of severity, which the Anti-patterns section forbids.
+
+   Follow it with the severity mapping table: Critical → **Critical**; Medium → **Medium**; Low → **Low**; Decisions and promotion candidates → **Optional**. (Only these four words appear in any sub-audit's severity vocabulary — High, Warning, and Info are never emitted and must not appear in the mapping.)
 
 6. **`## Hard rules`** — numbered: no own checks (a pattern to look for belongs in a sub-audit); run every sub-audit even when early ones find plenty; merge into the four buckets keeping each `{audit} N` label; one verdict line at the top; collapse the non-actionable into one closing line; no file paths in the master view; no emoji.
 
@@ -269,7 +291,7 @@ Report only what these do not enforce, plus anywhere either has gone stale.
 5. The spec and plan documents under `docs/superpowers/`, which describe the vendoring that was removed.
 6. Each skill's `_serve_stream` HTTP transport framing — the browser-facing SSE loop in `skills/interactive_review/server.py` and `skills/walkthrough/server.py`. The engine has no SSE-serving module for either to reimplement, so this is skill-owned, not a Rule 1 Violation. Duplication between the two belongs to `/audit-code-health`'s Rule 5, not to this audit.
 7. Importing through a same-repo compatibility shim that is documented as a deliberate, migratable re-export — for example `skills/interactive_review/threads.py`, whose docstring says "Import sites can migrate at leisure; this alias keeps both old module paths working" — is a **Decision** (migrate now or later), not a Rule 2 Violation. Rule 2 still applies in full to `sys.path` manipulation, a relative import climbing out of a skill, and a duplicated module file, all of which stay Critical.
-8. Any line carrying `# engine-exempt: <reason>`, or, for a Rule 1 finding, an explicit in-code statement elsewhere in the same file (prose in a docstring or comment) that the duplication is deliberate and why. The marker is preferred because it is greppable, but its absence is not itself a finding when the file already states the justification in prose.
+8. Any line carrying `# engine-exempt: <reason>`, or, for a Rule 1 finding, a justification attached to the duplicated code itself — its enclosing function's docstring, or a comment immediately preceding it — stating that the duplication is deliberate and why. The marker is preferred because it is greppable. A justification anywhere else in the file (a general file-level comment, a docstring on an unrelated function, a note in the module docstring) does not exempt the finding — it must sit on the code being flagged, not merely share a file with it.
 
 **`## Step 2 — scan`** — enumerate engine modules and the public names each exports; grep the three skill servers for those names to find who imports what; grep the same files for the behaviours in Rule 1 implemented locally; extract each `PORT_RANGE` and each `run(skill_name=...)` argument and diff them; build the file universe from `git ls-files`.
 
@@ -391,7 +413,7 @@ Body sections, in order:
 **`## Step 1 — load the sources of truth`**
 
 1. `skills/_shared/web_companion/server.py` — the shared path dispatch, `_match_session` (the session-scoped route matcher), and `_is_owner` at the write gate.
-2. `skills/annotate/server.py`, `skills/interactive_review/server.py`, and `skills/walkthrough/server.py` — the three per-skill `Handlers` classes.
+2. `skills/annotate/server.py`, `skills/interactive_review/server.py`, and `skills/walkthrough/server.py` — the three per-skill `Handlers` classes, in particular each `serve_data()`, where their routes actually live (see Step 2's third form).
 3. `ide-plugin/src/main/java/com/petros/ireview/ReviewSessionClient.java` and `WalkthroughSessionClient.java` — every path the client requests.
 4. `ide-plugin/src/test/java/com/petros/ireview/FakeReviewServer.java` — the test double.
 
@@ -414,7 +436,7 @@ Body sections, in order:
 6. `GET /` and `/api/sessions` being gated reads — the workspace index and the data behind it, deliberately owner-only because both list every session on the machine.
 7. Any line carrying `# route-exempt: <reason>`.
 
-**`## Step 2 — scan`** — routes come in two forms and both must be extracted: top-level `self.path ==` / `self.path.startswith(` literals in the engine and the three handler modules, and session-scoped `rest ==` literals inside the `_match_session("/s/")` branch (a session-scoped route's full path is `/s/<session>/<rest>`, so a client calling `/s/abc/api/threads/delete` is calling the route recorded as `rest == "/api/threads/delete"`). Extract every path string from both Java clients and from `FakeReviewServer`, normalizing session-scoped client calls the same way; diff the three sets pairwise; for each mutating branch, check whether `_is_owner` is called before the mutation; build the file universe from `git ls-files`.
+**`## Step 2 — scan`** — routes come in three forms and all three must be extracted: top-level `self.path ==` / `self.path.startswith(` literals in the engine and the three handler modules; session-scoped `rest ==` literals inside the `_match_session("/s/")` branch (a session-scoped route's full path is `/s/<session>/<rest>`, so a client calling `/s/abc/api/threads/delete` is calling the route recorded as `rest == "/api/threads/delete"`); and query-dispatched routes — the three handler modules contain zero `self.path`/`startswith`/`rest ==` literals of their own, their routes live inside each skill's `serve_data()`, matched on a `query` string (`query ==` / `query.startswith(`), e.g. `skills/interactive_review/server.py:110-116` (`query == "stream"`, `query == "threads.json"`, `query.startswith("thread")`), `skills/walkthrough/server.py:103-112` (`query == "steps.json"` and siblings), `skills/annotate/server.py:336-340` (same shape), reached through the engine's catch-all at `skills/_shared/web_companion/server.py:628-629` which strips the session prefix and hands the remainder to `handlers.serve_data` as `query` — a `query` of `steps.json` corresponds to a client call to `/s/<session>/steps.json`, and every `query ==`/`query.startswith(` literal must be mapped to that `/s/<session>/<query>` form before comparing against client calls, the same way session-scoped `rest ==` routes are mapped. Skipping this form leaves every route in `serve_data()` outside the diff entirely. Extract every path string from both Java clients and from `FakeReviewServer`, normalizing session-scoped and query-dispatched client calls the same way; diff the three sets pairwise; for each mutating branch, check whether `_is_owner` is called before the mutation; build the file universe from `git ls-files`.
 
 **`## Step 3 — severity`** — Critical for a route the client calls that is missing server-side or from the fake, and for an ungated write; Medium for a double implementation, a gated read, or a shadow list; Decision for an uncalled server route.
 
@@ -778,11 +800,17 @@ Body sections, in order:
 
 **`## Covering tests — read these first, do not duplicate them`**
 
-The repository has 742 tests. Before reporting a module as untested, check `skills/*/tests/` and `ide-plugin/src/test/java/` for a covering file. "No test beside it" means no test file exercises that module, not that a specific function lacks a direct test.
+No single test file covers this audit's territory — nothing asserts "no swallowed exceptions" or "every subprocess call has a timeout" across the whole tree the way the other four audits each have a structural test to defer to. The repository has 742 tests spread across two locations; before reporting a module as untested under Rule 6, check both for a covering file: `skills/*/tests/` (the per-skill Python test suites) and `ide-plugin/src/test/java/` (the Java test suite). Search for the module or class name across every test file in both locations, not just the test directory next to it. "No test beside it" means no test file exercises that module anywhere in either location, not that a specific function lacks a direct unit test.
+
+**`## Step 1 — load the sources of truth`**
+
+1. `skills/**/*.py` — every Python module under `skills/`, including `skills/_shared/web_companion/` (the engine) and each skill's `hooks/`.
+2. `ide-plugin/src/**/*.java`, plus the one Kotlin file, `ide-plugin/src/main/kotlin/com/petros/ireview/GhPrDiffDriver.kt`.
+3. `skills/*/tests/` and `ide-plugin/src/test/java/` — read before calling anything untested; see Covering tests above.
 
 **`## The rules`**
 
-- **Rule 1 — no swallowed exceptions.** `except Exception: pass`, or a bare `except:` that neither logs nor re-raises, is **Critical** when it wraps a mutation and **Medium** when it wraps a read — unless the swallow is deliberate and says so explicitly, in any of four places: the enclosing function's own docstring, the module's own docstring, a comment immediately preceding the `try` block, or a comment anywhere inside the `catch`/`except` block; an ordinary undocumented `except: pass` gets none of these exemptions. `_port_holder` in the engine documents it in its docstring. The `cleanup.sweep_state(...)` call inside `run()` documents it a second way — a comment immediately above the `try`, since `run()`'s own docstring is about being the server entrypoint and says nothing about this swallow. `BuildInfo.java:40` documents it a third way — a comment inside the `catch` body itself ("never throw into the UI"). `skills/annotate/hooks/progress_publish.py:134` documents it a fourth way — the module's own docstring ("Always exit 0... so a hook failure never disturbs the user's tool flow"), not the enclosing function's. In Java, a `catch` block with an empty body is the same finding, exempted only under the same four-form rule.
+- **Rule 1 — no swallowed exceptions.** `except Exception: pass`, or a bare `except:` that neither logs nor re-raises, is **Critical** when it wraps a mutation and **Medium** when it wraps a read — unless the swallow is deliberate and says so explicitly, in any of three places: the enclosing function's own docstring, a comment immediately preceding the `try` block, or a comment anywhere inside the `catch`/`except` block; an ordinary undocumented `except: pass` gets none of these exemptions, and neither does a justification that lives only in the module's own docstring — that position is not anchored to any specific swallow, so one module-level sentence would exempt every `try/except` in the file regardless of how many there are or whether any of them actually says so. `_port_holder` in the engine documents it in its own docstring. The `cleanup.sweep_state(...)` call inside `run()` documents it a second way — a comment immediately above the `try`, since `run()`'s own docstring is about being the server entrypoint and says nothing about this swallow. `BuildInfo.java:40` documents it a third way — a comment inside the `catch` body itself ("never throw into the UI"). `skills/annotate/hooks/progress_publish.py:134` documents it the same third way — `except Exception:` followed by a comment inside the block itself ("Never let a progress hook disrupt the user's tool flow"). In Java, a `catch` block with an empty body is the same finding, exempted only under the same three-form rule.
 - **Rule 2 — network and subprocess calls carry a timeout.** An `http.client`, `urllib`, or `subprocess` call with no timeout is **Critical**: it hangs the caller forever with no way out. This applies to both the Python side and the Java `HttpClient` usage.
 - **Rule 3 — resources are closed.** A file, socket, or process opened outside a `with` (Python) or try-with-resources (Java) and not closed on every path is **Medium**.
 - **Rule 4 — no dead code.** A module, function, or class nothing references is **Low**, unless it is an entry point, a test fixture, or a public helper the engine exposes for skills. Check `git ls-files` and grep the whole tree before calling anything dead — a name used only from a `SKILL.md` shell snippet is still live.
@@ -792,11 +820,11 @@ The repository has 742 tests. Before reporting a module as untested, check `skil
 
 **`## Closed allowlist — never flag these`**
 
-1. `skills/_shared/web_companion/server.py::_port_holder` and any other function whose docstring states that failure is deliberately ignored; also the `cleanup.sweep_state(...)` call inside `run()` (`server.py:435-443`), whose justification is a comment immediately above the `try` rather than a docstring. Any of four positions exempts a deliberate swallow — the enclosing function's own docstring, the module's own docstring, a comment immediately preceding the `try`, or a comment anywhere inside the `catch`/`except` block — for example `BuildInfo.java:40` (comment inside the `catch` body) and `skills/annotate/hooks/progress_publish.py:134` (module docstring); an undocumented swallow still is not exempt.
+1. `skills/_shared/web_companion/server.py::_port_holder` and any other function whose own docstring states that failure is deliberately ignored; also the `cleanup.sweep_state(...)` call inside `run()` (`server.py:435-443`), whose justification is a comment immediately above the `try` rather than a docstring. Any of three positions exempts a deliberate swallow — the enclosing function's own docstring, a comment immediately preceding the `try`, or a comment anywhere inside the `catch`/`except` block — for example `BuildInfo.java:40` (comment inside the `catch` body) and `skills/annotate/hooks/progress_publish.py:134` (comment inside the `except Exception:` body); an undocumented swallow still is not exempt, and neither is a justification that lives only in a module's docstring with nothing anchored to the specific swallow.
 2. Generated or vendored third-party assets: `skills/_shared/web_companion/static/markdown-it.min.js`, the fonts, `ide-plugin/gradle/wrapper/gradle-wrapper.jar`.
 3. `FakeReviewServer.java` — a test double; its simplifications are its purpose. Route drift there belongs to `/audit-http-surface`, not here.
 4. Test files' own duplication — repetitive tests are usually clearer than abstracted ones.
-5. The three per-skill `server.py` handler modules being structurally similar — that is `/audit-engine-boundary`'s call, not this one's.
+5. The three per-skill `server.py` handler modules' **structural** shape — the `Handlers` class outline and its `serve_data`/`create_session_extra` method set, plus byte-identical small helpers such as `_send_text`, `_send_html`, `_send_json`, and `_is_terminal` — is `/audit-engine-boundary`'s call, not this one's, and identical (undrifted) copies are a Decision under Rule 5 regardless. This does **not** reach duplicated **implementation bodies** between the three modules — for example the two `_serve_stream` loops — which this audit owns under Rule 5: there is no engine module either could import instead, so it is duplication between skills, not a boundary violation, and it is reportable here the same as any other drifted copy.
 6. Any line carrying `# health-exempt: <reason>`.
 7. A swallow around closing or releasing a resource during teardown — `close()`/`shutdown()`-shaped calls in a cleanup path, where the operation being abandoned is already finished or already failing — is not a Violation even with no comment, e.g. `SseClient.java:81,115`'s `catch (RuntimeException ignored) {}` around `Stream.close()`. Keep this narrow: it covers teardown-only close/shutdown calls, not ordinary operations.
 

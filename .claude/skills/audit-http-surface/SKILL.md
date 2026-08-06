@@ -22,7 +22,7 @@ There is no route registry. The HTTP surface is a sequence of `if self.path == "
 ## Step 1 — load the sources of truth
 
 1. `skills/_shared/web_companion/server.py` — the shared path dispatch, `_match_session` (the session-scoped route matcher), and `_is_owner` at the write gate.
-2. `skills/annotate/server.py`, `skills/interactive_review/server.py`, and `skills/walkthrough/server.py` — the three per-skill `Handlers` classes.
+2. `skills/annotate/server.py`, `skills/interactive_review/server.py`, and `skills/walkthrough/server.py` — the three per-skill `Handlers` classes, in particular each `serve_data()`, where their routes actually live (see Step 2's third form).
 3. `ide-plugin/src/main/java/com/petros/ireview/ReviewSessionClient.java` and `WalkthroughSessionClient.java` — every path the client requests.
 4. `ide-plugin/src/test/java/com/petros/ireview/FakeReviewServer.java` — the test double.
 
@@ -47,12 +47,13 @@ There is no route registry. The HTTP surface is a sequence of `if self.path == "
 
 ## Step 2 — scan
 
-Routes come in two forms and both must be extracted:
+Routes come in three forms and all three must be extracted:
 
 - **Top-level routes** — `self.path ==` and `self.path.startswith(` literals in the engine and the three handler modules.
 - **Session-scoped routes** — inside the `_match_session("/s/")` branch, the code matches on `rest ==` (the remainder after the session id is stripped), e.g. `if rest == "/api/threads/delete":`. A session-scoped route's full path is `/s/<session>/<rest>`, so a client calling `/s/abc/api/threads/delete` is calling the route recorded as `rest == "/api/threads/delete"`. Map every `rest ==` literal to its `/s/<session>/...` form before comparing against client calls — otherwise the two cannot be diffed at all.
+- **Query-dispatched routes** — the three handler modules contain zero `self.path`/`startswith`/`rest ==` literals of their own. Their routes live inside each skill's `serve_data()`, matched on a `query` string: `query ==` and `query.startswith(` comparisons, e.g. `skills/interactive_review/server.py:110-116` (`query == "stream"`, `query == "threads.json"`, `query.startswith("thread")`), `skills/walkthrough/server.py:103-112` (`query == "steps.json"` and siblings), and `skills/annotate/server.py:336-340` (same shape). These are reached through the engine's catch-all at `skills/_shared/web_companion/server.py:628-629`, which strips the session prefix and hands the remainder to `handlers.serve_data` as `query`. A `query` of `steps.json` corresponds to a client call to `/s/<session>/steps.json` — map every `query ==`/`query.startswith(` literal to that `/s/<session>/<query>` form before comparing against client calls, the same way session-scoped `rest ==` routes are mapped. Skipping this form leaves every route in `serve_data()` — including the one both Java clients actually call — outside the diff entirely.
 
-Extract every path string from both Java clients and from `FakeReviewServer`, normalizing session-scoped client calls the same way; diff the three sets pairwise; for each mutating branch, check whether `_is_owner` is called before the mutation; build the file universe from `git ls-files`.
+Extract every path string from both Java clients and from `FakeReviewServer`, normalizing session-scoped and query-dispatched client calls the same way; diff the three sets pairwise; for each mutating branch, check whether `_is_owner` is called before the mutation; build the file universe from `git ls-files`.
 
 ## Step 3 — severity
 

@@ -32,6 +32,13 @@ When delivering, if you feel the urge to write "this was flagged but it's actual
 | `/audit-docs-truth` | Whether the prose is true — progressive-disclosure structure across all three skills, and README and skill-doc claims against the tree. |
 | `/audit-code-health` | Generic health across Python and Java — dead code, duplication, swallowed exceptions, missing timeouts, risky code with no test beside it. |
 
+`test_umbrella_dispatch_table_matches_disk` only checks this table against
+disk, not the frontmatter `description` above — a sub-audit named here but
+missing from the description would pass the test and still mislead whoever
+reads `description` to decide whether to invoke `/audit`. Keep the two in
+sync by convention when adding a sub-audit: add it to both the description
+and this table together, even though only the table is enforced.
+
 ## Workflow
 
 1. **Dispatch.** Run each sub-audit. If the user has approved subagent use, launch one Explore agent per sub-audit in parallel with this prompt:
@@ -68,7 +75,19 @@ Nothing actionable from: {audits that came back clean}.
 Want detail on any item? Say "explain {sub-audit} N" (e.g. "explain http-surface 2") and I'll show the file:line and the fix as concrete steps.
 ```
 
-**Severity → bucket mapping**: Critical/High → **Critical**; Warning/Medium → **Medium**; Info/Low → **Low**; Decisions and promotion candidates → **Optional**.
+`{M}` is the repository-wide tracked-file count, `git ls-files | wc -l`. No
+sub-audit reports a uniform file count of its own — engine-boundary counts
+modules, http-surface counts routes, docs-truth counts claims, code-health
+counts Python and Java files separately — so this is not a sum of theirs;
+count the tree directly.
+
+The verdict line names the single strongest finding. When several items
+tie at the highest severity across sub-reports, name the one from the
+sub-audit listed first in the `## Sub-audits` table above (dispatch-table
+order) and do not rank or comment on the others — that is a fixed merge
+rule, not a re-judgment of severity, which the Anti-patterns below forbid.
+
+**Severity → bucket mapping**: Critical → **Critical**; Medium → **Medium**; Low → **Low**; Decisions and promotion candidates → **Optional**.
 
 ## Hard rules
 

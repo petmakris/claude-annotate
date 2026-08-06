@@ -66,8 +66,23 @@ def test_umbrella_dispatch_table_matches_disk():
     # The umbrella's whole job is dispatch. A sub-audit it forgets is a
     # silent hole in the full sweep; one it names but that does not exist
     # is a broken run.
+    #
+    # Scoped to the `## Sub-audits` table in the body, not the whole file.
+    # The frontmatter `description` also lists every sub-audit by
+    # convention, but that convention has no enforcement of its own — if
+    # this test scanned the whole file, a body that forgot every sub-audit
+    # (dispatch table, Sub-audits section, Workflow, all of it) would still
+    # pass as long as the frontmatter still named them, which defeats the
+    # point of a sync test. Only the table counts.
     umbrella = SUITE / "audit" / "SKILL.md"
-    named = set(re.findall(r"`/(audit-[a-z-]+)`", umbrella.read_text(encoding="utf-8")))
+    text = umbrella.read_text(encoding="utf-8")
+    assert text.startswith("---\n"), f"{umbrella} has no frontmatter"
+    body = text.split("---\n", 2)[2]
+    assert "## Sub-audits" in body, f"{umbrella} has no ## Sub-audits section"
+    table = body.split("## Sub-audits", 1)[1]
+    if "## Workflow" in table:
+        table = table.split("## Workflow", 1)[0]
+    named = set(re.findall(r"`/(audit-[a-z-]+)`", table))
     on_disk = {d.name for d in _audit_dirs() if d.name != "audit"}
     assert named == on_disk, (
         f"umbrella dispatches {sorted(named)} but disk has {sorted(on_disk)}"
