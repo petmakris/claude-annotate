@@ -1,6 +1,6 @@
 ---
 name: audit
-description: Master codebase audit for claude-annotate. Runs all focused sub-audits — `/audit-engine-boundary` — then presents one unified actionable report. Use when the user says "/audit", "audit the codebase", "run a full audit", "full sweep", or wants everything checked instead of one targeted sub-audit.
+description: Master codebase audit for claude-annotate. Runs all focused sub-audits — `/audit-engine-boundary`, `/audit-http-surface` — then presents one unified actionable report. Use when the user says "/audit", "audit the codebase", "run a full audit", "full sweep", or wants everything checked instead of one targeted sub-audit.
 user-invocable: true
 ---
 
@@ -27,6 +27,7 @@ When delivering, if you feel the urge to write "this was flagged but it's actual
 | Sub-audit | Owns |
 |---|---|
 | `/audit-engine-boundary` | One engine, reached by import rather than reimplemented; port and state-directory collisions between the three skills. |
+| `/audit-http-surface` | The Python-to-Java route contract, the `FakeReviewServer` test double, and the `_is_owner` write gate. |
 
 ## Workflow
 
