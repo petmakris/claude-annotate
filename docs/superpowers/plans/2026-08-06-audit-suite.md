@@ -35,7 +35,7 @@ Creates the suite's home, the guard that keeps it coherent, the umbrella, and th
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `skills/tests/test_audit_suite.py` with module constants `ROOT: Path` (repository root), `SUITE: Path` (`.claude/skills`), `REQUIRED_SECTIONS: tuple[str, ...]`, and helpers `_audit_dirs() -> list[Path]` and `_frontmatter(md: Path) -> dict[str, str]`. Later tasks add no tests; they rely on `test_umbrella_dispatch_table_matches_disk` and `test_sub_audits_carry_the_required_sections` to enforce their work.
+- Produces: `skills/tests/test_audit_suite.py` with module constants `ROOT: Path` (repository root), `SUITE: Path` (`.claude/skills`), `REQUIRED_SECTIONS: tuple[str, ...]`, and helpers `_audit_dirs() -> list[Path]` and `_frontmatter(md: Path) -> dict[str, str]`. Later tasks add no tests; they rely on `test_umbrella_dispatch_table_matches_disk` and `test_sub_audits_carry_the_required_sections` to enforce their work. `test_umbrella_dispatch_table_matches_disk` scopes its regex to the `## Sub-audits` table in the umbrella's body — not the whole file — so the frontmatter `description` alone can never satisfy it; see Step 2's implementation below.
 
 - [ ] **Step 1: Un-ignore the suite**
 
@@ -126,8 +126,23 @@ def test_umbrella_dispatch_table_matches_disk():
     # The umbrella's whole job is dispatch. A sub-audit it forgets is a
     # silent hole in the full sweep; one it names but that does not exist
     # is a broken run.
+    #
+    # Scoped to the `## Sub-audits` table in the body, not the whole file.
+    # The frontmatter `description` also lists every sub-audit by
+    # convention, but that convention has no enforcement of its own — if
+    # this test scanned the whole file, a body that forgot every sub-audit
+    # (dispatch table, Sub-audits section, Workflow, all of it) would still
+    # pass as long as the frontmatter still named them, which defeats the
+    # point of a sync test. Only the table counts.
     umbrella = SUITE / "audit" / "SKILL.md"
-    named = set(re.findall(r"`/(audit-[a-z-]+)`", umbrella.read_text(encoding="utf-8")))
+    text = umbrella.read_text(encoding="utf-8")
+    assert text.startswith("---\n"), f"{umbrella} has no frontmatter"
+    body = text.split("---\n", 2)[2]
+    assert "## Sub-audits" in body, f"{umbrella} has no ## Sub-audits section"
+    table = body.split("## Sub-audits", 1)[1]
+    if "## Workflow" in table:
+        table = table.split("## Workflow", 1)[0]
+    named = set(re.findall(r"`/(audit-[a-z-]+)`", table))
     on_disk = {d.name for d in _audit_dirs() if d.name != "audit"}
     assert named == on_disk, (
         f"umbrella dispatches {sorted(named)} but disk has {sorted(on_disk)}"
@@ -181,9 +196,11 @@ The body must contain, in this order:
    | `/audit-http-surface` | The Python-to-Java route contract, the `FakeReviewServer` test double, and the `_is_owner` write gate. |
    | `/audit-plugin-manifest` | `.claude-plugin/marketplace.json` as the registry of what ships; each skill's ability to locate itself once installed; the root-shared `hooks/`. |
    | `/audit-docs-truth` | Whether the prose is true — progressive-disclosure structure across all three skills, and README and skill-doc claims against the tree. |
-   | `/audit-code-health` | Generic health across Python and Java — dead code, duplication, unhandled async, risky code with no test beside it. |
+   | `/audit-code-health` | Generic health across Python and Java — dead code, duplication, swallowed exceptions, missing timeouts, risky code with no test beside it. |
 
    **In Task 1 this table contains only the `/audit-engine-boundary` row.** Each later task adds its own row. The sync test fails if a row names a sub-audit that does not exist yet.
+
+   `test_umbrella_dispatch_table_matches_disk` (see Step 2 below) checks only this table against disk, never the frontmatter `description`. Keep the two in sync by convention anyway — add a sub-audit to both the description and this table together — and say so in the umbrella's own text immediately after the table, since nothing enforces it: a sub-audit named in the table but missing from the description would pass the test and still mislead whoever reads the description to decide whether to invoke `/audit`.
 
 4. **`## Workflow`** — three numbered steps: dispatch each sub-audit (one Explore agent each, in parallel, with the prompt `"Follow the instructions in .claude/skills/<sub-audit>/SKILL.md exactly and produce that skill's report. Do not deviate from the format defined there. When done, return your full report verbatim — no preamble, no summary, no commentary."`, falling back to inline sequential runs when subagents are unavailable, never skipping one silently); wait for every report before formatting anything; compose the master report.
 
@@ -212,7 +229,12 @@ Nothing actionable from: {audits that came back clean}.
 Want detail on any item? Say "explain {sub-audit} N" (e.g. "explain http-surface 2") and I'll show the file:line and the fix as concrete steps.
 ```
 
-   Follow it with the severity mapping table: Critical/High → **Critical**; Warning/Medium → **Medium**; Info/Low → **Low**; Decisions and promotion candidates → **Optional**.
+   Immediately after the fenced block, define the two things the template leaves open, since neither has an obvious source:
+
+   - `{M}` is the repository-wide tracked-file count, `git ls-files | wc -l`. No sub-audit reports a uniform file count of its own — engine-boundary counts modules, http-surface counts routes, docs-truth counts claims, code-health counts Python and Java files separately — so this is not a sum of theirs; count the tree directly.
+   - The verdict line names the single strongest finding. When several items tie at the highest severity across sub-reports, name the one from the sub-audit listed first in the `## Sub-audits` table (dispatch-table order) and do not rank or comment on the others — a fixed merge rule, not a re-judgment of severity, which the Anti-patterns section forbids.
+
+   Follow it with the severity mapping table: Critical → **Critical**; Medium → **Medium**; Low → **Low**; Decisions and promotion candidates → **Optional**. (Only these four words appear in any sub-audit's severity vocabulary — High, Warning, and Info are never emitted and must not appear in the mapping.)
 
 6. **`## Hard rules`** — numbered: no own checks (a pattern to look for belongs in a sub-audit); run every sub-audit even when early ones find plenty; merge into the four buckets keeping each `{audit} N` label; one verdict line at the top; collapse the non-actionable into one closing line; no file paths in the master view; no emoji.
 
@@ -253,7 +275,7 @@ Report only what these do not enforce, plus anywhere either has gone stale.
 
 **`## The rules`**
 
-- **Rule 1 — the engine is imported, never reimplemented.** A skill that hand-rolls behaviour the engine already provides is a **Critical** Violation: its own atomic write instead of `atomic.py`, its own SSE framing instead of `events.py`, its own session-directory walk instead of `sessions.py`, its own thread store instead of `threads.py`. This is how two copies come back without a single banner reappearing. The fix is always the same: import it.
+- **Rule 1 — the engine is imported, never reimplemented.** A skill that hand-rolls behaviour the engine already provides is a **Critical** Violation: its own atomic write instead of `atomic.py`, its own on-disk event queue instead of `events.py` (the queue the watcher reads to wake Claude — not a browser-facing SSE transport), its own session-directory walk instead of `sessions.py`, its own thread store instead of `threads.py`. This is how two copies come back without a single banner reappearing. The fix is always the same: import it.
 - **Rule 2 — no import reaches the engine by another path.** Every engine import must read `skills._shared.web_companion.*`. A `sys.path` manipulation, a relative import climbing out of a skill, or a duplicated module file is **Critical**.
 - **Rule 3 — vendoring stays dead.** Any resurrected `VENDOR*` file, `GENERATED FILE` banner, or sync/check script anywhere in the tree is **Critical**. The covering tests above catch the two known filenames; this rule covers the rest of the shape, including a new script under `tools/` or a CI job that re-derives the tree.
 - **Rule 4 — port ranges stay disjoint.** `PORT_RANGE` in the three skill servers must not overlap. Today: annotate 3080, interactive-review 54620–54640, walkthrough 54660–54680. An overlap is **Critical** — two skills race for a port and the loser reports a stale one.
@@ -267,7 +289,9 @@ Report only what these do not enforce, plus anywhere either has gone stale.
 3. `skills/_shared/web_companion/tests/` naming engine internals — that is its job.
 4. This audit suite (`.claude/skills/audit*/`) naming engine modules to describe them.
 5. The spec and plan documents under `docs/superpowers/`, which describe the vendoring that was removed.
-6. Any line carrying `# engine-exempt: <reason>`.
+6. Each skill's `_serve_stream` HTTP transport framing — the browser-facing SSE loop in `skills/interactive_review/server.py` and `skills/walkthrough/server.py`. The engine has no SSE-serving module for either to reimplement, so this is skill-owned, not a Rule 1 Violation. Duplication between the two belongs to `/audit-code-health`'s Rule 5, not to this audit.
+7. Importing through a same-repo compatibility shim that is documented as a deliberate, migratable re-export — for example `skills/interactive_review/threads.py`, whose docstring says "Import sites can migrate at leisure; this alias keeps both old module paths working" — is a **Decision** (migrate now or later), not a Rule 2 Violation. Rule 2 still applies in full to `sys.path` manipulation, a relative import climbing out of a skill, and a duplicated module file, all of which stay Critical.
+8. Any line carrying `# engine-exempt: <reason>`, or, for a Rule 1 finding, a justification attached to the duplicated code itself — its enclosing function's docstring, or a comment immediately preceding it — stating that the duplication is deliberate and why. The marker is preferred because it is greppable. A justification anywhere else in the file (a general file-level comment, a docstring on an unrelated function, a note in the module docstring) does not exempt the finding — it must sit on the code being flagged, not merely share a file with it.
 
 **`## Step 2 — scan`** — enumerate engine modules and the public names each exports; grep the three skill servers for those names to find who imports what; grep the same files for the behaviours in Rule 1 implemented locally; extract each `PORT_RANGE` and each `run(skill_name=...)` argument and diff them; build the file universe from `git ls-files`.
 
@@ -388,8 +412,8 @@ Body sections, in order:
 
 **`## Step 1 — load the sources of truth`**
 
-1. `skills/_shared/web_companion/server.py` — the shared path dispatch, and `_is_owner` at the write gate.
-2. `skills/interactive_review/server.py` and `skills/walkthrough/server.py` — per-skill handlers.
+1. `skills/_shared/web_companion/server.py` — the shared path dispatch, `_match_session` (the session-scoped route matcher), and `_is_owner` at the write gate.
+2. `skills/annotate/server.py`, `skills/interactive_review/server.py`, and `skills/walkthrough/server.py` — the three per-skill `Handlers` classes, in particular each `serve_data()`, where their routes actually live (see Step 2's third form).
 3. `ide-plugin/src/main/java/com/petros/ireview/ReviewSessionClient.java` and `WalkthroughSessionClient.java` — every path the client requests.
 4. `ide-plugin/src/test/java/com/petros/ireview/FakeReviewServer.java` — the test double.
 
@@ -397,7 +421,7 @@ Body sections, in order:
 
 - **Rule 1 — every route the client calls exists.** A path requested by either Java client with no matching branch server-side is **Critical**: the feature fails at runtime and no test catches it, because the Java tests run against the fake.
 - **Rule 2 — the fake covers what the client uses.** A path the client calls that `FakeReviewServer` does not implement is **Critical**. Known instance at the time of writing: `ReviewSessionClient.java` calls `/api/threads/delete`, the engine implements it at `skills/_shared/web_companion/server.py:708`, and the fake does not. A fake that diverges from its subject makes every Java test that touches it meaningless.
-- **Rule 3 — every mutating route is gated.** Any branch that writes — creates a session, submits an event, deletes a thread, acknowledges, cancels — must call `_is_owner` before mutating. An ungated write is **Critical**: the gate is the only thing between a non-loopback client and a write. Read paths must **not** be gated; a gated read is **Medium**, since it breaks sharing for no benefit.
+- **Rule 3 — every mutating route is gated.** Any branch that writes — creates a session, submits an event, deletes a thread, acknowledges, cancels — must call `_is_owner` before mutating. An ungated write is **Critical**: the gate is the only thing between a non-loopback client and a write. A gated read is correct, not a Violation, **when the read exposes data across sessions** — `GET /` and `/api/sessions` are the standing examples, each listing every workspace on the machine, and must never be flagged. A gated read that exposes only its own session's data is **Medium**, since it breaks sharing for no benefit.
 - **Rule 4 — one route, one implementation.** The same path handled in both the engine and a per-skill handler is **Medium** — the resolution order decides which wins and the loser is dead code that reads as live.
 - **Rule 5 — no hand-maintained route list elsewhere.** A constant array of paths in the Java client, a switch in the frontend JS, or a table in a doc that enumerates routes is **Medium**. Describing the mechanism is fine; enumerating the routes is a second list.
 - **Rule 6 — a server route no client calls.** **Decision**, not a Violation — it may be a deliberate API for a future client or for `reply_cli.py`. Surface it and ask.
@@ -409,9 +433,10 @@ Body sections, in order:
 3. `skills/_shared/web_companion/tests/test_write_gate.py` naming routes on purpose.
 4. This audit suite naming routes to describe them.
 5. The `/s/<session>/` prefix — a routing prefix, not a route.
-6. Any line carrying `# route-exempt: <reason>`.
+6. `GET /` and `/api/sessions` being gated reads — the workspace index and the data behind it, deliberately owner-only because both list every session on the machine.
+7. Any line carrying `# route-exempt: <reason>`.
 
-**`## Step 2 — scan`** — extract every `self.path ==` and `self.path.startswith(` literal from the engine and the three handler modules; extract every path string from both Java clients and from `FakeReviewServer`; diff the three sets pairwise; for each mutating branch, check whether `_is_owner` is called before the mutation; build the file universe from `git ls-files`.
+**`## Step 2 — scan`** — routes come in three forms and all three must be extracted: top-level `self.path ==` / `self.path.startswith(` literals in the engine and the three handler modules; session-scoped `rest ==` literals inside the `_match_session("/s/")` branch (a session-scoped route's full path is `/s/<session>/<rest>`, so a client calling `/s/abc/api/threads/delete` is calling the route recorded as `rest == "/api/threads/delete"`); and query-dispatched routes — the three handler modules contain zero `self.path`/`startswith`/`rest ==` literals of their own, their routes live inside each skill's `serve_data()`, matched on a `query` string (`query ==` / `query.startswith(`), e.g. `skills/interactive_review/server.py:110-116` (`query == "stream"`, `query == "threads.json"`, `query.startswith("thread")`), `skills/walkthrough/server.py:103-112` (`query == "steps.json"` and siblings), `skills/annotate/server.py:336-340` (same shape), reached through the engine's catch-all at `skills/_shared/web_companion/server.py:628-629` which strips the session prefix and hands the remainder to `handlers.serve_data` as `query` — a `query` of `steps.json` corresponds to a client call to `/s/<session>/steps.json`, and every `query ==`/`query.startswith(` literal must be mapped to that `/s/<session>/<query>` form before comparing against client calls, the same way session-scoped `rest ==` routes are mapped. Skipping this form leaves every route in `serve_data()` outside the diff entirely. Extract every path string from both Java clients and from `FakeReviewServer`, normalizing session-scoped and query-dispatched client calls the same way; diff the three sets pairwise; for each mutating branch, check whether `_is_owner` is called before the mutation; build the file universe from `git ls-files`.
 
 **`## Step 3 — severity`** — Critical for a route the client calls that is missing server-side or from the fake, and for an ungated write; Medium for a double implementation, a gated read, or a shadow list; Decision for an uncalled server route.
 
@@ -500,14 +525,14 @@ Create `.claude/skills/audit-plugin-manifest/SKILL.md`. Frontmatter:
 ```yaml
 ---
 name: audit-plugin-manifest
-description: Audit `.claude-plugin/marketplace.json` — the registry of what ships — against the skills on disk, each skill's plugin-root probe, and the root-shared hooks file. Finds skills claimed by two plugins or none, probes that name the wrong marketplace, stale MARKER paths, and hooks that reach a plugin they were not written for. Reports in plain English. Use when the user says "/audit-plugin-manifest", "check what ships", or asks whether both plugins still install correctly.
+description: Audit `.claude-plugin/marketplace.json` — the registry of what ships — against the skills on disk and the root-shared hooks file. Finds a skill directory that never got its `SKILL.md`, thin install-time descriptions, a missing IntelliJ prerequisite note, and hooks that reach a plugin they were not written for. Reports in plain English. Use when the user says "/audit-plugin-manifest", "check what ships", or asks whether both plugins still install correctly.
 user-invocable: true
 ---
 ```
 
 Body sections, in order:
 
-**`# /audit-plugin-manifest — what ships, and whether it can find itself`** — explain that two plugins share one root and are separated only by their `skills` arrays, so `marketplace.json` is the sole statement of which skill belongs to which plugin. A skill also has to locate its own installed directory at runtime, by resolving a marketplace name against `~/.claude/plugins/known_marketplaces.json` and then verifying a MARKER file exists under the candidate root. That resolution only happens on an installed copy, so no test can catch a wrong name — the skill simply aborts with "plugin root not found" for the user and nobody else.
+**`# /audit-plugin-manifest — what ships, and whether it can find itself`** — explain that two plugins share one root and are separated only by their `skills` arrays, so `marketplace.json` is the sole statement of which skill belongs to which plugin. Both entries use `"source": "./"` rather than a subdirectory precisely so there is one copy of `skills/_shared/` to reach, not two — a subdirectory source would force a second copy and undo the merge, which is why `test_marketplace_publishes_two_plugins_from_one_root` checks it directly; this audit does not re-check it. A skill also has to locate its own installed directory at runtime, by resolving a marketplace name against `~/.claude/plugins/known_marketplaces.json` and then verifying a MARKER file exists under the candidate root. `test_every_probe_asks_for_the_real_marketplace_name` catches a probe whose `NAME` disagrees with this repo's `marketplace.json` — but nothing can catch the resolution failing on an installed copy: the marketplace registered under a different name, the registry entry missing from `known_marketplaces.json` altogether, or the MARKER file absent from the installed tree. Any of those and the skill simply aborts with "plugin root not found" for the user and nobody else.
 
 **`## The audit contract (read first)`** — Violation / Decision as in the Global Constraints.
 
@@ -524,19 +549,18 @@ These cover the mechanical checks thoroughly. Report only what they do not enfor
 
 **`## Step 1 — load the sources of truth`**
 
-1. `.claude-plugin/marketplace.json` — the two entries, their `source`, `strict`, `description` and `skills`.
+1. `.claude-plugin/marketplace.json` — the two entries, their `description` and `skills` (their `source` and `strict` are context — see the intro — not a check this audit runs).
 2. Each `skills/*/SKILL.md` — the embedded plugin-root probe.
 3. `hooks/hooks.json` — the root-shared hook registration.
 4. `skills/annotate/hooks/progress_publish.py` — the hook the root file registers.
 
 **`## The rules`**
 
-- **Rule 1 — both entries stay structurally identical.** Both must use `"source": "./"` and `"strict": false`. A subdirectory source is **Critical**: it would force a second copy of `skills/_shared/`, undoing the merge. Metadata lives in the entry because there is no root `plugin.json` to hold it; a reintroduced `plugin.json` is **Critical**.
-- **Rule 2 — every shipped skill is reachable.** A skill directory with a `SKILL.md` that no entry lists ships nothing and is **Critical**. A skill listed by both entries is **Critical** — the two plugins would fight over it.
-- **Rule 3 — descriptions are the install-time prose.** An entry `description` that restates the plugin name and nothing more is **Medium**: it is what a user reads when choosing whether to install.
-- **Rule 4 — a root-shared surface reaches both plugins.** Anything at the repository root that Claude Code loads per-plugin — `hooks/`, and `commands/` or `agents/` if they ever appear — is claimed by both entries. A hook there that is not inert for the plugin it was not written for is **Critical**. Today `hooks/hooks.json` registers `progress_publish.py`, which returns immediately when the session has no pending annotate rounds and always exits 0. A newly added hook without that property is a Violation.
-- **Rule 5 — the IDE half is named honestly.** `claude-ide-review`'s description must state that it requires the companion IntelliJ plugin. Without the IDE half its commands fail by doing nothing visible, which reads as a broken skill. A description that omits it is **Medium**.
-- **Rule 6 — a skill that could belong to either plugin.** **Decision**, not a Violation. Ask which plugin should own it.
+- **Rule 1 — a skill directory with no `SKILL.md` ships nothing, and no test notices.** `skills/_shared/` and `skills/tests/` are the two legitimate no-`SKILL.md` directories under `skills/`, allowlisted below. `test_plugin_skill_lists_partition_the_skills_tree` builds its on-disk set only from directories that already contain a `SKILL.md` — a directory without one never enters that comparison at all, so it is invisible by construction, not merely unlisted. A *third* such directory — one that reads like an abandoned or half-authored skill — is **Critical**.
+- **Rule 2 — descriptions are the install-time prose.** An entry `description` that restates the plugin name and nothing more is **Medium**: it is what a user reads when choosing whether to install. The covering tests only require a description to be non-empty, not substantive.
+- **Rule 3 — a root-shared surface reaches both plugins.** Anything at the repository root that Claude Code loads per-plugin — `hooks/`, and `commands/` or `agents/` if they ever appear — is claimed by both entries, and no covering test reads `hooks/hooks.json` at all. A hook there that is not inert for the plugin it was not written for is **Critical**. Today `hooks/hooks.json` registers `progress_publish.py`, which keys off a per-session registry at `~/.claude/annotate/pending-<session_id>.json` written only by the annotate skill; on a session that never used annotate the file does not exist, the lookup raises `FileNotFoundError`, and the hook returns before writing anything — so under `claude-ide-review` (interactive_review, walkthrough) it does nothing and always exits 0. A newly added hook without that property is a Violation.
+- **Rule 4 — the IDE half is named honestly.** `claude-ide-review`'s description must state that it requires the companion IntelliJ plugin. Without the IDE half its commands fail by doing nothing visible, which reads as a broken skill. A description that omits it is **Medium**; the covering tests do not read description content.
+- **Rule 5 — a skill that could belong to either plugin.** **Decision**, not a Violation. Ask which plugin should own it.
 
 **`## Closed allowlist — never flag these`**
 
@@ -546,9 +570,9 @@ These cover the mechanical checks thoroughly. Report only what they do not enfor
 4. `docs/superpowers/` specs and plans describing manifest structure.
 5. Any line carrying `# manifest-exempt: <reason>`.
 
-**`## Step 2 — scan`** — parse `marketplace.json`; list directories under `skills/` containing a `SKILL.md` and diff against the union of the `skills` arrays; extract each probe's `NAME` and `MARKER` and resolve both; read `hooks/hooks.json` and the script it registers, checking the early-return property; check for `commands/` or `agents/` at the root; build the file universe from `git ls-files`.
+**`## Step 2 — scan`** — parse `marketplace.json` for both entries' `description` and `skills`; list every directory under `skills/` that has no `SKILL.md`, and check each against the allowlist so only a genuine third case gets reported; extract each probe's `NAME` and `MARKER` and resolve both; read `hooks/hooks.json` and the script it registers, checking the early-return property; check for `commands/` or `agents/` at the root; build the file universe from `git ls-files`.
 
-**`## Step 3 — severity`** — Critical for a skill that ships nowhere or twice, a subdirectory source, a reintroduced `plugin.json`, or a non-inert shared hook; Medium for thin descriptions or a missing IntelliJ prerequisite; Decision for ownership questions.
+**`## Step 3 — severity`** — Critical for a `skills/` directory with no `SKILL.md` beyond the two allowlisted cases, or a non-inert shared hook; Medium for a thin description or a missing IntelliJ prerequisite; Decision for ownership questions.
 
 **`## Output template`**
 
@@ -748,7 +772,7 @@ because no test reads prose."
 Add to the umbrella's `## Sub-audits` table:
 
 ```markdown
-| `/audit-code-health` | Generic health across Python and Java — dead code, duplication, unhandled async, risky code with no test beside it. |
+| `/audit-code-health` | Generic health across Python and Java — dead code, duplication, swallowed exceptions, missing timeouts, risky code with no test beside it. |
 ```
 
 and add `` `/audit-code-health` `` to the umbrella's frontmatter `description`, completing the five-name list quoted in Task 1.
@@ -763,7 +787,7 @@ Create `.claude/skills/audit-code-health/SKILL.md`. Frontmatter:
 ```yaml
 ---
 name: audit-code-health
-description: Audit generic code health across the Python skills and the Java IntelliJ plugin — dead code, copy-paste duplication, swallowed exceptions, unbounded reads and missing timeouts on HTTP and subprocess calls, resource leaks, and risky modules with no test beside them. Reports in plain English. Use when the user says "/audit-code-health", "check code quality", "find duplication", or wants the non-structural slice of the full audit.
+description: Audit generic code health across the Python skills and the Java IntelliJ plugin — dead code, copy-paste duplication, swallowed exceptions, missing timeouts on HTTP and subprocess calls, resource leaks, and risky modules with no test beside them. Reports in plain English. Use when the user says "/audit-code-health", "check code quality", "find duplication", or wants the non-structural slice of the full audit.
 user-invocable: true
 ---
 ```
@@ -776,11 +800,17 @@ Body sections, in order:
 
 **`## Covering tests — read these first, do not duplicate them`**
 
-The repository has 742 tests. Before reporting a module as untested, check `skills/*/tests/` and `ide-plugin/src/test/java/` for a covering file. "No test beside it" means no test file exercises that module, not that a specific function lacks a direct test.
+No single test file covers this audit's territory — nothing asserts "no swallowed exceptions" or "every subprocess call has a timeout" across the whole tree the way the other four audits each have a structural test to defer to. The repository has 742 tests spread across two locations; before reporting a module as untested under Rule 6, check both for a covering file: `skills/*/tests/` (the per-skill Python test suites) and `ide-plugin/src/test/java/` (the Java test suite). Search for the module or class name across every test file in both locations, not just the test directory next to it. "No test beside it" means no test file exercises that module anywhere in either location, not that a specific function lacks a direct unit test.
+
+**`## Step 1 — load the sources of truth`**
+
+1. `skills/**/*.py` — every Python module under `skills/`, including `skills/_shared/web_companion/` (the engine) and each skill's `hooks/`.
+2. `ide-plugin/src/**/*.java`, plus the one Kotlin file, `ide-plugin/src/main/kotlin/com/petros/ireview/GhPrDiffDriver.kt`.
+3. `skills/*/tests/` and `ide-plugin/src/test/java/` — read before calling anything untested; see Covering tests above.
 
 **`## The rules`**
 
-- **Rule 1 — no swallowed exceptions.** `except Exception: pass`, or a bare `except:` that neither logs nor re-raises, is **Critical** when it wraps a mutation and **Medium** when it wraps a read. The exception is a diagnostic path that documents why failure is ignored — `_port_holder` in the engine deliberately never fails the startup path and says so in its docstring. In Java, a `catch` block with an empty body is the same finding.
+- **Rule 1 — no swallowed exceptions.** `except Exception: pass`, or a bare `except:` that neither logs nor re-raises, is **Critical** when it wraps a mutation and **Medium** when it wraps a read — unless the swallow is deliberate and says so explicitly, in any of three places: the enclosing function's own docstring, a comment immediately preceding the `try` block, or a comment anywhere inside the `catch`/`except` block; an ordinary undocumented `except: pass` gets none of these exemptions, and neither does a justification that lives only in the module's own docstring — that position is not anchored to any specific swallow, so one module-level sentence would exempt every `try/except` in the file regardless of how many there are or whether any of them actually says so. `_port_holder` in the engine documents it in its own docstring. The `cleanup.sweep_state(...)` call inside `run()` documents it a second way — a comment immediately above the `try`, since `run()`'s own docstring is about being the server entrypoint and says nothing about this swallow. `BuildInfo.java:40` documents it a third way — a comment inside the `catch` body itself ("never throw into the UI"). `skills/annotate/hooks/progress_publish.py:134` documents it the same third way — `except Exception:` followed by a comment inside the block itself ("Never let a progress hook disrupt the user's tool flow"). In Java, a `catch` block with an empty body is the same finding, exempted only under the same three-form rule.
 - **Rule 2 — network and subprocess calls carry a timeout.** An `http.client`, `urllib`, or `subprocess` call with no timeout is **Critical**: it hangs the caller forever with no way out. This applies to both the Python side and the Java `HttpClient` usage.
 - **Rule 3 — resources are closed.** A file, socket, or process opened outside a `with` (Python) or try-with-resources (Java) and not closed on every path is **Medium**.
 - **Rule 4 — no dead code.** A module, function, or class nothing references is **Low**, unless it is an entry point, a test fixture, or a public helper the engine exposes for skills. Check `git ls-files` and grep the whole tree before calling anything dead — a name used only from a `SKILL.md` shell snippet is still live.
@@ -790,12 +820,13 @@ The repository has 742 tests. Before reporting a module as untested, check `skil
 
 **`## Closed allowlist — never flag these`**
 
-1. `skills/_shared/web_companion/server.py::_port_holder` and any other function whose docstring states that failure is deliberately ignored.
+1. `skills/_shared/web_companion/server.py::_port_holder` and any other function whose own docstring states that failure is deliberately ignored; also the `cleanup.sweep_state(...)` call inside `run()` (`server.py:435-443`), whose justification is a comment immediately above the `try` rather than a docstring. Any of three positions exempts a deliberate swallow — the enclosing function's own docstring, a comment immediately preceding the `try`, or a comment anywhere inside the `catch`/`except` block — for example `BuildInfo.java:40` (comment inside the `catch` body) and `skills/annotate/hooks/progress_publish.py:134` (comment inside the `except Exception:` body); an undocumented swallow still is not exempt, and neither is a justification that lives only in a module's docstring with nothing anchored to the specific swallow.
 2. Generated or vendored third-party assets: `skills/_shared/web_companion/static/markdown-it.min.js`, the fonts, `ide-plugin/gradle/wrapper/gradle-wrapper.jar`.
 3. `FakeReviewServer.java` — a test double; its simplifications are its purpose. Route drift there belongs to `/audit-http-surface`, not here.
 4. Test files' own duplication — repetitive tests are usually clearer than abstracted ones.
-5. The three per-skill `server.py` handler modules being structurally similar — that is `/audit-engine-boundary`'s call, not this one's.
+5. The three per-skill `server.py` handler modules' **structural** shape — the `Handlers` class outline and its `serve_data`/`create_session_extra` method set, plus byte-identical small helpers such as `_send_text`, `_send_html`, `_send_json`, and `_is_terminal` — is `/audit-engine-boundary`'s call, not this one's, and identical (undrifted) copies are a Decision under Rule 5 regardless. This does **not** reach duplicated **implementation bodies** between the three modules — for example the two `_serve_stream` loops — which this audit owns under Rule 5: there is no engine module either could import instead, so it is duplication between skills, not a boundary violation, and it is reportable here the same as any other drifted copy.
 6. Any line carrying `# health-exempt: <reason>`.
+7. A swallow around closing or releasing a resource during teardown — `close()`/`shutdown()`-shaped calls in a cleanup path, where the operation being abandoned is already finished or already failing — is not a Violation even with no comment, e.g. `SseClient.java:81,115`'s `catch (RuntimeException ignored) {}` around `Stream.close()`. Keep this narrow: it covers teardown-only close/shutdown calls, not ordinary operations.
 
 **`## Step 2 — scan`** — build the file universe from `git ls-files`; walk Python and Java sources; for each rule, grep for its shape and then read the surrounding function before judging. Never report a finding from a grep hit alone.
 
