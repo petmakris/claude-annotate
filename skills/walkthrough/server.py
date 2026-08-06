@@ -17,6 +17,7 @@ from pathlib import Path
 from skills._shared.web_companion import server as wc_server
 from skills._shared.web_companion import events as events_module
 from skills._shared.web_companion import uploads as uploads_module
+from skills._shared.web_companion.atomic import write_text_atomic
 from skills.interactive_review import threads as threads_module
 from skills.walkthrough import steps as steps_module
 
@@ -277,7 +278,7 @@ class Handlers:
         kind = payload.get("kind") or "explain"
         if kind not in steps_module.DOC_KINDS:
             raise ValueError(f"kind must be one of {sorted(steps_module.DOC_KINDS)}")
-        (state_dir / "meta.json").write_text(json.dumps({
+        write_text_atomic(state_dir / "meta.json", json.dumps({
             "title": question.strip(),
             "question": question.strip(),
             "kind": kind,
