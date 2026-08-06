@@ -37,10 +37,10 @@ replaces it in place; the rest of the page does not move or reload.
 
 ## How it works
 
-A local HTTP server renders the response as addressable blocks and holds an SSE
-connection to the page. Your comment becomes an event; Claude wakes, rewrites
-that block, and patches it over the wire. Sessions persist on disk, so you can
-close the tab and come back to a document with its comment history intact.
+A local HTTP server renders the response as addressable blocks, and the page
+polls it for changes. Your comment becomes an event; Claude wakes, rewrites that
+block, and the next poll picks it up. Sessions persist on disk, so you can close
+the tab and come back to a document with its comment history intact.
 
 The server binds to `127.0.0.1` on a port chosen at startup and records it in
 `~/.claude/annotate/server.json`.
