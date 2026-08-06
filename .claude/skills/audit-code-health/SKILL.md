@@ -1,6 +1,6 @@
 ---
 name: audit-code-health
-description: Audit generic code health across the Python skills and the Java IntelliJ plugin — dead code, copy-paste duplication, swallowed exceptions, unbounded reads and missing timeouts on HTTP and subprocess calls, resource leaks, and risky modules with no test beside them. Reports in plain English. Use when the user says "/audit-code-health", "check code quality", "find duplication", or wants the non-structural slice of the full audit.
+description: Audit generic code health across the Python skills and the Java IntelliJ plugin — dead code, copy-paste duplication, swallowed exceptions, missing timeouts on HTTP and subprocess calls, resource leaks, and risky modules with no test beside them. Reports in plain English. Use when the user says "/audit-code-health", "check code quality", "find duplication", or wants the non-structural slice of the full audit.
 user-invocable: true
 ---
 
@@ -39,14 +39,24 @@ anywhere, not that a specific function lacks a direct unit test.
 
 - **Rule 1 — no swallowed exceptions.** `except Exception: pass`, or a bare
   `except:` that neither logs nor re-raises, is **Critical** when it wraps a
-  mutation and **Medium** when it wraps a read. The exception is a
-  diagnostic or cleanup path whose own docstring documents that it must
-  never fail the caller — for example "best-effort," "never raises," or
-  "must never stop the caller." `_port_holder` in the engine
-  (`skills/_shared/web_companion/server.py`) is the canonical example: its
-  docstring calls it a "best-effort description" and says "never let the
-  diagnostic itself fail the startup path." In Java, a `catch` block with an
-  empty body is the same finding.
+  mutation and **Medium** when it wraps a read — unless the swallow is
+  deliberate and says so, in which case it is not a Violation at all. The
+  justification must be explicit that failure is absorbed on purpose (for
+  example "best-effort," "never raises," "must never stop the caller"), and
+  it may live in either of two places: the enclosing function's own
+  docstring, or a comment immediately preceding the `try` block — an
+  ordinary undocumented `except: pass` gets neither exemption. `_port_holder`
+  in the engine (`skills/_shared/web_companion/server.py`) documents it in
+  its docstring ("best-effort description... never let the diagnostic itself
+  fail the startup path"). The `cleanup.sweep_state(...)` call inside
+  `run()` in the same file documents it the other way — a comment
+  immediately above the `try` ("Best-effort: a sweep failure must never stop
+  the server from starting") rather than in `run()`'s own docstring, which
+  is about being the server entrypoint and says nothing about this swallow.
+  Both are allowlisted; a swallow with no comment and no docstring statement
+  either way is still Critical or Medium as above. In Java, a `catch` block
+  with an empty body is the same finding, exempted only under the same
+  either-form rule.
 - **Rule 2 — network and subprocess calls carry a timeout.** An
   `http.client`, `urllib`, or `subprocess` call with no timeout is
   **Critical**: it hangs the caller forever with no way out. This applies to
@@ -82,9 +92,14 @@ anywhere, not that a specific function lacks a direct unit test.
    `skills/_shared/web_companion/cleanup.py::sweep_state`, and
    `skills/_shared/web_companion/server.py::_safe_500` — each carries a
    docstring stating its failure is deliberately absorbed (best-effort,
-   never raises, must not mask or block the caller). Any other function
-   whose docstring makes the same claim is covered by the same allowlist
-   entry, not just these three named ones.
+   never raises, must not mask or block the caller). The
+   `cleanup.sweep_state(...)` call wrapped in `try/except Exception: pass`
+   inside `run()` (`server.py:435-443`) is the same kind of deliberate
+   swallow, justified the other way: a comment immediately above the `try`
+   ("Best-effort: a sweep failure must never stop the server from
+   starting"), not `run()`'s own docstring. Any other function or call site
+   whose docstring or immediately-preceding comment makes the same claim is
+   covered by this same allowlist entry, not just these four named ones.
 2. Generated or vendored third-party assets:
    `skills/_shared/web_companion/static/markdown-it.min.js`, the fonts,
    `ide-plugin/gradle/wrapper/gradle-wrapper.jar`.

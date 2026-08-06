@@ -181,7 +181,7 @@ The body must contain, in this order:
    | `/audit-http-surface` | The Python-to-Java route contract, the `FakeReviewServer` test double, and the `_is_owner` write gate. |
    | `/audit-plugin-manifest` | `.claude-plugin/marketplace.json` as the registry of what ships; each skill's ability to locate itself once installed; the root-shared `hooks/`. |
    | `/audit-docs-truth` | Whether the prose is true — progressive-disclosure structure across all three skills, and README and skill-doc claims against the tree. |
-   | `/audit-code-health` | Generic health across Python and Java — dead code, duplication, unhandled async, risky code with no test beside it. |
+   | `/audit-code-health` | Generic health across Python and Java — dead code, duplication, swallowed exceptions, missing timeouts, risky code with no test beside it. |
 
    **In Task 1 this table contains only the `/audit-engine-boundary` row.** Each later task adds its own row. The sync test fails if a row names a sub-audit that does not exist yet.
 
@@ -748,7 +748,7 @@ because no test reads prose."
 Add to the umbrella's `## Sub-audits` table:
 
 ```markdown
-| `/audit-code-health` | Generic health across Python and Java — dead code, duplication, unhandled async, risky code with no test beside it. |
+| `/audit-code-health` | Generic health across Python and Java — dead code, duplication, swallowed exceptions, missing timeouts, risky code with no test beside it. |
 ```
 
 and add `` `/audit-code-health` `` to the umbrella's frontmatter `description`, completing the five-name list quoted in Task 1.
@@ -763,7 +763,7 @@ Create `.claude/skills/audit-code-health/SKILL.md`. Frontmatter:
 ```yaml
 ---
 name: audit-code-health
-description: Audit generic code health across the Python skills and the Java IntelliJ plugin — dead code, copy-paste duplication, swallowed exceptions, unbounded reads and missing timeouts on HTTP and subprocess calls, resource leaks, and risky modules with no test beside them. Reports in plain English. Use when the user says "/audit-code-health", "check code quality", "find duplication", or wants the non-structural slice of the full audit.
+description: Audit generic code health across the Python skills and the Java IntelliJ plugin — dead code, copy-paste duplication, swallowed exceptions, missing timeouts on HTTP and subprocess calls, resource leaks, and risky modules with no test beside them. Reports in plain English. Use when the user says "/audit-code-health", "check code quality", "find duplication", or wants the non-structural slice of the full audit.
 user-invocable: true
 ---
 ```
@@ -780,7 +780,7 @@ The repository has 742 tests. Before reporting a module as untested, check `skil
 
 **`## The rules`**
 
-- **Rule 1 — no swallowed exceptions.** `except Exception: pass`, or a bare `except:` that neither logs nor re-raises, is **Critical** when it wraps a mutation and **Medium** when it wraps a read. The exception is a diagnostic path that documents why failure is ignored — `_port_holder` in the engine deliberately never fails the startup path and says so in its docstring. In Java, a `catch` block with an empty body is the same finding.
+- **Rule 1 — no swallowed exceptions.** `except Exception: pass`, or a bare `except:` that neither logs nor re-raises, is **Critical** when it wraps a mutation and **Medium** when it wraps a read — unless the swallow is deliberate and says so explicitly, in either the enclosing function's own docstring or a comment immediately preceding the `try` block; an ordinary undocumented `except: pass` gets neither exemption. `_port_holder` in the engine documents it in its docstring. The `cleanup.sweep_state(...)` call inside `run()` documents it the other way — a comment immediately above the `try`, since `run()`'s own docstring is about being the server entrypoint and says nothing about this swallow. In Java, a `catch` block with an empty body is the same finding, exempted only under the same either-form rule.
 - **Rule 2 — network and subprocess calls carry a timeout.** An `http.client`, `urllib`, or `subprocess` call with no timeout is **Critical**: it hangs the caller forever with no way out. This applies to both the Python side and the Java `HttpClient` usage.
 - **Rule 3 — resources are closed.** A file, socket, or process opened outside a `with` (Python) or try-with-resources (Java) and not closed on every path is **Medium**.
 - **Rule 4 — no dead code.** A module, function, or class nothing references is **Low**, unless it is an entry point, a test fixture, or a public helper the engine exposes for skills. Check `git ls-files` and grep the whole tree before calling anything dead — a name used only from a `SKILL.md` shell snippet is still live.
@@ -790,7 +790,7 @@ The repository has 742 tests. Before reporting a module as untested, check `skil
 
 **`## Closed allowlist — never flag these`**
 
-1. `skills/_shared/web_companion/server.py::_port_holder` and any other function whose docstring states that failure is deliberately ignored.
+1. `skills/_shared/web_companion/server.py::_port_holder` and any other function whose docstring states that failure is deliberately ignored; also the `cleanup.sweep_state(...)` call inside `run()` (`server.py:435-443`), whose justification is a comment immediately above the `try` rather than a docstring — either form exempts a deliberate swallow, but an undocumented one does not.
 2. Generated or vendored third-party assets: `skills/_shared/web_companion/static/markdown-it.min.js`, the fonts, `ide-plugin/gradle/wrapper/gradle-wrapper.jar`.
 3. `FakeReviewServer.java` — a test double; its simplifications are its purpose. Route drift there belongs to `/audit-http-surface`, not here.
 4. Test files' own duplication — repetitive tests are usually clearer than abstracted ones.

@@ -30,7 +30,7 @@ When delivering, if you feel the urge to write "this was flagged but it's actual
 | `/audit-http-surface` | The Python-to-Java route contract, the `FakeReviewServer` test double, and the `_is_owner` write gate. |
 | `/audit-plugin-manifest` | `.claude-plugin/marketplace.json` as the registry of what ships; each skill's ability to locate itself once installed; the root-shared `hooks/`. |
 | `/audit-docs-truth` | Whether the prose is true — progressive-disclosure structure across all three skills, and README and skill-doc claims against the tree. |
-| `/audit-code-health` | Generic health across Python and Java — dead code, duplication, unhandled async, risky code with no test beside it. |
+| `/audit-code-health` | Generic health across Python and Java — dead code, duplication, swallowed exceptions, missing timeouts, risky code with no test beside it. |
 
 ## Workflow
 
