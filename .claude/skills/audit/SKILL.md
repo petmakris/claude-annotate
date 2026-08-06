@@ -1,6 +1,6 @@
 ---
 name: audit
-description: Master codebase audit for claude-annotate. Runs all focused sub-audits — `/audit-engine-boundary`, `/audit-http-surface`, `/audit-plugin-manifest` — then presents one unified actionable report. Use when the user says "/audit", "audit the codebase", "run a full audit", "full sweep", or wants everything checked instead of one targeted sub-audit.
+description: Master codebase audit for claude-annotate. Runs all focused sub-audits — `/audit-engine-boundary`, `/audit-http-surface`, `/audit-plugin-manifest`, `/audit-docs-truth` — then presents one unified actionable report. Use when the user says "/audit", "audit the codebase", "run a full audit", "full sweep", or wants everything checked instead of one targeted sub-audit.
 user-invocable: true
 ---
 
@@ -29,6 +29,7 @@ When delivering, if you feel the urge to write "this was flagged but it's actual
 | `/audit-engine-boundary` | One engine, reached by import rather than reimplemented; port and state-directory collisions between the three skills. |
 | `/audit-http-surface` | The Python-to-Java route contract, the `FakeReviewServer` test double, and the `_is_owner` write gate. |
 | `/audit-plugin-manifest` | `.claude-plugin/marketplace.json` as the registry of what ships; each skill's ability to locate itself once installed; the root-shared `hooks/`. |
+| `/audit-docs-truth` | Whether the prose is true — progressive-disclosure structure across all three skills, and README and skill-doc claims against the tree. |
 
 ## Workflow
 
