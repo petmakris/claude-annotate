@@ -18,6 +18,7 @@ from pathlib import Path
 from skills._shared.web_companion import server as wc_server
 from skills._shared.web_companion import events as events_module
 from skills._shared.web_companion import uploads as uploads_module
+from skills._shared.web_companion.atomic import write_text_atomic
 from skills._shared.web_companion.templates import html_escape, render_page
 from skills.annotate import blocks as blocks_model
 from skills.annotate import versions as versions_module
@@ -139,6 +140,24 @@ def _read_meta(response_dir: Path) -> dict:
 
 def _is_terminal(state_dir: Path) -> bool:
     return (state_dir / "finished").exists() or (state_dir / "cancelled").exists()
+
+
+def _snapshot_blocks(response_dir: Path) -> None:
+    """Copy blocks.json aside before a mutating event is applied.
+
+    versions.json stores content hashes, not text, so without this the page
+    can say a block changed but never what it said before. Written at QUEUE
+    time on purpose: that is the document the user was looking at when they
+    submitted, which is the baseline "what changed" has to mean. Best-effort —
+    a failed snapshot must never block the user's submission.
+    """
+    src = response_dir / "blocks.json"
+    if not src.exists():
+        return
+    try:
+        write_text_atomic(response_dir / "blocks.prev.json", src.read_text())
+    except OSError:
+        pass
 
 
 try:
@@ -340,6 +359,25 @@ class Handlers:
         if query == "statusline":
             _send_json(h, 200, _read_statusline(Path(dirs["response_dir"])))
             return
+        # /prev — the document as it stood when the last mutating event was
+        # queued, so the client can diff against it. A read, so it stays
+        # outside the owner write gate and works on read-only links.
+        if query == "prev":
+            prev_path = Path(dirs["response_dir"]) / "blocks.prev.json"
+            if not prev_path.exists():
+                _send_json(h, 200, {"ok": False, "blocks": {}})
+                return
+            try:
+                snap = json.loads(prev_path.read_text())
+            except (json.JSONDecodeError, OSError):
+                _send_json(h, 200, {"ok": False, "blocks": {}})
+                return
+            out = {}
+            for b in snap.get("blocks", []):
+                if isinstance(b, dict) and isinstance(b.get("id"), str):
+                    out[b["id"]] = b.get("markdown")
+            _send_json(h, 200, {"ok": True, "blocks": out})
+            return
         # /raw, /raw?block=section-N
         if query.startswith("raw"):
             qs = ""
@@ -375,6 +413,9 @@ class Handlers:
         if _is_terminal(Path(dirs["state_dir"])):
             _send_text(h, 409, "session closed")
             return
+        # Every branch below can mutate blocks.json. Snapshot once, here, so
+        # no future submit type can be added without coverage.
+        _snapshot_blocks(Path(dirs["response_dir"]))
         if payload.get("type") == "round":
             self._handle_round(h, dirs, payload)
             return

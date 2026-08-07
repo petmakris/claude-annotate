@@ -193,6 +193,50 @@ class SubmitRoundTests(unittest.TestCase):
         self.assertEqual(status, 422, body)
         self.assertIn("bad kind", body)
 
+    def test_queuing_a_round_snapshots_the_document(self):
+        """The snapshot is the document the user was looking at when they
+        pressed Submit — so it is taken at queue time, not at apply time."""
+        prev = Path(self.sess["response_dir"]) / "blocks.prev.json"
+        self.assertFalse(prev.exists(), "snapshot existed before any event")
+        status, _ = self._submit({"type": "round", "reactions": [_reaction("keep")]})
+        self.assertEqual(status, 202)
+        self.assertTrue(prev.exists(), "queuing a round wrote no snapshot")
+        snap = json.loads(prev.read_text())
+        ids = [b["id"] for b in snap["blocks"]]
+        self.assertEqual(ids, ["section-1", "section-2"])
+
+    def test_the_snapshot_is_overwritten_not_accumulated(self):
+        """Only the most recent round is described by the change bar."""
+        prev = Path(self.sess["response_dir"]) / "blocks.prev.json"
+        self._submit({"type": "round", "reactions": [_reaction("keep")]})
+        first = prev.read_text()
+        _write_blocks(Path(self.sess["response_dir"]), "resp-rd", "T", [
+            {"id": "section-1", "title": "A", "markdown": "rewritten"},
+            {"id": "section-2", "title": "B", "markdown": "beta"},
+        ])
+        self._submit({"type": "round", "reactions": [
+            _reaction("keep", selected_text="rewritten")]})
+        self.assertNotEqual(prev.read_text(), first,
+                            "the snapshot did not move with the document")
+        self.assertIn("rewritten", prev.read_text())
+
+    def test_prev_route_serves_the_snapshot(self):
+        self._submit({"type": "round", "reactions": [_reaction("keep")]})
+        conn = HTTPConnection("localhost", self.info["port"], timeout=2)
+        conn.request("GET", f"/s/{self.sess['sid']}/prev")
+        resp = conn.getresponse()
+        self.assertEqual(resp.status, 200)
+        body = json.loads(resp.read().decode())
+        self.assertTrue(body["ok"])
+        self.assertIn("alpha one", body["blocks"]["section-1"])
+
+    def test_prev_route_is_honest_when_there_is_no_snapshot(self):
+        conn = HTTPConnection("localhost", self.info["port"], timeout=2)
+        conn.request("GET", f"/s/{self.sess['sid']}/prev")
+        resp = conn.getresponse()
+        self.assertEqual(resp.status, 200)
+        self.assertFalse(json.loads(resp.read().decode())["ok"])
+
 
 if __name__ == "__main__":
     unittest.main()
