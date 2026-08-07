@@ -182,3 +182,19 @@ def test_keep_is_labelled_by_what_it_does():
     assert "Leave as written" in subunits, "unit strip still calls it Keep"
     assert "Leave as written" in script, "header strip still calls it Keep"
     assert '"keep"' in subunits, "the wire kind must stay `keep`"
+
+
+def test_no_static_file_hides_a_raw_nul_byte():
+    """A literal 0x00 in a source file makes the WHOLE file invisible to
+    every line-based tool — grep, ripgrep, most editors' search, diff
+    viewers all silently report nothing for it. `file(1)` calls such a file
+    `data`, not `text`. This bit script.js once (commit 81013cc, a NUL used
+    as an unambiguous join delimiter); catch it structurally so it can't
+    happen again without a test failing first."""
+    for path in sorted(STATIC.iterdir()):
+        if not path.is_file():
+            continue
+        data = path.read_bytes()
+        assert b"\x00" not in data, \
+            f"{path.name} contains a raw NUL byte — it will read as binary " \
+            "to grep and most editors; use an escape sequence instead"

@@ -981,6 +981,12 @@
       delete annotations[id];
       saveDrafts();
       document.body.classList.toggle("is-editing", Object.keys(annotations).length > 0);
+      // Re-render the dock in THIS tick. Its Submit button is disabled while
+      // `is-editing`, but renderDock otherwise only runs on the 1s poll — so
+      // without this there is a window where an editor is open and Submit is
+      // still live, which drops the comment the user is mid-way through
+      // writing. That window is the bug; a narrower window is not a fix.
+      window.AnnotateSubunits?.renderDock();
       card.remove();
       applyEngagedStyling();
     });
@@ -1070,6 +1076,10 @@
 
     // EDITING lock: any open comment card means one editor is active.
     document.body.classList.toggle("is-editing", Object.keys(annotations).length > 0);
+    // Same tick, same reason as the submit path above: the dock's disabled
+    // state reads `is-editing`, so it has to be repainted the moment the
+    // class moves rather than on the next poll.
+    window.AnnotateSubunits?.renderDock();
   }
 
   function focusComment(id) {
@@ -1348,7 +1358,7 @@
     // Re-observing on every rail rebuild would tear down and rebuild the
     // observer on each mark click (renderMapRail runs from onMarkChange too).
     // Only the section SET matters to it, so skip when that hasn't moved.
-    const key = sections.map(s => s.dataset.blockId).join(" ");
+    const key = sections.map(s => s.dataset.blockId).join("\x00");
     if (key === mapObserved && mapObserver) { recomputeReadingPosition(); return; }
     mapObserved = key;
     mapObserver?.disconnect();

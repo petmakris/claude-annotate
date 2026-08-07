@@ -90,3 +90,20 @@ def test_the_dead_session_banner_does_not_claim_the_round_was_lost():
         "the dead-session banner still claims the submission was lost"
     assert "annotate resume" in src, \
         "the banner does not name the way to pick the page back up"
+
+
+def test_the_dock_repaints_the_moment_an_editor_opens():
+    """Disabling Submit while `is-editing` is only half the fix.
+
+    `renderDock()` reads that class to decide `disabled`, but it otherwise
+    runs on the 1s poll — so toggling the class without repainting leaves a
+    window where an editor is open and Submit is still live, which silently
+    drops the comment being written. Every site that moves `is-editing` has
+    to repaint the dock in the same tick."""
+    src = SCRIPT_JS.read_text()
+    sites = [i for i in range(len(src)) if src.startswith('classList.toggle("is-editing"', i)]
+    assert sites, "script.js no longer toggles is-editing at all"
+    for i in sites:
+        window = src[i:i + 600]
+        assert "renderDock" in window, \
+            "an is-editing toggle site does not repaint the dock in the same tick"
