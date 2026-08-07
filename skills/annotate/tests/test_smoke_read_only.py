@@ -8,6 +8,7 @@ so a guest is now offered nothing at all.
 Source-string checks matching the repo's other smoke tests (see
 test_smoke_dismiss_lock.py). Live behavior is manual via the demo push.
 """
+import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -46,6 +47,19 @@ def test_the_page_says_it_is_read_only():
     server = SERVER_PY.read_text()
     assert "read-only-badge" in server, "no read-only indicator in the page shell"
     assert "Read-only" in server, "the badge does not name the mode"
+    # The fold was the one thing the badge could truthfully promise a guest,
+    # because it never left their browser. Compact replaced it and compact is
+    # an owner-only edit, so nothing is left for the tooltip to promise beyond
+    # "read, not write" — a resurrected promise of a private reading aid, in
+    # any wording, is the bug this guards against.
+    badge = re.search(
+        r'class="read-only-badge"\s+title="([^"]*)"', server)
+    assert badge, "could not find the read-only badge's tooltip text"
+    tooltip = badge.group(1)
+    assert "folding" not in tooltip.lower(), \
+        "the read-only badge still promises folding"
+    assert "private to your browser" not in tooltip.lower(), \
+        "the read-only badge still promises a private, browser-local control"
 
 
 def test_pushing_doc_separates_the_shareable_url_from_the_owner_one():
