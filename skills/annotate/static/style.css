@@ -1116,6 +1116,17 @@ body.is-busy .comment-card {
 .rd-summary { display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
   font-size: 12px; color: var(--text-dim); }
 .rd-summary b { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+/* compact's per-kind count chip inserts CONTROL_SPECS' raw COMPACT_ICON svg
+   with no wrapping class (renderDock: `span.innerHTML = \`${glyph} <b>...`),
+   so unlike .rd-k just below — which does get styled — this one had no
+   size and no fill/stroke rule at all: unstyled, it renders at the SVG
+   default intrinsic size AND paints as a solid black blob, found while
+   auditing every other site the compact icon renders at. */
+.rd-summary svg {
+  width: 12px; height: 12px; vertical-align: -1px;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
 #round-submit {
   margin-left: auto; flex: none; border: none; border-radius: 999px;
   padding: 8px 17px; font: inherit; font-size: 12.5px; font-weight: 700;
@@ -1305,7 +1316,10 @@ section.block[data-diff="open"] .diff-pane { display: block; }
   font: inherit; font-size: 12.5px; cursor: pointer; text-align: left;
 }
 .composer-collapsed:hover { background: var(--surface); border-style: solid; color: var(--text); }
-.composer-collapsed svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; flex: none; }
+.composer-collapsed svg {
+  width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; flex: none;
+}
 .composer-collapsed .cc-kbd {
   margin-left: auto; font-family: ui-monospace, monospace; font-size: 10.5px;
   border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; background: var(--surface-soft);
@@ -1329,5 +1343,18 @@ section.block[data-diff="open"] .diff-pane { display: block; }
 .discover-hint .dh-glyphs span {
   width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center;
   border: 1px solid var(--border); border-radius: 5px; background: var(--surface); font-size: 10px;
+}
+/* compact is the one glyph here that's an inline SVG rather than an emoji
+   (script.js's ICON.compact — same source the card-header strip and the
+   unit strip render). The SVG carries no fill/stroke of its own, so
+   without this it falls back to the SVG default (fill: black, stroke:
+   none) and paints as a solid blob instead of the eye-off outline every
+   other rendering of this icon uses. Mirrors
+   `.unit-strip button[data-kind="compact"] svg` verbatim but sized for
+   this box (20px vs. the strip's 22px button, 14px vs. its 13px glyph). */
+.discover-hint .dh-glyphs svg {
+  width: 14px; height: 14px;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
 }
 .discover-hint .dh-x { margin-left: auto; border: none; background: transparent; cursor: pointer; color: var(--text-dim); font-size: 15px; padding: 0 3px; }

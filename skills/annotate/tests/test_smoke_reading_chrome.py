@@ -136,3 +136,62 @@ def test_no_dead_compact_icon_export_reach_remains():
                 "export was never added to subunits.js's window.AnnotateSubunits "
                 "block, so reading it always silently returns undefined"
             )
+
+
+def test_the_discover_hint_compact_glyph_is_an_outline_not_a_blob():
+    """Regression guard (round-3 fix): round 2 fixed the compact glyph from
+    empty to a real SVG (script.js's ICON.compact), but that SVG carries no
+    fill/stroke of its own — it depends entirely on CSS, the same way
+    `.unit-strip button[data-kind="compact"] svg` and `.hover-actions button
+    svg` do for every other rendering of this icon. With no matching rule
+    for the hint, the SVG fell back to its default (fill: black, stroke:
+    none) and painted a solid blob instead of the eye-off outline. Measured
+    live before this fix: `.discover-hint .dh-glyphs svg` computed
+    `fill: rgb(0,0,0); stroke: none`; the strip's copy computed
+    `fill: none; stroke: rgb(131,134,143)` — they disagreed. Checking glyph
+    presence alone (round 2's test) cannot see this: the glyph was
+    non-empty and still wrong. Check the CSS treatment exists, not just
+    that the markup does — the third time in this task something passed
+    its test and was visibly wrong on screen."""
+    css = STYLE_CSS.read_text()
+    assert ".discover-hint .dh-glyphs svg" in css, (
+        "no rule styles the compact icon inside the discovery hint's glyph "
+        "row — it renders with the SVG default (solid black fill)"
+    )
+    start = css.index(".discover-hint .dh-glyphs svg")
+    end = css.index("}", start)
+    rule = css[start:end]
+    assert "fill: none" in rule, (
+        ".discover-hint .dh-glyphs svg has no fill:none — the compact "
+        "glyph paints as a solid blob instead of an outline"
+    )
+    assert "stroke: currentColor" in rule, (
+        ".discover-hint .dh-glyphs svg has no stroke — the eye-off outline "
+        "needs a visible stroke to read as anything at all"
+    )
+
+
+def test_the_round_dock_summary_compact_glyph_is_styled():
+    """Found auditing every other render site for the compact icon, as
+    asked in round 3, prompted by the discover-hint blob bug: renderDock()
+    (subunits.js) inserts CONTROL_SPECS' raw COMPACT_ICON svg into the
+    round dock's per-kind count chips (`.rd-summary span.innerHTML =
+    \\`${glyph} <b>...\\``) with no wrapping class at all. Unlike `.rd-k` —
+    the round drawer's per-ROW kind chip, styled a few lines below this one
+    in style.css — the summary's per-kind COUNT chip had no size and no
+    fill/stroke rule whatsoever, so it rendered at the browser's default
+    SVG size and painted solid black. Not the bug the coordinator
+    originally reported, but the same bug class, found by checking every
+    other site rather than stopping at the one that was reported."""
+    css = STYLE_CSS.read_text()
+    assert ".rd-summary svg" in css, (
+        "no rule styles the compact icon inside the round dock's summary "
+        "count chips — it renders unsized and filled solid black"
+    )
+    start = css.index(".rd-summary svg")
+    end = css.index("}", start)
+    rule = css[start:end]
+    assert "fill: none" in rule and "stroke: currentColor" in rule, (
+        ".rd-summary svg exists but doesn't give the compact glyph the "
+        "fill:none/stroke outline treatment"
+    )
