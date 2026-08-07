@@ -1076,7 +1076,7 @@ body.is-busy .comment-card {
    The collapsed state is the old dock. Expanded, it is the manifest for a
    batch of irreversible decisions the user made across several screens —
    which is why every row can be jumped to and removed. */
-#round-dock.round-drawer {
+#round-dock {
   position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px;
   z-index: 40; width: min(560px, calc(100vw - 40px));
   background: var(--surface); border: 1px solid var(--border);

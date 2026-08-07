@@ -40,5 +40,26 @@ def test_the_drawer_says_nothing_has_been_sent():
 
 def test_the_drawer_is_styled():
     css = STYLE_CSS.read_text()
-    for needle in (".round-drawer", ".rd-head", ".rd-list", ".rd-row", ".rd-x"):
+    for needle in ("#round-dock", ".rd-head", ".rd-list", ".rd-row", ".rd-x"):
         assert needle in css, f"style.css missing {needle}"
+
+
+def test_removing_a_block_mark_repaints_its_own_card():
+    """repaintBlocks() only revisits marks that still exist in `marks`, so a
+    mark just deleted from it is invisible to that sweep — the block it
+    belonged to would never have its `data-block-mark` attribute cleared and
+    the card would stay struck-through/dimmed after the drawer removed it.
+    removeMark must therefore repaint the removed mark's own block directly
+    (as toggleBlockMark already does) rather than relying solely on the
+    repaintBlocks() sweep.
+    """
+    src = SUBUNITS_JS.read_text()
+    start = src.index("function removeMark(key)")
+    # removeMark is a small, single-level function — its matching closing
+    # brace is the first "\n  }" after the opening one.
+    end = src.index("\n  }", start)
+    body = src[start:end]
+    assert "paintBlock(" in body, \
+        "removeMark does not directly repaint the removed mark's block"
+    assert "repaintBlocks()" in body, \
+        "removeMark should still sweep repaintBlocks() for surviving marks"

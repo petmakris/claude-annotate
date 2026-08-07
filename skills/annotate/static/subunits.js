@@ -489,8 +489,14 @@
   }
 
   function removeMark(key) {
+    // Capture before deleting: repaintBlocks() only visits marks that still
+    // exist, so a removed block-scope mark would never have its card
+    // repainted and would stay visually marked. Same reason toggleBlockMark
+    // calls paintBlock directly rather than relying on the sweep.
+    const gone = marks[key];
     delete marks[key];
     saveMarks();
+    if (gone && gone.scope === "block" && gone.block_id) paintBlock(gone.block_id);
     repaintBlocks();
     document.querySelectorAll("section.block .block-content").forEach(root => {
       const bid = root.closest("section.block")?.dataset.blockId;
@@ -517,7 +523,6 @@
     if (!dock) {
       dock = document.createElement("div");
       dock.id = "round-dock";
-      dock.className = "round-drawer";
       dock.dataset.open = drawerOpen ? "true" : "false";
 
       const head = document.createElement("div");
