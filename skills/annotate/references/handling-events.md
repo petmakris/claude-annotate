@@ -17,7 +17,7 @@ You wake here when a task-notification arrives whose first stdout line is one of
 All content feedback arrives as **one `type: "round"` event**, carrying a list
 of reactions the user batched up in the browser. Every reaction answers two
 questions: **does the content survive**, and **if so, what should you do to
-it?** There are exactly three answers, and they mean the same thing at every
+it?** There are exactly four answers, and they mean the same thing at every
 scope:
 
 | `kind` | Survives? | What you do |
@@ -25,6 +25,14 @@ scope:
 | `delete` | **No** | Remove it, re-thread what's left, never reintroduce it |
 | `keep` | Yes, untouched | Nothing — explicitly do not rewrite this |
 | `comment` | Yes, rewritten | Fold a response into the prose |
+| `compact` | **Not on the page** | Remove it, but fold what it contributes into the prose that stays |
+
+`delete` and `compact` both remove words; they differ in what happens to the
+idea. A `delete` puts the idea **out of scope** — you stop acting on it. A
+`compact` says only that the idea does not deserve page space: it **still
+binds** the plan, and you keep acting on it. Delete the sentence about health
+checks and you build no health check. Compact it and you still build one; the
+plan just stops spending six lines saying so.
 
 A `comment` may carry `disagree: true`. That does not change what survives —
 it tells you the user is pushing back, so concede or defend with reasoning
@@ -97,7 +105,8 @@ the lot at once. The payload carries the whole batch:
 
 - `reactions` — a list of `{scope, kind, block_id, selected_text, text,
   images, step_id?, disagree?, prefix?, suffix?}`.
-  - `kind` is `"delete"`, `"keep"`, or `"comment"` (see the table at the top).
+  - `kind` is `"delete"`, `"keep"`, `"comment"`, or `"compact"` (see the table
+    at the top).
   - `scope` is `"block"` or `"unit"`.
   - `selected_text` is the sub-unit's plain text — **empty for `scope:
     "block"`**, which is anchored by `block_id` alone. `prefix`/`suffix` pin
@@ -122,6 +131,13 @@ Apply the WHOLE round in one pass — this is the entire point of batching:
      are then no-ops.
    - **`keep`** — no rewrite for this block at all. Never re-emit a block
      whose only reaction is a keep.
+   - **`compact`** — the whole block leaves the page. Fold what it contributes
+     into a neighbouring block, then `blocks.remove_block(doc, block_id)` and
+     re-thread the survivors exactly as for a delete. The difference is what
+     you carry forward: the block's content still binds the plan, so keep
+     acting on it. Unit reactions on that block are absorbed rather than
+     dropped — answer a `comment` inside it first, and let the answer be what
+     travels into the neighbour.
    - **`comment`** — the block-rewrite contract for the whole block.
 3. For each remaining touched block, compose ONE new markdown that applies all
    of its unit reactions together:
@@ -136,10 +152,35 @@ Apply the WHOLE round in one pass — this is the entire point of batching:
      `images` paths first.
    - **`keep`** — no rewrite for this sub-unit. Never re-emit a block whose
      only reactions are keeps.
+   - **`compact`** — cut that sub-unit from the block's markdown, and fold
+     what it contributes into the nearest surviving sub-unit that already
+     covers that ground. The page gets shorter and denser. Do not leave a
+     stub, a trailer, or a "compacted" note behind — there must be no residue.
+     If no surviving sub-unit can carry it, the detail is dropped; that is
+     expected, not an error.
+
+Three rules govern compact, and all three matter:
+
+- **`keep` beats compact.** If the only surviving sub-unit that could carry
+  the absorbed material is marked `keep`, do not rewrite it — `keep` is an
+  explicit "do not rewrite this" and that is the whole reason it exists.
+  Carry the material somewhere else, or drop it. A user must be able to
+  protect one sentence and compact its neighbour in the same round without
+  the protection quietly failing.
+- **There is no hidden store.** Compacted text is not retained — not in
+  `blocks.json`, not in a side file, not carried in your head past this turn.
+  Whatever survived the absorb is the document, and it is the whole of what
+  you act on. If you find yourself about to use a detail that is no longer on
+  the page, you have lost it: ask, or pick a sensible default and say so.
+- **Compact is lossy, and that is accepted.** Do not compensate by writing
+  longer surviving sentences than the material warrants, and do not refuse to
+  compact because detail would be lost.
 4. Persist each changed block via `blocks.update_block(doc, block_id,
-   new_markdown)` (content-hash-safe), then `blocks.drop_unused_terms(doc)`,
-   then ONE `blocks.save_atomic`.
-5. Write ONE `<consumed_dir>/<event_id>.ack`. End your turn. No terminal
+   new_markdown)` (content-hash-safe), then `blocks.drop_unused_terms(doc)`.
+5. **Run the coherence sweep** — see the section below. This is not optional
+   and it is not conditional on the round having deleted anything.
+6. ONE `blocks.save_atomic`.
+7. Write ONE `<consumed_dir>/<event_id>.ack`. End your turn. No terminal
    output; the watcher stays armed.
 
 Cross-item coherence is required: if a round deletes two bullets and
@@ -151,6 +192,45 @@ reaction — apply the rest of the round normally and ack as usual. A `step_id`
 that no longer resolves is likewise a per-reaction no-op.
 Re-apply safety is unchanged: re-processing the round is a content-hash
 no-op.
+
+## The coherence sweep
+
+After applying a round and **before writing the `.ack`**, re-read every block
+and check it against the document you just produced.
+
+The order is the point. The page is locked behind "Claude is updating…" until
+the ack lands — `/poll` reports `busy: true` until then — so the ack is the
+moment the user sees your answer. Sweeping after it would be sweeping in front
+of them. It costs no extra tool calls: `blocks.json` is already in hand from
+applying the round.
+
+Steering block 4 while block 6 still describes what block 4 used to say is the
+single most common way this document goes wrong, and nothing else catches it.
+The block-rewrite contract's "touch only the blocks you actually need to
+change" is a rule about *gratuitous* rewrites; it was never a licence to leave
+a block saying something false.
+
+**Fix exactly two things:**
+
+1. **References that no longer resolve** — a pointer to a removed block, a
+   step number that shifted, a count or total that stopped adding up, a
+   glossary term whose referent is gone.
+2. **Claims the round made false** — including claims that never name the
+   block you changed. This is the case the smart-drop step cannot catch,
+   because it looks for references rather than for meaning.
+
+**Change nothing else.** Not wording, not tone, not ordering, not transitions,
+not anything that **still reads true**. "Wordy but accurate" is left alone. A
+block is rewritten only if leaving it would make the document lie.
+
+Persist sweep fixes with `blocks.update_block`, which is content-hash-safe, so
+a block that needed nothing costs no version bump. If a sweep fix itself makes
+another block false, resolve that too in the same pass — the document settles
+before the ack, not across turns.
+
+This generalises the smart-drop step that block-scope `delete` and `compact`
+already call for. Doing it there and again here is not wasted work: smart-drop
+is scoped to what a removal broke, the sweep is scoped to the whole document.
 
 ### `WEBCOMPANION_FINISHED`
 
