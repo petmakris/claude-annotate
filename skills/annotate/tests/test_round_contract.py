@@ -145,3 +145,23 @@ def test_dismiss_is_covered_by_the_same_rule():
     section = doc[dismiss:round_].lower()
     assert "coherence sweep" in section, \
         "the dismiss path does not reference the coherence sweep"
+
+
+def test_the_contract_describes_the_change_note():
+    doc = CONTRACT.read_text(encoding="utf-8")
+    assert "change_note" in doc, "the contract does not mention change_note"
+
+
+def test_a_compact_must_name_what_it_lost():
+    """Compact is lossy and irreversible after submit. The change note is the
+    only place the user could ever learn what it actually discarded."""
+    doc = CONTRACT.read_text(encoding="utf-8")
+    assert "Lost:" in doc, \
+        "the contract does not require a compact to name the dropped detail"
+
+
+def test_the_change_note_is_optional():
+    """A feature that breaks when Claude forgets a field is a broken feature."""
+    doc = CONTRACT.read_text(encoding="utf-8")
+    assert "optional" in doc.lower(), \
+        "the contract does not state that change_note is optional"

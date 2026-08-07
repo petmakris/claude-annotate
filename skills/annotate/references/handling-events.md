@@ -263,6 +263,34 @@ This generalises the smart-drop step that block-scope `delete` and `compact`
 already call for. Doing it there and again here is not wasted work: smart-drop
 is scoped to what a removal broke, the sweep is scoped to the whole document.
 
+## Explaining a change: `change_note`
+
+The page can show a mechanical diff of any block you rewrite — it snapshots
+the document when the event is queued. What it cannot derive is **why** you
+changed something, and for a `compact` it cannot know **what you dropped**,
+because that judgement existed only while you were applying the round.
+
+So when you rewrite a block, you may set an optional `change_note` string on
+it. Keep it to one or two sentences, in this shape:
+
+    Why: you asked whether this holds when the consumer is idle. It doesn't,
+    so the claim is now conditional.
+
+For a block where a `compact` discarded detail that no surviving sentence
+could carry, add a second line naming exactly what is gone:
+
+    Lost: the flag key `ingest.v2.writes`.
+
+**The `Lost:` line is the honest half of compact.** Compact is lossy and
+irreversible once the round is submitted, and this note is the only place a
+user could ever find out what it actually discarded. Write it whenever detail
+was dropped; do not write it when nothing was.
+
+`change_note` is **optional** and describes only the most recent rewrite.
+Clear it on a block you rewrite without anything worth explaining, rather than
+leaving a note that describes an older change. The diff renders with or
+without it — never withhold a rewrite because you cannot phrase the note.
+
 ## Block-rewrite contract
 
 When you receive a `WEBCOMPANION_EVENT` with a non-null `block_id`:
