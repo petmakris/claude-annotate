@@ -1191,8 +1191,17 @@
     for (const g of ["🗑", "✓", "💬"]) {
       const s = document.createElement("span"); s.textContent = g; glyphs.appendChild(s);
     }
+    // ICON.compact — not a cross-module reach into subunits.js's icon
+    // constant, which is module-local there and was never added to
+    // subunits.js's window export block, so the old lookup silently fell
+    // through to an empty string and rendered a blank fourth glyph — for
+    // compact, the newest, lossiest, most-in-need-of-explaining control the
+    // hint advertises. script.js already owns an ICON map with a compact
+    // entry (the card-header strip renders it via ICON[t.id]); reusing it
+    // here removes the cross-module reach entirely rather than adding the
+    // missing export, so this can't silently break the same way again.
     const eye = document.createElement("span");
-    eye.innerHTML = window.AnnotateSubunits?.COMPACT_ICON || "";
+    eye.innerHTML = ICON.compact;
     glyphs.appendChild(eye);
     const txt = document.createElement("span");
     txt.textContent = "Hover any sentence to mark it. Marks batch up — nothing reaches Claude until you submit.";

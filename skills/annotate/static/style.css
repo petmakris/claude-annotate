@@ -9,6 +9,13 @@
 :root {
   --content-max: 1040px;
   --content-gutter: 24px;
+  /* .reading-shell's own width: content-max plus the map rail (214px) and
+     its gap to the document (20px). Every sticky/floating chrome element
+     that sits above the shell (discover-hint, the collapsed composer
+     trigger, the change bar, the busy/watcher-dead banners) shares this so
+     their left edges line up with the shell instead of running full-bleed
+     while the document underneath is centred. */
+  --rail-shell-max: calc(var(--content-max) + 234px);
 }
 
 /* === Response content (prose) ======================================== */
@@ -898,7 +905,12 @@ main.prose mark.search-hit {
   position: sticky;
   top: 0;
   z-index: 20;
-  margin: 0 0 12px;
+  /* Same --rail-shell-max + auto-centering as .reading-shell/.discover-hint
+     — without it this ribbon stretched the full viewport width while the
+     document underneath it sat in the centred content column. */
+  width: 100%;
+  max-width: var(--rail-shell-max);
+  margin: 0 auto 12px auto;
   padding: 11px 14px;
   border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
   border-top: none;
@@ -928,7 +940,9 @@ main.prose mark.search-hit {
   position: sticky;
   top: 0;
   z-index: 20;
-  margin: 0 0 12px;
+  width: 100%;
+  max-width: var(--rail-shell-max);
+  margin: 0 auto 12px auto;
   padding: 11px 14px;
   border: 1px solid color-mix(in srgb, #f59e0b 55%, var(--border));
   border-top: none;
@@ -1151,10 +1165,15 @@ body.is-busy .comment-card {
    own demo toolbar, which is scaffolding that never shipped. The real
    .page-header (core.css) sets no `position` and scrolls away, so nothing
    reserves space above this bar — any offset pins it as an opaque slab with
-   prose scrolling above it. Do not reintroduce the mockup number. */
+   prose scrolling above it. Do not reintroduce the mockup number.
+
+   width/max-width/auto-margin: same --rail-shell-max centering as
+   .reading-shell — this bar otherwise stretches to the full viewport width
+   while the document below it sits in the centred column. */
 .change-bar {
   position: sticky; top: 0; z-index: 18; display: flex; align-items: center; gap: 10px;
-  margin: 0 0 12px; padding: 9px 13px; border-radius: 9px; font-size: 12.5px;
+  width: 100%; max-width: var(--rail-shell-max); margin: 0 auto 12px auto;
+  padding: 9px 13px; border-radius: 9px; font-size: 12.5px;
   background: #fffbeb; border: 1px solid #fcd34d; color: #78350f;
 }
 .change-bar .cb-dot { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; flex: none; }
@@ -1226,7 +1245,7 @@ section.block[data-diff="open"] .diff-pane { display: block; }
 .reading-shell {
   display: flex; gap: 20px; align-items: flex-start;
   width: 100%;
-  max-width: calc(var(--content-max) + 20px + 214px);
+  max-width: var(--rail-shell-max);
   margin: 0 auto;
 }
 
@@ -1270,9 +1289,17 @@ section.block[data-diff="open"] .diff-pane { display: block; }
 @media (max-width: 900px) { .map-rail { display: none; } }
 
 /* ── Collapsed general composer ─────────────────────────────────────── */
+/* max-width + auto side margins match .reading-shell (same --rail-shell-max
+   token) so this button's left edge lines up with the rail/document below
+   it instead of running edge to edge while everything else on the page is
+   centred on the content column. Plain `width: 100%` alone stretched it to
+   the full viewport — body is a column flex container (core.css), and a
+   flex item's `width: 100%` resolves against the whole body box, not
+   against any notion of "the content column", unless something caps it. */
 .composer-collapsed {
   display: flex; align-items: center; gap: 9px; width: 100%;
-  padding: 8px 13px; margin: 0 0 12px;
+  max-width: var(--rail-shell-max); margin: 0 auto 12px auto;
+  padding: 8px 13px;
   border: 1px dashed var(--border); border-radius: 9px;
   background: transparent; color: var(--text-dim);
   font: inherit; font-size: 12.5px; cursor: pointer; text-align: left;
@@ -1285,8 +1312,14 @@ section.block[data-diff="open"] .diff-pane { display: block; }
 }
 
 /* ── First-run discovery hint ───────────────────────────────────────── */
+/* Same --rail-shell-max + auto-margin-centering as .reading-shell and
+   .composer-collapsed, and for the same reason: body is a column flex
+   container (core.css), so with no width/max-width at all this box used
+   align-items:stretch and filled the full 1512px viewport edge to edge
+   while every other box on the page sat in the centred content column. */
 .discover-hint {
-  display: flex; align-items: center; gap: 10px; margin: 0 0 12px;
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; max-width: var(--rail-shell-max); margin: 0 auto 12px auto;
   padding: 9px 13px; border-radius: 9px; font-size: 12.5px;
   background: color-mix(in srgb, var(--accent) 8%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));

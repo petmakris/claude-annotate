@@ -90,3 +90,49 @@ def test_the_collapsed_composer_is_actually_hidden():
         "the bare [hidden] attribute alone does nothing against core.css's "
         "`.general-composer { display: flex }` base rule"
     )
+
+
+def test_the_discover_hint_glyphs_are_never_blank():
+    """Regression guard (round-2 fix): the hint's fourth glyph (compact) read
+    `window.AnnotateSubunits?.COMPACT_ICON || ""`. That export never existed
+    — subunits.js defines COMPACT_ICON as a module-local const and its
+    window.AnnotateSubunits export block never lists it — so the expression
+    was always `undefined || ""` and rendered an empty box. Measured live:
+    glyphs = ["🗑", "✓", "💬", ""]. compact is the newest, lossiest control
+    the hint exists to explain, so a blank glyph there is the worst place
+    for this bug to land. Guard every glyph the hint advertises, not just
+    the one that broke, and forbid the dead cross-module reach outright so
+    it can't quietly return under a different property name."""
+    src = SCRIPT_JS.read_text()
+    start = src.index("function renderDiscoverHint")
+    end = src.index("\n  }\n", start)
+    body = src[start:end]
+    # The three fixed emoji glyphs are literal characters, never a lookup,
+    # so they cannot silently go blank the way compact did.
+    for glyph in ("🗑", "✓", "💬"):
+        assert glyph in body, f"discover hint dropped the {glyph!r} glyph"
+    # compact IS a lookup — the one glyph source that can resolve to nothing
+    # — and must resolve to a value script.js owns outright (its own ICON
+    # map), never a reach into another module's export.
+    assert "ICON.compact" in body, (
+        "the compact glyph no longer reads from script.js's own ICON map"
+    )
+
+
+def test_no_dead_compact_icon_export_reach_remains():
+    """AnnotateSubunits.COMPACT_ICON was never exported anywhere in this
+    client (subunits.js keeps it as a module-local const; its export block
+    never lists it, nor a COMPACT_TITLE). Checking the exact dotted access
+    pattern rather than the bare word COMPACT_ICON on purpose: a legitimate
+    comment documenting this very bug (see renderDiscoverHint) is allowed to
+    say the word without tripping the guard meant for the code that reads
+    it — this is the same "comment vs. code" trap the round-1 fix for this
+    file's discover-hint anchoring ran into, one level removed."""
+    src = SCRIPT_JS.read_text()
+    for prop in ("COMPACT_ICON", "COMPACT_TITLE"):
+        for accessor in (f"AnnotateSubunits?.{prop}", f"AnnotateSubunits.{prop}"):
+            assert accessor not in src, (
+                f"a dead window.{accessor} reach exists in script.js — that "
+                "export was never added to subunits.js's window.AnnotateSubunits "
+                "block, so reading it always silently returns undefined"
+            )
