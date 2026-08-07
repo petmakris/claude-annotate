@@ -273,8 +273,7 @@ because that judgement existed only while you were applying the round.
 So when you rewrite a block, you may set an optional `change_note` string on
 it. Keep it to one or two sentences, in this shape:
 
-    Why: you asked whether this holds when the consumer is idle. It doesn't,
-    so the claim is now conditional.
+    Why: you asked whether this holds when the consumer is idle. It doesn't, so the claim is now conditional.
 
 For a block where a `compact` discarded detail that no surviving sentence
 could carry, add a second line naming exactly what is gone:

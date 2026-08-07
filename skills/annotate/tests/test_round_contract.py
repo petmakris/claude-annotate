@@ -161,7 +161,21 @@ def test_a_compact_must_name_what_it_lost():
 
 
 def test_the_change_note_is_optional():
-    """A feature that breaks when Claude forgets a field is a broken feature."""
+    """A feature that breaks when Claude forgets a field is a broken feature.
+
+    Scoped to the change_note section itself and to the specific claim, not
+    a bare word search: "optional" already occurs elsewhere in the document
+    (e.g. the coherence sweep is "not optional"), so an unscoped check for
+    the substring alone stays green even if this whole section is deleted."""
     doc = CONTRACT.read_text(encoding="utf-8")
-    assert "optional" in doc.lower(), \
-        "the contract does not state that change_note is optional"
+    start = doc.index("## Explaining a change: `change_note`")
+    end = doc.index("## Block-rewrite contract")
+    # Collapse whitespace: this document hand-wraps prose across source
+    # lines within a paragraph (markdown treats a single newline as a
+    # space), so a literal multi-word needle must not be sensitive to
+    # exactly where the source happens to wrap.
+    section = " ".join(doc[start:end].split())
+    assert "`change_note` is **optional**" in section, \
+        "the change_note section does not say change_note itself is optional"
+    assert "diff renders with or without it" in section, \
+        "the change_note section does not say the diff renders without it"
