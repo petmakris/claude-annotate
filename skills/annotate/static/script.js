@@ -119,23 +119,6 @@
         });
         wrap.appendChild(b);
       }
-      // The fold control sits apart from the three round controls because it
-      // answers a different question — "do I still need to look at this?"
-      // rather than "what should Claude do with this?". It is private to this
-      // browser and is never submitted, so it is also not gated on is-busy.
-      const readBtn = document.createElement("button");
-      readBtn.type = "button";
-      readBtn.className = "hover-read";
-      readBtn.dataset.type = "read";
-      readBtn.innerHTML = window.AnnotateSubunits?.READ_ICON || "";
-      readBtn.title = window.AnnotateSubunits?.READ_TITLE || "Fold";
-      readBtn.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        ev.preventDefault();
-        show();
-        window.AnnotateSubunits?.toggleBlockRead(block.dataset.blockId);
-      });
-      wrap.appendChild(readBtn);
       // Directly after the title, not at the far right of the header: the
       // title is what reveals the strip, and a trigger 600px from the thing
       // it reveals reads as nothing happening.

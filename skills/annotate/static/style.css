@@ -171,20 +171,18 @@ main.prose th {
 [data-block-id][data-engaged-type="comment"]:hover  { background: color-mix(in srgb, var(--type-comment-wash) 55%, var(--hover-tint)); }
 
 /* === Read-only mode ==================================================
-   A shared link renders the document and the reading aids, and nothing that
-   would be refused. The three round controls, the round dock and the comment
-   composers go away; the fold control deliberately stays, because folding is
-   private to the reader's browser and never reaches the server. That is the
-   one thing a guest can still "do", and it is the thing that makes a long
-   document readable. */
-body.read-only .hover-actions .hover-read { opacity: 1; pointer-events: auto; }
-body.read-only .hover-actions button:not(.hover-read),
-body.read-only .unit-strip button:not(.unit-read),
+   A shared link renders the document and nothing that would be refused.
+   Every control, the round dock and the comment composers go away. There is
+   no longer an exception: the fold used to survive here because it never
+   left the reader's browser, but compact replaced it and compact is an edit,
+   which belongs to whoever owns the workspace. */
+body.read-only .hover-actions button,
+body.read-only .unit-strip button,
 body.read-only #round-dock,
 body.read-only .unit-composer,
 body.read-only .comment-card { display: none; }
 /* The strip would otherwise be an empty box hovering next to every title. */
-body.read-only section.block:not([data-read="1"]) .hover-actions { border: none; }
+body.read-only section.block .hover-actions { border: none; }
 
 /* === Legend ==========================================================
    Collapsed to a chip by default — it is reference material, not chrome the
@@ -973,60 +971,9 @@ body.is-busy .comment-card {
   font-size: 11px; line-height: 1; cursor: pointer;
 }
 .unit-strip button:hover { border-color: var(--accent); color: var(--accent); }
-/* The round controls go away while a round is in flight — they'd be editing
-   a document that is mid-rewrite. The fold control stays: it changes nothing
-   Claude will ever see, so there is no reason to take reading aids away. */
-body.is-busy .unit-strip button:not(.unit-read) { display: none; }
-
-/* === Fold (read marker) ==============================================
-   A private, reversible "I'm done looking at this". It is NOT feedback: it
-   is never submitted and Claude is never told about it, which is exactly
-   why it must not look or behave like the three round controls. Solid
-   border against their dashed one, and a gap so the eye reads two groups. */
-.unit-strip .unit-read {
-  margin-left: 5px;
-  border-style: solid;
-  border-radius: 50%;
-}
-.unit-strip .unit-read svg,
-.hover-actions .hover-read svg {
-  width: 13px; height: 13px;
-  fill: none; stroke: currentColor; stroke-width: 2;
-  stroke-linecap: round; stroke-linejoin: round;
-}
-.hover-actions .hover-read {
-  margin-left: 6px;
-  border-style: solid;
-}
-.hover-actions .hover-read:hover { color: var(--text-strong); border-color: var(--text-strong); }
-
-/* A folded unit is a one-line stub that fades out at the bottom edge, so it
-   reads as "there is more here" rather than as truncated prose. Its strip
-   goes with it — clicking the stub anywhere is the way back, which is what
-   the zoom-in cursor promises. A pending mark's tint survives the fold, so
-   feedback you already left can never be hidden by folding. */
-.sub-unit[data-read="1"] {
-  max-height: 1.6em;
-  overflow: hidden;
-  opacity: .45;
-  cursor: zoom-in;
-  -webkit-mask-image: linear-gradient(to bottom, #000 45%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 45%, transparent 100%);
-  transition: opacity 120ms ease;
-}
-.sub-unit[data-read="1"]:hover { opacity: .7; }
-.sub-unit[data-read="1"] .unit-strip { display: none; }
-
-/* A folded card keeps its header and drops its body. The strip stays lit so
-   the way back is visible without hunting, the same treatment a pending mark
-   gets. */
-section.block[data-read="1"] .card-body { display: none; }
-section.block[data-read="1"] .card-title { color: var(--text-dim); }
-section.block[data-read="1"] .hover-actions { opacity: 1; pointer-events: auto; }
-section.block[data-read="1"] .hover-actions .hover-read {
-  color: var(--text-strong);
-  border-color: currentColor;
-}
+/* Every strip control goes away while a round is in flight — they would all
+   be editing a document that is mid-rewrite. */
+body.is-busy .unit-strip button { display: none; }
 
 .sub-unit[data-mark="keep"] {
   background: color-mix(in srgb, #16a34a 8%, transparent);

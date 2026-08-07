@@ -37,13 +37,6 @@
 (function () {
   const RID = document.body.dataset.responseId || "";
   const KEY = `annotate.round.${RID}`;
-  // Read state is a SEPARATE store from marks, and that separation is the
-  // whole point. Marks answer "what should Claude do with this?" and travel
-  // to the server on submit. Read answers "do I still need to look at this?"
-  // — private to this browser, never submitted, never seen by Claude. Folding
-  // a paragraph you understood must not read as rejecting it, so the two can
-  // never share a key space.
-  const READ_KEY = `annotate.read.${RID}`;
 
   // marks: { [markKey]: {block_id, kind, selected_text, ordinal, prefix?, suffix?, text?} }
   // markKey = `${block_id}::${text}::${ordinal}` — ordinal is the unit's
@@ -72,20 +65,6 @@
   }
   function saveMarks() {
     try { localStorage.setItem(KEY, JSON.stringify(marks)); } catch {}
-  }
-
-  // read: { [markKey]: 1 } for units, { [blockMarkKey]: "<version folded at>" }
-  // for blocks. Units are keyed by their text, so a rewrite mints a new key
-  // and the paragraph springs open by itself. Blocks have no text to key on,
-  // hence the stored version — you marked the old wording as read, not the
-  // new one, so a version bump unfolds the card.
-  let read = loadRead();
-  function loadRead() {
-    try { return JSON.parse(localStorage.getItem(READ_KEY) || "{}"); }
-    catch { return {}; }
-  }
-  function saveRead() {
-    try { localStorage.setItem(READ_KEY, JSON.stringify(read)); } catch {}
   }
 
   function unitText(el) {
@@ -234,73 +213,6 @@
   ];
   const CONTROLS = { unit: CONTROL_SPECS, block: CONTROL_SPECS };
 
-  // The read control is deliberately NOT in CONTROL_SPECS: everything in
-  // there is a round kind that ends up on the wire, and this one never
-  // leaves the browser. Same eye-off glyph at both scopes (script.js imports
-  // it from here) so the gesture reads identically in the header and in the
-  // body, and a solid border instead of the round controls' dashed one so
-  // the eye tells the two axes apart before the tooltip does.
-  const READ_ICON =
-    '<svg viewBox="0 0 24 24" aria-hidden="true">' +
-    '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>' +
-    '<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>' +
-    '<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>' +
-    '<line x1="1" y1="1" x2="23" y2="23"/></svg>';
-  const READ_TITLE = "Fold — hide it once you've read it (private, tells Claude nothing)";
-
-  // Table rows are excluded: a row cannot be height-clamped, so a fold
-  // control there would be an affordance that visibly does nothing.
-  function foldable(el) {
-    return el.tagName !== "TR";
-  }
-
-  function readKeyForUnit(root, el, blockId) {
-    const text = unitText(stripClone(el));
-    return markKey(blockId, text, unitOrdinal(root, el, text));
-  }
-
-  function toggleUnitRead(root, el, blockId) {
-    const key = readKeyForUnit(root, el, blockId);
-    if (read[key]) delete read[key];
-    else read[key] = 1;
-    saveRead();
-    applyReadState(root, el, blockId);
-  }
-
-  function applyReadState(root, el, blockId) {
-    if (read[readKeyForUnit(root, el, blockId)]) el.dataset.read = "1";
-    else delete el.dataset.read;
-  }
-
-  function toggleBlockRead(blockId) {
-    if (!blockId) return;
-    const section = document.querySelector(
-      `section.block[data-block-id="${CSS.escape(blockId)}"]`);
-    const key = blockMarkKey(blockId);
-    if (read[key]) delete read[key];
-    else read[key] = String(section ? section.dataset.version || "1" : "1");
-    saveRead();
-    applyBlockRead(blockId);
-  }
-
-  // Also the spring-back: a stored version that no longer matches the block's
-  // current one means Claude rewrote it since you folded it, so it unfolds.
-  function applyBlockRead(blockId) {
-    const section = document.querySelector(
-      `section.block[data-block-id="${CSS.escape(blockId)}"]`);
-    if (!section) return;
-    const key = blockMarkKey(blockId);
-    const foldedAt = read[key];
-    if (foldedAt === undefined) { delete section.dataset.read; return; }
-    if (foldedAt !== String(section.dataset.version || "1")) {
-      delete read[key];
-      saveRead();
-      delete section.dataset.read;
-      return;
-    }
-    section.dataset.read = "1";
-  }
-
   // The four sub-unit types (spec decision: all four, one DOM walk).
   // Top-level only: a nested list belongs to its parent bullet's unit.
   const UNIT_SELECTOR = [
@@ -327,7 +239,6 @@
       if (el.closest("[data-annotate-id]")) return;
       if (el.classList.contains("sub-unit")) {
         applyMarkState(content, el, blockId);
-        applyReadState(content, el, blockId);
         return;
       }
       const text = unitText(el);
@@ -354,41 +265,13 @@
         });
         strip.appendChild(b);
       }
-      if (foldable(el)) {
-        const r = document.createElement("button");
-        r.type = "button";
-        r.className = "unit-read";
-        r.dataset.kind = "read";
-        r.innerHTML = READ_ICON;
-        r.title = READ_TITLE;
-        // Not gated on is-busy like the round controls: folding changes
-        // nothing Claude will ever see, so there is no reason to lock it
-        // while a round is in flight.
-        r.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          ev.preventDefault();
-          toggleUnitRead(content, el, blockId);
-        });
-        strip.appendChild(r);
-      }
-      // A folded unit is a stub, so its strip is hidden with it — clicking
-      // the stub anywhere is the way back. Bound once here rather than
-      // added and removed as the state changes; it no-ops when not folded.
-      el.addEventListener("click", (ev) => {
-        if (el.dataset.read !== "1") return;
-        if (ev.target.closest(".unit-strip, .unit-chip, .unit-composer")) return;
-        ev.stopPropagation();
-        toggleUnitRead(content, el, blockId);
-      });
       el.appendChild(strip);
       applyMarkState(content, el, blockId);
-      applyReadState(content, el, blockId);
     });
     // A re-render replaces the section element, dropping the data attribute a
     // pending block mark painted onto it — restore it here, where we already
     // know the DOM has just been rebuilt.
     paintBlock(blockId);
-    applyBlockRead(blockId);
     renderDock();
   }
 
@@ -677,12 +560,6 @@
     for (const m of Object.values(marks)) {
       if (m.scope === "block") paintBlock(m.block_id);
     }
-    // Folded blocks are keyed independently of marks, so they need their own
-    // sweep — and this is where a rewritten block unfolds itself, since
-    // applyBlockRead drops any fold whose stored version has moved on.
-    for (const key of Object.keys(read)) {
-      if (key.endsWith("::__block__")) applyBlockRead(key.slice(0, -"::__block__".length));
-    }
   }
 
   // Poll integration: disable the dock while busy; clear marks when our
@@ -712,8 +589,5 @@
     // Block/step scope, driven by the card header strip in script.js.
     toggleBlockMark, pinComment, blockMark, repaintBlocks, renderDock,
     CONTROLS,
-    // Read scope — private, never submitted. The header strip in script.js
-    // renders the same glyph from here so the two scopes cannot drift.
-    toggleBlockRead, applyBlockRead, READ_ICON, READ_TITLE,
   };
 })();

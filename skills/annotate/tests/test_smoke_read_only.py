@@ -1,9 +1,9 @@
 """Structural guards for how a shared, read-only link renders.
 
 The server refuses the writes regardless — that is tested in the engine. What
-these guard is the page not *offering* what will be refused, and one specific
-exception: folding must survive read-only mode, because it is the reading aid
-a guest actually needs and it never leaves their browser.
+these guard is the page not *offering* what will be refused. There used to be
+one exception, the private fold; compact replaced it, and compact is an edit,
+so a guest is now offered nothing at all.
 
 Source-string checks matching the repo's other smoke tests (see
 test_smoke_dismiss_lock.py). Live behavior is manual via the demo push.
@@ -21,22 +21,25 @@ def test_feedback_controls_are_hidden_for_a_guest():
     """Removed, not disabled: a greyed-out trash can invites a click and then
     explains itself with a 403."""
     css = STYLE_CSS.read_text()
-    assert "body.read-only .hover-actions button:not(.hover-read)" in css, \
+    assert "body.read-only .hover-actions button," in css, \
         "block feedback controls are still offered on a read-only link"
-    assert "body.read-only .unit-strip button:not(.unit-read)" in css, \
+    assert "body.read-only .unit-strip button," in css, \
         "sub-unit feedback controls are still offered on a read-only link"
     assert "body.read-only #round-dock" in css, \
         "the submit dock is still shown on a read-only link"
 
 
-def test_folding_survives_read_only():
-    """The one thing a guest can still do. It is browser-local and never
-    reaches the server, so read-only mode must not take it away."""
+def test_a_guest_is_offered_no_exception():
+    """The fold was the one thing a guest could still do, because it never
+    reached the server. Compact is an edit and belongs to the owner, so the
+    carve-outs that kept the fold alive must be gone rather than retargeted."""
     css = STYLE_CSS.read_text()
-    assert "body.read-only .hover-actions .hover-read { opacity: 1; pointer-events: auto; }" in css, \
-        "the fold control was hidden along with the feedback controls"
-    for kept in ("button:not(.hover-read)", "button:not(.unit-read)"):
-        assert kept in css, f"read-only rule stopped exempting {kept}"
+    assert ":not(.hover-read)" not in css, \
+        "the header read-only rule still exempts a control"
+    assert ":not(.unit-read)" not in css, \
+        "the sub-unit read-only rule still exempts a control"
+    assert ":not(.hover-compact)" not in css and ":not(.unit-compact)" not in css, \
+        "the fold exemption was retargeted at compact instead of removed"
 
 
 def test_the_page_says_it_is_read_only():
