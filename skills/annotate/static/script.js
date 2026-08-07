@@ -42,7 +42,7 @@
   const PLACEHOLDER_TEXT = { comment: "Your comment…" };
 
   // Feather-style line icons for the card-header strip. The four controls are
-  // the same three the sub-unit strip offers (AnnotateSubunits.CONTROLS) —
+  // the same four the sub-unit strip offers (AnnotateSubunits.CONTROLS) —
   // scope is communicated by WHERE the strip lives (header = whole block,
   // body = one paragraph), never by giving the two scopes different verbs.
   const ICON = {
