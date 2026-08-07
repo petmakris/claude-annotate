@@ -288,7 +288,10 @@
         b.addEventListener("click", (ev) => {
           ev.stopPropagation();
           ev.preventDefault();
-          if (document.body.classList.contains("is-busy")) return;
+          // No is-busy guard: all four kinds (delete/keep/comment/compact)
+          // are local until Submit, so a round in flight is not a reason to
+          // refuse a click here — see the style.css comment above the
+          // (deliberately absent) `body.is-busy .unit-strip` rule.
           if (kind === "comment") openComposer(content, el, blockId);
           else toggleMark(content, el, blockId, kind);
         });

@@ -110,14 +110,16 @@ def test_both_scopes_offer_compact_with_the_same_glyph():
         "the header strip does not carry compact in ACTION_TYPES"
 
 
-def test_compact_is_gated_on_the_busy_lock():
-    """It is a round control, so it must not be clickable mid-round. Guarded
-    by the shared rule from Task 2 plus the loop's own guard."""
+def test_compact_stays_clickable_mid_round():
+    """Superseded by the annotate-ux-pass Task 2 fix-round: compact (like the
+    other three kinds) is local until Submit, so the strip loop must NOT
+    refuse a click just because a round is in flight — see
+    test_smoke_progress.py's guards against a visible-but-dead control."""
     src = SUBUNITS_JS.read_text()
     start = src.index("for (const [kind, glyph, title] of CONTROLS.unit)")
     end = src.index("el.appendChild(strip)")
-    assert 'classList.contains("is-busy")' in src[start:end], \
-        "the strip loop lost its busy guard"
+    assert 'classList.contains("is-busy")' not in src[start:end], \
+        "the strip loop's click handler still refuses clicks while busy"
 
 
 def test_table_rows_can_be_compacted():

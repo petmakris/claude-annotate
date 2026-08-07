@@ -115,7 +115,8 @@
           ev.stopPropagation();
           ev.preventDefault();
           show();
-          if (document.body.classList.contains("is-busy")) return;
+          // No is-busy guard: all four kinds are local until Submit (see the
+          // matching comment in subunits.js's unit-strip click handler).
           if (t.id === "comment") onHoverAction(block, "comment", ev);
           else window.AnnotateSubunits?.toggleBlockMark(block.dataset.blockId, t.id);
         });
@@ -225,8 +226,10 @@
     });
 
     // Single-flight: refuse to open a second editor while one is already open
-    // for a different target, and refuse entirely while the page is BUSY.
-    if (document.body.classList.contains("is-busy")) return;
+    // for a different target. Not gated on BUSY — the editor pins its
+    // comment into the local round via AnnotateSubunits.pinComment(), which
+    // never touches the network, so an in-flight round is not a reason to
+    // refuse opening it.
     if (!existingId && Object.keys(annotations).length > 0) return;
 
     const id = existingId || `a-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
