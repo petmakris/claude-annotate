@@ -477,7 +477,7 @@ class Handlers:
         eid = events_module.append(Path(dirs["events_dir"]), evt)
         _send_json(h, 202, {"event_id": eid, "status": "queued"})
 
-    # The three controls, one vocabulary at every scope. `delete` removes the
+    # The four controls, one vocabulary at every scope. `delete` removes the
     # content; `keep` protects it from rewrite; `comment` folds a response in
     # (with an optional `disagree` flag telling Claude to concede or defend
     # rather than assume agreement).

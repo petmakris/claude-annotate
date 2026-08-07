@@ -98,6 +98,9 @@ def test_one_vocabulary_at_both_scopes():
     for kind in ("delete", "keep", "comment", "compact"):
         assert f'"{kind}"' in subunits, f"subunits.js lost the {kind!r} control"
         assert f'id: "{kind}"' in script, f"script.js header strip lost {kind!r}"
+    for gone in ("agree", "reject"):
+        assert f'"{gone}"' not in subunits, \
+            f"subunits.js still uses the retired {gone!r} vocabulary"
 
 
 def test_the_two_strips_cannot_overlap():

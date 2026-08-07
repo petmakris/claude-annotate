@@ -1,17 +1,23 @@
 // annotate skill — the review round: every piece of content feedback on the
 // page, batched into one submission.
 //
-// THREE CONTROLS, one vocabulary, at every scope. Each answers two questions:
+// FOUR CONTROLS, one vocabulary, at every scope. Each answers two questions:
 // does the content survive, and if so what should Claude do to it?
 //
 //   delete   content is REMOVED from blocks.json, references re-threaded,
-//            and treated as out of scope from then on. The only destructive
-//            control. Reversible locally until Submit.
+//            and treated as out of scope from then on. The only control that
+//            takes an idea out of scope. Reversible locally until Submit.
 //   keep     content survives UNTOUCHED — an explicit "do not rewrite this",
 //            which is what protects a line while its neighbours change.
 //   comment  content survives and is REWRITTEN to fold in a response. An
 //            optional `disagree` flag turns it into a push-back, which tells
 //            Claude to concede or defend rather than assume agreement.
+//   compact  content is REMOVED from the page but stays IN SCOPE — the idea
+//            still binds the plan, and its contribution is absorbed into the
+//            surviving prose of a neighbouring unit. Destructive to the
+//            words, not to the plan: lossy (nothing is stored off-page, so
+//            detail no surviving sentence can carry is gone for good) and
+//            irreversible once Submit sends the round.
 //
 // TWO SCOPES, distinguished by where you hover, not by which icon you get:
 //   scope "block"  — the card header. Applies to the whole block.
@@ -200,7 +206,7 @@
     if (pruned) saveMarks();
   }
 
-  // The three controls, in one place so the card header and the sub-unit
+  // The four controls, in one place so the card header and the sub-unit
   // strip can never drift apart. Same order, same meaning, same glyphs at
   // both scopes — position is what tells the user the scope, not the icon.
   // Tooltips name the consequence, not the gesture: "delete" has to read as

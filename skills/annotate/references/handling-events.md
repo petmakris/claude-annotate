@@ -193,7 +193,7 @@ that no longer resolves is likewise a per-reaction no-op.
 Re-apply safety is unchanged: re-processing the round is a content-hash
 no-op.
 
-## The coherence sweep
+### The coherence sweep
 
 After applying a round and **before writing the `.ack`**, re-read every block
 and check it against the document you just produced.
