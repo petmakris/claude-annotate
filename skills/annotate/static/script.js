@@ -1204,7 +1204,16 @@
       hint.remove();
     });
     hint.append(glyphs, txt, x);
-    proseEl.parentNode?.insertBefore(hint, proseEl);
+    // Page chrome, not a reading-column item: it must land ABOVE
+    // `.reading-shell`, full width, not as a third flex child squeezed
+    // between the rail and the prose. renderMapRail() (called before this,
+    // in loadAndRenderBlocks) has already wrapped proseEl in that shell by
+    // the time this runs, so `proseEl.parentNode` is the shell itself, not
+    // <body> — inserting relative to proseEl directly would put the hint
+    // inside the flex row. Anchor on the shell (if built yet) instead.
+    const shellEl = proseEl.closest(".reading-shell");
+    const anchor = shellEl || proseEl;
+    anchor.parentNode?.insertBefore(hint, anchor);
   }
 
   // ── Document map rail ─────────────────────────────────────────────────────

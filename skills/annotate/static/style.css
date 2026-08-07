@@ -379,6 +379,15 @@ section.block[data-block-mark="compact"] .card-title { color: var(--text-dim); }
   padding-left: var(--content-gutter);
   padding-right: var(--content-gutter);
 }
+/* core.css's base rule is `.general-composer { display: flex; ... }` (0,1,0
+   specificity), which beats the UA default `[hidden] { display: none }`
+   (0,1,0 too, but the UA stylesheet always loses to an author stylesheet of
+   equal specificity) — so the bare `hidden` attribute this task's collapsed
+   composer relies on did nothing and the full textarea rendered anyway.
+   `[hidden]` added to a class selector here is 0,2,0, which wins. Same
+   specificity trick core.css already uses for `body.read-only .general-composer`
+   just above in that file. */
+.general-composer[hidden] { display: none; }
 .general-hint {
   margin-right: auto;
   font-size: 11px;
@@ -1202,9 +1211,21 @@ section.block[data-diff="open"] .diff-pane { display: block; }
    Widened past --content-max by the rail's own width plus the gap so that
    main.prose, which keeps its own `max-width: var(--content-max)` untouched,
    renders at exactly the width it did before the rail existed. A narrower
-   reading column would be a regression even though nothing would error. */
+   reading column would be a regression even though nothing would error.
+
+   `width: 100%` is load-bearing, not redundant with max-width: core.css's
+   `body { display: flex; flex-direction: column }` makes this shell a flex
+   item on body's CROSS axis. A cross-axis flex item with auto margins and
+   no explicit `width` sizes to fit-content (shrink-wraps to its children)
+   even when max-width is set — max-width only ever caps a size, it can't
+   manufacture one. `width: 100%` gives it a size to cap, exactly the
+   pattern main.prose already relied on before this task (see its own
+   `width: 100%` a few hundred lines up) and exactly the thing a stylesheet
+   reading can't catch: this only shows up by measuring the rendered box in
+   a browser, not by reading the property back off the sheet. */
 .reading-shell {
   display: flex; gap: 20px; align-items: flex-start;
+  width: 100%;
   max-width: calc(var(--content-max) + 20px + 214px);
   margin: 0 auto;
 }
