@@ -206,10 +206,24 @@
   // Tooltips name the consequence, not the gesture: "delete" has to read as
   // destructive-but-undoable, and "keep" has to read as a protection rather
   // than applause, or we are back to the vocabulary that confused everyone.
+  // Compact's glyph is the eye-off icon the private fold used to carry. The
+  // gesture the user learned — "take this off my screen" — is unchanged; what
+  // changed is that it now reaches Claude and slims the document instead of
+  // collapsing a stub locally. Kept as SVG rather than an emoji because there
+  // is no emoji that reads as "hide" without also reading as "delete".
+  const COMPACT_ICON =
+    '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+    '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>' +
+    '<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>' +
+    '<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>' +
+    '<line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
   const CONTROL_SPECS = [
     ["delete",  "🗑", "Delete — removed for good (undo until you submit)"],
     ["keep",    "✓", "Keep — don't rewrite this"],
     ["comment", "💬", "Comment — fold a response into this"],
+    ["compact", COMPACT_ICON,
+     "Compact — take this off the page; its point is folded into what stays"],
   ];
   const CONTROLS = { unit: CONTROL_SPECS, block: CONTROL_SPECS };
 
@@ -250,7 +264,10 @@
         const b = document.createElement("button");
         b.type = "button";
         b.dataset.kind = kind;
-        b.textContent = glyph;
+        // innerHTML, not textContent: three of the four glyphs are emoji but
+        // compact's is an inline SVG. Every glyph here is a module constant —
+        // nothing user-supplied reaches this line.
+        b.innerHTML = glyph;
         b.title = title;
         // Capture `content` (the decorated root) in this closure rather than
         // re-deriving it via el.closest() at click time — one consistent

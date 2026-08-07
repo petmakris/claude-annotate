@@ -248,10 +248,6 @@ body.read-only section.block .hover-actions { border: none; }
   fill: none; stroke: currentColor; stroke-width: 2;
   stroke-linecap: round; stroke-linejoin: round;
 }
-/* The private row is set apart because its whole point is that it does not
-   behave like the three above it. */
-.legend-private td { color: var(--text-dim); }
-.legend-private .legend-btn { color: var(--text-dim); }
 .legend-note {
   margin: 12px 0 0;
   font-size: 12.5px;
@@ -327,13 +323,20 @@ body.read-only section.block .hover-actions { border: none; }
   border-style: solid;
   background: color-mix(in srgb, var(--type-reject-fg) 10%, transparent);
 }
+.hover-actions button[data-type="compact"]:hover {
+  color: #7c3aed;
+  border-color: #7c3aed;
+  border-style: solid;
+  background: color-mix(in srgb, #7c3aed 10%, transparent);
+}
 
 /* A pending mark keeps its control lit while the strip is idle, so you can
    see what a card is carrying without hovering it. */
 section.block[data-block-mark] .hover-actions { opacity: 1; pointer-events: auto; }
 section.block[data-block-mark="keep"] .hover-actions button[data-type="keep"],
 section.block[data-block-mark="delete"] .hover-actions button[data-type="delete"],
-section.block[data-block-mark="comment"] .hover-actions button[data-type="comment"] {
+section.block[data-block-mark="comment"] .hover-actions button[data-type="comment"],
+section.block[data-block-mark="compact"] .hover-actions button[data-type="compact"] {
   border-style: solid;
   color: var(--text-strong);
   border-color: currentColor;
@@ -355,6 +358,12 @@ section.block[data-block-mark="delete"] .card-title {
   text-decoration: line-through;
   color: var(--text-dim);
 }
+
+/* A card marked compact dims whole, the same reversible-until-submit promise
+   the pending delete makes, without the strikethrough that would claim the
+   content is being dropped from the plan. */
+section.block[data-block-mark="compact"] .card-body { opacity: .5; }
+section.block[data-block-mark="compact"] .card-title { color: var(--text-dim); }
 
 @media (hover: none) {
   .hover-actions { opacity: 0.4; pointer-events: auto; }
@@ -971,6 +980,14 @@ body.is-busy .comment-card {
   font-size: 11px; line-height: 1; cursor: pointer;
 }
 .unit-strip button:hover { border-color: var(--accent); color: var(--accent); }
+/* Three of the four strip glyphs are emoji and size themselves. Compact's is
+   an inline SVG and needs the stroke treatment the header buttons already
+   get from `.hover-actions button svg`. */
+.unit-strip button[data-kind="compact"] svg {
+  width: 13px; height: 13px;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
 /* Every strip control goes away while a round is in flight — they would all
    be editing a document that is mid-rewrite. */
 body.is-busy .unit-strip button { display: none; }
@@ -991,6 +1008,19 @@ body.is-busy .unit-strip button { display: none; }
 }
 .sub-unit[data-mark="comment"] {
   background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+/* Pending compact: dimmed and washed, but NOT struck through. Strikethrough
+   is delete's, and the two must never be confused — delete drops the idea,
+   compact keeps it and drops only the page space. Violet because the other
+   three already own red, green and accent-blue. */
+.sub-unit[data-mark="compact"] {
+  background: color-mix(in srgb, #7c3aed 8%, transparent);
+  opacity: .55;
+}
+.sub-unit[data-mark="compact"]:hover { opacity: .8; }
+.sub-unit[data-mark="compact"] .unit-strip button[data-kind="compact"] {
+  background: #7c3aed; border-color: #7c3aed; color: #fff;
 }
 
 /* "I disagree" — a flag on a comment, at both scopes. */

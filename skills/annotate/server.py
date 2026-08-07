@@ -43,14 +43,15 @@ SHARED_STATIC_DIR = Path(__file__).resolve().parent.parent / "_shared" / "web_co
 PORT_RANGE = range(3080, 3081)
 BANNER = "annotate-server v1"
 
-# The four controls, stated once for the reader. Three of them are messages to
-# Claude that travel with the round; the fourth is a private reading aid that
-# never leaves the browser. Confusing those two is the specific mistake this
-# table exists to prevent — a reader who folds with the trash can loses the
-# passage from the document instead of merely from their screen.
+# The four controls, stated once for the reader. All four are messages to
+# Claude that travel with the round — there is no longer a private, browser-
+# only control. Delete and compact are the pair most often confused: delete
+# puts the idea out of scope entirely, while compact keeps its point folded
+# into the surviving prose and only removes it from the page. This table
+# exists to keep that distinction legible to the reader.
 #
 # The glyphs are the real ones, copied from static/script.js (ICON) and
-# static/subunits.js (READ_ICON), not emoji stand-ins: a legend the reader
+# static/subunits.js (COMPACT_ICON), not emoji stand-ins: a legend the reader
 # cannot match to the button they are looking at is worse than none.
 def _legend_icon(paths: str) -> str:
     return (f'<svg class="legend-icon" viewBox="0 0 24 24" aria-hidden="true">'
@@ -65,6 +66,14 @@ _ICON_CHECK = _legend_icon('<polyline points="20 6 9 17 4 12"/>')
 _ICON_COMMENT = _legend_icon(
     '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21'
     'l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>')
+_ICON_COMPACT = (
+    '<svg class="legend-icon" viewBox="0 0 24 24" fill="none" '
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>'
+    '<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>'
+    '<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>'
+    '<line x1="1" y1="1" x2="23" y2="23"/></svg>')
 _LEGEND_HTML = (
     '<details class="legend">'
     '<summary class="legend-summary">'
@@ -85,6 +94,13 @@ _LEGEND_HTML = (
     f'<tr><td class="legend-btn">{_ICON_COMMENT}<span>Comment</span></td>'
     '<td>&ldquo;Respond to this&rdquo;</td>'
     '<td>Stays, rewritten to fold Claude&rsquo;s answer into the prose</td></tr>'
+    f'<tr><td class="legend-btn">{_ICON_COMPACT}<span>Compact</span></td>'
+    '<td>&ldquo;I&rsquo;m fine with this &mdash; it just doesn&rsquo;t need '
+    'the space&rdquo;</td>'
+    '<td>Taken off the page. What it contributes is folded into the sentences '
+    'that stay, so the plan gets shorter without losing the thread. Detail '
+    'that nothing else can carry is lost &mdash; this cannot be undone once '
+    'the round is submitted</td></tr>'
     '</tbody></table>'
     '<p class="legend-note">All of these are feedback, and none of them does '
     'anything until you submit the round. Until then every mark is local and '
