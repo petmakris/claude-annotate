@@ -1194,3 +1194,86 @@ section.block[data-diff="open"] .diff-pane { display: block; }
 }
 .attr-chip.a-you   { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent); }
 .attr-chip.a-sweep { background: #fef3c7; color: #92400e; }
+
+/* ══ Reading surface: map rail + collapsed composer + discovery hint ═══ */
+/* The rail and main.prose share this flex shell (built at runtime in
+   script.js's renderMapRail — main.prose starts as a lone, self-centering
+   child of <body>, so there is no shell to hook until the rail exists).
+   Widened past --content-max by the rail's own width plus the gap so that
+   main.prose, which keeps its own `max-width: var(--content-max)` untouched,
+   renders at exactly the width it did before the rail existed. A narrower
+   reading column would be a regression even though nothing would error. */
+.reading-shell {
+  display: flex; gap: 20px; align-items: flex-start;
+  max-width: calc(var(--content-max) + 20px + 214px);
+  margin: 0 auto;
+}
+
+/* ── Document map rail ──────────────────────────────────────────────── */
+/* top: 0, not a mockup toolbar's height: .page-header (core.css) sets no
+   `position` and scrolls away, so nothing reserves space above the rail —
+   any nonzero offset here pins it lower than the viewport edge for no
+   reason. Same fix already applied to .change-bar; see that comment. */
+.map-rail {
+  position: sticky; top: 0; flex: none; width: 214px;
+  font-size: 12px; align-self: flex-start;
+  max-height: 100vh; overflow-y: auto;
+}
+.map-rail-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 0 8px 7px; color: var(--text-dim);
+  font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+}
+.map-rail-head .map-count { letter-spacing: 0; font-size: 11px; font-weight: 600; text-transform: none; }
+.map-item {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 8px; border-radius: 7px; cursor: pointer;
+  color: var(--text); border-left: 2px solid transparent; line-height: 1.35;
+}
+.map-item:hover { background: var(--hover-tint); }
+.map-item[aria-current="true"] { background: var(--surface); border-left-color: var(--accent); font-weight: 650; }
+.map-item .map-n {
+  flex: none; width: 15px; text-align: right; color: var(--text-dim);
+  font-family: 'Monaspace Radon', ui-monospace, monospace; font-size: 9.5px;
+}
+.map-item .map-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-dots { flex: none; display: inline-flex; gap: 3px; }
+.map-dot { width: 6px; height: 6px; border-radius: 50%; }
+.map-dot.d-comment { background: var(--accent); }
+.map-dot.d-delete  { background: #dc2626; }
+.map-dot.d-compact { background: #7c3aed; }
+.map-dot.d-keep    { background: #16a34a; }
+.map-dot.d-changed { background: #f59e0b; }
+.map-dot.d-swept   { background: #f59e0b; opacity: .45; }
+
+@media (max-width: 900px) { .map-rail { display: none; } }
+
+/* ── Collapsed general composer ─────────────────────────────────────── */
+.composer-collapsed {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 8px 13px; margin: 0 0 12px;
+  border: 1px dashed var(--border); border-radius: 9px;
+  background: transparent; color: var(--text-dim);
+  font: inherit; font-size: 12.5px; cursor: pointer; text-align: left;
+}
+.composer-collapsed:hover { background: var(--surface); border-style: solid; color: var(--text); }
+.composer-collapsed svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; flex: none; }
+.composer-collapsed .cc-kbd {
+  margin-left: auto; font-family: ui-monospace, monospace; font-size: 10.5px;
+  border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; background: var(--surface-soft);
+}
+
+/* ── First-run discovery hint ───────────────────────────────────────── */
+.discover-hint {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 12px;
+  padding: 9px 13px; border-radius: 9px; font-size: 12.5px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+  color: var(--text);
+}
+.discover-hint .dh-glyphs { display: inline-flex; gap: 3px; flex: none; }
+.discover-hint .dh-glyphs span {
+  width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: 5px; background: var(--surface); font-size: 10px;
+}
+.discover-hint .dh-x { margin-left: auto; border: none; background: transparent; cursor: pointer; color: var(--text-dim); font-size: 15px; padding: 0 3px; }

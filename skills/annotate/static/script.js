@@ -349,6 +349,8 @@
     renderHoverActions();
     renderComments();
     applyEngagedStyling();
+    renderMapRail();
+    renderDiscoverHint();
   }
 
   // Header title for a block's card. Claude may author a `title`; otherwise we
@@ -1145,6 +1147,135 @@
     sendBtn.addEventListener("click", send);
   })();
 
+  // ── Collapsed general composer ───────────────────────────────────────────
+  // The composer used to open as a full textarea above the fold — the least-
+  // used input holding the most valuable space. It now starts collapsed to a
+  // single trigger row; opening it is one click (or the `g` shortcut) away.
+  (function initComposerCollapse() {
+    const openBtn = document.getElementById("composer-open");
+    const section = document.querySelector(".general-composer");
+    if (!openBtn || !section) return;
+    function open() {
+      section.hidden = false;
+      openBtn.hidden = true;
+      document.getElementById("general-input")?.focus();
+    }
+    openBtn.addEventListener("click", open);
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "g" && e.key !== "G") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const active = document.activeElement;
+      const typing = active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        (active && active.isContentEditable);
+      if (typing) return;
+      if (openBtn.hidden) return;
+      e.preventDefault();
+      open();
+    });
+  })();
+
+  // ── First-run discovery hint ─────────────────────────────────────────────
+  // Every marking control is hover-only and the legend starts collapsed, so a
+  // first-time reader sees a static document and never learns the page is
+  // interactive. Shown once per response, dismissal remembered in
+  // localStorage so it doesn't nag on every visit.
+  function renderDiscoverHint() {
+    const key = "annotate.hint." + (document.body.dataset.responseId || "");
+    try { if (localStorage.getItem(key)) return; } catch { return; }
+    if (!proseEl) return;
+    const hint = document.createElement("div");
+    hint.className = "discover-hint";
+    const glyphs = document.createElement("span");
+    glyphs.className = "dh-glyphs";
+    for (const g of ["🗑", "✓", "💬"]) {
+      const s = document.createElement("span"); s.textContent = g; glyphs.appendChild(s);
+    }
+    const eye = document.createElement("span");
+    eye.innerHTML = window.AnnotateSubunits?.COMPACT_ICON || "";
+    glyphs.appendChild(eye);
+    const txt = document.createElement("span");
+    txt.textContent = "Hover any sentence to mark it. Marks batch up — nothing reaches Claude until you submit.";
+    const x = document.createElement("button");
+    x.type = "button"; x.className = "dh-x"; x.textContent = "×";
+    x.title = "Dismiss";
+    x.addEventListener("click", () => {
+      try { localStorage.setItem(key, "1"); } catch {}
+      hint.remove();
+    });
+    hint.append(glyphs, txt, x);
+    proseEl.parentNode?.insertBefore(hint, proseEl);
+  }
+
+  // ── Document map rail ─────────────────────────────────────────────────────
+  // A long plan has no shape without it: fuzzy search finds a section you
+  // already know exists, this orients you in one you don't. Rebuilt (not
+  // patched) on every call, so it can never accumulate stale entries or
+  // listeners across re-renders — the elements it rebuilds are fresh each
+  // time, so binding click handlers on them each call is safe; nothing is
+  // ever attached to the rail element itself or to `document` here.
+  function renderMapRail() {
+    if (!proseEl) return;
+    let rail = document.getElementById("map-rail");
+    if (!rail) {
+      rail = document.createElement("nav");
+      rail.id = "map-rail";
+      rail.className = "map-rail";
+      // main.prose starts as a lone, self-centering child of <body> (see
+      // style.css). Wrap it and the rail in a shared flex shell exactly
+      // once — later calls find `rail` above and skip this whole branch,
+      // so the shell is never duplicated across re-renders.
+      const shell = document.createElement("div");
+      shell.className = "reading-shell";
+      proseEl.parentNode?.insertBefore(shell, proseEl);
+      shell.appendChild(rail);
+      shell.appendChild(proseEl);
+    }
+    const sections = [...document.querySelectorAll("section.block[data-block-id]")];
+    const frag = document.createDocumentFragment();
+    const head = document.createElement("div");
+    head.className = "map-rail-head";
+    const h1 = document.createElement("span"); h1.textContent = "Document";
+    const h2 = document.createElement("span");
+    h2.className = "map-count";
+    h2.textContent = `${sections.length} section${sections.length === 1 ? "" : "s"}`;
+    head.append(h1, h2);
+    frag.appendChild(head);
+    sections.forEach((s, i) => {
+      const item = document.createElement("div");
+      item.className = "map-item";
+      const n = document.createElement("span");
+      n.className = "map-n"; n.textContent = String(i + 1);
+      const t = document.createElement("span");
+      t.className = "map-t";
+      // Section titles are Claude-authored content — textContent only, never
+      // innerHTML, so an authored title can never inject markup here.
+      t.textContent = s.querySelector(".card-title")?.textContent || s.dataset.blockId;
+      const dots = document.createElement("span");
+      dots.className = "map-dots";
+      // One dot per distinct mark kind pending in this section, plus one for
+      // a section changed by the last round.
+      const kinds = new Set();
+      s.querySelectorAll(".sub-unit[data-mark]").forEach(u => kinds.add(u.dataset.mark));
+      if (s.dataset.blockMark) kinds.add(s.dataset.blockMark);
+      for (const k of kinds) {
+        const d = document.createElement("span");
+        d.className = "map-dot d-" + k;
+        dots.appendChild(d);
+      }
+      if (s.dataset.diff !== undefined && s.querySelector(".attr-chip")) {
+        const d = document.createElement("span");
+        d.className = "map-dot " + (s.querySelector(".a-sweep") ? "d-swept" : "d-changed");
+        dots.appendChild(d);
+      }
+      item.append(n, t, dots);
+      item.addEventListener("click", () =>
+        s.scrollIntoView({ behavior: "smooth", block: "start" }));
+      frag.appendChild(item);
+    });
+    rail.replaceChildren(frag);
+  }
+
   // ── Polling / block refresh ────────────────────────────────────────────────
 
   function clearUpdatingOverlay(section) {
@@ -1648,6 +1779,10 @@
         console.warn("diff failed for block", c.blockId, e);
       }
     }
+    // markChangedCard just painted the attr-chips the rail's changed/swept
+    // dots read — refresh after, not before, or the rail lags one round
+    // behind what the cards themselves show.
+    renderMapRail();
   }
 
   function onPollDelta(data, lastVersions) {
@@ -1754,6 +1889,7 @@
 
     renderHoverActions();
     applyEngagedStyling();
+    renderMapRail();
   }
 
   // Refresh one block's content in place. Returns the section now in the DOM
@@ -1797,6 +1933,11 @@
   // map. The round has to land in pendingEvents or applyProgress skips it —
   // that omission is why round progress was computed and discarded.
   window.AnnotatePage = {
+    // subunits.js funnels every mark mutation through its own renderDock(),
+    // and calls this from there — one hook, so the rail never drifts out of
+    // sync with pending marks without a listener on every click handler
+    // that can change a mark.
+    onMarkChange: renderMapRail,
     registerRoundEvent(eventId, blockIds) {
       if (!eventId) return;
       pendingEvents.set(String(eventId), {

@@ -519,7 +519,11 @@
     // Keep the dock alive while a round is in flight even if the user
     // unmarks everything after Submit but before busy/consumed_events
     // propagate back — otherwise it flashes away and reappears.
-    if (!count && !pendingRound) { if (dock) dock.remove(); return; }
+    if (!count && !pendingRound) {
+      if (dock) dock.remove();
+      window.AnnotatePage?.onMarkChange?.();
+      return;
+    }
     if (!dock) {
       dock = document.createElement("div");
       dock.id = "round-dock";
@@ -630,6 +634,11 @@
       btn.title = "Keep marking — this submits once Claude finishes.";
     }
     btn.disabled = !!pendingRound || document.body.classList.contains("is-busy");
+    // The map rail's pending-mark dots read the same data-mark/data-block-mark
+    // attributes this function's callers just painted — refresh it every time
+    // the dock does, script.js owns rendering it, so notify through the same
+    // cross-file hook registerRoundEvent already uses.
+    window.AnnotatePage?.onMarkChange?.();
   }
 
   function submitRound() {
