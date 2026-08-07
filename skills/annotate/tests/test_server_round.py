@@ -159,6 +159,40 @@ class SubmitRoundTests(unittest.TestCase):
             {"type": "round", "reactions": [_reaction(selected_text="")]})
         self.assertEqual(status, 422)
 
+    def test_compact_is_a_round_kind_at_both_scopes(self):
+        """Compact rides the round like the other three kinds.
+
+        Unit scope anchors by selected_text; block scope by block_id alone.
+        """
+        status, body = self._submit({"type": "round", "reactions": [
+            _reaction("compact"),
+            {"kind": "compact", "scope": "block", "block_id": "section-2",
+             "selected_text": ""},
+        ]})
+        self.assertEqual(status, 202, body)
+        evt = self._event(json.loads(body)["event_id"])
+        self.assertEqual([r["kind"] for r in evt["reactions"]],
+                         ["compact", "compact"])
+        self.assertEqual(evt["reactions"][0]["scope"], "unit")
+        self.assertEqual(evt["reactions"][1]["scope"], "block")
+
+    def test_compact_carries_no_text(self):
+        """Only `comment` requires non-empty text. Compact says nothing —
+        it is a request to remove, not a message."""
+        status, body = self._submit({"type": "round", "reactions": [
+            _reaction("compact", text=""),
+        ]})
+        self.assertEqual(status, 202, body)
+
+    def test_unknown_kind_is_still_refused(self):
+        """Guard the allowlist itself: widening it for compact must not
+        turn it into a pass-through."""
+        status, body = self._submit({"type": "round", "reactions": [
+            _reaction("squash"),
+        ]})
+        self.assertEqual(status, 422, body)
+        self.assertIn("bad kind", body)
+
 
 if __name__ == "__main__":
     unittest.main()

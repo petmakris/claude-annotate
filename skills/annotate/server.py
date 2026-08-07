@@ -477,7 +477,11 @@ class Handlers:
     # content; `keep` protects it from rewrite; `comment` folds a response in
     # (with an optional `disagree` flag telling Claude to concede or defend
     # rather than assume agreement).
-    _ROUND_KINDS = ("delete", "keep", "comment")
+    # `compact` removes content from the page but NOT from the plan: Claude
+    # absorbs its contribution into the surviving prose. That is what makes it
+    # a distinct kind rather than an alias for delete, which means "out of
+    # scope, never act on this again". See references/handling-events.md.
+    _ROUND_KINDS = ("delete", "keep", "comment", "compact")
     # Compatibility shim: a browser tab opened before the rename is still
     # running the old client and will submit the old names. Translate rather
     # than 422 so an in-flight page isn't wedged. Removable once no
