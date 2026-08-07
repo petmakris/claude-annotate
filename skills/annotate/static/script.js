@@ -1388,13 +1388,235 @@
     pill.classList.toggle("show", show);
   }
 
-  function onPollDelta(data) {
+  // ── What changed, and who changed it ───────────────────────────────────────
+  //
+  // When a round is acked the page grows a bar reading
+  //   "<n> sections changed — <a> you marked, <b> by the coherence sweep"
+  // and every changed card grows an attribution chip plus a "what changed"
+  // word diff against the pre-round snapshot (GET <base>/prev, Task 1).
+  //
+  // Attribution is DERIVED, never reported: any block whose version bumped
+  // that was NOT in the round this client submitted was moved by the sweep.
+  // Nothing on the wire has to tell us that, so nothing can drift or lie.
+
+  // Per-block versions as they stood when the current round was submitted.
+  // Sourced from the `lastVersions` map core.js already threads into this
+  // callback — a second version ledger kept here is exactly how the
+  // attribution would start lying — and captured at the busy false→true edge,
+  // the same instant the server writes blocks.prev.json. So the bar, the
+  // chips, and the diff all describe one moment.
+  let roundBaseVersions = null;
+  let wasBusy = false;
+  // Set on the ack, consumed after the next reconcile: the diff needs the
+  // post-round markdown from /raw and the refreshed sections in the DOM.
+  let pendingChangeSet = null;
+
+  // Which blocks moved, and who moved them. The user's own set is whatever
+  // they submitted — captured at submit time in subunits.js, because
+  // clearRound() wipes the marks on ack and this is the only surviving
+  // record. Everything else that moved was the coherence sweep.
+  function computeChangeSet(prevVersions, nextVersions) {
+    const asked = new Set(window.AnnotateSubunits?.submittedBlockIds?.() || []);
+    const changed = [];
+    for (const [bid, v] of Object.entries(nextVersions || {})) {
+      const before = prevVersions ? prevVersions[bid] : undefined;
+      if (before !== undefined && v > before) {
+        changed.push({ blockId: bid, bySweep: !asked.has(bid), from: before });
+      }
+    }
+    return changed;
+  }
+
+  function renderChangeBar(changed) {
+    document.getElementById("change-bar")?.remove();
+    if (!changed.length) return;
+    const swept = changed.filter(c => c.bySweep).length;
+    const asked = changed.length - swept;
+    const bar = document.createElement("div");
+    bar.id = "change-bar";
+    bar.className = "change-bar";
+    bar.setAttribute("role", "status");
+    const dot = document.createElement("span");
+    dot.className = "cb-dot";
+    const txt = document.createElement("span");
+    const parts = [];
+    if (asked) parts.push(`${asked} you marked`);
+    if (swept) parts.push(`${swept} by the coherence sweep`);
+    txt.innerHTML = `<b>${changed.length} section${changed.length > 1 ? "s" : ""} changed</b>`
+      + (parts.length ? ` — <span class="cb-split">${parts.join(", ")}</span>` : "");
+    const nav = document.createElement("span");
+    nav.className = "cb-nav";
+    let idx = -1;
+    const go = (d) => {
+      if (!changed.length) return;
+      idx = (idx + d + changed.length) % changed.length;
+      document.querySelector(
+        `section.block[data-block-id="${cssEsc(changed[idx].blockId)}"]`
+      )?.scrollIntoView({ behavior: "smooth", block: "center" });
+    };
+    for (const [label, d] of [["↑ prev", -1], ["next ↓", 1]]) {
+      const b = document.createElement("button");
+      b.type = "button"; b.textContent = label;
+      b.addEventListener("click", () => go(d));
+      nav.appendChild(b);
+    }
+    const dis = document.createElement("button");
+    dis.type = "button"; dis.textContent = "dismiss";
+    dis.addEventListener("click", () => bar.remove());
+    nav.appendChild(dis);
+    bar.append(dot, txt, nav);
+    const header = document.querySelector(".page-header");
+    if (header) header.insertAdjacentElement("afterend", bar);
+  }
+
+  // Wipe last round's verdict. Called when the next round starts, so a card
+  // can never carry attribution earned two rounds ago.
+  function clearChangeAttribution() {
+    document.getElementById("change-bar")?.remove();
+    document.querySelectorAll("section.block").forEach(section => {
+      section.querySelector(".attr-chip")?.remove();
+      section.querySelector(".card-diff-toggle")?.remove();
+      section.querySelector(".diff-pane")?.remove();
+      delete section.dataset.diff;
+    });
+  }
+
+  function markChangedCard(section, c) {
+    const head = section.querySelector(".card-head");
+    if (!head) return;
+    head.querySelector(".attr-chip")?.remove();
+    head.querySelector(".card-diff-toggle")?.remove();
+    const chip = document.createElement("span");
+    chip.className = "attr-chip " + (c.bySweep ? "a-sweep" : "a-you");
+    chip.textContent = c.bySweep ? "sweep" : "you asked";
+    chip.title = c.bySweep
+      ? "Rewritten by the coherence sweep — you did not mark this section"
+      : "Rewritten because you marked it in this round";
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "card-diff-toggle";
+    toggle.textContent = "what changed";
+    toggle.setAttribute("aria-pressed", "false");
+    toggle.addEventListener("click", (ev) => {
+      // The header carries the collapse chevron and the control strip; don't
+      // let a diff toggle also trip whatever else listens up there.
+      ev.stopPropagation();
+      const open = section.dataset.diff === "open";
+      section.dataset.diff = open ? "" : "open";
+      toggle.setAttribute("aria-pressed", open ? "false" : "true");
+    });
+    const pill = head.querySelector(".section-pill");
+    if (pill) {
+      head.insertBefore(chip, pill);
+      head.insertBefore(toggle, pill);
+    } else {
+      head.append(chip, toggle);
+    }
+  }
+
+  // Word-level LCS. Small documents, runs once per changed block, so an
+  // O(n·m) table is fine and keeps the whole thing dependency-free.
+  function wordDiff(a, b) {
+    const A = a.split(/(\s+)/), B = b.split(/(\s+)/);
+    const n = A.length, m = B.length;
+    const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+    for (let i = n - 1; i >= 0; i--)
+      for (let j = m - 1; j >= 0; j--)
+        dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1
+                                 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    const out = [];
+    let i = 0, j = 0;
+    while (i < n && j < m) {
+      if (A[i] === B[j]) { out.push(["=", A[i]]); i++; j++; }
+      else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push(["-", A[i]]); i++; }
+      else { out.push(["+", B[j]]); j++; }
+    }
+    while (i < n) out.push(["-", A[i++]]);
+    while (j < m) out.push(["+", B[j++]]);
+    return out;
+  }
+
+  // Block markdown is arbitrary user-and-model text, so every run is a text
+  // node inside its element. Never string-concatenated into innerHTML.
+  function renderDiffPane(section, c, blk, before) {
+    section.querySelector(".diff-pane")?.remove();
+    const now = blk.markdown || "";
+    if (now === before) return;
+    const pane = document.createElement("div");
+    pane.className = "diff-pane";
+    const h = document.createElement("div");
+    h.className = "diff-h";
+    h.textContent = `changed from v${c.from}`
+      + (c.bySweep ? " — you did not mark this section" : "");
+    pane.appendChild(h);
+    const p = document.createElement("p");
+    for (const [op, token] of wordDiff(before, now)) {
+      const el = document.createElement(op === "-" ? "del" : op === "+" ? "ins" : "span");
+      el.appendChild(document.createTextNode(token));
+      p.appendChild(el);
+    }
+    pane.appendChild(p);
+    // Task 5's per-block "why" line, when the block carries one.
+    if (typeof blk.change_note === "string" && blk.change_note.trim()) {
+      const why = document.createElement("div");
+      why.className = "diff-why";
+      const lbl = document.createElement("b");
+      lbl.textContent = "Why: ";
+      why.append(lbl, document.createTextNode(blk.change_note.trim()));
+      pane.appendChild(why);
+    }
+    const body = section.querySelector(".card-body");
+    if (body) body.insertAdjacentElement("afterend", pane);
+    else section.appendChild(pane);
+  }
+
+  // The pre-round snapshot: the document as it stood when the round was
+  // queued, which is the only record of what a block used to say. Read-only
+  // route (GET <base>/prev), so it works on a shared read-only link too.
+  async function loadPrev() {
+    try {
+      const r = await fetch(BASE + "prev", { cache: "no-store" });
+      if (!r.ok) return null;
+      const d = await r.json();
+      return d && d.ok ? d.blocks : null;
+    } catch { return null; }
+  }
+
+  async function applyChangeSet(changed, doc) {
+    renderChangeBar(changed);
+    const byId = new Map((doc.blocks || []).map(b => [b.id, b]));
+    const prev = await loadPrev();
+    for (const c of changed) {
+      const section = document.querySelector(
+        `section.block[data-block-id="${cssEsc(c.blockId)}"]`);
+      if (!section) continue;
+      markChangedCard(section, c);
+      const blk = byId.get(c.blockId);
+      const before = prev ? prev[c.blockId] : null;
+      // No snapshot (first round on an old session, or a non-markdown block)
+      // means no diff — the chip and the bar still stand on their own.
+      if (blk && typeof before === "string") renderDiffPane(section, c, blk, before);
+    }
+  }
+
+  function onPollDelta(data, lastVersions) {
     const watcherDead = typeof data.watcher_age_s === "number"
       && data.watcher_age_s > WATCHER_DEAD_AFTER_S;
     setWatcherDead(watcherDead);
     // A dead watcher means no ack is ever coming — don't keep the page
     // locked on its behalf.
-    setBusy(data.busy && !watcherDead);
+    const busyNow = !!(data.busy && !watcherDead);
+    if (busyNow && !wasBusy) {
+      // A new round just started: last round's verdict is stale now.
+      clearChangeAttribution();
+      roundBaseVersions = lastVersions ? { ...lastVersions } : null;
+    } else if (!busyNow && wasBusy) {
+      const changed = computeChangeSet(roundBaseVersions, data.blocks);
+      roundBaseVersions = null;
+      if (changed.length) pendingChangeSet = changed;
+    }
+    wasBusy = busyNow;
+    setBusy(busyNow);
     setAttachedPill(data.attached);
     refreshStatusline();
     // 1. Clear spinners for comments Claude finished processing.
@@ -1411,6 +1633,14 @@
         if (!doc) return;
         reconcile(doc);
         syncGlossary(doc);
+        // Attribution lands only after reconcile: the chips hang off the
+        // refreshed sections (a kind flip rebuilds the whole card) and the
+        // diff needs this doc's post-round markdown.
+        if (pendingChangeSet) {
+          const changed = pendingChangeSet;
+          pendingChangeSet = null;
+          applyChangeSet(changed, doc);
+        }
       })
       .catch(() => { /* swallow — next tick retries */ });
   }
