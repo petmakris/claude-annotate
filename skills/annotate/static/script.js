@@ -1472,6 +1472,12 @@
   // Wipe last round's verdict. Called when the next round starts, so a card
   // can never carry attribution earned two rounds ago.
   function clearChangeAttribution() {
+    // Drop the un-applied set too, not just the painted DOM. Otherwise: the
+    // ack poll's /raw fetch fails, the set survives, and round 2's busy edge
+    // clears the cards and then hands round 1's set to the very next /raw —
+    // chips and a pane appear mid-round, labelled with round-1 versions but
+    // diffed against round 2's snapshot, and they sit there until round 3.
+    pendingChangeSet = null;
     document.getElementById("change-bar")?.remove();
     document.querySelectorAll("section.block").forEach(section => {
       section.querySelector(".attr-chip")?.remove();
@@ -1514,11 +1520,25 @@
     }
   }
 
+  // Cells of the LCS table we are willing to allocate. The table is
+  // (n+1)·(m+1) Uint32s, so 2,000,000 cells is ~8 MB and a couple of
+  // milliseconds. Tokens are word-plus-separator, so the cap bites at roughly
+  // 700 words per side — above a typical prose block, below the long code
+  // listings and wide tables Claude sometimes writes. Uncapped, a 2000-word
+  // block asks for ~61 MB and a 4000-word one for ~244 MB, and applyChangeSet
+  // runs this over every changed block so the peaks stack into a frozen tab
+  // or a RangeError.
+  const DIFF_MAX_CELLS = 2000000;
+
   // Word-level LCS. Small documents, runs once per changed block, so an
   // O(n·m) table is fine and keeps the whole thing dependency-free.
   function wordDiff(a, b) {
     const A = a.split(/(\s+)/), B = b.split(/(\s+)/);
     const n = A.length, m = B.length;
+    // Too big to align word by word. Fall back to one whole-text replacement:
+    // it loses the "which words moved" precision the pane exists for, but it
+    // is still a correct description of the change and it always renders.
+    if (n * m > DIFF_MAX_CELLS) return [["-", a], ["+", b]];
     const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
     for (let i = n - 1; i >= 0; i--)
       for (let j = m - 1; j >= 0; j--)
@@ -1587,15 +1607,21 @@
     const byId = new Map((doc.blocks || []).map(b => [b.id, b]));
     const prev = await loadPrev();
     for (const c of changed) {
-      const section = document.querySelector(
-        `section.block[data-block-id="${cssEsc(c.blockId)}"]`);
-      if (!section) continue;
-      markChangedCard(section, c);
-      const blk = byId.get(c.blockId);
-      const before = prev ? prev[c.blockId] : null;
-      // No snapshot (first round on an old session, or a non-markdown block)
-      // means no diff — the chip and the bar still stand on their own.
-      if (blk && typeof before === "string") renderDiffPane(section, c, blk, before);
+      // Per block, so one pathological block (a diff that still blows up
+      // despite the cell cap) costs its own pane and nothing else's.
+      try {
+        const section = document.querySelector(
+          `section.block[data-block-id="${cssEsc(c.blockId)}"]`);
+        if (!section) continue;
+        markChangedCard(section, c);
+        const blk = byId.get(c.blockId);
+        const before = prev ? prev[c.blockId] : null;
+        // No snapshot (first round on an old session, or a non-markdown block)
+        // means no diff — the chip and the bar still stand on their own.
+        if (blk && typeof before === "string") renderDiffPane(section, c, blk, before);
+      } catch (e) {
+        console.warn("diff failed for block", c.blockId, e);
+      }
     }
   }
 
@@ -1639,7 +1665,11 @@
         if (pendingChangeSet) {
           const changed = pendingChangeSet;
           pendingChangeSet = null;
-          applyChangeSet(changed, doc);
+          // Not chained into the outer .catch: it is a floating promise, so
+          // without this a throw becomes an unhandled rejection. The bar and
+          // the panes that did render stay put.
+          applyChangeSet(changed, doc)
+            .catch(e => console.warn("change attribution failed", e));
         }
       })
       .catch(() => { /* swallow — next tick retries */ });

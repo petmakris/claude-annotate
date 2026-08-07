@@ -148,7 +148,15 @@ function writeBlocks(dir, blocks) {
     if (del.join("").trim() !== "at all." || ins.join("").trim() !== "whatsoever.") fail("diff runs del=" + JSON.stringify(del) + " ins=" + JSON.stringify(ins));
     log("✓ diff pane: " + JSON.stringify(h) + " del=" + JSON.stringify(del) + " ins=" + JSON.stringify(ins));
 
-    // XSS guard: markdown that looks like HTML must land as text, not nodes.
+    // The toggle is a toggle: a second click closes the pane again.
+    const t1 = page.locator('section.block[data-block-id="b-1"] .card-diff-toggle');
+    if (await t1.getAttribute("aria-pressed") !== "true") fail("toggle not pressed while open");
+    await t1.click();
+    await page.waitForSelector('section.block[data-block-id="b-1"] .diff-pane', { state: "hidden", timeout: 3000 });
+    if (await t1.getAttribute("aria-pressed") !== "false") fail("toggle still pressed after closing");
+    log("✓ second click closes the pane and releases the toggle");
+
+    // The block the user DID mark is not labelled as swept.
     const b0h = await page.locator('section.block[data-block-id="b-0"] .diff-h').innerText();
     if (/did not mark/i.test(b0h)) fail("b-0 heading claims it was unmarked");
     log("✓ b-0 heading: " + JSON.stringify(b0h));
@@ -164,7 +172,8 @@ function writeBlocks(dir, blocks) {
     if (staleChips || stalePanes) fail(`stale attribution survived: ${staleChips} chips, ${stalePanes} panes`);
     log("✓ next round clears the bar, chips and panes");
 
-    // XSS: sweep a block whose new markdown carries a script tag.
+    // XSS guard: markdown that looks like HTML must land in the pane as text,
+    // not as nodes. Sweep b-2 into markup with an inline event handler.
     const acked = new Set(fs.readdirSync(consumedDir).map(f => f.replace(/\.ack$/, "")));
     const eid2 = fs.readdirSync(eventsDir).map(f => f.replace(/\.json$/, "")).filter(id => !acked.has(id))[0];
     if (!eid2) fail("no unacked event for round 2");

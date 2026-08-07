@@ -1138,8 +1138,13 @@ body.is-busy .comment-card {
 }
 
 /* ══ NEW ── Change summary bar (after the ack) ═══════════════════════ */
+/* The offset is zero, not the mockup's 62px: that value cleared the mockup's
+   own demo toolbar, which is scaffolding that never shipped. The real
+   .page-header (core.css) sets no `position` and scrolls away, so nothing
+   reserves space above this bar — any offset pins it as an opaque slab with
+   prose scrolling above it. Do not reintroduce the mockup number. */
 .change-bar {
-  position: sticky; top: 62px; z-index: 18; display: flex; align-items: center; gap: 10px;
+  position: sticky; top: 0; z-index: 18; display: flex; align-items: center; gap: 10px;
   margin: 0 0 12px; padding: 9px 13px; border-radius: 9px; font-size: 12.5px;
   background: #fffbeb; border: 1px solid #fcd34d; color: #78350f;
 }
