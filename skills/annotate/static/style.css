@@ -1072,14 +1072,67 @@ body.is-busy .comment-card {
   background: var(--accent); color: #fff;
 }
 
-#round-dock {
-  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
-  z-index: 40;
+/* ── Round review drawer ──────────────────────────────────────────────
+   The collapsed state is the old dock. Expanded, it is the manifest for a
+   batch of irreversible decisions the user made across several screens —
+   which is why every row can be jumped to and removed. */
+#round-dock.round-drawer {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px;
+  z-index: 40; width: min(560px, calc(100vw - 40px));
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; overflow: hidden;
+  box-shadow: 0 10px 34px rgba(15,23,42,.20), 0 2px 8px rgba(15,23,42,.10);
 }
-#round-dock button {
-  border: none; border-radius: 999px; padding: 10px 20px;
-  font-size: 13px; font-weight: 650; cursor: pointer;
-  background: var(--text-strong, #0f172a); color: #fff;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, .25);
+.rd-head {
+  display: flex; align-items: center; gap: 10px; padding: 10px 13px;
+  cursor: pointer; border-bottom: 1px solid var(--border);
+  background: var(--surface-soft);
 }
-#round-dock button:disabled { opacity: .5; cursor: default; }
+.rd-caret { color: var(--text-dim); font-size: 11px; transition: transform 140ms ease; }
+#round-dock[data-open="true"] .rd-caret { transform: rotate(180deg); }
+.rd-summary { display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
+  font-size: 12px; color: var(--text-dim); }
+.rd-summary b { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+#round-submit {
+  margin-left: auto; flex: none; border: none; border-radius: 999px;
+  padding: 8px 17px; font: inherit; font-size: 12.5px; font-weight: 700;
+  cursor: pointer; background: var(--text-strong); color: #fff;
+}
+#round-submit:disabled { opacity: .45; cursor: default; }
+.rd-list { max-height: 268px; overflow-y: auto; display: none; }
+#round-dock[data-open="true"] .rd-list { display: block; }
+.rd-row {
+  display: flex; align-items: flex-start; gap: 9px; padding: 8px 13px;
+  border-bottom: 1px solid var(--surface-soft); cursor: pointer; font-size: 12.5px;
+}
+.rd-row:last-child { border-bottom: none; }
+.rd-row:hover { background: var(--hover-tint); }
+.rd-k {
+  flex: none; width: 21px; height: 21px; border-radius: 5px; color: #fff;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 10px;
+}
+.rd-k svg { width: 12px; height: 12px; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.rd-k[data-kind="delete"]  { background: #dc2626; }
+.rd-k[data-kind="keep"]    { background: #16a34a; }
+.rd-k[data-kind="comment"] { background: var(--accent); }
+.rd-k[data-kind="compact"] { background: #7c3aed; }
+.rd-body { flex: 1; min-width: 0; }
+.rd-where { color: var(--text-dim); font-size: 10.5px; margin-bottom: 1px; }
+.rd-text { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-said { color: var(--accent); font-style: italic; margin-top: 2px; font-size: 11.5px; }
+.rd-x {
+  flex: none; border: none; background: transparent; color: var(--text-dim);
+  cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 4px; border-radius: 4px;
+}
+.rd-x:hover { color: #dc2626; background: color-mix(in srgb, #dc2626 10%, transparent); }
+.rd-foot {
+  padding: 7px 13px; font-size: 11px; color: var(--text-dim);
+  background: var(--surface-soft); border-top: 1px solid var(--border);
+}
+/* Brief highlight when a drawer row scrolls you to its mark. */
+.rd-flash { animation: rd-flash 1.2s ease; }
+@keyframes rd-flash {
+  0%, 100% { background: transparent; }
+  30%      { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+}

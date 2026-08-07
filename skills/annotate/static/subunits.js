@@ -450,11 +450,66 @@
     if (openComposerEl) { openComposerEl.remove(); openComposerEl = null; }
   }
 
-  // ── Round dock ─────────────────────────────────────────────────────────────
+  // ── Round dock / review drawer ───────────────────────────────────────────
+  // Open/closed is remembered for the session so the drawer does not
+  // re-collapse under the user every time a mark changes.
+  let drawerOpen = false;
+
+  function markRows() {
+    // Stable order: document order by block, then by the mark's ordinal, so
+    // the manifest reads like the page rather than like a hash map.
+    const order = [...document.querySelectorAll("section.block[data-block-id]")]
+      .map(s => s.dataset.blockId);
+    return Object.entries(marks).map(([key, m]) => ({ key, m })).sort((a, b) => {
+      const ai = order.indexOf(a.m.block_id), bi = order.indexOf(b.m.block_id);
+      if (ai !== bi) return ai - bi;
+      return (a.m.ordinal || 0) - (b.m.ordinal || 0);
+    });
+  }
+
+  function blockTitleFor(blockId) {
+    const s = document.querySelector(
+      `section.block[data-block-id="${CSS.escape(blockId)}"]`);
+    const n = s?.querySelector(".section-pill .sp-sec")?.textContent || "?";
+    const t = s?.querySelector(".card-title")?.textContent || blockId;
+    return `§${n} · ${t}`;
+  }
+
+  function jumpToMark(m) {
+    const s = document.querySelector(
+      `section.block[data-block-id="${CSS.escape(m.block_id)}"]`);
+    if (!s) return;
+    const target = m.selected_text
+      ? [...s.querySelectorAll(".sub-unit")].find(
+          el => unitText(stripClone(el)) === m.selected_text) || s
+      : s;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    target.classList.add("rd-flash");
+    setTimeout(() => target.classList.remove("rd-flash"), 1200);
+  }
+
+  function removeMark(key) {
+    delete marks[key];
+    saveMarks();
+    repaintBlocks();
+    document.querySelectorAll("section.block .block-content").forEach(root => {
+      const bid = root.closest("section.block")?.dataset.blockId;
+      if (bid) root.querySelectorAll(".sub-unit").forEach(
+        el => applyMarkState(root, el, bid));
+    });
+    renderDock();
+  }
+
+  function glyphFor(kind) {
+    const spec = CONTROL_SPECS.find(([k]) => k === kind);
+    return spec ? spec[1] : "";
+  }
+
   function renderDock() {
     pruneMarks();
     let dock = document.getElementById("round-dock");
-    const count = Object.keys(marks).length;
+    const rows = markRows();
+    const count = rows.length;
     // Keep the dock alive while a round is in flight even if the user
     // unmarks everything after Submit but before busy/consumed_events
     // propagate back — otherwise it flashes away and reappears.
@@ -462,13 +517,96 @@
     if (!dock) {
       dock = document.createElement("div");
       dock.id = "round-dock";
+      dock.className = "round-drawer";
+      dock.dataset.open = drawerOpen ? "true" : "false";
+
+      const head = document.createElement("div");
+      head.className = "rd-head";
+      // Ignores clicks that land on the Submit button: that button's own
+      // handler stops propagation before it can bubble up to this toggle.
+      head.addEventListener("click", () => {
+        drawerOpen = !drawerOpen;
+        dock.dataset.open = drawerOpen ? "true" : "false";
+      });
+      const caret = document.createElement("span");
+      caret.className = "rd-caret";
+      caret.textContent = "▾";
+      const summary = document.createElement("div");
+      summary.className = "rd-summary";
       const btn = document.createElement("button");
       btn.type = "button";
       btn.id = "round-submit";
-      btn.addEventListener("click", submitRound);
-      dock.appendChild(btn);
+      btn.addEventListener("click", (ev) => { ev.stopPropagation(); submitRound(); });
+      head.append(caret, summary, btn);
+
+      const list = document.createElement("div");
+      list.className = "rd-list";
+
+      dock.append(head, list);
       document.body.appendChild(dock);
     }
+    dock.dataset.open = drawerOpen ? "true" : "false";
+
+    // Per-kind counts, in CONTROL_SPECS order, so the summary reads like the
+    // controls the user actually clicked.
+    const summary = dock.querySelector(".rd-summary");
+    summary.innerHTML = "";
+    const counts = {};
+    for (const { m } of rows) counts[m.kind] = (counts[m.kind] || 0) + 1;
+    for (const [kind, glyph] of CONTROL_SPECS) {
+      if (!counts[kind]) continue;
+      const span = document.createElement("span");
+      span.innerHTML = `${glyph} <b>${counts[kind]}</b>`;
+      summary.appendChild(span);
+    }
+
+    // Rows are rebuilt wholesale each render — cheap at this scale, and it
+    // keeps the manifest from ever drifting out of document order.
+    const list = dock.querySelector(".rd-list");
+    list.innerHTML = "";
+    for (const { key, m } of rows) {
+      const row = document.createElement("div");
+      row.className = "rd-row";
+      row.addEventListener("click", () => jumpToMark(m));
+
+      const k = document.createElement("span");
+      k.className = "rd-k";
+      k.dataset.kind = m.kind;
+      k.innerHTML = glyphFor(m.kind);
+
+      const body = document.createElement("div");
+      body.className = "rd-body";
+      const where = document.createElement("div");
+      where.className = "rd-where";
+      where.textContent = blockTitleFor(m.block_id);
+      const text = document.createElement("div");
+      text.className = "rd-text";
+      text.textContent = m.selected_text || blockTitleFor(m.block_id);
+      body.append(where, text);
+      if (m.text) {
+        const said = document.createElement("div");
+        said.className = "rd-said";
+        said.textContent = m.text;
+        body.appendChild(said);
+      }
+
+      const x = document.createElement("button");
+      x.type = "button";
+      x.className = "rd-x";
+      x.textContent = "×";
+      x.title = "Remove this mark";
+      x.setAttribute("aria-label", "Remove mark");
+      x.addEventListener("click", (ev) => { ev.stopPropagation(); removeMark(key); });
+
+      row.append(k, body, x);
+      list.appendChild(row);
+    }
+    const foot = document.createElement("div");
+    foot.className = "rd-foot";
+    foot.textContent = "Click any row to jump to it. Nothing has reached "
+      + "Claude yet — every mark is undoable until you submit.";
+    list.appendChild(foot);
+
     const btn = dock.querySelector("#round-submit");
     if (pendingRound) {
       btn.textContent = "Applying round…";
