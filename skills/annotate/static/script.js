@@ -1281,7 +1281,15 @@
         d.className = "map-dot d-" + k;
         dots.appendChild(d);
       }
-      if (s.dataset.diff !== undefined && s.querySelector(".attr-chip")) {
+      // The attribution chip is the whole signal: markChangedCard() paints
+      // it on every section the last round rewrote, and
+      // clearChangeAttribution() removes it when the next round starts.
+      // Do NOT also require `s.dataset.diff` here — nothing sets that
+      // attribute except the card's own "what changed" toggle, so gating on
+      // it meant the rail could only dot a section AFTER the user had
+      // already found it and opened its diff. Showing which sections moved
+      // is the rail's headline feature; it never fired once.
+      if (s.querySelector(".attr-chip")) {
         const d = document.createElement("span");
         d.className = "map-dot " + (s.querySelector(".a-sweep") ? "d-swept" : "d-changed");
         dots.appendChild(d);
@@ -1289,9 +1297,66 @@
       item.append(n, t, dots);
       item.addEventListener("click", () =>
         s.scrollIntoView({ behavior: "smooth", block: "start" }));
+      // Carried so the scroll spy below can find this row again without
+      // re-deriving it from the item's index, which shifts as blocks land.
+      item.dataset.blockId = s.dataset.blockId;
+      if (s.dataset.blockId === mapCurrentId) item.setAttribute("aria-current", "true");
       frag.appendChild(item);
     });
     rail.replaceChildren(frag);
+    watchReadingPosition(sections);
+  }
+
+  // ── Which section am I reading? ──────────────────────────────────────────
+  // The rail lists sections; without this it never says which one you are in,
+  // which is most of what "orient me in a long plan" means. An
+  // IntersectionObserver is the cheap way: it wakes only when a section
+  // crosses the top band of the viewport, not on every scroll event.
+  let mapCurrentId = null;
+  let mapObserver = null;
+  let mapObserved = "";
+
+  function paintReadingPosition() {
+    document.querySelectorAll("#map-rail .map-item").forEach(item => {
+      if (item.dataset.blockId === mapCurrentId) item.setAttribute("aria-current", "true");
+      else item.removeAttribute("aria-current");
+    });
+  }
+
+  // The section being read is the last one whose top edge has passed the
+  // reading line, a third of the way down the viewport. Recomputed from the
+  // live DOM rather than from the observer's entry list: the observer is only
+  // the wake-up, so a section that was already on screen when the rail
+  // re-rendered still counts.
+  function recomputeReadingPosition() {
+    const line = window.innerHeight / 3;
+    let id = null;
+    for (const s of document.querySelectorAll("section.block[data-block-id]")) {
+      if (s.getBoundingClientRect().top <= line) id = s.dataset.blockId;
+      else break;
+    }
+    if (!id) {
+      id = document.querySelector("section.block[data-block-id]")?.dataset.blockId || null;
+    }
+    if (id === mapCurrentId) return;
+    mapCurrentId = id;
+    paintReadingPosition();
+  }
+
+  function watchReadingPosition(sections) {
+    if (typeof IntersectionObserver !== "function") return;
+    // Re-observing on every rail rebuild would tear down and rebuild the
+    // observer on each mark click (renderMapRail runs from onMarkChange too).
+    // Only the section SET matters to it, so skip when that hasn't moved.
+    const key = sections.map(s => s.dataset.blockId).join(" ");
+    if (key === mapObserved && mapObserver) { recomputeReadingPosition(); return; }
+    mapObserved = key;
+    mapObserver?.disconnect();
+    // Root box trimmed to the top third: entries fire exactly when a section
+    // enters or leaves the band the reading line runs through.
+    mapObserver = new IntersectionObserver(recomputeReadingPosition,
+      { rootMargin: "0px 0px -66% 0px", threshold: 0 });
+    sections.forEach(s => mapObserver.observe(s));
   }
 
   // ── Polling / block refresh ────────────────────────────────────────────────

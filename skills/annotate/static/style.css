@@ -9,13 +9,17 @@
 :root {
   --content-max: 1040px;
   --content-gutter: 24px;
-  /* .reading-shell's own width: content-max plus the map rail (214px) and
-     its gap to the document (20px). Every sticky/floating chrome element
-     that sits above the shell (discover-hint, the collapsed composer
-     trigger, the change bar, the busy/watcher-dead banners) shares this so
-     their left edges line up with the shell instead of running full-bleed
-     while the document underneath is centred. */
-  --rail-shell-max: calc(var(--content-max) + 234px);
+  /* The map rail's column: its own width (214px) plus its gap to the
+     document (20px). The document column starts exactly this far right of
+     .reading-shell's left edge, at every viewport width. */
+  --rail-gutter: 234px;
+  /* .reading-shell's own width: the document column plus the rail's. Every
+     floating chrome element that sits above the shell (discover-hint, the
+     collapsed composer trigger) shares this so their left edges line up
+     with the shell instead of running full-bleed while the document
+     underneath is centred. The three STICKY ribbons deliberately do not —
+     see the .busy-banner comment. */
+  --rail-shell-max: calc(var(--content-max) + var(--rail-gutter));
 }
 
 /* === Response content (prose) ======================================== */
@@ -905,12 +909,30 @@ main.prose mark.search-hit {
   position: sticky;
   top: 0;
   z-index: 20;
-  /* Same --rail-shell-max + auto-centering as .reading-shell/.discover-hint
-     — without it this ribbon stretched the full viewport width while the
-     document underneath it sat in the centred content column. */
-  width: 100%;
-  max-width: var(--rail-shell-max);
-  margin: 0 auto 12px auto;
+  /* This ribbon spans the DOCUMENT column, not the whole reading shell.
+     Both this and .map-rail are `sticky; top: 0`, so while the page is
+     scrolled they occupy the same band at the top of the viewport — and a
+     shell-wide ribbon (z-index 20) painted straight over the rail's
+     "DOCUMENT / N sections" header and its first rows.
+
+     Two sticky boxes pinned to the same top can only stop overlapping by
+     not sharing horizontal space. Offsetting the rail's `top` by a ribbon's
+     height is the wrong half of that trade — it is the mockup-scaffolding
+     mistake .change-bar already had to undo, it pins the rail below empty
+     space whenever no ribbon is showing (which is most of the time), and a
+     ribbon's height is not a constant anyway once its text wraps.
+
+     So the ribbon steps aside instead, in plain static CSS that holds
+     ribbon or no ribbon: it starts one --rail-gutter right of the shell's
+     left edge and runs to the shell's right edge — i.e. exactly main.prose's
+     box, at every width. The `max(0px, ...)` mirrors `margin: 0 auto`'s own
+     clamp (auto margins collapse to 0 once the shell fills the viewport),
+     the same idiom .page-header already uses for its padding. Below 900px
+     the rail is display:none and this offset is dropped with it. */
+  width: min(var(--content-max), calc(100% - var(--rail-gutter)));
+  margin-left: calc(max(0px, (100% - var(--rail-shell-max)) / 2) + var(--rail-gutter));
+  margin-right: auto;
+  margin-bottom: 12px;
   padding: 11px 14px;
   border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
   border-top: none;
@@ -940,9 +962,12 @@ main.prose mark.search-hit {
   position: sticky;
   top: 0;
   z-index: 20;
-  width: 100%;
-  max-width: var(--rail-shell-max);
-  margin: 0 auto 12px auto;
+  /* Document-column geometry, same as .busy-banner — see the long comment
+     there for why a sticky ribbon must not span the sticky map rail. */
+  width: min(var(--content-max), calc(100% - var(--rail-gutter)));
+  margin-left: calc(max(0px, (100% - var(--rail-shell-max)) / 2) + var(--rail-gutter));
+  margin-right: auto;
+  margin-bottom: 12px;
   padding: 11px 14px;
   border: 1px solid color-mix(in srgb, #f59e0b 55%, var(--border));
   border-top: none;
@@ -1178,12 +1203,14 @@ body.is-busy .comment-card {
    reserves space above this bar — any offset pins it as an opaque slab with
    prose scrolling above it. Do not reintroduce the mockup number.
 
-   width/max-width/auto-margin: same --rail-shell-max centering as
-   .reading-shell — this bar otherwise stretches to the full viewport width
-   while the document below it sits in the centred column. */
+   Document-column geometry (not the full reading shell): this bar is
+   sticky at top: 0 and so is .map-rail, so a shell-wide bar paints over the
+   rail whenever the page is scrolled. See the .busy-banner comment. */
 .change-bar {
   position: sticky; top: 0; z-index: 18; display: flex; align-items: center; gap: 10px;
-  width: 100%; max-width: var(--rail-shell-max); margin: 0 auto 12px auto;
+  width: min(var(--content-max), calc(100% - var(--rail-gutter)));
+  margin-left: calc(max(0px, (100% - var(--rail-shell-max)) / 2) + var(--rail-gutter));
+  margin-right: auto; margin-bottom: 12px;
   padding: 9px 13px; border-radius: 9px; font-size: 12.5px;
   background: #fffbeb; border: 1px solid #fcd34d; color: #78350f;
 }
@@ -1297,7 +1324,15 @@ section.block[data-diff="open"] .diff-pane { display: block; }
 .map-dot.d-changed { background: #f59e0b; }
 .map-dot.d-swept   { background: #f59e0b; opacity: .45; }
 
-@media (max-width: 900px) { .map-rail { display: none; } }
+/* No rail below 900px, so nothing for the sticky ribbons to step around:
+   they go back to spanning the document, which is now the whole width. */
+@media (max-width: 900px) {
+  .map-rail { display: none; }
+  .change-bar, .busy-banner, .watcher-dead-banner {
+    width: 100%;
+    margin-left: auto;
+  }
+}
 
 /* ── Collapsed general composer ─────────────────────────────────────── */
 /* max-width + auto side margins match .reading-shell (same --rail-shell-max
@@ -1315,6 +1350,18 @@ section.block[data-diff="open"] .diff-pane { display: block; }
   background: transparent; color: var(--text-dim);
   font: inherit; font-size: 12.5px; cursor: pointer; text-align: left;
 }
+/* Same cascade trap `.general-composer[hidden]` (line ~397) and
+   `.statstrip[hidden]` already work around, on the element that opens the
+   composer rather than the composer itself: script.js sets `openBtn.hidden
+   = true` to retire the trigger row once the composer is expanded, but the
+   `display: flex` above is an AUTHOR rule and the UA's `[hidden] { display:
+   none }` is a USER-AGENT rule — the author rule wins at equal specificity
+   regardless of source order, so the attribute alone paints nothing away.
+   The trigger stayed on screen above the open textarea forever. Reading
+   back `openBtn.hidden === true` cannot see this; only
+   getComputedStyle(openBtn).display can. All three hidden-able elements on
+   this page now carry the same explicit rule. */
+.composer-collapsed[hidden] { display: none; }
 .composer-collapsed:hover { background: var(--surface); border-style: solid; color: var(--text); }
 .composer-collapsed svg {
   width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2;
