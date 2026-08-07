@@ -55,6 +55,10 @@ class SubmitRoundTests(unittest.TestCase):
         path = Path(self.sess["events_dir"]) / f"{event_id}.json"
         return json.loads(path.read_text())
 
+    def _ack(self, event_id: str) -> None:
+        """What the watcher does when Claude has finished with an event."""
+        (Path(self.sess["consumed_dir"]) / f"{event_id}.ack").write_text("")
+
     def test_round_queues_single_event_with_reactions(self):
         status, body = self._submit({"type": "round", "reactions": [
             _reaction("keep"),
@@ -206,9 +210,15 @@ class SubmitRoundTests(unittest.TestCase):
         self.assertEqual(ids, ["section-1", "section-2"])
 
     def test_the_snapshot_is_overwritten_not_accumulated(self):
-        """Only the most recent round is described by the change bar."""
+        """Only the most recent round is described by the change bar.
+
+        The first round is ACKED before the second is sent, which is the only
+        order the client can produce: Submit is disabled while a round is in
+        flight. An unacked first round is the case the next test covers.
+        """
         prev = Path(self.sess["response_dir"]) / "blocks.prev.json"
-        self._submit({"type": "round", "reactions": [_reaction("keep")]})
+        _, body = self._submit({"type": "round", "reactions": [_reaction("keep")]})
+        self._ack(json.loads(body)["event_id"])
         first = prev.read_text()
         _write_blocks(Path(self.sess["response_dir"]), "resp-rd", "T", [
             {"id": "section-1", "title": "A", "markdown": "rewritten"},
@@ -219,6 +229,44 @@ class SubmitRoundTests(unittest.TestCase):
         self.assertNotEqual(prev.read_text(), first,
                             "the snapshot did not move with the document")
         self.assertIn("rewritten", prev.read_text())
+
+    def test_a_submit_mid_round_does_not_move_the_baseline(self):
+        """The general composer stays usable while a round is in flight.
+
+        If that POST re-snapshots, the round's baseline becomes the document
+        as Claude has *already half-rewritten it*: "before" and "now" then
+        match for every block Claude touched, renderDiffPane bails on its
+        `now === before` guard, and the "what changed" toggle the page has
+        already painted opens onto an empty pane.
+        """
+        prev = Path(self.sess["response_dir"]) / "blocks.prev.json"
+        self._submit({"type": "round", "reactions": [_reaction("keep")]})
+        baseline = prev.read_text()
+        self.assertIn("alpha one", baseline)
+        # Claude starts applying the round and rewrites section-1...
+        _write_blocks(Path(self.sess["response_dir"]), "resp-rd", "T", [
+            {"id": "section-1", "title": "A", "markdown": "half rewritten"},
+            {"id": "section-2", "title": "B", "markdown": "beta"},
+        ])
+        # ...and the user, still reading, sends a general comment.
+        status, _ = self._submit({"type": "comment", "text": "while you're in there"})
+        self.assertEqual(status, 202)
+        self.assertEqual(prev.read_text(), baseline,
+                         "a mid-round submit overwrote the round's baseline")
+        self.assertNotIn("half rewritten", prev.read_text())
+
+    def test_the_baseline_moves_again_once_the_round_is_acked(self):
+        """The guard is 'something is in flight', not 'freeze forever'."""
+        prev = Path(self.sess["response_dir"]) / "blocks.prev.json"
+        _, body = self._submit({"type": "round", "reactions": [_reaction("keep")]})
+        self._ack(json.loads(body)["event_id"])
+        _write_blocks(Path(self.sess["response_dir"]), "resp-rd", "T", [
+            {"id": "section-1", "title": "A", "markdown": "settled"},
+            {"id": "section-2", "title": "B", "markdown": "beta"},
+        ])
+        self._submit({"type": "comment", "text": "next turn"})
+        self.assertIn("settled", prev.read_text(),
+                      "the baseline never moved after the round was acked")
 
     def test_prev_route_serves_the_snapshot(self):
         self._submit({"type": "round", "reactions": [_reaction("keep")]})

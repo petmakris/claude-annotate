@@ -69,8 +69,14 @@
   // block_ids from the most recently SUBMITTED round. Captured synchronously
   // at submit time (see submitRound) because clearRound() wipes `marks` on
   // ack — this is the only moment "what did the user actually ask for"
-  // exists. Deliberately NOT cleared in clearRound(); Task 4's change-bar
-  // attribution reads it after the ack.
+  // exists.
+  //
+  // Deliberately NOT cleared in clearRound(): that runs on the ack, and the
+  // change bar reads this AFTER the ack. script.js clears it instead, at the
+  // one point the bar has finished consuming it (the busy false edge, right
+  // after computeChangeSet) — via clearSubmittedBlockIds below. Left uncleared
+  // it outlived its round and mis-attributed the next general comment's
+  // rewrites as "you asked".
   let lastSubmittedBlockIds = [];
 
   // Mirrors script.js's WATCHER_DEAD_AFTER_S: if the watcher hasn't reported
@@ -596,7 +602,15 @@
       where.textContent = blockTitleFor(m.block_id);
       const text = document.createElement("div");
       text.className = "rd-text";
-      text.textContent = m.selected_text || blockTitleFor(m.block_id);
+      // `.rd-where` above already carries blockTitleFor(), so falling back to
+      // it here printed "§3 · The retry path" twice on every block-scope row.
+      // What the second line has to add is the SCOPE — a block-scope delete
+      // and a unit-scope delete on the section's first sentence are different
+      // decisions, and echoing the block's first line of text (the other
+      // candidate) would render those two rows identically. A step mark names
+      // its node instead: it is neither the whole block nor a text span.
+      text.textContent = m.selected_text
+        || (m.step_id ? `step: ${m.step_id}` : "whole section");
       body.append(where, text);
       if (m.text) {
         const said = document.createElement("div");
@@ -650,6 +664,11 @@
       || document.body.classList.contains("is-busy")
       || document.body.classList.contains("is-editing");
     if (!pendingRound && document.body.classList.contains("is-editing")) {
+      // The LABEL, not just the title: the button is disabled a line below,
+      // and browsers suppress mouse events on a disabled button, so its
+      // tooltip can never be shown. A title-only version left the dock dead
+      // with no explanation anywhere on screen.
+      btn.textContent = "Finish or discard the open comment";
       btn.title = "Finish or discard the open comment first.";
     }
     // The map rail's pending-mark dots read the same data-mark/data-block-mark
@@ -802,5 +821,8 @@
     toggleBlockMark, pinComment, blockMark, repaintBlocks, renderDock,
     CONTROLS,
     submittedBlockIds: () => lastSubmittedBlockIds.slice(),
+    // Called by script.js once the change bar has derived its attribution —
+    // see the note on lastSubmittedBlockIds for why the ack is too early.
+    clearSubmittedBlockIds: () => { lastSubmittedBlockIds = []; },
   };
 })();

@@ -183,3 +183,17 @@ def test_clearing_attribution_also_drops_the_unapplied_set():
     assert body, "clearChangeAttribution is gone"
     assert "pendingChangeSet = null" in body.group(1), \
         "clearChangeAttribution leaves the un-applied change set behind"
+
+
+def test_the_busy_banner_has_no_empty_sub_label():
+    """A `.bb-sub` node was created for a promised "3 of 5 marks applied"
+    progress line. Nothing can write it: progress labels come from
+    hooks/progress_publish.py, which maps tool names onto a fixed allowlist
+    and knows nothing about mark counts. There is no `.bb-*` CSS either, so
+    the node shipped as an empty flex child eating a `gap: 9px` slot.
+
+    Recorded as a known spec deviation: the sub-label and step pips the spec
+    promised are not reachable without a progress-contract change.
+    """
+    assert "bb-sub" not in SCRIPT_JS.read_text(), \
+        "the busy banner still creates a sub-label nothing can fill"

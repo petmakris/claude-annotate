@@ -142,21 +142,50 @@ def _is_terminal(state_dir: Path) -> bool:
     return (state_dir / "finished").exists() or (state_dir / "cancelled").exists()
 
 
-def _snapshot_blocks(response_dir: Path) -> None:
+def _has_unacked_event(dirs: dict) -> bool:
+    """True when an event is queued but Claude has not acked it yet.
+
+    An event lives as events_dir/<id>.json and is finished when
+    consumed_dir/<id>.ack appears with the same stem; the .json is never
+    removed, so "queued minus acked" is the set still in flight. Same
+    definition /poll uses for `busy`.
+    """
+    try:
+        queued = {p.stem for p in Path(dirs["events_dir"]).glob("*.json")}
+        if not queued:
+            return False
+        acked = {p.stem for p in Path(dirs["consumed_dir"]).glob("*.ack")}
+        return bool(queued - acked)
+    except (KeyError, OSError):
+        return False
+
+
+def _snapshot_blocks(dirs: dict) -> None:
     """Copy blocks.json aside before a mutating event is applied.
 
     versions.json stores content hashes, not text, so without this the page
     can say a block changed but never what it said before. Written at QUEUE
     time on purpose: that is the document the user was looking at when they
-    submitted, which is the baseline "what changed" has to mean. Best-effort —
-    a failed snapshot must never block the user's submission.
+    submitted, which is the baseline "what changed" has to mean.
+
+    Skipped while an earlier event is still unacked. The general composer is
+    deliberately usable while a round is in flight, and re-snapshotting on that
+    POST replaced the round's baseline with a half-rewritten document: for
+    every block Claude had already touched, "before" and "now" were then
+    identical, renderDiffPane bailed on its `now === before` guard, and the
+    "what changed" toggle markChangedCard had already painted opened onto
+    nothing.
+
+    Best-effort throughout — a failed snapshot must never block a submission.
     """
-    src = response_dir / "blocks.json"
-    if not src.exists():
-        return
     try:
-        write_text_atomic(response_dir / "blocks.prev.json", src.read_text())
-    except OSError:
+        if _has_unacked_event(dirs):
+            return
+        src = Path(dirs["response_dir"]) / "blocks.json"
+        if not src.exists():
+            return
+        write_text_atomic(src.parent / "blocks.prev.json", src.read_text())
+    except (KeyError, OSError):
         pass
 
 
@@ -422,8 +451,9 @@ class Handlers:
             _send_text(h, 409, "session closed")
             return
         # Every branch below can mutate blocks.json. Snapshot once, here, so
-        # no future submit type can be added without coverage.
-        _snapshot_blocks(Path(dirs["response_dir"]))
+        # no future submit type can be added without coverage. (No-ops while an
+        # earlier event is unacked — see _snapshot_blocks.)
+        _snapshot_blocks(dirs)
         if payload.get("type") == "round":
             self._handle_round(h, dirs, payload)
             return

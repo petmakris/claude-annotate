@@ -63,3 +63,37 @@ def test_removing_a_block_mark_repaints_its_own_card():
         "removeMark does not directly repaint the removed mark's block"
     assert "repaintBlocks()" in body, \
         "removeMark should still sweep repaintBlocks() for surviving marks"
+
+
+def test_a_block_scope_row_does_not_print_its_title_twice():
+    """`.rd-where` already carries blockTitleFor(block_id).
+
+    Falling back to the same call for `.rd-text` made every block-scope row
+    read "§3 · The retry path" over "§3 · The retry path" — a whole line of
+    the manifest spent saying nothing. The second line's job is the SCOPE.
+
+    Behavioural guard: skills/annotate/tests/e2e/round-scope.e2e.cjs asserts
+    the two lines differ on a rendered page.
+    """
+    src = SUBUNITS_JS.read_text()
+    start = src.index("text.textContent =")
+    stmt = src[start:src.index(";", start)]
+    assert "blockTitleFor(" not in stmt, \
+        "the rd-text fallback still echoes the row's own rd-where line"
+    assert "whole section" in stmt, \
+        "a block-scope row does not say that it covers the whole section"
+
+
+def test_the_disabled_dock_says_why_on_the_button():
+    """Browsers suppress mouse events on a disabled button, so a `title` set
+    in the is-editing branch can never be shown. The label is the only
+    surface the user can actually read — without it Submit greys out and
+    nothing anywhere on the page explains it.
+
+    Behavioural guard: round-scope.e2e.cjs reads the rendered button.
+    """
+    src = SUBUNITS_JS.read_text()
+    start = src.index('if (!pendingRound && document.body.classList.contains("is-editing"))')
+    body = src[start:src.index("\n    }", start)]
+    assert "btn.textContent" in body, \
+        "the is-editing branch sets only a tooltip a disabled button cannot show"

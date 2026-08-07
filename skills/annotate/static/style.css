@@ -1067,9 +1067,9 @@ body.is-busy .comment-card {
 /* Pending compact: heavier than it was, and never struck through.
    Strikethrough belongs to delete, and the two must stay distinguishable —
    but compact is the one that discards detail the user never chose to lose,
-   so it cannot be the gentler-looking of the pair. The consequence is
-   written where the user is about to click, because the legend they would
-   otherwise learn it from is collapsed by default. */
+   so it cannot be the gentler-looking of the pair. The severity is carried by
+   the wash and the spine alone — see the note below on the consequence line
+   that used to sit here and why it was pulled. */
 .sub-unit[data-mark="compact"] {
   background: color-mix(in srgb, #7c3aed 13%, transparent);
   opacity: .62;

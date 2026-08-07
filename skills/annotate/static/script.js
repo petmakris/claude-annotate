@@ -42,9 +42,19 @@
   const PLACEHOLDER_TEXT = { comment: "Your comment…" };
 
   // Feather-style line icons for the card-header strip. The four controls are
-  // the same four the sub-unit strip offers (AnnotateSubunits.CONTROLS) —
-  // scope is communicated by WHERE the strip lives (header = whole block,
-  // body = one paragraph), never by giving the two scopes different verbs.
+  // the same four VERBS the sub-unit strip offers — scope is communicated by
+  // WHERE the strip lives (header = whole block, body = one paragraph), never
+  // by giving the two scopes different verbs.
+  //
+  // The glyphs themselves are NOT shared. subunits.js keeps its own copy of
+  // the compact SVG (its COMPACT_ICON) and this file keeps ICON.compact; the
+  // two are independent on purpose. Reaching across the module boundary for a
+  // glyph is what shipped a blank icon once already — the discovery hint read
+  // a compact-glyph property off the AnnotateSubunits export that was never
+  // added there, and rendered nothing at all for the newest control. (The
+  // exact dotted accessor is not written out here: a smoke test greps this
+  // file for it, and cannot tell prose from code.) Do not re-couple them; if
+  // a glyph changes, change it in both places on purpose.
   const ICON = {
     comment: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>',
     keep: '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>',
@@ -1453,11 +1463,14 @@
         const label = document.createElement("span");
         label.className = "bb-label";
         label.textContent = "Claude is applying your round…";
-        const sub = document.createElement("span");
-        sub.className = "bb-sub";
         const timer = document.createElement("span");
         timer.className = "bb-timer";
-        banner.append(spin, label, sub, timer);
+        // No sub-label node. One was created here for a promised "3 of 5 marks
+        // applied" progress line, but nothing can write it: progress labels
+        // come from hooks/progress_publish.py, which maps tool names onto a
+        // fixed allowlist ("Editing the response…", "Working…") and knows
+        // nothing about mark counts. An empty span still consumed a flex gap.
+        banner.append(spin, label, timer);
         banner.dataset.startedAt = String(Date.now());
         // Place the lock ribbon at the top of the content (just under the
         // header, above the composer) so it pins flush to the top of the
@@ -1633,6 +1646,26 @@
   // chips, and the diff all describe one moment.
   let roundBaseVersions = null;
   let wasBusy = false;
+  // Did the busy window we are currently inside actually contain a ROUND?
+  //
+  // `data.busy` is true while ANY event is unacked — a general comment or a
+  // choice pick raises it exactly like a round does. Without this gate every
+  // busy false→true→false cycle computed a change set, and computeChangeSet
+  // attributed it against `submittedBlockIds()` — the block ids of whatever
+  // round was submitted LAST. So a general comment two exchanges later grew a
+  // change bar for a round the user never fired, with "you asked" chips citing
+  // that stale round.
+  //
+  // Recomputed from pendingEvents at the busy START edge, which is
+  // authoritative: a round entry is only removed from that map when its ack
+  // lands. Also set by registerRoundEvent, because a round's POST can resolve
+  // AFTER the poll that first saw busy — in that race the start edge would
+  // have found nothing.
+  let windowHadRound = false;
+  const hasPendingRound = () => {
+    for (const p of pendingEvents.values()) if (p.round) return true;
+    return false;
+  };
   // Set on the ack, consumed after the next reconcile: the diff needs the
   // post-round markdown from /raw and the refreshed sections in the DOM.
   let pendingChangeSet = null;
@@ -1891,8 +1924,25 @@
       // A new round just started: last round's verdict is stale now.
       clearChangeAttribution();
       roundBaseVersions = lastVersions ? { ...lastVersions } : null;
+      windowHadRound = hasPendingRound();
     } else if (!busyNow && wasBusy) {
-      const changed = computeChangeSet(roundBaseVersions, data.blocks);
+      // Only a round earns a change bar. A general comment or a choice pick
+      // also opens and closes a busy window, and the blocks Claude rewrites
+      // answering one of those were not asked for by any round — attributing
+      // them against the last round's block ids is how the bar started lying.
+      let changed = [];
+      if (windowHadRound) {
+        changed = computeChangeSet(roundBaseVersions, data.blocks);
+        // The bar has now finished consuming the submitted set: this line is
+        // the LAST read of it (applyChangeSet only carries the already-derived
+        // `bySweep` flag). Cleared here rather than in clearRound() because
+        // that runs on the ack, which can land a poll or more before busy goes
+        // false when a second event is still in flight — clearing there would
+        // hand computeChangeSet an empty asked-set and label the user's own
+        // marked blocks "sweep".
+        window.AnnotateSubunits?.clearSubmittedBlockIds?.();
+      }
+      windowHadRound = false;
       roundBaseVersions = null;
       if (changed.length) pendingChangeSet = changed;
     }
@@ -2039,6 +2089,10 @@
         round: true,
         blockIds: Array.isArray(blockIds) ? blockIds.slice() : [],
       });
+      // The submit POST can resolve after the poll that first saw busy, in
+      // which case the busy start edge already ran and found no round in
+      // pendingEvents. Claim the open window here too.
+      windowHadRound = true;
     },
   };
 
