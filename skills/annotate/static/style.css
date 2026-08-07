@@ -1179,7 +1179,13 @@ section.block[data-diff="open"] .diff-pane { display: block; }
   margin-top: 8px; padding: 7px 10px; border-radius: 7px; font-size: 11.5px; line-height: 1.6;
   background: #fff; border: 1px solid var(--border); color: var(--text-dim);
 }
+.diff-why-line + .diff-why-line { margin-top: 4px; }
 .diff-why b { color: var(--text-strong); font-weight: 650; }
+/* The Lost: line names what a compact irreversibly discarded — the only
+   place a user can ever learn that. Distinct from the Why: line via the
+   same violet family compact already uses elsewhere (#7c3aed), but as a
+   calm text tint, not a warning badge. */
+.diff-lost, .diff-lost b { color: #6d28d9; }
 
 /* Attribution chips in the card header. */
 .attr-chip {

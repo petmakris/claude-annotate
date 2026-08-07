@@ -1556,6 +1556,10 @@
     return out;
   }
 
+  // Recognised change_note line labels, in the order the contract documents
+  // them (see references/handling-events.md § "Explaining a change").
+  const CHANGE_NOTE_LABELS = ["Why:", "Lost:"];
+
   // Block markdown is arbitrary user-and-model text, so every run is a text
   // node inside its element. Never string-concatenated into innerHTML.
   function renderDiffPane(section, c, blk, before) {
@@ -1576,13 +1580,34 @@
       p.appendChild(el);
     }
     pane.appendChild(p);
-    // Task 5's per-block "why" line, when the block carries one.
+    // Task 5's per-block change note: free-form text Claude may attach to a
+    // rewrite, optionally carrying a `Why:` line and — for a compact that
+    // dropped detail — a `Lost:` line. Render each line of the note on its
+    // own row rather than as one blob: a fixed leading label here would
+    // double up against a note that already starts with "Why:", and folding
+    // a `Lost:` line into the same paragraph buries the one place a user can
+    // ever learn what a compact discarded. The field is optional and
+    // free-form, so this must still render sensibly with no recognised
+    // label, extra blank lines, or only a `Why:` line.
     if (typeof blk.change_note === "string" && blk.change_note.trim()) {
       const why = document.createElement("div");
       why.className = "diff-why";
-      const lbl = document.createElement("b");
-      lbl.textContent = "Why: ";
-      why.append(lbl, document.createTextNode(blk.change_note.trim()));
+      for (const rawLine of blk.change_note.trim().split("\n")) {
+        const line = rawLine.trim();
+        if (!line) continue;
+        const row = document.createElement("div");
+        row.className = "diff-why-line";
+        const label = CHANGE_NOTE_LABELS.find(l => line.startsWith(l));
+        if (label) {
+          row.classList.add(label === "Lost:" ? "diff-lost" : "diff-reason");
+          const lbl = document.createElement("b");
+          lbl.textContent = label + " ";
+          row.append(lbl, document.createTextNode(line.slice(label.length).trim()));
+        } else {
+          row.appendChild(document.createTextNode(line));
+        }
+        why.appendChild(row);
+      }
       pane.appendChild(why);
     }
     const body = section.querySelector(".card-body");

@@ -134,6 +134,42 @@ def test_one_failed_block_cannot_kill_the_rest_of_the_set():
         "applyChangeSet's rejection is unhandled"
 
 
+def test_the_hardcoded_why_label_is_gone():
+    """The old renderDiffPane always prepended a literal "Why: " label and
+    then appended the raw change_note verbatim. Since the contract's own
+    change_note text starts with "Why:", that produced "Why: Why: ...".
+    The fix must build the label from the note's own line, not a fixed
+    string sitting outside the note's content."""
+    src = SCRIPT_JS.read_text()
+    body = _brace_block(src, src.index("function renderDiffPane("))
+    assert '"Why: "' not in body, \
+        "renderDiffPane still hardcodes a \"Why: \" label ahead of the note"
+
+
+def test_the_change_note_renders_line_by_line():
+    """A flat text node collapses the newline before a Lost: line (no
+    white-space: pre-wrap in .diff-why), burying it mid-sentence. The note
+    must be split into its own lines and rendered as separate elements."""
+    src = SCRIPT_JS.read_text()
+    body = _brace_block(src, src.index("function renderDiffPane("))
+    assert 'split("\\n")' in body or "split('\\n')" in body, \
+        "renderDiffPane does not split change_note into lines"
+    assert "diff-why-line" in body, \
+        "renderDiffPane does not give each note line its own element"
+
+
+def test_the_lost_line_gets_its_own_class():
+    """Lost: is the only place a user can ever learn what a compact
+    irreversibly discarded. It must be distinguishable from the Why: line,
+    not just more text in the same paragraph."""
+    src = SCRIPT_JS.read_text()
+    body = _brace_block(src, src.index("function renderDiffPane("))
+    assert "diff-lost" in body, \
+        "renderDiffPane never marks a Lost: line with its own class"
+    css = STYLE_CSS.read_text()
+    assert ".diff-lost" in css, "style.css does not style .diff-lost"
+
+
 def test_clearing_attribution_also_drops_the_unapplied_set():
     """The busy edge wipes the DOM; the /raw .then consumes the set later.
 
