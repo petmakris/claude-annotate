@@ -13,10 +13,13 @@ it aliased as `blocks_model`, but here it's always `blocks.`.
 You wake here when a task-notification arrives whose first stdout line is one of the `WEBCOMPANION_*` banners.
 
 **Universal rule, every path below:** whenever you have changed `blocks.json`
-in response to an event — round, choice, general comment, or legacy dismiss —
-run the coherence sweep (see "The coherence sweep" below) before writing that
-event's `.ack`. The ack is what unlocks the page, not the round specifically,
-so every path that mutates and then acks owes the same check.
+in response to an event, run the coherence sweep (see "The coherence sweep"
+below) before writing that event's `.ack`. The trigger is that condition —
+you changed `blocks.json` and are about to ack — not a list of event types;
+round, choice, general comment, and the legacy `reject` / `dismiss` types are
+examples, not the complete set. The ack is what unlocks the page, not the
+round specifically, so every path that mutates and then acks owes the same
+check.
 
 ## The model in one paragraph
 
@@ -219,10 +222,12 @@ The user cancelled (clicked tab close, or wrote `scrap it` in terminal).
 ## The coherence sweep
 
 **This is a universal pre-ack rule, not a step scoped to `type: "round"`.**
-Whenever you have changed `blocks.json` in response to any event — a round, a
-resolved choice, a general comment, a legacy dismiss — re-read every block and
-check it against the document you just produced, and do it **before writing
-the `.ack`**.
+The trigger is the condition — you changed `blocks.json` in response to an
+event and are about to write that event's `.ack` — not a fixed list of event
+types; a round, a resolved choice, a general comment, and the legacy
+`reject` / `dismiss` types are examples, not the complete set. Whenever that
+condition holds, re-read every block and check it against the document you
+just produced, and do it **before writing the `.ack`**.
 
 The order is the point. The page is locked behind "Claude is updating…" until
 the ack lands — `/poll` reports `busy: true` until then — so the ack is the
@@ -266,7 +271,7 @@ When you receive a `WEBCOMPANION_EVENT` with a non-null `block_id`:
 2. **Generate rewritten markdown for the block that folds the answer or clarification into the prose.**  The document itself is the answer — do not echo the user's question back as Q-and-A.  No "Claude says:" panels, no chat threads.  After your rewrite, a reader who didn't see the user's comment should be able to read the new block and have no remaining question on the topic the comment raised.
 3. **Edge cases:**
    - The comment is *off-topic* for the targeted block (the user's question references content that lives elsewhere): update the block to be clearer about its actual topic, or rewrite a *neighboring* block to address the question, or both.  Use judgement.
-   - The `type` is `reject`: the user disagrees.  Either soften / withdraw the claim in the new prose, or hold the line with a reasoned explanation woven into the rewrite.  Don't pretend agreement; don't argue back in a side channel.
+   - The `type` is `reject`: the user disagrees.  Either soften / withdraw the claim in the new prose, or hold the line with a reasoned explanation woven into the rewrite.  Don't pretend agreement; don't argue back in a side channel.  This mutates `blocks.json` and acks like any other path — the coherence sweep (see above) still applies before you write the `.ack`.
    - The user's `selected_text` no longer exists after a prior rewrite: treat it as historical context.  The current block content is what matters.
 4. **Touch only the blocks you actually need to change.** Do not re-emit unchanged blocks "for completeness" — the server derives `version` from a content-hash chain, so re-writing identical content is a true no-op, but re-emitting the same prose with cosmetic differences (a swapped synonym, a re-flowed sentence) inflates the version of a block the user didn't ask you to touch. Block ids stay the same; versions take care of themselves.
 

@@ -43,13 +43,49 @@ def test_nothing_is_stored_off_page():
 
 
 def test_the_sweep_runs_before_the_ack():
-    """Order is the whole point: the ack unlocks the page."""
+    """Order is the whole point: the ack unlocks the page. Anchored on the
+    `## The coherence sweep` heading itself, not the first occurrence of the
+    phrase anywhere in the doc — the Mode D universal-rule paragraph also
+    says "coherence sweep" and sits thousands of characters away from this
+    section, so anchoring on the phrase alone can miss the section entirely."""
     doc = CONTRACT.read_text(encoding="utf-8")
-    assert "sweep" in doc.lower(), "the contract has no coherence sweep"
-    sweep = doc.lower().index("coherence sweep")
+    assert "## The coherence sweep" in doc, "the contract has no coherence sweep section"
+    sweep = doc.index("## The coherence sweep")
     section = doc[sweep:sweep + 2500].lower()
     assert "before" in section and "ack" in section, \
         "the sweep does not state its position relative to the ack"
+
+
+def test_reject_is_named_alongside_dismiss_in_the_universal_rule():
+    """`reject` is a live legacy path — server.py accepts it alongside
+    `dismiss` — not a hypothetical. Both places that illustrate the
+    universal pre-ack rule's coverage must name it, or a reader can mistake
+    the illustrative list for a closed set that excludes it."""
+    doc = CONTRACT.read_text(encoding="utf-8")
+    mode_d = doc.index("## Mode D")
+    model_para = doc.index("## The model in one paragraph")
+    universal_rule = doc[mode_d:model_para].lower()
+    assert "reject" in universal_rule, \
+        "the Mode D universal-rule paragraph does not name reject"
+
+    sweep_heading = doc.index("## The coherence sweep")
+    block_contract = doc.index("## Block-rewrite contract")
+    sweep_section = doc[sweep_heading:block_contract].lower()
+    assert "reject" in sweep_section, \
+        "the coherence sweep section opening does not name reject"
+
+
+def test_reject_edge_case_points_at_the_sweep():
+    """The reject bullet in the block-rewrite contract mutates blocks.json
+    via a non-null block_id and then acks — the same pre-ack condition as
+    every other path — so it must point at the sweep the way the choice and
+    general-comment paths do, rather than silently skipping it."""
+    doc = CONTRACT.read_text(encoding="utf-8")
+    reject_bullet = doc.index("The `type` is `reject`")
+    next_bullet = doc.index("The user's `selected_text` no longer exists")
+    section = doc[reject_bullet:next_bullet].lower()
+    assert "coherence sweep" in section, \
+        "the reject edge case does not point at the coherence sweep"
 
 
 def test_the_sweep_is_bounded():
