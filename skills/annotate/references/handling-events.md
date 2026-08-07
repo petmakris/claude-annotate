@@ -12,6 +12,12 @@ it aliased as `blocks_model`, but here it's always `blocks.`.
 
 You wake here when a task-notification arrives whose first stdout line is one of the `WEBCOMPANION_*` banners.
 
+**Universal rule, every path below:** whenever you have changed `blocks.json`
+in response to an event — round, choice, general comment, or legacy dismiss —
+run the coherence sweep (see "The coherence sweep" below) before writing that
+event's `.ack`. The ack is what unlocks the page, not the round specifically,
+so every path that mutates and then acks owes the same check.
+
 ## The model in one paragraph
 
 All content feedback arrives as **one `type: "round"` event**, carrying a list
@@ -77,7 +83,8 @@ The user picked option(s) on a choice block. `selected_options` holds the picked
 1. Read `<response_dir>/blocks.json`, find the block by `block_id`.
 2. **Resolve the choice into a decision** — convert the block from `kind: "choice"` to a markdown block whose prose states the decision and folds in the reasoning (e.g. *"Decision: incremental cutover — phase 1 ships the read path…"*). The options disappear; the answer is final. Use `blocks.convert_block_to_markdown(doc, block_id, markdown)` — it sets the markdown, drops `kind`/`spec`, and is content-hash-safe (a no-op rewrite doesn't bump the version).
 3. **Continue the task** — the pick drives the next step. Append follow-up blocks to `blocks.json` and/or take the implied action, as the decision warrants.
-4. `save_atomic` the doc, write the `<consumed_dir>/<event_id>.ack`, end your turn. No terminal output; the watcher stays armed.
+4. Run the coherence sweep (see below — this path is the universal rule's highest-risk case, since it both resolves the block and appends new ones).
+5. `save_atomic` the doc, write the `<consumed_dir>/<event_id>.ack`, end your turn. No terminal output; the watcher stays armed.
 
 Multi-select: the decision prose names all picked options. There is no `reject` on a choice — a pick is a pick.
 
@@ -92,7 +99,8 @@ Only reachable from a browser tab opened before the round rework — the current
 3. **Smart-drop:** scan the surviving blocks. Re-thread any that referenced the removed one — renumber steps, cut or rewrite dangling references — so the document still reads coherently without it. Use `blocks.update_block` / `blocks.update_spec_block` per touched block; touch only blocks that actually referenced the removed one.
 4. `blocks.drop_unused_terms(doc)` — drop any glossary entry whose term was last used by the removed block.
 5. Treat the removed content as **out of scope** for the rest of this turn and going forward: do not reintroduce it, and exclude it when acting on the plan.
-6. `save_atomic` the doc, write `<consumed_dir>/<event_id>.ack`, end the turn. No terminal output; the watcher stays armed.
+6. Run the coherence sweep (see below — the same pre-ack rule as every other path; dismiss is legacy, not exempt).
+7. `save_atomic` the doc, write `<consumed_dir>/<event_id>.ack`, end the turn. No terminal output; the watcher stays armed.
 
 A dismissed `choice` or `sequence` block is removed whole-block the same way — there is no step-level dismiss.
 
@@ -177,8 +185,9 @@ Three rules govern compact, and all three matter:
   compact because detail would be lost.
 4. Persist each changed block via `blocks.update_block(doc, block_id,
    new_markdown)` (content-hash-safe), then `blocks.drop_unused_terms(doc)`.
-5. **Run the coherence sweep** — see the section below. This is not optional
-   and it is not conditional on the round having deleted anything.
+5. **Run the coherence sweep** — see "The coherence sweep" below (it's the
+   universal pre-ack rule, not a round-only step). This is not optional and it
+   is not conditional on the round having deleted anything.
 6. ONE `blocks.save_atomic`.
 7. Write ONE `<consumed_dir>/<event_id>.ack`. End your turn. No terminal
    output; the watcher stays armed.
@@ -193,16 +202,33 @@ that no longer resolves is likewise a per-reaction no-op.
 Re-apply safety is unchanged: re-processing the round is a content-hash
 no-op.
 
-### The coherence sweep
+### `WEBCOMPANION_FINISHED`
 
-After applying a round and **before writing the `.ack`**, re-read every block
-and check it against the document you just produced.
+The user clicked Done.
+
+1. Ack briefly in terminal: *"Annotate session for `<title>` closed."*
+2. Remove this session's entry from `~/.claude/annotate/pending-${CLAUDE_CODE_SESSION_ID}.json`.
+
+### `WEBCOMPANION_CANCELLED`
+
+The user cancelled (clicked tab close, or wrote `scrap it` in terminal).
+
+1. Ack briefly in terminal: *"Annotate session for `<title>` cancelled."*
+2. Remove this session's entry from the pending registry.
+
+## The coherence sweep
+
+**This is a universal pre-ack rule, not a step scoped to `type: "round"`.**
+Whenever you have changed `blocks.json` in response to any event — a round, a
+resolved choice, a general comment, a legacy dismiss — re-read every block and
+check it against the document you just produced, and do it **before writing
+the `.ack`**.
 
 The order is the point. The page is locked behind "Claude is updating…" until
 the ack lands — `/poll` reports `busy: true` until then — so the ack is the
 moment the user sees your answer. Sweeping after it would be sweeping in front
 of them. It costs no extra tool calls: `blocks.json` is already in hand from
-applying the round.
+whatever change you just made.
 
 Steering block 4 while block 6 still describes what block 4 used to say is the
 single most common way this document goes wrong, and nothing else catches it.
@@ -215,7 +241,7 @@ a block saying something false.
 1. **References that no longer resolve** — a pointer to a removed block, a
    step number that shifted, a count or total that stopped adding up, a
    glossary term whose referent is gone.
-2. **Claims the round made false** — including claims that never name the
+2. **Claims the change made false** — including claims that never name the
    block you changed. This is the case the smart-drop step cannot catch,
    because it looks for references rather than for meaning.
 
@@ -231,20 +257,6 @@ before the ack, not across turns.
 This generalises the smart-drop step that block-scope `delete` and `compact`
 already call for. Doing it there and again here is not wasted work: smart-drop
 is scoped to what a removal broke, the sweep is scoped to the whole document.
-
-### `WEBCOMPANION_FINISHED`
-
-The user clicked Done.
-
-1. Ack briefly in terminal: *"Annotate session for `<title>` closed."*
-2. Remove this session's entry from `~/.claude/annotate/pending-${CLAUDE_CODE_SESSION_ID}.json`.
-
-### `WEBCOMPANION_CANCELLED`
-
-The user cancelled (clicked tab close, or wrote `scrap it` in terminal).
-
-1. Ack briefly in terminal: *"Annotate session for `<title>` cancelled."*
-2. Remove this session's entry from the pending registry.
 
 ## Block-rewrite contract
 
@@ -264,7 +276,7 @@ When `block_id` is `null` (general comment):
 
 1. Read the comment text.  It will be a directive that applies across blocks ("make this shorter", "more casual tone", "remove the second paragraph", etc.).
 2. Update *only the blocks that actually need updating* to apply the directive. Don't re-emit untouched blocks.
-3. Save and ack as above.
+3. Run the coherence sweep (see "The coherence sweep" above — a cross-document directive is exactly the kind of change that can orphan a reference elsewhere), then save and ack as above.
 
 ## Diagram block-rewrite contract
 

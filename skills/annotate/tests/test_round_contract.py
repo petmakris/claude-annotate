@@ -58,3 +58,54 @@ def test_the_sweep_is_bounded():
     doc = CONTRACT.read_text(encoding="utf-8")
     assert "still reads true" in doc, \
         "the contract does not forbid rewriting blocks that are still true"
+
+
+def test_the_sweep_is_a_universal_pre_ack_rule():
+    """The sweep must not read as round-only. It was written under the round
+    subsection and a review found several other paths mutate blocks.json and
+    ack with no sweep. The rule has to be stated once, generally, so every
+    path inherits it instead of drifting out of sync with a per-path bullet."""
+    doc = CONTRACT.read_text(encoding="utf-8")
+    assert "universal" in doc.lower(), \
+        "the contract does not state the sweep as a universal rule"
+    assert "not a step scoped to" in doc or "not a round-only step" in doc.lower(), \
+        "the contract does not disclaim the sweep as round-only"
+
+
+def test_the_choice_path_references_the_sweep():
+    """Resolving a choice both converts the block and appends follow-ups —
+    the highest-risk path of all, since nothing else checks the two against
+    the rest of the document. Bounded to the choice subsection's own heading
+    through the next subsection's heading, so this can't pass on a sweep
+    mention that lives in a neighbouring section."""
+    doc = CONTRACT.read_text(encoding="utf-8")
+    choice = doc.index('### `WEBCOMPANION_EVENT` with `type: "choice"`')
+    dismiss = doc.index('### `WEBCOMPANION_EVENT` with `type: "dismiss"`')
+    section = doc[choice:dismiss].lower()
+    assert "coherence sweep" in section, \
+        "the choice path does not reference the coherence sweep"
+
+
+def test_the_general_comment_path_references_the_sweep():
+    """A cross-document directive ('make this shorter') can orphan a
+    reference or glossary term elsewhere with nothing checking. Anchored on
+    the block-rewrite contract's null-block_id subsection specifically, not
+    just any mention of the phrase 'general comment' in the document."""
+    doc = CONTRACT.read_text(encoding="utf-8")
+    general = doc.index("`block_id` is `null` (general comment)")
+    section = doc[general:general + 800].lower()
+    assert "coherence sweep" in section, \
+        "the general-comment path does not reference the coherence sweep"
+
+
+def test_dismiss_is_covered_by_the_same_rule():
+    """Dismiss is legacy but still mutates blocks.json and writes the ack —
+    it does not get a special case. Bounded to the dismiss subsection's own
+    heading through the next subsection's heading (round), so this can't
+    pass on the round subsection's own sweep step instead."""
+    doc = CONTRACT.read_text(encoding="utf-8")
+    dismiss = doc.index('### `WEBCOMPANION_EVENT` with `type: "dismiss"`')
+    round_ = doc.index('### `WEBCOMPANION_EVENT` with `type: "round"`')
+    section = doc[dismiss:round_].lower()
+    assert "coherence sweep" in section, \
+        "the dismiss path does not reference the coherence sweep"
