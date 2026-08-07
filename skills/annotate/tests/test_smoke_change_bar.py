@@ -86,13 +86,50 @@ def test_the_word_diff_caps_its_table():
         "the cap is checked after the table is already allocated"
 
 
-def test_one_failed_block_cannot_kill_the_rest_of_the_set():
-    """applyChangeSet is a floating async call inside a .then.
+def _brace_block(src: str, start: int) -> str:
+    """Text between the `{` at or after `start` and its matching `}`."""
+    open_at = src.index("{", start)
+    depth = 0
+    for i in range(open_at, len(src)):
+        if src[i] == "{":
+            depth += 1
+        elif src[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return src[open_at + 1:i]
+    raise AssertionError("unbalanced braces from offset %d" % start)
 
-    Without a .catch a throw is an unhandled rejection that silently drops
-    the diff panes for every block after the one that failed.
+
+def test_one_failed_block_cannot_kill_the_rest_of_the_set():
+    """Two guards, and only one of them is load-bearing.
+
+    The outer `.catch` on the `applyChangeSet(...)` call site silences an
+    unhandled rejection, but it fires AFTER the loop has already aborted —
+    every block past the one that threw has lost its pane by then. What
+    actually keeps the rest of the change set rendering is the per-block
+    `try`/`catch` INSIDE the loop.
+
+    So this asserts the per-block guard first and hardest: the loop body's
+    real work — markChangedCard and renderDiffPane — must sit inside a try
+    that has a catch. Asserting only the `.catch` was the earlier version
+    of this test, and it stayed green when the per-block guard was deleted.
     """
     src = SCRIPT_JS.read_text()
+
+    body = _brace_block(src, src.index("async function applyChangeSet("))
+    loop = _brace_block(body, body.index("for (const c of changed)"))
+    assert "try" in loop, "applyChangeSet's loop body has no per-block try"
+    guarded = _brace_block(loop, loop.index("try"))
+    for call in ("markChangedCard(", "renderDiffPane("):
+        assert call in guarded, \
+            f"{call} sits outside the per-block try — a throw there still " \
+            "aborts the loop and every later block loses its pane"
+    after_try = loop[loop.index(guarded) + len(guarded):]
+    assert re.match(r"\s*\}\s*catch\b", after_try), \
+        "the per-block try has no catch, so a throw still escapes the loop"
+
+    # Secondary: the floating promise still needs a .catch, or the (now
+    # rarer) escape becomes an unhandled rejection in the console.
     assert re.search(r"applyChangeSet\(changed, doc\)\s*\n?\s*\.catch\(", src), \
         "applyChangeSet's rejection is unhandled"
 
