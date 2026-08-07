@@ -58,12 +58,14 @@ def test_no_control_survives_a_read_only_link():
         "a read-only carve-out for the deleted fold survived"
 
 
-def test_the_busy_lock_covers_every_strip_button():
-    """Folding was exempt from the busy lock because it changed nothing
-    Claude would see. Every remaining control is feedback, so none is."""
+def test_the_busy_lock_no_longer_covers_every_strip_button():
+    """Superseded by the annotate-ux-pass Task 2 reversal: marks are local
+    and only Submit ever needed the lock, so the strip stays live while a
+    round is in flight (see test_smoke_progress.py's
+    test_marking_survives_the_busy_lock, which guards the same rule)."""
     css = STYLE_CSS.read_text()
-    assert "body.is-busy .unit-strip button { display: none; }" in css, \
-        "the busy lock still exempts something from the strip"
+    assert "body.is-busy .unit-strip button { display: none; }" not in css, \
+        "the busy lock still hides every marking control"
 
 
 def test_the_legend_does_not_advertise_a_private_control():

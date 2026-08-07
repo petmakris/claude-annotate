@@ -1188,12 +1188,25 @@
           `section.block[data-block-id="${cssEsc(pend.blockId)}"]`);
         const el = section && section.querySelector(".updating-label");
         if (el) el.textContent = label;
-      } else if (pend.general) {
+      }
+      if (pend.round) {
+        const b = document.getElementById("busy-banner");
+        if (b) {
+          const el = b.querySelector(".bb-label");
+          if (el && label) el.textContent = label;
+        }
+        continue;
+      }
+      if (pend.general) {
         const statusEl = document.getElementById("general-status");
         if (statusEl) statusEl.textContent = label;
       }
     }
   }
+
+  // Ticking timer for the busy banner's .bb-timer, started when the banner
+  // is created and cleared when it's removed.
+  let busyTimer = null;
 
   // Server-authoritative page lock. `data.busy` is true while any submitted
   // event is unacked; reflect it as body.is-busy + a banner. Survives reload
@@ -1211,8 +1224,14 @@
         const spin = document.createElement("span");
         spin.className = "busy-spinner";
         const label = document.createElement("span");
-        label.textContent = "Claude is updating the plan… the page is locked until it replies.";
-        banner.append(spin, label);
+        label.className = "bb-label";
+        label.textContent = "Claude is applying your round…";
+        const sub = document.createElement("span");
+        sub.className = "bb-sub";
+        const timer = document.createElement("span");
+        timer.className = "bb-timer";
+        banner.append(spin, label, sub, timer);
+        banner.dataset.startedAt = String(Date.now());
         // Place the lock ribbon at the top of the content (just under the
         // header, above the composer) so it pins flush to the top of the
         // screen when the page scrolls — not buried below the composer.
@@ -1221,7 +1240,17 @@
         else (document.querySelector(".general-composer") || proseEl)
           ?.parentNode?.insertBefore(banner, document.querySelector(".general-composer") || proseEl);
       }
+      if (!busyTimer) {
+        busyTimer = setInterval(() => {
+          const b = document.getElementById("busy-banner");
+          if (!b) return;
+          const t = Math.floor((Date.now() - Number(b.dataset.startedAt || Date.now())) / 1000);
+          const el = b.querySelector(".bb-timer");
+          if (el) el.textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+        }, 1000);
+      }
     } else if (banner) {
+      if (busyTimer) { clearInterval(busyTimer); busyTimer = null; }
       banner.remove();
     }
   }
@@ -1475,6 +1504,19 @@
   }
 
   // ── Boot ───────────────────────────────────────────────────────────────────
+
+  // subunits.js owns the round; script.js owns the poll loop and the progress
+  // map. The round has to land in pendingEvents or applyProgress skips it —
+  // that omission is why round progress was computed and discarded.
+  window.AnnotatePage = {
+    registerRoundEvent(eventId, blockIds) {
+      if (!eventId) return;
+      pendingEvents.set(String(eventId), {
+        round: true,
+        blockIds: Array.isArray(blockIds) ? blockIds.slice() : [],
+      });
+    },
+  };
 
   WebCompanion.init({ onPollDelta });
   loadAndRenderBlocks();

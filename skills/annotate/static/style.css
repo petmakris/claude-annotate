@@ -874,9 +874,12 @@ main.prose mark.search-hit {
 }
 
 /* ── Page-wide single-flight lock ─────────────────────────────────────── */
-/* BUSY: an event is in flight. EDITING: one comment card is open. In both,
-   every affordance that can submit to Claude is disabled. Passive reading,
-   scrolling, and block search stay live (they are not gated here). */
+/* BUSY: an event is in flight. EDITING: one comment card is open. Only
+   SUBMISSION is disabled — the choice-submit and card-submit buttons, which
+   would fire a second event mid-flight. Marking (hover-actions, unit strips)
+   stays live: marks are local until Submit, so there's work the user can
+   still do while Claude applies the current round. Passive reading,
+   scrolling, and block search stay live too (they are not gated here). */
 .busy-banner {
   display: flex;
   align-items: center;
@@ -939,7 +942,6 @@ main.prose mark.search-hit {
 }
 .attached-pill.show { display: inline-block; }
 
-body.is-busy .hover-actions,
 body.is-busy .choice-submit-btn,
 body.is-busy .card-submit-btn,
 body.is-editing .hover-actions {
@@ -988,9 +990,13 @@ body.is-busy .comment-card {
   fill: none; stroke: currentColor; stroke-width: 2;
   stroke-linecap: round; stroke-linejoin: round;
 }
-/* Every strip control goes away while a round is in flight — they would all
-   be editing a document that is mid-rewrite. */
-body.is-busy .unit-strip button { display: none; }
+/* Marking stays LIVE while a round is in flight, so there is deliberately no
+   `body.is-busy .unit-strip` rule here. Marks are local until Submit, so the
+   only thing that ever needed the lock is Submit itself — freezing the whole
+   vocabulary took away work the user could still do on the sections Claude
+   is not touching. A block genuinely being rewritten is still locked, by
+   `section.block.is-updating` above. Marks made now queue for the next
+   round, and the dock says so. */
 
 .sub-unit[data-mark="keep"] {
   background: color-mix(in srgb, #16a34a 8%, transparent);

@@ -60,6 +60,12 @@
   // instead of silently reverting to "Submit round (n)" with no signal.
   let roundError = false;
   let roundErrorTimer = null;
+  // block_ids from the most recently SUBMITTED round. Captured synchronously
+  // at submit time (see submitRound) because clearRound() wipes `marks` on
+  // ack — this is the only moment "what did the user actually ask for"
+  // exists. Deliberately NOT cleared in clearRound(); Task 4's change-bar
+  // attribution reads it after the ack.
+  let lastSubmittedBlockIds = [];
 
   // Mirrors script.js's WATCHER_DEAD_AFTER_S: if the watcher hasn't reported
   // in this long, no ack is ever coming for an in-flight round either.
@@ -471,6 +477,12 @@
       btn.textContent = `Submit round (${count})`;
       btn.title = "";
     }
+    if (document.body.classList.contains("is-busy") && !pendingRound) {
+      btn.textContent = count
+        ? `${count} queued for next round`
+        : "Claude is working…";
+      btn.title = "Keep marking — this submits once Claude finishes.";
+    }
     btn.disabled = !!pendingRound || document.body.classList.contains("is-busy");
   }
 
@@ -495,8 +507,13 @@
     roundError = false;
     if (roundErrorTimer) { clearTimeout(roundErrorTimer); roundErrorTimer = null; }
     renderDock();
+    // Captured HERE, not read back later: clearRound() wipes `marks` on ack,
+    // so this is the only moment that information exists. Task 4's
+    // attribution split depends on it.
+    lastSubmittedBlockIds = [...new Set(reactions.map(r => r.block_id))];
     WebCompanion.api.submit({ type: "round", reactions }).then((res) => {
       pendingRound = res && res.event_id ? String(res.event_id) : null;
+      window.AnnotatePage?.registerRoundEvent(pendingRound, lastSubmittedBlockIds);
       renderDock();
     }).catch(() => {
       // Surface the failure instead of silently reverting — a bare .catch
@@ -612,5 +629,6 @@
     // Block/step scope, driven by the card header strip in script.js.
     toggleBlockMark, pinComment, blockMark, repaintBlocks, renderDock,
     CONTROLS,
+    submittedBlockIds: () => lastSubmittedBlockIds.slice(),
   };
 })();
