@@ -55,11 +55,19 @@ def test_the_page_says_it_is_read_only():
     badge = re.search(
         r'class="read-only-badge"\s+title="([^"]*)"', server)
     assert badge, "could not find the read-only badge's tooltip text"
-    tooltip = badge.group(1)
-    assert "folding" not in tooltip.lower(), \
-        "the read-only badge still promises folding"
-    assert "private to your browser" not in tooltip.lower(), \
-        "the read-only badge still promises a private, browser-local control"
+    # The source wraps the title attribute across two adjacent f-string
+    # literals for line length, so the raw match still carries the closing
+    # `'` / newline / indent / opening `f'` of that split. Python folds those
+    # back into one string at parse time; fold them back here too so the
+    # comparison below is against the string a guest actually reads.
+    tooltip = re.sub(r"'\s*\n\s*f'", "", badge.group(1))
+    # Pinned to the exact string, not a keyword blacklist: this tooltip is the
+    # only thing a guest is told about what they can do here, so ANY change to
+    # it — reworded or not — has to be re-checked against what a guest can
+    # actually do, and this assertion updated deliberately rather than
+    # reflexively loosened to let a new wording through.
+    assert tooltip == "This link can read the document but not change it.", \
+        f"the read-only badge's tooltip changed: {tooltip!r}"
 
 
 def test_pushing_doc_separates_the_shareable_url_from_the_owner_one():
