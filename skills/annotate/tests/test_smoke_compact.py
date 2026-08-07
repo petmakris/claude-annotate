@@ -157,12 +157,19 @@ def test_the_dead_private_legend_style_is_gone():
 
 def test_compact_reads_as_heavier_than_it_did():
     """Compact discards detail the user never chose to lose, so it must not
-    look gentler than delete, which removes content they did choose to."""
+    look gentler than delete, which removes content they did choose to.
+
+    Weight alone carries this — a solid violet spine and a deeper wash. A
+    per-unit prose consequence line was tried and removed: repeated on every
+    marked unit it read as wallpaper instead of a warning, in a code fence it
+    inherited the monospace, and on a table row the layout algorithm pushed it
+    past the table's right edge. The warning belongs at submit time, where the
+    round drawer already lists each pending compact by name with a ×."""
     css = STYLE_CSS.read_text()
     assert 'border-left: 2px solid #7c3aed' in css, \
         "the compact mark has no severity spine"
-    assert '.sub-unit[data-mark="compact"]::after' in css, \
-        "the compact mark states no consequence at the point of decision"
+    assert '.sub-unit[data-mark="compact"]::after' not in css, \
+        "the per-unit consequence line is back; it was removed deliberately"
 
 
 def test_compact_still_is_not_delete():

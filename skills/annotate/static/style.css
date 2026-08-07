@@ -1076,19 +1076,14 @@ body.is-busy .comment-card {
   border-left: 2px solid #7c3aed;
   padding-left: 8px;
 }
-.sub-unit[data-mark="compact"]::after {
-  content: "compacted — its point is folded into what stays; the rest is lost";
-  display: block; margin-top: 3px;
-  font-size: 10.5px; font-style: italic; color: #6d28d9;
-}
-/* A <tr> is compactable (unlike the fold this replaced, which excluded
-   table rows — see test_table_rows_can_be_compacted), but the table layout
-   algorithm anonymizes any non-cell child of a row into its own extra
-   table-cell, regardless of the child's own `display`. That pushes the
-   block-level consequence line above out past the table's right edge
-   instead of under the row. The spine and wash already carry the severity
-   signal on a row, so suppress the redundant, broken line there. */
-.sub-unit[data-mark="compact"]:is(tr)::after { content: none; }
+/* There is deliberately NO ::after consequence line on a compacted unit.
+   One was tried and pulled: repeated on every marked unit it read as
+   wallpaper rather than a warning, in a code fence it inherited the
+   monospace and looked like part of the code, and on a table row the layout
+   algorithm anonymized it into an extra cell that escaped past the table's
+   right edge. The spine and wash carry the severity, the legend explains the
+   control, and the round drawer lists every pending compact by name with a
+   × before anything is submitted — which is the moment the warning was for. */
 .sub-unit[data-mark="compact"]:hover { opacity: .8; }
 .sub-unit[data-mark="compact"] .unit-strip button[data-kind="compact"] {
   background: #7c3aed; border-color: #7c3aed; color: #fff;
