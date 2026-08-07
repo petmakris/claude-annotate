@@ -70,3 +70,23 @@ def test_busy_lock_consumed_in_script():
 def test_single_editor_guard_in_script():
     src = SCRIPT_JS.read_text()
     assert "is-editing" in src, "script.js does not toggle the is-editing state"
+
+
+def test_submit_is_blocked_while_a_comment_is_open():
+    """Drafts and round marks live in separate stores and submitRound reads
+    only the second, so submitting with an editor open silently omits the
+    comment the user believes they left."""
+    src = SUBUNITS_JS.read_text()
+    i = src.index("btn.disabled")
+    assert "is-editing" in src[i:i + 200], \
+        "the dock can still submit while a comment editor is open"
+
+
+def test_the_dead_session_banner_does_not_claim_the_round_was_lost():
+    """The event stays queued and a fresh watcher re-emits it. Saying it was
+    not processed invites the user to submit the same round twice."""
+    src = SCRIPT_JS.read_text()
+    assert "was not processed" not in src, \
+        "the dead-session banner still claims the submission was lost"
+    assert "annotate resume" in src, \
+        "the banner does not name the way to pick the page back up"

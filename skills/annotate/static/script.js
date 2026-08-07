@@ -53,7 +53,7 @@
   };
   const ACTION_TYPES = [
     { id: "delete",  title: "Delete — removed for good (undo until you submit)" },
-    { id: "keep",    title: "Keep — don't rewrite this section" },
+    { id: "keep",    title: "Leave as written — don't rewrite this section" },
     { id: "comment", title: "Comment — fold a response into this section" },
     { id: "compact", title: "Compact — take this section off the page; its point is folded into what stays" },
   ];
@@ -1569,8 +1569,10 @@
         banner.setAttribute("aria-live", "assertive");
         const label = document.createElement("span");
         label.textContent =
-          "Claude's session is gone — your last submission was not processed. " +
-          "Re-run annotate from a Claude session to pick this page back up.";
+          "Claude's session is gone. Your last submission is still queued — " +
+          "it will be picked up when a Claude session reattaches to this page. " +
+          "Run `/annotate resume` from a Claude session to continue. " +
+          "Don't resubmit; it would apply the same round twice.";
         banner.append(label);
         const header = document.querySelector(".page-header");
         if (header) header.insertAdjacentElement("afterend", banner);

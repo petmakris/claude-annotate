@@ -89,7 +89,7 @@ _LEGEND_HTML = (
     f'<tr><td class="legend-btn">{_ICON_TRASH}<span>Trash</span></td>'
     '<td>&ldquo;This is irrelevant &mdash; cut it&rdquo;</td>'
     '<td>Removed from the document for good, and Claude is told never to bring it back</td></tr>'
-    f'<tr><td class="legend-btn">{_ICON_CHECK}<span>Check</span></td>'
+    f'<tr><td class="legend-btn">{_ICON_CHECK}<span>Leave as written</span></td>'
     '<td>&ldquo;This is fine &mdash; don&rsquo;t touch it&rdquo;</td>'
     '<td>Stays exactly as written; Claude skips rewriting it</td></tr>'
     f'<tr><td class="legend-btn">{_ICON_COMMENT}<span>Comment</span></td>'

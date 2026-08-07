@@ -1064,13 +1064,22 @@ body.is-busy .comment-card {
   background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
-/* Pending compact: dimmed and washed, but NOT struck through. Strikethrough
-   is delete's, and the two must never be confused — delete drops the idea,
-   compact keeps it and drops only the page space. Violet because the other
-   three already own red, green and accent-blue. */
+/* Pending compact: heavier than it was, and never struck through.
+   Strikethrough belongs to delete, and the two must stay distinguishable —
+   but compact is the one that discards detail the user never chose to lose,
+   so it cannot be the gentler-looking of the pair. The consequence is
+   written where the user is about to click, because the legend they would
+   otherwise learn it from is collapsed by default. */
 .sub-unit[data-mark="compact"] {
-  background: color-mix(in srgb, #7c3aed 8%, transparent);
-  opacity: .55;
+  background: color-mix(in srgb, #7c3aed 13%, transparent);
+  opacity: .62;
+  border-left: 2px solid #7c3aed;
+  padding-left: 8px;
+}
+.sub-unit[data-mark="compact"]::after {
+  content: "compacted — its point is folded into what stays; the rest is lost";
+  display: block; margin-top: 3px;
+  font-size: 10.5px; font-style: italic; color: #6d28d9;
 }
 .sub-unit[data-mark="compact"]:hover { opacity: .8; }
 .sub-unit[data-mark="compact"] .unit-strip button[data-kind="compact"] {

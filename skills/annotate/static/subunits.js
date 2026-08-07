@@ -56,6 +56,12 @@
   // submit is dispatched (before the promise resolves) so a fast double
   // click can't fire two rounds.
   let pendingRound = null;
+  // Set when the watcher behind our in-flight round has gone dark. The
+  // event stays queued on disk and a fresh watcher re-emits it, so
+  // `pendingRound` is deliberately NOT cleared here — clearing it would
+  // re-arm Submit and let the user fire the same round a second time. This
+  // flag only changes what the button says while that lock holds.
+  let sessionDead = false;
   // Set for a few seconds after a failed submit so the dock can surface it
   // instead of silently reverting to "Submit round (n)" with no signal.
   let roundError = false;
@@ -232,7 +238,7 @@
 
   const CONTROL_SPECS = [
     ["delete",  "🗑", "Delete — removed for good (undo until you submit)"],
-    ["keep",    "✓", "Keep — don't rewrite this"],
+    ["keep",    "✓", "Leave as written — don't rewrite this"],
     ["comment", "💬", "Comment — fold a response into this"],
     ["compact", COMPACT_ICON,
      "Compact — take this off the page; its point is folded into what stays"],
@@ -617,7 +623,10 @@
     list.appendChild(foot);
 
     const btn = dock.querySelector("#round-submit");
-    if (pendingRound) {
+    if (sessionDead) {
+      btn.textContent = "Session gone — see the banner";
+      btn.title = "";
+    } else if (pendingRound) {
       btn.textContent = "Applying round…";
       btn.title = "";
     } else if (roundError) {
@@ -633,7 +642,16 @@
         : "Claude is working…";
       btn.title = "Keep marking — this submits once Claude finishes.";
     }
-    btn.disabled = !!pendingRound || document.body.classList.contains("is-busy");
+    // `is-editing` matters as much as the other two: drafts live in
+    // script.js's store and round marks live here, and submitRound only
+    // reads the latter — so submitting with an editor open silently drops
+    // the comment the user believes they just left.
+    btn.disabled = !!pendingRound
+      || document.body.classList.contains("is-busy")
+      || document.body.classList.contains("is-editing");
+    if (!pendingRound && document.body.classList.contains("is-editing")) {
+      btn.title = "Finish or discard the open comment first.";
+    }
     // The map rail's pending-mark dots read the same data-mark/data-block-mark
     // attributes this function's callers just painted — refresh it every time
     // the dock does, script.js owns rendering it, so notify through the same
@@ -687,6 +705,7 @@
   function clearRound() {
     marks = {};
     pendingRound = null;
+    sessionDead = false;
     saveMarks();
     document.querySelectorAll(".sub-unit[data-mark]").forEach(el => {
       delete el.dataset.mark;
@@ -766,16 +785,14 @@
       clearRound();
       return;
     }
-    // Mirrors script.js's watcher_age_s > WATCHER_DEAD_AFTER_S handling: a
-    // dead watcher means no ack is ever coming for our in-flight round
-    // either, so don't leave the dock wedged on "Applying round…" forever.
-    // Marks stay put — they're still valid local state the user can retry.
-    if (pendingRound && typeof data.watcher_age_s === "number" &&
-        data.watcher_age_s > WATCHER_DEAD_AFTER_S) {
-      pendingRound = null;
-      renderDock();
-      return;
-    }
+    // Mirrors script.js's watcher_age_s > WATCHER_DEAD_AFTER_S handling: the
+    // watcher behind our in-flight round has gone dark. The event is still
+    // queued on disk and a fresh watcher will re-emit it, so clearing
+    // pendingRound here would re-arm Submit and let the user fire the same
+    // round twice — the dock stays locked (the consumed_events branch above
+    // is what eventually clears it, once a fresh watcher actually acks).
+    sessionDead = !!(pendingRound && typeof data.watcher_age_s === "number" &&
+        data.watcher_age_s > WATCHER_DEAD_AFTER_S);
     renderDock();
   }
 

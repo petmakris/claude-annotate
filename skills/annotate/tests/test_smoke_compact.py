@@ -153,3 +153,32 @@ def test_the_dead_private_legend_style_is_gone():
     css = STYLE_CSS.read_text()
     assert ".legend-private" not in css, \
         "styling survives for a legend row that no longer exists"
+
+
+def test_compact_reads_as_heavier_than_it_did():
+    """Compact discards detail the user never chose to lose, so it must not
+    look gentler than delete, which removes content they did choose to."""
+    css = STYLE_CSS.read_text()
+    assert 'border-left: 2px solid #7c3aed' in css, \
+        "the compact mark has no severity spine"
+    assert '.sub-unit[data-mark="compact"]::after' in css, \
+        "the compact mark states no consequence at the point of decision"
+
+
+def test_compact_still_is_not_delete():
+    """Heavier, but never struck through — strikethrough is delete's, and
+    conflating them is the failure this styling exists to avoid."""
+    css = STYLE_CSS.read_text()
+    i = css.index('.sub-unit[data-mark="compact"]')
+    assert "line-through" not in css[i:i + 400], \
+        "compact was made to look like delete"
+
+
+def test_keep_is_labelled_by_what_it_does():
+    """The tick reads as approval and gets clicked liberally; it costs a
+    round and does nothing outside two narrow cases."""
+    subunits = SUBUNITS_JS.read_text()
+    script = SCRIPT_JS.read_text()
+    assert "Leave as written" in subunits, "unit strip still calls it Keep"
+    assert "Leave as written" in script, "header strip still calls it Keep"
+    assert '"keep"' in subunits, "the wire kind must stay `keep`"
