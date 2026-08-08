@@ -1417,3 +1417,61 @@ section.block[data-diff="open"] .diff-pane { display: block; }
   stroke-linecap: round; stroke-linejoin: round;
 }
 .discover-hint .dh-x { margin-left: auto; border: none; background: transparent; cursor: pointer; color: var(--text-dim); font-size: 15px; padding: 0 3px; }
+
+/* ── pflow source pane ─────────────────────────────────────────────────────
+   A flowchart authored as Python ships its source. It sits under the chart as
+   one row per line: the number and the code share a row, so the gutter cannot
+   drift out of step with the text the way two stacked layers would. Rows whose
+   line produced a node carry that node's id, which is what lets a click here
+   and a click on the chart open the same comment, and lets hovering either
+   light both (`.is-node-active`).
+
+   `.hljs` sits on the body so the theme paints its own ground and base colour
+   here exactly as it does for a fenced code block. Deliberately not a
+   <pre><code>: `main.prose pre code.hljs` sets a font-size and line-height for
+   fenced code that would silently override the row metrics. */
+.pflow {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.pflow-head {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 7px 12px;
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--border);
+}
+.pflow-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-dim);
+}
+.pflow-hint { font-size: 11.5px; color: var(--text-dim); }
+
+.pflow-body {
+  overflow-x: auto;
+  padding: 10px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.pflow-row { display: flex; min-width: max-content; }
+.pflow-num {
+  flex: none; width: 3em; padding-right: 12px;
+  text-align: right; opacity: 0.45; user-select: none;
+}
+.pflow-line { flex: 1 1 auto; white-space: pre; padding-right: 16px; }
+/* pflow's tags are Python comments, so the theme paints them all one grey.
+   Warm them up so the side-channel reads as a channel. */
+.pflow-tag { color: #ffb86b; font-weight: 600; }
+
+.pflow-row.is-live { cursor: pointer; }
+.pflow-row.is-live:hover,
+.pflow-row.is-node-active {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.annotate-flow g.node.is-node-active .node-shape {
+  stroke: var(--accent);
+  stroke-width: 3;
+}

@@ -203,3 +203,32 @@ def test_ignores_legacy_version_field(tmp_path):
         vp, [{"id": "b-0", "markdown": "hi", "version": 99}]
     )
     assert versions == {"b-0": 1}
+
+
+def test_flowchart_spec_change_bumps(tmp_path):
+    """Flowchart content lives in `spec` too — nodes/edges, or the pflow source
+    they were compiled from. Without this the hash never moved, so answering a
+    comment on a flowchart rewrote blocks.json and changed nothing on screen."""
+    vp = tmp_path / "versions.json"
+    derive_versions(vp, [{"id": "b-0", "kind": "flowchart", "spec": {
+        "nodes": [{"id": "a", "role": "entry", "label": "start"}], "edges": []}}])
+    versions = derive_versions(vp, [{"id": "b-0", "kind": "flowchart", "spec": {
+        "nodes": [{"id": "a", "role": "entry", "label": "begin"}], "edges": []}}])
+    assert versions == {"b-0": 2}
+
+
+def test_flowchart_source_change_bumps(tmp_path):
+    vp = tmp_path / "versions.json"
+    derive_versions(vp, [{"id": "b-0", "kind": "flowchart",
+                          "spec": {"source": "def f(r):\n    a()\n"}}])
+    versions = derive_versions(vp, [{"id": "b-0", "kind": "flowchart",
+                                     "spec": {"source": "def f(r):\n    b()\n"}}])
+    assert versions == {"b-0": 2}
+
+
+def test_flowchart_spec_unchanged_no_bump(tmp_path):
+    vp = tmp_path / "versions.json"
+    spec = {"source": "def f(r):\n    a()\n"}
+    derive_versions(vp, [{"id": "b-0", "kind": "flowchart", "spec": spec}])
+    versions = derive_versions(vp, [{"id": "b-0", "kind": "flowchart", "spec": dict(spec)}])
+    assert versions == {"b-0": 1}

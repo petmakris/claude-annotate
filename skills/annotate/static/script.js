@@ -547,6 +547,141 @@
     content.appendChild(iframe);
   }
 
+  // ── pflow source pane ──────────────────────────────────────────────────────
+
+  // Highlight pflow source. Same graceful degradation as highlightFence: an
+  // empty return means "hljs is missing", and the caller falls back to plain
+  // text rather than showing markup.
+  function highlightPflow(src) {
+    if (typeof window.hljs !== "object" || !window.hljs) return "";
+    let html;
+    try {
+      html = hljs.highlight(src, { language: "python", ignoreIllegals: true }).value;
+    } catch (e) {
+      return "";
+    }
+    // pflow's tags are comments to Python, so hljs paints them all one grey.
+    // Re-mark them so the side-channel (cache/gate/note/ref) reads as a channel.
+    return html.replace(
+      /(<span class="hljs-comment">)(#\s*(?:[!?]|(?:id|cache|gate|note|ref)\s*:)[^<]*)/g,
+      '$1<span class="pflow-tag">$2</span>'
+    );
+  }
+
+  // Cut highlighted HTML into one string per source line. hljs emits spans that
+  // freely straddle newlines, so a naive split("\n") tears them: each line
+  // reopens whatever was still open at the end of the last one and closes
+  // whatever it leaves open. Line rows are why the gutter cannot drift out of
+  // step with the code — the number and the text sit in the same row.
+  function splitHighlightedLines(html) {
+    const out = [];
+    let open = [];
+    for (const raw of html.split("\n")) {
+      const prefix = open.join("");
+      const tags = raw.match(/<span[^>]*>|<\/span>/g) || [];
+      for (const tag of tags) {
+        if (tag === "</span>") open.pop();
+        else open.push(tag);
+      }
+      out.push(prefix + raw + "</span>".repeat(open.length));
+    }
+    return out;
+  }
+
+  // A flowchart authored as pflow ships the source it was compiled from. Render
+  // it under the chart, line-addressable: every line that produced a node
+  // carries that node's id, so clicking a line opens exactly the comment that
+  // clicking the node opens — and the answer to it is an edit to that line.
+  function renderPflowSource(blk) {
+    const spec = blk.spec || {};
+    const src = String(spec.source || "").replace(/\n+$/, "");
+    if (!src) return null;
+
+    const wrap = document.createElement("div");
+    wrap.className = "pflow";
+
+    const head = document.createElement("div");
+    head.className = "pflow-head";
+    const label = document.createElement("span");
+    label.className = "pflow-label";
+    label.textContent = "source";
+    const hint = document.createElement("span");
+    hint.className = "pflow-hint";
+    hint.textContent = "click a line to comment on the step it draws";
+    head.append(label, hint);
+
+    const byLine = new Map();
+    (spec.nodes || []).forEach((n) => {
+      if (n && n.line) byLine.set(Number(n.line), n.id);
+    });
+
+    const lines = src.split("\n");
+    const painted = highlightPflow(src);
+    const paintedLines = painted ? splitHighlightedLines(painted) : null;
+
+    // `.hljs` on the body, not on a <pre><code>: it takes the theme's ground and
+    // base colour (the token classes stand alone and paint regardless), and it
+    // keeps `main.prose pre code.hljs` — which sets its own font-size and
+    // line-height for fenced code — from reaching in here and breaking the rows.
+    const body = document.createElement("div");
+    body.className = "pflow-body hljs";
+
+    lines.forEach((line, i) => {
+      const row = document.createElement("div");
+      row.className = "pflow-row";
+      const num = document.createElement("span");
+      num.className = "pflow-num";
+      num.setAttribute("aria-hidden", "true");
+      num.textContent = String(i + 1);
+      const text = document.createElement("span");
+      text.className = "pflow-line";
+      if (paintedLines) text.innerHTML = paintedLines[i] || "";
+      else text.textContent = line;
+      // A line that produced no node is inert — there is nothing there to
+      // comment on, and pretending otherwise invites a comment nobody can act on.
+      const nodeId = byLine.get(i + 1);
+      if (nodeId) {
+        row.dataset.nodeId = nodeId;
+        row.classList.add("is-live");
+        row.title = "Comment on this step";
+      }
+      row.append(num, text);
+      body.appendChild(row);
+    });
+
+    wrap.append(head, body);
+    return wrap;
+  }
+
+  // Paint a flowchart block: the server SVG, plus the source pane when the
+  // block was authored as pflow. Shared by create and update so an in-place
+  // refresh cannot leave one without the other.
+  function paintFlowchart(content, blk) {
+    // Trusted server output — deliberately bypasses sanitizeFreeHtml so the
+    // class/data-* hit targets survive.
+    content.innerHTML = blk.svg || "";
+    const source = renderPflowSource(blk);
+    if (source) content.appendChild(source);
+  }
+
+  // Hovering either view lights the other: the id lives on the SVG node and on
+  // the source line alike, so one selector reaches both.
+  function linkPflowHover(content) {
+    const clear = () => {
+      content.querySelectorAll(".is-node-active").forEach((el) => {
+        el.classList.remove("is-node-active");
+      });
+    };
+    content.addEventListener("mouseover", (ev) => {
+      const el = ev.target.closest && ev.target.closest("[data-node-id]");
+      clear();
+      if (!el || !content.contains(el)) return;
+      content.querySelectorAll(`[data-node-id="${cssEsc(el.dataset.nodeId)}"]`)
+        .forEach((m) => m.classList.add("is-node-active"));
+    });
+    content.addEventListener("mouseleave", clear);
+  }
+
   function createBlockSection(blk) {
     const section = document.createElement("section");
     section.className = "block card";
@@ -595,10 +730,11 @@
       // hover-actions strip (renderHoverActions does not skip "diagram").
       content.innerHTML = blk.svg || "";
     } else if (kind === "flowchart") {
-      // Server pre-rendered the hand-built SVG; inject as-is — trusted
-      // server output, deliberately bypasses sanitizeFreeHtml so the
-      // class/data-* hit targets survive.
-      content.innerHTML = blk.svg || "";
+      // Server pre-rendered the hand-built SVG, plus the pflow source pane when
+      // the block carries one. Both views hang their hit targets off
+      // data-node-id, so the one listener below serves either.
+      paintFlowchart(content, blk);
+      linkPflowHover(content);
       // Any click inside the SVG either follows an in-page cross-block
       // anchor (href="#<block-id>") by smooth-scrolling to that block, or
       // opens a comment scoped to the node that was clicked; onHoverAction
@@ -2057,6 +2193,12 @@
     if (content) {
       if (newKind === "sequence" || newKind === "diagram") {
         content.innerHTML = blk.svg || "";
+      } else if (newKind === "flowchart") {
+        // Without this a flowchart fell through to the markdown branch below and
+        // rendered blk.markdown — which a flowchart does not have — so updating
+        // one in place blanked the chart. The click and hover listeners live on
+        // .block-content, which survives the repaint.
+        paintFlowchart(content, blk);
       } else if (blockMd) {
         content.innerHTML = blockMd.render(blk.markdown || "");
         sanitizeFreeHtml(content);
