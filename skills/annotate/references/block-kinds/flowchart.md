@@ -145,6 +145,83 @@ Two entry points (`a`, `c`) converge on the shared guard (`e`), which
 branches on a decision (`f`) into a success and an error outcome — a shape a
 numbered list or a single sequence diagram couldn't express cleanly.
 
+## Authoring the chart as Python (`source`)
+
+Hand-written `nodes`/`edges` are fine for a shape nobody will revise. Write
+`spec.source` instead whenever the flow is something the human will **argue
+with**: a plan, a control flow you are proposing to change, an explanation they
+will want to correct. A node list has nothing to edit, so a comment on one box
+can only be answered in prose. A source has a line.
+
+    {"id": "section-N", "kind": "flowchart", "spec": {
+      "source": "\"\"\"How a request becomes evidence.\"\"\"\n\n\ndef atlas(request):  # ! request R\n    ..."
+    }}
+
+The server compiles `source` and fills in `title`, `nodes` and `edges` itself.
+**Do not write `nodes` or `edges` alongside a `source`** — they are derived, any
+you write are replaced, and hand-editing them is how the two fall out of sync.
+
+### The subset
+
+One module docstring (the chart title), one `def` (the entry node), and inside
+it only:
+
+| Python | Node |
+|---|---|
+| `def f(...)` | `entry` — labelled by the `# !` tag, else the function name |
+| `if` / `elif` / `else` | `decision` — labelled by the `# ?` tag, else the test's source |
+| `raise X(...)` | `error` |
+| `return X(...)` | `success` |
+| `x = f(...)` | `code` |
+| `f(...)` | `call` |
+
+The `yes` branch is the body; the `no` branch is the `else`, or the
+fall-through when there is no `else`. A branch that does not return or raise
+converges on the next statement — that is how fan-in is expressed.
+
+### Tags
+
+Trailing comments carry what the node cannot say in code. All optional:
+
+| Tag | On | Becomes |
+|---|---|---|
+| `# ! text` | the `def` | the entry node's label |
+| `# ? text` | an `if` | the diamond's label — keep it short, a diamond needs roughly twice the width of its text |
+| `# id: slug` | any statement | pins the node id (see below) |
+| `# cache: text` | any statement | `sub`, prefixed `cache:` |
+| `# gate: text` | any statement | `sub`, prefixed `gate:` |
+| `# note: text` | any statement | `sub`, plain |
+| `# ref: Class:line` | any statement | the `ref` line |
+
+### What it refuses, and why that is the point
+
+The compiler fails with a line number rather than dropping what it does not
+understand, and the block renders an error pill carrying that line. **Do not
+work around a refusal by hand-writing nodes** — a chart that quietly omits a
+branch reads as complete, which is worse than no chart.
+
+- `for` / `while` — a loop needs a back edge and this spec must be a DAG; the
+  validator rejects cycles. Collapse the repetition into one step, or split the
+  flow.
+- `try` / `except` — draw the failure as an explicit `raise` on the branch that
+  produces it.
+- `with`, nested `def`, `class` — the flow is the steps, not the scoping or the
+  types.
+- an assignment or bare statement that is not a call — a step is something that
+  happens.
+- a statement after a `return` or `raise` in the same block — unreachable.
+
+Over ~15 nodes it still compiles but warns, for the reason in **Size guidance**
+above. Split it exactly as you would a hand-written one.
+
+### Node ids, and keeping a comment thread alive
+
+Ids are derived from the node's text, so they are stable for free — until the
+node is reworded, which renames its id and orphans any comment thread hanging
+off it. **Before rewording a node that carries a live thread, pin its id** with
+`# id: <slug>`. Ids must be unique; a duplicate pin is refused, naming both
+lines.
+
 ## Per-node comments
 
 Flowchart blocks have **per-node hit targets** — each node in the rendered
@@ -154,7 +231,26 @@ uses (there is no separate `node_id` JSON field — `step_id` carries the
 node's id for this kind too). See `references/handling-events.md` §
 "Flowchart block-rewrite contract" for how to handle the resulting event.
 
+Flowchart blocks authored as `source` render the Python under the chart, one
+row per line, with the same hit target on the row that produced each node — so
+a reader can click either the box or the line that draws it.
+
 ## Rewriting a flowchart block after a comment
 
 See `references/handling-events.md` § "Flowchart block-rewrite contract" —
 flowchart blocks support per-node targeting via `step_id`.
+
+When the block has a `source`, answer the comment by editing the source, never
+the compiled nodes:
+
+1. Find the commented node in the block's spec. Its `line` is the source line
+   that produced it.
+2. Edit **that line** of `source`.
+3. Re-emit the block with only `source` changed. The server recompiles; if your
+   edit leaves the subset, the refusal names the line — fix it rather than
+   falling back to hand-written nodes.
+4. If the reword would change the node's derived id and it carries a thread,
+   pin the id first with `# id: <slug>`.
+
+This is the whole reason `source` exists: a comment on a box becomes an edit to
+a line.
