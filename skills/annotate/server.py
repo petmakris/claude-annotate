@@ -25,6 +25,7 @@ from skills.annotate import versions as versions_module
 from skills.annotate.diagrams.sequence import render
 from skills.annotate.diagrams.mermaid import render as render_mermaid
 from skills.annotate.diagrams.flowchart import render as render_flowchart
+from skills.annotate.pflow import PflowError, compile_source as compile_pflow
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 SHARED_STATIC_DIR = Path(__file__).resolve().parent.parent / "_shared" / "web_companion" / "static"
@@ -798,7 +799,25 @@ def _render_block_for_raw(blk: dict, version: int) -> dict:
         base["svg"] = svg
     elif kind == "flowchart":
         spec = blk.get("spec") or {}
+        warnings: list[str] = []
+        source = spec.get("source")
+        if source:
+            # Authored as pflow: nodes/edges are derived, so any that were stored
+            # alongside the source are stale by definition and get replaced.
+            try:
+                compiled = compile_pflow(source, filename=blk["id"])
+                warnings = compiled.pop("warnings", [])
+                spec = {**spec, **compiled}
+            except PflowError as e:
+                spec = {**spec, "nodes": [], "edges": []}
+                source_error = str(e)
+            else:
+                source_error = None
+        else:
+            source_error = None
         try:
+            if source_error:
+                raise ValueError(source_error)
             svg = render_flowchart(spec, block_id=blk["id"])
         except Exception as e:
             # Compact inline error pill — one malformed block must never
@@ -818,6 +837,8 @@ def _render_block_for_raw(blk: dict, version: int) -> dict:
             )
         base["spec"] = spec
         base["svg"] = svg
+        if warnings:
+            base["warnings"] = warnings
     elif kind == "diagram":
         spec = blk.get("spec") or {}
         try:
