@@ -65,9 +65,9 @@ instead of only showing up in a screenshot.
 
 ## Trigger modes
 
-- **Forward:** Claude-initiated. Compose response as blocks, write `blocks.json`, announce the URL, arm the watcher.
-- **Postmortem:** User-initiated. User says `/annotate` after a response; Claude re-composes the prior terminal answer through the same block-kind pipeline (substance preserved, presentation upgraded) and pushes it.
-- **Live session:** Any invocation makes the session live — from then on every substantive response routes to the browser and the terminal carries only status one-liners, until the user says "respond in terminal".
+- **Postmortem:** User types `/annotate` after a response — the explicit command is the only user trigger (the word "annotate" in prose is not); Claude re-composes the prior terminal answer through the same block-kind pipeline (substance preserved, presentation upgraded) and pushes it.
+- **Forward:** While a session is live, Claude composes qualifying responses as blocks, writes `blocks.json`, announces the URL, arms the watcher.
+- **Live session:** Typing `/annotate` makes the session live — from then on every substantive response routes to the browser and the terminal carries only status one-liners, until the user says "respond in terminal". The skill never self-invokes before that.
 - **Event handling:** Watcher emits an event on submit/Done/cancel; Claude wakes up, applies the block-rewrite contract, updates `blocks.json`, acks the event.
 
 See SKILL.md for full details.

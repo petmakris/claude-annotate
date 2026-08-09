@@ -1,24 +1,25 @@
 # Pushing a response to the annotation view
 
 Read this when you are about to **push** a response to the browser — either
-Forward mode (Mode A, you decided to route per the kind menu in SKILL.md) or
-because the user invoked `/annotate` / "annotate" (Mode B and the live-session rule below).
+Forward mode (Mode A, a session is live and this response meets a routing
+trigger in SKILL.md) or because the user typed `/annotate` (Mode B and the
+live-session rule below).
 
 The pipeline downstream of "ensure the server is running" is identical for all
 modes — only the **content source** differs.
 
-## Mode A — Forward (Claude-initiated)
+## Mode A — Forward (live-session routing)
 
-You already decided to route (SKILL.md routing decision). **Content source:**
+An annotate session is live and this response meets a routing trigger (SKILL.md
+routing decision). **Content source:**
 compose the response as a list of blocks, each assigned a kind by the capability
 check ("How to push a response" step 1 below), and write those to `blocks.json`.
 
 ## Mode B — Postmortem (user-invoked)
 
-The user invokes the skill after a big response has already been delivered in terminal. Typical triggers:
-
-- The user types `/annotate` (skill is invoked directly).
-- The user says "annotate", "annotate that", "annotate the last response", or anything semantically equivalent.
+The user types `/annotate` after a response has already been delivered in
+terminal. The explicit command is the only user-facing trigger — the word
+"annotate" appearing in ordinary prose is not an invocation.
 
 When invoked this way, treat the user's message as the trigger only — **do not** generate a fresh answer. Instead:
 
@@ -30,7 +31,7 @@ When invoked this way, treat the user's message as the trigger only — **do not
 
 ## The live-session rule — the browser is the output channel
 
-An annotate session is **live** from the moment the skill is invoked, whatever the trigger: a push makes it live, and so does an invocation with nothing usable to push (the empty-prior case in Mode B — reply once in terminal, one line: *"Annotate is armed for this session — responses from now on will route through the browser. Say 'respond in terminal' to disarm."*).
+An annotate session is **live** from the first `/annotate` (or `/annotate resume`) of the conversation: a push makes it live, and so does an invocation with nothing usable to push (the empty-prior case in Mode B — reply once in terminal, one line: *"Annotate is armed for this session — responses from now on will route through the browser. Say 'respond in terminal' to disarm."*).
 
 While the session is live:
 

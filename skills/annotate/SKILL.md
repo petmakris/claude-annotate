@@ -1,6 +1,6 @@
 ---
 name: annotate
-description: Render Claude responses as an interactive web page with span-based annotation. Three trigger paths — (1) auto: Claude routes its current response through the view when it contains 2+ distinct things the user might want to react to (plans, analyses, multi-paragraph answers, lists of findings); (2) postmortem: user manually invokes the skill ("annotate", "annotate that", "/annotate") after a big response has already landed, and the skill pushes the most recent prior assistant message through the same pipeline; (3) watcher event: a task-notification arrives whose first stdout line starts with `WEBCOMPANION_EVENT`, `WEBCOMPANION_FINISHED`, or `WEBCOMPANION_CANCELLED` — that's a previously-pushed response's watcher reporting in, and the skill must be re-invoked to parse the payload and respond. In all cases the user reads in the browser, clicks any block to comment, and Claude updates that block in place when it responds.
+description: Render Claude responses as an interactive web page with span-based annotation. The skill never self-triggers, and plain prose never triggers it — the word "annotate" inside a sentence (e.g. "annotate that") is not an invocation. Trigger paths — (1) explicit command: the user types `/annotate` (or `/annotate resume [slug]`); the skill pushes the most recent prior assistant message through the pipeline, arms the session if there is nothing to push, or reattaches a past workspace; (2) live session: a prior `/annotate` in this conversation armed it — every substantive response (plans, analyses, multi-paragraph answers, lists of findings) routes through the browser until the user disarms; (3) watcher event: a task-notification arrives whose first stdout line starts with `WEBCOMPANION_EVENT`, `WEBCOMPANION_FINISHED`, or `WEBCOMPANION_CANCELLED` — that's a previously-pushed response's watcher reporting in, and the skill must be re-invoked to parse the payload and respond. In all cases the user reads in the browser, clicks any block to comment, and Claude updates that block in place when it responds.
 allowed-tools:
   - Bash
   - Read
@@ -21,17 +21,17 @@ Decide which situation you're in and **`Read` the named file before doing the wo
 
 | Situation | What it is | Read & follow |
 |-----------|-----------|---------------|
-| You're composing a response that meets a routing trigger below (or an annotate session is live) | **Push** | `references/pushing.md` |
-| The user typed `/annotate` / said "annotate", "annotate that" | **Push** (postmortem/armed) | `references/pushing.md` |
+| An annotate session is live (a prior `/annotate` this conversation) and you're composing a response that meets a routing trigger below | **Push** | `references/pushing.md` |
+| The user typed `/annotate` — the explicit command is the only user trigger; the word "annotate" in prose is not | **Push** (postmortem/arm) | `references/pushing.md` |
 | The user typed `/annotate resume` / `/annotate resume <slug>` | **Resume** a past workspace | `references/resuming.md` |
 | A task-notification's first stdout line is `WEBCOMPANION_EVENT` / `WEBCOMPANION_FINISHED` / `WEBCOMPANION_CANCELLED` | **Handle event** | `references/handling-events.md` |
 | The user says "scrap it" / "stop annotating" / "respond in terminal" while a watcher is armed | **Cancel** | `references/handling-events.md` (§ Terminal cancellation) |
 
 These lifecycles are independent invocations: pushing creates the page and arms a watcher; handling-events fires later, once per comment; resuming points an existing workspace at this conversation instead of creating one. Do not load a reference you don't need for the situation you're in.
 
-## Routing decision (Mode A — Forward)
+## Routing decision (only while a session is live)
 
-Route to the annotation view when ANY of the following is true about the response you are about to write:
+The skill never self-invokes: before the first `/annotate` of a conversation, answer in the terminal as normal, however long the response. Typing `/annotate` makes the session live. While it is live, route to the annotation view when ANY of the following is true about the response you are about to write:
 
 - It is a multi-step plan with 2+ steps the user might want to comment on.
 - It is an analysis with 2+ distinct claims or recommendations.
@@ -48,7 +48,7 @@ DO NOT use the annotation view for:
 
 When in doubt, prefer the annotation view. Once you've decided to route, follow `references/pushing.md`.
 
-Once an annotate session is **live** (any push or arming earlier this session), the browser is the output channel: route every response that meets any trigger above, and the terminal carries only the URL announcement, one-line status notes, and answers genuinely too small to annotate — see `references/pushing.md` § The live-session rule.
+While the session is live, the browser is the output channel: route every response that meets any trigger above, and the terminal carries only the URL announcement, one-line status notes, and answers genuinely too small to annotate — see `references/pushing.md` § The live-session rule.
 
 ## Block-kind menu
 
