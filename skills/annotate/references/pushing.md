@@ -2,7 +2,7 @@
 
 Read this when you are about to **push** a response to the browser — either
 Forward mode (Mode A, you decided to route per the kind menu in SKILL.md) or
-because the user invoked `/annotate` / "annotate" (Modes B & C below).
+because the user invoked `/annotate` / "annotate" (Mode B and the live-session rule below).
 
 The pipeline downstream of "ensure the server is running" is identical for all
 modes — only the **content source** differs.
@@ -20,24 +20,23 @@ The user invokes the skill after a big response has already been delivered in te
 - The user types `/annotate` (skill is invoked directly).
 - The user says "annotate", "annotate that", "annotate the last response", or anything semantically equivalent.
 
-When invoked this way, treat the user's message as the trigger only — **do not** generate a fresh response. Instead:
+When invoked this way, treat the user's message as the trigger only — **do not** generate a fresh answer. Instead:
 
-1. Take **your most recent prior assistant message from conversation context** as the content. Do not consult transcript files; the conversation context is authoritative.
-2. Use that text **verbatim**. No curating, no polishing, no rewording, no summarizing. What the user already saw in terminal must be what they see in the browser. The only transformation is markdown → styled HTML (handled by the renderer).
-3. Strip nothing except: the final `assistant:` / system metadata wrappers if any, and any per-turn-hook trailer (e.g. a trailing absolute path the dump hook used to append). Substantive prose, lists, code blocks, headings — preserved exactly.
-4. If your most recent prior assistant message is empty, trivial (a one-line acknowledgement), or contains only tool-call narration without standalone prose, do **not** push it. Instead, switch to **Mode C — armed for the session** (see below). Don't invent content; arm forward mode and reply once in terminal so the user knows annotate is on.
-5. Split the prior message into blocks (one logical unit per block — a paragraph, a heading + its prose, one bullet, one code block), then follow the exact same flow as forward mode: `ensure_server.sh` → POST `/api/sessions` → write `meta.json` then `blocks.json` → announce the URL → **start the watcher** (see "Arming the watcher" below) → end your turn.
+1. Take **your most recent prior assistant message from conversation context** as the content source. Do not consult transcript files; the conversation context is authoritative.
+2. **Preserve the substance, re-compose the presentation.** Every claim, finding, number, name, and code block from the terminal answer appears on the page — add no new conclusions, drop nothing substantive. The terminal text was the draft rendering; the browser page is the finished one: run the same capability check as forward mode ("How to push a response" step 1), so a described interaction flow becomes a `sequence` block, branching logic a `flowchart`, a decision the user must make a `choice`, and prose no richer kind claims stays `markdown`.
+3. Strip terminal-only artifacts: `assistant:` / system metadata wrappers if any, and any per-turn-hook trailer (e.g. a trailing absolute path a dump hook appended).
+4. If your most recent prior assistant message is empty, trivial (a one-line acknowledgement), or contains only tool-call narration without standalone prose, do **not** push it. Instead, go live with nothing pushed (see "The live-session rule" below). Don't invent content; reply once in terminal so the user knows annotate is on.
+5. Then follow the exact same flow as forward mode: `ensure_server.sh` → POST `/api/sessions` → write `meta.json` then `blocks.json` → announce the URL → **start the watcher** (see "Arming the watcher" below) → end your turn.
 
-## Mode C — Armed for the session (no prior message to annotate)
+## The live-session rule — the browser is the output channel
 
-Triggered when the user invokes the skill (`/annotate`, "annotate", etc.) but there is nothing usable to push — typically the first turn of a session, or right after a short status reply.
+An annotate session is **live** from the moment the skill is invoked, whatever the trigger: a push makes it live, and so does an invocation with nothing usable to push (the empty-prior case in Mode B — reply once in terminal, one line: *"Annotate is armed for this session — responses from now on will route through the browser. Say 'respond in terminal' to disarm."*).
 
-What to do:
+While the session is live:
 
-1. Don't try to push the empty/trivial prior message.
-2. Reply once in terminal, one line: *"Annotate is armed for this session — long-form responses from now on will route through the browser. Say 'respond in terminal' to disarm."*
-3. From this turn on, treat forward mode (Mode A) as **armed**: route every response that meets *any* Mode A trigger, AND lower the bar — when in doubt, route. The arming persists across turns of this session because Claude reads its own prior "armed" line in conversation context.
-4. Disarm if the user says "respond in terminal", "stop annotating", or anything semantically equivalent. Acknowledge briefly and stop routing for the rest of the session.
+1. **Every response that meets any Mode A trigger goes to the browser**, and the bar is lowered — when in doubt, route. The state persists across turns because Claude reads its own prior push or arming line in conversation context.
+2. The terminal carries only: the URL announcement, one-line status notes, and answers genuinely too small to annotate (single facts, yes/no, brief acknowledgements). If a reply you are drafting in terminal grows past that, it belongs on the page — compose it as blocks and push.
+3. Disarm when the user says "respond in terminal", "stop annotating", or anything semantically equivalent. Acknowledge briefly and stop routing for the rest of the session.
 
 **Token-budget note:** postmortem mode does not produce a new response. The only outputs in your terminal turn are short status lines (creating session, writing files, announcing URL). Keep terminal text minimal.
 

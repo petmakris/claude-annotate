@@ -21,7 +21,7 @@ Decide which situation you're in and **`Read` the named file before doing the wo
 
 | Situation | What it is | Read & follow |
 |-----------|-----------|---------------|
-| You're composing a response that meets a routing trigger below (or forward mode is armed) | **Push** | `references/pushing.md` |
+| You're composing a response that meets a routing trigger below (or an annotate session is live) | **Push** | `references/pushing.md` |
 | The user typed `/annotate` / said "annotate", "annotate that" | **Push** (postmortem/armed) | `references/pushing.md` |
 | The user typed `/annotate resume` / `/annotate resume <slug>` | **Resume** a past workspace | `references/resuming.md` |
 | A task-notification's first stdout line is `WEBCOMPANION_EVENT` / `WEBCOMPANION_FINISHED` / `WEBCOMPANION_CANCELLED` | **Handle event** | `references/handling-events.md` |
@@ -47,6 +47,8 @@ DO NOT use the annotation view for:
 - Tool-result discussions where you're just reporting what a command produced.
 
 When in doubt, prefer the annotation view. Once you've decided to route, follow `references/pushing.md`.
+
+Once an annotate session is **live** (any push or arming earlier this session), the browser is the output channel: route every response that meets any trigger above, and the terminal carries only the URL announcement, one-line status notes, and answers genuinely too small to annotate — see `references/pushing.md` § The live-session rule.
 
 ## Block-kind menu
 
