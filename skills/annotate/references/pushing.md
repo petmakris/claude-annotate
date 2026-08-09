@@ -10,7 +10,8 @@ modes — only the **content source** differs.
 ## Mode A — Forward (Claude-initiated)
 
 You already decided to route (SKILL.md routing decision). **Content source:**
-compose the response as a list of plain-markdown blocks (plus any `kind: "sequence"|"diagram"|"choice"` blocks per `references/block-kinds/`) and write those to `blocks.json` (see "How to push a response" below).
+compose the response as a list of blocks, each assigned a kind by the capability
+check ("How to push a response" step 1 below), and write those to `blocks.json`.
 
 ## Mode B — Postmortem (user-invoked)
 
@@ -185,7 +186,7 @@ automatically.
 
 ## How to push a response
 
-1. Compose the response as a **list of plain-markdown blocks**.  Each block is one logical unit (a paragraph, a heading + its prose, one bullet, one code block).  Aim for blocks of 3-15 lines — small enough that the user can read one at a time, large enough to carry a self-contained thought.
+1. **Split, then capability-check every block.** Split the response into logical units (a paragraph, a heading + its prose, one bullet, one code block; aim for 3-15 lines — small enough to read one at a time, large enough to carry a self-contained thought). Then walk the kind menu (SKILL.md § Block-kind menu) over each unit and assign the first kind whose trigger matches — `sequence`, `flowchart`, `diagram`, `choice`, or `mockup` — with `kind: "markdown"` as the fallback for units no richer kind claims. Before writing the files, re-scan a block list that came out all-markdown against the menu once: a response about interacting systems, branching logic, or a decision the user must make typically mixes kinds.
 2. Write `meta.json` first (at `<response_dir>/meta.json`):
    ```json
    {"response_id": "resp-<unix-timestamp>",
@@ -205,7 +206,7 @@ automatically.
    ```
    Block ids are sequential `section-1`, `section-2`, `section-3`, ... starting from 1. Each block also carries a **`title`** — a 2-5 word header shown on the block's collapsible card (e.g. `"What happens when you comment"`). Keep it a noun phrase, not a sentence. If you omit it, the client derives a header from the block's first heading or sentence, but an authored title is almost always cleaner. **When you author a `title`, do not also repeat it as a leading `#`/`##` heading inside that block's markdown** — the card already shows the title, so a duplicate heading reads twice. **Do not write a `version` field** — the server derives per-block versions from a content-hash chain stored in a sibling `versions.json`. Any `version` field you write is stripped on save and ignored on read.
 
-   For non-markdown blocks (`kind: "sequence"|"diagram"|"choice"`), read the exact spec shape in `references/block-kinds/<kind>.md`.
+   For non-markdown blocks (`kind: "sequence"|"flowchart"|"diagram"|"choice"|"mockup"`), read the exact spec shape in `references/block-kinds/<kind>.md`.
 
 4. Order matters: write `meta.json` before `blocks.json`, both atomically (write to `*.tmp` then `mv`).  The server reads both per request; an in-flight half-write falls back to the waiting page.
 5. Tell the user, announcing **both** URLs (the loopback one first, since it's the one where voice dictation works):

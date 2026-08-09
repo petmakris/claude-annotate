@@ -50,7 +50,7 @@ When in doubt, prefer the annotation view. Once you've decided to route, follow 
 
 ## Block-kind menu
 
-Every block defaults to `kind: "markdown"` (plain markdown; may contain inline HTML — see `references/pushing.md`). For a richer block, pick a kind below by its trigger, then **`Read` that kind's reference for the exact spec shape before emitting it**:
+Composing a push is a two-pass job: split the response into blocks, then run this menu over **every** block — assign the first kind whose trigger matches, and fall back to `kind: "markdown"` (plain markdown; may contain inline HTML — see `references/pushing.md`) only for blocks no richer kind claims. Markdown is the fallback per block, not the default for the response. Before emitting a non-markdown kind, **`Read` that kind's reference for the exact spec shape**:
 
 | Kind | Use when | To emit, read |
 |------|----------|---------------|
