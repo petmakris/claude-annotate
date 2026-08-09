@@ -46,8 +46,8 @@ def render(spec: dict[str, Any], block_id: str) -> str:
     """Render a validated spec to an SVG string.
 
     Raises ValidationError if the spec is malformed, RenderError if mmdc is
-    missing or fails. The block_id is accepted for signature parity with
-    diagrams/sequence.render (v1 injects no per-node hit targets).
+    missing or fails. The block_id seeds the SVG root's id (see --svgId
+    below); v1 injects no per-node hit targets.
     """
     validate(spec)
 
@@ -81,10 +81,18 @@ def render(spec: dict[str, Any], block_id: str) -> str:
         with open(cfg_path, "w", encoding="utf-8") as f:
             f.write('{"securityLevel": "strict", "htmlLabels": false,'
                     ' "flowchart": {"htmlLabels": false}}')
+        # --svgId: without it every mmdc render gets id="my-svg", and mermaid
+        # scopes the diagram's entire stylesheet under that id (`#my-svg .node
+        # .label text{...}`). Two diagram blocks inlined on one page therefore
+        # cross-apply each other's rules — a flowchart's `text-anchor:middle`
+        # landing on a state diagram's start-anchored labels is how "DISCARDED"
+        # rendered as "SCARDED". A per-block id keeps each stylesheet scoped to
+        # its own diagram.
+        svg_id = "mmd-" + re.sub(r"[^A-Za-z0-9_-]", "-", str(block_id) or "block")
         try:
             proc = subprocess.run(
                 [mmdc, "-i", in_path, "-o", out_path, "-c", cfg_path,
-                 "-t", "neutral", "-b", "transparent"],
+                 "-t", "neutral", "-b", "transparent", "--svgId", svg_id],
                 capture_output=True,
                 text=True,
                 timeout=RENDER_TIMEOUT_S,

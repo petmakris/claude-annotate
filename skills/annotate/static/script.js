@@ -359,7 +359,6 @@
     renderHoverActions();
     renderComments();
     applyEngagedStyling();
-    renderMapRail();
     renderDiscoverHint();
   }
 
@@ -1369,150 +1368,7 @@
       hint.remove();
     });
     hint.append(glyphs, txt, x);
-    // Page chrome, not a reading-column item: it must land ABOVE
-    // `.reading-shell`, full width, not as a third flex child squeezed
-    // between the rail and the prose. renderMapRail() (called before this,
-    // in loadAndRenderBlocks) has already wrapped proseEl in that shell by
-    // the time this runs, so `proseEl.parentNode` is the shell itself, not
-    // <body> — inserting relative to proseEl directly would put the hint
-    // inside the flex row. Anchor on the shell (if built yet) instead.
-    const shellEl = proseEl.closest(".reading-shell");
-    const anchor = shellEl || proseEl;
-    anchor.parentNode?.insertBefore(hint, anchor);
-  }
-
-  // ── Document map rail ─────────────────────────────────────────────────────
-  // A long plan has no shape without it: fuzzy search finds a section you
-  // already know exists, this orients you in one you don't. Rebuilt (not
-  // patched) on every call, so it can never accumulate stale entries or
-  // listeners across re-renders — the elements it rebuilds are fresh each
-  // time, so binding click handlers on them each call is safe; nothing is
-  // ever attached to the rail element itself or to `document` here.
-  function renderMapRail() {
-    if (!proseEl) return;
-    let rail = document.getElementById("map-rail");
-    if (!rail) {
-      rail = document.createElement("nav");
-      rail.id = "map-rail";
-      rail.className = "map-rail";
-      // main.prose starts as a lone, self-centering child of <body> (see
-      // style.css). Wrap it and the rail in a shared flex shell exactly
-      // once — later calls find `rail` above and skip this whole branch,
-      // so the shell is never duplicated across re-renders.
-      const shell = document.createElement("div");
-      shell.className = "reading-shell";
-      proseEl.parentNode?.insertBefore(shell, proseEl);
-      shell.appendChild(rail);
-      shell.appendChild(proseEl);
-    }
-    const sections = [...document.querySelectorAll("section.block[data-block-id]")];
-    const frag = document.createDocumentFragment();
-    const head = document.createElement("div");
-    head.className = "map-rail-head";
-    const h1 = document.createElement("span"); h1.textContent = "Document";
-    const h2 = document.createElement("span");
-    h2.className = "map-count";
-    h2.textContent = `${sections.length} section${sections.length === 1 ? "" : "s"}`;
-    head.append(h1, h2);
-    frag.appendChild(head);
-    sections.forEach((s, i) => {
-      const item = document.createElement("div");
-      item.className = "map-item";
-      const n = document.createElement("span");
-      n.className = "map-n"; n.textContent = String(i + 1);
-      const t = document.createElement("span");
-      t.className = "map-t";
-      // Section titles are Claude-authored content — textContent only, never
-      // innerHTML, so an authored title can never inject markup here.
-      t.textContent = s.querySelector(".card-title")?.textContent || s.dataset.blockId;
-      const dots = document.createElement("span");
-      dots.className = "map-dots";
-      // One dot per distinct mark kind pending in this section, plus one for
-      // a section changed by the last round.
-      const kinds = new Set();
-      s.querySelectorAll(".sub-unit[data-mark]").forEach(u => kinds.add(u.dataset.mark));
-      if (s.dataset.blockMark) kinds.add(s.dataset.blockMark);
-      for (const k of kinds) {
-        const d = document.createElement("span");
-        d.className = "map-dot d-" + k;
-        dots.appendChild(d);
-      }
-      // The attribution chip is the whole signal: markChangedCard() paints
-      // it on every section the last round rewrote, and
-      // clearChangeAttribution() removes it when the next round starts.
-      // Do NOT also require `s.dataset.diff` here — nothing sets that
-      // attribute except the card's own "what changed" toggle, so gating on
-      // it meant the rail could only dot a section AFTER the user had
-      // already found it and opened its diff. Showing which sections moved
-      // is the rail's headline feature; it never fired once.
-      if (s.querySelector(".attr-chip")) {
-        const d = document.createElement("span");
-        d.className = "map-dot " + (s.querySelector(".a-sweep") ? "d-swept" : "d-changed");
-        dots.appendChild(d);
-      }
-      item.append(n, t, dots);
-      item.addEventListener("click", () =>
-        s.scrollIntoView({ behavior: "smooth", block: "start" }));
-      // Carried so the scroll spy below can find this row again without
-      // re-deriving it from the item's index, which shifts as blocks land.
-      item.dataset.blockId = s.dataset.blockId;
-      if (s.dataset.blockId === mapCurrentId) item.setAttribute("aria-current", "true");
-      frag.appendChild(item);
-    });
-    rail.replaceChildren(frag);
-    watchReadingPosition(sections);
-  }
-
-  // ── Which section am I reading? ──────────────────────────────────────────
-  // The rail lists sections; without this it never says which one you are in,
-  // which is most of what "orient me in a long plan" means. An
-  // IntersectionObserver is the cheap way: it wakes only when a section
-  // crosses the top band of the viewport, not on every scroll event.
-  let mapCurrentId = null;
-  let mapObserver = null;
-  let mapObserved = "";
-
-  function paintReadingPosition() {
-    document.querySelectorAll("#map-rail .map-item").forEach(item => {
-      if (item.dataset.blockId === mapCurrentId) item.setAttribute("aria-current", "true");
-      else item.removeAttribute("aria-current");
-    });
-  }
-
-  // The section being read is the last one whose top edge has passed the
-  // reading line, a third of the way down the viewport. Recomputed from the
-  // live DOM rather than from the observer's entry list: the observer is only
-  // the wake-up, so a section that was already on screen when the rail
-  // re-rendered still counts.
-  function recomputeReadingPosition() {
-    const line = window.innerHeight / 3;
-    let id = null;
-    for (const s of document.querySelectorAll("section.block[data-block-id]")) {
-      if (s.getBoundingClientRect().top <= line) id = s.dataset.blockId;
-      else break;
-    }
-    if (!id) {
-      id = document.querySelector("section.block[data-block-id]")?.dataset.blockId || null;
-    }
-    if (id === mapCurrentId) return;
-    mapCurrentId = id;
-    paintReadingPosition();
-  }
-
-  function watchReadingPosition(sections) {
-    if (typeof IntersectionObserver !== "function") return;
-    // Re-observing on every rail rebuild would tear down and rebuild the
-    // observer on each mark click (renderMapRail runs from onMarkChange too).
-    // Only the section SET matters to it, so skip when that hasn't moved.
-    const key = sections.map(s => s.dataset.blockId).join("\x00");
-    if (key === mapObserved && mapObserver) { recomputeReadingPosition(); return; }
-    mapObserved = key;
-    mapObserver?.disconnect();
-    // Root box trimmed to the top third: entries fire exactly when a section
-    // enters or leaves the band the reading line runs through.
-    mapObserver = new IntersectionObserver(recomputeReadingPosition,
-      { rootMargin: "0px 0px -66% 0px", threshold: 0 });
-    sections.forEach(s => mapObserver.observe(s));
+    proseEl.parentNode?.insertBefore(hint, proseEl);
   }
 
   // ── Polling / block refresh ────────────────────────────────────────────────
@@ -2043,10 +1899,6 @@
         console.warn("diff failed for block", c.blockId, e);
       }
     }
-    // markChangedCard just painted the attr-chips the rail's changed/swept
-    // dots read — refresh after, not before, or the rail lags one round
-    // behind what the cards themselves show.
-    renderMapRail();
   }
 
   function onPollDelta(data, lastVersions) {
@@ -2170,7 +2022,6 @@
 
     renderHoverActions();
     applyEngagedStyling();
-    renderMapRail();
   }
 
   // Refresh one block's content in place. Returns the section now in the DOM
@@ -2220,11 +2071,6 @@
   // map. The round has to land in pendingEvents or applyProgress skips it —
   // that omission is why round progress was computed and discarded.
   window.AnnotatePage = {
-    // subunits.js funnels every mark mutation through its own renderDock(),
-    // and calls this from there — one hook, so the rail never drifts out of
-    // sync with pending marks without a listener on every click handler
-    // that can change a mark.
-    onMarkChange: renderMapRail,
     registerRoundEvent(eventId, blockIds) {
       if (!eventId) return;
       pendingEvents.set(String(eventId), {

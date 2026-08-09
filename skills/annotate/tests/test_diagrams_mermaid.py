@@ -95,6 +95,28 @@ def test_render_state_diagram_returns_svg():
     assert "<svg" in render(spec, block_id="section-2")
 
 
+@requires_mmdc
+def test_render_scopes_styles_per_block():
+    """Every render must get a per-block SVG id, never mmdc's default.
+
+    mermaid scopes the diagram's whole stylesheet under the root id
+    (`#my-svg .node .label text{...}`). With the default id, two diagram
+    blocks inlined on one page cross-apply each other's rules — a
+    flowchart's `text-anchor:middle` landing on a state diagram's
+    start-anchored labels is how "DISCARDED" rendered clipped to
+    "SCARDED" on the demo-272 page. The id derives from the block id, so
+    it is unique within a page and stable across re-renders of the same
+    block."""
+    spec = {"type": "state", "title": "S",
+            "source": "stateDiagram-v2\n  [*] --> Idle\n  Idle --> Running"}
+    svg = render(spec, block_id="section-2")
+    assert 'id="mmd-section-2"' in svg
+    assert "my-svg" not in svg, (
+        "the default mmdc id leaks — its scoped stylesheet will collide "
+        "with every other mermaid diagram on the page"
+    )
+
+
 def test_render_rejects_bad_spec_before_shelling_out():
     with pytest.raises(ValidationError):
         render({"type": "gantt", "source": "x"}, block_id="section-3")

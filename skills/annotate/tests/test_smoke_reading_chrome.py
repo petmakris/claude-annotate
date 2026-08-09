@@ -1,8 +1,10 @@
 """Structural guards for the reading surface.
 
-Three problems, one theme: the document was not the most prominent thing on
-its own page. The composer held the space above the fold, nothing told a
-first-time reader the page was interactive, and a long plan had no shape.
+The surface is deliberately minimal: a collapsed general composer, a
+first-run discovery hint, and the document itself. A sticky "document map"
+rail used to sit beside the prose; it was removed on request (the sections
+are self-describing cards and the rail cost a quarter of the viewport), and
+a guard below keeps it from quietly coming back.
 
 Source-string checks matching the repo's other smoke tests. Anything that
 can only be seen by rendering the page — computed styles, box geometry,
@@ -18,22 +20,6 @@ STATIC = REPO / "skills" / "annotate" / "static"
 SCRIPT_JS = STATIC / "script.js"
 STYLE_CSS = STATIC / "style.css"
 SERVER_PY = REPO / "skills" / "annotate" / "server.py"
-
-
-def _fn_body(src, decl):
-    """The CODE of a function, decl through its closing brace, comments stripped.
-
-    Stripped on purpose. Twice in this task a substring check meant to guard
-    code was satisfied by an explanatory comment sitting next to it — once
-    passing against a reverted bug, once failing against a correct fix. A
-    comment is allowed to name the bug it documents; only the code is under
-    test. (`//` to end of line: none of these functions contain a URL or a
-    string with a slash pair, and a test that reads a function this literally
-    is already coupled to it.)
-    """
-    start = src.index(decl)
-    body = src[start:src.index("\n  }\n", start)]
-    return "\n".join(re.sub(r"//.*$", "", line) for line in body.splitlines())
 
 
 def _hides_when_hidden(css, selector):
@@ -74,82 +60,47 @@ def test_the_composer_starts_collapsed():
     )
 
 
+def test_the_collapsed_composer_clears_the_header():
+    """The trigger row sat flush against the page header/statstrip band with
+    no gap at all, reading as one merged bar. The breathing room is a top
+    margin on .composer-collapsed; assert it is present and nonzero so a
+    stylesheet cleanup can't silently reglue the two."""
+    css = STYLE_CSS.read_text()
+    start = css.index(".composer-collapsed {")
+    rule = css[start:css.index("}", start)]
+    m = re.search(r"margin:\s*(\d+)px\s+auto", rule)
+    assert m and int(m.group(1)) > 0, (
+        ".composer-collapsed has no top margin — the trigger row sits flush "
+        "under the page header"
+    )
+
+
 def test_a_first_run_hint_exists():
     src = SCRIPT_JS.read_text()
     assert "discover-hint" in src, "nothing tells a first-time reader the page is interactive"
     assert "annotate.hint." in src, "the hint's dismissal is not remembered"
 
 
-def test_a_document_map_is_rendered():
+def test_the_map_rail_stays_removed():
+    """The document map rail was removed on explicit request (2026-08-09):
+    it consumed a quarter of the viewport to restate the card titles. Its
+    CSS tokens (--rail-gutter/--rail-shell-max) and the .reading-shell flex
+    wrapper went with it — every centred box now derives from
+    --content-max alone. If any of these names reappear, someone is
+    resurrecting the rail; that needs a deliberate decision, not a merge
+    accident."""
     src = SCRIPT_JS.read_text()
-    assert "map-rail" in src, "no document map"
-    assert "map-item" in src, "the map has no section entries"
-
-
-def test_the_map_shows_pending_marks():
-    """The rail is the surface every other signal reuses.
-
-    `"map-dot" in src` — all this test used to assert — passes with the dot
-    unreachable, and did: the changed-section dot was gated on
-    `s.dataset.diff !== undefined && s.querySelector(".attr-chip")`, and
-    nothing sets `dataset.diff` except the card's own "what changed" toggle
-    (markChangedCard paints the chip and the toggle, never the attribute).
-    So after a round completed the rail showed no changed dots at all, and a
-    dot appeared only once the reader clicked the toggle on that card — i.e.
-    it could only ever mark sections they had already found. Showing which
-    sections moved is the rail's headline feature and it never fired.
-
-    Gate on what markChangedCard actually sets — the attribution chip — and
-    on nothing else. `dataset.diff` means "this card's diff pane is open"; it
-    is the toggle's own state and must not be read as a change signal.
-    """
-    src = SCRIPT_JS.read_text()
-    body = _fn_body(src, "function renderMapRail")
-    assert "map-dot" in body, "the map shows no per-section state"
-    assert 'querySelector(".attr-chip")' in body, (
-        "the rail's changed-section dot no longer keys on the attribution "
-        "chip, which is the only thing markChangedCard() actually paints"
-    )
-    assert "dataset.diff" not in body, (
-        "renderMapRail reads dataset.diff — that attribute is set only by "
-        "the per-card diff toggle, so any dot gated on it can only appear "
-        "for a section the reader already opened"
-    )
+    css = STYLE_CSS.read_text()
+    for needle in ("map-rail", "renderMapRail", "reading-shell"):
+        assert needle not in src, f"script.js grew {needle!r} back"
+    for needle in ("map-rail", "reading-shell", "--rail-gutter", "--rail-shell-max"):
+        assert needle not in css, f"style.css grew {needle!r} back"
 
 
 def test_the_reading_chrome_is_styled():
     css = STYLE_CSS.read_text()
-    for needle in (".map-rail", ".map-item", ".composer-collapsed", ".discover-hint"):
+    for needle in (".composer-collapsed", ".discover-hint"):
         assert needle in css, f"style.css missing {needle}"
-
-
-def test_the_discover_hint_lands_outside_the_shell():
-    """Regression guard (round-1 fix): renderMapRail() wraps proseEl in
-    .reading-shell before renderDiscoverHint() runs, so `proseEl.parentNode`
-    is the shell by the time the hint inserts itself. Anchoring on proseEl
-    directly makes the hint a third flex child squeezed between the rail and
-    the document — measured in a real browser at 830px total shell width
-    with main.prose down to ~408px instead of 1040px. The hint must anchor
-    on the shell itself (or its absence) so it renders as page chrome above
-    the shell, not a column inside it."""
-    src = SCRIPT_JS.read_text()
-    start = src.index("function renderDiscoverHint")
-    end = src.index("\n  }\n", start)
-    body = src[start:end]
-    # The exact functional call, not just the word "reading-shell" appearing
-    # anywhere in the function (a stale explanatory comment can carry the
-    # word "reading-shell" long after the code it describes reverts to the
-    # bug — this happened while writing this very guard).
-    assert 'proseEl.closest(".reading-shell")' in body, (
-        "renderDiscoverHint doesn't resolve the shell via proseEl.closest("
-        '".reading-shell") — once renderMapRail has wrapped proseEl, '
-        "inserting relative to proseEl directly puts the hint inside the "
-        "flex shell as a third column"
-    )
-    assert "proseEl.parentNode?.insertBefore(hint, proseEl)" not in body, (
-        "renderDiscoverHint still anchors directly on proseEl — that is "
-        "the shell's own child once renderMapRail runs first"
-    )
 
 
 def test_the_collapsed_composer_is_actually_hidden():
@@ -174,51 +125,37 @@ def test_the_collapsed_composer_is_actually_hidden():
     )
 
 
-def test_the_sticky_ribbons_clear_the_map_rail():
-    """.map-rail, .change-bar, .busy-banner and .watcher-dead-banner are all
-    `position: sticky; top: 0`. Two boxes pinned to the same top can only
-    stop overlapping by not sharing horizontal space, so the three ribbons
-    span the DOCUMENT column (offset by --rail-gutter) rather than the whole
-    reading shell. Before this, a ribbon painted straight over the rail's
-    "DOCUMENT / N sections" header and its first rows whenever the page was
-    scrolled with a round in flight.
-
-    The rail's own `top` must stay 0: offsetting it by a ribbon's height is
-    the mockup-scaffolding mistake .change-bar already had to undo, and it
-    would pin the rail below empty space every time no ribbon is showing —
-    which is most of the time.
-    """
+def test_the_sticky_ribbons_span_the_document_column():
+    """With the rail gone the three sticky ribbons (.change-bar,
+    .busy-banner, .watcher-dead-banner) go back to plain content-column
+    geometry: width capped at --content-max, centred with auto margins.
+    The old rail-gutter offset math must not linger on any of them — it
+    would shove the ribbon right of centre for a rail that no longer
+    exists."""
     css = STYLE_CSS.read_text()
     for selector in (".change-bar", ".busy-banner", ".watcher-dead-banner"):
         start = css.index(selector + " {")
         rule = css[start:css.index("}", start)]
-        assert "var(--rail-gutter)" in rule, (
-            f"{selector} does not step around the map rail's column — it "
-            "spans the whole reading shell and paints over the rail"
+        assert "max-width: var(--content-max)" in rule, (
+            f"{selector} no longer caps at the content column"
         )
-    rail = css[css.index(".map-rail {"):]
-    rail = rail[:rail.index("}")]
-    assert re.search(r"top:\s*0", rail), (
-        ".map-rail's sticky offset is no longer 0 — the rail must not be "
-        "pushed down to clear a banner that is usually not there"
-    )
+        assert "rail" not in rule, (
+            f"{selector} still carries rail-offset geometry"
+        )
 
 
-def test_the_map_marks_the_section_being_read():
-    """style.css styles `.map-item[aria-current="true"]`, so something has to
-    set it. It came from a mockup that had a scroll spy; for three rounds
-    nothing did, and the rail listed sections without ever saying which one
-    you were in — most of what "orient me in a long plan" means. Styled but
-    unreachable state is worse than no state: it reads as implemented.
-    """
-    src = SCRIPT_JS.read_text()
-    assert 'setAttribute("aria-current", "true")' in src, (
-        "nothing sets aria-current, so .map-item[aria-current] in style.css "
-        "is a dead rule and the rail never shows the current section"
-    )
-    assert "IntersectionObserver" in src, (
-        "the reading-position spy is gone — the rail's current-section "
-        "highlight has nothing to drive it"
+def test_the_sequence_card_keeps_the_card_surface():
+    """A prose-era override forced `section.block[data-kind="sequence"]` to
+    background: transparent in all four hover/engaged states. On the card
+    layout that read as a gray card that flashed white on hover — the only
+    block on the page that did. The override is gone; sequence blocks are
+    ordinary cards (constant var(--surface)), and the hover affordance
+    lives on the diagram's own steps in diagram.css."""
+    css = STYLE_CSS.read_text()
+    assert 'section.block[data-kind="sequence"]' not in css, (
+        "a sequence-specific background override is back in style.css — "
+        "the card surface rules already handle hover/engaged states, and "
+        "this exact override is what made sequence cards flash on hover"
     )
 
 
