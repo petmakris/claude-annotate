@@ -1330,6 +1330,64 @@
     });
   })();
 
+  // ── Fold-all / unfold-all chords (⌘K ⌘0 / ⌘K ⌘J) ─────────────────────────
+  // The user's VS Code fold bindings, verbatim. ⌘K arms a two-step chord —
+  // intercepted so the browser's address-bar focus never fires — and the
+  // second key acts on every card through the same applyCollapsed +
+  // localStorage path the per-card chevron uses, so a fold-all survives
+  // reload and a single chevron click afterwards still toggles one card.
+  (function () {
+    let armed = null; // timeout id while waiting for the second chord key
+    const pill = document.createElement("div");
+    pill.className = "chord-pill";
+    pill.textContent = "⌘K …";
+    pill.hidden = true;
+    document.body.appendChild(pill);
+
+    function disarm() {
+      if (armed !== null) { clearTimeout(armed); armed = null; }
+      pill.hidden = true;
+    }
+
+    function foldAll(collapsed) {
+      document.querySelectorAll("section.block.card").forEach((section) => {
+        const chev = section.querySelector(".card-chevron");
+        applyCollapsed(section, chev, collapsed);
+        try {
+          localStorage.setItem(collapseKey(section.dataset.blockId), collapsed ? "1" : "0");
+        } catch (_) {}
+      });
+    }
+
+    document.addEventListener("keydown", (e) => {
+      const active = document.activeElement;
+      const typing = active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        (active && active.isContentEditable);
+      if (typing) { disarm(); return; }
+      if (armed === null) {
+        if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey &&
+            (e.key === "k" || e.key === "K")) {
+          e.preventDefault();
+          pill.hidden = false;
+          armed = setTimeout(disarm, 2000);
+        }
+        return;
+      }
+      // While armed, the modifier keys themselves (releasing/re-pressing ⌘
+      // between the two strokes) neither resolve nor cancel the chord.
+      if (e.key === "Meta" || e.key === "Control" || e.key === "Shift" || e.key === "Alt") return;
+      if ((e.metaKey || e.ctrlKey) && e.key === "0") {
+        e.preventDefault();
+        foldAll(true);
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === "j" || e.key === "J")) {
+        e.preventDefault();
+        foldAll(false);
+      }
+      disarm();
+    });
+  })();
+
   // ── First-run discovery hint ─────────────────────────────────────────────
   // Every marking control is hover-only and the legend starts collapsed, so a
   // first-time reader sees a static document and never learns the page is

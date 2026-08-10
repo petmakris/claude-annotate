@@ -1357,3 +1357,28 @@ section.block[data-diff="open"] .diff-pane { display: block; }
   stroke: var(--accent);
   stroke-width: 3;
 }
+
+/* === Fold-chord pill ================================================= */
+/* Transient "⌘K …" indicator while the fold chord is armed — the role
+   VS Code's status bar plays for a pending chord. Display-gated on the
+   [hidden] attribute explicitly: an author display rule would beat the UA
+   default, the exact cascade bug .general-composer[hidden] guards against. */
+.chord-pill {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.chord-pill[hidden] { display: none; }
