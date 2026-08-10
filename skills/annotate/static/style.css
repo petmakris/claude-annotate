@@ -613,17 +613,23 @@ section.block.card.collapsed .card-body { display: none; }
 section.block.card.collapsed .card-head { background: var(--surface-soft); }
 section.block.card.collapsed .card-head:hover { background: var(--surface-hover); }
 .card-chevron {
-  background: transparent;
-  border: none;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  /* Same control family as .hover-actions button: an easy 26px round
+     target instead of the bare 14px text glyph it used to be. */
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 50%;
   color: var(--text-dim);
   cursor: pointer;
   font-size: 12px;
   line-height: 1;
-  padding: 0;
-  width: 14px;
-  text-align: center;
-  flex: none;
-  transition: color 120ms ease;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
 }
 .card-head:hover .card-chevron { color: var(--text-strong); }
 

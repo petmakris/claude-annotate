@@ -51,3 +51,14 @@ def test_the_chord_pill_is_styled_and_actually_hides():
         ".chord-pill has no [hidden] display:none rule — the pill's author "
         "display rule beats the bare hidden attribute and it never dismisses"
     )
+
+
+def test_the_chevron_is_a_round_button_not_a_text_glyph():
+    """The chevron was a bare 14px-wide text glyph — the smallest target in
+    the header. It now matches the 26px .hover-actions button family."""
+    css = STYLE_CSS.read_text()
+    start = css.index(".card-chevron {")
+    rule = css[start:css.index("}", start)]
+    for needle in ("width: 26px", "height: 26px", "border-radius: 50%",
+                   "border: 1px dashed var(--border)"):
+        assert needle in rule, f".card-chevron lost {needle!r}"

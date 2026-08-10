@@ -152,6 +152,19 @@ function deck(mark) {
     if ((await collapsedCount()) !== 0) fail("the chord fired while typing in the composer");
     log("✓ chord inert while typing");
 
+    // ── 8. The chevron is a 26px round button, not a 14px text glyph ───────
+    const chev = await page.evaluate(() => {
+      const el = document.querySelector('section.block[data-block-id="b-0"] .card-chevron');
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return { w: Math.round(r.width), h: Math.round(r.height),
+               radius: cs.borderRadius, border: cs.borderTopStyle };
+    });
+    if (chev.w !== 26 || chev.h !== 26) fail("chevron is " + chev.w + "×" + chev.h + ", expected 26×26");
+    if (chev.radius !== "50%") fail("chevron border-radius = " + chev.radius);
+    if (chev.border !== "dashed") fail("chevron border-style = " + chev.border + ", expected dashed");
+    log("✓ chevron is a 26×26 round dashed button");
+
     log("ALL PASS");
   } finally {
     cleanup();
