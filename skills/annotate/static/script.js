@@ -483,6 +483,7 @@
     // just typing).
     wrap.addEventListener("keydown", (e) => {
       if (e.target === note) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const n = Number(e.key);
       if (Number.isInteger(n) && n >= 1 && n <= options.length) {
         e.preventDefault();
