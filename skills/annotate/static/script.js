@@ -390,14 +390,15 @@
     if (el) el.textContent = blockTitle(blk);
   }
 
-  // Render a choice block's interactive body: question, radio/checkbox
-  // options, and a Submit button. On submit, POST the selection and show the
+  // Render a choice block's interactive body: selectable option cards, an
+  // optional note field, and Submit. A card click toggles selection (single-
+  // select moves it); Submit enables on a pick OR a non-empty note. Note-only
+  // means "none of these — here's my direction". On submit, POST and show the
   // same "updating" overlay the comment path uses.
   function renderChoice(section, content, blk) {
     const spec = blk.spec || {};
     const multi = !!spec.multiSelect;
     const options = Array.isArray(spec.options) ? spec.options : [];
-    const groupName = `choice-${blk.id}`;
 
     const wrap = document.createElement("div");
     wrap.className = "choice-block";
@@ -407,52 +408,129 @@
 
     const list = document.createElement("div");
     list.className = "choice-options";
-    const inputs = [];
-    for (const opt of options) {
-      const row = document.createElement("label");
-      row.className = "choice-option";
-      const input = document.createElement("input");
-      input.type = multi ? "checkbox" : "radio";
-      input.name = groupName;
-      input.value = opt.id;
-      inputs.push(input);
+    list.setAttribute("role", multi ? "group" : "radiogroup");
+    const cards = [];
+    const selected = new Set();
+
+    const setChecked = (card, on) => {
+      card.classList.toggle("selected", on);
+      card.setAttribute("aria-checked", String(on));
+    };
+    const toggleAt = (idx) => {
+      const opt = options[idx];
+      if (selected.has(opt.id)) {
+        selected.delete(opt.id);
+        setChecked(cards[idx], false);
+      } else {
+        if (!multi) {
+          selected.clear();
+          cards.forEach(c => setChecked(c, false));
+        }
+        selected.add(opt.id);
+        setChecked(cards[idx], true);
+      }
+      refreshSubmit();
+    };
+
+    options.forEach((opt, idx) => {
+      const card = document.createElement("div");
+      card.className = "choice-option";
+      card.tabIndex = 0;
+      card.setAttribute("role", multi ? "checkbox" : "radio");
+      card.setAttribute("aria-checked", "false");
       const textWrap = document.createElement("span");
       textWrap.className = "choice-option-text";
+      const head = document.createElement("span");
+      head.className = "choice-option-head";
       const label = document.createElement("span");
       label.className = "choice-option-label";
       label.textContent = opt.label || opt.id;
-      textWrap.appendChild(label);
+      head.appendChild(label);
+      if (opt.recommended) {
+        const badge = document.createElement("span");
+        badge.className = "choice-badge";
+        badge.textContent = "recommended";
+        head.appendChild(badge);
+      }
+      textWrap.appendChild(head);
       if (opt.description) {
         const desc = document.createElement("span");
         desc.className = "choice-option-desc";
         desc.textContent = opt.description;
         textWrap.appendChild(desc);
       }
-      row.append(input, textWrap);
-      list.appendChild(row);
-    }
+      card.appendChild(textWrap);
+      card.addEventListener("click", () => toggleAt(idx));
+      card.addEventListener("keydown", (e) => {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          toggleAt(idx);
+        } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+          e.preventDefault();
+          cards[(idx + 1) % cards.length].focus();
+        } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+          e.preventDefault();
+          cards[(idx - 1 + cards.length) % cards.length].focus();
+        }
+      });
+      cards.push(card);
+      list.appendChild(card);
+    });
     wrap.appendChild(list);
+
+    // Digit shortcuts 1..9 toggle the corresponding option while focus is
+    // anywhere in the block except the note field (typing digits there is
+    // just typing).
+    wrap.addEventListener("keydown", (e) => {
+      if (e.target === note) return;
+      const n = Number(e.key);
+      if (Number.isInteger(n) && n >= 1 && n <= options.length) {
+        e.preventDefault();
+        toggleAt(n - 1);
+      }
+    });
+
+    const footer = document.createElement("div");
+    footer.className = "choice-footer";
+    const note = document.createElement("textarea");
+    note.className = "choice-note";
+    note.rows = 1;
+    note.placeholder = "Add a note (optional) — or answer in your own words";
+    note.addEventListener("input", () => {
+      note.style.height = "auto";
+      note.style.height = note.scrollHeight + "px";
+      refreshSubmit();
+    });
+    note.addEventListener("keydown", (e) => {
+      // Cmd/Ctrl+Enter sends — plain Enter stays a newline, same convention
+      // as the general and card composers (a note may be a multi-line
+      // answer, e.g. a numbered list, so plain Enter must not submit).
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        if (!submitBtn.disabled) doSubmit();
+      }
+    });
 
     const submitBtn = document.createElement("button");
     submitBtn.type = "button";
     submitBtn.className = "choice-submit-btn";
     submitBtn.textContent = "Submit";
     submitBtn.disabled = true;
-    const refreshDisabled = () => {
-      submitBtn.disabled = !inputs.some(i => i.checked);
-    };
-    inputs.forEach(i => i.addEventListener("change", refreshDisabled));
+    function refreshSubmit() {
+      submitBtn.disabled = selected.size === 0 && !note.value.trim();
+    }
 
-    submitBtn.addEventListener("click", () => {
-      const selected = inputs.filter(i => i.checked).map(i => i.value);
-      if (!selected.length) return;
+    function doSubmit() {
+      const picked = options.filter(o => selected.has(o.id)).map(o => o.id);
+      const text = note.value.trim();
+      if (!picked.length && !text) return;
       submitBtn.disabled = true;
       const payload = {
         block_id: blk.id,
         step_id: null,
         type: "choice",
-        selected_options: selected,
-        text: "",
+        selected_options: picked,
+        text,
         selected_text: "",
         images: [],
       };
@@ -461,10 +539,13 @@
         if (eventId) pendingEvents.set(String(eventId), { blockId: blk.id });
         startUpdatingOverlay(section);
       }).catch(() => {
-        refreshDisabled();
+        refreshSubmit();
       });
-    });
-    wrap.appendChild(submitBtn);
+    }
+    submitBtn.addEventListener("click", doSubmit);
+
+    footer.append(note, submitBtn);
+    wrap.appendChild(footer);
     content.appendChild(wrap);
   }
 

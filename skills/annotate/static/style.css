@@ -683,38 +683,79 @@ section.block.card.collapsed .card-head:hover { background: var(--surface-hover)
 .choice-option {
   display: flex;
   align-items: flex-start;
-  gap: 0.6rem;
   padding: 0.6rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
   cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  user-select: none;
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
 }
 .choice-option:hover {
   border-color: var(--accent);
   background: var(--surface-soft);
 }
-.choice-option input {
-  margin-top: 0.2rem;
-  accent-color: var(--accent);
-  flex: none;
+.choice-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.choice-option.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 .choice-option-text {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
 }
+.choice-option-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .choice-option-label {
   color: var(--text-strong);
   font-weight: 500;
+}
+.choice-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 999px;
+  padding: 1px 8px;
 }
 .choice-option-desc {
   color: var(--text-dim);
   font-size: 0.85em;
 }
+.choice-footer {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+.choice-note {
+  flex: 1;
+  resize: none;
+  overflow: hidden;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.4;
+}
+.choice-note:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.15);
+}
+.choice-note::placeholder { color: var(--text-dim); }
 .choice-submit-btn {
-  align-self: flex-start;
+  flex: none;
   padding: 0.45rem 1rem;
   border: none;
   border-radius: 8px;
@@ -956,6 +997,7 @@ main.prose mark.search-hit {
 .attached-pill.show { display: inline-block; }
 
 body.is-busy .choice-submit-btn,
+body.is-busy .choice-note,
 body.is-busy .card-submit-btn,
 body.is-editing .hover-actions {
   pointer-events: none;
