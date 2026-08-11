@@ -149,15 +149,19 @@ def choice_option_ids(spec: dict[str, Any]) -> list[str]:
     return [o.get("id") for o in (spec.get("options") or []) if o.get("id")]
 
 
-def validate_choice_selection(spec: dict[str, Any], selected: Any) -> str | None:
+def validate_choice_selection(
+    spec: dict[str, Any], selected: Any, *, has_text: bool = False
+) -> str | None:
     """Validate a submitted selection against a choice spec.
 
     Returns None when valid, else a short human-readable error string.
+    An empty selection is valid only when the submission carries a note
+    (has_text) — that is the "none of these, here's my direction" case.
     """
     if not isinstance(selected, list) or not all(isinstance(s, str) for s in selected):
         return "selected_options must be a list of strings"
     if not selected:
-        return "selected_options must not be empty"
+        return None if has_text else "selected_options must not be empty"
     valid = set(choice_option_ids(spec))
     unknown = [s for s in selected if s not in valid]
     if unknown:

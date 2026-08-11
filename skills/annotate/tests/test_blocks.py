@@ -342,6 +342,25 @@ def test_validate_multi_select_rejects_empty():
     assert err is not None and "empty" in err.lower()
 
 
+def test_validate_choice_empty_selection_with_note_is_valid():
+    assert validate_choice_selection(_choice_spec(), [], has_text=True) is None
+
+
+def test_validate_choice_empty_selection_without_note_still_invalid():
+    err = validate_choice_selection(_choice_spec(), [], has_text=False)
+    assert err is not None
+
+
+def test_validate_choice_note_does_not_excuse_unknown_ids():
+    err = validate_choice_selection(_choice_spec(), ["o9"], has_text=True)
+    assert "o9" in err
+
+
+def test_validate_choice_note_does_not_excuse_two_picks_on_single_select():
+    err = validate_choice_selection(_choice_spec(multi=False), ["o1", "o2"], has_text=True)
+    assert err is not None
+
+
 def test_convert_block_to_markdown_flips_kind_and_drops_spec():
     doc = BlocksDoc(blocks=[
         {"id": "section-1", "kind": "choice", "spec": _choice_spec()},
