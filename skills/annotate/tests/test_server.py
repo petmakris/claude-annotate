@@ -832,6 +832,42 @@ class ServerStartupTests(unittest.TestCase):
         })
         self.assertEqual(status, 422)
 
+    def test_submit_choice_note_only_succeeds(self):
+        response_dir = Path(self.sess["response_dir"])
+        _write_blocks(response_dir, "resp-chn", "T", self._choice_blocks())
+        status, _ = self._post_json(self.base + "/api/submit", {
+            "block_id": "b-0", "type": "choice", "selected_options": [],
+            "text": "none of these — try nautical names",
+        })
+        self.assertEqual(status, 202)
+        events_dir = Path(self.sess["events_dir"])
+        evt = json.loads(list(events_dir.glob("*.json"))[0].read_text())
+        self.assertEqual(evt["type"], "choice")
+        self.assertEqual(evt["selected_options"], [])
+        self.assertEqual(evt["text"], "none of these — try nautical names")
+
+    def test_submit_choice_pick_with_note_records_both(self):
+        response_dir = Path(self.sess["response_dir"])
+        _write_blocks(response_dir, "resp-chpn", "T", self._choice_blocks())
+        status, _ = self._post_json(self.base + "/api/submit", {
+            "block_id": "b-0", "type": "choice", "selected_options": ["o1"],
+            "text": "but lowercase it",
+        })
+        self.assertEqual(status, 202)
+        events_dir = Path(self.sess["events_dir"])
+        evt = json.loads(list(events_dir.glob("*.json"))[0].read_text())
+        self.assertEqual(evt["selected_options"], ["o1"])
+        self.assertEqual(evt["text"], "but lowercase it")
+
+    def test_submit_choice_whitespace_note_only_returns_422(self):
+        response_dir = Path(self.sess["response_dir"])
+        _write_blocks(response_dir, "resp-chw", "T", self._choice_blocks())
+        status, _ = self._post_json(self.base + "/api/submit", {
+            "block_id": "b-0", "type": "choice", "selected_options": [],
+            "text": "   ",
+        })
+        self.assertEqual(status, 422)
+
     def test_submit_choice_single_select_two_picks_returns_422(self):
         response_dir = Path(self.sess["response_dir"])
         _write_blocks(response_dir, "resp-ch2", "T", self._choice_blocks(multi=False))

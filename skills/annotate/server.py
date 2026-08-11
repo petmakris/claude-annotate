@@ -505,7 +505,9 @@ class Handlers:
             if (blk.get("kind") or "markdown") != "choice":
                 _send_text(h, 422, "type=choice only valid for kind=choice blocks")
                 return
-            err = blocks_model.validate_choice_selection(blk.get("spec") or {}, selected_options)
+            err = blocks_model.validate_choice_selection(
+                blk.get("spec") or {}, selected_options,
+                has_text=bool(text.strip()))
             if err is not None:
                 _send_text(h, 422, err)
                 return
