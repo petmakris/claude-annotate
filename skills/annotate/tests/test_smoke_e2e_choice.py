@@ -88,6 +88,61 @@ class ChoiceSmokeTests(unittest.TestCase):
         self.assertNotIn("spec", blk2)
         self.assertEqual(blk2["version"], 2)
 
+    def test_e2e_note_only_then_repropose(self):
+        response_dir = Path(self.sess["response_dir"])
+        spec = {
+            "question": "New name for the bot?",
+            "multiSelect": False,
+            "options": [
+                {"id": "o1", "label": "Koumbaras", "recommended": True},
+                {"id": "o2", "label": "Ovolos"},
+            ],
+        }
+        _write_blocks(response_dir, "resp-note", "note-smoke", [
+            {"id": "b-0", "kind": "choice", "spec": spec, "version": 1},
+        ])
+
+        # 1. Note-only submit: no pick, a direction instead → 202.
+        status, _ = self._post_json(self.base + "/api/submit", {
+            "block_id": "b-0", "type": "choice", "selected_options": [],
+            "text": "none of these — try nautical names",
+        })
+        self.assertEqual(status, 202)
+        events_dir = Path(self.sess["events_dir"])
+        evt = json.loads(list(events_dir.glob("*.json"))[0].read_text())
+        self.assertEqual(evt["selected_options"], [])
+        self.assertEqual(evt["text"], "none of these — try nautical names")
+
+        # 1b. /raw initializes versions.json, confirms initial choice block.
+        status, body = _http_get("localhost", self.info["port"], self.base + "/raw")
+        self.assertEqual(status, 200)
+        blk = next(b for b in json.loads(body)["blocks"] if b["id"] == "b-0")
+        self.assertEqual(blk["kind"], "choice")
+        self.assertEqual(blk["spec"], spec)
+        self.assertEqual(blk["version"], 1)
+
+        # 2. Simulate Claude re-proposing (spec update, NOT resolution).
+        blocks_path = response_dir / "blocks.json"
+        doc = blocks_model.load(blocks_path)
+        new_spec = {
+            "question": "New name for the bot?",
+            "multiSelect": False,
+            "options": [
+                {"id": "o1", "label": "Trata"},
+                {"id": "o2", "label": "Kaiki"},
+            ],
+        }
+        self.assertTrue(blocks_model.update_spec_block(doc, "b-0", new_spec))
+        blocks_model.save_atomic(blocks_path, doc)
+
+        # 3. /raw still shows a choice block, new options, bumped version.
+        status, body = _http_get("localhost", self.info["port"], self.base + "/raw")
+        self.assertEqual(status, 200)
+        blk = next(b for b in json.loads(body)["blocks"] if b["id"] == "b-0")
+        self.assertEqual(blk["kind"], "choice")
+        self.assertEqual(blk["spec"], new_spec)
+        self.assertEqual(blk["version"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()
