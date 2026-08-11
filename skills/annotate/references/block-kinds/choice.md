@@ -8,7 +8,7 @@ should be a choice/decision block, and you need the exact contract to emit or re
 Emit a choice block when the response reaches a **decision point** and the next step depends on the user's preference, with ALL of:
 
 - 2–4 discrete, comparable options (or, for multi-select, a set the user picks a subset from).
-- A closed answer space — picking beats free-text.
+- A mostly closed answer space — picking beats free-text. (The rendered block still lets the user add a note or answer in their own words, so near-misses are fine.)
 - The choice genuinely drives what you do next.
 
 Typical fits: "which migration strategy", "which datastores to provision", "scope this to A, B, or both".
@@ -29,14 +29,14 @@ A choice block looks like this in `blocks.json`:
       "question": "<the decision, one line>",
       "multiSelect": false,
       "options": [
-        {"id": "o1", "label": "<terse choice>", "description": "<optional sub-text>"},
+        {"id": "o1", "label": "<terse choice>", "description": "<optional sub-text>", "recommended": true},
         {"id": "o2", "label": "...", "description": "..."}
       ]
     }}
 
-Block id is `section-N` (assigned by `next_block_id`). Option ids are `o1`, `o2`, … minted by hand, stable across rewrites. `multiSelect: false` renders radio (exactly one); `true` renders checkboxes (pick ≥ 1). `description` is optional. Use 2–4 options.
+Block id is `section-N` (assigned by `next_block_id`). Option ids are `o1`, `o2`, … minted by hand, stable across rewrites. `multiSelect: false` allows exactly one pick; `true` allows several. `description` is optional. Use 2–4 options. Mark at most ONE option `"recommended": true` — it renders as a badge on the card; never write "(recommended)" inside `description` prose.
 
-A choice block carries no `markdown`, and the question is shown in the card header — don't repeat it in the spec elsewhere. The user picks in the browser; you resolve the block on the watcher event.
+A choice block carries no `markdown`, and the question is shown in the card header — don't repeat it in the spec elsewhere. The user picks in the browser and may attach a free-text note; a **note-only** submission (no pick, non-empty note) means "none of these — here's my direction". You resolve or re-propose on the watcher event.
 
 ## Resolving a choice after the user picks
 

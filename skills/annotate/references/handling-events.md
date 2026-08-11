@@ -66,7 +66,7 @@ respectively.
    - `block_id` — the block to update, or `null` for a general comment.
    - `step_id` — for `kind: "sequence"` blocks: the step row the user clicked, or `null` for whole-diagram comments. For `kind: "flowchart"` blocks: the clicked node's id (the DOM carries it as `data-node-id`, but it arrives on the wire in this same `step_id` field — there is no separate `node_id` field), or `null` for whole-flowchart comments. For `kind: "diagram"` blocks: always `null` (whole-diagram only in v1). Absent/null for markdown blocks.
    - `type` — `"round"` (all content feedback), `"choice"` (an answer), or `"comment"` with a null `block_id` (the general chat box). `"reject"` / `"dismiss"` are legacy — see the model paragraph above.
-   - `selected_options` — for `type: "choice"`: the option id(s) the user picked (a list). Absent otherwise.
+   - `selected_options` — for `type: "choice"`: the option id(s) the user picked (a list, possibly EMPTY when the user answered with a note instead). Absent otherwise.
    - `reactions` — for `type: "round"`: the batched reactions. Jump to the `round` subsection below.
    - `text` — the user's free-text feedback.
    - `selected_text` — the span they highlighted, or `null` if the comment is block-scoped.
@@ -81,15 +81,19 @@ respectively.
 
 ### `WEBCOMPANION_EVENT` with `type: "choice"`
 
-The user picked option(s) on a choice block. `selected_options` holds the picked id(s); map them to labels via the block's `spec.options`.
+The user answered a choice block. `selected_options` holds the picked id(s) — map them to labels via the block's `spec.options` — and `text` may carry a free-text note riding along with the pick.
+
+**Pick (with or without a note):**
 
 1. Read `<response_dir>/blocks.json`, find the block by `block_id`.
-2. **Resolve the choice into a decision** — convert the block from `kind: "choice"` to a markdown block whose prose states the decision and folds in the reasoning (e.g. *"Decision: incremental cutover — phase 1 ships the read path…"*). The options disappear; the answer is final. Use `blocks.convert_block_to_markdown(doc, block_id, markdown)` — it sets the markdown, drops `kind`/`spec`, and is content-hash-safe (a no-op rewrite doesn't bump the version).
+2. **Resolve the choice into a decision** — convert the block from `kind: "choice"` to a markdown block whose prose states the decision, folds in the reasoning, AND folds in the note when present (e.g. *"Decision: Koumbaras, lowercased per your note…"*). The options disappear; the answer is final. Use `blocks.convert_block_to_markdown(doc, block_id, markdown)` — it sets the markdown, drops `kind`/`spec`, and is content-hash-safe (a no-op rewrite doesn't bump the version).
 3. **Continue the task** — the pick drives the next step. Append follow-up blocks to `blocks.json` and/or take the implied action, as the decision warrants.
 4. Run the coherence sweep (see below — this path is the universal rule's highest-risk case, since it both resolves the block and appends new ones).
 5. `save_atomic` the doc, write the `<consumed_dir>/<event_id>.ack`, end your turn. No terminal output; the watcher stays armed.
 
-Multi-select: the decision prose names all picked options. There is no `reject` on a choice — a pick is a pick.
+**Note-only (`selected_options` is `[]`, `text` non-empty):** the user rejected the slate and gave a direction instead. Do NOT resolve. Either rewrite the block's spec with re-proposed options that follow the direction (`blocks.update_spec_block` — the version bumps), or, when the note itself settles the question, resolve to a decision paragraph built from the note. Then continue as in steps 3–5 above.
+
+Multi-select: the decision prose names all picked options. There is no `reject` on a choice — an empty pick always carries a note.
 
 ### `WEBCOMPANION_EVENT` with `type: "dismiss"` (legacy)
 
