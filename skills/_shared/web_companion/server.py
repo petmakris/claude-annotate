@@ -128,8 +128,9 @@ def list_rows(registry, cwd, scope, now, count_fn=None):
     # workspace 180s after the session that created it exits — exactly the
     # set /annotate resume and the browser need to see. registry.list_all()
     # is already pruned to live on-disk dirs by rehydrate(), so the only
-    # remaining gate is retention (same env/default the startup GC uses).
-    retention_seconds = int(os.environ.get("WEBCOMPANION_RETENTION_DAYS", "7")) * 86400
+    # remaining gate is retention (same env/default the startup GC uses) —
+    # and by default there is none: workspaces stay listed until deleted.
+    retention_seconds = cleanup.retention_seconds_from_env()
     out = []
     for sid, dirs in registry.list_all():
         meta = registry.get_meta(sid)
@@ -140,6 +141,26 @@ def list_rows(registry, cwd, scope, now, count_fn=None):
         out.append(session_row(sid, dirs, meta, now, count_fn=count_fn))
     out.sort(key=lambda r: r["last_active"], reverse=True)
     return out
+
+
+def delete_session(registry, key) -> bool:
+    """Explicitly delete a workspace: its on-disk dir, then its registration.
+
+    This is the ONLY sanctioned way a workspace disappears under the default
+    (infinite) retention. `key` may be a slug or a sid. Returns False for an
+    unknown key; never raises on filesystem trouble — a half-deleted dir is
+    retried simply by deleting again.
+    """
+    sid = registry.resolve(key)
+    if sid is None:
+        return False
+    dirs = registry.lookup(sid)
+    state_dir = (dirs or {}).get("state_dir")
+    if state_dir:
+        shutil.rmtree(Path(state_dir).parent, ignore_errors=True)
+    registry.unregister(sid)
+    registry.persist()
+    return True
 
 
 def supersede_for_claude_session(registry, claude_session_id, exclude_sid=None):
@@ -429,13 +450,15 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
 
     state_root = Path(os.path.expanduser(f"~/.claude/{skill_name}"))
 
-    # Garbage-collect state left behind by past sessions before we rehydrate,
-    # so dormant rows never get re-registered. Best-effort: a sweep failure
+    # Reconcile state before we rehydrate: prune registry rows whose dirs are
+    # already gone, and — only when WEBCOMPANION_RETENTION_DAYS is set to a
+    # positive number — expire dormant workspaces. By default nothing expires:
+    # a workspace lives until explicitly deleted. Best-effort: a sweep failure
     # must never stop the server from starting.
     try:
-        retention_days = int(os.environ.get("WEBCOMPANION_RETENTION_DAYS", "7"))
         gc = cleanup.sweep_state(
-            state_root, retention_days * 86400, time.time(), extra_globs=prune_globs)
+            state_root, cleanup.retention_seconds_from_env(), time.time(),
+            extra_globs=prune_globs)
         if any(gc.values()):
             sys.stdout.write(json.dumps({"type": "cleanup", "skill": skill_name, **gc}) + "\n")
             sys.stdout.flush()
@@ -658,6 +681,25 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
                 return
             if self.path == "/api/sessions":
                 self._handle_create_session()
+                return
+            if self.path == "/api/sessions/delete":
+                raw, err = self._read_body_text()
+                if err is not None:
+                    self._send_text(400, err)
+                    return
+                try:
+                    payload = json.loads(raw) if raw else {}
+                except json.JSONDecodeError:
+                    self._send_text(400, "invalid json")
+                    return
+                key = payload.get("key")
+                if not isinstance(key, str) or not key:
+                    self._send_text(400, "missing key")
+                    return
+                if not delete_session(registry, key):
+                    self._send_text(404, "unknown session")
+                    return
+                self._send_json(200, {"deleted": key})
                 return
             if self.path == "/api/cancel_for_claude_session":
                 raw, err = self._read_body_text()

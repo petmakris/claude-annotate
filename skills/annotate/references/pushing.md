@@ -75,8 +75,8 @@ sys.exit(f"could not locate the {NAME} plugin root")
 
 ## Create-or-attach a workspace for this conversation
 
-Workspaces outlive a single push — they persist on disk for 7 days and survive
-Claude exiting (see SKILL.md § Session lifecycle). So don't mint a fresh one on
+Workspaces outlive a single push — they persist on disk until explicitly
+deleted and survive Claude exiting (see SKILL.md § Session lifecycle). So don't mint a fresh one on
 every push: **create once per conversation, then attach on every push after
 that**, so all of a conversation's pushes land in the same `blocks.json` at the
 same URL.

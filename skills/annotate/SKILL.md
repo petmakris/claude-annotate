@@ -73,11 +73,14 @@ starts it the first time anyone needs it; every later call from any session just
 confirms it's already up. It survives this conversation ending, and self-shuts
 after **24h with no activity** (any request resets the clock).
 
-Workspaces (one per `sid`/`slug`) persist on disk for **7 days** at
-`<cwd>/.claude/annotate/<sid>/` (addressed by `slug` in URLs and `/annotate
-resume`, stored under `sid`) independent of whether any Claude session is
-currently attached to them. A conversation ending doesn't delete its
-workspace — the page stays live, and it's still there to come back to later.
+Workspaces (one per `sid`/`slug`) persist on disk **until explicitly
+deleted** — via the landing page's delete button or `POST
+/api/sessions/delete` — at `<cwd>/.claude/annotate/<sid>/` (addressed by
+`slug` in URLs and `/annotate resume`, stored under `sid`) independent of
+whether any Claude session is currently attached to them. A conversation
+ending doesn't delete its workspace — the page stays live, and it's still
+there to come back to later. (Setting `WEBCOMPANION_RETENTION_DAYS` to a
+positive number opts back into auto-expiry after that many idle days.)
 
 Because of this, don't mint a fresh workspace on every push within one
 conversation — `references/pushing.md` § "Create-or-attach a workspace for

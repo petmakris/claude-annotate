@@ -218,3 +218,44 @@ def test_sweep_prunes_meta_rows_for_removed_sessions(tmp_path):
     sweep_state(state_root, 7 * 86400, time.time())
     meta = json.loads((state_root / "sessions_meta.json").read_text())
     assert meta == {}
+
+
+def test_retention_env_unset_means_never(monkeypatch):
+    monkeypatch.delenv("WEBCOMPANION_RETENTION_DAYS", raising=False)
+    assert cleanup.retention_seconds_from_env() == float("inf")
+
+
+def test_retention_env_zero_means_never(monkeypatch):
+    monkeypatch.setenv("WEBCOMPANION_RETENTION_DAYS", "0")
+    assert cleanup.retention_seconds_from_env() == float("inf")
+
+
+def test_retention_env_positive_opts_into_expiry(monkeypatch):
+    monkeypatch.setenv("WEBCOMPANION_RETENTION_DAYS", "3")
+    assert cleanup.retention_seconds_from_env() == 3 * DAY
+
+
+def test_retention_env_garbage_means_never(monkeypatch):
+    """An unparseable value must fail safe: keep everything, delete nothing."""
+    monkeypatch.setenv("WEBCOMPANION_RETENTION_DAYS", "soon")
+    assert cleanup.retention_seconds_from_env() == float("inf")
+
+
+def test_infinite_retention_keeps_dormant_but_prunes_dangling_rows(tmp_path):
+    """With retention disabled, a years-dormant workspace survives the sweep,
+    while a registry row whose dir is already gone is still pruned."""
+    state_root = tmp_path / "home"
+    cwd = tmp_path / "proj"
+    dirs = _make_session(tmp_path, cwd, "ancient-sid")
+    _write_sessions(state_root, {
+        "ancient-sid": dirs,
+        "ghost": {"state_dir": str(tmp_path / "proj/.claude/annotate/ghost/state")},
+    })
+    now = 100_000_000.0
+    _set_activity(dirs, now - 900 * DAY)
+
+    out = sweep_state(state_root, float("inf"), now=now)
+
+    assert out["sessions_removed"] == 0
+    assert Path(dirs["state_dir"]).parent.exists()
+    assert json.loads((state_root / "sessions.json").read_text()) == {"ancient-sid": dirs}

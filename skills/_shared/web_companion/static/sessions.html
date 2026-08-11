@@ -168,6 +168,9 @@ table.sessions tbody tr:hover { background: #f8f9fb; }
 /* The resume command is the primary action on a row, so it reads as one. */
 .act-cmd { background: #eef0f4; border-color: #c9cdd6; color: #3a3d44; }
 .act-cmd:hover { background: #fff; }
+/* Deletion is the only way a workspace ever disappears, so the button reads
+   as dangerous — red on hover, never on rest, so the page stays calm. */
+.act-del:hover { color: #b91c1c; border-color: #b91c1c; }
 .act[disabled] { opacity: .3; cursor: default; border-style: dashed; }
 .act[disabled]:hover { color: #83868f; border-color: #d4d8e0; }
 .c-go { color: #0071e3; font-size: 12.5px; font-weight: 600; opacity: .5; }
@@ -277,6 +280,8 @@ function rowHtml(row) {
         ? '<button class="act" data-copy="' + escapeHtml(publicUrl(slug)) +
           '" title="Copy the shareable link — read-only for anyone but you">share</button>'
         : '') + '</td>' +
+      '<td class="w-act"><button class="act act-del" data-del="' + slug +
+        '" title="Delete this workspace permanently — page, comments and history">delete</button></td>' +
       '<td class="w-open"><span class="c-go">Open →</span></td>' +
     '</tr>'
   );
@@ -362,8 +367,8 @@ function render() {
 
   var rows = ALL.filter(function (row) {
     // "all" shows everything the server still holds — live, idle and closed.
-    // Workspaces past retention are already gone from the response, so there
-    // is nothing deleted to filter out here.
+    // Deleted workspaces (and, when opt-in retention is set, expired ones)
+    // are already gone from the response, so there is nothing to filter here.
     if (segment === "live" && row.status !== "live") return false;
     if (segment === "open" && row.status === "done") return false;
     if (selectedProject && row.project !== selectedProject) return false;
@@ -397,6 +402,7 @@ function render() {
       '<th class="w-act">Resume</th>' +
       '<th class="w-act">Link</th>' +
       '<th class="w-act">' + (HOSTS.shareable ? "Share" : "") + '</th>' +
+      '<th class="w-act">Delete</th>' +
       '<th class="w-open"></th>' +
     '</tr></thead><tbody>' + rows.map(rowHtml).join("") + '</tbody></table>';
   footEl.textContent = rows.length + (rows.length === 1 ? " workspace" : " workspaces") + " · sorted by last activity";
@@ -408,11 +414,38 @@ function render() {
   });
   // Bound after the row handler and stopping propagation, so copying a link
   // does not also navigate away from the page you wanted to copy it from.
-  Array.prototype.forEach.call(listEl.querySelectorAll(".act"), function (btn) {
+  Array.prototype.forEach.call(listEl.querySelectorAll(".act[data-copy]"), function (btn) {
     btn.addEventListener("click", function (ev) {
       ev.stopPropagation();
       ev.preventDefault();
       copyText(btn.getAttribute("data-copy"), btn);
+    });
+  });
+  // Deletion is irreversible — nothing expires on its own, so this button is
+  // the workspace's one exit and always confirms before acting.
+  Array.prototype.forEach.call(listEl.querySelectorAll(".act-del"), function (btn) {
+    btn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      ev.preventDefault();
+      var key = btn.getAttribute("data-del");
+      if (!window.confirm("Delete workspace “" + key + "” permanently? This cannot be undone.")) return;
+      fetch("/api/sessions/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: key }),
+      }).then(function (r) {
+        if (!r.ok) throw new Error(String(r.status));
+        ALL = ALL.filter(function (row) { return (row.slug || row.sid) !== key; });
+        populateProjects();
+        render();
+      }).catch(function () {
+        btn.innerHTML = "failed";
+        btn.classList.add("bad");
+        setTimeout(function () {
+          btn.innerHTML = "delete";
+          btn.classList.remove("bad");
+        }, 1200);
+      });
     });
   });
 }

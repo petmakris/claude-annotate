@@ -105,3 +105,13 @@ def test_scope_all_excludes_beyond_retention(tmp_path, monkeypatch):
     # which is far beyond the 1-day retention window relative to `now`.
     rows = list_rows(r, "", "all", now=now)
     assert rows == []
+
+
+def test_scope_all_includes_ancient_rows_by_default(tmp_path, monkeypatch):
+    """With WEBCOMPANION_RETENTION_DAYS unset, workspaces never age out of the
+    scope=all listing — retention is opt-in, not a default."""
+    monkeypatch.delenv("WEBCOMPANION_RETENTION_DAYS", raising=False)
+    r = Registry(tmp_path)
+    _session(r, tmp_path, "260720-1-a", "s1", "One", "p")   # created_at = 1
+    rows = list_rows(r, "", "all", now=100_000_000)
+    assert [row["sid"] for row in rows] == ["260720-1-a"]

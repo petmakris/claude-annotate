@@ -8,8 +8,11 @@ nothing ever removed either — so both grew by one entry per session forever.
 The shared HTTP server is the single owner of this state and re-launches after
 each idle shutdown (see ``server.run``'s idle watchdog), which makes server
 startup the natural, once-per-lifecycle GC point. ``sweep_state`` runs there,
-before ``Registry.rehydrate``, and deletes anything dormant past a retention
-window.
+before ``Registry.rehydrate``. By default the retention window is infinite —
+workspaces live until explicitly deleted, and the sweep only reconciles
+registry rows whose dirs are already gone; setting
+``WEBCOMPANION_RETENTION_DAYS`` to a positive number opts back into deleting
+anything dormant past that window.
 
 The clock is injected (``now``) so the sweep is deterministic under test, and
 every filesystem step is best-effort: an error on one entry is counted and
@@ -18,6 +21,7 @@ skipped, never raised, so a GC failure can't stop the server from starting.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 from pathlib import Path
@@ -41,6 +45,22 @@ _LIVENESS_CHILDREN = (
     "finished",
     "cancelled",
 )
+
+
+def retention_seconds_from_env() -> float:
+    """The retention window in seconds, from WEBCOMPANION_RETENTION_DAYS.
+
+    Workspaces live until explicitly deleted: unset, zero, negative, or
+    unparseable all disable expiry (``inf``) — the failure mode of a bad value
+    must be "keep everything", never "delete everything". A positive integer
+    opts back into the old N-day sweep.
+    """
+    raw = os.environ.get("WEBCOMPANION_RETENTION_DAYS", "")
+    try:
+        days = int(raw)
+    except ValueError:
+        return float("inf")
+    return days * 86400 if days > 0 else float("inf")
 
 
 def _mtime(path: Path) -> float | None:

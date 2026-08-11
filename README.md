@@ -98,10 +98,11 @@ the sidebar or one settings row instead of the whole mock.
   the thing you're looking for.
 - **Paste images** — screenshots paste into comments and travel to Claude
   with the round.
-- **Persistent workspaces** — documents live on disk for 7 days; close the
-  tab, come back, the comment history is still there. The server's landing
-  page lists every live workspace, and `/annotate resume <slug>` reattaches
-  Claude to one.
+- **Persistent workspaces** — documents live on disk until you delete them;
+  close the tab, come back next month, the comment history is still there.
+  The server's landing page lists every workspace with a delete button, and
+  `/annotate resume <slug>` reattaches Claude to one. (Set
+  `WEBCOMPANION_RETENTION_DAYS=N` to opt back into N-day auto-expiry.)
 
 ## How it works
 
