@@ -1,8 +1,7 @@
 # Shot list
 
-Two recordings are missing from `README.md`. Each is marked there with a
-`<!-- SCREENSHOT: … -->` comment — replace the comment with
-`![alt text](docs/img/<name>)` once the file exists.
+Both recordings live in `docs/img/` and are embedded in `README.md`. This file
+stays as the spec for re-recording them when the UI changes.
 
 Keep GIFs under about 5 MB; GitHub will not render larger ones inline.
 

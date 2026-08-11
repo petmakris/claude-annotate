@@ -4,7 +4,7 @@ Claude writes you a long answer. You read it in a browser instead of a terminal,
 click the one paragraph you disagree with, and type why. Claude rewrites *that
 block* — not the whole answer, not a fresh reply appended below it.
 
-<!-- SCREENSHOT: hero.gif — see docs/SHOTLIST.md -->
+![Comment on one block; Claude rewrites it in place](docs/img/hero.gif)
 
 ## Install
 
@@ -33,7 +33,7 @@ its own. To push an answer that has already landed:
 Your browser opens. Every block is clickable. Comment on one, and Claude's reply
 replaces it in place; the rest of the page does not move or reload.
 
-<!-- SCREENSHOT: comment-flow.gif — see docs/SHOTLIST.md -->
+![The comment flow up close: type a correction, submit the round, the block updates](docs/img/comment-flow.gif)
 
 ## How it works
 
