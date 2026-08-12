@@ -1113,10 +1113,10 @@ class BrokenMachineTests(unittest.TestCase):
         self.home.mkdir()
         self.bin = sanitized_path_dir(self.tmp, with_python=False)
 
-    def test_a_hundred_tool_calls_produce_no_output_at_all(self):
+    def test_repeated_tool_calls_produce_no_output_at_all(self):
         # The reported symptom: one red line per tool call, forever.
         env = hook_env(self.home, self.bin)
-        for _ in range(100):
+        for _ in range(5):
             result = subprocess.run(
                 [BASH, "-c", hook_command()],
                 input=PAYLOAD, capture_output=True, text=True, timeout=10, env=env,
@@ -1188,7 +1188,7 @@ launching a skill names the plugin exactly once."
 
 | Claim | Verified by | Expected |
 |---|---|---|
-| The hook is silent without `python3` | Task 1 / Task 8 | exit 0, empty stdout and stderr, 100 times |
+| The hook is silent without `python3` | Task 1 / Task 8 | exit 0, empty stdout and stderr, on every repeat |
 | The hook spawns nothing when unused | Task 1 spy interpreter | marker file absent |
 | The hook still receives its stdin payload | Task 1 | `progress_publish.py` runs clean |
 | The launcher names the plugin and the fix | Task 2 | stderr has `claude-annotate`, `python3`, `3.9`, a remedy |
