@@ -12,7 +12,8 @@ import unittest
 from pathlib import Path
 
 from skills.tests.sanitized_env import (
-    BASH, REPO_ROOT, hook_command, hook_env, sanitized_path_dir,
+    BASH, REPO_ROOT, hook_command, hook_env, pythonless_home,
+    sanitized_path_dir,
 )
 
 PAYLOAD = json.dumps({"tool_name": "Bash", "session_id": "sess-1"})
@@ -37,6 +38,10 @@ class BrokenMachineTests(unittest.TestCase):
             self.assertEqual(result.stdout + result.stderr, "")
 
     def test_the_doctor_still_runs_and_explains(self):
+        # The reported machine had no python3 at all, so the login shell has
+        # none either — otherwise this fixture is a shim machine, which the
+        # doctor deliberately diagnoses differently.
+        pythonless_home(self.home, self.bin)
         doctor = REPO_ROOT / "skills" / "_shared" / "web_companion" / "doctor.sh"
         result = subprocess.run(
             [str(self.bin / "sh"), str(doctor)],

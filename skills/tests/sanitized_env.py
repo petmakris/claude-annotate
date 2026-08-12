@@ -65,6 +65,30 @@ def sanitized_path_dir(tmp: Path, *, with_python: bool = False,
     return bin_dir
 
 
+def pythonless_home(home: Path, bin_dir: Path, *, profile_extra: str = "") -> Path:
+    """Make the LOGIN shell python-less too, not just the PATH we hand over.
+
+    Sanitizing PATH only sanitizes the *non-interactive* view. `bash -l` still
+    sources /etc/profile, which on macOS runs path_helper and puts
+    /usr/bin/python3 back — so a fixture claiming "this machine has no python3"
+    was quietly describing a machine that has one in the login shell.
+
+    doctor.sh now distinguishes those two situations, because they need
+    opposite remedies (install one / expose the one you have). So the fixture
+    has to distinguish them as well. ~/.bash_profile is sourced after
+    /etc/profile, so pinning PATH there yields a login shell that genuinely
+    finds no interpreter.
+
+    `profile_extra` is prepended, for tests that need the profile itself to
+    misbehave (e.g. a bare `read`).
+    """
+    home.mkdir(parents=True, exist_ok=True)
+    (home / ".bash_profile").write_text(
+        f'{profile_extra}PATH="{bin_dir}"\nexport PATH\n'
+    )
+    return home
+
+
 def spy_marker(tmp: Path) -> Path:
     """Path the spy python3 writes to when it is executed."""
     return tmp / "python3-was-spawned"
