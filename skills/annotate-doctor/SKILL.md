@@ -32,9 +32,12 @@ IFS="$old_ifs"
 if [ -z "$DOCTOR" ] && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/$MARKER" ]; then
   DOCTOR="$CLAUDE_PLUGIN_ROOT/$MARKER"
 fi
-# 3. Marketplace cache layout, last.
+# 3. Marketplace cache layout, last: cache/<marketplace>/<plugin>/<version>/.
+#    Three levels, and matched by marker file rather than directory name — the
+#    plugin directory is named for the PLUGIN (claude-annotate OR
+#    claude-ide-review), so a name glob would miss half the installs.
 if [ -z "$DOCTOR" ]; then
-  for candidate in "$HOME"/.claude/plugins/cache/*/claude-annotate*/; do
+  for candidate in "$HOME"/.claude/plugins/cache/*/*/*/; do
     if [ -f "$candidate$MARKER" ]; then DOCTOR="$candidate$MARKER"; break; fi
   done
 fi
@@ -46,9 +49,13 @@ This scans `PATH` for directories ending in `bin/`, then checks whether the pare
 contains our marker file. That covers both `--plugin-dir` installs (where Claude
 Code adds `<plugin-root>/bin` to `PATH`) and marketplace installs (where the plugin's
 `bin` is on `PATH`). It falls back to `CLAUDE_PLUGIN_ROOT` when the Bash tool has
-access to it (only in hook contexts), and finally checks the marketplace cache layout.
-Searching by marker file rather than directory name means it survives clones under
-any directory name.
+access to it (only in hook contexts), and finally walks the marketplace cache layout
+(`cache/<marketplace>/<plugin>/<version>/`) for a directory containing the marker.
+In practice the first probe wins — Claude Code puts `<plugin-root>/bin` on `PATH` for
+both install kinds — so the cache walk is the safety net for a trimmed `PATH`.
+Every probe searches by marker file rather than directory name, so all three survive
+clones under any directory name, and none of them assumes which of the two plugins
+is installed.
 
 ## Report
 

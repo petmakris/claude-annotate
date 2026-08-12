@@ -38,7 +38,8 @@ def sanitized_path_dir(tmp: Path, *, with_python: bool = False,
     with_python=False -> no python3 at all (the reported user's machine).
     with_python=True, spy=False -> the real python3, symlinked.
     with_python=True, spy=True -> a shell script named python3 that records
-        that it ran, so a test can prove the gate never spawned it.
+        that it ran AND everything it was handed on stdin, so a test can prove
+        the gate never spawned it, or that the payload survived the gate.
     """
     bin_dir = tmp / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
@@ -52,9 +53,11 @@ def sanitized_path_dir(tmp: Path, *, with_python: bool = False,
         target = bin_dir / "python3"
         if spy:
             marker = tmp / "python3-was-spawned"
+            stdin_log = tmp / "python3-stdin"
             target.write_text(
                 "#!/bin/sh\n"
                 f"echo spawned > '{marker}'\n"
+                f"cat > '{stdin_log}'\n"
                 "exit 0\n"
             )
             target.chmod(0o755)
@@ -92,6 +95,11 @@ def pythonless_home(home: Path, bin_dir: Path, *, profile_extra: str = "") -> Pa
 def spy_marker(tmp: Path) -> Path:
     """Path the spy python3 writes to when it is executed."""
     return tmp / "python3-was-spawned"
+
+
+def spy_stdin(tmp: Path) -> Path:
+    """Path the spy python3 copies its stdin into."""
+    return tmp / "python3-stdin"
 
 
 def hook_command() -> str:

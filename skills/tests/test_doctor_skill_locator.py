@@ -12,14 +12,11 @@ from __future__ import annotations
 
 import re
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-# Import from same directory
-sys.path.insert(0, str(Path(__file__).parent))
-from sanitized_env import REPO_ROOT
+from skills.tests.sanitized_env import REPO_ROOT
 
 DOCTOR_PATH = REPO_ROOT / "skills" / "_shared" / "web_companion" / "doctor.sh"
 
@@ -89,6 +86,41 @@ class TestDoctorLocator(unittest.TestCase):
                 result.stdout or result.stderr,
                 "doctor.sh should produce output"
             )
+
+    def test_locates_doctor_in_the_marketplace_cache_layout(self):
+        """The third fallback walks cache/<marketplace>/<plugin>/<version>/.
+
+        It used to glob one level short (cache/*/claude-annotate*/), so it
+        could never match anything — and its name filter would have skipped a
+        claude-ide-review install even at the right depth. Nothing on PATH
+        here ends in /bin, so probe 1 cannot answer and this fallback is the
+        only thing that can.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+
+            # A real marketplace install of the OTHER plugin, at real depth.
+            versioned = (tmp / ".claude" / "plugins" / "cache"
+                         / "claude-annotate" / "claude-ide-review" / "0.1.0")
+            dest = versioned / "skills" / "_shared" / "web_companion" / "doctor.sh"
+            dest.parent.mkdir(parents=True)
+            dest.write_bytes(
+                (REPO_ROOT / "skills" / "_shared" / "web_companion"
+                 / "doctor.sh").read_bytes()
+            )
+
+            # Deliberately NOT named bin/, so the PATH probe cannot fire.
+            tools = tmp / "tools"
+            tools.mkdir()
+            (tools / "sh").symlink_to("/bin/sh")
+
+            result = subprocess.run(
+                ["sh", "-c", self.locator],
+                env={"PATH": str(tools), "HOME": str(tmp)},
+                capture_output=True, text=True, timeout=60,
+            )
+            self.assertIn("claude-annotate doctor", result.stdout,
+                          f"cache fallback did not find doctor.sh: {result.stderr}")
 
     def test_fails_clearly_when_doctor_not_found(self):
         """The locator fails with clear message when doctor.sh is missing.
