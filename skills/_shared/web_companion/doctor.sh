@@ -21,10 +21,12 @@ if command -v python3 >/dev/null 2>&1; then
   where="$(command -v python3)"
   major="$(python3 --version 2>&1 | sed -n 's/[^0-9]*\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1/p')"
   minor="$(python3 --version 2>&1 | sed -n 's/[^0-9]*\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\2/p')"
-  # An unparseable version must not make `[` error out under an empty operand.
-  [ -n "$major" ] || major=0
-  [ -n "$minor" ] || minor=0
-  if [ "$major" -gt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -ge 9 ]; }; then
+  # An unparseable version is a distinct failure from an old-but-valid one:
+  # do not let it fall through and be reported as merely "older than 3.9".
+  if [ -z "$major" ] || [ -z "$minor" ]; then
+    fail "python3 — could not parse a version number from: $version ($where)"
+    fix "Confirm this is really python3 by running: $where --version"
+  elif [ "$major" -gt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -ge 9 ]; }; then
     ok "python3 — $version ($where)"
   else
     fail "python3 — $version is older than the required 3.9 ($where)"
@@ -42,13 +44,29 @@ fi
 # Hooks run under a non-interactive shell. A pyenv/asdf/conda shim added by
 # .zshrc is invisible there, so `python3 --version` can work when the user
 # types it and fail inside a hook. No README can resolve that; detect it.
+#
+# Resolvable is not the same as runnable: macOS ships /usr/bin/python3 as an
+# Xcode Command Line Tools placeholder that `command -v` finds whether or not
+# its license has been accepted. Unaccepted, invoking it fails or pops a GUI
+# installer prompt — so we execute it non-interactively with all output and
+# stdin discarded, and treat a non-zero exit as "resolvable but not
+# functional" rather than something safe to symlink.
 login_python="$(bash -lc 'command -v python3' 2>/dev/null)"
 if [ -n "$login_python" ] && ! command -v python3 >/dev/null 2>&1; then
-  fail "python3 — found by your login shell but NOT by a non-interactive shell"
-  fix "Your shell finds it at: $login_python"
-  fix "Hooks run under a non-interactive shell, which does not read your rc file."
-  fix "Expose it to non-interactive shells, e.g. link it onto the default PATH:"
-  fix "  sudo ln -s \"$login_python\" /usr/local/bin/python3"
+  if bash -lc 'python3 --version' </dev/null >/dev/null 2>&1; then
+    fail "python3 — found by your login shell but NOT by a non-interactive shell"
+    fix "Your shell finds it at: $login_python"
+    fix "Hooks run under a non-interactive shell, which does not read your rc file."
+    fix "Expose it to non-interactive shells, e.g. link it onto the default PATH:"
+    fix "  sudo ln -s \"$login_python\" /usr/local/bin/python3"
+  else
+    fail "python3 — resolves to $login_python in your login shell, but that binary does not run"
+    fix "This is often the macOS Xcode Command Line Tools placeholder before its"
+    fix "license is accepted, or a broken pyenv/asdf shim. Do not symlink it —"
+    fix "the target does not work. Install a real python3 instead:"
+    fix "macOS:  xcode-select --install     (or: brew install python)"
+    fix "Linux:  install python3 with your distribution's package manager"
+  fi
 fi
 
 # --- other tools -----------------------------------------------------------
