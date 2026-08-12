@@ -7,10 +7,16 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 is the declared floor (Path.is_relative_to in uploads.py).
+        # It is in the matrix so the number in the README stays true.
+        python-version: ['3.9', '3.12']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python-version }}
       - run: pip install pytest
       - run: python3 -m pytest skills -q
