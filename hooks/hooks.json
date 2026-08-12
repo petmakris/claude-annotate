@@ -1,12 +1,12 @@
 {
-  "description": "progress_publish.py on PostToolUse — publishes a coarse, sanitized live-progress label to the annotate web companion while Claude is rewriting a block. Runs entirely outside the model loop, so it costs zero tokens. Only allowlisted labels are ever written; no paths, arguments or tool output can reach the browser.",
+  "description": "progress_publish.py on PostToolUse — publishes a coarse, sanitized live-progress label to the annotate web companion while Claude is rewriting a block. Runs entirely outside the model loop, so it costs zero tokens. Only allowlisted labels are ever written; no paths, arguments or tool output can reach the browser. Gated in POSIX sh: exits 0 without spawning an interpreter unless python3 resolves and this machine has a pending annotate round, so a machine without Python stays silent and an ide-review-only install pays nothing.",
   "hooks": {
     "PostToolUse": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skills/annotate/hooks/progress_publish.py\""
+            "command": "command -v python3 >/dev/null 2>&1 || exit 0; set -- \"$HOME\"/.claude/annotate/pending-*.json; [ -e \"$1\" ] || exit 0; exec python3 \"${CLAUDE_PLUGIN_ROOT}/skills/annotate/hooks/progress_publish.py\""
           }
         ]
       }
