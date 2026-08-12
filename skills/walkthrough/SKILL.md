@@ -43,6 +43,20 @@ Use this instead of answering in terminal prose whenever the honest answer is
 Run this once at the top of every invocation, before anything else:
 
 ```bash
+if ! command -v python3 >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+claude-annotate: python3 was not found on PATH.
+
+This plugin needs Python 3.9 or newer (standard library only — nothing to
+pip install).
+
+  macOS:  xcode-select --install     # or: brew install python
+  Linux:  install python3 with your distribution's package manager
+
+Run /annotate-doctor for a full check of this machine.
+EOF
+  exit 1
+fi
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(python3 -c '
 import json, os, sys
 NAME, MARKER = "claude-annotate", "skills/walkthrough/ensure_server.sh"
