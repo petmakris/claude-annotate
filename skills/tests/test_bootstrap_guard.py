@@ -42,7 +42,11 @@ class BootstrapGuardTests(unittest.TestCase):
         return subprocess.run(
             [str(bin_dir / "bash"), str(path)],
             capture_output=True, text=True, timeout=20,
-            env={"HOME": str(self.home), "PATH": str(bin_dir)},
+            # LC_ALL/LANG pinned to C so bash's own diagnostics (e.g. "command
+            # not found") are always English — otherwise this test's meaning
+            # depends on the developer's locale instead of the guard.
+            env={"HOME": str(self.home), "PATH": str(bin_dir),
+                 "LC_ALL": "C", "LANG": "C"},
         )
 
     def test_each_bootstrap_names_the_plugin_and_the_fix(self):

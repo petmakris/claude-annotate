@@ -21,7 +21,11 @@ class PreflightTests(unittest.TestCase):
         return subprocess.run(
             [str(bin_dir / "bash"), str(SCRIPT)],
             capture_output=True, text=True, timeout=20,
-            env={"HOME": str(self.home), "PATH": str(bin_dir)},
+            # LC_ALL/LANG pinned to C so bash's own diagnostics (e.g. "command
+            # not found") are always English — otherwise this test's meaning
+            # depends on the developer's locale instead of the guard.
+            env={"HOME": str(self.home), "PATH": str(bin_dir),
+                 "LC_ALL": "C", "LANG": "C"},
         )
 
     def test_reports_missing_python_and_stops(self):
