@@ -210,6 +210,33 @@ than a fact.
 If the suite does not pass on 3.9, the declared floor is raised to the version
 CI actually tests. We do not publish a number we have not run.
 
+## Known residuals
+
+Implemented and shipped 2026-08-12. Two findings were adjudicated as real but
+not worth fixing then; they are recorded here because the reasoning matters
+more than the defects.
+
+**The guard scan checks only the first `python3` block per document.**
+`skills/tests/test_bootstrap_guard.py` derives its list by scanning skill
+markdown, which is what catches a whole unguarded file — the failure that
+actually shipped (`resuming.md`). It does not catch an unguarded block
+appended *below* an already-guarded one. Every current entry guard sits under
+"run this once, before anything else", so later blocks cannot run first;
+guarding all ~15 blocks was judged worse than the risk.
+
+**The scan's `python3` pattern is one form narrower than it looks.** It
+matches `python3 -c`, `-m` and `--version` — every form shipped today — but
+not `python3 "$SCRIPT"` or `python3 <<'PY'`. A new document using either form
+would be invisible to the scanner, not merely unguarded. A one-line widening
+closes it.
+
+Also worth remembering: five tests written for this work turned out to assert
+nothing, each caught only by reverting the production code and checking the
+test noticed. Two failure shapes recurred — asserting the *absence* of a
+string that could never appear, and building a "machine with no `python3`" by
+clearing `PATH` while `bash -l` restored it from `/etc/profile`. Sabotage the
+test before believing it.
+
 ## Out of scope
 
 - Windows and WSL support
