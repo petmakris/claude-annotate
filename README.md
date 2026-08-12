@@ -6,6 +6,19 @@ block* — not the whole answer, not a fresh reply appended below it.
 
 ![Comment on one block; Claude rewrites it in place](docs/img/hero.gif)
 
+## Requirements
+
+- **`python3` on your `PATH`, version 3.9 or newer.** Standard library only —
+  there is nothing to `pip install`.
+- **`bash` and `curl`** (both ship with macOS and every mainstream Linux).
+- **macOS or Linux.** Windows is not supported.
+- `claude-ide-review` additionally needs the IntelliJ plugin — see below.
+
+On a fresh Mac without the Xcode Command Line Tools there is no `python3` at
+all; `xcode-select --install` or `brew install python` provides one. If
+anything misbehaves after installing, run `/annotate-doctor` for a check of
+your machine.
+
 ## Install
 
     /plugin marketplace add petmakris/claude-annotate
