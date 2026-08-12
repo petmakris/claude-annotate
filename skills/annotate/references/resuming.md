@@ -13,9 +13,27 @@ marker is set, the *next* push in this conversation attaches to it
 automatically — no different from a second push in a conversation that never
 left, per `references/pushing.md`.
 
-Every step below needs the server URL:
+Every step below needs the server URL. `/annotate resume` reaches this file
+**directly** from SKILL.md's router — it never passes through
+`references/pushing.md`, so it never runs `ensure_server.sh`. That makes the
+block below this skill's first `python3` call on a resume, and it carries its
+own guard for the same reason `references/pushing.md` does:
 
 ```bash
+if ! command -v python3 >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+claude-annotate: python3 was not found on PATH.
+
+This plugin needs Python 3.9 or newer (standard library only — nothing to
+pip install).
+
+  macOS:  xcode-select --install     # or: brew install python
+  Linux:  install python3 with your distribution's package manager
+
+Run /annotate-doctor for a full check of this machine.
+EOF
+  exit 1
+fi
 SERVER_URL=$(python3 -c 'import json,os; print(json.load(open(os.path.expanduser("~/.claude/annotate/server.json")))["url"])')
 ```
 
