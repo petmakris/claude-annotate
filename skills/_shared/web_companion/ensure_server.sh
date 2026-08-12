@@ -23,6 +23,50 @@ INFO_FILE="$STATE_DIR/server.json"
 
 mkdir -p "$STATE_DIR"
 
+preflight() {
+  # Requirements are the user's to install; ours to state clearly. Never
+  # probe for other interpreters and never install anything — see
+  # docs/superpowers/specs/2026-08-12-install-robustness-design.md.
+  if ! command -v python3 >/dev/null 2>&1; then
+    cat >&2 <<'EOF'
+claude-annotate: python3 was not found on PATH.
+
+This plugin needs Python 3.9 or newer (standard library only — there is
+nothing to pip install).
+
+  macOS:  xcode-select --install     # or: brew install python
+  Linux:  install python3 with your distribution's package manager
+
+Then run /annotate-doctor to confirm the install is healthy.
+EOF
+    return 1
+  fi
+  if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)'; then
+    local found
+    found="$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:3])))' 2>/dev/null || echo unknown)"
+    cat >&2 <<EOF
+claude-annotate: python3 is version $found, but this plugin needs 3.9 or newer.
+
+  macOS:  brew install python
+  Linux:  install a newer python3 with your distribution's package manager
+
+Then run /annotate-doctor to confirm the install is healthy.
+EOF
+    return 1
+  fi
+  if ! command -v curl >/dev/null 2>&1; then
+    cat >&2 <<'EOF'
+claude-annotate: curl was not found on PATH.
+
+The launcher uses curl to check whether the local server is healthy.
+Install curl with your system's package manager, then run /annotate-doctor.
+EOF
+    return 1
+  fi
+}
+
+preflight || exit 1
+
 expected_fp() {
   # Must mirror server.code_fingerprint() so a running server built from a
   # different tree state (old install dir after a plugin update, or edited
