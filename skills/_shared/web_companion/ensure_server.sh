@@ -30,6 +30,7 @@ preflight() {
   if ! command -v python3 >/dev/null 2>&1; then
     cat >&2 <<'EOF'
 claude-annotate: python3 was not found on PATH.
+claude-annotate is the marketplace that ships this plugin and claude-ide-review.
 
 This plugin needs Python 3.9 or newer (standard library only — there is
 nothing to pip install).
@@ -46,6 +47,7 @@ EOF
     found="$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:3])))' 2>/dev/null || echo unknown)"
     cat >&2 <<EOF
 claude-annotate: python3 is version $found, but this plugin needs 3.9 or newer.
+claude-annotate is the marketplace that ships this plugin and claude-ide-review.
 
   macOS:  brew install python
   Linux:  install a newer python3 with your distribution's package manager
@@ -57,6 +59,7 @@ EOF
   if ! command -v curl >/dev/null 2>&1; then
     cat >&2 <<'EOF'
 claude-annotate: curl was not found on PATH.
+claude-annotate is the marketplace that ships this plugin and claude-ide-review.
 
 The launcher uses curl to check whether the local server is healthy.
 Install curl with your system's package manager, then run /annotate-doctor.

@@ -78,9 +78,26 @@ def test_marketplace_publishes_two_plugins_from_one_root():
         assert plugin["description"], plugin["name"]
 
 
-def test_plugin_skill_lists_partition_the_skills_tree():
+# Skills deliberately claimed by BOTH plugins. The list is not a loophole —
+# anything not named here is still a duplicate-claim bug.
+#
+# annotate-doctor: every guard block and both ensure_server.sh failure
+# messages tell the user to run /annotate-doctor. Shipping it only with
+# claude-annotate meant a claude-ide-review-only user was pointed at a command
+# their install does not have. One diagnostic, both plugins.
+SHARED_SKILLS = {"./skills/annotate-doctor"}
+
+
+def test_plugin_skill_lists_cover_the_skills_tree():
     listed = [s for p in _marketplace()["plugins"] for s in p["skills"]]
-    assert len(listed) == len(set(listed)), f"a skill is claimed twice: {listed}"
+    doubled = {s for s in listed if listed.count(s) > 1}
+    unexpected = doubled - SHARED_SKILLS
+    assert not unexpected, f"a skill is claimed twice: {sorted(unexpected)}"
+    stale = SHARED_SKILLS - doubled
+    assert not stale, (
+        f"declared shared but claimed by one plugin only: {sorted(stale)} — "
+        "either share it or drop it from SHARED_SKILLS"
+    )
     # A skill directory is one with a SKILL.md; _shared and tests have none.
     on_disk = {
         f"./skills/{d.name}"

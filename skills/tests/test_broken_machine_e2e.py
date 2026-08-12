@@ -64,6 +64,10 @@ class BrokenMachineTests(unittest.TestCase):
         self.assertEqual(result.stderr.count("claude-annotate:"), 1,
                          "say it once, not once per layer")
         self.assertIn("/annotate-doctor", result.stderr)
+        # ...and say what "claude-annotate" is, since it is the marketplace
+        # name and half the userbase installed claude-ide-review instead.
+        self.assertIn("marketplace", result.stderr)
+        self.assertIn("claude-ide-review", result.stderr)
 
 
 if __name__ == "__main__":

@@ -180,6 +180,11 @@ class BootstrapGuardTests(unittest.TestCase):
                 self.assertIn("claude-annotate", result.stderr)
                 self.assertIn("python3", result.stderr)
                 self.assertIn("/annotate-doctor", result.stderr)
+                # The prefix is the marketplace, which ships two plugins. A
+                # claude-ide-review user reading "claude-annotate:" otherwise
+                # sees the name of something they never installed.
+                self.assertIn("marketplace", result.stderr)
+                self.assertIn("claude-ide-review", result.stderr)
 
     def test_no_raw_command_not_found_reaches_the_user(self):
         bin_dir = sanitized_path_dir(self.tmp, with_python=False)

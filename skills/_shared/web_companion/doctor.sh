@@ -13,7 +13,8 @@ ok()   { printf 'ok    %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; failures=$((failures + 1)); }
 fix()  { printf '        %s\n' "$1"; }
 
-printf 'claude-annotate doctor\n\n'
+printf 'claude-annotate doctor\n'
+printf 'claude-annotate is the marketplace that ships this plugin and claude-ide-review.\n\n'
 
 # --- interpreter -----------------------------------------------------------
 if command -v python3 >/dev/null 2>&1; then

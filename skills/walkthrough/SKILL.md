@@ -46,6 +46,7 @@ Run this once at the top of every invocation, before anything else:
 if ! command -v python3 >/dev/null 2>&1; then
   cat >&2 <<'EOF'
 claude-annotate: python3 was not found on PATH.
+claude-annotate is the marketplace that ships this plugin and claude-ide-review.
 
 This plugin needs Python 3.9 or newer (standard library only — nothing to
 pip install).
