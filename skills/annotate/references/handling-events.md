@@ -64,7 +64,7 @@ respectively.
 1. Parse the banner: `skill`, `sid`, `event_id`.
 2. Read the event payload between the `---payload---` and `---end---` markers in the notification body. **If `type == "choice"`, jump to the `choice` subsection below.** Otherwise, fields are:
    - `block_id` — the block to update, or `null` for a general comment.
-   - `step_id` — for `kind: "sequence"` blocks: the step row the user clicked, or `null` for whole-diagram comments. For `kind: "flowchart"` blocks: the clicked node's id (the DOM carries it as `data-node-id`, but it arrives on the wire in this same `step_id` field — there is no separate `node_id` field), or `null` for whole-flowchart comments. For `kind: "diagram"` blocks: always `null` (whole-diagram only in v1). Absent/null for markdown blocks.
+   - `step_id` — which sub-unit of the block the comment targets, or `null` for the whole block. **Pictures no longer produce one.** A `sequence`, `flowchart` or `diagram` block is commented as a whole, from the card header, so its comments arrive with `step_id: null`; the reader cannot click a step row, a node, or a pflow source line to scope one. (The field is still live: `mockup` blocks produce it from a `data-annotate-id` region, and comments made before this rule changed still carry theirs. Keep handling it — see the rewrite contracts below.) Absent/null for markdown blocks.
    - `type` — `"round"` (all content feedback), `"choice"` (an answer), or `"comment"` with a null `block_id` (the general chat box). `"reject"` / `"dismiss"` are legacy — see the model paragraph above.
    - `selected_options` — for `type: "choice"`: the option id(s) the user picked (a list, possibly EMPTY when the user answered with a note instead). Absent otherwise.
    - `reactions` — for `type: "round"`: the batched reactions. Jump to the `round` subsection below.
@@ -115,8 +115,9 @@ A dismissed `choice` or `sequence` block is removed whole-block the same way —
 
 **This is how essentially all content feedback arrives.** The user swept the
 document — marking whole blocks from the card header and individual sub-units
-(list items, paragraphs, table rows, code blocks) in the body — and submitted
-the lot at once. The payload carries the whole batch:
+(list items, paragraphs, code blocks) in the body — and submitted the lot at
+once. Tables and pictures have no sub-units: a comment on either is a
+block-scope one from the card header. The payload carries the whole batch:
 
 - `reactions` — a list of `{scope, kind, block_id, selected_text, text,
   images, step_id?, disagree?, prefix?, suffix?}`.
@@ -127,8 +128,10 @@ the lot at once. The payload carries the whole batch:
     "block"`**, which is anchored by `block_id` alone. `prefix`/`suffix` pin
     down which occurrence when it repeats inside the block (same convention as
     span comments).
-  - `step_id`, when present, anchors a unit reaction to a diagram/flowchart
-    node or an authored `data-annotate-id` sub-unit instead of to text.
+  - `step_id`, when present, anchors a unit reaction to an authored
+    `data-annotate-id` sub-unit instead of to text. Pictures no longer emit
+    one (see the field note above); a `step_id` on a diagram or flowchart
+    reaction is a pre-existing mark from before that rule and still resolves.
   - `disagree: true` on a comment means push-back — concede or defend, don't
     read it as agreement.
 
@@ -318,9 +321,9 @@ When `block_id` is `null` (general comment):
 
 For `WEBCOMPANION_EVENT` payloads that target a `kind: "sequence"` block, the rewrite contract has three deltas from the markdown contract above:
 
-1. **Targeted by default when `step_id` is present.** A comment on step `s4` ("does this fire once per click, or can it batch?") rewrites just that step's `label` and/or `sub`. Other steps untouched. Step ids stay stable across rewrites; new steps mint fresh ids via `next_step_id`.
+1. **Whole-diagram by default (`step_id: null`)** — the usual case, and now the only one the UI produces. A picture is commented as a whole from the card header, so read the comment against the whole spec and apply it across steps as needed: restructure phases, reorder steps, add/remove actors, retitle. Analogous to general comments with `block_id: null` in the markdown contract. The user is pointing at the diagram; work out from the words which part they mean.
 
-2. **Whole-diagram comments (`step_id: null`)** apply across steps as needed — restructure phases, reorder steps, add/remove actors. Analogous to general comments with `block_id: null` in the markdown contract.
+2. **Targeted when `step_id` IS present.** Comments made before the header-only rule still carry one, and a re-emitted event can bring one back. A comment on step `s4` ("does this fire once per click, or can it batch?") rewrites just that step's `label` and/or `sub`. Other steps untouched. Step ids stay stable across rewrites; new steps mint fresh ids via `next_step_id`.
 
 3. **Reject on a step** — either soften/withdraw the claim by rewriting the step, or hold the line by rewriting the sub-caption with reasoning. Don't drop the step silently. Same "fold the answer into the prose" spirit; here the "prose" is the spec.
 
@@ -328,7 +331,7 @@ Persist updates via `blocks.update_spec_block(doc, block_id, new_spec)` — retu
 
 **Off-topic comments** (user comments on `s4` about something that really belongs in `s2`) follow the same "use judgment" rule as the markdown contract: rewrite the targeted step to be clearer about its actual topic, or rewrite the neighboring step, or both.
 
-**`kind: "diagram"` (Mermaid) blocks** have no per-step targeting in v1: a
+**`kind: "diagram"` (Mermaid) blocks** have no per-step targeting at all: a
 comment always arrives with `step_id: null` and applies to the whole diagram.
 Rewrite `spec.source` (and `spec.title` if warranted) to fold in the answer,
 then persist with `blocks.update_spec_block(doc, block_id, new_spec)` — the same
@@ -338,20 +341,26 @@ a diagram to/from prose, treat it as a kind change (drop `kind`/`spec`, set
 
 ### Flowchart block-rewrite contract
 
-`kind: "flowchart"` blocks carry per-node targeting the same way sequence
-blocks carry per-step targeting: a click on a node arrives with `step_id` set
-to that node's `id` (see the `step_id` field note above — there is no
-separate `node_id` field on the wire).
+`kind: "flowchart"` blocks follow the sequence contract above, with node ids
+where it says step ids. Neither the chart nor the pflow source pane is a click
+target, so comments arrive whole-block.
 
-1. **Targeted by default when `step_id` is present.** A comment on node `f`
-   ("does this decision also fire on a partial save?") rewrites just that
-   node's `label`/`sub`/`method`/`ref`/`href`, or the edges touching it if the
-   branch structure itself needs to change. Other nodes untouched. Node ids
-   are author-assigned and stay stable across rewrites — don't renumber a
-   node just because you touched it.
-2. **Whole-flowchart comments (`step_id: null`)** apply across the spec as
-   needed — add/remove nodes, rewire edges, retitle. Analogous to general
-   comments with `block_id: null` in the markdown contract.
+1. **Whole-flowchart by default (`step_id: null`)** — the usual case, and now
+   the only one the UI produces. Apply across the spec as needed: add/remove
+   nodes, rewire edges, retitle, fix a `ref`. Analogous to general comments
+   with `block_id: null` in the markdown contract. When the block was authored
+   as `spec.source`, edit the source line the comment is about and let it
+   recompile — the reader can see which line drew which shape, so they will
+   often name it in words.
+2. **Targeted when `step_id` IS present** (a pre-existing mark, or one a
+   re-emitted event brought back). A comment on node `f` ("does this decision
+   also fire on a partial save?") rewrites just that node's
+   `label`/`sub`/`method`/`ref`/`href`, or the edges touching it if the branch
+   structure itself needs to change. Other nodes untouched. Node ids are
+   author-assigned and stay stable across rewrites — don't renumber a node
+   just because you touched it. (The DOM carries the id as `data-node-id`, but
+   it arrives on the wire in the `step_id` field — there is no separate
+   `node_id` field.)
 3. **Reject on a node** — either soften/withdraw the claim by rewriting the
    node, or hold the line by rewriting its `sub` with reasoning. Don't drop
    the node silently.

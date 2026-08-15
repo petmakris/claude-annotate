@@ -1352,9 +1352,11 @@ section.block[data-diff="open"] .diff-pane { display: block; }
    A flowchart authored as Python ships its source. It sits under the chart as
    one row per line: the number and the code share a row, so the gutter cannot
    drift out of step with the text the way two stacked layers would. Rows whose
-   line produced a node carry that node's id, which is what lets a click here
-   and a click on the chart open the same comment, and lets hovering either
-   light both (`.is-node-active`).
+   line produced a node carry that node's id, which is what lets hovering
+   either view light both (`.is-node-active`). Clicking a row used to open a
+   comment on that node; it no longer does — a picture is commented as a whole
+   from the card header — so the pane is now a reading aid that pairs source to
+   shape, not a second way in.
 
    `.hljs` sits on the body so the theme paints its own ground and base colour
    here exactly as it does for a fenced code block. Deliberately not a
@@ -1395,7 +1397,9 @@ section.block[data-diff="open"] .diff-pane { display: block; }
    Warm them up so the side-channel reads as a channel. */
 .pflow-tag { color: #ffb86b; font-weight: 600; }
 
-.pflow-row.is-live { cursor: pointer; }
+/* `is-live` no longer means "clickable" — it means "this line drew a node",
+   which is what the cross-highlight below reads. No pointer cursor: the pane
+   is a reading aid now, and the comment on it comes from the card header. */
 .pflow-row.is-live:hover,
 .pflow-row.is-node-active {
   background: color-mix(in srgb, var(--accent) 26%, transparent);

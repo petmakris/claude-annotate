@@ -49,4 +49,8 @@ Arrow types are exactly three values:
 
 ## Rewriting a sequence block after a comment
 
-See `references/handling-events.md` § "Diagram block-rewrite contract" — sequence blocks support per-step targeting via `step_id`.
+A sequence diagram is commented as a whole, from the card header — the step
+rows are not click targets, so comments arrive with `step_id: null` and the
+words tell you which step the reader means. See
+`references/handling-events.md` § "Diagram block-rewrite contract" (its
+targeted branch still applies to older comments that carry a `step_id`).

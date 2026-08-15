@@ -4,7 +4,12 @@
  *
  * Clicks a [data-annotate-id] region INSIDE the sandboxed iframe and asserts:
  *   1. The bridge forwards the click; the host opens a comment editor.
- *   2. Submitting records an event whose step_id is the region's slug.
+ *   2. Adding it to the round and submitting records a round whose one
+ *      reaction carries the region's slug as step_id.
+ *
+ * A mockup region is the LAST surface that still produces a step_id — pictures
+ * and tables are commented whole-block now (no-granular-diagram.e2e.cjs), so
+ * this is the test that keeps the field alive.
  *
  * Run:
  *   NODE_PATH=$(npm root -g) node skills/annotate/tests/e2e/mockup-region.e2e.cjs
@@ -28,7 +33,11 @@ function startServer() {
   const proc = spawn("python3", ["-m", "skills.annotate.server"], {
     cwd: REPO_ROOT,
     env: { ...process.env, PYTHONPATH: REPO_ROOT, HOME: fakeHome,
-           ANNOTATE_PUBLIC_HOST: "localhost", ANNOTATE_SHUTDOWN_SECONDS: "120" },
+           ANNOTATE_PUBLIC_HOST: "localhost", ANNOTATE_SHUTDOWN_SECONDS: "120",
+           // Port 0 = let the OS pick. Without this the suite binds the default
+           // port and dies with "server exited early: 1" whenever the developer
+           // has their own annotate server running — which is most of the time.
+           ANNOTATE_PORT: "0" },
   });
   return new Promise((resolve, reject) => {
     const rl = readline.createInterface({ input: proc.stdout });
@@ -115,14 +124,25 @@ async function waitForEvent(dir, ms) {
     log("✓ host opened a comment editor from the forwarded click");
 
     await page.locator(".comment-card textarea").first().fill("make the hero taller");
-    await page.locator(".card-submit-btn").first().click();
+    // The card's button pins the comment into the LOCAL round; the round dock's
+    // Submit is what reaches Claude. Two clicks, not one.
+    await page.locator(".card-submit-btn").first().click();   // "Add to round"
+    await page.locator("#round-submit").click();
 
-    // The submitted event is scoped to the region slug.
+    // The submitted round carries one reaction, scoped to the region slug.
+    // A mockup region is the last surface that still produces a step_id: the
+    // iframe bridge forwards the clicked [data-annotate-id] up to the host.
+    // (Pictures and tables no longer produce one — see
+    // no-granular-diagram.e2e.cjs.)
     const evt = await waitForEvent(eventsDir, 8000);
-    if (evt.block_id !== "b-0") fail("event block_id wrong: " + evt.block_id);
-    if (evt.step_id !== "hero") fail("event step_id must be 'hero', got: " + evt.step_id);
-    if (!String(evt.text).includes("hero taller")) fail("event text missing");
-    log("✓ event recorded with step_id='hero' (per-region scope round-tripped)");
+    if (evt.type !== "round") fail("expected a round event, got: " + evt.type);
+    const reactions = evt.reactions || [];
+    if (reactions.length !== 1) fail("expected 1 reaction, got " + reactions.length);
+    const r = reactions[0];
+    if (r.block_id !== "b-0") fail("reaction block_id wrong: " + r.block_id);
+    if (r.step_id !== "hero") fail("reaction step_id must be 'hero', got: " + r.step_id);
+    if (!String(r.text).includes("hero taller")) fail("reaction text missing");
+    log("✓ round reaction recorded with step_id='hero' (per-region scope round-tripped)");
 
     log("PASS: per-region annotation of a mockup works end to end");
   } finally {

@@ -148,8 +148,16 @@ def delete_session(registry, key) -> bool:
 
     This is the ONLY sanctioned way a workspace disappears under the default
     (infinite) retention. `key` may be a slug or a sid. Returns False for an
-    unknown key; never raises on filesystem trouble — a half-deleted dir is
-    retried simply by deleting again.
+    unknown key, and False without raising if the tree could not be removed.
+
+    The registration is dropped ONLY once the tree is actually gone. That
+    ordering is the whole point: `rmtree(ignore_errors=True)` swallows a
+    permissions problem or a locked file, so unregistering unconditionally
+    reported success, left the files on disk, and threw away the only handle
+    that could reach them — the key stopped resolving, so "just delete it
+    again" answered 404 forever, and `rehydrate` could not recover it either
+    because the row was gone from sessions.json. Keeping the row instead
+    leaves the workspace visible in the index and the retry genuinely works.
     """
     sid = registry.resolve(key)
     if sid is None:
@@ -157,7 +165,10 @@ def delete_session(registry, key) -> bool:
     dirs = registry.lookup(sid)
     state_dir = (dirs or {}).get("state_dir")
     if state_dir:
-        shutil.rmtree(Path(state_dir).parent, ignore_errors=True)
+        base = Path(state_dir).parent
+        shutil.rmtree(base, ignore_errors=True)
+        if base.exists():
+            return False
     registry.unregister(sid)
     registry.persist()
     return True
@@ -516,6 +527,53 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
             self.end_headers()
             self.wfile.write(data)
 
+        def _is_cross_site(self) -> bool:
+            """Did this write come from a page on somebody else's site?
+
+            _is_owner cannot answer that. Loopback is the owner by
+            construction, and JavaScript on ANY website runs from loopback —
+            so a page you merely visit could reach the local server as the
+            owner. `Content-Type: text/plain` makes a POST a CORS "simple
+            request", which the browser sends with no preflight to stop it,
+            and the handlers json.loads the body without consulting
+            Content-Type. That is a working delete-everything gadget for any
+            site you open, so the origin of the request has to be checked.
+
+            `Sec-Fetch-Site` is the reliable signal — the browser sets it and
+            script cannot forge it. Non-browser callers (curl, and the Claude
+            session driving this server) send neither header and are
+            unaffected; requiring one would break them.
+
+            The Origin fallback compares HOST ONLY, deliberately. The owner
+            typically browses a TLS-terminating reverse proxy — `https://
+            annotate` in front of a plain-http server — so the Origin's scheme
+            and port do not match the server's own. Comparing whole origin
+            strings would lock the owner out of their own page.
+            """
+            site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
+            if site:
+                # "same-origin"/"same-site" are ours; "none" is a typed URL or
+                # a bookmark. Only "cross-site" is another site's page.
+                return site == "cross-site"
+            origin = (self.headers.get("Origin") or "").strip()
+            if not origin or origin == "null":
+                return False
+            from urllib.parse import urlsplit
+            try:
+                origin_host = urlsplit(origin).hostname
+            except ValueError:
+                return True                      # unparseable: refuse
+            if not origin_host:
+                return True
+            host_header = (self.headers.get("Host") or "").strip()
+            try:
+                # urlsplit needs a scheme to find a hostname in a bare
+                # authority, and gives us IPv6-bracket handling for free.
+                own_host = urlsplit(f"//{host_header}").hostname
+            except ValueError:
+                own_host = None
+            return origin_host.lower() != (own_host or "").lower()
+
         def _is_owner(self) -> bool:
             """Two ways to be the owner, and no third.
 
@@ -676,6 +734,9 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
             # the seven individual routes — a route added later is guarded by
             # default rather than by whoever remembers. Reads are deliberately
             # ungated: a shared link is meant to be readable.
+            if self._is_cross_site():
+                self._send_text(403, "refused: cross-site write")
+                return
             if not self._is_owner():
                 self._send_text(403, "read-only: this link does not carry write access")
                 return
@@ -696,8 +757,15 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
                 if not isinstance(key, str) or not key:
                     self._send_text(400, "missing key")
                     return
-                if not delete_session(registry, key):
+                if registry.resolve(key) is None:
                     self._send_text(404, "unknown session")
+                    return
+                if not delete_session(registry, key):
+                    # Known key, tree still there: a permissions problem or a
+                    # locked file. The workspace is deliberately still
+                    # registered, so saying "unknown session" here would be a
+                    # lie the user cannot act on.
+                    self._send_text(500, "could not remove the workspace directory")
                     return
                 self._send_json(200, {"deleted": key})
                 return

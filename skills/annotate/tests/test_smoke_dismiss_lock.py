@@ -1,7 +1,7 @@
 """Structural guards for the delete control + page-lock feature.
 
 Source-string checks matching the repo's other smoke tests; live behavior
-is exercised by tests/e2e/dismiss.e2e.cjs (manual).
+is exercised by tests/e2e/delete-lock.e2e.cjs (manual).
 """
 from pathlib import Path
 

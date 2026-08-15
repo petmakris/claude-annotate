@@ -9,8 +9,8 @@ Emit a `kind: "diagram"` block when content is clearer seen than read AND it is
 one of these shapes (the cases a sequence diagram does NOT cover):
 
 - **flowchart** — DEPRECATED here. Use the first-class `kind: "flowchart"`
-  block (structured nodes/edges, role color, jump-to-source links, per-node
-  comments). See `references/block-kinds/flowchart.md`. `kind: "diagram"` now
+  block (structured nodes/edges, role color, jump-to-source links). See
+  `references/block-kinds/flowchart.md`. `kind: "diagram"` now
   covers architecture / state / er / class only.
 - **architecture** — system/service architecture, how components connect.
 - **state** — state machines, lifecycle transitions.
@@ -76,8 +76,9 @@ A `kind: "diagram"` block looks like this in `blocks.json`:
 `type` selects the diagram family (validated server-side); `source` is raw
 Mermaid. The server renders it to SVG via `mmdc` and themes it to the page. If
 the source is invalid or `mmdc` fails, the block shows a compact error pill
-instead of blanking the page. v1 has whole-diagram commenting only — there are
-no per-node hit targets, so comments arrive with `step_id: null`.
+instead of blanking the page. Commenting is whole-diagram only — there are no
+per-node hit targets, so comments arrive with `step_id: null`. That matches
+every other picture kind: a diagram is commented from the card header.
 
 ## Rewriting a diagram block after a comment
 

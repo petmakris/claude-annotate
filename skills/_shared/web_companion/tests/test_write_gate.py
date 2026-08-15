@@ -88,13 +88,15 @@ def _start_server(tmp_path: Path, monkeypatch):
     return port_holder["port"], buf.getvalue()
 
 
-def _request(port, path, method="GET", token=None, body=b""):
+def _request(port, path, method="GET", token=None, body=b"", headers=None):
     req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", method=method)
     if token:
         req.add_header(server_mod.WRITE_TOKEN_HEADER, token)
     if method == "POST":
         req.data = body
         req.add_header("Content-Type", "application/json")
+    for k, v in (headers or {}).items():
+        req.add_header(k, v)
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
             return resp.status, resp.read().decode()
@@ -153,6 +155,10 @@ def test_whoami_reports_the_mode(port, monkeypatch):
 
 WRITE_ROUTES = [
     "/api/sessions",
+    # The one route that destroys data. It was the only POST missing from this
+    # list — gated in practice by the blanket check, but pinned by nothing, so
+    # a refactor could unguard it in silence.
+    "/api/sessions/delete",
     "/api/cancel_for_claude_session",
     "/s/000000-000000-0000000000000000/api/submit",
     "/s/000000-000000-0000000000000000/api/finish",
@@ -202,6 +208,67 @@ def test_the_index_is_owner_only(port, monkeypatch):
     assert _request(port, "/api/sessions?scope=all")[0] == 403
     # ...and reachable again with the token.
     assert _request(port, "/api/sessions?scope=all", token=TOKEN)[0] == 200
+
+
+# ── A website you visit is not the owner ──────────────────────────────────
+#
+# Loopback IS the owner, and JavaScript on any page runs from loopback. So
+# the gate above cannot tell the sessions index apart from evil.example — and
+# `text/plain` makes a POST a CORS "simple request", which the browser sends
+# with no preflight to block it. Without a look at where the request came
+# from, a page you merely visit can delete every workspace you own.
+
+CSRF_ROUTE = "/api/sessions/delete"
+
+
+def test_a_cross_site_write_is_refused(port):
+    status, body = _request(port, CSRF_ROUTE, method="POST", body=b'{"key":"x"}',
+                            headers={"Sec-Fetch-Site": "cross-site",
+                                     "Origin": "https://evil.example"})
+    assert status == 403, "a hostile page's write was accepted"
+    assert "cross-site" in body
+
+
+@pytest.mark.parametrize("route", WRITE_ROUTES)
+def test_every_write_route_refuses_cross_site(port, route):
+    status, _ = _request(port, route, method="POST", body=b"{}",
+                         headers={"Sec-Fetch-Site": "cross-site"})
+    assert status == 403, f"{route} accepted a cross-site write"
+
+
+def test_the_index_page_itself_still_writes(port):
+    """Same-origin is how the sessions page talks to its own server."""
+    status, _ = _request(port, "/api/sessions", method="POST", body=b"{}",
+                         headers={"Sec-Fetch-Site": "same-origin",
+                                  "Origin": f"http://127.0.0.1:{port}"})
+    assert status == 400, "expected the route's own validation, not a CSRF refusal"
+
+
+def test_a_client_that_sends_neither_header_is_unaffected(port):
+    """curl, and the Claude session driving the server, send no Origin and no
+    Sec-Fetch-Site. Requiring either would break every non-browser caller."""
+    status, _ = _request(port, "/api/sessions", method="POST", body=b"{}")
+    assert status == 400
+
+
+def test_a_tls_terminating_proxy_is_still_same_origin(port):
+    """The owner browses https://annotate, Caddy forwards to localhost:3080
+    preserving Host. The browser's Origin is therefore https://annotate while
+    the server speaks plain http — comparing full origin strings would call
+    that cross-site and lock the owner out of their own page. Host is what
+    matters; scheme and port are the proxy's business."""
+    status, _ = _request(port, "/api/sessions", method="POST", body=b"{}",
+                         headers={"Origin": "https://annotate",
+                                  "Host": "annotate"})
+    assert status == 400, "the reverse-proxied owner was refused"
+
+
+def test_an_old_browser_without_sec_fetch_site_is_still_checked(port):
+    """Sec-Fetch-Site is the reliable signal, but a browser too old to send it
+    still sends Origin — so a foreign Origin alone is enough to refuse."""
+    status, _ = _request(port, CSRF_ROUTE, method="POST", body=b'{"key":"x"}',
+                         headers={"Origin": "https://evil.example"})
+    assert status == 403
 
 
 # ── The credential must not leak through the log ──────────────────────────

@@ -222,28 +222,38 @@ off it. **Before rewording a node that carries a live thread, pin its id** with
 `# id: <slug>`. Ids must be unique; a duplicate pin is refused, naming both
 lines.
 
-## Per-node comments
+## Comments arrive whole-block
 
-Flowchart blocks have **per-node hit targets** — each node in the rendered
-SVG carries `data-node-id`. Clicking a node scopes the comment to that node:
-on the wire the click arrives in the same `step_id` field the sequence kind
-uses (there is no separate `node_id` JSON field — `step_id` carries the
-node's id for this kind too). See `references/handling-events.md` §
-"Flowchart block-rewrite contract" for how to handle the resulting event.
+**A flowchart is commented as a whole, from the card header.** Nothing inside
+it is a click target: not the boxes, not the file `ref` lines, not the rows of
+the source pane. Comments therefore arrive with `step_id: null`, and the words
+are what tell you which part of the picture the reader means.
 
-Flowchart blocks authored as `source` render the Python under the chart, one
-row per line, with the same hit target on the row that produced each node — so
-a reader can click either the box or the line that draws it.
+The rule exists because a node's `ref` is painted accent-coloured and
+underlined whether or not you gave it an `href`. A ref without one reads as a
+jump-to-source link and used to behave as a comment target — the click missed
+the absent anchor and opened the composer, so a reader reaching for a file got
+an editor. **Give every `ref` an `href`** and that half stops being a lie too.
+
+Nodes still carry `data-node-id`, and the source pane still carries it on the
+row that produced each node: hovering either view lights the other, so the
+reader can see which line draws which box and name it in their comment. It
+just no longer opens anything.
+
+Comments made before this rule still carry a `step_id`, and `mockup` blocks
+still produce one from a `data-annotate-id` region — see
+`references/handling-events.md` § "Flowchart block-rewrite contract" for
+handling both cases.
 
 ## Rewriting a flowchart block after a comment
 
-See `references/handling-events.md` § "Flowchart block-rewrite contract" —
-flowchart blocks support per-node targeting via `step_id`.
+See `references/handling-events.md` § "Flowchart block-rewrite contract".
 
 When the block has a `source`, answer the comment by editing the source, never
 the compiled nodes:
 
-1. Find the commented node in the block's spec. Its `line` is the source line
+1. Find the node the comment is about — by name from the comment text, or from
+   `step_id` when an older event carries one. Its `line` is the source line
    that produced it.
 2. Edit **that line** of `source`.
 3. Re-emit the block with only `source` changed. The server recompiles; if your

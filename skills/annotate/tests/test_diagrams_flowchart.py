@@ -99,6 +99,31 @@ def test_render_ref_becomes_link_when_href():
         '<text class="flow-method"' not in svg
 
 
+def test_render_ref_without_href_is_not_painted_as_a_link():
+    """`.flow-ref` is accent-coloured and underlined, so a ref carries the
+    look of a jump-to-source link whether or not the spec gave it an href.
+    A ref with no href must therefore opt out of that paint — a reader who
+    clicks it gets nothing, and before the node click handler was withdrawn
+    they got a comment composer they never asked for.
+
+    The visual half of this (resolved fill and text-decoration in a real
+    browser) is proven in tests/e2e/no-granular-diagram.e2e.cjs § 9."""
+    spec = _spec()
+    assert "href" not in spec["nodes"][1]
+    svg = render(spec, block_id="s")
+    assert '<text class="flow-ref flow-ref-plain"' in svg, \
+        "an href-less ref is still painted with the bare link class"
+    assert "<a " not in svg, "a node with no href produced an anchor"
+
+
+def test_render_ref_with_href_keeps_the_link_paint():
+    spec = _spec()
+    spec["nodes"][1]["href"] = "jetbrains://idea/x"
+    svg = render(spec, block_id="s")
+    assert "flow-ref-plain" not in svg, \
+        "a real link was demoted to the plain-ref paint"
+
+
 def test_render_method_only_node_with_href_wraps_method():
     spec = {
         "nodes": [

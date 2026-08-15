@@ -20,11 +20,35 @@ def test_subunits_js_exists_with_public_api():
         assert needle in src, f"subunits.js missing {needle!r}"
 
 
-def test_subunits_selectors_cover_all_four_unit_types():
+def _unit_selector_entries():
+    """The selector strings the DOM walk actually uses.
+
+    Read out of the UNIT_SELECTOR array literal, not out of the whole file:
+    a prose comment explaining why table rows were removed contains the very
+    string a naive `in src` check looks for, so a file-wide search would go
+    on passing after the rule it guards had been reversed."""
     src = SUBUNITS_JS.read_text()
+    body = src.split("const UNIT_SELECTOR = [", 1)[1].split("].join", 1)[0]
+    return [line.strip().strip(",").strip('"')
+            for line in body.splitlines() if line.strip().startswith('"')]
+
+
+def test_subunits_cover_prose_unit_types():
+    entries = _unit_selector_entries()
     for needle in (":scope > ul > li", ":scope > ol > li",
-                   ":scope > p", ":scope > pre", "tbody tr"):
-        assert needle in src, f"subunits.js missing unit selector {needle!r}"
+                   ":scope > p", ":scope > pre"):
+        assert needle in entries, f"subunits.js missing unit selector {needle!r}"
+
+
+def test_table_rows_are_not_sub_units():
+    """A table is commented as a whole, from the card header — never row by
+    row. Rows used to be units, which put a four-button strip on every line
+    of a matrix and invited feedback at a grain nobody asks questions at.
+
+    Guarded against the selector array only; see _unit_selector_entries."""
+    for entry in _unit_selector_entries():
+        assert "tr" not in entry.split(">")[-1], \
+            f"a table-row selector is back in UNIT_SELECTOR: {entry!r}"
 
 
 def test_subunits_skips_authored_annotate_ids():

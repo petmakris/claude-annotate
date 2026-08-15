@@ -347,6 +347,9 @@ class Handlers:
             f'</div>'
             f'<span class="read-only-badge" title="This link can read the '
             f'document but not change it.">&#128065; Read-only</span>'
+            f'<button id="export-btn" type="button" class="export-btn"'
+            f' title="Save this document as a single standalone HTML file you'
+            f' can send to anyone">Share</button>'
             f'<button id="done-btn" type="button" class="done-btn">Done</button>'
             f'</div></header>'
             f'<div id="statstrip" class="statstrip" hidden></div>'
@@ -380,6 +383,7 @@ class Handlers:
                 # so document order is execution order — keep this line first.
                 '<script src="/static/highlight.min.js" defer></script>'
                 '<script src="/static/script.js" defer></script>'
+                '<script src="/static/export.js" defer></script>'
                 '<script src="/static/subunits.js" defer></script>'
                 '<script src="/static/fuse.min.js" defer></script>'
                 '<script src="/static/search.js" defer></script>'

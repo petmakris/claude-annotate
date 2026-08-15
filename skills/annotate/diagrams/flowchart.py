@@ -109,7 +109,16 @@ def _text_lines(pos: dict[str, Any]) -> str:
     for cls, txt, kind in lines:
         lh = line_h(cls)
         baseline = y + lh * 0.76
-        el = (f'<text class="{cls}" x="{cx:.1f}" y="{baseline:.1f}" '
+        # A ref is painted as a link — accent, underlined — by `.flow-ref`. It
+        # may only look that way when it IS one: a ref with no href reads as
+        # jump-to-source, and a reader who clicks it gets nothing (before the
+        # node click handler was withdrawn, they got a comment composer). The
+        # modifier class keeps the monospace, so the line still says where the
+        # code lives, and drops the promise.
+        css = cls
+        if kind == "ref" and kind != primary_kind:
+            css = f"{cls} flow-ref-plain"
+        el = (f'<text class="{css}" x="{cx:.1f}" y="{baseline:.1f}" '
               f'text-anchor="middle">{_esc(txt)}</text>')
         if kind == primary_kind:
             el = f'<a href="{_esc(href, quote=True)}">{el}</a>'

@@ -36,6 +36,10 @@ function startServer() {
       HOME: fakeHome,
       ANNOTATE_PUBLIC_HOST: "localhost",
       ANNOTATE_SHUTDOWN_SECONDS: "120",
+      // Port 0 = let the OS pick. Without this the suite binds the default
+      // port and dies with "server exited early: 1" whenever the developer
+      // has their own annotate server running — which is most of the time.
+      ANNOTATE_PORT: "0",
     },
   });
   return new Promise((resolve, reject) => {

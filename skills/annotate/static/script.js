@@ -671,8 +671,10 @@
 
   // A flowchart authored as pflow ships the source it was compiled from. Render
   // it under the chart, line-addressable: every line that produced a node
-  // carries that node's id, so clicking a line opens exactly the comment that
-  // clicking the node opens — and the answer to it is an edit to that line.
+  // carries that node's id, so hovering either view lights the other and the
+  // reader can see which line drew which shape. The line used to be a comment
+  // target too; it is not any more (see the createBlockSection note on why the
+  // granular scope was withdrawn from pictures).
   function renderPflowSource(blk) {
     const spec = blk.spec || {};
     const src = String(spec.source || "").replace(/\n+$/, "");
@@ -688,7 +690,7 @@
     label.textContent = "source";
     const hint = document.createElement("span");
     hint.className = "pflow-hint";
-    hint.textContent = "click a line to comment on the step it draws";
+    hint.textContent = "hover a line to light the step it draws";
     head.append(label, hint);
 
     const byLine = new Map();
@@ -718,13 +720,13 @@
       text.className = "pflow-line";
       if (paintedLines) text.innerHTML = paintedLines[i] || "";
       else text.textContent = line;
-      // A line that produced no node is inert — there is nothing there to
-      // comment on, and pretending otherwise invites a comment nobody can act on.
+      // A line that produced a node carries its id, which is what pairs the
+      // row with the shape on hover. Lines that produced nothing stay inert.
+      // Neither is clickable: the comment on a picture is whole-block now.
       const nodeId = byLine.get(i + 1);
       if (nodeId) {
         row.dataset.nodeId = nodeId;
         row.classList.add("is-live");
-        row.title = "Comment on this step";
       }
       row.append(num, text);
       body.appendChild(row);
@@ -795,14 +797,11 @@
     if (kind === "sequence") {
       // Server pre-rendered the SVG; inject as-is.
       content.innerHTML = blk.svg || "";
-      // Diagram blocks skip the hover-actions strip (it would overlap the
-      // chart). Instead any click inside the SVG opens a comment scoped to
-      // the step that was clicked; onHoverAction extracts step_id from
-      // event.target.closest("[data-step-id]"). Listener lives on content
-      // so updateBlockContent's innerHTML swap doesn't drop it.
-      content.addEventListener("click", (ev) => {
-        onHoverAction(section, "comment", ev);
-      });
+      // No step-click listener, for the same reason flowchart lost its node
+      // one below: a picture is commented as a whole, from the card header.
+      // The `data-step-id` hit targets stay on the rows — they still anchor
+      // comments made before this rule, and applyEngagedStyling still paints
+      // the row those comments target.
     } else if (kind === "diagram") {
       // Server pre-rendered the Mermaid SVG; inject as-is. This is trusted
       // server output and deliberately bypasses sanitizeFreeHtml so Mermaid's
@@ -816,29 +815,31 @@
       // data-node-id, so the one listener below serves either.
       paintFlowchart(content, blk);
       linkPflowHover(content);
-      // Any click inside the SVG either follows an in-page cross-block
-      // anchor (href="#<block-id>") by smooth-scrolling to that block, or
-      // opens a comment scoped to the node that was clicked; onHoverAction
-      // extracts the scope id from event.target.closest via data-step-id or
-      // data-node-id. Listener lives on content so updateBlockContent's
-      // innerHTML swap doesn't drop it.
+      // A picture is commented as a whole, from the card header — never per
+      // node. The node click handler that used to live here was withdrawn
+      // because a node's `ref` line is painted accent-coloured and underlined
+      // whether or not the spec gave it an href (`.annotate-flow .flow-ref`),
+      // so a file reference with no href reads as a jump-to-source link and
+      // behaved as a comment target: the click missed the absent anchor and
+      // opened the composer instead. Reaching for a file and getting an
+      // editor is the whole complaint, and no amount of hit-target tuning
+      // fixes a link that isn't one.
+      //
+      // What survives is navigation: an in-page cross-block anchor
+      // (href="#<block-id>") smooth-scrolls to that block, and any other
+      // anchor (e.g. a jetbrains:// code ref) is left to navigate normally.
+      // Listener lives on content so updateBlockContent's innerHTML swap
+      // doesn't drop it.
       content.addEventListener("click", (ev) => {
         const anchor = ev.target.closest && ev.target.closest("a[href]");
-        if (anchor) {
-          const href = anchor.getAttribute("href");
-          if (href.startsWith("#")) {
-            ev.preventDefault();
-            const targetId = href.slice(1);
-            const target = document.querySelector(
-              `[data-block-id="${cssEsc(targetId)}"]`
-            );
-            if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
-          }
-          // Any other anchor (e.g. a jetbrains:// code-ref link) is left to
-          // navigate normally — never also open a node comment on top of it.
-          return;
-        }
-        onHoverAction(section, "comment", ev);
+        if (!anchor) return;
+        const href = anchor.getAttribute("href");
+        if (!href.startsWith("#")) return;
+        ev.preventDefault();
+        const target = document.querySelector(
+          `[data-block-id="${cssEsc(href.slice(1))}"]`
+        );
+        if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
       });
     } else if (kind === "choice") {
       renderChoice(section, content, blk);

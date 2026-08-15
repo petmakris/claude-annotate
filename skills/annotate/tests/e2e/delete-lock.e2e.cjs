@@ -1,17 +1,27 @@
 #!/usr/bin/env node
 /*
- * Playwright e2e for annotate dismiss + page lock.
+ * Playwright e2e for the DELETE control and the page lock it eventually
+ * raises. Formerly dismiss.e2e.cjs, when × on a block fired an event the
+ * instant it was clicked. It does not any more, and that reversal is the
+ * thing most worth pinning down here.
  *
  * Seeds 3 markdown blocks, then:
- *  - hovers block 2, clicks the × (dismiss) affordance
- *  - asserts /poll reports busy:true while the event is unacked
- *  - asserts the page shows the .busy-banner and body has class is-busy
- *  - asserts other blocks' hover-actions are pointer-events:none while busy
+ *  - marks block 2 "delete" from its card header, and asserts NOTHING left the
+ *    browser: no event on disk, no busy state. Every mark is local until the
+ *    round dock's Submit — that is the whole timing model.
+ *  - asserts the mark is visible and reversible (the block is struck through,
+ *    still on the page, not removed)
+ *  - submits the round, and only NOW asserts the page goes busy: .busy-banner,
+ *    body.is-busy, and /poll reporting busy:true
+ *  - asserts the block controls stay LIVE while busy. This is deliberate and
+ *    was once the opposite: freezing the whole vocabulary took away work the
+ *    user could still do on the sections Claude is not touching. Marks made
+ *    now queue for the next round.
  *  - simulates Claude: remove block 2 from blocks.json + write the .ack
  *  - asserts the banner clears, body loses is-busy, and block 2 is gone
  *
  * Run:
- *   NODE_PATH=$(npm root -g) node skills/annotate/tests/e2e/dismiss.e2e.cjs
+ *   NODE_PATH=$(npm root -g) node skills/annotate/tests/e2e/delete-lock.e2e.cjs
  * (requires the global `playwright` package + an installed chromium)
  */
 const { chromium } = require("playwright");
@@ -28,7 +38,7 @@ function log(msg) { process.stdout.write(msg + "\n"); }
 function fail(msg) { throw new Error("ASSERTION FAILED: " + msg); }
 
 function startServer() {
-  const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), "annotate-dismiss-home-"));
+  const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), "annotate-delete-home-"));
   const proc = spawn("python3", ["-m", "skills.annotate.server"], {
     cwd: REPO_ROOT,
     env: {
@@ -37,6 +47,10 @@ function startServer() {
       HOME: fakeHome,
       ANNOTATE_PUBLIC_HOST: "localhost",
       ANNOTATE_SHUTDOWN_SECONDS: "120",
+      // Port 0 = let the OS pick. Without this the suite binds the default
+      // port and dies with "server exited early: 1" whenever the developer
+      // has their own annotate server running — which is most of the time.
+      ANNOTATE_PORT: "0",
     },
   });
   return new Promise((resolve, reject) => {
@@ -93,7 +107,7 @@ function getJSON(port, urlPath) {
     try { fs.rmSync(fakeHome, { recursive: true, force: true }); } catch (_) {}
   };
   try {
-    const project = fs.mkdtempSync(path.join(os.tmpdir(), "annotate-dismiss-proj-"));
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), "annotate-delete-proj-"));
     const sess = JSON.parse((await postJSON(info.port, "/api/sessions", { cwd: project })).body);
     const responseDir = sess.response_dir;
     const eventsDir = sess.events_dir;
@@ -101,8 +115,8 @@ function getJSON(port, urlPath) {
 
     // Write 3 blocks via atomic rename (same pattern as other e2e helpers).
     const doc = {
-      response_id: "r-dismiss",
-      title: "Dismiss test",
+      response_id: "r-delete",
+      title: "Delete test",
       blocks: [
         { id: "section-1", title: "Alpha", markdown: "First." },
         { id: "section-2", title: "Beta",  markdown: "Second." },
@@ -119,45 +133,71 @@ function getJSON(port, urlPath) {
     await page.waitForSelector('section.block[data-block-id="section-2"]', { timeout: 8000 });
     log("✓ blocks rendered");
 
-    // Hover block 2, then click its dismiss button.
-    await page.hover('section.block[data-block-id="section-2"]');
-    await page.click('section.block[data-block-id="section-2"] .hover-actions button[data-type="dismiss"]');
+    const b2 = page.locator('section.block[data-block-id="section-2"]');
+
+    // Mark block 2 "delete" from its card header. The strip reveals on
+    // .card-head hover — hovering the section puts the pointer in the body.
+    await b2.locator(".card-head").hover();
+    await b2.locator('.hover-actions button[data-type="delete"]').click();
+
+    // NOTHING may have left the browser yet.
+    await new Promise((r) => setTimeout(r, 600));
+    const earlyEvents = fs.readdirSync(eventsDir).filter(f => f.endsWith(".json"));
+    if (earlyEvents.length) fail("a mark reached Claude before the round was submitted: " + earlyEvents);
+    if (await page.evaluate(() => document.body.classList.contains("is-busy")))
+      fail("the page went busy on a mark, before any submission");
+    log("✓ the mark is local: no event on disk, page not busy");
+
+    // It is visible and reversible: struck through, still on the page.
+    if (await page.locator('section.block[data-block-id="section-2"][data-block-mark="delete"]').count() !== 1)
+      fail("the pending delete is not shown on the block");
+    if (await b2.count() !== 1) fail("the block was removed locally instead of marked");
+    log("✓ the pending delete is shown on the block, which is still there");
+
+    // Submit the round — NOW it reaches Claude.
+    await page.locator("#round-submit").click();
 
     // Assert page entered BUSY state.
-    await page.waitForSelector(".busy-banner", { timeout: 5000 });
+    await page.waitForSelector(".busy-banner", { timeout: 8000 });
     const isBusy = await page.evaluate(() => document.body.classList.contains("is-busy"));
-    if (!isBusy) fail("body does not have is-busy class after dismiss click");
+    if (!isBusy) fail("body does not have is-busy class after the round was submitted");
     log("✓ busy-banner visible and body.is-busy set");
 
     // Assert /poll reports busy:true.
     const pollResp = await getJSON(info.port, "/s/" + sess.sid + "/poll");
     const pollData = JSON.parse(pollResp.body);
-    if (!pollData.busy) fail("/poll did not report busy:true after dismiss; got: " + pollResp.body);
+    if (!pollData.busy) fail("/poll did not report busy:true after submit; got: " + pollResp.body);
     log("✓ /poll reports busy:true");
 
-    // Assert other blocks are non-interactive while busy (pointer-events:none on .hover-actions
-    // if present, otherwise confirm body.is-busy is still set as the guard).
-    const b1HoverActions = await page.locator('section.block[data-block-id="section-1"] .hover-actions').count();
-    if (b1HoverActions > 0) {
-      const pe = await page.evaluate(
-        () => getComputedStyle(document.querySelector('section.block[data-block-id="section-1"] .hover-actions')).pointerEvents
-      );
-      if (pe !== "none") fail("section-1 .hover-actions not pointer-events:none while busy; got: " + pe);
-      log("✓ other blocks' hover-actions are pointer-events:none while busy");
-    } else {
-      const stillBusy = await page.evaluate(() => document.body.classList.contains("is-busy"));
-      if (!stillBusy) fail("body.is-busy was lost before ack");
-      log("✓ body.is-busy still set (other block hover-actions not yet in DOM — acceptable)");
+    // Marking stays LIVE while a round is in flight — deliberate, and the
+    // reverse of what this test used to assert. See the note in style.css
+    // above the (absent) `body.is-busy .unit-strip` rule.
+    //
+    // Asserted by USE, not by computed style. `.card-head:hover
+    // .hover-actions` sets `pointer-events: auto` at higher specificity than
+    // any `body.is-busy` rule could, so reading the property while hovering
+    // reports "auto" no matter what — a freeze added on the BUTTONS would
+    // sail straight past it. Actually marking a block is the only check that
+    // cannot be fooled.
+    const b1 = page.locator('section.block[data-block-id="section-1"]');
+    await b1.locator(".card-head").hover();
+    try {
+      await b1.locator('.hover-actions button[data-type="keep"]').click({ timeout: 4000 });
+    } catch (_) {
+      fail("block controls are frozen while busy — marks for the NEXT round are unreachable");
     }
+    if (await page.locator('section.block[data-block-id="section-1"][data-block-mark="keep"]').count() !== 1)
+      fail("a mark made during an in-flight round did not register");
+    log("✓ a block can still be marked while a round is in flight");
 
     // Simulate Claude: find the queued event, rewrite blocks.json without section-2, write .ack.
     const eventFiles = fs.readdirSync(eventsDir).filter(f => f.endsWith(".json"));
-    if (eventFiles.length === 0) fail("no event files found in events_dir after dismiss");
+    if (eventFiles.length === 0) fail("no event files found in events_dir after the round was submitted");
     const eventId = eventFiles[0].replace(/\.json$/, "");
 
     const updatedDoc = {
-      response_id: "r-dismiss",
-      title: "Dismiss test",
+      response_id: "r-delete",
+      title: "Delete test",
       blocks: [
         { id: "section-1", title: "Alpha", markdown: "First." },
         { id: "section-3", title: "Gamma", markdown: "Third." },
@@ -175,11 +215,11 @@ function getJSON(port, urlPath) {
     if (isStillBusy) fail("body.is-busy not cleared after ack");
     log("✓ busy-banner gone, body.is-busy cleared, section-2 removed from DOM");
 
-    log("\nDISMISS E2E PASSED");
+    log("\nDELETE-LOCK E2E PASSED");
     cleanup();
     process.exit(0);
   } catch (err) {
-    log("\nDISMISS E2E FAILED: " + (err && err.stack ? err.stack : err));
+    log("\nDELETE-LOCK E2E FAILED: " + (err && err.stack ? err.stack : err));
     cleanup();
     process.exit(1);
   }

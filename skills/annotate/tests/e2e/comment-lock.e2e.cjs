@@ -40,6 +40,10 @@ function startServer() {
       HOME: fakeHome,
       ANNOTATE_PUBLIC_HOST: "localhost",
       ANNOTATE_SHUTDOWN_SECONDS: "120",
+      // Port 0 = let the OS pick. Without this the suite binds the default
+      // port and dies with "server exited early: 1" whenever the developer
+      // has their own annotate server running — which is most of the time.
+      ANNOTATE_PORT: "0",
     },
   });
   return new Promise((resolve, reject) => {
@@ -122,7 +126,11 @@ function getJSON(port, urlPath) {
     log("✓ blocks rendered");
 
     // Step 2: Open a comment editor on section-1.
-    await page.hover('section.block[data-block-id="section-1"]');
+    // Hover the HEADER, not the section. The control strip lives in the
+    // card header and reveals on .card-head hover; hovering the section
+    // puts the pointer in the body, leaving the strip hidden and the
+    // header intercepting the click.
+    await page.hover('section.block[data-block-id="section-1"] .card-head');
     await page.click('section.block[data-block-id="section-1"] .hover-actions button[data-type="comment"]');
     await page.waitForSelector(".comment-card textarea", { timeout: 5000 });
     log("✓ comment editor opened on section-1");
@@ -134,8 +142,12 @@ function getJSON(port, urlPath) {
 
     // Step 4: Type a comment and submit.
     await page.fill(".comment-card textarea", "please clarify");
-    await page.click(".comment-card .card-submit-btn");
-    log("✓ comment submitted");
+    // A card's submit button pins the comment into the LOCAL round; nothing
+    // reaches Claude until the round dock's Submit fires it. Two clicks,
+    // not one — the batching model is the whole point of the dock.
+    await page.click(".comment-card .card-submit-btn");   // "Add to round"
+    await page.click("#round-submit");
+    log("✓ comment added to the round and the round submitted");
 
     // Step 5: Assert the page goes BUSY.
     await page.waitForSelector(".busy-banner", { timeout: 5000 });
@@ -160,7 +172,11 @@ function getJSON(port, urlPath) {
 
     // Step 8: Assert the page is usable again — open a new editor on section-2.
     // On buggy code this times out because hover-actions are pointer-events:none.
-    await page.hover('section.block[data-block-id="section-2"]');
+    // Hover the HEADER, not the section. The control strip lives in the
+    // card header and reveals on .card-head hover; hovering the section
+    // puts the pointer in the body, leaving the strip hidden and the
+    // header intercepting the click.
+    await page.hover('section.block[data-block-id="section-2"] .card-head');
     await page.click('section.block[data-block-id="section-2"] .hover-actions button[data-type="comment"]');
     await page.waitForSelector(".comment-card textarea", { timeout: 5000 });
     log("✓ new comment editor opened on section-2 — page is interactive again");

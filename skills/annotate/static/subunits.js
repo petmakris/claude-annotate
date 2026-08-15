@@ -251,18 +251,20 @@
   ];
   const CONTROLS = { unit: CONTROL_SPECS, block: CONTROL_SPECS };
 
-  // The four sub-unit types (spec decision: all four, one DOM walk).
-  // Top-level only: a nested list belongs to its parent bullet's unit.
+  // The sub-unit types, in one DOM walk. Top-level only: a nested list
+  // belongs to its parent bullet's unit.
+  //
+  // A table row is NOT one of them, deliberately. Rows used to be units
+  // (":scope > table tbody tr" and its wrapped-in-a-div twin), which put a
+  // four-button strip on every line of a matrix and invited feedback at a
+  // grain nobody asked questions at — the question is almost always about
+  // the table, not row 4 of it. Tables are now commented from the card
+  // header, at whole-block scope, the same way pictures are.
   const UNIT_SELECTOR = [
     ":scope > ul > li",
     ":scope > ol > li",
     ":scope > p",
     ":scope > pre",
-    ":scope > table tbody tr",
-    // markdown-it wraps tables bare (no wrapper div); some blocks nest the
-    // table under a div via free HTML. The descendant combinator here
-    // matches the table at any depth under that div, not just one level.
-    ":scope > div table tbody tr",
   ].join(", ");
 
   function decorate(content, section) {

@@ -46,7 +46,12 @@ def parse(svg: str):
             continue
         cls = g.get("class", "")
         if "node" in cls.split():
-            texts = [(t.get("class"), t.text or "", float(t.get("x")), float(t.get("y")))
+            # `class` is a LIST, and the metrics key is its first token. A ref
+            # with no href carries a second class (`flow-ref flow-ref-plain`)
+            # to opt out of the link paint; passing the whole attribute to
+            # text_px would KeyError on a style that was never a metrics key.
+            texts = [(t.get("class", "").split()[0], t.text or "",
+                      float(t.get("x")), float(t.get("y")))
                      for t in g.iter() if _strip(t.tag) == "text"]
             rect = next((c for c in g if _strip(c.tag) == "rect"), None)
             if rect is not None:

@@ -9,8 +9,9 @@
  *   1. A flowchart authored as `spec.source` renders the chart AND the source,
  *      with one gutter number per line.
  *   2. Only lines that produced a node are live; the blank lines are inert.
- *   3. Clicking a source line opens a comment scoped to that line's node id —
- *      the same annotation clicking the node produces.
+ *   3. Clicking a source line opens NOTHING — the pane pairs a line to the
+ *      shape it drew, and the comment comes from the card header at
+ *      whole-block scope (see no-granular-diagram.e2e.cjs for why).
  *   4. Hovering either view lights both, because the id is on both.
  *   5. An in-place block update repaints chart and pane together. (Before this
  *      feature, updating a flowchart in place rendered its absent markdown and
@@ -31,6 +32,7 @@ const path = require("path");
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..", "..");
 function log(m) { process.stdout.write(m + "\n"); }
 function fail(m) { throw new Error("ASSERTION FAILED: " + m); }
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 const SOURCE = [
   '"""How a request becomes evidence."""',
@@ -151,29 +153,44 @@ function writeBlocks(dir, blocks) {
     }
     log("✓ hover links the two views both ways");
 
-    // 5. clicking a source line opens a comment scoped to that line's node
+    // 5. clicking a source line opens NOTHING. The pane pairs a line to the
+    //    shape it drew; it is not a second way into the composer. A picture is
+    //    commented as a whole, from the card header — see
+    //    no-granular-diagram.e2e.cjs for why the granular scope was withdrawn.
     await declineLine.click();
-    await page.waitForSelector(".comment-card textarea", { timeout: 5000 });
-    const scoped = await page.evaluate(() =>
-      [...document.querySelectorAll(".card-step-chip")].map((e) => e.textContent.trim()));
-    if (!scoped.includes("decline")) fail("comment not scoped to the node: " + JSON.stringify(scoped));
-    log("✓ a click on a line comments on that line's step");
+    await sleep(300);
+    if (await page.locator(".comment-card").count())
+      fail("a click on a source line opened a comment editor");
+    log("✓ a click on a line opens nothing");
 
-    // 6. the whole loop: that comment goes back, Claude edits the line it named,
-    //    and the block repaints. This is the feature in one move.
+    await block.locator(".card-head").hover();
+    await block.locator('.hover-actions button[data-type="comment"]').click();
+    await page.waitForSelector(".comment-card textarea", { timeout: 5000 });
+    if (await page.locator(".card-step-chip").count())
+      fail("the header comment came out step-scoped, not whole-block");
+    log("✓ the header opens a whole-block comment on the chart");
+
+    // 6. the whole loop: that comment goes back naming the line in words,
+    //    Claude edits it, and the block repaints. This is the feature in one
+    //    move — what changed is only which scope carries the request.
     await page.fill(".comment-card textarea", "call it Refuse, not Decline");
     await page.click(".comment-card .card-submit-btn");      // "Add to round"
     await page.click("#round-submit");
     await page.waitForSelector(".busy-banner", { timeout: 8000 });
-    log("✓ the line comment submitted a round");
+    log("✓ the block comment submitted a round");
 
     const eventFiles = fs.readdirSync(sess.events_dir).filter((f) => f.endsWith(".json"));
-    if (!eventFiles.length) fail("no event written for the line comment");
+    if (!eventFiles.length) fail("no event written for the block comment");
     const eventId = eventFiles[0].replace(/\.json$/, "");
     const event = JSON.parse(fs.readFileSync(path.join(sess.events_dir, eventFiles[0]), "utf8"));
-    const carried = JSON.stringify(event).includes('"decline"');
-    if (!carried) fail("the event did not carry the node id: " + JSON.stringify(event).slice(0, 300));
-    log("✓ the event carries the step id Claude needs to find the line");
+    const raw = JSON.stringify(event);
+    if (!raw.includes('"b-0"'))
+      fail("the event did not carry the block id: " + raw.slice(0, 300));
+    if (!raw.includes("Refuse"))
+      fail("the event did not carry the comment text: " + raw.slice(0, 300));
+    if (raw.includes('"decline"'))
+      fail("a whole-block comment leaked a step id: " + raw.slice(0, 300));
+    log("✓ the event carries the block and the words, and no step id");
 
     writeBlocks(sess.response_dir, [
       { id: "b-0", kind: "flowchart", spec: { source: SOURCE_V2 } },
