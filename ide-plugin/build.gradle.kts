@@ -56,18 +56,44 @@ dependencies {
         // `runIde` will sandbox against.
         //
         // Resolution order: gradle property `localIdePath`, else env var
-        // `IREVIEW_LOCAL_IDE_PATH`, else the usual user-installed location —
-        // each used only if it actually exists on disk. When none does (CI, or
-        // a contributor without IDEA installed) this downloads the pinned
-        // `platformVersion` instead, so the build never depends on one
+        // `IREVIEW_LOCAL_IDE_PATH`, else the usual user-installed locations for
+        // this OS — each used only if it actually exists on disk. When none does
+        // (CI, or a contributor without IDEA installed) this downloads the
+        // pinned `platformVersion` instead, so the build never depends on one
         // machine's filesystem layout.
+        //
+        // The defaults are per-OS because IntelliJ installs somewhere different
+        // on each, and this used to hardcode the macOS .app path — which meant
+        // Linux and Windows contributors silently downloaded a whole IDE even
+        // with one installed locally. JetBrains Toolbox nests builds under a
+        // versioned directory that cannot be guessed, so Toolbox users should
+        // set `localIdePath` explicitly rather than rely on these.
         //
         // The download is Ultimate, not Community: Community stops at build
         // 253, and this plugin targets 261+.
+        val userHome = System.getProperty("user.home")
+        val osName = System.getProperty("os.name").lowercase()
+        val defaultIdeHomes = when {
+            osName.contains("mac") -> listOf(
+                "$userHome/Applications/IntelliJ IDEA.app/Contents",
+                "/Applications/IntelliJ IDEA.app/Contents",
+            )
+            osName.contains("win") -> listOf(
+                "$userHome/AppData/Local/Programs/IntelliJ IDEA Ultimate",
+                "C:/Program Files/JetBrains/IntelliJ IDEA Ultimate",
+            )
+            else -> listOf(
+                "/opt/intellij-idea-ultimate",
+                "/usr/share/intellij-idea-ultimate",
+                "/snap/intellij-idea-ultimate/current",
+            )
+        }
+
         val candidate = providers.gradleProperty("localIdePath")
             .orElse(providers.environmentVariable("IREVIEW_LOCAL_IDE_PATH"))
-            .orElse("${System.getProperty("user.home")}/Applications/IntelliJ IDEA.app/Contents")
-            .get()
+            .orNull
+            ?: defaultIdeHomes.firstOrNull { File(it).isDirectory }
+            ?: defaultIdeHomes.first()
         if (File(candidate).isDirectory) {
             logger.lifecycle("intellijPlatform: using local IDE at $candidate")
             local(candidate)

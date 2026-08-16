@@ -30,9 +30,14 @@ with this plugin installed, leaving your real IDE untouched.
 `./reload` runs `prepareSandbox`, which is what actually refreshes the plugin your
 IDE loads. `./reload --watch` rebuilds on every save, so you only ever restart.
 
-The IDE loads the sandbox through a symlink you create once:
+The IDE loads the sandbox through a symlink you create once, under the JetBrains
+config directory — which is in a different place on each OS:
 
-    ~/Library/Application Support/JetBrains/IntelliJIdea<version>/plugins/claude-ide-review
+    macOS    ~/Library/Application Support/JetBrains/IntelliJIdea<version>
+    Linux    ~/.config/JetBrains/IntelliJIdea<version>     (or $XDG_CONFIG_HOME)
+    Windows  %APPDATA%/JetBrains/IntelliJIdea<version>
+
+    <that dir>/plugins/claude-ide-review
       -> <this dir>/.intellijPlatform/sandbox/.../plugins/claude-ide-review
 
 That symlink is keyed to the IDE build. After an IDE point upgrade, `prepareSandbox`
