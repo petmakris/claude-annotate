@@ -73,10 +73,19 @@ def test_the_composer_band_sits_flush_under_the_bar():
     )
 
 
-def test_a_first_run_hint_exists():
+def test_the_first_run_hint_stays_removed():
+    """The first-run discovery hint was removed on explicit request
+    (2026-08-17): a banner above the prose restating what hovering does,
+    pushing the actual response down the page. Its markup, its localStorage
+    dismissal key and its stylesheet block went with it. If any of these
+    names reappear, someone is resurrecting the banner; that needs a
+    deliberate decision, not a merge accident."""
     src = SCRIPT_JS.read_text()
-    assert "discover-hint" in src, "nothing tells a first-time reader the page is interactive"
-    assert "annotate.hint." in src, "the hint's dismissal is not remembered"
+    css = STYLE_CSS.read_text()
+    for needle in ("discover-hint", "renderDiscoverHint", "annotate.hint."):
+        assert needle not in src, f"script.js grew {needle!r} back"
+    for needle in ("discover-hint", "dh-glyphs", "dh-x"):
+        assert needle not in css, f"style.css grew {needle!r} back"
 
 
 def test_the_map_rail_stays_removed():
@@ -97,7 +106,7 @@ def test_the_map_rail_stays_removed():
 
 def test_the_reading_chrome_is_styled():
     css = STYLE_CSS.read_text()
-    for needle in (".legend-pop", ".discover-hint"):
+    for needle in (".legend-pop",):
         assert needle in css, f"style.css missing {needle}"
 
 
@@ -157,42 +166,15 @@ def test_the_sequence_card_keeps_the_card_surface():
     )
 
 
-def test_the_discover_hint_glyphs_are_never_blank():
-    """Regression guard (round-2 fix): the hint's fourth glyph (compact) read
-    `window.AnnotateSubunits?.COMPACT_ICON || ""`. That export never existed
-    — subunits.js defines COMPACT_ICON as a module-local const and its
-    window.AnnotateSubunits export block never lists it — so the expression
-    was always `undefined || ""` and rendered an empty box. Measured live:
-    glyphs = ["🗑", "✓", "💬", ""]. compact is the newest, lossiest control
-    the hint exists to explain, so a blank glyph there is the worst place
-    for this bug to land. Guard every glyph the hint advertises, not just
-    the one that broke, and forbid the dead cross-module reach outright so
-    it can't quietly return under a different property name."""
-    src = SCRIPT_JS.read_text()
-    start = src.index("function renderDiscoverHint")
-    end = src.index("\n  }\n", start)
-    body = src[start:end]
-    # The three fixed emoji glyphs are literal characters, never a lookup,
-    # so they cannot silently go blank the way compact did.
-    for glyph in ("🗑", "✓", "💬"):
-        assert glyph in body, f"discover hint dropped the {glyph!r} glyph"
-    # compact IS a lookup — the one glyph source that can resolve to nothing
-    # — and must resolve to a value script.js owns outright (its own ICON
-    # map), never a reach into another module's export.
-    assert "ICON.compact" in body, (
-        "the compact glyph no longer reads from script.js's own ICON map"
-    )
-
-
 def test_no_dead_compact_icon_export_reach_remains():
     """AnnotateSubunits.COMPACT_ICON was never exported anywhere in this
     client (subunits.js keeps it as a module-local const; its export block
     never lists it, nor a COMPACT_TITLE). Checking the exact dotted access
     pattern rather than the bare word COMPACT_ICON on purpose: a legitimate
-    comment documenting this very bug (see renderDiscoverHint) is allowed to
-    say the word without tripping the guard meant for the code that reads
-    it — this is the same "comment vs. code" trap the round-1 fix for this
-    file's discover-hint anchoring ran into, one level removed."""
+    comment is allowed to say the word without tripping the guard meant for
+    the code that reads it. The site that originally made this reach (the
+    first-run discovery hint) is gone, but every other render of the compact
+    icon must still resolve from a source that actually exists."""
     src = SCRIPT_JS.read_text()
     for prop in ("COMPACT_ICON", "COMPACT_TITLE"):
         for accessor in (f"AnnotateSubunits?.{prop}", f"AnnotateSubunits.{prop}"):
@@ -201,39 +183,6 @@ def test_no_dead_compact_icon_export_reach_remains():
                 "export was never added to subunits.js's window.AnnotateSubunits "
                 "block, so reading it always silently returns undefined"
             )
-
-
-def test_the_discover_hint_compact_glyph_is_an_outline_not_a_blob():
-    """Regression guard (round-3 fix): round 2 fixed the compact glyph from
-    empty to a real SVG (script.js's ICON.compact), but that SVG carries no
-    fill/stroke of its own — it depends entirely on CSS, the same way
-    `.unit-strip button[data-kind="compact"] svg` and `.hover-actions button
-    svg` do for every other rendering of this icon. With no matching rule
-    for the hint, the SVG fell back to its default (fill: black, stroke:
-    none) and painted a solid blob instead of the eye-off outline. Measured
-    live before this fix: `.discover-hint .dh-glyphs svg` computed
-    `fill: rgb(0,0,0); stroke: none`; the strip's copy computed
-    `fill: none; stroke: rgb(131,134,143)` — they disagreed. Checking glyph
-    presence alone (round 2's test) cannot see this: the glyph was
-    non-empty and still wrong. Check the CSS treatment exists, not just
-    that the markup does — the third time in this task something passed
-    its test and was visibly wrong on screen."""
-    css = STYLE_CSS.read_text()
-    assert ".discover-hint .dh-glyphs svg" in css, (
-        "no rule styles the compact icon inside the discovery hint's glyph "
-        "row — it renders with the SVG default (solid black fill)"
-    )
-    start = css.index(".discover-hint .dh-glyphs svg")
-    end = css.index("}", start)
-    rule = css[start:end]
-    assert "fill: none" in rule, (
-        ".discover-hint .dh-glyphs svg has no fill:none — the compact "
-        "glyph paints as a solid blob instead of an outline"
-    )
-    assert "stroke: currentColor" in rule, (
-        ".discover-hint .dh-glyphs svg has no stroke — the eye-off outline "
-        "needs a visible stroke to read as anything at all"
-    )
 
 
 def test_the_round_dock_summary_compact_glyph_is_styled():

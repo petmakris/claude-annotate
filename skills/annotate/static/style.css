@@ -1325,40 +1325,6 @@ section.block[data-diff="open"] .diff-pane { display: block; }
   border-radius: 0;
 }
 
-/* ── First-run discovery hint ───────────────────────────────────────── */
-/* max-width + auto side margins center this box on the content column.
-   Plain `width: 100%` alone stretched it to the full viewport — body is a
-   column flex container (core.css), and a flex item's `width: 100%` resolves
-   against the whole body box, not against any notion of "the content column",
-   unless something caps it. */
-.discover-hint {
-  display: flex; align-items: center; gap: 10px;
-  width: 100%; max-width: var(--content-max); margin: 0 auto 12px auto;
-  padding: 9px 13px; border-radius: 9px; font-size: 12.5px;
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
-  color: var(--text);
-}
-.discover-hint .dh-glyphs { display: inline-flex; gap: 3px; flex: none; }
-.discover-hint .dh-glyphs span {
-  width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid var(--border); border-radius: 5px; background: var(--surface); font-size: 10px;
-}
-/* compact is the one glyph here that's an inline SVG rather than an emoji
-   (script.js's ICON.compact — same source the card-header strip and the
-   unit strip render). The SVG carries no fill/stroke of its own, so
-   without this it falls back to the SVG default (fill: black, stroke:
-   none) and paints as a solid blob instead of the eye-off outline every
-   other rendering of this icon uses. Mirrors
-   `.unit-strip button[data-kind="compact"] svg` verbatim but sized for
-   this box (20px vs. the strip's 22px button, 14px vs. its 13px glyph). */
-.discover-hint .dh-glyphs svg {
-  width: 14px; height: 14px;
-  fill: none; stroke: currentColor; stroke-width: 2;
-  stroke-linecap: round; stroke-linejoin: round;
-}
-.discover-hint .dh-x { margin-left: auto; border: none; background: transparent; cursor: pointer; color: var(--text-dim); font-size: 15px; padding: 0 3px; }
-
 /* ── pflow source pane ─────────────────────────────────────────────────────
    A flowchart authored as Python ships its source. It sits under the chart as
    one row per line: the number and the code share a row, so the gutter cannot
