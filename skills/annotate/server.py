@@ -76,12 +76,15 @@ _ICON_COMPACT = (
     '<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>'
     '<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>'
     '<line x1="1" y1="1" x2="23" y2="23"/></svg>')
+# The legend is a popover hanging off #legend-toggle in the page header, not a
+# block in the reading column. It is a one-shot reference — read once, dismissed
+# — so it has no business holding permanent space above the first word, and no
+# business pushing the document down when it opens either. `hidden` here is
+# load-bearing: see .legend-pop[hidden] in style.css for why the attribute alone
+# is not enough to keep it off screen.
 _LEGEND_HTML = (
-    '<details class="legend">'
-    '<summary class="legend-summary">'
-    '<span class="legend-chip">?</span>'
-    'What do the buttons do?'
-    '</summary>'
+    '<div id="legend-pop" class="legend-pop" role="dialog" aria-label="What the '
+    'buttons do" hidden>'
     '<div class="legend-body">'
     '<table class="legend-table">'
     '<thead><tr><th>Button</th><th>What it tells Claude</th>'
@@ -107,7 +110,36 @@ _LEGEND_HTML = (
     '<p class="legend-note">All of these are feedback, and none of them does '
     'anything until you submit the round. Until then every mark is local and '
     'clicking the same button again takes it back.</p>'
-    '</div></details>'
+    '</div></div>'
+)
+
+# The two panel toggles that sit between the search box and Share/Done. Same
+# surface, border and radius vocabulary as those buttons, so nothing new enters
+# the bar — only two more of what is already there.
+_ICON_BUBBLE = (
+    '<svg viewBox="0 0 24 24" aria-hidden="true">'
+    '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 '
+    '0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 '
+    '8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>')
+_ICON_HELP = (
+    '<svg viewBox="0 0 24 24" aria-hidden="true">'
+    '<circle cx="12" cy="12" r="9"/>'
+    '<path d="M9.2 9.3a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.4-2.8 4"/>'
+    '<path d="M12 17.2h.01"/></svg>')
+_HEADER_PANEL_TOGGLES = (
+    '<span class="header-sep" aria-hidden="true"></span>'
+    '<button id="composer-toggle" type="button" class="icon-btn"'
+    ' aria-expanded="false" aria-controls="general-composer"'
+    ' title="Comment on the whole response (G)"'
+    f' aria-label="Comment on the whole response">{_ICON_BUBBLE}</button>'
+    '<span class="icon-btn-wrap">'
+    '<button id="legend-toggle" type="button" class="icon-btn"'
+    ' aria-expanded="false" aria-controls="legend-pop"'
+    ' title="What do the buttons do?"'
+    f' aria-label="What do the buttons do?">{_ICON_HELP}</button>'
+    + _LEGEND_HTML +
+    '</span>'
+    '<span class="header-sep" aria-hidden="true"></span>'
 )
 
 WAITING_HTML = """<!DOCTYPE html>
@@ -345,6 +377,7 @@ class Handlers:
             f'<button id="block-search-clear" type="button" class="search-clear"'
             f' aria-label="Clear search" tabindex="-1">&times;</button>'
             f'</div>'
+            + _HEADER_PANEL_TOGGLES +
             f'<span class="read-only-badge" title="This link can read the '
             f'document but not change it.">&#128065; Read-only</span>'
             f'<button id="export-btn" type="button" class="export-btn"'
@@ -353,24 +386,19 @@ class Handlers:
             f'<button id="done-btn" type="button" class="done-btn">Done</button>'
             f'</div></header>'
             f'<div id="statstrip" class="statstrip" hidden></div>'
-            f'<button id="composer-open" type="button" class="composer-collapsed">'
-            f'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-            f'stroke-width="2" aria-hidden="true">'
-            f'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 '
-            f'8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 '
-            f'8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>'
-            f'</svg>Comment on the whole response'
-            f'<span class="cc-kbd">G</span></button>'
-            f'<section class="general-composer" hidden>'
+            # Opened by #composer-toggle, and rendered as a third band of the
+            # top bar — header gutters, own hairline — so the chrome stays one
+            # object instead of growing a floating box in the reading column.
+            f'<section id="general-composer" class="general-composer" hidden>'
             f'  <textarea id="general-input" class="general-input" rows="2"'
             f'    placeholder="Comment on the whole response (not a specific block)…"></textarea>'
             f'  <div class="general-composer-bar">'
-            f'    <span class="general-hint"><kbd>⌘</kbd><kbd>↩</kbd> to send</span>'
+            f'    <span class="general-hint"><kbd>⌘</kbd><kbd>↩</kbd> to send'
+            f'      &middot; <kbd>Esc</kbd> to close</span>'
             f'    <span id="general-status" class="general-status" aria-live="polite"></span>'
             f'    <button id="general-send" type="button" class="general-send-btn" disabled>Send</button>'
             f'  </div>'
             f'</section>'
-            + _LEGEND_HTML +
             f'<main class="prose"></main>'
         )
         head = ('<link rel="stylesheet" href="/static/style.css">'

@@ -282,7 +282,11 @@ const PROSE = [
 
     // ── 4. no interactive chrome ────────────────────────────────────────────
     for (const sel of [".hover-actions", ".unit-strip", ".comment-card", "#round-dock",
-                       ".general-composer", "#composer-open", ".card-chevron",
+                       ".general-composer", ".card-chevron",
+                       // The two header panel toggles and the panel one of them
+                       // opens: live chrome that would arrive in a shared file
+                       // as buttons wired to nothing.
+                       "#composer-toggle", "#legend-toggle", ".legend-pop",
                        ".unit-composer", "#block-search", "#export-btn"]) {
       const n = await viewer.locator(sel).count();
       if (n) fail(`the export still carries ${n} × ${sel}`);

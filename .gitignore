@@ -7,3 +7,7 @@ __pycache__/
 *.iml
 .claude/*
 !.claude/skills/
+
+# superpowers brainstorming companion (mockups, ephemeral state)
+.superpowers/
+.playwright-mcp/

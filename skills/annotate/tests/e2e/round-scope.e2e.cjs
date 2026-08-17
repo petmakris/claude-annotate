@@ -164,7 +164,7 @@ function ackAll(eventsDir, consumedDir) {
     await sleep(1500);   // let the page reconcile the mid-round rewrite
     // The user, still reading, sends a general comment through the real
     // composer — deliberately usable while busy.
-    await page.locator("#composer-open").click();
+    await page.locator("#composer-toggle").click();
     await page.locator("#general-input").fill("while you're in there, check the cache");
     await page.locator("#general-send").click();
     await sleep(1200);

@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 /*
- * Playwright end-to-end for the reading chrome: the collapsed general
- * composer and the sticky page ribbons. (The document map rail this file
- * once guarded was removed on request — see test_smoke_reading_chrome.py's
- * stays-removed guard.)
+ * Playwright end-to-end for the reading chrome: what the reading surface
+ * looks like at rest, and the sticky page ribbons. (The document map rail
+ * this file once guarded was removed on request — see
+ * test_smoke_reading_chrome.py's stays-removed guard. The collapsed composer
+ * trigger it also guarded became a header icon button; that whole control now
+ * lives in top-panels.e2e.cjs.)
  *
  * Everything here is measured on a rendered page — getComputedStyle() and
  * getBoundingClientRect() — because every bug this file guards passed a
@@ -111,28 +113,21 @@ function deck(mark) {
     if (Math.round(layout.prose) !== 1040) fail("main.prose width = " + layout.prose + ", expected 1040");
     log("✓ no rail, main.prose 1040px");
 
-    // ── 1. The collapsed composer trigger actually disappears ──────────────
-    const before = await page.evaluate(() => ({
-      btn: getComputedStyle(document.getElementById("composer-open")).display,
-      btnMarginTop: parseFloat(getComputedStyle(document.getElementById("composer-open")).marginTop),
-      composer: getComputedStyle(document.querySelector(".general-composer")).display,
+    // ── 1. The composer is closed until something opens it ─────────────────
+    // The collapsed trigger row this section used to drive is gone: the
+    // composer now opens from #composer-toggle in the page header, and all of
+    // its open/close/focus/geometry behaviour is measured in
+    // `top-panels.e2e.cjs`. What still belongs here is the one fact the
+    // reading surface owns — nothing of the composer paints until asked.
+    const composerOnLoad = await page.evaluate(() => ({
+      display: getComputedStyle(document.querySelector(".general-composer")).display,
+      legacyTrigger: !!document.getElementById("composer-open"),
     }));
-    if (before.btn === "none") fail("the trigger is hidden before anything opened the composer");
-    if (before.composer !== "none") fail("the composer renders expanded on load: display=" + before.composer);
-    if (!(before.btnMarginTop > 0)) fail("the trigger row has no gap above it: margin-top=" + before.btnMarginTop);
-    await page.locator("#composer-open").click();
-    const after = await page.evaluate(() => ({
-      btn: getComputedStyle(document.getElementById("composer-open")).display,
-      btnBox: document.getElementById("composer-open").getBoundingClientRect().height,
-      composer: getComputedStyle(document.querySelector(".general-composer")).display,
-      focus: document.activeElement && document.activeElement.id,
-    }));
-    // The PROPERTY was always true; only these two reads can see the bug.
-    if (after.btn !== "none") fail("trigger still painted after opening: display=" + after.btn);
-    if (after.btnBox !== 0) fail("trigger still occupies " + after.btnBox + "px of layout");
-    if (after.composer !== "flex") fail("composer did not expand: display=" + after.composer);
-    if (after.focus !== "general-input") fail("focus went to " + after.focus);
-    log("✓ trigger display none / 0px box, composer flex, focus in #general-input");
+    if (composerOnLoad.legacyTrigger) fail("the retired composer trigger row is back on the page");
+    if (composerOnLoad.display !== "none") {
+      fail("the composer renders expanded on load: display=" + composerOnLoad.display);
+    }
+    log("✓ composer closed on load, no legacy trigger row");
 
     // ── 2a. The busy ribbon tracks the document column ─────────────────────
     const b0 = page.locator('section.block[data-block-id="b-0"]');

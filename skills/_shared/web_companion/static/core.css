@@ -83,7 +83,55 @@ body {
   font-weight: 400;
   color: var(--text-dim);
 }
-.header-actions { display: flex; gap: 4px; }
+.header-actions { display: flex; align-items: center; gap: 4px; }
+
+/* === Header icon buttons ============================================== */
+/* Toggles for the panels that hang off the bar (the whole-response composer,
+   the button legend). Deliberately the same surface/border/radius as Done and
+   Share: the bar already has four corner radii in one row, and these must not
+   add a fifth. Square rather than pill so they read as a pair of tools next to
+   the two word-buttons, not as two more actions competing with them. */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.icon-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.icon-btn:hover { color: var(--accent); border-color: var(--accent); }
+/* Lit while its panel is open — the only cue that the band/popover below
+   belongs to this button rather than to the bar in general. */
+.icon-btn[aria-expanded="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+/* Anchor for a popover that hangs off one of these buttons. */
+.icon-btn-wrap { position: relative; display: inline-flex; }
+
+.header-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 5px;
+  flex: none;
+}
 
 /* === Done button ====================================================== */
 .done-btn {
@@ -579,6 +627,7 @@ body {
    clean document. The server enforces this regardless; hiding the chrome is
    about not offering what will be refused. */
 body.read-only .general-composer,
+body.read-only #composer-toggle,
 body.read-only .done-btn { display: none; }
 
 .read-only-badge { display: none; }

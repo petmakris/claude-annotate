@@ -179,35 +179,11 @@ body.read-only .comment-card { display: none; }
 body.read-only section.block .hover-actions { border: none; }
 
 /* === Legend ==========================================================
-   Collapsed to a chip by default — it is reference material, not chrome the
-   reader needs on every visit. Open state persists nowhere on purpose: it is
-   cheap to reopen and a permanently-expanded table would push the document
-   down the page for someone who already knows the controls. */
-.legend {
-  max-width: var(--content-max);
-  margin: 0 auto 14px;
-  padding: 0 var(--content-gutter);
-}
-.legend-summary {
-  display: inline-flex; align-items: center; gap: 8px;
-  cursor: pointer; user-select: none;
-  font-size: 12.5px; font-weight: 600;
-  color: var(--text-dim);
-  padding: 5px 12px 5px 7px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  transition: color 140ms ease, border-color 140ms ease;
-  list-style: none;
-}
-.legend-summary::-webkit-details-marker { display: none; }
-.legend-summary:hover { color: var(--text-strong); border-color: var(--accent); }
-.legend-chip {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 17px; height: 17px; border-radius: 50%;
-  background: var(--surface-soft); border: 1px solid var(--border);
-  font-size: 11px; font-weight: 700;
-}
+   Reference material, not chrome the reader needs on every visit, so it lives
+   behind #legend-toggle in the page header and paints as .legend-pop — see
+   the popover rules further down. These inner rules are shared with the
+   exported standalone HTML, which has no popover and renders the table inline.
+   Open state persists nowhere on purpose: reopening is cheap. */
 .legend-body {
   margin-top: 10px;
   padding: 14px 16px;
@@ -367,11 +343,21 @@ section.block[data-block-mark="compact"] .card-title { color: var(--text-dim); }
 }
 
 /* === General composer (page-level comment) =========================== */
-/* core.css insets the textarea 56px; bring it to the shared gutter so the
-   composer's editable box left-aligns with the cards below it. */
+/* Opened by #composer-toggle, and painted as a third band of the top bar
+   rather than as a box in the reading column: full-bleed surface, its own
+   bottom hairline, and the SAME gutter formula .page-header and .statstrip use
+   (core.css / .statstrip below), so all three bands share one left edge. Every
+   part of core.css's centred-box geometry has to be undone for that — its base
+   rule is `max-width: var(--content-max); margin: 0 auto 8px; padding: 16px
+   56px 0`, and leaving any of it in place leaves the band inset from the bar
+   above it by a different amount at every viewport width. */
 .general-composer {
-  padding-left: var(--content-gutter);
-  padding-right: var(--content-gutter);
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 12px max(var(--content-gutter), calc((100% - var(--content-max)) / 2 + var(--content-gutter))) 13px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
 /* core.css's base rule is `.general-composer { display: flex; ... }` (0,1,0
    specificity), which beats the UA default `[hidden] { display: none }`
@@ -1276,50 +1262,75 @@ section.block[data-diff="open"] .diff-pane { display: block; }
 .attr-chip.a-you   { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent); }
 .attr-chip.a-sweep { background: #fef3c7; color: #92400e; }
 
-/* ── Collapsed general composer ─────────────────────────────────────── */
-/* max-width + auto side margins center this button on the content column.
-   Plain `width: 100%` alone stretched it to the full viewport — body is a
-   column flex container (core.css), and a flex item's `width: 100%`
-   resolves against the whole body box, not against any notion of "the
-   content column", unless something caps it. The top margin is the
-   breathing room between the page header above and this trigger row —
-   without it they sit flush and read as one merged bar. */
-.composer-collapsed {
-  display: flex; align-items: center; gap: 9px; width: 100%;
-  max-width: var(--content-max); margin: 18px auto 12px auto;
-  padding: 8px 13px;
-  border: 1px dashed var(--border); border-radius: 9px;
-  background: transparent; color: var(--text-dim);
-  font: inherit; font-size: 12.5px; cursor: pointer; text-align: left;
+/* ── Legend popover ─────────────────────────────────────────────────── */
+/* Opened by #legend-toggle, anchored to it by .icon-btn-wrap (core.css).
+   Absolutely positioned on purpose: the legend is a glance-and-dismiss
+   reference, so it floats OVER the document rather than displacing it — the
+   first sentence must not move because someone checked what a button does.
+   Right-anchored because the button sits near the right edge of the bar; a
+   left-anchored 640px panel would run off screen. */
+.legend-pop {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  z-index: 60;
+  /* The panel grows LEFTWARDS from a button that is itself inset from the
+     right edge, so the viewport is the wrong thing to clamp against: measured
+     at a 760px viewport, `max-width: calc(100vw - 2 * gutter)` never engaged
+     (712px > the 640px width) and the panel's left edge still landed at -57px.
+     What actually bounds it is the space between the left gutter and this
+     button — i.e. the viewport minus everything to the button's right. 240px
+     is that run (Share + Done + separators, ~177px) plus the gutter and slack,
+     and it errs large: read-only mode hides Done, which only moves the button
+     right and leaves more room, never less. Adding another control to the
+     right of this one would invalidate it, so top-panels.e2e.cjs measures the
+     left edge at 760px to catch exactly that. */
+  width: min(700px, calc(100vw - 240px));
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 34px rgba(20, 22, 28, .20), 0 2px 6px rgba(20, 22, 28, .08);
+  text-align: left;
+  cursor: default;
 }
-/* Same cascade trap `.general-composer[hidden]` (line ~397) and
-   `.statstrip[hidden]` already work around, on the element that opens the
-   composer rather than the composer itself: script.js sets `openBtn.hidden
-   = true` to retire the trigger row once the composer is expanded, but the
-   `display: flex` above is an AUTHOR rule and the UA's `[hidden] { display:
-   none }` is a USER-AGENT rule — the author rule wins at equal specificity
-   regardless of source order, so the attribute alone paints nothing away.
-   The trigger stayed on screen above the open textarea forever. Reading
-   back `openBtn.hidden === true` cannot see this; only
-   getComputedStyle(openBtn).display can. All three hidden-able elements on
-   this page now carry the same explicit rule. */
-.composer-collapsed[hidden] { display: none; }
-.composer-collapsed:hover { background: var(--surface); border-style: solid; color: var(--text); }
-.composer-collapsed svg {
-  width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2;
-  stroke-linecap: round; stroke-linejoin: round; flex: none;
+/* The arrow that ties the panel to the button that opened it. */
+.legend-pop::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  right: 8px;
+  width: 11px;
+  height: 11px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  transform: rotate(45deg);
 }
-.composer-collapsed .cc-kbd {
-  margin-left: auto; font-family: ui-monospace, monospace; font-size: 10.5px;
-  border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; background: var(--surface-soft);
+/* The same cascade trap `.general-composer[hidden]` and `.statstrip[hidden]`
+   already work around, now on the popover. `display: block` above is an
+   AUTHOR rule; the UA's `[hidden] { display: none }` is a USER-AGENT rule, so
+   the author rule wins at equal specificity regardless of source order and the
+   bare attribute paints nothing away. Without this line the legend table hangs
+   over the first block from the moment the page loads. Reading back
+   `el.hidden === true` cannot see it; only getComputedStyle can. */
+.legend-pop[hidden] { display: none; }
+/* The popover IS the panel — it already has the surface, border and shadow, so
+   the inner body must not draw a second card inside it. */
+.legend-pop .legend-body {
+  margin-top: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
 }
 
 /* ── First-run discovery hint ───────────────────────────────────────── */
-/* Same max-width + auto-margin-centering as .composer-collapsed, and for
-   the same reason: body is a column flex container (core.css), so with no
-   width/max-width at all this box used align-items:stretch and filled the
-   full 1512px viewport edge to edge while every other box on the page sat
-   in the centred content column. */
+/* max-width + auto side margins center this box on the content column.
+   Plain `width: 100%` alone stretched it to the full viewport — body is a
+   column flex container (core.css), and a flex item's `width: 100%` resolves
+   against the whole body box, not against any notion of "the content column",
+   unless something caps it. */
 .discover-hint {
   display: flex; align-items: center; gap: 10px;
   width: 100%; max-width: var(--content-max); margin: 0 auto 12px auto;

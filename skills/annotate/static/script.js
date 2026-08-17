@@ -298,6 +298,16 @@
                           breaks: false, highlight: highlightFence })
     : null;
 
+  // Indented code blocks are disabled on purpose.  With html:true, Claude
+  // writes free-form HTML into blocks, and readable HTML is indented — but
+  // CommonMark turns any line indented 4+ spaces into a code block, so a
+  // hand-formatted <div> tree renders as its own source.  A blank line makes
+  // it worse: it closes the HTML block, and everything after it is indented,
+  // so half a diagram silently becomes a listing.  Nothing here needs
+  // indented code — every code sample we emit is fenced (see highlightFence),
+  // and fences are a separate rule that stays enabled.
+  if (blockMd) blockMd.disable("code");
+
   // Conservative sanitizer for HTML that lands in a block via markdown-it
   // (now html: true so Claude can emit free-form HTML).  Threat model is
   // "defend against accidents", not a hostile author — Claude is the only
@@ -1385,20 +1395,93 @@
     sendBtn.addEventListener("click", send);
   })();
 
-  // ── Collapsed general composer ───────────────────────────────────────────
-  // The composer used to open as a full textarea above the fold — the least-
-  // used input holding the most valuable space. It now starts collapsed to a
-  // single trigger row; opening it is one click (or the `g` shortcut) away.
-  (function initComposerCollapse() {
-    const openBtn = document.getElementById("composer-open");
-    const section = document.querySelector(".general-composer");
-    if (!openBtn || !section) return;
-    function open() {
-      section.hidden = false;
-      openBtn.hidden = true;
-      document.getElementById("general-input")?.focus();
+  // ── Top-bar panels ───────────────────────────────────────────────────────
+  // Two one-shot controls used to hold permanent space above the first word: a
+  // full-width "comment on the whole response" trigger row, and a centred
+  // legend pill. Both now hang off icon buttons in the page header.
+  //
+  // They open differently, on purpose, because they are used differently. The
+  // composer is somewhere you WRITE, so it opens as a band of the bar with the
+  // full column width; pushing the document down for as long as you are typing
+  // is fine. The legend is something you GLANCE at, so it opens as a popover
+  // over the document — nudging every sentence down to answer "what does the
+  // trash button do?" would be absurd. Same shell here, different geometry in
+  // the stylesheet; see .general-composer and .legend-pop in style.css.
+  (function initTopPanels() {
+    // Each panel is (toggle button, panel element, what to focus on open).
+    const panels = [
+      { btn: document.getElementById("composer-toggle"),
+        el: document.getElementById("general-composer"),
+        focus: () => document.getElementById("general-input") },
+      { btn: document.getElementById("legend-toggle"),
+        el: document.getElementById("legend-pop"),
+        focus: () => null },
+    ].filter((p) => p.btn && p.el);
+    if (!panels.length) return;
+
+    const isOpen = (p) => !p.el.hidden;
+
+    function close(p, { restoreFocus = false } = {}) {
+      if (!isOpen(p)) return;
+      // Move focus off the panel BEFORE hiding it: blurring a display:none
+      // element drops focus to <body>, and the Esc-to-close path is meant to
+      // hand the keyboard back to the button you opened it with.
+      const inside = p.el.contains(document.activeElement);
+      p.el.hidden = true;
+      p.btn.setAttribute("aria-expanded", "false");
+      if (restoreFocus || inside) p.btn.focus();
     }
-    openBtn.addEventListener("click", open);
+
+    function open(p) {
+      // One at a time. Two panels open at once would stack a popover on top of
+      // a band and leave two toggles lit with no way to tell which owns what.
+      panels.forEach((other) => { if (other !== p) close(other); });
+      if (isOpen(p)) return;
+      p.el.hidden = false;
+      p.btn.setAttribute("aria-expanded", "true");
+      p.focus()?.focus();
+    }
+
+    const toggle = (p) => (isOpen(p) ? close(p, { restoreFocus: true }) : open(p));
+
+    panels.forEach((p) => {
+      p.btn.addEventListener("click", (e) => { e.preventDefault(); toggle(p); });
+    });
+
+    // Esc closes whichever panel is open, and takes precedence over the page's
+    // other two Esc handlers (search.js clears the query, subunits.js closes a
+    // per-unit composer). Capture phase + stopPropagation is what buys that
+    // precedence, and it is a deliberate ordering, not just defensiveness: an
+    // open panel is the most recent thing the user opened, so it is what they
+    // mean by "close this". Both other handlers are already conditional on
+    // focus being in their own field, and neither can be reached without a
+    // panel ALSO being open, so nothing is stranded — the early return below
+    // leaves their Esc untouched whenever no panel is open, which is the
+    // overwhelmingly common case.
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const open_ = panels.find(isOpen);
+      if (!open_) return;
+      e.preventDefault();
+      e.stopPropagation();
+      close(open_, { restoreFocus: true });
+    }, true);
+
+    // Click-outside, for the popover only. The composer is deliberately exempt:
+    // it can hold half-written text, and losing that to a stray click on the
+    // document would be the worst bug in this file.
+    document.addEventListener("click", (e) => {
+      panels.forEach((p) => {
+        if (p.el !== document.getElementById("legend-pop")) return;
+        if (!isOpen(p)) return;
+        if (p.el.contains(e.target) || p.btn.contains(e.target)) return;
+        close(p);
+      });
+    });
+
+    // The `g` shortcut, unchanged in behaviour: it opens the composer from
+    // anywhere you are not already typing.
+    const composer = panels[0];
     document.addEventListener("keydown", (e) => {
       if (e.key !== "g" && e.key !== "G") return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1407,9 +1490,9 @@
         active instanceof HTMLTextAreaElement ||
         (active && active.isContentEditable);
       if (typing) return;
-      if (openBtn.hidden) return;
+      if (!composer || isOpen(composer)) return;
       e.preventDefault();
-      open();
+      open(composer);
     });
   })();
 
@@ -1610,8 +1693,11 @@
         // screen when the page scrolls — not buried below the composer.
         const header = document.querySelector(".page-header");
         if (header) header.insertAdjacentElement("afterend", banner);
-        else (document.querySelector(".general-composer") || proseEl)
-          ?.parentNode?.insertBefore(banner, document.querySelector(".general-composer") || proseEl);
+        // Fallback for a shell with no header at all. It used to anchor on
+        // .general-composer, which is now a band of the top bar — landing the
+        // ribbon inside the chrome it is supposed to sit below. The document
+        // itself is the only anchor that still means "top of the content".
+        else proseEl?.parentNode?.insertBefore(banner, proseEl);
       }
       if (!busyTimer) {
         busyTimer = setInterval(() => {

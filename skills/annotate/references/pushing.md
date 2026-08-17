@@ -238,7 +238,9 @@ Fenced code blocks are syntax-highlighted (highlight.js, Tokyo Night theme) and 
 
 A markdown block can contain raw HTML when prose isn't enough — comparison tables, callout boxes, dense tabular data, anything you'd otherwise contort markdown into. The renderer (`markdown-it`) is configured with `html: true`; after render, a conservative client-side sanitizer strips `<script>`, `<iframe>`, `<style>`, `<form>`, `on*` event-handler attributes, and `javascript:` URLs. Everything else passes through.
 
-Two guidelines:
+Three guidelines:
+
+0. **Write the HTML as one unbroken run: no blank lines inside it.** A blank line ends the HTML block and hands what follows back to markdown. This is the one failure that looks like the renderer is broken — the outer wrapper renders and the entire inside of your diagram appears on the page as its own source. Indentation used to compound it (4+ spaces meant a code block); the indented-code rule is now disabled for block markdown so that half can no longer bite, but **the blank-line rule is CommonMark and cannot be switched off.** For anything with nested structure, emit it flat — one long line per element, no blank lines between them — even though the source reads worse. Fenced code blocks are unaffected and remain the way to show code.
 
 1. **Reuse the existing CSS variables.** `var(--accent)`, `var(--surface)`, `var(--surface-soft)`, `var(--border)`, `var(--text)`, `var(--text-strong)`, `var(--text-dim)`, `color-mix(...)` against them. Don't invent palettes — the page already has one. Inline `style="..."` is acceptable; a `<style>` block is not (the sanitizer strips it).
 

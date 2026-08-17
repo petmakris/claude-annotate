@@ -145,7 +145,7 @@ function deck(mark) {
     log("✓ stray second key disarms");
 
     // ── 7. Inert while typing in the composer ──────────────────────────────
-    await page.locator("#composer-open").click();
+    await page.locator("#composer-toggle").click();
     await page.waitForSelector("#general-input");
     await page.keyboard.press("Meta+KeyK");
     await page.keyboard.press("Meta+Digit0");

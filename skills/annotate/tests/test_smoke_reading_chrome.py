@@ -33,45 +33,43 @@ def _hides_when_hidden(css, selector):
     return re.search(pattern, css) is not None
 
 
-def test_the_composer_starts_collapsed():
-    """Two halves, and the second is the one that broke twice.
+def test_the_composer_starts_closed():
+    """The composer must not render expanded on load.
 
-    The markup half: server.py renders the trigger button. The rendering
-    half: script.js retires that button with `openBtn.hidden = true`, and a
-    bare `hidden` attribute does NOTHING here — style.css's own
-    `.composer-collapsed { display: flex }` is an author rule and the UA's
-    `[hidden] { display: none }` is a user-agent rule, so the author rule
-    wins at equal specificity no matter the source order. The trigger row
-    stayed painted above the open textarea forever.
-
-    This is the same cascade bug `.general-composer[hidden]` already had to
-    fix on the sibling element. Checking only that the class name appears in
-    server.py — all this test used to do — passes with the feature rendered
-    wrong, and passed against that earlier bug too.
+    The trigger row this test used to guard is gone — the composer now opens
+    from #composer-toggle in the page header (see test_smoke_top_panels.py).
+    What survives unchanged is the cascade trap underneath it: a bare `hidden`
+    attribute does NOTHING against core.css's author rule `.general-composer {
+    display: flex }`, because the UA's `[hidden] { display: none }` loses to an
+    author rule of equal specificity whatever the source order. Without an
+    explicit `[hidden]` rule the full textarea paints on load, which is exactly
+    the bug that shipped twice.
     """
-    server = SERVER_PY.read_text()
-    assert "composer-collapsed" in server, \
-        "the general composer still opens as a full textarea"
     css = STYLE_CSS.read_text()
-    assert _hides_when_hidden(css, ".composer-collapsed"), (
-        "nothing makes .composer-collapsed display:none when hidden — "
-        "script.js sets the attribute, the author `display: flex` rule beats "
-        "it, and the trigger stays on screen above the expanded composer"
+    assert _hides_when_hidden(css, ".general-composer"), (
+        "nothing makes .general-composer display:none when hidden — the "
+        "composer renders expanded on load, before anyone opened it"
     )
 
 
-def test_the_collapsed_composer_clears_the_header():
-    """The trigger row sat flush against the page header/statstrip band with
-    no gap at all, reading as one merged bar. The breathing room is a top
-    margin on .composer-collapsed; assert it is present and nonzero so a
-    stylesheet cleanup can't silently reglue the two."""
+def test_the_composer_band_sits_flush_under_the_bar():
+    """Inverted on purpose, and worth saying why.
+
+    While the composer lived below the fold it needed a top margin, or it read
+    as glued to the header. It is now deliberately part of that chrome — a
+    third band of the top bar — so the requirement flips: any top margin would
+    open a stripe of page background between the statstrip and the band and
+    break the one-object reading the bar is supposed to have.
+    """
     css = STYLE_CSS.read_text()
-    start = css.index(".composer-collapsed {")
+    start = css.index(".general-composer {")
     rule = css[start:css.index("}", start)]
-    m = re.search(r"margin:\s*(\d+)px\s+auto", rule)
-    assert m and int(m.group(1)) > 0, (
-        ".composer-collapsed has no top margin — the trigger row sits flush "
-        "under the page header"
+    m = re.search(r"margin:\s*([^;]+);", rule)
+    assert m, ".general-composer no longer pins its margin — core.css's " \
+               "`margin: 0 auto 8px` leaks back in and detaches the band"
+    assert m.group(1).strip() == "0", (
+        f".general-composer has margin {m.group(1).strip()!r} — the band must "
+        "sit flush under the statstrip, with no page background between them"
     )
 
 
@@ -99,7 +97,7 @@ def test_the_map_rail_stays_removed():
 
 def test_the_reading_chrome_is_styled():
     css = STYLE_CSS.read_text()
-    for needle in (".composer-collapsed", ".discover-hint"):
+    for needle in (".legend-pop", ".discover-hint"):
         assert needle in css, f"style.css missing {needle}"
 
 
