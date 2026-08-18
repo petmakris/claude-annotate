@@ -1236,15 +1236,115 @@ body.is-busy .comment-card {
 .diff-pane { display: none; padding: 10px 18px 14px; border-top: 1px dashed var(--border); background: var(--surface-soft); }
 section.block[data-diff="open"] .diff-pane { display: block; }
 .diff-pane .diff-h {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
-  color: var(--text-dim); margin: 0 0 7px;
+  color: var(--text-dim); margin: 0 0 9px;
 }
-.diff-pane p { padding: 0; margin: 0 0 7px; font-size: 13.5px; line-height: 1.6; }
-.diff-pane del { background: #fee2e2; color: #7f1d1d; text-decoration: line-through; border-radius: 3px; padding: 0 2px; }
-.diff-pane ins { background: #dcfce7; color: #14532d; text-decoration: none; border-radius: 3px; padding: 0 2px; }
+.diff-pane .diff-h-space { flex: 1; }
+
+/* Two views of the same rows. Reader answers "what does it say now", diff
+   answers "what exactly moved" — the switch is the whole point, so it sits in
+   the pane header where the reader is already looking. */
+.diff-views { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; flex: none; }
+.diff-view-btn {
+  font: inherit; font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  padding: 3px 10px; border: 0; border-left: 1px solid var(--border);
+  background: var(--surface); color: var(--text-dim); cursor: pointer;
+}
+.diff-view-btn:first-child { border-left: 0; }
+.diff-view-btn:hover { color: var(--accent); }
+.diff-view-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+.diff-view-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* One pane holds both trees; the switch just decides which is on screen.
+   Rendering both up front keeps switching instant and means a view can never
+   disagree with the other about what changed. */
+.diff-pane[data-view="reader"] .d-uni,
+.diff-pane[data-view="diff"] .d-reader { display: none; }
+
+/* ── Reader ─────────────────────────────────────────────────────────────
+   The new text, readable as prose. Structure and emphasis survive, so the
+   pane and the card above it finally look like the same document. */
+.d-reader { font-size: 13.5px; line-height: 1.66; }
+.d-reader p { padding: 0; margin: 0 0 8px; }
+.d-reader p:last-child, .d-reader .d-li:last-child { margin-bottom: 0; }
+.d-li { display: grid; grid-template-columns: 24px 1fr; gap: 2px; align-items: start; margin: 0 0 8px; }
+.d-marker { font-weight: 700; color: var(--text-strong); }
+/* Reader puts the marker in its own grid column; the diff row is inline,
+   so it needs the gap spelled out or it reads "1.Which". */
+.d-txt .d-marker { margin-right: 5px; }
+.d-ins {
+  background: #dcfce7; color: #14532d; text-decoration: none;
+  border-radius: 3px; padding: 0 1px; box-shadow: inset 0 -1px 0 rgba(20, 83, 45, .28);
+}
+/* A deletion has no room in the new text, so it folds to a counter you open.
+   Reading what it says now is the common case; reading what it used to say is
+   one click, and the click is always available. */
+.d-cut {
+  font: inherit; font-size: 9.5px; font-weight: 700; letter-spacing: .02em;
+  vertical-align: 1px; white-space: nowrap;
+  background: #fde8e8; color: #8c2020; border: 0; border-radius: 999px;
+  padding: 1px 7px; margin: 0 2px; cursor: pointer;
+}
+.d-cut:hover { background: #f9d0d0; }
+.d-cut:focus-visible { outline: 2px solid #8c2020; outline-offset: 1px; }
+.d-cut-open {
+  background: #fde8e8; color: #8c2020; text-decoration: line-through;
+  border-radius: 3px; padding: 0 2px; margin: 0 1px;
+}
+/* A paragraph that is simply gone has nowhere in the new text to fold into,
+   and is the one change a reader most needs told about outright. */
+.d-gone {
+  display: block; padding: 6px 10px; margin: 0 0 8px;
+  border-left: 3px solid #e9b4b4; background: #fde8e8; color: #8c2020;
+  border-radius: 3px 7px 7px 3px;
+}
+.d-gone-lab {
+  display: block; font-size: 9px; font-weight: 700; letter-spacing: .07em;
+  text-transform: uppercase; opacity: .72; margin-bottom: 1px;
+}
+
+/* ── Diff ───────────────────────────────────────────────────────────────
+   Paragraph by paragraph. Word-level marks only inside a pair that stayed
+   recognisably the same paragraph, which is why this view cannot produce the
+   word-level confetti the old single-paragraph pane did. */
+.d-uni { display: grid; gap: 7px; font-size: 13px; line-height: 1.62; }
+.d-row { display: grid; grid-template-columns: 18px 1fr; gap: 9px; align-items: start; }
+.d-gut { font-weight: 700; color: var(--text-dim); text-align: center; padding-top: 2px; }
+.d-row.d-del .d-gut { color: #8c2020; }
+.d-row.d-ins-row .d-gut { color: #14532d; }
+.d-row.d-mod .d-gut { color: var(--accent); }
+.d-txt { padding: 4px 9px; border-radius: 6px; }
+.d-row.d-del .d-txt { background: #fde8e8; color: #8c2020; }
+.d-row.d-ins-row .d-txt { background: #dcfce7; color: #14532d; }
+.d-row.d-mod .d-txt { background: var(--surface); border: 1px solid var(--border); }
+.d-row.d-del .d-txt strong, .d-row.d-ins-row .d-txt strong { color: inherit; }
+.d-cut-text {
+  background: rgba(190, 40, 40, .15); color: #8c2020;
+  text-decoration: line-through; border-radius: 3px; padding: 0 2px;
+}
+/* Untouched paragraphs are context, not news — collapsed by default so the
+   pane is as long as the change is, not as long as the block is. */
+.d-fold {
+  font: inherit; font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text-dim); background: transparent;
+  border: 1px dashed var(--border); border-radius: 7px;
+  padding: 4px 11px; text-align: left; cursor: pointer;
+}
+.d-fold:hover { border-color: var(--accent); color: var(--accent); }
+.d-fold:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.d-fold-body { display: grid; gap: 7px; }
+.d-fold-body[hidden] { display: none; }
+.d-fold-body .d-txt { color: var(--text-dim); }
+
+/* The change note. Above the diff, not below it: a one-line reason makes the
+   marks underneath legible, and on a compact the Lost: line is the only place
+   a user can ever learn what was irreversibly discarded. */
 .diff-why {
-  margin-top: 8px; padding: 7px 10px; border-radius: 7px; font-size: 11.5px; line-height: 1.6;
-  background: #fff; border: 1px solid var(--border); color: var(--text-dim);
+  margin: 0 0 11px; padding: 7px 10px; border-radius: 4px 8px 8px 4px;
+  font-size: 11.5px; line-height: 1.6;
+  background: var(--surface); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); color: var(--text-dim);
 }
 .diff-why-line + .diff-why-line { margin-top: 4px; }
 .diff-why b { color: var(--text-strong); font-weight: 650; }

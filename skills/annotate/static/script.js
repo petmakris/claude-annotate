@@ -1956,100 +1956,191 @@
     }
   }
 
-  // Cells of the LCS table we are willing to allocate. The table is
-  // (n+1)·(m+1) Uint32s, so 2,000,000 cells is ~8 MB and a couple of
-  // milliseconds. Tokens are word-plus-separator, so the cap bites at roughly
-  // 700 words per side — above a typical prose block, below the long code
-  // listings and wide tables Claude sometimes writes. Uncapped, a 2000-word
-  // block asks for ~61 MB and a 4000-word one for ~244 MB, and applyChangeSet
-  // runs this over every changed block so the peaks stack into a frozen tab
-  // or a RangeError.
-  const DIFF_MAX_CELLS = 2000000;
+  // ── The pane ──────────────────────────────────────────────────────────────
+  //
+  // The diff itself lives in static/diff.js, as pure functions over two
+  // strings, and is covered by tests/diff_engine.test.cjs. Everything here is
+  // DOM: materialise what the engine returned, wire the three controls, and
+  // stay out of the algorithm's way.
+  //
+  // The pane offers two views of the same rows because they answer different
+  // questions and both get asked:
+  //
+  //   reader  the new text as prose, additions tinted, deletions folded into
+  //           a chip. Answers "what does it say now".
+  //   diff    paragraph by paragraph, both sides on show, unchanged runs
+  //           collapsed. Answers "what exactly moved", and is where you go
+  //           the moment you do not trust the reader view.
+  //
+  // Reader is the default: it is the question people arrive with. The choice
+  // is remembered, because someone who wants the diff view wants it for the
+  // whole round, not for one card.
 
-  // Word-level LCS. Small documents, runs once per changed block, so an
-  // O(n·m) table is fine and keeps the whole thing dependency-free.
-  function wordDiff(a, b) {
-    const A = a.split(/(\s+)/), B = b.split(/(\s+)/);
-    const n = A.length, m = B.length;
-    // Too big to align word by word. Fall back to one whole-text replacement:
-    // it loses the "which words moved" precision the pane exists for, but it
-    // is still a correct description of the change and it always renders.
-    if (n * m > DIFF_MAX_CELLS) return [["-", a], ["+", b]];
-    const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
-    for (let i = n - 1; i >= 0; i--)
-      for (let j = m - 1; j >= 0; j--)
-        dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1
-                                 : Math.max(dp[i + 1][j], dp[i][j + 1]);
-    const out = [];
-    let i = 0, j = 0;
-    while (i < n && j < m) {
-      if (A[i] === B[j]) { out.push(["=", A[i]]); i++; j++; }
-      else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push(["-", A[i]]); i++; }
-      else { out.push(["+", B[j]]); j++; }
-    }
-    while (i < n) out.push(["-", A[i++]]);
-    while (j < m) out.push(["+", B[j++]]);
-    return out;
+  const DIFF_VIEW_KEY = "annotate.diffview";
+  const DIFF_VIEWS = [["reader", "reader"], ["diff", "diff"]];
+  let diffView = (() => {
+    try {
+      const v = localStorage.getItem(DIFF_VIEW_KEY);
+      return DIFF_VIEWS.some(([id]) => id === v) ? v : "reader";
+    } catch { return "reader"; }
+  })();
+
+  // vnode -> DOM. A string kid is ALWAYS a text node, which is what keeps
+  // arbitrary block markdown from becoming markup: there is no path here that
+  // parses HTML, so a block containing "<img onerror=...>" renders those
+  // characters and nothing else. diff.js builds the tree; nobody builds an
+  // HTML string anywhere along the way.
+  function materialize(node) {
+    if (typeof node === "string") return document.createTextNode(node);
+    const el = document.createElement(node.tag);
+    if (node.cls) el.className = node.cls;
+    for (const k of Object.keys(node.attrs || {})) el.setAttribute(k, node.attrs[k]);
+    for (const kid of node.kids || []) el.appendChild(materialize(kid));
+    return el;
   }
 
   // Recognised change_note line labels, in the order the contract documents
   // them (see references/handling-events.md § "Explaining a change").
   const CHANGE_NOTE_LABELS = ["Why:", "Lost:"];
 
-  // Block markdown is arbitrary user-and-model text, so every run is a text
-  // node inside its element. Never string-concatenated into innerHTML.
+  // Task 5's per-block change note: free-form text Claude may attach to a
+  // rewrite, optionally carrying a `Why:` line and — for a compact that
+  // dropped detail — a `Lost:` line. Rendered ABOVE the diff, not below it: a
+  // one-line reason makes the marks underneath legible, and on a compact the
+  // `Lost:` line is the single most valuable thing in the pane and the one
+  // place a user can ever learn what was discarded. It should not be the last
+  // thing you scroll to.
+  //
+  // Each line gets its own row rather than one blob: a fixed leading label
+  // would double up against a note that already starts with "Why:", and
+  // folding a `Lost:` line into the same paragraph buries it. The field is
+  // optional and free-form, so this must still render sensibly with no
+  // recognised label, extra blank lines, or only a `Why:` line.
+  function renderChangeNote(note) {
+    if (typeof note !== "string" || !note.trim()) return null;
+    const why = document.createElement("div");
+    why.className = "diff-why";
+    for (const rawLine of note.trim().split("\n")) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      const row = document.createElement("div");
+      row.className = "diff-why-line";
+      const label = CHANGE_NOTE_LABELS.find(l => line.startsWith(l));
+      if (label) {
+        row.classList.add(label === "Lost:" ? "diff-lost" : "diff-reason");
+        const lbl = document.createElement("b");
+        lbl.textContent = label + " ";
+        row.append(lbl, document.createTextNode(line.slice(label.length).trim()));
+      } else {
+        row.appendChild(document.createTextNode(line));
+      }
+      why.appendChild(row);
+    }
+    return why.children.length ? why : null;
+  }
+
+  function renderViewSwitch() {
+    const wrap = document.createElement("span");
+    wrap.className = "diff-views";
+    wrap.setAttribute("role", "group");
+    wrap.setAttribute("aria-label", "How to show the change");
+    for (const [id, label] of DIFF_VIEWS) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "diff-view-btn";
+      b.dataset.view = id;
+      b.textContent = label;
+      b.setAttribute("aria-pressed", String(id === diffView));
+      wrap.appendChild(b);
+    }
+    return wrap;
+  }
+
+  // Repaint every open pane's switch after a choice, so the setting reads as
+  // a document-wide preference rather than a per-card accident.
+  function applyDiffView(view) {
+    diffView = view;
+    try { localStorage.setItem(DIFF_VIEW_KEY, view); } catch { /* private mode */ }
+    document.querySelectorAll(".diff-pane").forEach(pane => {
+      pane.dataset.view = view;
+      pane.querySelectorAll(".diff-view-btn").forEach(b => {
+        b.setAttribute("aria-pressed", String(b.dataset.view === view));
+      });
+    });
+  }
+
   function renderDiffPane(section, c, blk, before) {
     section.querySelector(".diff-pane")?.remove();
     const now = blk.markdown || "";
     if (now === before) return;
+
+    const D = window.AnnotateDiff;
+    // No engine (a stale cached page, a blocked asset) is not a reason to
+    // lose the attribution chip and the change note as well.
+    const rows = D ? D.alignUnits(D.splitUnits(before), D.splitUnits(now)) : null;
+
     const pane = document.createElement("div");
     pane.className = "diff-pane";
+    pane.dataset.view = diffView;
+
     const h = document.createElement("div");
     h.className = "diff-h";
-    h.textContent = `changed from v${c.from}`
+    const label = document.createElement("span");
+    label.textContent = `changed from v${c.from}`
       + (c.bySweep ? " — you did not mark this section" : "");
+    const spacer = document.createElement("span");
+    spacer.className = "diff-h-space";
+    h.append(label, spacer);
+    if (rows) h.appendChild(renderViewSwitch());
     pane.appendChild(h);
-    const p = document.createElement("p");
-    for (const [op, token] of wordDiff(before, now)) {
-      const el = document.createElement(op === "-" ? "del" : op === "+" ? "ins" : "span");
-      el.appendChild(document.createTextNode(token));
-      p.appendChild(el);
+
+    const note = renderChangeNote(blk.change_note);
+    if (note) pane.appendChild(note);
+
+    if (rows) {
+      pane.appendChild(materialize(D.renderReader(rows)));
+      pane.appendChild(materialize(D.renderUnified(rows)));
     }
-    pane.appendChild(p);
-    // Task 5's per-block change note: free-form text Claude may attach to a
-    // rewrite, optionally carrying a `Why:` line and — for a compact that
-    // dropped detail — a `Lost:` line. Render each line of the note on its
-    // own row rather than as one blob: a fixed leading label here would
-    // double up against a note that already starts with "Why:", and folding
-    // a `Lost:` line into the same paragraph buries the one place a user can
-    // ever learn what a compact discarded. The field is optional and
-    // free-form, so this must still render sensibly with no recognised
-    // label, extra blank lines, or only a `Why:` line.
-    if (typeof blk.change_note === "string" && blk.change_note.trim()) {
-      const why = document.createElement("div");
-      why.className = "diff-why";
-      for (const rawLine of blk.change_note.trim().split("\n")) {
-        const line = rawLine.trim();
-        if (!line) continue;
-        const row = document.createElement("div");
-        row.className = "diff-why-line";
-        const label = CHANGE_NOTE_LABELS.find(l => line.startsWith(l));
-        if (label) {
-          row.classList.add(label === "Lost:" ? "diff-lost" : "diff-reason");
-          const lbl = document.createElement("b");
-          lbl.textContent = label + " ";
-          row.append(lbl, document.createTextNode(line.slice(label.length).trim()));
-        } else {
-          row.appendChild(document.createTextNode(line));
-        }
-        why.appendChild(row);
-      }
-      pane.appendChild(why);
-    }
+
     const body = section.querySelector(".card-body");
     if (body) body.insertAdjacentElement("afterend", pane);
     else section.appendChild(pane);
   }
+
+  // One delegated listener for every pane on the page: panes come and go on
+  // every round, and re-binding per pane is how listeners leak.
+  document.addEventListener("click", (ev) => {
+    const view = ev.target.closest?.(".diff-view-btn");
+    if (view) { ev.stopPropagation(); applyDiffView(view.dataset.view); return; }
+
+    // Open a folded deletion in place. One-way on purpose: having asked what
+    // was cut, you are reading the answer, and a chip that re-hides it invites
+    // clicking twice and losing it again.
+    const cut = ev.target.closest?.(".d-cut");
+    if (cut) {
+      ev.stopPropagation();
+      const del = document.createElement("del");
+      del.className = "d-cut-open";
+      del.textContent = cut.getAttribute("data-cut") || "";
+      cut.replaceWith(del);
+      return;
+    }
+
+    const fold = ev.target.closest?.(".d-fold");
+    if (fold) {
+      ev.stopPropagation();
+      const box = fold.nextElementSibling;
+      if (!box || !box.classList.contains("d-fold-body")) return;
+      const opening = box.hasAttribute("hidden");
+      if (opening) box.removeAttribute("hidden"); else box.setAttribute("hidden", "");
+      fold.setAttribute("aria-expanded", String(opening));
+      const n = box.children.length;
+      fold.textContent = opening
+        ? "▾ hide unchanged"
+        : "… " + n + " unchanged paragraph" + (n > 1 ? "s" : "");
+    }
+  });
+
 
   // The pre-round snapshot: the document as it stood when the round was
   // queued, which is the only record of what a block used to say. Read-only

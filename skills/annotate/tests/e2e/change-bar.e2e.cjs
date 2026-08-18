@@ -143,10 +143,44 @@ function writeBlocks(dir, blocks) {
     await page.waitForSelector('section.block[data-block-id="b-1"] .diff-pane', { state: "visible", timeout: 3000 });
     const h = await page.locator('section.block[data-block-id="b-1"] .diff-h').innerText();
     if (!/changed from v1/i.test(h) || !/did not mark/i.test(h)) fail("sweep diff heading = " + h);
-    const del = await page.locator('section.block[data-block-id="b-1"] .diff-pane del').allInnerTexts();
-    const ins = await page.locator('section.block[data-block-id="b-1"] .diff-pane ins').allInnerTexts();
-    if (del.join("").trim() !== "at all." || ins.join("").trim() !== "whatsoever.") fail("diff runs del=" + JSON.stringify(del) + " ins=" + JSON.stringify(ins));
-    log("✓ diff pane: " + JSON.stringify(h) + " del=" + JSON.stringify(del) + " ins=" + JSON.stringify(ins));
+    // The pane holds BOTH views and shows one, so every query below is scoped
+    // to the visible tree. Querying the pane as a whole double-counts.
+    const b1pane = page.locator('section.block[data-block-id="b-1"] .diff-pane');
+    if (await b1pane.getAttribute("data-view") !== "reader") fail("reader is not the default view");
+
+    // Reader: the new wording reads as prose, the removed wording is folded
+    // into a chip rather than braided into the sentence.
+    const readerText = (await b1pane.locator(".d-reader").innerText()).trim();
+    if (!/whatsoever\./.test(readerText)) fail("reader view omits the new wording: " + readerText);
+    if (/at all\./.test(readerText)) fail("reader view shows the old wording inline: " + readerText);
+    const rIns = (await b1pane.locator(".d-reader ins").allInnerTexts()).join("").trim();
+    if (!/whatsoever\./.test(rIns)) fail("reader marked the wrong span as added: " + rIns);
+    const chip = b1pane.locator(".d-reader .d-cut");
+    if (await chip.count() !== 1) fail("expected one cut chip, got " + await chip.count());
+    if (!/at all\./.test(await chip.getAttribute("data-cut"))) fail("the cut chip does not carry what was cut");
+
+    // Clicking the chip opens the cut text in place — nothing is unreachable,
+    // it is one click away.
+    await chip.click();
+    const opened = (await b1pane.locator(".d-reader .d-cut-open").allInnerTexts()).join("").trim();
+    if (!/at all\./.test(opened)) fail("clicking the chip did not reveal the cut text: " + opened);
+    log("✓ reader view: additions tinted, deletion folded into a chip that opens");
+
+    // Diff: both sides on show, in one row.
+    await b1pane.locator('.diff-view-btn[data-view="diff"]').click();
+    if (await b1pane.getAttribute("data-view") !== "diff") fail("the view switch did not change the view");
+    if (await b1pane.locator(".d-reader").isVisible()) fail("reader tree still visible in diff view");
+    const uDel = (await b1pane.locator(".d-uni del").allInnerTexts()).join("").trim();
+    const uIns = (await b1pane.locator(".d-uni ins").allInnerTexts()).join("").trim();
+    if (!/at all\./.test(uDel) || !/whatsoever\./.test(uIns)) fail("diff runs del=" + uDel + " ins=" + uIns);
+    log("✓ diff view: del=" + JSON.stringify(uDel) + " ins=" + JSON.stringify(uIns));
+
+    // The choice is a document-wide preference, not a per-card accident: a
+    // reader who switched once should not switch again on the next card.
+    const b0pane = page.locator('section.block[data-block-id="b-0"] .diff-pane');
+    if (await b0pane.getAttribute("data-view") !== "diff") fail("the view choice did not carry to other panes");
+    log("✓ the view choice applies to every pane at once");
+    await b1pane.locator('.diff-view-btn[data-view="reader"]').click();
 
     // The toggle is a toggle: a second click closes the pane again.
     const t1 = page.locator('section.block[data-block-id="b-1"] .card-diff-toggle');
@@ -157,6 +191,7 @@ function writeBlocks(dir, blocks) {
     log("✓ second click closes the pane and releases the toggle");
 
     // The block the user DID mark is not labelled as swept.
+    await page.locator('section.block[data-block-id="b-0"] .card-diff-toggle').click();
     const b0h = await page.locator('section.block[data-block-id="b-0"] .diff-h').innerText();
     if (/did not mark/i.test(b0h)) fail("b-0 heading claims it was unmarked");
     log("✓ b-0 heading: " + JSON.stringify(b0h));
@@ -180,12 +215,28 @@ function writeBlocks(dir, blocks) {
     writeBlocks(responseDir, [
       { id: "b-0", markdown: "The quick red fox leaps over the lazy dog." },
       { id: "b-1", markdown: "A second paragraph that nobody marked whatsoever." },
-      { id: "b-2", markdown: 'A third paragraph <img src=x onerror="window.__pwned=1"> moved.' },
+      { id: "b-2", markdown: 'A third paragraph <img src=x onerror="window.__pwned=1"> moved.',
+        change_note: "Why: you asked what moved here.\nLost: the original phrasing." },
     ]);
     fs.writeFileSync(path.join(consumedDir, eid2 + ".ack"), "");
     await page.waitForSelector('section.block[data-block-id="b-2"] .card-diff-toggle', { timeout: 10000 });
     await page.locator('section.block[data-block-id="b-2"] .card-diff-toggle').click();
-    const paneHTML = await page.locator('section.block[data-block-id="b-2"] .diff-pane').innerHTML();
+    const b2pane = page.locator('section.block[data-block-id="b-2"] .diff-pane');
+    // The note explains the marks, so it sits ABOVE them. Below the diff it is
+    // the last thing you reach, and on a compact the Lost: line is the only
+    // record of what was discarded.
+    const notePos = await b2pane.evaluate((el) => {
+      const why = el.querySelector(".diff-why");
+      const body = el.querySelector(".d-reader, .d-uni");
+      if (!why) return "missing";
+      if (!body) return "no-body";
+      return (why.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING) ? "above" : "below";
+    });
+    if (notePos !== "above") fail("change note is " + notePos + ", must be above the diff");
+    const lost = await b2pane.locator(".diff-lost").count();
+    if (lost !== 1) fail("the Lost: line has no distinguishing class");
+    log("✓ change note sits above the diff, Lost: line marked");
+    const paneHTML = await b2pane.innerHTML();
     if (/<img/i.test(paneHTML)) fail("diff pane materialised an <img> node from block text");
     const pwned = await page.evaluate(() => window.__pwned);
     if (pwned) fail("onerror fired from diff pane");

@@ -410,6 +410,11 @@ class Handlers:
                 # markdown-it instance with the highlight hook). Both are defer,
                 # so document order is execution order — keep this line first.
                 '<script src="/static/highlight.min.js" defer></script>'
+                # The diff engine is a plain namespace object with no DOM
+                # dependency; script.js reads window.AnnotateDiff when a round
+                # is acked, so it only has to exist by then — but ordering it
+                # first keeps that true even if the pane ever renders earlier.
+                '<script src="/static/diff.js" defer></script>'
                 '<script src="/static/script.js" defer></script>'
                 '<script src="/static/export.js" defer></script>'
                 '<script src="/static/subunits.js" defer></script>'
@@ -806,6 +811,15 @@ def _render_block_for_raw(blk: dict, version: int) -> dict:
     base = {"id": blk["id"], "kind": kind, "version": int(version)}
     if blk.get("title"):
         base["title"] = blk["title"]
+    # Optional per-rewrite explanation (references/handling-events.md
+    # § "Explaining a change"). The diff pane renders it above the marks, and
+    # its `Lost:` line is the only place a user can ever learn what a compact
+    # discarded — so it has to be on the wire. It was not, for the whole life
+    # of the feature: the pane read blk.change_note and this allowlist never
+    # put it there. blocks.json is model-authored, so guard the type.
+    note = blk.get("change_note")
+    if isinstance(note, str) and note.strip():
+        base["change_note"] = note
     if kind == "sequence":
         spec = blk.get("spec") or {}
         try:

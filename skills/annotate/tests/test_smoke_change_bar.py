@@ -14,6 +14,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 STATIC = REPO / "skills" / "annotate" / "static"
 SCRIPT_JS = STATIC / "script.js"
+DIFF_JS = STATIC / "diff.js"
 STYLE_CSS = STATIC / "style.css"
 
 
@@ -67,22 +68,29 @@ def test_the_bar_sticks_to_the_top_of_the_viewport():
 
 
 def test_the_word_diff_caps_its_table():
-    """wordDiff allocates an (n+1)x(m+1) Uint32 table.
+    """The LCS allocates an (n+1)x(m+1) Uint32 table.
 
     Uncapped, a 2000-word block asks for ~61MB and a 4000-word one for
     ~244MB, and applyChangeSet runs it over every changed block so the
     peaks stack — a frozen tab, or a RangeError that kills the whole set.
     Past the cap it must still return a coarse whole-text replacement
     rather than nothing, so a huge block still shows a correct diff.
+
+    The engine moved to static/diff.js, where diff_engine.test.cjs also
+    EXECUTES this path and asserts the fallback's contents. This check stays
+    because it is the cheap one that runs everywhere, including on a machine
+    with no node: it pins the ordering of the guard against the allocation,
+    which is the half that silently stops mattering if someone reshuffles the
+    function.
     """
-    src = SCRIPT_JS.read_text()
-    assert "DIFF_MAX_CELLS" in src, "wordDiff's table allocation is unbounded"
-    guard = re.search(r"if \(n \* m > DIFF_MAX_CELLS\) return (.+);", src)
+    src = DIFF_JS.read_text()
+    assert "MAX_CELLS" in src, "the LCS table allocation is unbounded"
+    guard = re.search(r"if \(n \* m > MAX_CELLS\) return (.+);", src)
     assert guard, "no size guard ahead of the table allocation"
     assert '["-", a]' in guard.group(1) and '["+", b]' in guard.group(1), \
-        "over the cap wordDiff must still return a whole-text replacement"
+        "over the cap the diff must still return a whole-text replacement"
     # The guard has to come BEFORE the allocation or it saves nothing.
-    assert src.index("DIFF_MAX_CELLS)") < src.index("new Uint32Array(m + 1)"), \
+    assert src.index("MAX_CELLS) return") < src.index("new Uint32Array(m + 1)"), \
         "the cap is checked after the table is already allocated"
 
 
@@ -141,9 +149,9 @@ def test_the_hardcoded_why_label_is_gone():
     The fix must build the label from the note's own line, not a fixed
     string sitting outside the note's content."""
     src = SCRIPT_JS.read_text()
-    body = _brace_block(src, src.index("function renderDiffPane("))
+    body = _brace_block(src, src.index("function renderChangeNote("))
     assert '"Why: "' not in body, \
-        "renderDiffPane still hardcodes a \"Why: \" label ahead of the note"
+        "renderChangeNote still hardcodes a \"Why: \" label ahead of the note"
 
 
 def test_the_change_note_renders_line_by_line():
@@ -151,11 +159,11 @@ def test_the_change_note_renders_line_by_line():
     white-space: pre-wrap in .diff-why), burying it mid-sentence. The note
     must be split into its own lines and rendered as separate elements."""
     src = SCRIPT_JS.read_text()
-    body = _brace_block(src, src.index("function renderDiffPane("))
+    body = _brace_block(src, src.index("function renderChangeNote("))
     assert 'split("\\n")' in body or "split('\\n')" in body, \
-        "renderDiffPane does not split change_note into lines"
+        "renderChangeNote does not split change_note into lines"
     assert "diff-why-line" in body, \
-        "renderDiffPane does not give each note line its own element"
+        "renderChangeNote does not give each note line its own element"
 
 
 def test_the_lost_line_gets_its_own_class():
@@ -163,9 +171,9 @@ def test_the_lost_line_gets_its_own_class():
     irreversibly discarded. It must be distinguishable from the Why: line,
     not just more text in the same paragraph."""
     src = SCRIPT_JS.read_text()
-    body = _brace_block(src, src.index("function renderDiffPane("))
+    body = _brace_block(src, src.index("function renderChangeNote("))
     assert "diff-lost" in body, \
-        "renderDiffPane never marks a Lost: line with its own class"
+        "renderChangeNote never marks a Lost: line with its own class"
     css = STYLE_CSS.read_text()
     assert ".diff-lost" in css, "style.css does not style .diff-lost"
 

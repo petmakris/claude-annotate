@@ -18,5 +18,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      # test_diff_engine.py executes static/diff.js under node. Without node
+      # on the runner it SKIPS, so the diff engine's only real test would go
+      # quietly unrun and CI would still be green.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       - run: pip install pytest
       - run: python3 -m pytest skills -q
