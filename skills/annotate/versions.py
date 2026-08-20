@@ -1,11 +1,12 @@
 """Per-block version chain — server-derived versioning.
 
 A block's `version` is *not* something Claude writes into blocks.json. It is
-computed on every read by hashing the block's content — markdown or spec,
-plus any code anchors — (normalized for cosmetic noise) and comparing
-against a per-block hash chain stored in a sidecar `versions.json` alongside
-`blocks.json`. The reported version is the length of that chain — a value
-that can only grow when the content actually changes.
+computed on every read by hashing the block's content — markdown (normalized
+for cosmetic noise) or spec, plus any code anchors (both canonical-JSON, key
+order does not count) — and comparing against a per-block hash chain stored
+in a sidecar `versions.json` alongside `blocks.json`. The reported version
+is the length of that chain — a value that can only grow when the content
+actually changes.
 
 This kills two failure modes at once:
   (a) Claude rewriting unrelated blocks bumps their versions for no reason.
@@ -41,11 +42,6 @@ _TRAILING_WS = re.compile(r"[ \t]+$", re.MULTILINE)
 _SPEC_KINDS = ("sequence", "diagram", "choice", "mockup", "flowchart")
 
 
-def _canonical_spec(spec: dict[str, Any]) -> str:
-    """Stable JSON serialization — must match blocks._canonical_spec."""
-    return json.dumps(spec, sort_keys=True, separators=(",", ":"))
-
-
 def _normalize_markdown(s: str) -> str:
     """Cosmetic-noise filter for markdown/HTML block content.
 
@@ -60,16 +56,18 @@ def _normalize_markdown(s: str) -> str:
     return s
 
 
-def _canonical_code(code: Any) -> str:
-    """Stable JSON for a block's anchors — key order is not a content change."""
-    return json.dumps(code, sort_keys=True, separators=(",", ":"))
+def _canonical_json(value: Any) -> str:
+    """Stable JSON serialization — key order is not a content change.
+    Must match blocks._canonical_spec: the two modules hash the same specs
+    and have to agree byte-for-byte."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def _block_hash(blk: dict[str, Any]) -> str:
     """SHA1 of (kind, normalized-content, anchors)."""
     kind = blk.get("kind") or "markdown"
     if kind in _SPEC_KINDS:
-        body = _canonical_spec(blk.get("spec") or {})
+        body = _canonical_json(blk.get("spec") or {})
     else:
         body = _normalize_markdown(blk.get("markdown") or "")
     h = hashlib.sha1()
@@ -83,7 +81,7 @@ def _block_hash(blk: dict[str, Any]) -> str:
     # first read after this ships.
     code = blk.get("code")
     if code:
-        h.update(b"\x00" + _canonical_code(code).encode("utf-8"))
+        h.update(b"\x00" + _canonical_json(code).encode("utf-8"))
     return h.hexdigest()
 
 

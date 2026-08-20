@@ -270,3 +270,19 @@ def test_an_anchorless_block_hashes_exactly_as_before():
     assert _block_hash({"id": "section-1", "markdown": "hello"}) == _block_hash(
         {"id": "section-1", "markdown": "hello", "code": []}
     )
+
+
+def test_anchor_change_bumps_version_for_spec_kind_block(tmp_path):
+    """Regression guard: the code mix-in must apply regardless of which
+    branch (spec vs markdown) produced `body`. A refactor that moved the
+    mix-in inside the kind if/else would break spec-kind blocks silently
+    while the markdown-only tests above kept passing."""
+    vp = tmp_path / "versions.json"
+    spec = {"nodes": [{"id": "a", "role": "entry", "label": "start"}], "edges": []}
+    a1 = [{"file": "a.py", "line": 1, "snippet": "x = 1"}]
+    a2 = [{"file": "a.py", "line": 2, "snippet": "x = 2"}]
+    derive_versions(vp, [{"id": "b-0", "kind": "flowchart", "spec": spec, "code": a1}])
+    versions = derive_versions(
+        vp, [{"id": "b-0", "kind": "flowchart", "spec": spec, "code": a2}]
+    )
+    assert versions == {"b-0": 2}
