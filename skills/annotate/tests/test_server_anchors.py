@@ -54,6 +54,19 @@ class TestRenderBlockAnchors(unittest.TestCase):
         out = server._render_block_for_raw(blk, 1, None)
         self.assertNotIn("code", out)
 
+    def test_mockup_block_never_gets_anchors_resolved(self):
+        # I4: check_anchors already refuses anchors on a mockup block at push
+        # time, but this path serves strangers on the read-only link too --
+        # defence in depth belongs here, not only in the check. A block that
+        # somehow carries a `code` list anyway (a hand-edited blocks.json, or
+        # a bug elsewhere) must still render with no code column, not a
+        # halved card.
+        blk = {"id": "section-1", "kind": "mockup",
+               "spec": {"html": "<p>hi</p>"},
+               "code": [{"file": "mod.py", "line": 1, "snippet": "a = 1"}]}
+        out = server._render_block_for_raw(blk, 1, self.root)
+        self.assertNotIn("code", out)
+
 
 class TestRawRouteResolvesAnchors(unittest.TestCase):
     """HTTP-level coverage: proves the *route* wires dirs["_cwd"] through to

@@ -943,8 +943,17 @@ def _render_block_for_raw(blk: dict, version: int, repo_root=None) -> dict:
     # Code anchors, resolved server-side so the client, the export and the
     # read-only share link all read from one path. Any failure is a status on
     # the pane, never an exception — one bad anchor must not blank the page.
+    #
+    # MAX_ANCHORS (anchors.py) is enforced at push time by check_anchors, not
+    # here — a block that somehow carries more than the cap still has every
+    # one of them resolved and rendered. Don't assume the cap binds render-side.
+    #
+    # kind == "mockup" is excluded: check_anchors already refuses anchors on
+    # a mockup block at push time, but this path serves strangers on the
+    # read-only link, so the same rule belongs here too, not only in the
+    # check. See renderCodeColumn's matching guard in script.js.
     code = blk.get("code")
-    if repo_root and isinstance(code, list) and code:
+    if repo_root and kind != "mockup" and isinstance(code, list) and code:
         base["code"] = [
             anchors_module.resolve_anchor(a, repo_root) for a in code
         ]

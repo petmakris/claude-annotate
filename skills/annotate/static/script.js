@@ -832,6 +832,12 @@
   // no code. An anchorless block renders exactly as annotate does today:
   // full-width prose, no second column, nothing else.
   function renderCodeColumn(blk) {
+    // I4: check_anchors already refuses a mockup block's anchors at push
+    // time, but the render path serves strangers on the read-only link --
+    // defence in depth belongs here too, not only in the check. A mockup
+    // renders in a sandboxed iframe at width:100%; splitting its card in
+    // half for a column it should never have had halves it to ~440px.
+    if (blk.kind === "mockup") return null;
     const panes = Array.isArray(blk.code) ? blk.code : [];
     if (!panes.length) return null;
 

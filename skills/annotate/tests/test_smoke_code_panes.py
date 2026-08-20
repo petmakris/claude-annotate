@@ -95,3 +95,15 @@ class TestCodePaneJs(unittest.TestCase):
     def test_update_path_repaints_panes(self):
         # A rewritten block must not keep the previous version's panes.
         self.assertIn("renderCodeColumn", JS.split("function updateBlockContent")[1])
+
+    def test_mockup_blocks_never_get_a_code_column(self):
+        # I4: a mockup renders in a sandboxed iframe at width:100% -- giving
+        # it a code column halves its card to ~440px. The guard must be the
+        # first thing renderCodeColumn does, before it ever looks at panes.
+        body = JS.split("function renderCodeColumn(blk) {", 1)[1]
+        body = body.split("\n  }", 1)[0]
+        guard_pos = body.find('blk.kind === "mockup"')
+        panes_pos = body.find("blk.code")
+        self.assertNotEqual(guard_pos, -1, "renderCodeColumn lost its mockup guard")
+        self.assertLess(guard_pos, panes_pos,
+                         "the mockup guard must run before panes are read")
