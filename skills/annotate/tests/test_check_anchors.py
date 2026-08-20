@@ -47,6 +47,60 @@ class TestCheck(unittest.TestCase):
         problems = check_anchors.check(doc, self.root)
         self.assertTrue(any("outside the workspace" in p for p in problems))
 
+    # --- Fix round 1: malformed `blocks` must never crash and never pass ---
+
+    def test_blocks_non_iterable_int_is_reported_not_raised(self):
+        doc = {"response_id": "r", "title": "t", "blocks": 5}
+        problems = check_anchors.check(doc, self.root)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("blocks", problems[0])
+
+    def test_blocks_non_iterable_bool_is_reported_not_raised(self):
+        doc = {"response_id": "r", "title": "t", "blocks": True}
+        problems = check_anchors.check(doc, self.root)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("blocks", problems[0])
+
+    def test_blocks_string_is_reported_not_silently_passed(self):
+        # A string is iterable (character by character) — the exact shape
+        # that used to slip through silently rather than crash.
+        doc = {"response_id": "r", "title": "t", "blocks": "not-a-list"}
+        problems = check_anchors.check(doc, self.root)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("blocks", problems[0])
+
+    def test_blocks_dict_is_reported_not_silently_passed(self):
+        doc = {"response_id": "r", "title": "t", "blocks": {}}
+        problems = check_anchors.check(doc, self.root)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("blocks", problems[0])
+
+    def test_blocks_null_is_reported_not_silently_passed(self):
+        doc = {"response_id": "r", "title": "t", "blocks": None}
+        problems = check_anchors.check(doc, self.root)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("blocks", problems[0])
+
+    def test_blocks_missing_key_is_reported_not_silently_passed(self):
+        doc = {"response_id": "r", "title": "t"}
+        problems = check_anchors.check(doc, self.root)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("blocks", problems[0])
+
+    def test_blocks_empty_list_is_still_valid(self):
+        # Regression guard: an empty document is valid; an unreadable one
+        # is not. This must keep exiting clean.
+        doc = {"response_id": "r", "title": "t", "blocks": []}
+        self.assertEqual(check_anchors.check(doc, self.root), [])
+
+    def test_non_dict_block_entry_is_reported_not_dropped(self):
+        doc = {"response_id": "r", "title": "t",
+               "blocks": ["not-a-block",
+                          {"id": "section-1", "markdown": "hi", "code": []}]}
+        problems = check_anchors.check(doc, self.root)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("0", problems[0])
+
 
 class TestCli(unittest.TestCase):
     def setUp(self):
@@ -80,6 +134,20 @@ class TestCli(unittest.TestCase):
     def test_missing_blocks_file_is_an_error_not_a_pass(self):
         res = self._run()
         self.assertEqual(res.returncode, 1)
+
+    def test_non_list_blocks_reported_cleanly_not_traceback(self):
+        # This is the only place the old crash was reachable: check() is
+        # called from inside main(), and an uncaught TypeError there would
+        # dump a raw Python traceback into the author's turn.
+        self.blocks.write_text(json.dumps({"blocks": 5}))
+        res = self._run()
+        self.assertEqual(res.returncode, 1)
+        self.assertNotIn("Traceback", res.stderr)
+        self.assertIn("blocks", res.stderr)
+
+    def test_empty_blocks_list_exits_zero_through_cli(self):
+        self.blocks.write_text(json.dumps({"blocks": []}))
+        self.assertEqual(self._run().returncode, 0)
 
 
 if __name__ == "__main__":

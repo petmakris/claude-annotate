@@ -27,9 +27,14 @@ def check(doc: dict, root) -> list:
     the pane says so and shows it. Only `stale`, `missing` and `refused`
     mean the citation no longer points at anything.
     """
+    blocks = doc.get("blocks")
+    if not isinstance(blocks, list):
+        return ["blocks must be a list of blocks"]
+
     problems = []
-    for blk in (doc.get("blocks") or []):
+    for idx, blk in enumerate(blocks):
         if not isinstance(blk, dict):
+            problems.append("blocks[%d]: not an object" % idx)
             continue
         bid = blk.get("id") or "?"
         for p in anchors_module.block_problems(blk):
