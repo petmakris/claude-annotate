@@ -242,3 +242,46 @@ already uses for block kinds. `references/pushing.md` gains a pointer.
 - **Fetching code from git refs or remotes.** The working tree is the truth.
 - **Backfilling anchors into existing workspaces.** The field is optional;
   old documents render unchanged.
+
+---
+
+## Field notes — first dogfood, 2026-08-20
+
+Pushed a real eight-block answer explaining this feature, anchored to its own
+implementation, through the real server and the real push-time check.
+
+**What held.** Seven anchors resolved and rendered with two dimmed context
+lines either side. The deliberately-rotted anchor (citing `_canonical_spec`,
+which a fix round in this same branch renamed to `_canonical_json`) resolved
+`stale`, showed its reason, and rendered **zero** code rows. Two blocks making
+no claim about code carried no anchors and got the empty slot. The push-time
+check named exactly the one bad anchor and nothing else.
+
+**What the dogfood taught that the plan did not anticipate.**
+
+1. **The check fires on the author's own drift, not just the user's.** The first
+   stale anchor caught in real use was one *this session* created: the spec was
+   written citing `_canonical_spec`, and Task 4's review folded that function
+   into `_canonical_json` hours later. The failure mode the feature exists to
+   prevent reproduced inside the branch that built it. That is the strongest
+   argument for the check running before the URL is announced rather than after.
+
+2. **Prose-about-the-skill can anchor too.** The block stating the authoring
+   rule carried no anchor, and its empty slot looked slightly wrong — the rule
+   *does* live in a file (`skills/annotate/SKILL.md`). Anchors are not only for
+   source code; any repo file the prose asserts something about is fair game.
+   Worth saying explicitly in `references/code-anchors.md`, because the instinct
+   is to reach for anchors only when discussing `.py`/`.js`.
+
+3. **Two-context-lines is the right default and was nearly wrong.** At
+   `end_line` spans of 5-7 lines the ±2 padding reads as generous; at a
+   single-line anchor it is what makes the line legible as part of a function
+   rather than a floating fragment. A single context line would have looked
+   like a truncation bug.
+
+**Honest gaps carried past the branch.** Nobody has executed this on Python 3.9,
+the declared floor — it is read-verified only and CI's matrix is what settles
+it. `.cp-jump` (the jump-into-IntelliJ link) is not click-tested, because a
+custom URI scheme is not observable headlessly. `highlightCodeLine`'s length
+guard has no dedicated unit test. None of these block merge; all three are
+recorded so nobody rediscovers them as surprises.
