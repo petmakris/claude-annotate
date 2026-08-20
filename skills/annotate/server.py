@@ -20,6 +20,7 @@ from skills._shared.web_companion import events as events_module
 from skills._shared.web_companion import uploads as uploads_module
 from skills._shared.web_companion.atomic import write_text_atomic
 from skills._shared.web_companion.templates import html_escape, render_page
+from skills.annotate import anchors as anchors_module
 from skills.annotate import blocks as blocks_model
 from skills.annotate import versions as versions_module
 from skills.annotate.diagrams.sequence import render
@@ -470,13 +471,15 @@ class Handlers:
                 except KeyError:
                     _send_text(h, 404, "block not found")
                     return
-                _send_json(h, 200, _render_block_for_raw(blk, versions.get(bid, 1)))
+                _send_json(h, 200, _render_block_for_raw(
+                    blk, versions.get(bid, 1), dirs.get("_cwd")))
                 return
             _send_json(h, 200, {
                 "response_id": doc.response_id,
                 "title": doc.title,
                 "blocks": [
-                    _render_block_for_raw(b, versions.get(b["id"], 1))
+                    _render_block_for_raw(b, versions.get(b["id"], 1),
+                                          dirs.get("_cwd"))
                     for b in doc.blocks
                 ],
                 "glossary": list(doc.glossary),
@@ -798,7 +801,7 @@ def _send_json(h, status, body_obj):
     h.wfile.write(data)
 
 
-def _render_block_for_raw(blk: dict, version: int) -> dict:
+def _render_block_for_raw(blk: dict, version: int, repo_root=None) -> dict:
     """Return a dict shape the client expects for one block.
 
     `version` is derived externally from the chain sidecar — not read off
@@ -917,6 +920,15 @@ def _render_block_for_raw(blk: dict, version: int) -> dict:
         base["spec"] = blk.get("spec") or {}
     else:
         base["markdown"] = blk.get("markdown", "")
+
+    # Code anchors, resolved server-side so the client, the export and the
+    # read-only share link all read from one path. Any failure is a status on
+    # the pane, never an exception — one bad anchor must not blank the page.
+    code = blk.get("code")
+    if repo_root and isinstance(code, list) and code:
+        base["code"] = [
+            anchors_module.resolve_anchor(a, repo_root) for a in code
+        ]
     return base
 
 
