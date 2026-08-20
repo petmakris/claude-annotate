@@ -176,5 +176,118 @@ class TestResolveWindow(AnchorFixture):
         self.assertEqual(len(window), anchors.MAX_WINDOW)
         self.assertEqual(out["truncated"], 100 - anchors.MAX_WINDOW)
 
+
+class TestDrift(AnchorFixture):
+    def _rewrite(self, body: str):
+        (self.root / "pkg" / "mod.py").write_text(body)
+
+    def test_indentation_change_is_not_drift(self):
+        self._rewrite("\n".join([
+            "import os", "", "", "def alpha():", "    return 1", "", "",
+            "        def beta():",   # line 8, re-indented
+            "    return 2", "",
+        ]) + "\n")
+        out = anchors.resolve_anchor(self.anchor(), self.root)
+        self.assertEqual(out["status"], "ok")
+        self.assertEqual(out["actual_line"], 8)
+
+    def test_moved_line_is_found_and_reported(self):
+        self._rewrite("\n".join([
+            "import os", "", "", "# a new comment", "# and another",
+            "def alpha():", "    return 1", "", "",
+            "def beta():",   # was 8, now 10
+            "    return 2", "",
+        ]) + "\n")
+        out = anchors.resolve_anchor(self.anchor(), self.root)
+        self.assertEqual(out["status"], "moved")
+        self.assertEqual(out["line"], 8)
+        self.assertEqual(out["actual_line"], 10)
+        self.assertIn("now at line 10", out["message"])
+
+    def test_moved_window_moves_with_it(self):
+        self._rewrite("\n".join([
+            "import os", "", "", "# a new comment", "# and another",
+            "def alpha():", "    return 1", "", "",
+            "def beta():", "    return 2", "",
+        ]) + "\n")
+        out = anchors.resolve_anchor(self.anchor(end_line=9), self.root)
+        roles = {l["n"]: l["role"] for l in out["lines"]}
+        # authored span was 8..9; shifted by +2 it is 10..11.
+        self.assertEqual(roles[10], "anchor")
+        self.assertEqual(roles[11], "window")
+
+    def test_vanished_line_is_stale_and_shows_no_code(self):
+        self._rewrite("\n".join([
+            "import os", "", "", "def alpha():", "    return 1", "",
+        ]) + "\n")
+        out = anchors.resolve_anchor(self.anchor(), self.root)
+        self.assertEqual(out["status"], "stale")
+        self.assertNotIn("lines", out)
+        self.assertIn("def beta():", out["message"])
+
+    def test_stale_rather_than_confidently_wrong(self):
+        # The killer case: line 8 still exists and holds something else.
+        # Rendering it would be a lie the reader cannot detect.
+        self._rewrite("\n".join([
+            "import os", "", "", "def alpha():", "    return 1", "", "",
+            "def gamma():", "    return 3", "",
+        ]) + "\n")
+        out = anchors.resolve_anchor(self.anchor(), self.root)
+        self.assertEqual(out["status"], "stale")
+
+    def test_nearest_match_wins_when_the_line_is_duplicated(self):
+        body = ["import os", "", "", "def alpha():", "    return 1", "", ""]
+        body += ["def beta():", "    return 2"]        # 8, 9
+        body += ["x = 0"] * 5                          # 10..14
+        body += ["def beta():", "    return 2"]        # 15, 16
+        self._rewrite("\n".join(body) + "\n")
+        out = anchors.resolve_anchor(self.anchor(line=14), self.root)
+        # 15 is one away, 8 is six away.
+        self.assertEqual(out["actual_line"], 15)
+
+
+class TestNeverRaises(AnchorFixture):
+    """anchors.py's docstring promises resolve_anchor never raises — a
+    failure is always a status, never an exception. Task 2's reviewer
+    confirmed five edge cases stay exception-free with a one-off live probe;
+    this class is what keeps that guarantee from regressing silently."""
+
+    _STATUSES = {"ok", "moved", "stale", "missing", "refused"}
+
+    def test_empty_file(self):
+        (self.root / "empty.py").write_text("")
+        out = anchors.resolve_anchor(
+            {"file": "empty.py", "line": 1, "snippet": "anything"}, self.root)
+        self.assertIn(out["status"], self._STATUSES)
+
+    def test_binary_content(self):
+        (self.root / "binary.dat").write_bytes(b"\x00\x01\x02\xff\xfe")
+        out = anchors.resolve_anchor(
+            {"file": "binary.dat", "line": 1, "snippet": "anything"}, self.root)
+        self.assertIn(out["status"], self._STATUSES)
+
+    def test_line_past_eof(self):
+        out = anchors.resolve_anchor(self.anchor(line=9999), self.root)
+        self.assertIn(out["status"], self._STATUSES)
+
+    def test_permission_denied_file(self):
+        if os.geteuid() == 0:
+            self.skipTest("root ignores file permissions")
+        p = self.root / "locked.py"
+        p.write_text("secret = 1\n")
+        os.chmod(p, 0o000)
+        self.addCleanup(lambda: os.chmod(p, 0o644))
+        if os.access(str(p), os.R_OK):
+            self.skipTest("filesystem does not enforce the permission bit")
+        out = anchors.resolve_anchor(
+            {"file": "locked.py", "line": 1, "snippet": "secret = 1"}, self.root)
+        self.assertIn(out["status"], self._STATUSES)
+
+    def test_root_does_not_exist(self):
+        missing_root = self.root / "does" / "not" / "exist"
+        out = anchors.resolve_anchor(self.anchor(), missing_root)
+        self.assertIn(out["status"], self._STATUSES)
+
+
 if __name__ == "__main__":
     unittest.main()
