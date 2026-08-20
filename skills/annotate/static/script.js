@@ -722,7 +722,13 @@
     const path = document.createElement("span");
     path.className = "cp-path";
     const shown = pane.actual_line || pane.line;
-    path.textContent = shown ? `${pane.file}:${shown}` : (pane.file || "");
+    // A pane whose status isn't "ok"/"moved" has no location to assert — the
+    // body text is about to say the anchored line ISN'T there, so a header
+    // reading "file:44" would claim the very thing the message disproves.
+    // "moved" is the one non-"ok" status that keeps its line: actual_line is
+    // real, it's just not where the block originally pointed.
+    const resolved = pane.status === "ok" || pane.status === "moved";
+    path.textContent = (resolved && shown) ? `${pane.file}:${shown}` : (pane.file || "");
     path.title = pane.file || "";
     const spacer = document.createElement("span");
     spacer.className = "cp-spacer";
@@ -772,7 +778,14 @@
       const status = document.createElement("div");
       status.className = "cp-status";
       status.dataset.status = pane.status;
-      status.textContent = pane.message || "this anchor could not be resolved";
+      let msg = pane.message || "this anchor could not be resolved";
+      // The header already shows the filename; strip it back off the message
+      // if it leads with exactly "<file>: " so it isn't said twice. Only an
+      // exact match is stripped — an unexpected message shape renders in
+      // full rather than being mangled.
+      const filePrefix = pane.file ? `${pane.file}: ` : null;
+      if (filePrefix && msg.startsWith(filePrefix)) msg = msg.slice(filePrefix.length);
+      status.textContent = msg;
       wrap.appendChild(status);
       return wrap;
     }

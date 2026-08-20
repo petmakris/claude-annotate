@@ -326,12 +326,33 @@ function blockRect(page, blockId, selector) {
       const section = document.querySelector('section.block[data-block-id="b-1"]');
       const status = section.querySelector(".code-col .cp-status");
       const rows = section.querySelectorAll(".code-col .cp-row");
-      return { status: status && status.dataset.status, message: status && status.textContent, rowCount: rows.length };
+      const path = section.querySelector(".code-col .cp-path");
+      return {
+        status: status && status.dataset.status,
+        message: status && status.textContent,
+        rowCount: rows.length,
+        header: path && path.textContent,
+      };
     });
     if (stale.status !== "stale") fail("expected the b-1 pane status to be 'stale', got " + stale.status);
     if (!stale.message) fail("the stale pane carries no reason text");
     if (stale.rowCount !== 0) fail(`the stale pane rendered ${stale.rowCount} .cp-row elements — it must render none`);
     log(`✓ failing pane shows its reason ("${stale.message}") and renders zero code rows`);
+
+    // ── Fix 2: a failing pane must not claim a line number, and must not
+    //         repeat its filename ──────────────────────────────────────────
+    // b-1's anchor is on "lib/calc.py". A failing pane's header used to read
+    // "lib/calc.py:5" — asserting a location the body text was about to
+    // disprove — and the message started with "lib/calc.py: " again, so the
+    // filename appeared twice.
+    if (stale.header !== "lib/calc.py")
+      fail(`stale pane header is "${stale.header}", expected the bare file path `
+        + `"lib/calc.py" with no :line suffix`);
+    if (stale.message.startsWith("lib/calc.py"))
+      fail(`stale pane status text starts with the filename ("${stale.message}") — `
+        + "the header already shows it, it should not be repeated");
+    log(`✓ stale pane header is the bare file path ("${stale.header}", no :line) and its `
+      + `status text does not repeat the filename`);
 
     // ── 12. A collapsed code-bearing card does not leak its split grid ─────
     // The split rule (style.css) guards its two-column grid with
