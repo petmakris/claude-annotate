@@ -85,6 +85,13 @@ class TestCodePaneJs(unittest.TestCase):
         self.assertNotIn('".cp-body"', exp)
         self.assertNotIn('".code-col"', exp)
 
+    def test_export_strips_the_ide_jump_link(self):
+        # I1: an exported file has no owner, and a dead jetbrains:// href
+        # (it names a path that only ever existed on the author's machine)
+        # would otherwise leak that path into a document meant to be shared.
+        exp = (Path(__file__).resolve().parents[1] / "static" / "export.js").read_text()
+        self.assertIn('".cp-jump"', exp)
+
     def test_update_path_repaints_panes(self):
         # A rewritten block must not keep the previous version's panes.
         self.assertIn("renderCodeColumn", JS.split("function updateBlockContent")[1])

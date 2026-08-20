@@ -426,9 +426,16 @@ class Handlers:
         # link into the IDE for a resolved code anchor. Both are filesystem
         # paths headed straight into an HTML attribute, so both go through
         # html_escape — the same reason every other value here does.
+        #
+        # Owner-only: the read-only share link is deliberately allowed to
+        # serve code EXCERPTS (see anchors.py's docstring), but that decision
+        # never covered the server's own filesystem layout. Without this
+        # gate, `/Users/<name>/projects/<repo>` rode along on every render a
+        # stranger holding the link could open, and script.js turned it into
+        # a jetbrains:// href that also can't resolve on their machine.
         cwd = dirs.get("_cwd") or ""
         body_attrs = ""
-        if cwd:
+        if cwd and h._is_owner():
             body_attrs = (
                 f' data-project-name="{html_escape(Path(cwd).name)}"'
                 f' data-repo-root="{html_escape(cwd)}"'

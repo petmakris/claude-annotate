@@ -1,4 +1,4 @@
-import http.client
+import io
 import json
 import shutil
 import tempfile
@@ -111,6 +111,80 @@ class TestRawRouteResolvesAnchors(unittest.TestCase):
         data = json.loads(body)
         self.assertEqual(data["code"][0]["status"], "refused")
         self.assertNotIn("lines", data["code"][0])
+
+
+class _FakeHandler:
+    """Minimal duck-typed stand-in for the real per-connection handler.
+
+    serve_root only calls four methods on `h` plus (as of this fix) the
+    ownership check -- it never needs a real socket. This matters because a
+    real subprocess-served HTTP client always connects from 127.0.0.1, which
+    _is_loopback treats as the owner unconditionally (see
+    web_companion/server.py's _is_owner) -- there is no way to drive a
+    genuine non-owner GET through an actual TCP connection in a test
+    process. Faking `_is_owner()` directly is the only way to exercise the
+    non-owner branch at all.
+    """
+
+    def __init__(self, owner: bool):
+        self._owner = owner
+        self.wfile = io.BytesIO()
+        self.status = None
+        self.sent_headers = {}
+
+    def _is_owner(self) -> bool:
+        return self._owner
+
+    def send_response(self, status):
+        self.status = status
+
+    def send_header(self, key, value):
+        self.sent_headers[key] = value
+
+    def end_headers(self):
+        pass
+
+
+class TestServeRootOwnerGate(unittest.TestCase):
+    """I1: the absolute repo root (and the project name derived from it)
+    must reach only the owner. A stranger holding the read-only share link
+    gets a page that works -- script.js already guards `if (abs)` before
+    building the jetbrains:// jump link -- just with no filesystem path
+    riding along in the markup."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.state_dir = self.root / "state"
+        self.response_dir = self.root / "response"
+        self.state_dir.mkdir()
+        self.response_dir.mkdir()
+        (self.response_dir / "blocks.json").write_text(json.dumps(
+            {"response_id": "r1", "title": "T", "blocks": []}))
+        self.dirs = {
+            "state_dir": str(self.state_dir),
+            "response_dir": str(self.response_dir),
+            "_cwd": str(self.root / "the-secret-project"),
+        }
+        self.addCleanup(self.tmp.cleanup)
+
+    def _render(self, owner: bool) -> str:
+        h = _FakeHandler(owner)
+        server.Handlers().serve_root(h, self.dirs)
+        self.assertEqual(h.status, 200)
+        return h.wfile.getvalue().decode("utf-8")
+
+    def test_owner_render_carries_repo_root_and_project_name(self):
+        html = self._render(owner=True)
+        self.assertIn("data-repo-root=", html)
+        self.assertIn("data-project-name=", html)
+        self.assertIn("the-secret-project", html)
+
+    def test_non_owner_render_carries_neither(self):
+        html = self._render(owner=False)
+        self.assertNotIn("data-repo-root", html)
+        self.assertNotIn("data-project-name", html)
+        self.assertNotIn("the-secret-project", html)
 
 
 if __name__ == "__main__":
