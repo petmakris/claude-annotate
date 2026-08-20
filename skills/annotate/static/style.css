@@ -1535,14 +1535,16 @@ section.block.card[data-has-code="1"] .card-body > .block-content {
   padding: 2px 18px 16px 18px;
   min-width: 0;
 }
+/* Full-bleed slab: the pane paints its own background and runs edge to edge
+   in its column — no gutter around it, no dead space below a short pane.
+   border-left is the only divider left once the padding that used to carry
+   it is gone. */
 .code-col {
   border-left: 1px solid var(--border);
-  background: var(--surface-soft);
-  padding: 14px 16px 16px;
+  padding: 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 /* A promoted pane takes the whole card: the grid collapses to one column and
    the prose sits above it. Promotion is per-block and persisted, because a
@@ -1555,61 +1557,92 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
   border-top: 1px solid var(--border);
 }
 
-/* Tokyo Night, matching the fenced-code card the page already paints. */
+/* Light theme, contrast-checked against the annotate page's light ground
+   (this is deliberately NOT Tokyo Night Day — that theme fails 8 of 9
+   tokens on this ground, worst case 1.85:1, which is the washed-out result
+   being avoided here). Scoped to .codepane so the vendored Tokyo Night Dark
+   theme in code-theme.css keeps painting ordinary fenced code blocks
+   elsewhere on the page untouched. */
 .codepane {
-  background: #1a1b26;
-  border-radius: 8px;
+  background: #e3e7ee;
+  border-radius: 0;
+  height: 100%;
   overflow: hidden;
   font-family: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+/* Two panes stacked in one column (a block citing more than one file) used
+   to be separated by column padding; the column has none now, so without
+   this they'd merge into one slab. */
+.codepane + .codepane { border-top: 1px solid #c3cad6; }
+
 .cp-head {
   display: flex; align-items: center; gap: 8px;
-  padding: 8px 12px;
-  background: #16171f;
-  border-bottom: 1px solid #262838;
+  padding: 9px 12px;
+  background: #d8dde7;
+  border-bottom: 1px solid #c3cad6;
   font-size: 11px;
 }
 .cp-path {
-  color: #7aa2f7;
+  color: #1e40af;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .cp-spacer { flex: 1; }
 .cp-jump {
-  color: #565f89; font-size: 10.5px; letter-spacing: 0.06em;
+  color: #4e5665; font-size: 10.5px; letter-spacing: 0.06em;
   text-transform: uppercase; white-space: nowrap; text-decoration: none;
 }
-.cp-jump:hover { color: #7aa2f7; }
+.cp-jump:hover { color: #1e40af; }
 .cp-widen {
-  background: none; border: 1px solid #2f3348; border-radius: 5px;
-  color: #565f89; cursor: pointer; padding: 2px 7px;
+  background: none; border: 1px solid #c3cad6; border-radius: 5px;
+  color: #4e5665; cursor: pointer; padding: 2px 7px;
   font-family: inherit; font-size: 10px;
   letter-spacing: 0.06em; text-transform: uppercase;
 }
-.cp-widen:hover { color: #7aa2f7; border-color: #7aa2f7; }
-.cp-note {
+.cp-widen:hover { color: #1e40af; border-color: #1e40af; }
+/* Specificity fix: main.prose p (0,1,2) used to beat the plain .cp-note
+   rule (0,1,0), so the note silently inherited the prose paragraph's 140px
+   right gutter (room for hover-action buttons that don't exist here).
+   Scoping under .codepane raises this to (0,2,0), which wins on class
+   count without touching the prose rule at all. */
+.codepane .cp-note {
   margin: 0; padding: 6px 12px;
-  background: #14151d; border-bottom: 1px solid #262838;
-  color: #7f89ad; font-size: 11.5px;
+  background: #d8dde7; border-bottom: 1px solid #c3cad6;
+  color: #4e5665; font-size: 11.5px;
   font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
 }
 .cp-body {
-  padding: 9px 0; font-size: 12px; line-height: 1.62;
-  overflow-x: auto; color: #9aa5ce;
+  padding: 7px 0; font-size: 12px; line-height: 1.62;
+  overflow-x: auto; color: #1b1f26;
 }
 .cp-row { display: flex; min-width: max-content; }
 .cp-num {
-  flex: none; width: 3.4em; padding-right: 12px;
-  text-align: right; color: #3f4459; user-select: none;
+  flex: none; width: 2.6em; padding-right: 8px;
+  text-align: right; color: #5f6773; user-select: none;
 }
-.cp-line { flex: 1 1 auto; white-space: pre; padding-right: 16px; }
+.cp-line { flex: 1 1 auto; white-space: pre; padding-right: 8px; }
 /* The anchored line is the one the prose is about; the padding around it is
    there so the line has a home, not to be read. */
-.cp-row.is-anchor { background: rgba(122,162,247,.13); box-shadow: inset 3px 0 0 #7aa2f7; }
-.cp-row.is-anchor .cp-num { color: #7aa2f7; }
-.cp-row.is-context { opacity: 0.5; }
+.cp-row.is-anchor { background: #cbd9f2; box-shadow: inset 3px 0 0 #1e40af; }
+.cp-row.is-anchor .cp-num { color: #1e40af; }
+/* De-emphasise context rows by desaturation, not opacity: opacity blends
+   ink toward the paper, which is fine on a dark ground but drags a comment
+   token down to 2.17:1 on this light one. A flat muted grey holds every
+   context row at 4.61:1 regardless of what token colour it would otherwise
+   carry. The extra .codepane level of nesting here is deliberate — three
+   classes (0,3,0) has to outrank the two-class .codepane .hljs-* overrides
+   below (0,2,0), or a context row's syntax colours would win back through;
+   [class^="hljs-"] counts as a class for specificity, same as a literal
+   .hljs-keyword would, so this covers every token class without enumerating
+   them twice. */
+.codepane .cp-row.is-context,
+.codepane .cp-row.is-context .hljs,
+.codepane .cp-row.is-context [class^="hljs-"],
+.codepane .cp-row.is-context [class*=" hljs-"] {
+  color: #5f6773;
+}
 .cp-truncated {
-  padding: 5px 12px 2px calc(3.4em + 12px);
-  color: #565f89; font-size: 11px; font-style: italic;
+  padding: 5px 12px 2px calc(2.6em + 8px);
+  color: #5f6773; font-size: 11px; font-style: italic;
 }
 
 /* A pane that could not resolve says so, and shows no code at all. A pane
@@ -1620,10 +1653,60 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
   font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
   font-size: 11.5px; line-height: 1.5;
 }
-.cp-status[data-status="moved"] { color: #e0af68; }
+/* The dark-theme originals (#e0af68, #f7768e) measure 2.42:1 and 3.09:1 on
+   this ground — both fail AA. These are darker equivalents in the same
+   amber/red families: #92400e is 5.72:1, #991b1b is 6.70:1 on #e3e7ee. */
+.cp-status[data-status="moved"] { color: #92400e; }
 .cp-status[data-status="stale"],
 .cp-status[data-status="missing"],
-.cp-status[data-status="refused"] { color: #f7768e; }
+.cp-status[data-status="refused"] { color: #991b1b; }
+
+/* highlight.js tokens, light equivalents of every class code-theme.css
+   colours, grouped by the measured palette above. Anything code-theme.css
+   paints that isn't named here still falls through to its dark-theme
+   colour on this light ground, so this list is deliberately exhaustive
+   against that file's class list, not just the common ones. */
+.codepane .hljs { color: #1b1f26; background: transparent; }
+.codepane .hljs-punctuation,
+.codepane .hljs-operator { color: #333a45; }
+.codepane .hljs-number,
+.codepane .hljs-literal,
+.codepane .hljs-type,
+.codepane .hljs-template-variable,
+.codepane .hljs-variable,
+.codepane .hljs-subst { color: #7c2d12; }
+.codepane .hljs-keyword,
+.codepane .hljs-title,
+.codepane .hljs-name,
+.codepane .hljs-tag,
+.codepane .hljs-template-tag,
+.codepane .hljs-doctag,
+.codepane .hljs-selector-tag { color: #6b21a8; }
+.codepane .hljs-built_in,
+.codepane .hljs-attr,
+.codepane .hljs-params,
+.codepane .hljs-attribute,
+.codepane .hljs-property,
+.codepane .hljs-char.escape_,
+.codepane .hljs-symbol,
+.codepane .hljs-code,
+.codepane .hljs-formula,
+.codepane .hljs-section { color: #1e40af; }
+.codepane .hljs-string,
+.codepane .hljs-addition,
+.codepane .hljs-bullet,
+.codepane .hljs-quote,
+.codepane .hljs-regexp,
+.codepane .hljs-link { color: #065f46; }
+.codepane .hljs-comment,
+.codepane .hljs-meta,
+.codepane .hljs-deletion,
+.codepane .hljs-selector-pseudo,
+.codepane .hljs-selector-class,
+.codepane .hljs-selector-id,
+.codepane .hljs-selector-attr { color: #4e5665; }
+.codepane .hljs-emphasis { font-style: italic; }
+.codepane .hljs-strong { font-weight: 700; }
 
 @media (max-width: 1100px) {
   /* Two columns stop being two columns before they stop being readable. */

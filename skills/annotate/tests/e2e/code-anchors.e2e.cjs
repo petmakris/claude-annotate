@@ -304,16 +304,34 @@ function blockRect(page, blockId, selector) {
     log(`✓ exactly one anchor row, line number ${anchorInfo.num} matches the anchor`);
 
     // ── 3. Context lines are dimmed, not hidden ─────────────────────────────
-    const contextOpacities = await page.evaluate(() => {
+    // The light theme (task 13) de-emphasises context rows by desaturating
+    // them to a single muted grey instead of opacity — opacity blends ink
+    // toward the paper, which drops a comment token to 2.17:1 on a light
+    // ground. So this now asserts full opacity (not hidden) plus the
+    // desaturated colour actually winning over any token colour a row's
+    // syntax highlighting would otherwise have painted.
+    const contextInfo = await page.evaluate(() => {
       const section = document.querySelector('section.block[data-block-id="b-0"]');
-      return [...section.querySelectorAll(".code-col .cp-row.is-context")]
-        .map((el) => parseFloat(getComputedStyle(el).opacity));
+      const rows = [...section.querySelectorAll(".code-col .cp-row.is-context")];
+      return rows.map((el) => {
+        const tokens = [...el.querySelectorAll('[class^="hljs-"], [class*=" hljs-"]')];
+        return {
+          opacity: parseFloat(getComputedStyle(el).opacity),
+          rowColor: getComputedStyle(el).color,
+          tokenColors: tokens.map((t) => getComputedStyle(t).color),
+        };
+      });
     });
-    if (!contextOpacities.length) fail("no .cp-row.is-context found — the fixture's context window is empty");
-    for (const op of contextOpacities) {
-      if (!(op > 0 && op < 1)) fail("a context row has opacity " + op + ", expected strictly between 0 and 1");
+    if (!contextInfo.length) fail("no .cp-row.is-context found — the fixture's context window is empty");
+    const DESATURATED = "rgb(95, 103, 115)"; // #5f6773
+    for (const row of contextInfo) {
+      if (row.opacity !== 1) fail("a context row has opacity " + row.opacity + ", expected 1 (desaturation replaces opacity now)");
+      if (row.rowColor !== DESATURATED) fail("a context row has color " + row.rowColor + ", expected the desaturated " + DESATURATED);
+      for (const tc of row.tokenColors) {
+        if (tc !== DESATURATED) fail("a context row's token has color " + tc + " instead of the desaturated " + DESATURATED + " — a syntax colour is winning back through");
+      }
     }
-    log(`✓ ${contextOpacities.length} context rows dimmed (opacity ${contextOpacities[0]}), not hidden`);
+    log(`✓ ${contextInfo.length} context rows desaturated to ${DESATURATED} (opacity 1, not hidden, not dimmed via opacity)`);
 
     // ── 4. widen promotes ────────────────────────────────────────────────────
     const beforeWidth = (await blockRect(page, "b-0", ".code-col")).width;
