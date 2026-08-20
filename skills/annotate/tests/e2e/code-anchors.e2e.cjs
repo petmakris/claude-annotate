@@ -10,7 +10,8 @@
  * source check can see:
  *
  *   - "side by side" is a fact about pixels (getBoundingClientRect), not a
- *     class name;
+ *     class name — and a zero-width column would pass that check while
+ *     rendering nothing, so width is checked too;
  *   - a failing anchor must render ZERO lines, not whatever now sits at that
  *     line number — that would be a lie the reader cannot detect;
  *   - nothing inside a pane is a click target except widen and jump — a
@@ -18,10 +19,42 @@
  *     click does;
  *   - export is free because inlining happens server-side, not fetched by
  *     the client after render;
+ *   - a collapsed code-bearing card must not leak its two-column grid —
+ *     the split rule's `:not(.collapsed)` guard exists for exactly this;
  *   - the "no code cited" slot and the document-wide hasCode flag are
  *     decisions about the DOCUMENT, including on the poll-delta path where
  *     one block's first anchor has to update flag-driven siblings in the
  *     same tick (Task 8's fix to reconcile/setDocumentCodeFlag).
+ *
+ * A note on the export check (item 7), after a fix-round review finding:
+ * the obvious way to prove "inlined server-side, not appended later" is to
+ * defer renderCodePane's line-append by one tick (setTimeout(…, 0)) and
+ * confirm the exported file's real button+download flow comes up empty.
+ * It doesn't — measured directly (see the sabotage note by item 7 below),
+ * clicking #export-btn and waiting for the download always takes 40ms+
+ * (Playwright's CDP round trip alone accounts for most of it; export.js's
+ * own font-embedding step adds the rest), which is an eternity next to a
+ * same-tick 0ms deferral — so the deferred rows are already in the live DOM
+ * by the time the real export ever fires, sabotaged or not. No amount of
+ * reordering this file's calls changes that: it was verified with the
+ * export check moved to the very first thing after the page loads, and
+ * separately with window.fetch mocked to remove real network I/O from
+ * export.js's font-embedding step entirely — neither made the real
+ * button+download flow observe a still-pending render.
+ *
+ * So item 7 is two checks. The first is a MutationObserver installed via
+ * page.addInitScript BEFORE the page's own scripts run, watching for the
+ * moment b-0's card is inserted into the document and recording — as a
+ * MicroTask, which the JS spec guarantees runs before ANY further
+ * setTimeout callback, no matter how small its delay — whether that card's
+ * pane already contained `.cp-row` elements at that exact instant. That is
+ * not a wall-clock race: microtask-before-macrotask ordering is a language
+ * guarantee, not a timing hope, so it deterministically catches a deferred
+ * render that the real button click structurally cannot. The second is the
+ * real #export-btn click + download, which still earns its keep for
+ * everything ELSE it proves: the file it produces actually contains the
+ * real source line, and the widen control (dead chrome with no JS in the
+ * export) is stripped.
  *
  * Run:
  *   NODE_PATH=$(npm root -g) node skills/annotate/tests/e2e/code-anchors.e2e.cjs
@@ -78,6 +111,40 @@ function keepAlive(stateDir) {
   const beat = () => { try { fs.writeFileSync(hb, String(Math.floor(Date.now() / 1000))); } catch (_) {} };
   beat();
   return setInterval(beat, 500);
+}
+
+// Installed before the page's own scripts run. Watches for b-0's card being
+// inserted into the document and records — synchronously, in the
+// MutationObserver callback, which the spec guarantees runs as a microtask
+// before the next macrotask (i.e. before ANY setTimeout callback, including
+// a 0ms one queued earlier in the same turn) — whether its pane already
+// contained `.cp-row` elements at that exact instant. See the file header
+// for why this, and not the real export button, is what actually has teeth
+// against a same-tick deferred render.
+function installSameTickProbe(page) {
+  return page.addInitScript(() => {
+    window.__cpSyncProbe = { fired: false, hadRows: null };
+    const obs = new MutationObserver((records) => {
+      if (window.__cpSyncProbe.fired) return;
+      for (const rec of records) {
+        for (const node of rec.addedNodes) {
+          if (node.nodeType !== 1) continue;
+          if (node.matches && node.matches('section.block[data-block-id="b-0"]')) {
+            const pane = node.querySelector(".codepane");
+            if (pane) {
+              window.__cpSyncProbe.fired = true;
+              window.__cpSyncProbe.hadRows = !!pane.querySelector(".cp-row");
+              obs.disconnect();
+            }
+          }
+        }
+      }
+    });
+    // document.documentElement does not exist yet at addInitScript time;
+    // `document` itself always does, and subtree:true still catches
+    // everything under the eventual <html>.
+    obs.observe(document, { childList: true, subtree: true });
+  });
 }
 
 // ── Workspace A fixture: real source, one good anchor, one stale anchor ────
@@ -154,22 +221,56 @@ function blockRect(page, blockId, selector) {
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage({ viewport: { width: 1512, height: 900 } });
     page.on("pageerror", (e) => log("PAGE ERROR: " + e.message));
+    await installSameTickProbe(page);
     await page.goto(sessA.url, { waitUntil: "domcontentloaded" });
     await page.waitForSelector('section.block[data-block-id="b-2"]', { timeout: 8000 });
-    await sleep(300); // let the initial /raw render settle before measuring anything
     log("✓ workspace A rendered: three blocks");
+
+    // ── 7. Export carries the code (deterministic half) ─────────────────────
+    // See the file header: this is the check with real teeth against a
+    // same-tick deferred render, because it relies on microtask-before-
+    // macrotask ordering rather than out-racing Playwright's own IPC.
+    const probe = await page.evaluate(() => window.__cpSyncProbe);
+    if (!probe.fired) fail("the same-tick probe never saw b-0's card get inserted");
+    if (!probe.hadRows)
+      fail("b-0's pane had no .cp-row at the instant its card entered the DOM — "
+        + "the code was not rendered synchronously with the pane container");
+    log("✓ the pane's code rows exist in the DOM in the same tick as the pane itself (deterministic, not raced)");
+
+    // ── 7. Export carries the code (the real button, for everything else it
+    //       proves: the file is real, and dead chrome is stripped) ─────────
+    const outFile = path.join(projectA, "exported.html");
+    const [download] = await Promise.all([
+      page.waitForEvent("download", { timeout: 20000 }),
+      page.locator("#export-btn").click(),
+    ]);
+    await download.saveAs(outFile);
+    const exportedHtml = fs.readFileSync(outFile, "utf8");
+    // hljs wraps tokens in <span>s that split the raw line across tags, so
+    // compare against the tag-stripped text — hljs preserves every character,
+    // it only wraps substrings, so the stripped text reassembles exactly.
+    const strippedText = exportedHtml.replace(/<[^>]+>/g, "");
+    if (!strippedText.includes(ANCHOR_SNIPPET))
+      fail("the exported file does not contain the real source line — code was not inlined server-side");
+    if (/class="cp-widen"/.test(exportedHtml))
+      fail("the exported file still carries a .cp-widen button — dead chrome with no JS behind it");
+    log("✓ export carries the real source line and strips the widen control");
+
+    await sleep(300); // let the initial /raw render settle before measuring layout
 
     // ── 1. The split is real, not just classed ──────────────────────────────
     const contentRect = await blockRect(page, "b-0", ".block-content");
     const codeRect = await blockRect(page, "b-0", ".code-col");
     if (!contentRect || !codeRect) fail("b-0 is missing .block-content or .code-col");
+    if (!(contentRect.width > 0)) fail(".block-content has zero width: " + JSON.stringify(contentRect));
+    if (!(codeRect.width > 0)) fail(".code-col has zero width — a collapsed column would pass the overlap check while rendering nothing: " + JSON.stringify(codeRect));
     const vOverlap = contentRect.top < codeRect.bottom && codeRect.top < contentRect.bottom;
     const hOverlap = contentRect.left < codeRect.right && codeRect.left < contentRect.right;
     if (!vOverlap) fail("block-content and code-col do not overlap vertically: "
       + JSON.stringify(contentRect) + " vs " + JSON.stringify(codeRect));
     if (hOverlap) fail("block-content and code-col overlap horizontally — not side by side: "
       + JSON.stringify(contentRect) + " vs " + JSON.stringify(codeRect));
-    log(`✓ split is real: content right=${Math.round(contentRect.right)} <= code left=${Math.round(codeRect.left)}, rows overlap vertically`);
+    log(`✓ split is real: content right=${Math.round(contentRect.right)} <= code left=${Math.round(codeRect.left)}, both columns have real width, rows overlap vertically`);
 
     // ── 2. The anchor line is the emphasised one ────────────────────────────
     const anchorInfo = await page.evaluate(() => {
@@ -228,6 +329,25 @@ function blockRect(page, blockId, selector) {
     if (stale.rowCount !== 0) fail(`the stale pane rendered ${stale.rowCount} .cp-row elements — it must render none`);
     log(`✓ failing pane shows its reason ("${stale.message}") and renders zero code rows`);
 
+    // ── 12. A collapsed code-bearing card does not leak its split grid ─────
+    // The split rule (style.css) guards its two-column grid with
+    // `:not(.collapsed)`. Nothing before this line ever folds a code-bearing
+    // card, so nothing has proved that guard holds. Uses b-1, not b-0 — b-0
+    // stays expanded because item 9 below still needs to click into it.
+    await page.locator('section.block[data-block-id="b-1"] .card-chevron').click();
+    await page.waitForFunction(() => {
+      const s = document.querySelector('section.block[data-block-id="b-1"]');
+      return s && s.classList.contains("collapsed");
+    }, { timeout: 3000 });
+    const foldedDisplay = await page.evaluate(() => {
+      const s = document.querySelector('section.block[data-block-id="b-1"]');
+      const body = s.querySelector(".card-body");
+      return body && getComputedStyle(body).display;
+    });
+    if (foldedDisplay !== "none")
+      fail(`a collapsed code-bearing card still shows its body: display=${foldedDisplay} — the split grid leaked through .collapsed`);
+    log("✓ folding a code-bearing card hides its body — the split grid does not leak through .collapsed");
+
     // ── 9. Nothing inside the pane is a click target except widen/jump ─────
     const before9 = await page.evaluate(() => ({
       url: location.href,
@@ -251,24 +371,6 @@ function blockRect(page, blockId, selector) {
     });
     if (!noCodeSlot) fail("b-2 (no anchors, but the doc cites code elsewhere) has no .no-code-slot");
     log("✓ the anchorless block in a code-bearing document shows the 'no code cited' slot");
-
-    // ── 7. Export carries the code ───────────────────────────────────────────
-    const outFile = path.join(projectA, "exported.html");
-    const [download] = await Promise.all([
-      page.waitForEvent("download", { timeout: 20000 }),
-      page.locator("#export-btn").click(),
-    ]);
-    await download.saveAs(outFile);
-    const exportedHtml = fs.readFileSync(outFile, "utf8");
-    // hljs wraps tokens in <span>s that split the raw line across tags, so
-    // compare against the tag-stripped text — hljs preserves every character,
-    // it only wraps substrings, so the stripped text reassembles exactly.
-    const strippedText = exportedHtml.replace(/<[^>]+>/g, "");
-    if (!strippedText.includes(ANCHOR_SNIPPET))
-      fail("the exported file does not contain the real source line — code was not inlined server-side");
-    if (/class="cp-widen"/.test(exportedHtml))
-      fail("the exported file still carries a .cp-widen button — dead chrome with no JS behind it");
-    log("✓ export carries the real source line and strips the widen control");
 
     // ── Workspace B: a document with NO anchors anywhere ────────────────────
     const projectB = fs.mkdtempSync(path.join(os.tmpdir(), "ca-e2e-proj-b-"));
