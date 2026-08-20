@@ -130,7 +130,7 @@ def resolve_anchor(a: dict, root) -> dict:
     try:
         root_real = Path(root).resolve()
         target = (root_real / rel).resolve()
-    except (OSError, ValueError) as e:
+    except (OSError, ValueError, TypeError) as e:
         return _fail(a, "refused", "%s: path could not be resolved (%s)" % (rel, e))
 
     # resolve() follows symlinks BEFORE this test, which is the point: a link
@@ -143,7 +143,14 @@ def resolve_anchor(a: dict, root) -> dict:
     try:
         lines = _read_lines(target)
     except OSError as e:
-        return _fail(a, "missing", "%s: could not be read (%s)" % (rel, e))
+        # e's stringified form embeds the resolved *absolute* path (target),
+        # which this payload may reach via a read-only share link. Report
+        # only what the model already knows -- the relative path -- plus the
+        # OS-level reason, never the raw exception text.
+        detail = e.strerror or str(e)
+        if e.errno is not None:
+            detail = "errno %d: %s" % (e.errno, detail)
+        return _fail(a, "missing", "%s: could not be read (%s)" % (rel, detail))
 
     return _build(a, lines)
 

@@ -288,6 +288,30 @@ class TestNeverRaises(AnchorFixture):
         out = anchors.resolve_anchor(self.anchor(), missing_root)
         self.assertIn(out["status"], self._STATUSES)
 
+    def test_none_root_is_refused_not_a_typeerror(self):
+        # dirs.get("_cwd") can legitimately be absent (Task 5's server
+        # wiring). Path(None) raises TypeError, which used to escape
+        # resolve_anchor uncaught -- that violates the module's own promise.
+        out = anchors.resolve_anchor(self.anchor(), None)
+        self.assertEqual(out["status"], "refused")
+
+
+class TestReadFailureMessage(AnchorFixture):
+    def test_unreadable_file_message_has_no_absolute_path(self):
+        if os.geteuid() == 0:
+            self.skipTest("root ignores file permissions")
+        p = self.root / "locked.py"
+        p.write_text("secret = 1\n")
+        os.chmod(p, 0o000)
+        self.addCleanup(lambda: os.chmod(p, 0o644))
+        if os.access(str(p), os.R_OK):
+            self.skipTest("filesystem does not enforce the permission bit")
+        out = anchors.resolve_anchor(
+            {"file": "locked.py", "line": 1, "snippet": "secret = 1"}, self.root)
+        self.assertEqual(out["status"], "missing")
+        self.assertIn("locked.py", out["message"])
+        self.assertNotIn(str(self.root), out["message"])
+
 
 if __name__ == "__main__":
     unittest.main()
