@@ -1511,3 +1511,136 @@ section.block[data-diff="open"] .diff-pane { display: block; }
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 .chord-pill[hidden] { display: none; }
+
+/* === Code anchors ====================================================
+   A block that cites code splits its body in two: prose left, the real
+   source right. The split is gated on data-has-code so a document with no
+   anchors renders exactly as it did before this feature existed — nobody's
+   prose-only page gets wider or two-columned because the field now exists.
+
+   The pane is a READING AID. Nothing inside it is a click target, for the
+   same reason the flowchart source pane gave that up: a code line painted
+   like a jump-to-source link that opens a comment box instead is a lie
+   about what a click does. Comments come from the card header. */
+
+/* The wide column, only for documents that actually carry anchors. */
+body[data-has-code="1"] { --content-max: 1180px; }
+
+section.block.card[data-has-code="1"] .card-body {
+  display: grid;
+  grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+  padding: 0;
+}
+section.block.card[data-has-code="1"] .card-body > .block-content {
+  padding: 2px 18px 16px 18px;
+  min-width: 0;
+}
+.code-col {
+  border-left: 1px solid var(--border);
+  background: var(--surface-soft);
+  padding: 14px 16px 16px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* A promoted pane takes the whole card: the grid collapses to one column and
+   the prose sits above it. Promotion is per-block and persisted, because a
+   widening you must redo on every reload is worse than not having one. */
+section.block.card[data-has-code="1"][data-code-wide="1"] .card-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
+  border-left: none;
+  border-top: 1px solid var(--border);
+}
+
+/* Tokyo Night, matching the fenced-code card the page already paints. */
+.codepane {
+  background: #1a1b26;
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.cp-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  background: #16171f;
+  border-bottom: 1px solid #262838;
+  font-size: 11px;
+}
+.cp-path {
+  color: #7aa2f7;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cp-spacer { flex: 1; }
+.cp-jump {
+  color: #565f89; font-size: 10.5px; letter-spacing: 0.06em;
+  text-transform: uppercase; white-space: nowrap; text-decoration: none;
+}
+.cp-jump:hover { color: #7aa2f7; }
+.cp-widen {
+  background: none; border: 1px solid #2f3348; border-radius: 5px;
+  color: #565f89; cursor: pointer; padding: 2px 7px;
+  font-family: inherit; font-size: 10px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.cp-widen:hover { color: #7aa2f7; border-color: #7aa2f7; }
+.cp-note {
+  margin: 0; padding: 6px 12px;
+  background: #14151d; border-bottom: 1px solid #262838;
+  color: #7f89ad; font-size: 11.5px;
+  font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+}
+.cp-body {
+  padding: 9px 0; font-size: 12px; line-height: 1.62;
+  overflow-x: auto; color: #9aa5ce;
+}
+.cp-row { display: flex; min-width: max-content; }
+.cp-num {
+  flex: none; width: 3.4em; padding-right: 12px;
+  text-align: right; color: #3f4459; user-select: none;
+}
+.cp-line { flex: 1 1 auto; white-space: pre; padding-right: 16px; }
+/* The anchored line is the one the prose is about; the padding around it is
+   there so the line has a home, not to be read. */
+.cp-row.is-anchor { background: rgba(122,162,247,.13); box-shadow: inset 3px 0 0 #7aa2f7; }
+.cp-row.is-anchor .cp-num { color: #7aa2f7; }
+.cp-row.is-context { opacity: 0.5; }
+.cp-truncated {
+  padding: 5px 12px 2px calc(3.4em + 12px);
+  color: #565f89; font-size: 11px; font-style: italic;
+}
+
+/* A pane that could not resolve says so, and shows no code at all. A pane
+   rendering whatever now sits at that line number would be a lie the reader
+   has no way to detect. */
+.cp-status {
+  padding: 8px 12px;
+  font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+  font-size: 11.5px; line-height: 1.5;
+}
+.cp-status[data-status="moved"] { color: #e0af68; }
+.cp-status[data-status="stale"],
+.cp-status[data-status="missing"],
+.cp-status[data-status="refused"] { color: #f7768e; }
+
+/* The visible half of the authoring rule: in a document that cites code, a
+   block that cites none says so where its pane would be. A missing citation
+   is then something the reader can point at, not something they endure. */
+.no-code-slot {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: var(--text-dim);
+  font-size: 12px;
+  background: transparent;
+}
+
+@media (max-width: 1100px) {
+  /* Two columns stop being two columns before they stop being readable. */
+  section.block.card[data-has-code="1"] .card-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .code-col { border-left: none; border-top: 1px solid var(--border); }
+}
