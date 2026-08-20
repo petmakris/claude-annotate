@@ -150,5 +150,74 @@ class TestCli(unittest.TestCase):
         self.assertEqual(self._run().returncode, 0)
 
 
+class TestDeriveWorkspaceRoot(unittest.TestCase):
+    """I3: blocks.json's own path on disk names the workspace it belongs to
+    -- <root>/.claude/annotate/<sid>/response/blocks.json -- independent of
+    whatever root the caller happens to pass."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def test_shaped_path_derives_the_root(self):
+        root = Path(self.tmp.name) / "myrepo"
+        blocks = root / ".claude" / "annotate" / "sid123" / "response" / "blocks.json"
+        blocks.parent.mkdir(parents=True)
+        blocks.write_text("{}")
+        self.assertEqual(check_anchors._derive_workspace_root(blocks), root.resolve())
+
+    def test_unshaped_path_derives_nothing(self):
+        blocks = Path(self.tmp.name) / "blocks.json"
+        blocks.write_text("{}")
+        self.assertIsNone(check_anchors._derive_workspace_root(blocks))
+
+    def test_shaped_prefix_but_wrong_filename_derives_nothing(self):
+        blocks = (Path(self.tmp.name) / "myrepo" / ".claude" / "annotate"
+                  / "sid123" / "response" / "other.json")
+        blocks.parent.mkdir(parents=True)
+        blocks.write_text("{}")
+        self.assertIsNone(check_anchors._derive_workspace_root(blocks))
+
+
+class TestCliWorkspaceRootAgreement(unittest.TestCase):
+    """I3: `/annotate resume <slug>` from a different directory used to
+    validate against the wrong repo silently -- the check passed while the
+    server read a different one. Now the check refuses instead of guessing."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name) / "myrepo"
+        (self.root / ".claude" / "annotate" / "sid1" / "response").mkdir(parents=True)
+        (self.root / "mod.py").write_text("a = 1\n")
+        self.blocks = self.root / ".claude" / "annotate" / "sid1" / "response" / "blocks.json"
+        self.blocks.write_text(json.dumps({"blocks": [
+            {"id": "section-1", "markdown": "hi",
+             "code": [{"file": "mod.py", "line": 1, "snippet": "a = 1"}]}]}))
+
+    def _run(self, root_arg):
+        return subprocess.run(
+            [sys.executable, "-m", "skills.annotate.check_anchors",
+             str(self.blocks), str(root_arg)],
+            cwd=str(REPO_ROOT), capture_output=True, text=True,
+        )
+
+    def test_agreeing_root_validates_normally(self):
+        res = self._run(self.root)
+        self.assertEqual(res.returncode, 0, res.stderr)
+
+    def test_mismatched_root_fails_loudly_naming_both_paths(self):
+        other = Path(self.tmp.name) / "other-repo"
+        other.mkdir()
+        res = self._run(other)
+        self.assertEqual(res.returncode, 1)
+        self.assertIn(str(self.root.resolve()), res.stderr)
+        self.assertIn(str(other.resolve()), res.stderr)
+        self.assertIn("does not match", res.stderr)
+        # It refuses outright -- it must not also report per-anchor problems
+        # as if it had picked a root and gone ahead.
+        self.assertNotIn("anchor problem", res.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

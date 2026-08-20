@@ -51,18 +51,60 @@ def check(doc: dict, root) -> list:
     return problems
 
 
+def _derive_workspace_root(blocks_path: Path):
+    """If `blocks_path` sits at <root>/.claude/annotate/<sid>/response/
+    blocks.json, return <root>. Otherwise None.
+
+    The server stamps a session's root (dirs["_cwd"]) once at create time
+    and never refreshes it on the attach path -- so `/annotate resume` from
+    a different directory can hand this check a root that names the wrong
+    repo, while blocks.json's own location on disk still names the right
+    one. A hand-made fixture (as this module's own tests use) won't match
+    this shape, and the caller falls back to the passed root exactly as
+    before.
+    """
+    parts = blocks_path.resolve().parts
+    if len(parts) < 5:
+        return None
+    claude, annotate, _sid, response, name = parts[-5:]
+    if (claude, annotate, response, name) != (".claude", "annotate", "response", "blocks.json"):
+        return None
+    return Path(*parts[:-5])
+
+
 def main(argv: list) -> int:
     if len(argv) != 3:
         sys.stderr.write(
             "usage: python3 -m skills.annotate.check_anchors "
             "<blocks.json> <repo_root>\n")
         return 1
-    blocks_path, root = Path(argv[1]), argv[2]
+    blocks_path, root_arg = Path(argv[1]), argv[2]
     try:
         doc = json.loads(blocks_path.read_text())
     except (OSError, json.JSONDecodeError) as e:
         sys.stderr.write("could not read %s: %s\n" % (blocks_path, e))
         return 1
+
+    root = root_arg
+    derived = _derive_workspace_root(blocks_path)
+    if derived is not None:
+        try:
+            passed_real = Path(root_arg).resolve()
+        except (OSError, ValueError):
+            passed_real = None
+        if passed_real is None or derived != passed_real:
+            # Refuse rather than guess which one is right -- validating
+            # against either would silently check the wrong repo's files.
+            sys.stderr.write(
+                "claude-annotate: the workspace this session was created in "
+                "does not match where this check is running from.\n"
+                "  session's workspace root (from blocks.json's own path): %s\n"
+                "  check was run against:                                  %s\n"
+                % (derived, passed_real if passed_real is not None else root_arg)
+            )
+            return 1
+        root = derived
+
     problems = check(doc, root)
     if not problems:
         return 0

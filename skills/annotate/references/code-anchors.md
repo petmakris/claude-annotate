@@ -34,7 +34,9 @@ Each entry in a block's `code` list, verified against `skills/annotate/anchors.p
 - **`file`** (required) — repo-relative path, resolved against the
   workspace root passed to `check_anchors`/the server. An absolute path is
   refused. A path that resolves outside the root (via `..` or a symlink) is
-  refused too — it never reaches the page.
+  refused too — it never reaches the page. Anchors are not limited to
+  source code — any repo file a block asserts something about is fair
+  game, including `SKILL.md`, a config file, or a spec.
 - **`line`** (required) — a positive integer, the line the anchor names.
 - **`end_line`** (optional) — a positive integer; if given, must be `>=
   line`. Extends the anchor to a range instead of one line.
@@ -98,6 +100,13 @@ EOF
 fi
 python3 -m skills.annotate.check_anchors "<response_dir>/blocks.json" "$PWD"
 ```
+
+`$PWD` here is a best guess, not authoritative: the root that actually matters is
+the directory the session was **created** in, which the server stamped once and
+does not refresh when you `/annotate resume` from somewhere else. If `$PWD`
+disagrees with the workspace `blocks.json` itself lives under, the check refuses
+outright — naming both paths — rather than silently validating against the wrong
+repo.
 
 Exit 0 means every anchor resolves. Non-zero prints one problem per line,
 each naming the block id and which anchor — fix `blocks.json` and re-run
