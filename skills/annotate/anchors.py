@@ -131,7 +131,12 @@ def resolve_anchor(a: dict, root) -> dict:
         root_real = Path(root).resolve()
         target = (root_real / rel).resolve()
     except (OSError, ValueError, TypeError) as e:
-        return _fail(a, "refused", "%s: path could not be resolved (%s)" % (rel, e))
+        # Bounded to the exception's class name, not its stringified form:
+        # a TypeError's message can carry a repr of whatever `root` was, and
+        # an OSError's can carry the absolute path -- see the read-failure
+        # branch below for why that must never reach this payload.
+        return _fail(a, "refused", "%s: path could not be resolved (%s)"
+                     % (rel, e.__class__.__name__))
 
     # resolve() follows symlinks BEFORE this test, which is the point: a link
     # inside the repo pointing out of it must not smuggle a file through.
@@ -146,8 +151,10 @@ def resolve_anchor(a: dict, root) -> dict:
         # e's stringified form embeds the resolved *absolute* path (target),
         # which this payload may reach via a read-only share link. Report
         # only what the model already knows -- the relative path -- plus the
-        # OS-level reason, never the raw exception text.
-        detail = e.strerror or str(e)
+        # OS-level reason, never the raw exception text. No str(e) fallback:
+        # a plain OSError.__str__() embeds .filename (the absolute path) when
+        # set, which would reopen this exact leak.
+        detail = e.strerror or e.__class__.__name__
         if e.errno is not None:
             detail = "errno %d: %s" % (e.errno, detail)
         return _fail(a, "missing", "%s: could not be read (%s)" % (rel, detail))

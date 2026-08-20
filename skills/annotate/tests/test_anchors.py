@@ -295,6 +295,22 @@ class TestNeverRaises(AnchorFixture):
         out = anchors.resolve_anchor(self.anchor(), None)
         self.assertEqual(out["status"], "refused")
 
+    def test_root_resolution_oserror_message_has_no_absolute_path(self):
+        # Review finding 2: the resolve()/confinement except block (the
+        # sibling of Fix B's read-failure branch) must not echo the raw
+        # exception either. A real OSError's __str__() embeds .filename when
+        # set -- exactly the leak Fix B closed three lines below -- so
+        # simulate one via mock rather than relying on a symlink loop
+        # actually raising on every platform/Python version in the CI matrix.
+        from unittest import mock
+
+        hidden = "/Users/someone/secret/repo/mod.py"
+        err = OSError(13, "Permission denied", hidden)
+        with mock.patch("skills.annotate.anchors.Path.resolve", side_effect=err):
+            out = anchors.resolve_anchor(self.anchor(), self.root)
+        self.assertEqual(out["status"], "refused")
+        self.assertNotIn(hidden, out["message"])
+
 
 class TestReadFailureMessage(AnchorFixture):
     def test_unreadable_file_message_has_no_absolute_path(self):
@@ -311,6 +327,23 @@ class TestReadFailureMessage(AnchorFixture):
         self.assertEqual(out["status"], "missing")
         self.assertIn("locked.py", out["message"])
         self.assertNotIn(str(self.root), out["message"])
+
+    def test_strerror_less_oserror_falls_back_to_class_name_not_str(self):
+        # Review finding 3: `detail = e.strerror or str(e)` re-opens the leak
+        # Fix B closed, because a plain OSError.__str__() embeds .filename
+        # when set. Real read failures always set strerror, so drive the
+        # fallback directly via mock rather than relying on a strerror-less
+        # OSError occurring naturally.
+        from unittest import mock
+
+        hidden = str(self.root / "pkg" / "mod.py")
+        err = OSError()
+        err.filename = hidden  # strerror left None -- the fallback path
+        with mock.patch("skills.annotate.anchors._read_lines", side_effect=err):
+            out = anchors.resolve_anchor(self.anchor(), self.root)
+        self.assertEqual(out["status"], "missing")
+        self.assertNotIn(hidden, out["message"])
+        self.assertIn("OSError", out["message"])
 
 
 if __name__ == "__main__":
