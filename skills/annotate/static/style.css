@@ -1526,7 +1526,7 @@ section.block[data-diff="open"] .diff-pane { display: block; }
 /* The wide column, only for documents that actually carry anchors. */
 body[data-has-code="1"] { --content-max: 1180px; }
 
-section.block.card[data-has-code="1"] .card-body {
+section.block.card[data-has-code="1"]:not(.collapsed) .card-body {
   display: grid;
   grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
   padding: 0;

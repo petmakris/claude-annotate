@@ -1,3 +1,4 @@
+import re
 import unittest
 from pathlib import Path
 
@@ -35,3 +36,29 @@ class TestCodePaneCss(unittest.TestCase):
             if "body.read-only" in line:
                 self.assertNotIn(".code-col", line)
                 self.assertNotIn(".codepane", line)
+
+
+class TestCollapseGuard(unittest.TestCase):
+    """Fix round 1: a rule that sets display:grid on .card-body must not
+    win over section.block.card.collapsed .card-body { display: none; } —
+    both selectors tie at specificity (0,4,1), so source order decides,
+    and an unguarded grid rule appended later in the file would silently
+    break card folding for any block that carries code anchors."""
+
+    RULE_RE = re.compile(r"([^{}]+)\{([^{}]*)\}")
+
+    def test_grid_display_rules_on_card_body_respect_collapsed(self):
+        offenders = []
+        for selector, body in self.RULE_RE.findall(CSS):
+            if ".card-body" not in selector:
+                continue
+            if "display: grid" not in body and "display:grid" not in body:
+                continue
+            if ":not(.collapsed)" not in selector:
+                offenders.append(selector.strip())
+        self.assertEqual(
+            offenders, [],
+            "rule(s) set display:grid on .card-body without excluding "
+            ".collapsed, so a collapsed code-anchored card would not fold: "
+            "%r" % offenders,
+        )
