@@ -27,6 +27,17 @@ MAX_WINDOW = 40        # a pane you must scroll has stopped being a glance
 CONTEXT_LINES = 2      # dimmed lines either side, so a line has a home
 DRIFT_RADIUS = 40      # how far to hunt for a snippet that moved
 
+# The client refetches /raw once a second, per open tab, and the read-only
+# share link makes that reachable by anyone holding it. MAX_WINDOW bounds how
+# many lines an anchor's payload carries, but nothing bounded how long any one
+# line could BE -- a 40-line window over a minified or generated file could
+# still be a multi-megabyte JSON body every tick. A source file an anchor
+# realistically points at (something a person reads and cites a line of) is
+# well under a megabyte; past that, whatever it is isn't the kind of file
+# this feature was built for.
+MAX_BYTES = 1_000_000   # refuse to read a file bigger than this
+MAX_LINE_CHARS = 2000   # truncate any single rendered line past this many chars
+
 
 def _is_int(v: Any) -> bool:
     """bool is an int subclass; True must not pass as line 1."""
@@ -146,6 +157,19 @@ def resolve_anchor(a: dict, root) -> dict:
         return _fail(a, "missing", "%s: no such file in the workspace" % rel)
 
     try:
+        size = target.stat().st_size
+    except OSError as e:
+        # Same rule as the read-failure branch below: report the relative
+        # path the model already knows, never the resolved absolute one.
+        detail = e.strerror or e.__class__.__name__
+        if e.errno is not None:
+            detail = "errno %d: %s" % (e.errno, detail)
+        return _fail(a, "missing", "%s: could not be read (%s)" % (rel, detail))
+    if size > MAX_BYTES:
+        return _fail(a, "missing",
+                     "%s: too large to anchor (%d bytes)" % (rel, size))
+
+    try:
         lines = _read_lines(target)
     except OSError as e:
         # e's stringified form embeds the resolved *absolute* path (target),
@@ -194,7 +218,10 @@ def _build(a: dict, lines: list) -> dict:
             role = "window"
         else:
             role = "context"
-        out_lines.append({"n": n, "text": lines[n - 1], "role": role})
+        text = lines[n - 1]
+        if len(text) > MAX_LINE_CHARS:
+            text = text[:MAX_LINE_CHARS] + " … [line truncated]"
+        out_lines.append({"n": n, "text": text, "role": role})
 
     out = {
         "file": a["file"],
@@ -223,9 +250,16 @@ def _locate(lines: list, snippet: str, authored: int):
     want = snippet.strip()
     if 1 <= authored <= len(lines) and lines[authored - 1].strip() == want:
         return authored
+    # Bounded to the drift window directly, rather than scanning every line
+    # in the file and filtering by distance -- DRIFT_RADIUS already promises
+    # "40 lines either way"; a large file (or the pathological one MAX_BYTES
+    # doesn't catch because it's mostly long lines) should not pay for a scan
+    # past what that promise covers.
+    lo = max(1, authored - DRIFT_RADIUS)
+    hi = min(len(lines), authored + DRIFT_RADIUS)
     candidates = [
-        n for n in range(1, len(lines) + 1)
-        if abs(n - authored) <= DRIFT_RADIUS and lines[n - 1].strip() == want
+        n for n in range(lo, hi + 1)
+        if lines[n - 1].strip() == want
     ]
     if not candidates:
         return None

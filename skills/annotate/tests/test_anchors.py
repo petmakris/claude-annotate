@@ -177,6 +177,60 @@ class TestResolveWindow(AnchorFixture):
         self.assertEqual(out["truncated"], 100 - anchors.MAX_WINDOW)
 
 
+class TestSizeAndLineCaps(AnchorFixture):
+    """I2: the /raw poll refetches every anchor's file once a second, per
+    open tab, on the read-only link. Nothing bounded how big that file (or
+    any one line in it) could be."""
+
+    def test_huge_file_is_refused_rather_than_read(self):
+        big = self.root / "huge.py"
+        # One byte past the cap -- proves the boundary, not just "very big".
+        big.write_text("x" * (anchors.MAX_BYTES + 1))
+        out = anchors.resolve_anchor(
+            {"file": "huge.py", "line": 1, "snippet": "x"}, self.root)
+        self.assertEqual(out["status"], "missing")
+        self.assertIn("too large to anchor", out["message"])
+        self.assertIn("huge.py", out["message"])
+        self.assertNotIn("lines", out)
+
+    def test_file_at_exactly_the_cap_is_still_read(self):
+        # The boundary is inclusive: MAX_BYTES itself must not be refused.
+        at_cap = self.root / "at_cap.py"
+        at_cap.write_text("x" * anchors.MAX_BYTES)
+        out = anchors.resolve_anchor(
+            {"file": "at_cap.py", "line": 1, "snippet": "x" * anchors.MAX_BYTES},
+            self.root)
+        self.assertEqual(out["status"], "ok")
+
+    def test_oversized_line_is_truncated_with_a_visible_marker(self):
+        wide = self.root / "wide.py"
+        long_line = "x" * (anchors.MAX_LINE_CHARS + 500)
+        wide.write_text(long_line + "\n")
+        out = anchors.resolve_anchor(
+            {"file": "wide.py", "line": 1, "snippet": long_line}, self.root)
+        self.assertEqual(out["status"], "ok")
+        text = out["lines"][0]["text"]
+        self.assertLess(len(text), len(long_line))
+        self.assertIn("truncated", text)
+        self.assertTrue(text.startswith("x" * 100))
+
+    def test_short_line_is_not_touched_by_the_cap(self):
+        out = anchors.resolve_anchor(self.anchor(), self.root)
+        text = next(l["text"] for l in out["lines"] if l["n"] == 8)
+        self.assertEqual(text, "def beta():")
+
+    def test_drift_search_does_not_look_past_the_radius(self):
+        # A match that exists but sits outside DRIFT_RADIUS must not be
+        # found -- proves the scan is genuinely bounded, not just filtered.
+        body = ["x"] * (8 + anchors.DRIFT_RADIUS + 5)
+        body[7] = "def beta():"     # line 8, the authored line -- erased below
+        body[7] = "# moved away"
+        body[8 + anchors.DRIFT_RADIUS + 4] = "def beta():"  # far outside the radius
+        self.root.joinpath("pkg", "mod.py").write_text("\n".join(body) + "\n")
+        out = anchors.resolve_anchor(self.anchor(), self.root)
+        self.assertEqual(out["status"], "stale")
+
+
 class TestDrift(AnchorFixture):
     def _rewrite(self, body: str):
         (self.root / "pkg" / "mod.py").write_text(body)
