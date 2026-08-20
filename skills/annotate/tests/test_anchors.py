@@ -75,5 +75,106 @@ class TestBlockProblems(unittest.TestCase):
         self.assertTrue(problems[0].startswith("code[1]: "))
 
 
+
+import os
+import tempfile
+from pathlib import Path
+
+
+class AnchorFixture(unittest.TestCase):
+    """A throwaway repo with one known file, so line numbers are ours."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        (self.root / "pkg").mkdir()
+        (self.root / "pkg" / "mod.py").write_text(
+            "\n".join([
+                "import os",            # 1
+                "",                     # 2
+                "",                     # 3
+                "def alpha():",         # 4
+                "    return 1",         # 5
+                "",                     # 6
+                "",                     # 7
+                "def beta():",          # 8
+                "    return 2",         # 9
+                "",                     # 10
+            ]) + "\n"
+        )
+        self.addCleanup(self.tmp.cleanup)
+
+    def anchor(self, **over):
+        a = {"file": "pkg/mod.py", "line": 8, "snippet": "def beta():"}
+        a.update(over)
+        return a
+
+
+class TestResolveConfinement(AnchorFixture):
+    def test_escaping_the_root_is_refused(self):
+        out = anchors.resolve_anchor(self.anchor(file="../outside.py"), self.root)
+        self.assertEqual(out["status"], "refused")
+        self.assertIn("outside the workspace", out["message"])
+        self.assertNotIn("lines", out)
+
+    def test_symlink_escaping_the_root_is_refused(self):
+        outside = Path(self.tmp.name).parent / "escape-target.py"
+        outside.write_text("SECRET\n")
+        self.addCleanup(lambda: outside.unlink(missing_ok=True))
+        os.symlink(outside, self.root / "link.py")
+        out = anchors.resolve_anchor(
+            self.anchor(file="link.py", line=1, snippet="SECRET"), self.root)
+        self.assertEqual(out["status"], "refused")
+
+    def test_missing_file(self):
+        out = anchors.resolve_anchor(self.anchor(file="pkg/gone.py"), self.root)
+        self.assertEqual(out["status"], "missing")
+        self.assertIn("pkg/gone.py", out["message"])
+
+
+class TestResolveWindow(AnchorFixture):
+    def test_single_line_anchor_carries_context_either_side(self):
+        out = anchors.resolve_anchor(self.anchor(), self.root)
+        self.assertEqual(out["status"], "ok")
+        self.assertEqual(out["actual_line"], 8)
+        self.assertEqual([l["n"] for l in out["lines"]], [6, 7, 8, 9, 10])
+
+    def test_the_anchor_line_is_marked(self):
+        out = anchors.resolve_anchor(self.anchor(), self.root)
+        roles = {l["n"]: l["role"] for l in out["lines"]}
+        self.assertEqual(roles[8], "anchor")
+        self.assertEqual(roles[6], "context")
+        self.assertEqual(roles[10], "context")
+
+    def test_end_line_widens_the_window(self):
+        out = anchors.resolve_anchor(self.anchor(end_line=9), self.root)
+        roles = {l["n"]: l["role"] for l in out["lines"]}
+        self.assertEqual(roles[9], "window")
+
+    def test_context_clamps_at_the_start_of_file(self):
+        out = anchors.resolve_anchor(
+            self.anchor(line=1, snippet="import os"), self.root)
+        self.assertEqual(out["lines"][0]["n"], 1)
+
+    def test_text_is_verbatim(self):
+        out = anchors.resolve_anchor(self.anchor(line=9, snippet="return 2"), self.root)
+        got = {l["n"]: l["text"] for l in out["lines"]}
+        self.assertEqual(got[9], "    return 2")
+
+    def test_note_is_passed_through(self):
+        out = anchors.resolve_anchor(self.anchor(note="the second one"), self.root)
+        self.assertEqual(out["note"], "the second one")
+
+    def test_oversized_window_is_truncated_with_a_count(self):
+        big = self.root / "big.py"
+        big.write_text("\n".join("x = %d" % i for i in range(1, 101)) + "\n")
+        out = anchors.resolve_anchor(
+            {"file": "big.py", "line": 1, "end_line": 100, "snippet": "x = 1"},
+            self.root)
+        self.assertEqual(out["status"], "ok")
+        window = [l for l in out["lines"] if l["role"] in ("anchor", "window")]
+        self.assertEqual(len(window), anchors.MAX_WINDOW)
+        self.assertEqual(out["truncated"], 100 - anchors.MAX_WINDOW)
+
 if __name__ == "__main__":
     unittest.main()

@@ -93,3 +93,126 @@ def block_problems(blk: dict) -> list:
         if p:
             problems.append("code[%d]: %s" % (i, p))
     return problems
+
+
+def _fail(a: dict, status: str, message: str) -> dict:
+    """A failing anchor still names itself, so the pane can say what is lost."""
+    out = {
+        "file": a.get("file") if isinstance(a.get("file"), str) else "",
+        "line": a.get("line") if _is_int(a.get("line")) else 0,
+        "status": status,
+        "message": message,
+    }
+    if isinstance(a.get("note"), str):
+        out["note"] = a["note"]
+    return out
+
+
+def _read_lines(path: Path) -> list:
+    """File as a list of lines, newline stripped. Undecodable bytes replaced
+    rather than raising: a pane showing a mojibake line is still better than
+    a block that failed to render."""
+    text = path.read_text(encoding="utf-8", errors="replace")
+    lines = text.split("\n")
+    # A trailing newline yields a final empty element that is not a line.
+    if lines and lines[-1] == "":
+        lines.pop()
+    return lines
+
+
+def resolve_anchor(a: dict, root) -> dict:
+    """Read the source an anchor names. Never raises; failures are statuses."""
+    problem = anchor_problem(a)
+    if problem:
+        return _fail(a if isinstance(a, dict) else {}, "refused", problem)
+
+    rel = a["file"]
+    try:
+        root_real = Path(root).resolve()
+        target = (root_real / rel).resolve()
+    except (OSError, ValueError) as e:
+        return _fail(a, "refused", "%s: path could not be resolved (%s)" % (rel, e))
+
+    # resolve() follows symlinks BEFORE this test, which is the point: a link
+    # inside the repo pointing out of it must not smuggle a file through.
+    if not target.is_relative_to(root_real):
+        return _fail(a, "refused", "%s: resolves outside the workspace" % rel)
+    if not target.is_file():
+        return _fail(a, "missing", "%s: no such file in the workspace" % rel)
+
+    try:
+        lines = _read_lines(target)
+    except OSError as e:
+        return _fail(a, "missing", "%s: could not be read (%s)" % (rel, e))
+
+    return _build(a, lines)
+
+
+def _build(a: dict, lines: list) -> dict:
+    """Locate the anchor in `lines` and lay out the window around it."""
+    authored = a["line"]
+    actual = _locate(lines, a["snippet"], authored)
+    if actual is None:
+        return _fail(
+            a, "stale",
+            "%s: the anchored line is no longer at or near line %d "
+            "(looked for %r)" % (a["file"], authored, a["snippet"].strip()),
+        )
+
+    shift = actual - authored
+    end = (a.get("end_line") or authored) + shift
+    end = min(end, len(lines))
+
+    truncated = 0
+    span = end - actual + 1
+    if span > MAX_WINDOW:
+        truncated = span - MAX_WINDOW
+        end = actual + MAX_WINDOW - 1
+
+    first = max(1, actual - CONTEXT_LINES)
+    last = min(len(lines), end + CONTEXT_LINES)
+
+    out_lines = []
+    for n in range(first, last + 1):
+        if n == actual:
+            role = "anchor"
+        elif actual <= n <= end:
+            role = "window"
+        else:
+            role = "context"
+        out_lines.append({"n": n, "text": lines[n - 1], "role": role})
+
+    out = {
+        "file": a["file"],
+        "line": authored,
+        "actual_line": actual,
+        "status": "moved" if shift else "ok",
+        "lines": out_lines,
+    }
+    if shift:
+        out["message"] = ("moved: authored at line %d, now at line %d"
+                          % (authored, actual))
+    if truncated:
+        out["truncated"] = truncated
+    if isinstance(a.get("note"), str):
+        out["note"] = a["note"]
+    return out
+
+
+def _locate(lines: list, snippet: str, authored: int):
+    """Line number where `snippet` really is, or None.
+
+    Compared stripped, so re-indenting a line is not treated as drift — it is
+    the same line. On several matches take the one nearest the authored line;
+    on a tie, the earlier one.
+    """
+    want = snippet.strip()
+    if 1 <= authored <= len(lines) and lines[authored - 1].strip() == want:
+        return authored
+    candidates = [
+        n for n in range(1, len(lines) + 1)
+        if abs(n - authored) <= DRIFT_RADIUS and lines[n - 1].strip() == want
+    ]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda n: (abs(n - authored), n))
