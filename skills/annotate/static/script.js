@@ -697,6 +697,12 @@
 
   function highlightCodeLine(text, file) {
     if (typeof window.hljs !== "object" || !window.hljs) return null;
+    // Same guard as highlightFence: an anchor into a minified or generated
+    // file can hand this a single 100KB+ "line" — hljs on that stalls the
+    // render synchronously. The pane caps line COUNT (40) but never line
+    // LENGTH, so this is the only thing standing between a code anchor and a
+    // hung tab. Falls back to plain text, same as a missing hljs.
+    if (text.length > 20000) return null;
     const m = /\.([A-Za-z0-9]+)$/.exec(file || "");
     const lang = m && hljs.getLanguage(m[1]) ? m[1] : null;
     try {
