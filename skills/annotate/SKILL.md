@@ -28,7 +28,7 @@ Decide which situation you're in and **`Read` the named file before doing the wo
 | The user says "scrap it" / "stop annotating" / "respond in terminal" while a watcher is armed | **Cancel** | `references/handling-events.md` (§ Terminal cancellation) |
 | A block asserts something about specific code (a file, function, branch, line) | **Anchor it** | `references/code-anchors.md` |
 
-These lifecycles are independent invocations: pushing creates the page and arms a watcher; handling-events fires later, once per comment; resuming points an existing workspace at this conversation instead of creating one. Do not load a reference you don't need for the situation you're in.
+The first five rows are independent lifecycles: pushing creates the page and arms a watcher; handling-events fires later, once per comment; resuming points an existing workspace at this conversation instead of creating one. The code-anchors row is not a sixth lifecycle — it's a per-block decision made inside whichever lifecycle you're already in, and `references/code-anchors.md` carries its own guard so it's also safe to read standalone (a rewrite reaches it with no push in the turn). Do not load a reference you don't need for the situation you're in.
 
 ## Routing decision (only while a session is live)
 

@@ -72,9 +72,31 @@ The snippet has to be the real text of that line, not a description of it.
 
 ## The check — run before announcing the URL
 
-After writing `blocks.json`, and **before** telling the user the URL:
+After writing `blocks.json`, and **before** telling the user the URL, run
+this. It carries its own `python3` guard because this file is reached two
+ways — mid-push (after `references/pushing.md` has already checked once)
+and standalone, when a **rewrite** re-emits anchors on a comment reply with
+no push in the same turn (see Rewrites below) — and the second path never
+touches `pushing.md`'s guard:
 
-    python3 -m skills.annotate.check_anchors "<response_dir>/blocks.json" "$PWD"
+```bash
+if ! command -v python3 >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+claude-annotate: python3 was not found on PATH.
+claude-annotate is the marketplace that ships this plugin and claude-ide-review.
+
+This plugin needs Python 3.9 or newer (standard library only — nothing to
+pip install).
+
+  macOS:  xcode-select --install     # or: brew install python
+  Linux:  install python3 with your distribution's package manager
+
+Run /annotate-doctor for a full check of this machine.
+EOF
+  exit 1
+fi
+python3 -m skills.annotate.check_anchors "<response_dir>/blocks.json" "$PWD"
+```
 
 Exit 0 means every anchor resolves. Non-zero prints one problem per line,
 each naming the block id and which anchor — fix `blocks.json` and re-run
@@ -94,7 +116,9 @@ When answering a comment on a block that carries anchors, re-emit its
 because the comment was about the prose. **Re-read the file if it may have
 changed** since you first wrote the anchor: a snippet copied from memory
 instead of from the current file is exactly how a block goes stale between
-one turn and the next.
+one turn and the next. **Re-run the check** (above) after rewriting, the
+same as after a push — a rewrite reaches this file with no `pushing.md` in
+the turn, so its own guard is the only one that will run.
 
 ## What the reader sees
 
