@@ -1,11 +1,11 @@
 """Per-block version chain — server-derived versioning.
 
 A block's `version` is *not* something Claude writes into blocks.json. It is
-computed on every read by hashing the block's content (normalized for
-cosmetic noise) and comparing against a per-block hash chain stored in a
-sidecar `versions.json` alongside `blocks.json`. The reported version is
-the length of that chain — a value that can only grow when the content
-actually changes.
+computed on every read by hashing the block's content — markdown or spec,
+plus any code anchors — (normalized for cosmetic noise) and comparing
+against a per-block hash chain stored in a sidecar `versions.json` alongside
+`blocks.json`. The reported version is the length of that chain — a value
+that can only grow when the content actually changes.
 
 This kills two failure modes at once:
   (a) Claude rewriting unrelated blocks bumps their versions for no reason.
@@ -60,8 +60,13 @@ def _normalize_markdown(s: str) -> str:
     return s
 
 
+def _canonical_code(code: Any) -> str:
+    """Stable JSON for a block's anchors — key order is not a content change."""
+    return json.dumps(code, sort_keys=True, separators=(",", ":"))
+
+
 def _block_hash(blk: dict[str, Any]) -> str:
-    """SHA1 of (kind, normalized-content)."""
+    """SHA1 of (kind, normalized-content, anchors)."""
     kind = blk.get("kind") or "markdown"
     if kind in _SPEC_KINDS:
         body = _canonical_spec(blk.get("spec") or {})
@@ -69,6 +74,16 @@ def _block_hash(blk: dict[str, Any]) -> str:
         body = _normalize_markdown(blk.get("markdown") or "")
     h = hashlib.sha1()
     h.update(kind.encode("utf-8") + b"\x00" + body.encode("utf-8"))
+    # Anchors are content: a block whose prose is unchanged but whose citation
+    # moved IS a changed block, and without this the chain never grows, the
+    # client never refetches, and the corrected pane never appears.
+    #
+    # Only mixed in when non-empty, so every block in every existing
+    # workspace keeps the hash it already has and nothing jumps to v2 on the
+    # first read after this ships.
+    code = blk.get("code")
+    if code:
+        h.update(b"\x00" + _canonical_code(code).encode("utf-8"))
     return h.hexdigest()
 
 

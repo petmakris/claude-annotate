@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from skills.annotate.versions import derive_versions
+from skills.annotate.versions import _block_hash, derive_versions
 
 
 def test_first_call_assigns_v1_to_every_block(tmp_path):
@@ -232,3 +232,41 @@ def test_flowchart_spec_unchanged_no_bump(tmp_path):
     derive_versions(vp, [{"id": "b-0", "kind": "flowchart", "spec": spec}])
     versions = derive_versions(vp, [{"id": "b-0", "kind": "flowchart", "spec": dict(spec)}])
     assert versions == {"b-0": 1}
+
+
+def _anchor_blk(code=None):
+    b = {"id": "section-1", "markdown": "unchanged prose"}
+    if code is not None:
+        b["code"] = code
+    return b
+
+
+def test_editing_only_an_anchor_bumps_the_version(tmp_path):
+    vp = tmp_path / "versions.json"
+    a1 = [{"file": "a.py", "line": 1, "snippet": "x = 1"}]
+    a2 = [{"file": "a.py", "line": 2, "snippet": "x = 2"}]
+    assert derive_versions(vp, [_anchor_blk(a1)]) == {"section-1": 1}
+    assert derive_versions(vp, [_anchor_blk(a2)]) == {"section-1": 2}
+
+
+def test_adding_a_first_anchor_bumps_the_version(tmp_path):
+    vp = tmp_path / "versions.json"
+    assert derive_versions(vp, [_anchor_blk()]) == {"section-1": 1}
+    a = [{"file": "a.py", "line": 1, "snippet": "x = 1"}]
+    assert derive_versions(vp, [_anchor_blk(a)]) == {"section-1": 2}
+
+
+def test_key_order_in_an_anchor_is_not_a_change(tmp_path):
+    vp = tmp_path / "versions.json"
+    a1 = [{"file": "a.py", "line": 1, "snippet": "x = 1"}]
+    a2 = [{"snippet": "x = 1", "line": 1, "file": "a.py"}]
+    derive_versions(vp, [_anchor_blk(a1)])
+    assert derive_versions(vp, [_anchor_blk(a2)]) == {"section-1": 1}
+
+
+def test_an_anchorless_block_hashes_exactly_as_before():
+    # Existing workspaces must not have every block jump to v2 on the
+    # first read after this change ships.
+    assert _block_hash({"id": "section-1", "markdown": "hello"}) == _block_hash(
+        {"id": "section-1", "markdown": "hello", "code": []}
+    )
