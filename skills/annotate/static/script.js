@@ -361,6 +361,11 @@
       // in-progress text selection.
       window.AnnotateGlossary._lastGlossary = data.glossary || [];
     }
+    // Set before any block renders: renderCodeColumn reads this flag to
+    // decide whether an anchorless block gets a "no code cited" slot, and
+    // that is a decision about the document, not about whichever block
+    // happens to paint first.
+    setDocumentCodeFlag(data.blocks);
     proseEl.replaceChildren();
     for (const blk of (data.blocks || [])) {
       const section = createBlockSection(blk);
@@ -678,6 +683,164 @@
     return out;
   }
 
+  // ── Code anchors ───────────────────────────────────────────────────────────
+  // A block's anchors, resolved by the server into real lines. The pane is a
+  // reading aid: it links into the IDE and nothing inside it is a click
+  // target. Comments come from the card header, the same rule the flowchart
+  // source pane adopted after a `ref` that only looked like a link kept
+  // opening a comment box for people reaching for a file.
+
+  function codeWideKey(blockId) {
+    const rid = (document.body.dataset.responseId || "default");
+    return `annotate.codewide:${rid}:${blockId}`;
+  }
+
+  function highlightCodeLine(text, file) {
+    if (typeof window.hljs !== "object" || !window.hljs) return null;
+    const m = /\.([A-Za-z0-9]+)$/.exec(file || "");
+    const lang = m && hljs.getLanguage(m[1]) ? m[1] : null;
+    try {
+      return lang
+        ? hljs.highlight(text, { language: lang, ignoreIllegals: true }).value
+        : hljs.highlightAuto(text).value;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function renderCodePane(pane, blockId) {
+    const wrap = document.createElement("div");
+    wrap.className = "codepane";
+
+    const head = document.createElement("div");
+    head.className = "cp-head";
+    const path = document.createElement("span");
+    path.className = "cp-path";
+    const shown = pane.actual_line || pane.line;
+    path.textContent = shown ? `${pane.file}:${shown}` : (pane.file || "");
+    path.title = pane.file || "";
+    const spacer = document.createElement("span");
+    spacer.className = "cp-spacer";
+    head.append(path, spacer);
+
+    if (pane.status === "ok" || pane.status === "moved") {
+      const widen = document.createElement("button");
+      widen.type = "button";
+      widen.className = "cp-widen";
+      widen.textContent = "widen";
+      widen.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const card = wrap.closest("section.block");
+        if (!card) return;
+        const next = card.dataset.codeWide === "1" ? "0" : "1";
+        card.dataset.codeWide = next;
+        widen.textContent = next === "1" ? "narrow" : "widen";
+        try { localStorage.setItem(codeWideKey(blockId), next); } catch (_) {}
+      });
+      head.appendChild(widen);
+
+      const project = document.body.dataset.projectName || "";
+      const abs = document.body.dataset.repoRoot || "";
+      if (abs) {
+        const jump = document.createElement("a");
+        jump.className = "cp-jump";
+        jump.textContent = "open ↗";
+        jump.href = "jetbrains://idea/navigate/reference?project="
+          + encodeURIComponent(project)
+          + "&path=" + encodeURIComponent(`${abs}/${pane.file}:${shown}`);
+        head.appendChild(jump);
+      }
+    }
+    wrap.appendChild(head);
+
+    if (pane.note) {
+      const note = document.createElement("p");
+      note.className = "cp-note";
+      note.textContent = pane.note;
+      wrap.appendChild(note);
+    }
+
+    // A pane that could not resolve shows its reason and NO code. Rendering
+    // whatever now sits at that line number would be a lie the reader has no
+    // way to detect.
+    if (pane.status !== "ok" && pane.status !== "moved") {
+      const status = document.createElement("div");
+      status.className = "cp-status";
+      status.dataset.status = pane.status;
+      status.textContent = pane.message || "this anchor could not be resolved";
+      wrap.appendChild(status);
+      return wrap;
+    }
+
+    if (pane.status === "moved") {
+      const status = document.createElement("div");
+      status.className = "cp-status";
+      status.dataset.status = "moved";
+      status.textContent = pane.message || "";
+      wrap.appendChild(status);
+    }
+
+    const body = document.createElement("div");
+    body.className = "cp-body hljs";
+    (pane.lines || []).forEach((l) => {
+      const row = document.createElement("div");
+      row.className = "cp-row";
+      if (l.role === "anchor") row.classList.add("is-anchor");
+      if (l.role === "context") row.classList.add("is-context");
+      const num = document.createElement("span");
+      num.className = "cp-num";
+      num.setAttribute("aria-hidden", "true");
+      num.textContent = String(l.n);
+      const text = document.createElement("span");
+      text.className = "cp-line";
+      const painted = highlightCodeLine(l.text, pane.file);
+      if (painted !== null) text.innerHTML = painted;
+      else text.textContent = l.text;
+      row.append(num, text);
+      body.appendChild(row);
+    });
+    wrap.appendChild(body);
+
+    if (pane.truncated) {
+      const cut = document.createElement("div");
+      cut.className = "cp-truncated";
+      cut.textContent = `… ${pane.truncated} more lines`;
+      wrap.appendChild(cut);
+    }
+    return wrap;
+  }
+
+  // The whole right-hand column for one block, or null when the block cites
+  // nothing and the document cites nothing either.
+  function renderCodeColumn(blk) {
+    const panes = Array.isArray(blk.code) ? blk.code : [];
+    const docHasCode = document.body.dataset.hasCode === "1";
+    if (!panes.length && !docHasCode) return null;
+
+    const col = document.createElement("div");
+    col.className = "code-col";
+    if (!panes.length) {
+      // The visible half of the authoring rule.
+      const slot = document.createElement("div");
+      slot.className = "no-code-slot";
+      slot.textContent = "no code cited";
+      col.appendChild(slot);
+      return col;
+    }
+    panes.forEach((p) => col.appendChild(renderCodePane(p, blk.id)));
+    return col;
+  }
+
+  // Whether ANY block in this document cites code. Drives the wide column and
+  // the "no code cited" slots, so both are decisions about the document, not
+  // about one block.
+  function setDocumentCodeFlag(blocks) {
+    const any = (blocks || []).some(
+      (b) => Array.isArray(b.code) && b.code.length
+    );
+    document.body.dataset.hasCode = any ? "1" : "0";
+  }
+
   // A flowchart authored as pflow ships the source it was compiled from. Render
   // it under the chart, line-addressable: every line that produced a node
   // carries that node's id, so hovering either view lights the other and the
@@ -865,6 +1028,18 @@
       if (window.AnnotateSubunits) window.AnnotateSubunits.decorate(content, section);
     }
     body.appendChild(content);
+
+    const codeCol = renderCodeColumn(blk);
+    if (codeCol) {
+      section.dataset.hasCode = "1";
+      body.appendChild(codeCol);
+      let wide = "0";
+      try { wide = localStorage.getItem(codeWideKey(blk.id)) || "0"; } catch (_) {}
+      section.dataset.codeWide = wide;
+      const widenBtn = codeCol.querySelector(".cp-widen");
+      if (widenBtn && wide === "1") widenBtn.textContent = "narrow";
+    }
+
     section.appendChild(body);
 
     renderVersionBadge(section, blk.version ?? 1);
@@ -2264,6 +2439,10 @@
     if (!proseEl) return;
     const serverBlocks = doc.blocks || [];
     const serverIds = new Set(serverBlocks.map(b => b.id));
+    // Same reason as loadAndRenderBlocks: a block newly inserted by this poll
+    // is about to call createBlockSection below, which calls renderCodeColumn,
+    // which reads this flag.
+    setDocumentCodeFlag(serverBlocks);
 
     // Remove sections (and their inline-comments wrapper) for deleted blocks,
     // clearing any running updating-timer so it can't leak.
@@ -2337,6 +2516,24 @@
     section.dataset.version = String(blk.version ?? srvVer);
     renderVersionBadge(section, blk.version ?? srvVer);
     setCardTitle(section, blk);
+
+    // A rewrite must not leave a card with stale panes: drop whatever was
+    // there and repaint fresh from this version's anchors.
+    const oldCol = section.querySelector(".code-col");
+    if (oldCol) oldCol.remove();
+    const freshCol = renderCodeColumn(blk);
+    if (freshCol) {
+      section.dataset.hasCode = "1";
+      (section.querySelector(".card-body") || section).appendChild(freshCol);
+      // The card keeps its data-code-wide across the rewrite, so the freshly
+      // built button has to agree with it — otherwise a promoted pane comes
+      // back from a rewrite still wide but offering to widen it again.
+      const btn = freshCol.querySelector(".cp-widen");
+      if (btn && section.dataset.codeWide === "1") btn.textContent = "narrow";
+    } else {
+      delete section.dataset.hasCode;
+    }
+
     clearUpdatingOverlay(section);
     return section;
   }

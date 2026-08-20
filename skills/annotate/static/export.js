@@ -27,6 +27,7 @@
     ".card-chevron",        // folding is meaningless once nothing can fold
     ".attr-chip",           // "you asked" attribution
     ".section-pill",        // section number + version: revision history
+    ".cp-widen",            // code-pane promote/narrow toggle: no JS in the export to run it
   ].join(", ");
 
   // Review state painted onto the document as attributes. Left in place, a

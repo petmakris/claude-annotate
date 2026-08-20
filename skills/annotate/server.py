@@ -422,11 +422,23 @@ class Handlers:
                 '<script src="/static/fuse.min.js" defer></script>'
                 '<script src="/static/search.js" defer></script>'
                 '<script src="/static/voice.js" defer></script>')
+        # Project name + full repo root, so script.js can build a jetbrains://
+        # link into the IDE for a resolved code anchor. Both are filesystem
+        # paths headed straight into an HTML attribute, so both go through
+        # html_escape — the same reason every other value here does.
+        cwd = dirs.get("_cwd") or ""
+        body_attrs = ""
+        if cwd:
+            body_attrs = (
+                f' data-project-name="{html_escape(Path(cwd).name)}"'
+                f' data-repo-root="{html_escape(cwd)}"'
+            )
         page = render_page(
             title=doc.title or "Response",
             head_assets=head,
             body_html=body,
             response_id=doc.response_id,
+            body_attrs=body_attrs,
         )
         _send_html(h, 200, page)
 

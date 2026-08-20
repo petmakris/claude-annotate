@@ -62,3 +62,32 @@ class TestCollapseGuard(unittest.TestCase):
             ".collapsed, so a collapsed code-anchored card would not fold: "
             "%r" % offenders,
         )
+
+
+JS = (Path(__file__).resolve().parents[1] / "static" / "script.js").read_text()
+
+
+class TestCodePaneJs(unittest.TestCase):
+    def test_renderer_exists(self):
+        self.assertIn("function renderCodeColumn", JS)
+
+    def test_status_pane_shows_no_lines(self):
+        # Guard the rule, not the wording: a failing pane must branch on
+        # status before it ever touches `lines`.
+        self.assertIn('pane.status !== "ok" && pane.status !== "moved"', JS)
+
+    def test_promotion_is_persisted(self):
+        self.assertIn("annotate.codewide:", JS)
+
+    def test_body_flag_is_set_for_the_wide_column(self):
+        self.assertIn('dataset.hasCode', JS)
+
+    def test_export_strips_the_widen_control_but_not_the_code(self):
+        exp = (Path(__file__).resolve().parents[1] / "static" / "export.js").read_text()
+        self.assertIn('".cp-widen"', exp)
+        self.assertNotIn('".cp-body"', exp)
+        self.assertNotIn('".code-col"', exp)
+
+    def test_update_path_repaints_panes(self):
+        # A rewritten block must not keep the previous version's panes.
+        self.assertIn("renderCodeColumn", JS.split("function updateBlockContent")[1])
