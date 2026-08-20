@@ -201,7 +201,7 @@ automatically.
 
 ## How to push a response
 
-1. **Split, then capability-check every block.** Split the response into logical units (a paragraph, a heading + its prose, one bullet, one code block; aim for 3-15 lines — small enough to read one at a time, large enough to carry a self-contained thought). Then walk the kind menu (SKILL.md § Block-kind menu) over each unit and assign the first kind whose trigger matches — `sequence`, `flowchart`, `diagram`, `choice`, or `mockup` — with `kind: "markdown"` as the fallback for units no richer kind claims. Before writing the files, re-scan a block list that came out all-markdown against the menu once: a response about interacting systems, branching logic, or a decision the user must make typically mixes kinds.
+1. **Split, then capability-check every block.** Split the response into logical units (a paragraph, a heading + its prose, one bullet, one code block; aim for 3-15 lines — small enough to read one at a time, large enough to carry a self-contained thought). Then walk the kind menu (SKILL.md § Block-kind menu) over each unit and assign the first kind whose trigger matches — `sequence`, `flowchart`, `diagram`, `choice`, or `mockup` — with `kind: "markdown"` as the fallback for units no richer kind claims. Before writing the files, re-scan a block list that came out all-markdown against the menu once: a response about interacting systems, branching logic, or a decision the user must make typically mixes kinds. **Independent of kind, also decide each block's `code` anchors** — see `references/code-anchors.md`.
 2. Write `meta.json` first (at `<response_dir>/meta.json`):
    ```json
    {"response_id": "resp-<unix-timestamp>",
@@ -224,11 +224,25 @@ automatically.
    For non-markdown blocks (`kind: "sequence"|"flowchart"|"diagram"|"choice"|"mockup"`), read the exact spec shape in `references/block-kinds/<kind>.md`.
 
 4. Order matters: write `meta.json` before `blocks.json`, both atomically (write to `*.tmp` then `mv`).  The server reads both per request; an in-flight half-write falls back to the waiting page.
+4b. **Check the anchors** before announcing anything:
+
+    python3 -m skills.annotate.check_anchors "<response_dir>/blocks.json" "$PWD"
+
+    Exit 0 means every anchor resolves. Non-zero prints one problem per line
+    naming the block and the anchor — fix `blocks.json` and re-run. A broken
+    anchor caught here costs a rewrite; the same anchor caught by the reader
+    costs their trust in every other citation on the page.
 5. Tell the user, announcing **both** URLs (the loopback one first, since it's the one where voice dictation works):
    **"Response in browser → `<localhost_url>` (or `<url>` to open from another device).  Click any block to comment; the page updates that block in place when I respond."**
    If `localhost_url` and `url` are identical, announce just the one.
 6. **Arm the watcher** (see "Arming the watcher").  The Monitor runs in the background; your turn ends immediately.  The user can chat in terminal while the page is open.
 7. End your turn.
+
+## Code anchors
+
+A block that asserts something about specific code carries a `code` anchor
+to it — see `references/code-anchors.md` for the field shape, the limits,
+and the check (step 4b above).
 
 ## Code blocks
 

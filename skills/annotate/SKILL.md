@@ -26,6 +26,7 @@ Decide which situation you're in and **`Read` the named file before doing the wo
 | The user typed `/annotate resume` / `/annotate resume <slug>` | **Resume** a past workspace | `references/resuming.md` |
 | A task-notification's first stdout line is `WEBCOMPANION_EVENT` / `WEBCOMPANION_FINISHED` / `WEBCOMPANION_CANCELLED` | **Handle event** | `references/handling-events.md` |
 | The user says "scrap it" / "stop annotating" / "respond in terminal" while a watcher is armed | **Cancel** | `references/handling-events.md` (§ Terminal cancellation) |
+| A block asserts something about specific code (a file, function, branch, line) | **Anchor it** | `references/code-anchors.md` |
 
 These lifecycles are independent invocations: pushing creates the page and arms a watcher; handling-events fires later, once per comment; resuming points an existing workspace at this conversation instead of creating one. Do not load a reference you don't need for the situation you're in.
 
@@ -64,6 +65,14 @@ Composing a push is a two-pass job: split the response into blocks, then run thi
 | `mockup` | A high-fidelity, interactive UI mock is clearer than prose or a static diagram — real `<style>`/`<script>`/Tailwind, hover, interaction. Renders in a sandboxed iframe. | `references/block-kinds/mockup.md` |
 
 One diagram per concept; frame it with a short prose block — a diagram must add clarity, not decorate. Each reference also states when **not** to use that kind.
+
+## Code anchors — for engineering answers
+
+Independent of kind, **a block that asserts something about specific code
+carries a `code` anchor to that code.** Prose naming a file, function,
+branch or line with the code nowhere on screen is the failure this field
+exists to fix. Before emitting anchors, **`Read` `references/code-anchors.md`**
+for the field shape, the limits, and the check to run before announcing the URL.
 
 ## Session lifecycle
 

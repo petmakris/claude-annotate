@@ -76,3 +76,22 @@ def test_phase_map_points_at_both_lifecycles():
     text = SKILL_MD.read_text(encoding="utf-8")
     assert "references/pushing.md" in text
     assert "references/handling-events.md" in text
+
+
+def test_code_anchors_reference_exists():
+    assert (SKILL_DIR / "references" / "code-anchors.md").is_file()
+
+
+def test_skill_md_states_the_anchoring_rule():
+    text = SKILL_MD.read_text(encoding="utf-8")
+    assert "code-anchors.md" in text
+
+
+def test_pushing_points_at_code_anchors():
+    text = (SKILL_DIR / "references" / "pushing.md").read_text(encoding="utf-8")
+    assert "code-anchors.md" in text
+
+
+def test_code_anchors_reference_documents_the_check():
+    text = (SKILL_DIR / "references" / "code-anchors.md").read_text(encoding="utf-8")
+    assert "check_anchors" in text
