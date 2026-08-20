@@ -96,6 +96,16 @@ class TestCodePaneJs(unittest.TestCase):
         # A rewritten block must not keep the previous version's panes.
         self.assertIn("renderCodeColumn", JS.split("function updateBlockContent")[1])
 
+    def test_a_rewrite_that_drops_the_last_anchor_clears_the_wide_flag_too(self):
+        # A card that goes anchorless on a rewrite must not keep
+        # data-code-wide from a previous version -- otherwise a later
+        # rewrite that brings code back arrives already "wide" for no
+        # reason anyone chose.
+        body = JS.split("function updateBlockContent")[1]
+        else_branch = body.split("delete section.dataset.hasCode;", 1)[1]
+        else_branch = else_branch.split("}", 1)[0]
+        self.assertIn("delete section.dataset.codeWide;", else_branch)
+
     def test_mockup_blocks_never_get_a_code_column(self):
         # I4: a mockup renders in a sandboxed iframe at width:100% -- giving
         # it a code column halves its card to ~440px. The guard must be the

@@ -306,23 +306,26 @@ class TestNeverRaises(AnchorFixture):
     confirmed five edge cases stay exception-free with a one-off live probe;
     this class is what keeps that guarantee from regressing silently."""
 
-    _STATUSES = {"ok", "moved", "stale", "missing", "refused"}
-
     def test_empty_file(self):
         (self.root / "empty.py").write_text("")
         out = anchors.resolve_anchor(
             {"file": "empty.py", "line": 1, "snippet": "anything"}, self.root)
-        self.assertIn(out["status"], self._STATUSES)
+        # Pinned, not just membership: the anchored line can never be FOUND
+        # in an empty file, which is what "the line moved or vanished" means.
+        self.assertEqual(out["status"], "stale")
 
     def test_binary_content(self):
         (self.root / "binary.dat").write_bytes(b"\x00\x01\x02\xff\xfe")
         out = anchors.resolve_anchor(
             {"file": "binary.dat", "line": 1, "snippet": "anything"}, self.root)
-        self.assertIn(out["status"], self._STATUSES)
+        # Decoded with errors="replace" and then searched like any text --
+        # the snippet won't match the mojibake, so this is "not found", too.
+        self.assertEqual(out["status"], "stale")
 
     def test_line_past_eof(self):
         out = anchors.resolve_anchor(self.anchor(line=9999), self.root)
-        self.assertIn(out["status"], self._STATUSES)
+        # Same shape as the two above: nothing at or near that line matches.
+        self.assertEqual(out["status"], "stale")
 
     def test_permission_denied_file(self):
         if os.geteuid() == 0:
@@ -335,12 +338,16 @@ class TestNeverRaises(AnchorFixture):
             self.skipTest("filesystem does not enforce the permission bit")
         out = anchors.resolve_anchor(
             {"file": "locked.py", "line": 1, "snippet": "secret = 1"}, self.root)
-        self.assertIn(out["status"], self._STATUSES)
+        # An OS-level read failure, not a content mismatch -- "missing", not
+        # "stale".
+        self.assertEqual(out["status"], "missing")
 
     def test_root_does_not_exist(self):
         missing_root = self.root / "does" / "not" / "exist"
         out = anchors.resolve_anchor(self.anchor(), missing_root)
-        self.assertIn(out["status"], self._STATUSES)
+        # is_file() is False under a root that doesn't exist -- same
+        # "missing" as any other file-not-there case.
+        self.assertEqual(out["status"], "missing")
 
     def test_none_root_is_refused_not_a_typeerror(self):
         # dirs.get("_cwd") can legitimately be absent (Task 5's server

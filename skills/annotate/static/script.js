@@ -2548,6 +2548,11 @@
       if (btn && section.dataset.codeWide === "1") btn.textContent = "narrow";
     } else {
       delete section.dataset.hasCode;
+      // A rewrite that drops the last anchor must also drop the stale
+      // widen/narrow state -- otherwise a card that goes anchorless keeps
+      // data-code-wide from its previous version, and a LATER rewrite that
+      // brings code back arrives already "wide" for no reason anyone chose.
+      delete section.dataset.codeWide;
     }
 
     clearUpdatingOverlay(section);

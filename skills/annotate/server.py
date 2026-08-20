@@ -423,9 +423,9 @@ class Handlers:
                 '<script src="/static/search.js" defer></script>'
                 '<script src="/static/voice.js" defer></script>')
         # Project name + full repo root, so script.js can build a jetbrains://
-        # link into the IDE for a resolved code anchor. Both are filesystem
-        # paths headed straight into an HTML attribute, so both go through
-        # html_escape — the same reason every other value here does.
+        # link into the IDE for a resolved code anchor. render_page escapes
+        # both — they're filesystem paths headed straight into an HTML
+        # attribute.
         #
         # Owner-only: the read-only share link is deliberately allowed to
         # serve code EXCERPTS (see anchors.py's docstring), but that decision
@@ -434,12 +434,12 @@ class Handlers:
         # stranger holding the link could open, and script.js turned it into
         # a jetbrains:// href that also can't resolve on their machine.
         cwd = dirs.get("_cwd") or ""
-        body_attrs = ""
+        body_attrs = {}
         if cwd and h._is_owner():
-            body_attrs = (
-                f' data-project-name="{html_escape(Path(cwd).name)}"'
-                f' data-repo-root="{html_escape(cwd)}"'
-            )
+            body_attrs = {
+                "data-project-name": Path(cwd).name,
+                "data-repo-root": cwd,
+            }
         page = render_page(
             title=doc.title or "Response",
             head_assets=head,

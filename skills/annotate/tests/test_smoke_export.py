@@ -58,7 +58,7 @@ def test_the_export_does_not_reuse_read_only_mode():
     """read-only HIDES comment cards; the export must DELETE them. Reaching
     for that class here would silently reintroduce the leak."""
     src = EXPORT_JS.read_text()
-    assert '<body class="exported">' in src, \
+    assert 'class="exported"' in src, \
         "the export no longer marks its output body as exported"
     # The prose mentions `body.read-only` to explain WHY it is not used; the
     # code must not actually reach for it.

@@ -200,13 +200,21 @@ body.exported .export-foot {
     const title = (titleEl && titleEl.textContent.trim()) || document.title || "annotate";
     const respId = (respEl && respEl.textContent.trim()) || "";
 
+    // style.css widens --content-max to 1180px via body[data-has-code="1"].
+    // Each code-bearing section keeps its own data-has-code attribute
+    // through the clone (it's a real DOM attribute inside main.prose), so
+    // its card still splits 46/54 -- but without this flag on <body> too,
+    // it splits into the NARROW 1040px column instead of the wide one.
+    const hasCode = document.body.dataset.hasCode === "1"
+      ? ' data-has-code="1"' : "";
+
     const css = await embedFonts(dedupeFontSrc(await collectCss()));
     return (
       "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n" +
       '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
       "<title>" + esc(title) + "</title>\n" +
       "<style>\n" + css + "\n" + EXPORT_CSS + "</style>\n" +
-      '</head>\n<body class="exported">\n' +
+      '</head>\n<body class="exported"' + hasCode + '>\n' +
       buildHeader(title, respId) +
       buildProse() +
       buildFooter() +

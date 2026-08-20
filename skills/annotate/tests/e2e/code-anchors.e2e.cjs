@@ -260,6 +260,23 @@ function blockRect(page, blockId, selector) {
       fail("the exported file still carries a .cp-widen button — dead chrome with no JS behind it");
     log("✓ export carries the real source line and strips the widen control");
 
+    // M3: the live page's document.body.dataset.hasCode drives --content-max
+    // (1180px vs 1040px) via body[data-has-code="1"] in style.css. Each
+    // code-bearing section keeps its own data-has-code attribute through the
+    // clone, so its card still split 46/54 even without this — just into the
+    // narrow column instead of the wide one.
+    if (!/<body class="exported" data-has-code="1">/.test(exportedHtml))
+      fail("the exported <body> does not carry data-has-code — the exported "
+        + "document loses its widened --content-max while its sections still split");
+    log("✓ export carries data-has-code so the wide column survives");
+
+    // I1: the exported file has no owner, so a jetbrains:// link (which only
+    // ever resolves on the author's machine) must not ride along either.
+    if (/class="cp-jump"/.test(exportedHtml))
+      fail("the exported file still carries a .cp-jump link — a dead, "
+        + "author-machine-only href leaking a filesystem path");
+    log("✓ export strips the IDE jump link");
+
     await sleep(300); // let the initial /raw render settle before measuring layout
 
     // ── 1. The split is real, not just classed ──────────────────────────────
