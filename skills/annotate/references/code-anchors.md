@@ -16,7 +16,8 @@ source at render time and paints it in a column beside the prose.
 ## When NOT to anchor
 
 A block making a recommendation, framing a question, or summarising takes
-**no** anchor — its empty "no code cited" slot is the correct, deliberate
+**no** anchor — it renders as ordinary full-width prose, the same as any
+block in a document with no anchors at all. That is the correct, deliberate
 outcome, not an omission. Anchor a claim about code; don't anchor an opinion
 about one. `kind: "mockup"` blocks refuse anchors outright (see Limits) — a
 sandboxed iframe has nowhere to put a pane.
@@ -130,7 +131,7 @@ the turn, so its own guard is the only one that will run.
   would be a lie the reader has no way to detect, so the pane refuses to
   guess.
 
-A document where at least one block cites code shows a "no code cited" slot
-on every block that doesn't — that's the visible half of the rule above: an
-anchorless block next to anchored ones should read as a deliberate choice,
-not a gap nobody noticed.
+A block that makes no claim about code simply carries no anchor and renders
+normally — full-width prose, no second column, nothing else. Nothing on the
+page marks the absence; the rule above is enforced by the push-time check,
+not by a visible gap on every anchorless block.

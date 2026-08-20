@@ -361,10 +361,9 @@
       // in-progress text selection.
       window.AnnotateGlossary._lastGlossary = data.glossary || [];
     }
-    // Set before any block renders: renderCodeColumn reads this flag to
-    // decide whether an anchorless block gets a "no code cited" slot, and
-    // that is a decision about the document, not about whichever block
-    // happens to paint first.
+    // Set before any block renders: setDocumentCodeFlag decides whether this
+    // document gets the widened --content-max, and that is a decision about
+    // the document, not about whichever block happens to paint first.
     setDocumentCodeFlag(data.blocks);
     proseEl.replaceChildren();
     for (const blk of (data.blocks || [])) {
@@ -817,29 +816,21 @@
   }
 
   // The whole right-hand column for one block, or null when the block cites
-  // nothing and the document cites nothing either.
+  // no code. An anchorless block renders exactly as annotate does today:
+  // full-width prose, no second column, nothing else.
   function renderCodeColumn(blk) {
     const panes = Array.isArray(blk.code) ? blk.code : [];
-    const docHasCode = document.body.dataset.hasCode === "1";
-    if (!panes.length && !docHasCode) return null;
+    if (!panes.length) return null;
 
     const col = document.createElement("div");
     col.className = "code-col";
-    if (!panes.length) {
-      // The visible half of the authoring rule.
-      const slot = document.createElement("div");
-      slot.className = "no-code-slot";
-      slot.textContent = "no code cited";
-      col.appendChild(slot);
-      return col;
-    }
     panes.forEach((p) => col.appendChild(renderCodePane(p, blk.id)));
     return col;
   }
 
-  // Whether ANY block in this document cites code. Drives the wide column and
-  // the "no code cited" slots, so both are decisions about the document, not
-  // about one block.
+  // Whether ANY block in this document cites code. Drives the wide column
+  // (--content-max), so this is a decision about the document, not about
+  // one block.
   function setDocumentCodeFlag(blocks) {
     const any = (blocks || []).some(
       (b) => Array.isArray(b.code) && b.code.length
@@ -2445,9 +2436,9 @@
     if (!proseEl) return;
     const serverBlocks = doc.blocks || [];
     const serverIds = new Set(serverBlocks.map(b => b.id));
-    // Same reason as loadAndRenderBlocks: a block newly inserted by this poll
-    // is about to call createBlockSection below, which calls renderCodeColumn,
-    // which reads this flag.
+    // Same reason as loadAndRenderBlocks: this poll may be the one that gives
+    // the document its first anchor, and --content-max's width must already
+    // be set before any block (new or refreshed) repaints this tick.
     setDocumentCodeFlag(serverBlocks);
 
     // Remove sections (and their inline-comments wrapper) for deleted blocks,

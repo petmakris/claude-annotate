@@ -21,10 +21,14 @@
  *     the client after render;
  *   - a collapsed code-bearing card must not leak its two-column grid —
  *     the split rule's `:not(.collapsed)` guard exists for exactly this;
- *   - the "no code cited" slot and the document-wide hasCode flag are
- *     decisions about the DOCUMENT, including on the poll-delta path where
- *     one block's first anchor has to update flag-driven siblings in the
- *     same tick (Task 8's fix to reconcile/setDocumentCodeFlag).
+ *   - an anchorless block in a code-bearing document gets no `.code-col` at
+ *     all and its prose keeps the card's full width — there is no longer a
+ *     marker slot to check instead (Task 12 dropped it after measuring its
+ *     layout cost on a real page: see the spec amendment);
+ *   - the document-wide hasCode flag (driving --content-max) is a decision
+ *     about the DOCUMENT, including on the poll-delta path where one
+ *     block's first anchor has to update the flag for siblings rendered in
+ *     the same tick (Task 8's fix to reconcile/setDocumentCodeFlag).
  *
  * A note on the export check (item 7), after a fix-round review finding:
  * the obvious way to prove "inlined server-side, not appended later" is to
@@ -363,14 +367,24 @@ function blockRect(page, blockId, selector) {
     if (after9.composers !== before9.composers) fail("clicking a .cp-row opened a comment composer/card");
     log("✓ clicking a .cp-row does nothing — no composer, no navigation");
 
-    // ── 10. The "no code cited" slot appears where a block cites nothing,
-    //         in a document that has anchors elsewhere ───────────────────────
-    const noCodeSlot = await page.evaluate(() => {
+    // ── 10. An anchorless block in a code-bearing document gets its full
+    //         card width back — no marker, no second column ────────────────
+    const b2CodeCols = await page.evaluate(() =>
+      document.querySelectorAll('section.block[data-block-id="b-2"] .code-col').length);
+    if (b2CodeCols !== 0) fail(`b-2 (no anchors, but the doc cites code elsewhere) has ${b2CodeCols} .code-col element(s) — should have none`);
+    const b2ContentRect = await blockRect(page, "b-2", ".block-content");
+    const b2CardWidth = await page.evaluate(() => {
       const section = document.querySelector('section.block[data-block-id="b-2"]');
-      return !!section.querySelector(".code-col .no-code-slot");
+      return section.getBoundingClientRect().width;
     });
-    if (!noCodeSlot) fail("b-2 (no anchors, but the doc cites code elsewhere) has no .no-code-slot");
-    log("✓ the anchorless block in a code-bearing document shows the 'no code cited' slot");
+    if (!b2ContentRect) fail("b-2 is missing .block-content");
+    const b2Ratio = b2ContentRect.width / b2CardWidth;
+    if (!(b2Ratio > 0.85))
+      fail(`b-2's .block-content (${Math.round(b2ContentRect.width)}px) does not span the card `
+        + `(${Math.round(b2CardWidth)}px, ratio ${b2Ratio.toFixed(2)}) — expected the full width `
+        + `back now that the marker slot is gone`);
+    log(`✓ b-2 (anchorless, in a code-bearing document) has no .code-col and its prose spans `
+      + `the full card width (${Math.round(b2ContentRect.width)}px / ${Math.round(b2CardWidth)}px)`);
 
     // ── Workspace B: a document with NO anchors anywhere ────────────────────
     const projectB = fs.mkdtempSync(path.join(os.tmpdir(), "ca-e2e-proj-b-"));
@@ -396,21 +410,18 @@ function blockRect(page, blockId, selector) {
     if (untouched.hasCode === "1") fail("body.dataset.hasCode is '1' in a document with no anchors");
     if (untouched.codeCols !== 0) fail(`found ${untouched.codeCols} .code-col elements in an anchorless document`);
     if (untouched.contentMax !== "1040px") fail("--content-max is " + untouched.contentMax + ", expected 1040px");
-    // The other half of item 10: the slot must NOT appear when the document
-    // itself cites nothing anywhere.
-    const noSlotB = await pageB.evaluate(() =>
-      document.querySelectorAll(".no-code-slot").length);
-    if (noSlotB !== 0) fail("found .no-code-slot in a document with no anchors anywhere — should not appear at all");
-    log("✓ anchorless document untouched: no hasCode flag, no .code-col, --content-max=1040px, no .no-code-slot");
+    log("✓ anchorless document untouched: no hasCode flag, no .code-col, --content-max=1040px");
 
     // ── 11. The poll-delta path sets the document flag ──────────────────────
     // Both blocks change in the SAME rewrite: b-1 gains the document's first
     // anchor, and b-0 (still anchorless) is edited too so it is re-rendered
     // in the SAME reconcile tick. That is exactly the scenario Task 8's
-    // setDocumentCodeFlag-in-reconcile fix targets — if the flag were stale
-    // when b-0's turn in the loop comes up, b-0 would come back from the
-    // rewrite with no "no code cited" slot despite the document now citing
-    // code.
+    // setDocumentCodeFlag-in-reconcile fix targets — body[data-has-code="1"]
+    // drives --content-max by a live CSS attribute selector, so a stale flag
+    // would show up as the wrong width, not (any more) as a marker on b-0.
+    // b-0 itself must come back from the rewrite with no .code-col of its
+    // own — it stays anchorless even though its sibling and the document
+    // flag both went code-bearing in the same tick.
     writeBlocks(sessB.response_dir, "resp-anchors-b", "No code cited anywhere", [
       { id: "b-0", title: "First observation", markdown: "Nothing here cites source. (revised)" },
       { id: "b-1", title: "Second observation", markdown: "Neither does this.",
@@ -425,15 +436,15 @@ function blockRect(page, blockId, selector) {
       hasCode: document.body.dataset.hasCode,
       b1Rows: document.querySelector('section.block[data-block-id="b-1"]')
         .querySelectorAll(".code-col .cp-row").length,
-      b0Slot: !!document.querySelector('section.block[data-block-id="b-0"] .code-col .no-code-slot'),
+      b0CodeCols: document.querySelectorAll('section.block[data-block-id="b-0"] .code-col').length,
     }));
     if (afterPoll.hasCode !== "1") fail("hasCode flag did not flip to '1' after the poll delta");
     if (!afterPoll.b1Rows) fail("b-1's new anchor never rendered any .cp-row after the poll");
-    if (!afterPoll.b0Slot)
-      fail("b-0 (still anchorless, but re-rendered in the same tick) did not get a "
-        + "'no code cited' slot — the document-wide flag was stale for it (Task 8's bug)");
+    if (afterPoll.b0CodeCols !== 0)
+      fail(`b-0 (still anchorless, but re-rendered in the same tick) has ${afterPoll.b0CodeCols} `
+        + ".code-col element(s) — it should have none");
     log("✓ poll-delta path: hasCode flips to 1, the new pane renders, and a sibling block "
-      + "re-rendered in the same tick picks up the document flag — all without a reload");
+      + "re-rendered in the same tick stays anchorless (no .code-col) — all without a reload");
 
     log("\nE2E PASSED");
     cleanup();

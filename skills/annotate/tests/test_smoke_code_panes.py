@@ -24,9 +24,6 @@ class TestCodePaneCss(unittest.TestCase):
         self.assertIn(".cp-row.is-anchor", CSS)
         self.assertIn(".cp-row.is-context", CSS)
 
-    def test_no_code_slot_exists(self):
-        self.assertIn(".no-code-slot", CSS)
-
     def test_read_only_does_not_hide_the_panes(self):
         # Spec decision 3: the shared link serves panes too. A shared page
         # that dropped them would be the detached document this feature

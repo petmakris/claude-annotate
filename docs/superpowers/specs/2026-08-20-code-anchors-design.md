@@ -42,11 +42,14 @@ neither is worth building.
    branch on reads. A shared page that dropped its panes would be the
    detached document this whole design exists to eliminate. Accepted
    consequence: whoever holds the link reads those excerpts.
-4. **The rule is written *and* its violations are visible.** `SKILL.md` gains
-   the anchoring rule; a block that skips it in a code document renders a
-   *no code cited* slot where its pane would be. A missing citation becomes
+4. ~~**The rule is written *and* its violations are visible.** `SKILL.md`
+   gains the anchoring rule; a block that skips it in a code document renders
+   a *no code cited* slot where its pane would be. A missing citation becomes
    something the reader can point at and comment on, not something they
-   silently endure.
+   silently endure.~~ **Reversed — see the amendment below.** `SKILL.md`
+   still gains the rule, but an anchorless block now renders with no marker
+   at all: full-width prose, no second column. Nothing catches an omitted
+   citation on the page; the push-time check is what enforces the rule.
 5. **The pane is a reading aid.** Comments arrive from the card header, as
    they already do for flowcharts — and for the same reason that rule was
    adopted there: a code line painted as a jump-to-source link that opens a
@@ -175,10 +178,10 @@ card's full width, prose moving above it. Persisted per `(sid, block_id)` in
 `localStorage`, because a promotion you have to redo on every reload is worse
 than not having it. Export freezes whatever state the document is in.
 
-**Unanchored block in a code document.** Full-width prose plus a small
-*no code cited* slot where the pane would be. This is the visible half of the
-rule. A document with no anchors at all is not a code document and renders
-exactly as annotate does today.
+**Unanchored block in a code document.** Full-width prose, no second column,
+nothing else — same as any block in a document with no anchors at all.
+(Originally this rendered a small *no code cited* slot; reversed after the
+first dogfood — see the amendment below.)
 
 **Column width.** `--content-max` goes from `1040px` to `1180px` **only** when
 the document carries at least one anchor. Ordinary annotate pages are
@@ -285,3 +288,30 @@ it. `.cp-jump` (the jump-into-IntelliJ link) is not click-tested, because a
 custom URI scheme is not observable headlessly. `highlightCodeLine`'s length
 guard has no dedicated unit test. None of these block merge; all three are
 recorded so nobody rediscovers them as surprises.
+
+---
+
+## Amendment — the "no code cited" slot was removed, 2026-08-20
+
+After the dogfood above, the owner looked at a real rendered page and
+measured the *no code cited* slot decision 4 and the Layout section
+describe: an anchorless block's `.code-col` held a small dashed-border box
+and nothing else. On that page the prose column was squeezed to 518px while
+the code column held 609px — 301px of it dead vertical space below the box.
+The slot cost real width on every anchorless block in a code document, for a
+box that says nothing the surrounding page doesn't already imply.
+
+**Decision, reversed:** drop the marker entirely. An unanchored block now
+renders exactly as annotate did before this feature: full-width prose, no
+second column, nothing else. Decision 4 and the Layout section above are
+struck/updated to match; this entry is the record of why, kept rather than
+edited away.
+
+**What is lost, accepted knowingly:** the "visible gap" mechanism is gone.
+Nothing on the rendered page now catches a block that *should* have cited
+code and didn't — that was the entire mechanism decision 4 introduced.
+`SKILL.md`'s authoring rule and the push-time check are unchanged and are
+now the only enforcement; the check only ever validated anchors that were
+actually written, so this loses no coverage the check used to have — it
+loses the on-page visual nudge for the case the check cannot see (an anchor
+that should exist but was never authored at all).
