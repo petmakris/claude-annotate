@@ -104,14 +104,23 @@ function deck(mark) {
     log("✓ blocks rendered");
 
     // ── The rail is gone and the reading column keeps its full width ───────
+    // Measured against the column's OWN declared measure rather than a
+    // hardcoded 1040: the width is a reader preference now, so pinning one
+    // number here would test the default instead of the claim. The claim is
+    // that nothing steals space from the reading column -- no rail, no shell,
+    // and the prose fills the measure it was given.
     const layout = await page.evaluate(() => ({
       prose: document.querySelector("main.prose").getBoundingClientRect().width,
+      contentMax: parseFloat(
+        getComputedStyle(document.body).getPropertyValue("--content-max")),
       rail: !!document.getElementById("map-rail"),
       shell: !!document.querySelector(".reading-shell"),
     }));
     if (layout.rail || layout.shell) fail("the map rail / reading shell is back: " + JSON.stringify(layout));
-    if (Math.round(layout.prose) !== 1040) fail("main.prose width = " + layout.prose + ", expected 1040");
-    log("✓ no rail, main.prose 1040px");
+    if (Math.round(layout.prose) !== Math.round(layout.contentMax))
+      fail(`main.prose is ${Math.round(layout.prose)}px inside a ${layout.contentMax}px column — `
+        + "something is taking space from the reading column");
+    log(`✓ no rail, main.prose fills its ${Math.round(layout.contentMax)}px column`);
 
     // ── 1. The composer is closed until something opens it ─────────────────
     // The collapsed trigger row this section used to drive is gone: the

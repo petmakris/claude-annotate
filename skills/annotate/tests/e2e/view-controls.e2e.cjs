@@ -103,6 +103,53 @@ const readWidth = (page) => page.evaluate(() => ({
   proseWidth: Math.round(document.querySelector("main.prose").getBoundingClientRect().width),
 }));
 
+
+// A theme is a fact about painted pixels. There is no single element whose
+// computed style proves the pane changed -- the ground, the chrome band, the
+// anchor wash and seven token colours all move together -- so this samples
+// the MODAL pixel of a region, which is its background.
+async function modalPixel(page, selector) {
+  const box = await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    const b = el.getBoundingClientRect();
+    return { x: b.x, y: b.y, width: b.width, height: b.height };
+  }, selector);
+  if (!box) return null;
+  const clip = { x: Math.round(box.x), y: Math.round(box.y),
+                 width: Math.max(2, Math.round(box.width)),
+                 height: Math.max(2, Math.round(box.height)) };
+  const png = await page.screenshot({ clip });
+  return page.evaluate((b64) => new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = img.width; c.height = img.height;
+      const ctx = c.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      const d = ctx.getImageData(0, 0, c.width, c.height).data;
+      const tally = new Map();
+      for (let i = 0; i < d.length; i += 4) {
+        const k = `${d[i]},${d[i + 1]},${d[i + 2]}`;
+        tally.set(k, (tally.get(k) || 0) + 1);
+      }
+      let best = null, n = -1;
+      for (const [k, v] of tally) if (v > n) { n = v; best = k; }
+      resolve(best);
+    };
+    img.src = "data:image/png;base64," + b64;
+  }), png.toString("base64"));
+}
+const rgbOf = (hex) => {
+  const h = hex.replace("#", "");
+  return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)).join(",");
+};
+// Ground colour per theme, from the measured palette in style.css.
+const THEME_GROUND = {
+  daylight: "#e3e7ee", midnight: "#1a1b26", parchment: "#f2ead9", contrast: "#ffffff",
+};
+const FENCE_DARK = "#1a1b26";   // code-theme.css, the page-wide fenced-block theme
+
 (async () => {
   const { proc, info, fakeHome } = await startServer();
   let browser;
@@ -125,6 +172,13 @@ const readWidth = (page) => page.evaluate(() => ({
         code: [{ file: "lib/calc.py", line: LINE_A, snippet: SNIP_A }] },
       { id: "b-1", title: "Second anchored block", markdown: "Cites multiply().",
         code: [{ file: "lib/calc.py", line: LINE_B, snippet: SNIP_B }] },
+      // An ORDINARY fenced block, painted by the vendored Tokyo Night Dark in
+      // code-theme.css. It exists so the theme-leak check has something to
+      // watch: every pane rule is scoped under `.codepane`, and a theme that
+      // escapes that scope would recolour the whole page while looking
+      // perfectly correct inside the pane.
+      { id: "b-2", title: "An ordinary fenced block",
+        markdown: "Not an anchor, just a fence:\n\n```python\ndef untouched():\n    return 1\n```" },
     ]);
 
     // A viewport wide enough that 1600px is reachable — otherwise "extra
@@ -333,9 +387,160 @@ const readWidth = (page) => page.evaluate(() => ({
     if (anchorless.layoutShown)
       fail("the code-layout toggle is visible on a document with no panes to lay out");
     if (!anchorless.widthShown) fail("the width control vanished on an anchorless document");
-    if (anchorless.width !== "normal" || anchorless.contentMax !== "1040px")
-      fail("an anchorless document should open at the normal measure: " + JSON.stringify(anchorless));
-    log("✓ anchorless document: layout toggle hidden, width control live, opens at 1040px");
+    // Every new session opens WIDE, code or not. It used to be derived from
+    // data-has-code -- 1180px with anchors, 1040px without -- which made the
+    // opening measure depend on something the reader never chose.
+    if (anchorless.width !== "wide" || anchorless.contentMax !== "1180px")
+      fail("a new anchorless session should open wide: " + JSON.stringify(anchorless));
+    log("✓ anchorless document: layout toggle hidden, width control live, opens wide at 1180px");
+
+    // ── 10. The top bar never moves when the content width changes ─────────
+    // The bar is chrome, not content. It used to share --content-max with the
+    // prose, so choosing a narrower column dragged the search box and every
+    // control inwards -- the controls moved under the pointer, and the bar
+    // gave up space it had no reason to give up. It now sits on its own fixed
+    // measure, so the only thing that moves it is the window.
+    const barAt = {};
+    for (const target of ["normal", "wide", "extra"]) {
+      while ((await page.evaluate(() => document.body.dataset.width)) !== target) {
+        await page.locator("#width-toggle").click();
+        await page.waitForTimeout(60);
+      }
+      barAt[target] = await page.evaluate(() => ({
+        toggle: document.getElementById("width-toggle").getBoundingClientRect().x,
+        title: document.querySelector(".header-title").getBoundingClientRect().x,
+        done: document.getElementById("done-btn").getBoundingClientRect().right,
+        prose: document.querySelector("main.prose").getBoundingClientRect().x,
+      }));
+    }
+    for (const key of ["toggle", "title", "done"]) {
+      const seen = ["normal", "wide", "extra"].map((w) => Math.round(barAt[w][key]));
+      if (new Set(seen).size !== 1)
+        fail(`the top bar's ${key} moves with the content width (${seen.join(" / ")} at `
+          + "normal / wide / extra) — the bar must not follow the reading column");
+    }
+    // ...and it is genuinely using more room than the narrow column would
+    // give it, rather than being pinned wide by coincidence.
+    if (!(barAt.normal.title < barAt.normal.prose))
+      fail(`at 'normal' the bar starts at ${Math.round(barAt.normal.title)} and the prose at `
+        + `${Math.round(barAt.normal.prose)} — the bar is no wider than the reading column`);
+    if (Math.round(barAt.extra.title) !== Math.round(barAt.extra.prose + 24))
+      fail(`the bar does not line up with the widest column: bar ${Math.round(barAt.extra.title)}, `
+        + `prose text edge ${Math.round(barAt.extra.prose + 24)}`);
+    log(`✓ the top bar holds position at every width (title x=${Math.round(barAt.normal.title)}), `
+      + `and is wider than the narrow column (prose x=${Math.round(barAt.normal.prose)})`);
+
+    // ── 11. Pane themes repaint the pane, measured in pixels ───────────────
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const themeBtn = await page.evaluate(() => !!document.getElementById("panetheme-toggle"));
+    if (!themeBtn) fail("no #panetheme-toggle in the header");
+    if ((await page.evaluate(() => document.body.dataset.paneTheme)) !== "daylight")
+      fail("the pane theme should default to daylight, got "
+        + (await page.evaluate(() => document.body.dataset.paneTheme)));
+
+    const seenGrounds = new Set();
+    let fenceBaseline = null;
+    for (const name of Object.keys(THEME_GROUND)) {
+      await page.evaluate((n) => {
+        document.getElementById("panetheme-toggle").click();
+        document.querySelector(`#panetheme-pop [data-theme="${n}"]`).click();
+      }, name);
+      await page.waitForTimeout(180);
+      const attr = await page.evaluate(() => document.body.dataset.paneTheme);
+      if (attr !== name) fail(`picking ${name} left data-pane-theme as ${attr}`);
+
+      const ground = await modalPixel(page, 'section.block[data-block-id="b-0"] .cp-body');
+      if (ground !== rgbOf(THEME_GROUND[name]))
+        fail(`theme ${name}: the pane paints ${ground}, expected ${rgbOf(THEME_GROUND[name])} `
+          + `(${THEME_GROUND[name]})`);
+      seenGrounds.add(ground);
+
+      // ...and the theme must NOT escape `.codepane`. An ordinary fenced
+      // block elsewhere on the page is painted by code-theme.css and has to
+      // stay exactly as dark as it always was, under EVERY theme -- checked
+      // per theme rather than once, because only one of them (midnight)
+      // would look correct while leaking.
+      // Read as COMPUTED STYLE, not as a sampled pixel. The modal pixel of a
+      // code block is its background, so a theme that leaked only its token
+      // colours would sail straight through a pixel check -- proved by
+      // sabotage. These are real elements, so exact values are available.
+      const fence = await page.evaluate(() => {
+        const code = document.querySelector('section.block[data-block-id="b-2"] pre code.hljs');
+        const kw = code.querySelector('.hljs-keyword') || code.querySelector('[class^="hljs-"]');
+        const c = getComputedStyle(code);
+        return {
+          bg: c.backgroundColor,
+          fg: c.color,
+          token: kw ? getComputedStyle(kw).color : null,
+        };
+      });
+      if (!fenceBaseline) fenceBaseline = fence;
+      for (const k of ["bg", "fg", "token"]) {
+        if (fence[k] !== fenceBaseline[k])
+          fail(`theme ${name} LEAKED out of .codepane: an ordinary fenced block's ${k} changed `
+            + `from ${fenceBaseline[k]} to ${fence[k]} — every pane rule must stay scoped `
+            + "under .codepane, or a theme recolours the whole page while looking correct "
+            + "inside the pane");
+      }
+      if (fence.bg !== `rgb(${rgbOf(FENCE_DARK).split(",").join(", ")})`)
+        fail(`the page's fenced blocks are no longer the vendored dark theme: ${fence.bg}`);
+
+      // The IDE link has to take the THEME's dim colour, not the page accent.
+      // `.cp-jump` is (0,1,0) and `main.prose a` is (0,1,2), so the accent won
+      // — measured at 3.16:1 on Midnight's chrome band and 3.45:1 on
+      // Daylight's, i.e. below AA on every theme including the one already
+      // shipped. Compared against the pane's own --cp-dim rather than a fixed
+      // value, so this keeps holding as themes are added.
+      const jump = await page.evaluate(() => {
+        const pane = document.querySelector('section.block[data-block-id="b-0"] .codepane');
+        const link = pane.querySelector(".cp-jump");
+        if (!link) return null;
+        return {
+          color: getComputedStyle(link).color,
+          dim: getComputedStyle(pane).getPropertyValue("--cp-dim").trim(),
+        };
+      });
+      if (jump) {
+        const want = jump.dim.replace("#", "");
+        const wantRgb = "rgb(" + [0, 2, 4].map((i) => parseInt(want.slice(i, i + 2), 16)).join(", ") + ")";
+        if (jump.color !== wantRgb)
+          fail(`theme ${name}: the IDE link paints ${jump.color}, but the theme's --cp-dim is `
+            + `${jump.dim} (${wantRgb}) — main.prose a is overriding .cp-jump, which measures `
+            + "below AA on every theme");
+      }
+    }
+    if (seenGrounds.size !== Object.keys(THEME_GROUND).length)
+      fail(`the four themes produced only ${seenGrounds.size} distinct grounds: `
+        + JSON.stringify([...seenGrounds]));
+    log(`✓ all ${seenGrounds.size} pane themes repaint the pane in real pixels, and none leaks `
+      + "onto the page's ordinary fenced blocks");
+
+    // ── 12. The pane theme survives reload and reaches an export ───────────
+    await page.evaluate(() => {
+      document.getElementById("panetheme-toggle").click();
+      document.querySelector('#panetheme-pop [data-theme="midnight"]').click();
+    });
+    await page.waitForTimeout(150);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector('section.block[data-block-id="b-1"] .cp-row', { timeout: 8000 });
+    await page.waitForTimeout(300);
+    if ((await page.evaluate(() => document.body.dataset.paneTheme)) !== "midnight")
+      fail("the pane theme did not survive a reload");
+    const afterReload = await modalPixel(page, 'section.block[data-block-id="b-0"] .cp-body');
+    if (afterReload !== rgbOf(THEME_GROUND.midnight))
+      fail(`after reload the pane paints ${afterReload}, expected midnight`);
+
+    const themeFile = path.join(projectA, "themed.html");
+    const [dl] = await Promise.all([
+      page.waitForEvent("download", { timeout: 20000 }),
+      page.locator("#export-btn").click(),
+    ]);
+    await dl.saveAs(themeFile);
+    const themedBody = (/<body[^>]*>/.exec(fs.readFileSync(themeFile, "utf8")) || [""])[0];
+    if (!/data-pane-theme="midnight"/.test(themedBody))
+      fail("the exported <body> lost data-pane-theme — the reader gets the default palette, "
+        + "not the one the document was written in: " + themedBody);
+    log("✓ the pane theme survives reload and travels into an export");
 
     log("\nE2E PASSED");
     cleanup();

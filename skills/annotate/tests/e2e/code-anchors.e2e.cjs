@@ -602,15 +602,20 @@ function blockRect(page, blockId, selector) {
     log(`✓ empty pane keeps its full reason: "${staleNotice.text}"`);
 
     // ── 6. An anchorless document is untouched ──────────────────────────────
+    // This is about CODE machinery, and only that. It used to also assert
+    // --content-max was 1040px, back when the column width was derived from
+    // data-has-code. Width is now a reader preference with one default for
+    // every document, so that claim is deliberately no longer true and lives
+    // in view-controls.e2e.cjs, which owns width behaviour.
     const untouched = await pageB.evaluate(() => ({
       hasCode: document.body.dataset.hasCode,
       codeCols: document.querySelectorAll(".code-col").length,
-      contentMax: getComputedStyle(document.body).getPropertyValue("--content-max").trim(),
+      codePanes: document.querySelectorAll(".codepane").length,
     }));
     if (untouched.hasCode === "1") fail("body.dataset.hasCode is '1' in a document with no anchors");
     if (untouched.codeCols !== 0) fail(`found ${untouched.codeCols} .code-col elements in an anchorless document`);
-    if (untouched.contentMax !== "1040px") fail("--content-max is " + untouched.contentMax + ", expected 1040px");
-    log("✓ anchorless document untouched: no hasCode flag, no .code-col, --content-max=1040px");
+    if (untouched.codePanes !== 0) fail(`found ${untouched.codePanes} .codepane elements in an anchorless document`);
+    log("✓ anchorless document untouched: no hasCode flag, no .code-col, no .codepane");
 
     // ── 11. The poll-delta path sets the document flag ──────────────────────
     // Both blocks change in the SAME rewrite: b-1 gains the document's first

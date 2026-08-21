@@ -709,17 +709,28 @@
   function readStored(name) {
     try { return localStorage.getItem(viewKey(name)); } catch (_) { return null; }
   }
-  // Nothing stored means nothing CHOSEN, so the width is derived fresh each
-  // time rather than frozen at first paint. That is what lets a document
-  // which gains its first anchor mid-poll widen itself — the same event that
-  // flips data-has-code re-derives this.
+  // Every new session opens WIDE, code or not. This used to be derived from
+  // data-has-code — 1180px with anchors, 1040px without — which made the
+  // opening measure depend on something the reader never chose, and left a
+  // prose-only document narrower than it needed to be. One default, chosen
+  // once; anything else is the reader's own click, and that is what `stored`
+  // is for.
+  const DEFAULT_WIDTH = "wide";
   function effectiveWidth() {
     const stored = readStored("width");
     if (VIEW_WIDTHS.indexOf(stored) >= 0) return stored;
-    return document.body.dataset.hasCode === "1" ? "wide" : "normal";
+    return DEFAULT_WIDTH;
   }
   function effectiveCodeLayout() {
     return readStored("codelayout") === "wide" ? "wide" : "split";
+  }
+  // Pane themes. Daylight is the measured light palette the pane shipped
+  // with; the others redeclare its variables. An unknown stored value falls
+  // back rather than painting an undefined theme.
+  const PANE_THEMES = ["daylight", "midnight", "parchment", "contrast"];
+  function effectivePaneTheme() {
+    const stored = readStored("panetheme");
+    return PANE_THEMES.indexOf(stored) >= 0 ? stored : PANE_THEMES[0];
   }
 
   // Paints both preferences onto <body> and syncs the two controls to them.
@@ -735,6 +746,15 @@
     document.body.dataset.codeLayout = layout;
     const lb = document.getElementById("codelayout-toggle");
     if (lb) lb.setAttribute("aria-pressed", layout === "wide" ? "true" : "false");
+
+    const theme = effectivePaneTheme();
+    document.body.dataset.paneTheme = theme;
+    const pop = document.getElementById("panetheme-pop");
+    if (pop) {
+      pop.querySelectorAll("[data-theme]").forEach((b) => {
+        b.setAttribute("aria-pressed", b.dataset.theme === theme ? "true" : "false");
+      });
+    }
   }
 
   function wireViewControls() {
@@ -752,6 +772,15 @@
         const next = effectiveCodeLayout() === "wide" ? "split" : "wide";
         try { localStorage.setItem(viewKey("codelayout"), next); } catch (_) {}
         applyViewControls();
+      });
+    }
+    const pop = document.getElementById("panetheme-pop");
+    if (pop) {
+      pop.querySelectorAll("[data-theme]").forEach((b) => {
+        b.addEventListener("click", () => {
+          try { localStorage.setItem(viewKey("panetheme"), b.dataset.theme); } catch (_) {}
+          applyViewControls();
+        });
       });
     }
     applyViewControls();
@@ -1692,6 +1721,9 @@
         focus: () => null, dismissOnOutsideClick: true },
       { btn: document.getElementById("highlighter-palette"),
         el: document.getElementById("palette-pop"),
+        focus: () => null, dismissOnOutsideClick: true },
+      { btn: document.getElementById("panetheme-toggle"),
+        el: document.getElementById("panetheme-pop"),
         focus: () => null, dismissOnOutsideClick: true },
     ].filter((p) => p.btn && p.el);
     if (!panels.length) return;

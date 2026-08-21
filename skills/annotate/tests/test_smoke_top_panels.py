@@ -92,9 +92,17 @@ def test_the_composer_band_spans_the_header_gutters():
     css = STYLE_CSS.read_text()
     start = css.index(".general-composer {")
     rule = css[start:css.index("}", start)]
-    assert "--content-gutter" in rule and "--content-max" in rule, (
-        ".general-composer no longer uses the header's full-bleed gutter "
-        "formula — it will not line up with the bar above it"
+    # Checked against the measure the HEADER uses, not against a named
+    # variable: the chrome moved off --content-max onto --chrome-max so the
+    # bar stops following the reading column, and an assertion naming the old
+    # variable would have failed for a change that kept the two in step. What
+    # has to stay true is that they use the same one.
+    header_start = css.index("body .page-header {")
+    header_rule = css[header_start:css.index("}", header_start)]
+    measure = "--chrome-max" if "--chrome-max" in header_rule else "--content-max"
+    assert "--content-gutter" in rule and measure in rule, (
+        ".general-composer uses a different measure (%s) from the header (%s) — "
+        "it will not line up with the bar above it" % (rule.strip(), measure)
     )
 
 

@@ -18,7 +18,7 @@ paints them as a full-bleed light slab in a second column beside the prose. A `S
 rule instructs Claude to anchor any block that asserts something about specific code, and
 `check_anchors` fails a bad citation before the URL is announced.
 
-**It works end to end.** 1102 Python tests, 20/20 + 9/9 browser e2e, dogfooded live. The remaining
+**It works end to end.** 1108 Python tests, 20/20 + 9/9 browser e2e, dogfooded live. The remaining
 work is UI polish, not correctness.
 
 ---
@@ -27,7 +27,7 @@ work is UI polish, not correctness.
 
 ```bash
 # full python suite (from the repo root)
-python3 -m pytest skills -q                       # expect 1102 passed
+python3 -m pytest skills -q                       # expect 1108 passed
 
 # the browser end-to-end (manual only — NOT in CI, by repo convention)
 NODE_PATH=$(npm root -g) node skills/annotate/tests/e2e/code-anchors.e2e.cjs   # expect 20/20
@@ -59,7 +59,7 @@ pixels.
 | `skills/annotate/static/export.js` | `STRIP` list — controls removed from an exported file |
 | `skills/annotate/tests/test_smoke_code_panes.py` | source-presence assertions on the CSS/JS |
 | `skills/annotate/tests/e2e/code-anchors.e2e.cjs` | the 20 behavioural assertions |
-| `skills/annotate/tests/e2e/view-controls.e2e.cjs` | the 9 assertions for the two top-bar view controls |
+| `skills/annotate/tests/e2e/view-controls.e2e.cjs` | the 10 assertions for the top-bar view controls |
 | `skills/annotate/static/highlighter.js` | the reading highlighter, self-contained |
 | `skills/annotate/tests/e2e/read-highlighter.e2e.cjs` | its 14 assertions, incl. the bugs in §7c |
 | `skills/annotate/tests/test_smoke_view_controls.py` | fast guards for those, including the CSS ordering trap |
@@ -250,9 +250,25 @@ reason, and both ride into an export.
    write `data-code-wide` on each block. That is what lets leaving wide mode hand the reader
    back exactly the panes they promoted by hand, and only those. e2e item 6 round-trips it.
 
-An unchosen width is **derived**, not stored: with nothing in `localStorage`,
-`effectiveWidth()` reads `data-has-code` each time, so a document that gains its first
-anchor mid-poll still widens itself. Only an actual click persists a value.
+**Every new session opens `wide`.** This used to be derived from `data-has-code` — 1180px
+with anchors, 1040px without — which made the opening measure depend on something the reader
+never chose, and left a prose-only document narrower than it needed to be. One default now
+(`DEFAULT_WIDTH` in script.js); only an actual click persists anything else.
+
+**The page chrome has its own measure and never follows `--content-max`.** The top bar, stat
+strip, composer band and footer actions all sit on `--chrome-max: 1600px`. The bar is not
+content: narrowing the reading column used to drag the search box and every control inwards
+with it. Measured before the split, the width toggle sat at **x = 980 / 1051 / 1261** for
+normal / wide / extra — a 281px swing from a setting that is about prose. It now holds at one
+x at every width, while the column moves underneath it. `.page-header`'s own rule lives in
+core.css (shared engine, not ours to edit), so it is overridden in annotate's style.css with
+a `body` prefix — (0,1,1) against core's (0,1,0) — rather than relying on the order the two
+stylesheets happen to be linked in.
+
+`.width-btn` is a **fixed** 72px, not a minimum. "NORMAL" renders 48.94px of text against
+"WIDE"'s 28.47px, so at `min-width: 66px` the button grew to 66.94px on one setting only —
+and since `.header-actions` is right-aligned, that 0.94px pushed every control left by 1px
+whenever the width was Normal. e2e item 10 measures the toggle's x at all three.
 
 ---
 
@@ -329,6 +345,53 @@ Each was found by sabotaging a passing test, and each now has one that reproduce
    test screenshots the highlighted words, hands the PNG back into the page as a data URL,
    draws it on a canvas and takes the modal pixel. It measures `252,211,77` → `249,168,212`.
    Asserting the CSS rule exists would only have proved a rule was *written*, not that it won.
+
+---
+
+## 7d. Code pane themes (added 2026-08-21)
+
+Four themes, picked from `#panetheme-toggle` in the top bar. `body[data-pane-theme="…"]`,
+persisted per response, and it travels into an export.
+
+**A theme is a block of variable declarations and nothing else.** Every colour the pane
+paints comes from a `--cp-*` variable declared on `.codepane`; the defaults *are* Daylight.
+That refactor was proved neutral before any theme was added — computed styles compared before
+and after, and the rendered screenshots came out byte-identical.
+
+**Every theme rule is scoped under `.codepane`.** `code-theme.css` paints ordinary fenced
+blocks across the whole page, and Midnight is the dangerous one: it would look perfectly
+correct inside the pane while recolouring every fenced block on the page. `view-controls`
+item 11 samples an ordinary fenced block under **every** theme, not once.
+
+| theme | ground | tightest pairing |
+|---|---|---|
+| Daylight | `#e3e7ee` | muted `#5f6773` on ground, 4.61:1 |
+| Midnight | `#1a1b26` | comment `#8f99c4` on the anchor wash, 4.84:1 |
+| Parchment | `#f2ead9` | comment `#6b6150` on the anchor wash, 4.52:1 |
+| Contrast | `#ffffff` | comment `#4a5160` on the anchor wash, 6.40:1 |
+
+Nothing below AA ships. Two findings from measuring:
+
+- **A context row is never the anchor row** — the roles are exclusive — so `--cp-muted` cannot
+  land on the anchor wash and is only checked against the ground. `comment` *can*: an
+  anchored line may itself be a comment. That distinction is what caught Midnight.
+- **Midnight is Tokyo Night Dark, seven of eight tokens unchanged.** Only `comment #565f89`
+  failed, at 2.76:1 — the usual dark-theme dim convention. Lifted to `#8f99c4`, which then
+  needed the anchor wash darkened from `#2c3350` to `#272d47` to clear 4.5 there too. That
+  wash is still more visible against its ground (1.264:1) than Daylight's shipped one is
+  against its own (1.148:1).
+
+**A pre-existing AA failure fell out of this.** `.cp-jump` names `var(--cp-dim)` but was
+painting the page accent `#0071e3`, because `main.prose a` is (0,1,2) and a bare `.cp-jump`
+is (0,1,0). Measured: **3.45:1 on Daylight's chrome band** — below AA on the theme already in
+production, and 3.16:1 on Midnight's. Fixed by scoping to `.codepane .cp-jump` (0,2,0). Same
+trap as the one that cost the card prose 140px. The e2e compares the link against the pane's
+own `--cp-dim`, so it keeps holding as themes are added.
+
+**Whole-page theming (light/dark for the entire page) is explicitly NOT this.** It was
+scoped out to its own job: the base variables live in `core.css`, the shared engine used by
+two other skills, so it either changes their appearance too or needs an annotate-local
+override layer.
 
 ---
 

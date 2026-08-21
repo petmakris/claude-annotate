@@ -161,6 +161,30 @@ _PALETTE_HTML = (
     + '</div>'
 )
 
+# Pane themes. Named rather than swatched alone: "Midnight" tells you what
+# you are getting in a way a dark square next to a light one does not.
+_PANE_THEMES = (
+    ("daylight", "Daylight", "#e3e7ee", "#1b1f26"),
+    ("midnight", "Midnight", "#1a1b26", "#c0caf5"),
+    ("parchment", "Parchment", "#f2ead9", "#2b2417"),
+    ("contrast", "Contrast", "#ffffff", "#000000"),
+)
+_PANETHEME_HTML = (
+    '<div id="panetheme-pop" class="panetheme-pop" role="group"'
+    ' aria-label="Code pane theme" hidden>'
+    + "".join(
+        '<button type="button" data-theme="%s" aria-pressed="false">'
+        '<span class="pt-chip" style="background:%s;color:%s">Aa</span>'
+        '<span class="pt-name">%s</span></button>' % (key, bg, fg, label)
+        for key, label, bg, fg in _PANE_THEMES
+    )
+    + '</div>'
+)
+_ICON_THEME = (
+    '<svg viewBox="0 0 24 24" aria-hidden="true">'
+    '<circle cx="12" cy="12" r="9"/>'
+    '<path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg>')
+
 _ICON_MARKER = (
     '<svg viewBox="0 0 24 24" aria-hidden="true">'
     '<path d="M15.5 4.5l4 4L10 18H6v-4z"/>'
@@ -183,6 +207,15 @@ _HEADER_VIEW_CONTROLS = (
     # Reading highlighter. The clear button is rendered always and revealed by
     # CSS only while the highlighter is on, so the resting bar is unchanged and
     # nothing has to be inserted into the header at runtime.
+    # Code pane theme, next to the layout control it belongs with rather than
+    # among the highlighter's controls -- both are about how the panes look.
+    '<span class="icon-btn-wrap">'
+    '<button id="panetheme-toggle" type="button" class="icon-btn"'
+    ' aria-expanded="false" aria-controls="panetheme-pop"'
+    ' title="Code pane theme"'
+    f' aria-label="Code pane theme">{_ICON_THEME}</button>'
+    + _PANETHEME_HTML +
+    '</span>'
     '<button id="highlighter-toggle" type="button" class="icon-btn hl-btn"'
     ' aria-pressed="false"'
     ' title="Reading highlighter — drag over text to mark it read"'
