@@ -187,11 +187,19 @@ class TestServeRootOwnerGate(unittest.TestCase):
         self.assertEqual(h.status, 200)
         return h.wfile.getvalue().decode("utf-8")
 
-    def test_owner_render_carries_repo_root_and_project_name(self):
+    def test_owner_render_carries_the_repo_root(self):
         html = self._render(owner=True)
         self.assertIn("data-repo-root=", html)
-        self.assertIn("data-project-name=", html)
         self.assertIn("the-secret-project", html)
+
+    def test_the_ide_project_name_is_never_sent(self):
+        """It was guessed from the directory basename, and the guess was wrong
+        whenever a project's name differed from its folder's. Opening is now a
+        server-side POST that resolves the project from the file, so no name is
+        needed — and one sent anyway would be a guess nothing consumes."""
+        html = self._render(owner=True)
+        self.assertNotIn("data-project-name", html)
+        self.assertNotIn("jetbrains://", html)
 
     def test_non_owner_render_carries_neither(self):
         html = self._render(owner=False)

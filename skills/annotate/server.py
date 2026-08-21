@@ -530,24 +530,29 @@ class Handlers:
                 '<script src="/static/fuse.min.js" defer></script>'
                 '<script src="/static/search.js" defer></script>'
                 '<script src="/static/voice.js" defer></script>')
-        # Project name + full repo root, so script.js can build a jetbrains://
-        # link into the IDE for a resolved code anchor. render_page escapes
-        # both — they're filesystem paths headed straight into an HTML
-        # attribute.
+        # The repo root, so script.js knows a code anchor is openable at all and
+        # shows the control. render_page escapes it — it's a filesystem path headed
+        # straight into an HTML attribute.
+        #
+        # It used to be accompanied by the IDE's project NAME, guessed as the
+        # basename of this directory, because the page built a `jetbrains://` URI
+        # and that scheme demands one. The guess was wrong whenever a project's
+        # name differed from its folder's — an IntelliJ project living in
+        # `montblanc-worktrees/PMP-272` is named `montblanc`, and the link failed
+        # in silence. Opening is now a POST to `/api/open`, which runs the opener
+        # server-side and lets it resolve the project from the file itself, so
+        # there is no name to guess and none is sent.
         #
         # Owner-only: the read-only share link is deliberately allowed to
         # serve code EXCERPTS (see anchors.py's docstring), but that decision
         # never covered the server's own filesystem layout. Without this
         # gate, `/Users/<name>/projects/<repo>` rode along on every render a
-        # stranger holding the link could open, and script.js turned it into
-        # a jetbrains:// href that also can't resolve on their machine.
+        # stranger holding the link could open — and the open control would be
+        # offered to someone whose POST the write gate refuses anyway.
         cwd = dirs.get("_cwd") or ""
         body_attrs = {}
         if cwd and h._is_owner():
-            body_attrs = {
-                "data-project-name": Path(cwd).name,
-                "data-repo-root": cwd,
-            }
+            body_attrs = {"data-repo-root": cwd}
         page = render_page(
             title=doc.title or "Response",
             head_assets=head,

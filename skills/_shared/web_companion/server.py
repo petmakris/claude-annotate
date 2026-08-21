@@ -743,6 +743,9 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
             if self.path == "/api/sessions":
                 self._handle_create_session()
                 return
+            if self.path == "/api/open":
+                self._handle_open_in_editor(registry)
+                return
             if self.path == "/api/sessions/delete":
                 raw, err = self._read_body_text()
                 if err is not None:
@@ -822,6 +825,81 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
                     self._handle_thread_delete(sid, dirs)
                     return
             self._send_text(404, "not found")
+
+        def _handle_open_in_editor(self, registry):
+            """Open one of a session's own files in the user's editor.
+
+            A page cannot ask the OS to open a file: `file://` is refused from an http
+            origin, and a browser would render the file rather than hand it to an editor.
+            The custom `jetbrains://` scheme was the way round that, and it carried the
+            IDE's *project name* — which the page had to guess from a directory basename,
+            guessed wrong whenever the two differed, and failed silently when it did.
+
+            The server has no such problem: it is an ordinary local process, so it can
+            simply run the opener. `idea --line N <file>` resolves the project itself from
+            the file's own location, which is the whole guessing step deleted rather than
+            fixed. Falls back to the platform default when the IDE launcher is absent —
+            that loses the line number, never the file.
+
+            POST-gated by `_dispatch_post` (owner-only, same-site), and the path must
+            resolve INSIDE the session's own root — otherwise this is an
+            open-any-file-on-the-host endpoint wearing a review tool's clothes.
+            """
+            raw, err = self._read_body_text()
+            if err is not None:
+                self._send_text(400, err)
+                return
+            try:
+                payload = json.loads(raw) if raw else {}
+            except json.JSONDecodeError:
+                self._send_text(400, "invalid json")
+                return
+            key = payload.get("key")
+            rel = payload.get("file")
+            if not isinstance(key, str) or not key or not isinstance(rel, str) or not rel:
+                self._send_text(400, "missing key or file")
+                return
+            sid = registry.resolve(key)
+            if sid is None:
+                self._send_text(404, "unknown session")
+                return
+            root = (registry.lookup(sid) or {}).get("_cwd")
+            if not root:
+                self._send_text(409, "session has no workspace root")
+                return
+            try:
+                root_real = Path(root).resolve()
+                target = (root_real / rel).resolve()
+            except OSError as e:
+                self._send_text(400, f"path could not be resolved ({e})")
+                return
+            # Same rule anchors.py applies at render time: `..` and symlinks may not
+            # walk out of the workspace. A rendered anchor already passed this check,
+            # but the request arrives from the browser, so it is re-checked here rather
+            # than assumed — the page is not the only thing that can POST.
+            if not target.is_relative_to(root_real) or not target.is_file():
+                self._send_text(400, "refused: not a file inside this workspace")
+                return
+            line = payload.get("line")
+            line = line if isinstance(line, int) and line > 0 else None
+            launcher = shutil.which("idea")
+            if launcher and line:
+                cmd = [launcher, "--line", str(line), str(target)]
+            elif launcher:
+                cmd = [launcher, str(target)]
+            elif sys.platform == "darwin":
+                cmd = ["open", str(target)]
+            else:
+                cmd = ["xdg-open", str(target)]
+            try:
+                # Detached and not waited on: opening an editor is fire-and-forget, and a
+                # launcher that blocks must not hold the request open behind it.
+                subprocess.Popen(cmd, start_new_session=True,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except OSError as e:
+                self._send_text(500, f"could not launch the editor ({e})")
+                return
+            self._send_json(200, {"opened": str(target), "line": line, "via": cmd[0]})
 
         def _handle_create_session(self):
             raw, err = self._read_body_text()

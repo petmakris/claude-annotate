@@ -41,7 +41,12 @@ class _StubHandlers(HandlersProtocol):
         return {}
 
 
-def _start_server(tmp_path: Path, monkeypatch):
+def _start_server(tmp_path: Path, monkeypatch, port_range=None):
+    # Every call binds a port for the life of the test session, so a second test
+    # module reusing this helper drains the range and the failure surfaces here
+    # as "server did not start in time" — in THIS file's tests, not the new
+    # file's. Callers outside this module pass their own range.
+    port_range = port_range if port_range is not None else TEST_PORT_RANGE
     monkeypatch.setenv("WEBCOMPANION_TOKEN", TOKEN)
     monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -76,7 +81,7 @@ def _start_server(tmp_path: Path, monkeypatch):
     server_mod.sys.stdout.write = _patched_write
     threading.Thread(
         target=server_mod.run,
-        kwargs=dict(skill_name=skill_name, port_range=TEST_PORT_RANGE,
+        kwargs=dict(skill_name=skill_name, port_range=port_range,
                     handlers=_StubHandlers(), static_dirs=[],
                     shutdown_after_seconds=300),
         daemon=True,
@@ -159,6 +164,10 @@ WRITE_ROUTES = [
     # list — gated in practice by the blanket check, but pinned by nothing, so
     # a refactor could unguard it in silence.
     "/api/sessions/delete",
+    # Runs a program on the host with a path the caller supplies. Reachable
+    # from a shared link it would be remote file-opening, so the blanket gate
+    # is doing real work here and is pinned rather than assumed.
+    "/api/open",
     "/api/cancel_for_claude_session",
     "/s/000000-000000-0000000000000000/api/submit",
     "/s/000000-000000-0000000000000000/api/finish",

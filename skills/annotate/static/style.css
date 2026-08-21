@@ -1775,7 +1775,11 @@ section.block.card[data-has-code="1"] .card-body > .block-content {
    it is gone. */
 .code-col {
   border-left: 1px solid var(--border);
-  padding: 0;
+  /* Padding and gap, where there was none of either: the panes used to run
+     edge to edge and butt against each other, so the rail read as one dense
+     block rather than as N separate citations. */
+  padding: 12px;
+  gap: 12px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -1825,6 +1829,13 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
   --cp-moved-bg:  #fde8c8;
   --cp-bad-fg:    #991b1b;
   --cp-bad-bg:    #fcdada;
+  /* The project pill's saturation and lightness. Its HUE is set per element
+     by JS from the project's name; everything else is the theme's, so the
+     pill stays readable on a dark ground instead of inheriting a pale
+     background computed with no idea what it would sit on. */
+  --cp-pill-s:    58%;
+  --cp-pill-bg-l: 86%;
+  --cp-pill-fg-l: 26%;
 
   background: var(--cp-ground);
   border-radius: 0;
@@ -1832,10 +1843,15 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
   overflow: hidden;
   font-family: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
-/* Two panes stacked in one column (a block citing more than one file) used
-   to be separated by column padding; the column has none now, so without
-   this they'd merge into one slab. */
-.codepane + .codepane { border-top: 1px solid var(--cp-divider); }
+/* Two panes stacked in one column (a block citing more than one file) were
+   separated by a single hairline, which is not enough: three panes read as one
+   striped slab, and the eye cannot tell where one citation ends and the next
+   begins. They are now discrete cards with real space between them — see the
+   `gap` and `padding` on `.code-col`, which is where the separation lives. */
+.code-col > .codepane {
+  border: 1px solid var(--cp-divider);
+  border-radius: 8px;
+}
 
 /* One band, not three. The header used to be the first of a stack — head
    (35px) + note (27px) + status (39px) = 101px above the first line of code,
@@ -1853,7 +1869,39 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
 .cp-path {
   color: var(--cp-accent);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: flex; align-items: center; gap: 7px; min-width: 0;
 }
+/* The project, tinted from its own name. Only the HUE comes from JS (see
+   hueFromName in script.js); saturation and lightness are the theme's, so a
+   dark pane gets a dark pill with light text rather than the pale one a
+   fully JS-computed colour would have forced on it. --cp-pill-h has a
+   fallback so a pane with no project segment still paints something sane. */
+.cp-proj {
+  /* Shrinks only after file:line has, and only when the band genuinely runs
+     out: a truncated pill defeats its own purpose, since the tint is there to
+     be recognised alongside a name. 42% clipped `montblanc-worktrees` while
+     the header still had room to spare. */
+  flex: 0 1 auto;
+  background: hsl(var(--cp-pill-h, 220) var(--cp-pill-s, 58%) var(--cp-pill-bg-l, 86%));
+  color: hsl(var(--cp-pill-h, 220) var(--cp-pill-s, 58%) var(--cp-pill-fg-l, 26%));
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  max-width: 68%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* file:line is a button because it copies, but it must not look like one --
+   it is the pane's identity first and an action second. Underline on hover
+   is the whole affordance. */
+.codepane .cp-loc {
+  flex: 0 1 auto;
+  font: inherit; background: none; border: 0; padding: 0;
+  color: var(--cp-accent); cursor: pointer;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.codepane .cp-loc:hover { text-decoration: underline; }
+.codepane .cp-loc[data-flash] { color: var(--cp-muted); text-decoration: none; cursor: default; }
 .cp-spacer { flex: 1; }
 /* Scoped under .codepane, and that prefix is load-bearing. `main.prose a`
    sets the page accent at specificity (0,1,2); a bare `.cp-jump` is (0,1,0)
@@ -1862,18 +1910,30 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
    3.16:1 on Midnight's — below AA on every theme, including the one already
    shipped. `.codepane .cp-jump` is (0,2,0), which wins on class count.
    Same trap as the one that cost the card prose 140px; see that rule. */
-.codepane .cp-jump {
-  color: var(--cp-dim); font-size: 10.5px; letter-spacing: 0.06em;
-  text-transform: uppercase; white-space: nowrap; text-decoration: none;
+/* Both header controls are icon buttons on the same 22px square. They were
+   two uppercase words, WIDEN and OPEN ↗, sitting at the same visual weight as
+   the path they shared a band with — so the chrome read as loudly as the thing
+   it was chrome for. The icons inherit `currentColor`, which is why no theme
+   needs its own rule for them.
+   `.codepane` prefix is load-bearing on cp-jump: `main.prose a` is (0,1,2) and
+   a bare `.cp-jump` at (0,1,0) loses to it. Same trap as the card prose. */
+.codepane .cp-jump,
+.codepane .cp-widen {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; flex: 0 0 auto;
+  background: none; border: 1px solid transparent; border-radius: 5px;
+  color: var(--cp-dim); cursor: pointer; padding: 0;
+  font: inherit; text-decoration: none;
 }
-.codepane .cp-jump:hover { color: var(--cp-accent); }
-.cp-widen {
-  background: none; border: 1px solid var(--cp-divider); border-radius: 5px;
-  color: var(--cp-dim); cursor: pointer; padding: 1px 6px;
-  font-family: inherit; font-size: 9.5px;
-  letter-spacing: 0.06em; text-transform: uppercase;
+.codepane .cp-jump:hover,
+.codepane .cp-widen:hover {
+  color: var(--cp-accent); border-color: var(--cp-divider);
+  background: color-mix(in srgb, var(--cp-accent) 8%, transparent);
 }
-.cp-widen:hover { color: var(--cp-accent); border-color: var(--cp-accent); }
+.codepane .cp-jump[disabled] { cursor: default; opacity: 0.55; }
+/* A failed open, said in colour as well as in the tooltip — an icon button
+   cannot turn into its own error message the way a text one could. */
+.codepane .cp-jump[data-failed] { color: var(--cp-bad-fg); border-color: var(--cp-bad-fg); }
 /* Drift, as a chip in the header band rather than a row of its own. A pane
    that still has code to show does not need a whole sentence to say the line
    moved — but it must not go quiet either, so the chip is bordered, bold and
@@ -1905,19 +1965,34 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
    paragraph's padding. */
 .cp-body {
   padding: 5px 0 8px; font-size: 12px; line-height: 1.62;
-  overflow-x: auto; color: var(--cp-text);
+  /* Nothing overflows horizontally now that rows wrap, so the scroll container
+     is gone with it — `auto` would still paint a track on some platforms, and
+     a scrollbar under every pane was most of what made the rail look cluttered. */
+  overflow-x: hidden; color: var(--cp-text);
 }
 /* The inset lives on the ROW, not on .cp-line: it has to be real geometry
    between the anchor row's 3px inset bar and the first glyph, and padding
    inside the text span would leave that span's own left edge sitting on the
    bar. Every row carries it equally, so indentation is untouched. */
-.cp-row { display: flex; min-width: max-content; padding-left: 12px; }
+/* `min-width: max-content` used to sit here, and it was the reason a pane
+   scrolled sideways: it forces the row as wide as its longest unbroken line,
+   which no wrap rule on .cp-line downstream can override. Measured on a real
+   page, one pane's content was 1240px inside a 608px column — so the claim the
+   prose was making sat off-screen behind a scrollbar. `min-width: 0` lets the
+   row take the column's width and the line below wrap inside it. */
+.cp-row { display: flex; min-width: 0; padding-left: 12px; }
 /* No line numbers. An anchored-row-only number was tried and reversed after
    seeing it rendered: it was still a number to read, and the header already
    states `file:134` — the pane is for glancing at what the code says, not for
    locating it. The inset the gutter used to provide now lives on .cp-row —
    see that rule; code-anchors.e2e.cjs item 15 measures it against the bar. */
-.cp-line { flex: 1 1 auto; white-space: pre; padding-right: 8px; }
+/* `pre-wrap`, not `pre`: a long line folds onto the next row rather than
+   running off the edge. Indentation is still honoured (that is what pre-wrap
+   preserves); only the overflow behaviour changes. `overflow-wrap: anywhere`
+   is the backstop for the case wrapping alone cannot solve — a single token
+   longer than the column, which is common in code (a long dotted call chain,
+   a minified string) and would otherwise reintroduce the scrollbar. */
+.cp-line { flex: 1 1 auto; white-space: pre-wrap; overflow-wrap: anywhere; padding-right: 8px; }
 /* A blank context line renders nothing at all now, so at a full row height it
    reads as a hole in the pane rather than as the blank line it is. */
 .cp-row.is-blank { height: 9px; }
@@ -1988,6 +2063,10 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
    is 4.84:1, and the wash is still more visible against its ground (1.264:1)
    than Daylight's shipped one is against its own (1.148:1). */
 body[data-pane-theme="midnight"] .codepane {
+  /* The only dark theme: the pill inverts — dark ground, light ink. */
+  --cp-pill-s:    42%;
+  --cp-pill-bg-l: 26%;
+  --cp-pill-fg-l: 80%;
   --cp-ground:    #1a1b26;
   --cp-chrome:    #24263a;
   --cp-divider:   #343850;
@@ -2011,6 +2090,10 @@ body[data-pane-theme="midnight"] .codepane {
    tightest pairing is `comment` on the anchor wash at 4.52:1; everything else
    has room. */
 body[data-pane-theme="parchment"] .codepane {
+  /* Warm, low-chroma ground: a 58% pill shouts against it. */
+  --cp-pill-s:    40%;
+  --cp-pill-bg-l: 82%;
+  --cp-pill-fg-l: 25%;
   --cp-ground:    #f2ead9;
   --cp-chrome:    #e7dcc6;
   --cp-divider:   #d3c5a8;
@@ -2034,6 +2117,10 @@ body[data-pane-theme="parchment"] .codepane {
    of it far above. The one to reach for when the pane has to be readable in
    bad light or on a bad screen. */
 body[data-pane-theme="contrast"] .codepane {
+  /* Pushed apart deliberately — this theme exists for legibility. */
+  --cp-pill-s:    62%;
+  --cp-pill-bg-l: 90%;
+  --cp-pill-fg-l: 20%;
   --cp-ground:    #ffffff;
   --cp-chrome:    #eef0f4;
   --cp-divider:   #b6bcc7;

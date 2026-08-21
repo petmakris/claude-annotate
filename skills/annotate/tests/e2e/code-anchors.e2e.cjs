@@ -382,7 +382,9 @@ function blockRect(page, blockId, selector) {
     const persisted = await page.evaluate(() => {
       const s = document.querySelector('section.block[data-block-id="b-0"]');
       const btn = s.querySelector(".cp-widen");
-      return { wide: s.dataset.codeWide, label: btn && btn.textContent };
+      // The button is an icon now, so its accessible name is the label —
+      // textContent is empty by design.
+      return { wide: s.dataset.codeWide, label: btn && btn.getAttribute("aria-label") };
     });
     if (persisted.wide !== "1") fail("data-code-wide did not survive reload: " + persisted.wide);
     if (persisted.label !== "narrow") fail("widen button did not read 'narrow' after reload: " + persisted.label);

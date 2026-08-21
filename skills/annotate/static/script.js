@@ -6,6 +6,71 @@
     return p.endsWith("/") ? p : p + "/";
   })();
 
+  // The slug (or sid) this page is served under — "/s/<key>/" — which the server
+  // resolves either way. Empty on the index, which renders no code panes.
+  // A hue from a name, stable forever. djb2 over the code units, folded to a
+  // degree — no randomness and no counter, so "benzene" is the same colour in
+  // every pane of every page, which is the only property that makes the tint
+  // worth having. Saturation and lightness stay with the theme (see .cp-proj
+  // in style.css); only the hue travels, so a dark theme is not handed a pale
+  // pill it cannot paint text on.
+  // A curated wheel rather than `hash % 360`, and the reason is a real result:
+  // taking the hash straight to a degree put `montblanc-worktrees` on hue 14
+  // and `montblanc-claude-skills` on hue 15. One degree apart reads as a
+  // rendering fault, not as two projects — the worst outcome, because it is
+  // neither "the same" nor "different". Landing on a fixed set of separated
+  // hues means two projects are either plainly distinct or exactly equal, and
+  // an honest collision is easier to live with than a near-miss.
+  const PILL_HUES = [210, 145, 25, 275, 190, 45, 330, 95, 250, 5, 165, 300, 65, 230];
+  const hueFromName = (name) => {
+    let h = 5381;
+    for (let i = 0; i < name.length; i++) h = ((h * 33) ^ name.charCodeAt(i)) >>> 0;
+    return PILL_HUES[h % PILL_HUES.length];
+  };
+
+  // Inline SVG rather than a glyph font or an emoji: the header is 11px and
+  // needs to line up with text, and an icon that inherits `currentColor`
+  // recolours itself with the theme instead of needing one rule per theme.
+  const icon = (paths, label) => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 16 16");
+    svg.setAttribute("width", "13");
+    svg.setAttribute("height", "13");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.6");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    paths.forEach(d => {
+      const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      p.setAttribute("d", d);
+      svg.appendChild(p);
+    });
+    if (label) svg.setAttribute("data-icon", label);
+    return svg;
+  };
+  const ICON_WIDEN  = ["M9.5 2.5h4v4", "M6.5 13.5h-4v-4", "M13.5 2.5l-5 5", "M2.5 13.5l5-5"];
+  const ICON_NARROW = ["M13.5 6.5h-4v-4", "M2.5 9.5h4v4", "M9.5 6.5l4-4", "M6.5 9.5l-4 4"];
+  const ICON_OPEN   = ["M13.5 8.5v4a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h4",
+                       "M9.5 2.5h4v4", "M7 9l6.5-6.5"];
+
+  // Three places set this button's face: creation, restore-from-storage on
+  // load, and restore-after-rewrite. They used to each assign `textContent`
+  // independently, which was survivable while the face WAS the text; with an
+  // icon and an accessible name to keep in step it is one function or it is a
+  // bug waiting for whichever site someone forgets.
+  const setWidenFace = (btn, wide) => {
+    btn.replaceChildren(icon(wide ? ICON_NARROW : ICON_WIDEN));
+    btn.title = wide ? "narrow" : "widen";
+    btn.setAttribute("aria-label", btn.title);
+  };
+
+  const workspaceKey = () => {
+    const m = BASE.match(/^\/s\/([^/]+)\//);
+    return m ? decodeURIComponent(m[1]) : "";
+  };
+
   const proseEl = document.querySelector("main.prose");
   const STORAGE_KEY = `annotate.drafts.${document.body.dataset.responseId || ""}`;
 
@@ -820,8 +885,61 @@
     // "moved" is the one non-"ok" status that keeps its line: actual_line is
     // real, it's just not where the block originally pointed.
     const resolved = pane.status === "ok" || pane.status === "moved";
-    path.textContent = (resolved && shown) ? `${pane.file}:${shown}` : (pane.file || "");
+    // The filename, not the path. A repo-relative path is routinely 90+
+    // characters and the header is ~475px wide, so the full string was
+    // ellipsised in the middle of the part that identifies it --
+    // `montblanc-worktrees/PMP-272/advisory/.../featuretoggle/Feat...` told the
+    // reader the repo (which the prose already said) and hid the filename
+    // (which it did not). Leading segment plus basename keeps both ends, and
+    // the full path stays one hover away in the title.
+    const segments = (pane.file || "").split("/").filter(Boolean);
+    const base = segments.length ? segments[segments.length - 1] : (pane.file || "");
+    const project = segments.length > 1 ? segments[0] : "";
+    const located = (resolved && shown) ? `${base}:${shown}` : base;
     path.title = pane.file || "";
+
+    // The project reads as a pill, tinted from its own name. A page citing four
+    // repos otherwise gives every header the same colour, so telling them apart
+    // means reading each one; a stable tint makes it a glance. Deterministic by
+    // construction — the same name always lands on the same hue, across panes,
+    // pages and reloads — so the colour is a property of the project rather
+    // than of the order things happened to render in.
+    if (project) {
+      const pill = document.createElement("span");
+      pill.className = "cp-proj";
+      pill.textContent = project;
+      pill.style.setProperty("--cp-pill-h", String(hueFromName(project)));
+      path.appendChild(pill);
+    }
+
+    // file:line copies on click. It is the one string in the pane somebody
+    // wants in another window -- a message, a commit, a terminal -- and the
+    // FULL repo-relative path is what pastes usefully, even though the header
+    // shows the short form. Reading the long path off the screen was never
+    // possible anyway: it is why the label was shortened.
+    const loc = document.createElement("button");
+    loc.type = "button";
+    loc.className = "cp-loc";
+    loc.textContent = located;
+    const toCopy = (resolved && shown) ? `${pane.file}:${shown}` : (pane.file || "");
+    loc.title = `copy ${toCopy}`;
+    loc.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const was = loc.textContent;
+      try {
+        await navigator.clipboard.writeText(toCopy);
+        loc.textContent = "copied";
+      } catch (_) {
+        // Clipboard access needs a secure context; the shared LAN link is
+        // plain http, so this is a normal outcome there, not a defect. Say so
+        // rather than looking like the click did nothing.
+        loc.textContent = "copy unavailable";
+      }
+      loc.dataset.flash = "1";
+      setTimeout(() => { loc.textContent = was; delete loc.dataset.flash; }, 1200);
+    });
+    path.appendChild(loc);
+
     const spacer = document.createElement("span");
     spacer.className = "cp-spacer";
     head.append(path, spacer);
@@ -845,30 +963,75 @@
     }
 
     if (pane.status === "ok" || pane.status === "moved") {
+      // Icon, not a word. Two uppercase labels sat at the same weight as the
+      // path they were competing with, and the header's job is to identify the
+      // code, not to advertise its own controls. The accessible name is on the
+      // button (aria-label + title), so nothing is lost to a screen reader or
+      // to a hover.
       const widen = document.createElement("button");
       widen.type = "button";
       widen.className = "cp-widen";
-      widen.textContent = "widen";
+      setWidenFace(widen, false);
       widen.addEventListener("click", (ev) => {
         ev.stopPropagation();
         const card = wrap.closest("section.block");
         if (!card) return;
         const next = card.dataset.codeWide === "1" ? "0" : "1";
         card.dataset.codeWide = next;
-        widen.textContent = next === "1" ? "narrow" : "widen";
+        setWidenFace(widen, next === "1");
         try { localStorage.setItem(codeWideKey(blockId), next); } catch (_) {}
       });
       head.appendChild(widen);
 
-      const project = document.body.dataset.projectName || "";
+      // Opening is asked of the SERVER, not of the operating system. A page has no
+      // way to hand a path to a native app -- `file://` is refused from an http
+      // origin -- which is why this used to build a `jetbrains://` URI carrying the
+      // IDE's project name, guessed from a directory basename. The guess was wrong
+      // whenever a project's name differed from its folder's, and the failure was
+      // silent. The server is a local process with no such limitation, so it runs
+      // the opener itself and the project name stops existing as a concept here.
       const abs = document.body.dataset.repoRoot || "";
       if (abs) {
-        const jump = document.createElement("a");
+        const jump = document.createElement("button");
+        jump.type = "button";
         jump.className = "cp-jump";
-        jump.textContent = "open ↗";
-        jump.href = "jetbrains://idea/navigate/reference?project="
-          + encodeURIComponent(project)
-          + "&path=" + encodeURIComponent(`${abs}/${pane.file}:${shown}`);
+        jump.replaceChildren(icon(ICON_OPEN));
+        jump.title = "open in editor";
+        jump.setAttribute("aria-label", jump.title);
+        // A failure has to stay legible now that the button is an icon: it
+        // cannot become its own error message any more. The reason goes into
+        // the tooltip and a red state onto the button, so the click is never
+        // silent -- which was the entire point of moving opening server-side.
+        const failFor = (why) => {
+          jump.dataset.failed = "1";
+          jump.title = why;
+          jump.setAttribute("aria-label", why);
+          setTimeout(() => {
+            delete jump.dataset.failed;
+            jump.title = "open in editor";
+            jump.setAttribute("aria-label", jump.title);
+            jump.disabled = false;
+          }, 4000);
+        };
+        jump.addEventListener("click", async () => {
+          jump.disabled = true;
+          try {
+            const res = await fetch("/api/open", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ key: workspaceKey(), file: pane.file, line: shown }),
+            });
+            if (!res.ok) {
+              // The reason is the server's, not a guess.
+              failFor((await res.text()) || "could not open");
+              return;
+            }
+          } catch (_) {
+            failFor("server unreachable");
+            return;
+          }
+          jump.disabled = false;
+        });
         head.appendChild(jump);
       }
     }
@@ -1161,7 +1324,7 @@
       try { wide = localStorage.getItem(codeWideKey(blk.id)) || "0"; } catch (_) {}
       section.dataset.codeWide = wide;
       const widenBtn = codeCol.querySelector(".cp-widen");
-      if (widenBtn && wide === "1") widenBtn.textContent = "narrow";
+      if (widenBtn && wide === "1") setWidenFace(widenBtn, true);
     }
 
     section.appendChild(body);
@@ -2666,7 +2829,7 @@
       // built button has to agree with it — otherwise a promoted pane comes
       // back from a rewrite still wide but offering to widen it again.
       const btn = freshCol.querySelector(".cp-widen");
-      if (btn && section.dataset.codeWide === "1") btn.textContent = "narrow";
+      if (btn && section.dataset.codeWide === "1") setWidenFace(btn, true);
     } else {
       delete section.dataset.hasCode;
       // A rewrite that drops the last anchor must also drop the stale
