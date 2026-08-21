@@ -127,6 +127,81 @@ _ICON_HELP = (
     '<circle cx="12" cy="12" r="9"/>'
     '<path d="M9.2 9.3a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.4-2.8 4"/>'
     '<path d="M12 17.2h.01"/></svg>')
+# Two page-wide VIEW controls: how wide the column is, and whether code panes
+# sit beside the prose or under it. Both are preferences about looking, never
+# about the document's content -- which is why they stay live on the read-only
+# share link, and why the author's choice rides into an export.
+#
+# The width control is one cycling button rather than three segments: the bar
+# already carries search, two panel toggles, the read-only badge, Share and
+# Done, and three more targets is more than it has room for. It renders with
+# no label -- applyViewControls() in script.js fills it in on load, because the
+# right label depends on whether the document cites code, which the server does
+# not know at header-build time. `min-width` on .width-btn keeps the bar from
+# shifting in the meantime.
+_ICON_SPLIT = (
+    '<svg class="icon-split" viewBox="0 0 24 24" aria-hidden="true">'
+    '<rect x="3" y="5" width="18" height="14" rx="2"/>'
+    '<line x1="13.5" y1="5" x2="13.5" y2="19"/></svg>')
+_ICON_STACK = (
+    '<svg class="icon-stack" viewBox="0 0 24 24" aria-hidden="true">'
+    '<rect x="3" y="5" width="18" height="14" rx="2"/>'
+    '<line x1="3" y1="12.5" x2="21" y2="12.5"/></svg>')
+# Five marker colours. Every one measured against body, bold and link text
+# (see the palette comment in style.css); none is below AA on any of them.
+_PALETTE_COLORS = ("yellow", "green", "orange", "blue", "pink")
+_PALETTE_HTML = (
+    '<div id="palette-pop" class="palette-pop" role="group"'
+    ' aria-label="Highlight colour" hidden>'
+    + "".join(
+        '<button type="button" data-color="%s" aria-pressed="false"'
+        ' title="%s" aria-label="%s highlight"></button>' % (c, c.capitalize(), c.capitalize())
+        for c in _PALETTE_COLORS
+    )
+    + '</div>'
+)
+
+_ICON_MARKER = (
+    '<svg viewBox="0 0 24 24" aria-hidden="true">'
+    '<path d="M15.5 4.5l4 4L10 18H6v-4z"/>'
+    '<line x1="4" y1="21" x2="20" y2="21"/></svg>')
+_ICON_ERASE = (
+    '<svg viewBox="0 0 24 24" aria-hidden="true">'
+    '<path d="M4 16.5l7-7 6.5 6.5-4 4H7z"/>'
+    '<line x1="12.5" y1="8" x2="19" y2="14.5"/>'
+    '<line x1="4" y1="21" x2="20" y2="21"/></svg>')
+
+_HEADER_VIEW_CONTROLS = (
+    '<span class="header-sep" aria-hidden="true"></span>'
+    '<button id="width-toggle" type="button" class="width-btn"'
+    ' title="Page width \u2014 click to cycle Normal / Wide / Extra wide"'
+    ' aria-label="Page width"></button>'
+    '<button id="codelayout-toggle" type="button" class="icon-btn layout-btn"'
+    ' aria-pressed="false"'
+    ' title="Code panes: beside the prose, or full width beneath it"'
+    f' aria-label="Code pane layout">{_ICON_SPLIT}{_ICON_STACK}</button>'
+    # Reading highlighter. The clear button is rendered always and revealed by
+    # CSS only while the highlighter is on, so the resting bar is unchanged and
+    # nothing has to be inserted into the header at runtime.
+    '<button id="highlighter-toggle" type="button" class="icon-btn hl-btn"'
+    ' aria-pressed="false"'
+    ' title="Reading highlighter — drag over text to mark it read"'
+    f' aria-label="Reading highlighter">{_ICON_MARKER}</button>'
+    # The swatch shows the colour it will paint in, and opens the palette.
+    # Wrapped in .icon-btn-wrap so the popover anchors to it the way the
+    # legend's does, and driven by the same initTopPanels machinery.
+    '<span class="icon-btn-wrap">'
+    '<button id="highlighter-palette" type="button" class="icon-btn hl-swatch"'
+    ' aria-expanded="false" aria-controls="palette-pop"'
+    ' title="Highlight colour"'
+    ' aria-label="Highlight colour"><span class="swatch-dot"></span></button>'
+    + _PALETTE_HTML +
+    '</span>'
+    '<button id="highlighter-clear" type="button" class="icon-btn hl-clear"'
+    ' title="Clear every highlight on this page"'
+    f' aria-label="Clear highlights">{_ICON_ERASE}</button>'
+)
+
 _HEADER_PANEL_TOGGLES = (
     '<span class="header-sep" aria-hidden="true"></span>'
     '<button id="composer-toggle" type="button" class="icon-btn"'
@@ -378,7 +453,7 @@ class Handlers:
             f'<button id="block-search-clear" type="button" class="search-clear"'
             f' aria-label="Clear search" tabindex="-1">&times;</button>'
             f'</div>'
-            + _HEADER_PANEL_TOGGLES +
+            + _HEADER_VIEW_CONTROLS + _HEADER_PANEL_TOGGLES +
             f'<span class="read-only-badge" title="This link can read the '
             f'document but not change it.">&#128065; Read-only</span>'
             f'<button id="export-btn" type="button" class="export-btn"'
@@ -418,7 +493,7 @@ class Handlers:
                 '<script src="/static/diff.js" defer></script>'
                 '<script src="/static/script.js" defer></script>'
                 '<script src="/static/export.js" defer></script>'
-                '<script src="/static/subunits.js" defer></script>'
+                '<script src="/static/subunits.js" defer></script><script src="/static/highlighter.js" defer></script>'
                 '<script src="/static/fuse.min.js" defer></script>'
                 '<script src="/static/search.js" defer></script>'
                 '<script src="/static/voice.js" defer></script>')

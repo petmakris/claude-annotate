@@ -511,13 +511,32 @@ section.block.card[data-engaged-type="comment"] .card-body { border-left-color: 
 section.block.card[data-engaged-type="reject"]  .card-body { border-left-color: var(--type-reject-fg); }
 
 /* Inside a card the wide right gutter (old hover-action room) is gone; tighten
-   per-element padding so prose fills the card. Hover actions float top-right. */
-.card-body p,
-.card-body li,
-.card-body blockquote { padding-right: 12px; }
-.card-body h1, .card-body h2, .card-body h3,
-.card-body h4, .card-body h5, .card-body h6 { padding-right: 12px; }
-.card-body pre { padding-right: 14px; }
+   per-element padding so prose fills the card.
+   The `main.prose` prefix is load-bearing, not decoration. `main.prose p` sets
+   `padding: 4px 140px 4px 6px` at specificity (0,1,2); a bare `.card-body p`
+   is (0,1,1) and LOSES, so for as long as that prefix was missing every card
+   paragraph kept reserving 140px for buttons that are not there — measured at
+   140px computed, costing 128px of text width in the two-column code layout.
+   Same specificity trap the code pane hit with its own caption (see the
+   note above `.cp-body` below, which records it). Adding
+   `main.prose` makes these (0,2,2), which wins on class count.
+   Nothing needs the reserve any more: the block-scope strip lives in the card
+   header, and the per-sentence `.unit-strip` is `position: absolute`, so it
+   overlays the sentence's own top-right corner rather than sitting beside it.
+   e2e item 13 measures the computed padding, because no source check can see
+   which of two rules won. */
+main.prose .card-body p,
+main.prose .card-body li,
+main.prose .card-body blockquote { padding-right: 12px; }
+main.prose .card-body h1, main.prose .card-body h2, main.prose .card-body h3,
+main.prose .card-body h4, main.prose .card-body h5, main.prose .card-body h6 { padding-right: 12px; }
+/* `pre` is deliberately NOT in that list. A `.card-body pre { padding-right:
+   14px }` rule used to sit here and, like the rules above, never won against
+   `main.prose pre { padding: 0 }`. Giving it the prefix that would make it win
+   was tried and rendered: the <pre> is a bare wrapper whose inner <code> is
+   the visible dark surface, so right-only padding pulls that surface 14px off
+   the card's right edge while its left edge stays put — an asymmetric slab.
+   Flush is correct, so the rule is gone rather than fixed. */
 .card-body > .block-content > :first-child { margin-top: 8px; }
 
 /* === Block updating overlay ========================================= */
@@ -1002,7 +1021,15 @@ body.is-busy .comment-card {
 
 /* ── Granular sub-units (subunits.js) ────────────────────────────────── */
 .sub-unit { position: relative; border-radius: 6px; }
-.sub-unit:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+/* No hover wash. It was `color-mix(in srgb, var(--accent) 5%, transparent)` --
+   a pale blue band across the hovered sentence -- and next to the reading
+   highlighter it read as a second kind of highlight in the same family as the
+   selection colour, which is the one thing a highlighter must not be
+   ambiguous about. The hover AFFORDANCE was never the wash: it is the control
+   strip appearing, which is the rule below and is unchanged.
+   read-highlighter.e2e.cjs item 11 asserts both halves -- no background rule,
+   and the strip rule still there -- so removing one cannot silently remove
+   the other. */
 
 .unit-strip {
   position: absolute; right: 4px; top: 2px;
@@ -1526,6 +1553,153 @@ section.block[data-diff="open"] .diff-pane { display: block; }
 /* The wide column, only for documents that actually carry anchors. */
 body[data-has-code="1"] { --content-max: 1180px; }
 
+/* === Page-wide view controls =========================================
+   ORDER-DEPENDENT — this block sits immediately AFTER the rule above on
+   purpose. `body[data-has-code="1"]` and `body[data-width="normal"]` are
+   both specificity (0,1,1), so nothing but source order decides which one
+   paints. Move these rules above it and choosing "Normal" silently stops
+   working on every document that cites code, while every source-level
+   check still passes. view-controls.e2e.cjs item 3 measures the computed
+   value for exactly this reason.
+
+   The attribute is only written when the reader has chosen: with nothing
+   stored, script.js derives it from data-has-code each render, so a
+   document that gains its first anchor mid-poll still widens by itself. */
+body[data-width="normal"] { --content-max: 1040px; }
+body[data-width="wide"]   { --content-max: 1180px; }
+body[data-width="extra"]  { --content-max: 1600px; }
+
+/* Every pane promoted at once. Deliberately an OVERRIDE, not a rewrite of
+   each block's stored data-code-wide: leaving wide mode has to give the
+   reader back exactly the promotions they made by hand, and a mode that
+   wrote per-block state could not. (0,5,2) beats the per-block promotion
+   rule's (0,4,1), so this wins while it is on and vanishes when it is off.
+   Carries :not(.collapsed) for the same reason the split rule does — see
+   the collapse trap on that rule above. */
+body[data-code-layout="wide"] section.block.card[data-has-code="1"]:not(.collapsed) .card-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+body[data-code-layout="wide"] section.block.card[data-has-code="1"] .code-col {
+  border-left: none;
+  border-top: 1px solid var(--border);
+}
+/* Nothing left for a per-pane promote button to promote. */
+body[data-code-layout="wide"] .cp-widen { display: none; }
+/* A pane-layout control on a document with no panes is a button that
+   provably does nothing. */
+body:not([data-has-code="1"]) #codelayout-toggle { display: none; }
+
+/* Same surface/border/radius vocabulary as .icon-btn (core.css), just wide
+   enough to carry a word. min-width holds the bar steady while script.js
+   fills in the label — the server cannot know it, since it depends on
+   whether the document cites code. */
+.width-btn {
+  flex: none;
+  min-width: 66px; height: 26px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0 9px;
+  font-family: inherit;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+.width-btn:hover { color: var(--accent); border-color: var(--accent); }
+/* One button, two glyphs: it shows the layout you are IN, and aria-pressed
+   carries the same fact for anything not looking at pixels. */
+.layout-btn .icon-stack { display: none; }
+.layout-btn[aria-pressed="true"] .icon-split { display: none; }
+.layout-btn[aria-pressed="true"] .icon-stack { display: inline; }
+.layout-btn[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+
+/* === Reading highlighter =============================================
+   #fcd34d measured against every colour prose actually uses on it: body
+   text #3a3d44 is 7.54:1 AAA, bold #1d1d1f is 11.67:1 AAA, a link #1e40af
+   is 6.05:1 AA. It also separates from the card surface #f8f9fb better
+   than any softer yellow tried (1.37:1 vs 1.10–1.21:1) — and being a hue
+   shift rather than only a luminance one, it reads as a marker at a
+   glance. No other yellow is in use on the page.
+   ::highlight() accepts a small set of properties; background-color is
+   one of them, and the text keeps its own colour underneath. */
+/* Every colour measured against all three of the colours prose actually
+   uses on it -- body #3a3d44, bold #1d1d1f, link #1e40af -- and none is
+   below AA on any of them. Worst case in the set is pink against a link at
+   4.81:1. Change one and recompute all three; the helper is in the handoff
+   doc under "The light palette".
+     yellow  7.54 / 11.67 / 6.05      green   7.14 / 11.04 / 5.72
+     orange  6.45 /  9.98 / 5.17      blue    6.03 /  9.33 / 4.84
+     pink    6.00 /  9.28 / 4.81
+   The default rule comes first and every named colour overrides it by
+   ancestor attribute -- verified in a browser that ::highlight() does honour
+   an ancestor selector, since it is a pseudo on the originating element and
+   not something you can style inline. */
+::highlight(annotate-read) { background-color: #fcd34d; }
+body[data-highlight-color="yellow"] ::highlight(annotate-read) { background-color: #fcd34d; }
+body[data-highlight-color="green"]  ::highlight(annotate-read) { background-color: #6ee7b7; }
+body[data-highlight-color="orange"] ::highlight(annotate-read) { background-color: #fdba74; }
+body[data-highlight-color="blue"]   ::highlight(annotate-read) { background-color: #93c5fd; }
+body[data-highlight-color="pink"]   ::highlight(annotate-read) { background-color: #f9a8d4; }
+
+/* While the highlighter is on, the selection goes neutral. The default
+   ::selection is rgba(0,113,227,.18) -- the accent blue -- and blue over a
+   marker colour composites into a hue that is in NO palette: measured over
+   yellow it lands at rgb(207,193,104), an olive-green that reads as a third
+   highlight colour. A neutral grey darkens whatever is underneath instead of
+   inventing a colour, and stays legible as a selection on bare surface too. */
+body[data-highlighter="on"] ::selection { background: rgba(90, 96, 108, 0.30); }
+
+/* The swatch button shows the colour it will paint in, so the control is the
+   value rather than a label for it. */
+.hl-swatch .swatch-dot { width: 13px; height: 13px; border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, .22); background: #fcd34d; display: block; }
+body[data-highlight-color="green"]  .hl-swatch .swatch-dot { background: #6ee7b7; }
+body[data-highlight-color="orange"] .hl-swatch .swatch-dot { background: #fdba74; }
+body[data-highlight-color="blue"]   .hl-swatch .swatch-dot { background: #93c5fd; }
+body[data-highlight-color="pink"]   .hl-swatch .swatch-dot { background: #f9a8d4; }
+.hl-swatch { visibility: hidden; pointer-events: none; }
+body[data-highlighter="on"] .hl-swatch { visibility: visible; pointer-events: auto; }
+
+/* Anchored to its button by .icon-btn-wrap, same as the legend popover, and
+   opened/closed by the same initTopPanels machinery so Esc, click-outside and
+   one-panel-at-a-time all behave identically. */
+.palette-pop {
+  position: absolute; top: calc(100% + 9px); right: 0; z-index: 60;
+  display: flex; gap: 6px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 34px rgba(20, 22, 28, .20), 0 2px 6px rgba(20, 22, 28, .08);
+}
+.palette-pop[hidden] { display: none; }
+.palette-pop button {
+  width: 24px; height: 24px; padding: 0; cursor: pointer;
+  border-radius: 6px; border: 1px solid rgba(0, 0, 0, .22);
+}
+.palette-pop button:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+.palette-pop button[aria-pressed="true"] { outline: 2px solid var(--text-strong); outline-offset: 1px; }
+.palette-pop button[data-color="yellow"] { background: #fcd34d; }
+.palette-pop button[data-color="green"]  { background: #6ee7b7; }
+.palette-pop button[data-color="orange"] { background: #fdba74; }
+.palette-pop button[data-color="blue"]   { background: #93c5fd; }
+.palette-pop button[data-color="pink"]   { background: #f9a8d4; }
+
+.hl-btn[aria-pressed="true"] { color: #92400e; border-color: #fcd34d; background: #fef3c7; }
+/* Only offer the eraser when there is a highlighter running -- but keep its
+   SLOT at all times. `display: none` was tried and measured: .header-actions
+   is right-aligned, so revealing the eraser pushed everything to its left
+   over by 26px, sliding the eraser itself under a pointer that had not moved
+   since the click that revealed it. The next click would then land on
+   clear-all, which wipes the page. Reserving the space costs one transparent
+   26px gap and makes the bar geometrically fixed.
+   read-highlighter.e2e.cjs item 2 measures the toggle's x before and after. */
+.hl-clear { visibility: hidden; pointer-events: none; }
+body[data-highlighter="on"] .hl-clear { visibility: visible; pointer-events: auto; }
+.hl-clear:hover { color: #991b1b; border-color: #991b1b; }
+
 section.block.card[data-has-code="1"]:not(.collapsed) .card-body {
   display: grid;
   grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
@@ -1575,9 +1749,15 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
    this they'd merge into one slab. */
 .codepane + .codepane { border-top: 1px solid #c3cad6; }
 
+/* One band, not three. The header used to be the first of a stack — head
+   (35px) + note (27px) + status (39px) = 101px above the first line of code,
+   which on a six-line pane is more chrome than content. The note moved onto
+   the code ground as a caption and the drift notice became `.cp-chip` below,
+   so this band now carries identity, drift and controls on a single row.
+   e2e item 14 measures the height above the first `.cp-row`. */
 .cp-head {
-  display: flex; align-items: center; gap: 8px;
-  padding: 9px 12px;
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 11px;
   background: #d8dde7;
   border-bottom: 1px solid #c3cad6;
   font-size: 11px;
@@ -1594,36 +1774,61 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
 .cp-jump:hover { color: #1e40af; }
 .cp-widen {
   background: none; border: 1px solid #c3cad6; border-radius: 5px;
-  color: #4e5665; cursor: pointer; padding: 2px 7px;
-  font-family: inherit; font-size: 10px;
+  color: #4e5665; cursor: pointer; padding: 1px 6px;
+  font-family: inherit; font-size: 9.5px;
   letter-spacing: 0.06em; text-transform: uppercase;
 }
 .cp-widen:hover { color: #1e40af; border-color: #1e40af; }
-/* Specificity fix: main.prose p (0,1,2) used to beat the plain .cp-note
-   rule (0,1,0), so the note silently inherited the prose paragraph's 140px
-   right gutter (room for hover-action buttons that don't exist here).
-   Scoping under .codepane raises this to (0,2,0), which wins on class
-   count without touching the prose rule at all. */
-.codepane .cp-note {
-  margin: 0; padding: 6px 12px;
-  background: #d8dde7; border-bottom: 1px solid #c3cad6;
-  color: #4e5665; font-size: 11.5px;
-  font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+/* Drift, as a chip in the header band rather than a row of its own. A pane
+   that still has code to show does not need a whole sentence to say the line
+   moved — but it must not go quiet either, so the chip is bordered, bold and
+   uppercase rather than a tint.
+   The border is doing real work: measured, no warm fill light enough to sit
+   in this band separates from #d8dde7 by more than 1.14:1, so a fill alone
+   would leave a chip with no edge. The border is the chip's own text colour
+   (5.93:1 moved / 6.40:1 stale on their fills), which is the same device
+   .cp-widen already uses. An EMPTY pane keeps the full sentence instead --
+   see .cp-status and e2e item 16. */
+.cp-chip {
+  flex: none;
+  border-radius: 4px; padding: 1px 5px;
+  font-size: 9.5px; font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  border: 1px solid currentColor;
 }
+.cp-chip[data-status="moved"] { color: #92400e; background: #fde8c8; }
+.cp-chip[data-status="stale"],
+.cp-chip[data-status="missing"],
+.cp-chip[data-status="refused"] { color: #991b1b; background: #fcdada; }
+/* The pane's one band is its header. A `.cp-note` caption used to sit here,
+   carrying a short gloss the block author wrote; it was removed after being
+   seen in place — the header line says everything the pane needs to say about
+   itself, and the prose beside the pane is already the place for a gloss.
+   Trap kept for whoever adds the next <p> in here: `main.prose p` is (0,1,2)
+   and beats a bare `.cp-*` class rule at (0,1,0), so any new paragraph inside
+   a pane must be scoped under `.codepane` or it silently inherits the prose
+   paragraph's padding. */
 .cp-body {
-  padding: 7px 0; font-size: 12px; line-height: 1.62;
+  padding: 5px 0 8px; font-size: 12px; line-height: 1.62;
   overflow-x: auto; color: #1b1f26;
 }
-.cp-row { display: flex; min-width: max-content; }
-.cp-num {
-  flex: none; width: 2.6em; padding-right: 8px;
-  text-align: right; color: #5f6773; user-select: none;
-}
+/* The inset lives on the ROW, not on .cp-line: it has to be real geometry
+   between the anchor row's 3px inset bar and the first glyph, and padding
+   inside the text span would leave that span's own left edge sitting on the
+   bar. Every row carries it equally, so indentation is untouched. */
+.cp-row { display: flex; min-width: max-content; padding-left: 12px; }
+/* No line numbers. An anchored-row-only number was tried and reversed after
+   seeing it rendered: it was still a number to read, and the header already
+   states `file:134` — the pane is for glancing at what the code says, not for
+   locating it. The inset the gutter used to provide now lives on .cp-row —
+   see that rule; code-anchors.e2e.cjs item 15 measures it against the bar. */
 .cp-line { flex: 1 1 auto; white-space: pre; padding-right: 8px; }
+/* A blank context line renders nothing at all now, so at a full row height it
+   reads as a hole in the pane rather than as the blank line it is. */
+.cp-row.is-blank { height: 9px; }
 /* The anchored line is the one the prose is about; the padding around it is
    there so the line has a home, not to be read. */
 .cp-row.is-anchor { background: #cbd9f2; box-shadow: inset 3px 0 0 #1e40af; }
-.cp-row.is-anchor .cp-num { color: #1e40af; }
 /* De-emphasise context rows by desaturation, not opacity: opacity blends
    ink toward the paper, which is fine on a dark ground but drags a comment
    token down to 2.17:1 on this light one. A flat muted grey holds every
@@ -1641,15 +1846,21 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
   color: #5f6773;
 }
 .cp-truncated {
-  padding: 5px 12px 2px calc(2.6em + 8px);
+  padding: 5px 12px 2px 12px;
   color: #5f6773; font-size: 11px; font-style: italic;
 }
 
 /* A pane that could not resolve says so, and shows no code at all. A pane
    rendering whatever now sits at that line number would be a lie the reader
    has no way to detect. */
+/* Reached only by a pane with NO code: stale, missing, refused. When there
+   are lines to look at the drift is a `.cp-chip` in the header instead. An
+   empty pane's entire content is the reason it is empty, so shortening that
+   to a chip would leave a box that says nothing — e2e item 16.
+   No grey band: this sits directly on the code ground, so an empty pane is
+   one surface rather than a bar stacked on another. */
 .cp-status {
-  padding: 8px 12px;
+  padding: 6px 12px 8px;
   font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
   font-size: 11.5px; line-height: 1.5;
 }

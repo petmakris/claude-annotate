@@ -70,10 +70,10 @@ def anchor_problem(a: Any) -> Optional[str]:
     if not isinstance(snippet, str) or not snippet.strip():
         return "snippet must be non-empty (it is what survives the file moving)"
 
-    note = a.get("note")
-    if note is not None and not isinstance(note, str):
-        return "note must be a string"
-
+    # No `note` check: the field it validated is gone. An anchor written
+    # before the removal may still carry one, and this function is a list of
+    # checks rather than a reject-unknown-keys gate, so such an anchor keeps
+    # passing -- it simply stops being rendered.
     return None
 
 
@@ -114,8 +114,6 @@ def _fail(a: dict, status: str, message: str) -> dict:
         "status": status,
         "message": message,
     }
-    if isinstance(a.get("note"), str):
-        out["note"] = a["note"]
     return out
 
 
@@ -235,8 +233,6 @@ def _build(a: dict, lines: list) -> dict:
                           % (authored, actual))
     if truncated:
         out["truncated"] = truncated
-    if isinstance(a.get("note"), str):
-        out["note"] = a["note"]
     return out
 
 

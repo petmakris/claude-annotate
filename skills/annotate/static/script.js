@@ -694,6 +694,69 @@
     return `annotate.codewide:${rid}:${blockId}`;
   }
 
+  // ── Page-wide view controls ───────────────────────────────────────────
+  // Two reader preferences: how wide the column is, and whether code panes
+  // sit beside the prose or beneath it. Both are stored per response, like
+  // the per-block promotion above, because a preference you must re-set on
+  // every reload is worse than not having one.
+  const VIEW_WIDTHS = ["normal", "wide", "extra"];
+  const VIEW_LABELS = { normal: "Normal", wide: "Wide", extra: "Extra" };
+
+  function viewKey(name) {
+    const rid = (document.body.dataset.responseId || "default");
+    return `annotate.view:${rid}:${name}`;
+  }
+  function readStored(name) {
+    try { return localStorage.getItem(viewKey(name)); } catch (_) { return null; }
+  }
+  // Nothing stored means nothing CHOSEN, so the width is derived fresh each
+  // time rather than frozen at first paint. That is what lets a document
+  // which gains its first anchor mid-poll widen itself — the same event that
+  // flips data-has-code re-derives this.
+  function effectiveWidth() {
+    const stored = readStored("width");
+    if (VIEW_WIDTHS.indexOf(stored) >= 0) return stored;
+    return document.body.dataset.hasCode === "1" ? "wide" : "normal";
+  }
+  function effectiveCodeLayout() {
+    return readStored("codelayout") === "wide" ? "wide" : "split";
+  }
+
+  // Paints both preferences onto <body> and syncs the two controls to them.
+  // Idempotent, and safe to call on every render: it reads state, it never
+  // advances it.
+  function applyViewControls() {
+    const width = effectiveWidth();
+    document.body.dataset.width = width;
+    const wb = document.getElementById("width-toggle");
+    if (wb) wb.textContent = VIEW_LABELS[width];
+
+    const layout = effectiveCodeLayout();
+    document.body.dataset.codeLayout = layout;
+    const lb = document.getElementById("codelayout-toggle");
+    if (lb) lb.setAttribute("aria-pressed", layout === "wide" ? "true" : "false");
+  }
+
+  function wireViewControls() {
+    const wb = document.getElementById("width-toggle");
+    if (wb) {
+      wb.addEventListener("click", () => {
+        const next = VIEW_WIDTHS[(VIEW_WIDTHS.indexOf(effectiveWidth()) + 1) % VIEW_WIDTHS.length];
+        try { localStorage.setItem(viewKey("width"), next); } catch (_) {}
+        applyViewControls();
+      });
+    }
+    const lb = document.getElementById("codelayout-toggle");
+    if (lb) {
+      lb.addEventListener("click", () => {
+        const next = effectiveCodeLayout() === "wide" ? "split" : "wide";
+        try { localStorage.setItem(viewKey("codelayout"), next); } catch (_) {}
+        applyViewControls();
+      });
+    }
+    applyViewControls();
+  }
+
   function highlightCodeLine(text, file) {
     if (typeof window.hljs !== "object" || !window.hljs) return null;
     // Same guard as highlightFence: an anchor into a minified or generated
@@ -734,6 +797,24 @@
     spacer.className = "cp-spacer";
     head.append(path, spacer);
 
+    // Drift rides in the header band as a chip. It used to be a `.cp-status`
+    // row under the note, and head + note + status stacked to 101px above the
+    // first line of code — more chrome than content on a short pane. The chip
+    // has to carry the AUTHORED line, because that is the one fact the header
+    // does not: `path` shows where the line is NOW. The full message stays as
+    // the title, so nothing is lost, and a pane with no code to show keeps the
+    // whole sentence as a row (below) rather than shrinking to this.
+    if (pane.status !== "ok") {
+      const chip = document.createElement("span");
+      chip.className = "cp-chip";
+      chip.dataset.status = pane.status;
+      chip.textContent = pane.status === "moved" && pane.line
+        ? `moved · was ${pane.line}`
+        : pane.status;
+      if (pane.message) chip.title = pane.message;
+      head.appendChild(chip);
+    }
+
     if (pane.status === "ok" || pane.status === "moved") {
       const widen = document.createElement("button");
       widen.type = "button";
@@ -764,13 +845,6 @@
     }
     wrap.appendChild(head);
 
-    if (pane.note) {
-      const note = document.createElement("p");
-      note.className = "cp-note";
-      note.textContent = pane.note;
-      wrap.appendChild(note);
-    }
-
     // A pane that could not resolve shows its reason and NO code. Rendering
     // whatever now sits at that line number would be a lie the reader has no
     // way to detect.
@@ -790,14 +864,6 @@
       return wrap;
     }
 
-    if (pane.status === "moved") {
-      const status = document.createElement("div");
-      status.className = "cp-status";
-      status.dataset.status = "moved";
-      status.textContent = pane.message || "";
-      wrap.appendChild(status);
-    }
-
     const body = document.createElement("div");
     body.className = "cp-body hljs";
     (pane.lines || []).forEach((l) => {
@@ -805,16 +871,15 @@
       row.className = "cp-row";
       if (l.role === "anchor") row.classList.add("is-anchor");
       if (l.role === "context") row.classList.add("is-context");
-      const num = document.createElement("span");
-      num.className = "cp-num";
-      num.setAttribute("aria-hidden", "true");
-      num.textContent = String(l.n);
+      // A blank context line renders nothing at all; at a full row height it
+      // reads as a hole in the pane rather than as the blank line it is.
+      if (l.role === "context" && !String(l.text || "").trim()) row.classList.add("is-blank");
       const text = document.createElement("span");
       text.className = "cp-line";
       const painted = highlightCodeLine(l.text, pane.file);
       if (painted !== null) text.innerHTML = painted;
       else text.textContent = l.text;
-      row.append(num, text);
+      row.appendChild(text);
       body.appendChild(row);
     });
     wrap.appendChild(body);
@@ -850,11 +915,25 @@
   // Whether ANY block in this document cites code. Drives the wide column
   // (--content-max), so this is a decision about the document, not about
   // one block.
+  // The reading highlighter paints ranges over block prose from outside the
+  // DOM, so it has to be re-applied whenever that prose is replaced. Called
+  // from here rather than from a MutationObserver inside the highlighter: this
+  // is the point where a render is FINISHED, which an observer cannot know.
+  function repaintHighlights() {
+    const hl = window.annotateHighlighter;
+    if (hl && typeof hl.repaint === "function") hl.repaint();
+  }
+
   function setDocumentCodeFlag(blocks) {
     const any = (blocks || []).some(
       (b) => Array.isArray(b.code) && b.code.length
     );
     document.body.dataset.hasCode = any ? "1" : "0";
+    // An unchosen width is DERIVED from this flag, so the two must move
+    // together: a document that gains its first anchor mid-poll has to widen
+    // in the same tick, not on the next reload.
+    applyViewControls();
+    repaintHighlights();
   }
 
   // A flowchart authored as pflow ships the source it was compiled from. Render
@@ -1597,6 +1676,11 @@
   // over the document — nudging every sentence down to answer "what does the
   // trash button do?" would be absurd. Same shell here, different geometry in
   // the stylesheet; see .general-composer and .legend-pop in style.css.
+  // Runs at parse time, alongside initTopPanels below: the controls are
+  // server-rendered, so they exist before any block does, and painting the
+  // stored preference now avoids a flash of the default measure.
+  wireViewControls();
+
   (function initTopPanels() {
     // Each panel is (toggle button, panel element, what to focus on open).
     const panels = [
@@ -1605,7 +1689,10 @@
         focus: () => document.getElementById("general-input") },
       { btn: document.getElementById("legend-toggle"),
         el: document.getElementById("legend-pop"),
-        focus: () => null },
+        focus: () => null, dismissOnOutsideClick: true },
+      { btn: document.getElementById("highlighter-palette"),
+        el: document.getElementById("palette-pop"),
+        focus: () => null, dismissOnOutsideClick: true },
     ].filter((p) => p.btn && p.el);
     if (!panels.length) return;
 
@@ -1657,12 +1744,14 @@
       close(open_, { restoreFocus: true });
     }, true);
 
-    // Click-outside, for the popover only. The composer is deliberately exempt:
-    // it can hold half-written text, and losing that to a stray click on the
-    // document would be the worst bug in this file.
+    // Click-outside, for the popovers only. The composer is deliberately
+    // exempt: it can hold half-written text, and losing that to a stray click
+    // on the document would be the worst bug in this file. That exemption is
+    // now carried by a per-panel flag rather than by naming the legend, so a
+    // new popover opts in instead of being silently left out.
     document.addEventListener("click", (e) => {
       panels.forEach((p) => {
-        if (p.el !== document.getElementById("legend-pop")) return;
+        if (!p.dismissOnOutsideClick) return;
         if (!isOpen(p)) return;
         if (p.el.contains(e.target) || p.btn.contains(e.target)) return;
         close(p);

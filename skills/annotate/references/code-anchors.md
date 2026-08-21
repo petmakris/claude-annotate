@@ -28,7 +28,7 @@ Each entry in a block's `code` list, verified against `skills/annotate/anchors.p
 
 ```json
 {"file": "src/orders/service.py", "line": 154, "end_line": 156,
- "snippet": "def validate(order):", "note": "the guard that fans in from both callers"}
+ "snippet": "def validate(order):"}
 ```
 
 - **`file`** (required) — repo-relative path, resolved against the
@@ -42,7 +42,11 @@ Each entry in a block's `code` list, verified against `skills/annotate/anchors.p
   line`. Extends the anchor to a range instead of one line.
 - **`snippet`** (required) — the verbatim text of `line`, at authoring
   time. Non-empty. See "Why snippet is the point" below.
-- **`note`** (optional) — a short string shown above the pane.
+There is no `note` field. One existed — a short gloss rendered as a caption
+above the pane — and it was removed after being seen in place: the pane's
+header line says everything the pane needs to say about itself, and the prose
+beside the pane is already where a gloss belongs. An anchor written before the
+removal is still accepted; the string is simply ignored. Do not author one.
 
 ### Limits
 

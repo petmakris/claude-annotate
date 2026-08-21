@@ -8,8 +8,43 @@ CSS = (Path(__file__).resolve().parents[1] / "static" / "style.css").read_text()
 class TestCodePaneCss(unittest.TestCase):
     def test_pane_classes_exist(self):
         for sel in [".codepane", ".cp-head", ".cp-body", ".cp-row",
-                    ".cp-num", ".cp-line", ".cp-status"]:
+                    ".cp-line", ".cp-status", ".cp-chip"]:
             self.assertIn(sel, CSS, "%s missing from style.css" % sel)
+
+    def test_card_prose_rules_keep_their_main_prose_prefix(self):
+        # `main.prose p` sets padding-right: 140px at specificity (0,1,2) --
+        # room for hover buttons that now live in the card header. A bare
+        # `.card-body p` is (0,1,1) and LOSES to it, which is how the reserve
+        # survived unnoticed until it was measured in a browser. The prefix is
+        # what makes these rules (0,2,2) and lets them win; "simplifying" it
+        # off silently restores 140px of dead gutter inside every card.
+        # e2e item 13 catches it for real; this catches it in a second.
+        for tag in ("p", "li", "blockquote"):
+            self.assertIn("main.prose .card-body %s" % tag, CSS,
+                          "the .card-body %s padding rule lost its main.prose "
+                          "prefix and now loses to main.prose %s" % (tag, tag))
+
+    def test_the_pane_paints_no_line_numbers_and_no_caption(self):
+        # Both were tried, rendered, and reversed. The header line already
+        # states `file:134`, and the prose beside the pane is where a gloss
+        # belongs -- what is left above the code is one band.
+        # Matched as RULES (a selector followed by `{` or `,`), not as bare
+        # strings: the comments deliberately keep saying why these were
+        # removed, and a history note is not a live rule.
+        SCRIPT = (Path(__file__).resolve().parents[1] / "static" / "script.js").read_text()
+        for gone in ("cp-num", "cp-note", "cp-gutter"):
+            self.assertIsNone(
+                re.search(r"\.%s\s*[{,]" % gone, CSS),
+                "%s still has a live rule in style.css" % gone)
+            self.assertNotIn(gone, SCRIPT, "%s is still rendered by script.js" % gone)
+
+    def test_code_rows_are_inset_clear_of_the_anchor_bar(self):
+        # The gutter used to provide this inset. Without it the anchored
+        # row's 3px inset box-shadow would paint over the first glyph, so the
+        # padding moved onto .cp-row -- where it is real geometry the e2e can
+        # measure, rather than padding inside the text span.
+        i = CSS.index(".cp-row { display: flex;")
+        self.assertIn("padding-left", CSS[i:CSS.index("}", i)])
 
     def test_split_is_gated_on_the_block_having_code(self):
         # An anchorless document must render exactly as annotate does today.

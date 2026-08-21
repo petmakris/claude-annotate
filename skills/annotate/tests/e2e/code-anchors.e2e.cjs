@@ -179,6 +179,26 @@ const ANCHOR_SNIPPET = "subtotal = add(subtotal, item.price)";
 const ANCHOR_LINE = CALC_LINES.indexOf(`        ${ANCHOR_SNIPPET}`) + 1;
 if (ANCHOR_LINE < 1) throw new Error("fixture setup: anchor snippet not found in fixture source");
 
+// A snippet that IS in the file, but not at the line the block claims — the
+// "moved" status, which is the only non-"ok" status that still renders code.
+// It is the case the header has to carry drift for, so it needs a fixture.
+//
+// It is deliberately pushed past line 99. The line-number gutter is sized
+// from the widest number a pane paints, and the bug that motivated item 15's
+// clipping check only appears at three digits: a two-digit fixture fits any
+// plausible gutter and would let a clipped gutter pass. So the file is padded
+// until this anchor lands in three-digit territory.
+while (CALC_LINES.length < 128) CALC_LINES.push("# padding so the anchor below needs three digits");
+const MOVED_SNIPPET = "def multiply_wide(a, b):";
+CALC_LINES.push(MOVED_SNIPPET, "    return a * b");
+const MOVED_ACTUAL_LINE = CALC_LINES.indexOf(MOVED_SNIPPET) + 1;
+// Inside anchors.py's DRIFT_RADIUS (40): further than that and the snippet is
+// not looked for at all, which is "stale", a different pane entirely.
+const MOVED_AUTHORED_LINE = MOVED_ACTUAL_LINE - 11;
+if (MOVED_ACTUAL_LINE < 100)
+  throw new Error("fixture setup: the moved anchor must land on a three-digit line, got " + MOVED_ACTUAL_LINE);
+if (MOVED_ACTUAL_LINE === MOVED_AUTHORED_LINE) throw new Error("fixture setup: moved anchor does not actually move");
+
 // ── Workspace B fixture: gains its first-ever anchor mid-poll ──────────────
 const UTIL_LINES = ["def util():", "    return 42"];
 const UTIL_SNIPPET = "return 42";
@@ -220,6 +240,8 @@ function blockRect(page, blockId, selector) {
       { id: "b-1", title: "A stale anchor", markdown: "This citation has drifted.",
         code: [{ file: "lib/calc.py", line: 5, snippet: "THIS_TEXT_IS_NOT_IN_THE_FILE_92f1" }] },
       { id: "b-2", title: "A block with nothing to cite", markdown: "Plain prose, no anchors." },
+      { id: "b-3", title: "A drifted anchor", markdown: "This citation still resolves, one line off.",
+        code: [{ file: "lib/calc.py", line: MOVED_AUTHORED_LINE, snippet: MOVED_SNIPPET }] },
     ]);
 
     browser = await chromium.launch({ headless: true });
@@ -265,9 +287,15 @@ function blockRect(page, blockId, selector) {
     // code-bearing section keeps its own data-has-code attribute through the
     // clone, so its card still split 46/54 even without this — just into the
     // narrow column instead of the wide one.
-    if (!/<body class="exported" data-has-code="1">/.test(exportedHtml))
+    // Matched against the body tag's ATTRIBUTES, not against the whole tag as
+    // a fixed string: the page-wide view controls now bake data-width and
+    // data-code-layout onto the same tag, and an exact-tag regex fails the
+    // moment anything legitimately joins it.
+    const exportedBody = (/<body[^>]*>/.exec(exportedHtml) || [""])[0];
+    if (!/\bclass="exported"/.test(exportedBody) || !/\bdata-has-code="1"/.test(exportedBody))
       fail("the exported <body> does not carry data-has-code — the exported "
-        + "document loses its widened --content-max while its sections still split");
+        + "document loses its widened --content-max while its sections still "
+        + "split. Tag was: " + exportedBody);
     log("✓ export carries data-has-code so the wide column survives");
 
     // I1: the exported file has no owner, so a jetbrains:// link (which only
@@ -294,14 +322,18 @@ function blockRect(page, blockId, selector) {
     log(`✓ split is real: content right=${Math.round(contentRect.right)} <= code left=${Math.round(codeRect.left)}, both columns have real width, rows overlap vertically`);
 
     // ── 2. The anchor line is the emphasised one ────────────────────────────
+    // With line numbers gone the anchored row is identified by what it SHOWS,
+    // which is the stronger claim anyway: the emphasised row has to be the
+    // source line the block cited, not merely the row in the right position.
     const anchorInfo = await page.evaluate(() => {
       const section = document.querySelector('section.block[data-block-id="b-0"]');
       const rows = [...section.querySelectorAll(".code-col .cp-row.is-anchor")];
-      return { count: rows.length, num: rows[0] && rows[0].querySelector(".cp-num").textContent };
+      return { count: rows.length, text: rows[0] && rows[0].querySelector(".cp-line").textContent };
     });
     if (anchorInfo.count !== 1) fail("expected exactly one .cp-row.is-anchor, found " + anchorInfo.count);
-    if (anchorInfo.num !== String(ANCHOR_LINE)) fail(`anchor row shows line ${anchorInfo.num}, expected ${ANCHOR_LINE}`);
-    log(`✓ exactly one anchor row, line number ${anchorInfo.num} matches the anchor`);
+    if ((anchorInfo.text || "").trim() !== ANCHOR_SNIPPET)
+      fail(`the emphasised row reads "${(anchorInfo.text || "").trim()}", expected the cited line "${ANCHOR_SNIPPET}"`);
+    log(`✓ exactly one anchor row, and it is the cited line`);
 
     // ── 3. Context lines are dimmed, not hidden ─────────────────────────────
     // The light theme (task 13) de-emphasises context rows by desaturating
@@ -456,6 +488,118 @@ function blockRect(page, blockId, selector) {
     pageB.on("pageerror", (e) => log("PAGE ERROR (workspace B): " + e.message));
     await pageB.goto(sessB.url, { waitUntil: "domcontentloaded" });
     await pageB.waitForSelector('section.block[data-block-id="b-1"]', { timeout: 8000 });
+
+    // ── 13. The card's prose keeps the card's width ────────────────────────
+    // `main.prose p` sets `padding: 4px 140px 4px 6px` — a gutter reserved for
+    // hover-action buttons in the pre-card layout. Those buttons moved into
+    // the card header, and the per-sentence strip is `position: absolute`, so
+    // nothing needs that space any more. The rule that was supposed to release
+    // it (`.card-body p`, specificity (0,1,1)) silently lost to `main.prose p`
+    // at (0,1,2) — the same specificity trap that already bit `.cp-note`.
+    // Measured, not read: a source check cannot see which rule won.
+    const proseGutter = await page.evaluate(() => {
+      const sec = document.querySelector('section.block[data-block-id="b-0"]');
+      const p = sec.querySelector(".block-content > p");
+      const cs = getComputedStyle(p);
+      const r = p.getBoundingClientRect();
+      return {
+        padRight: parseFloat(cs.paddingRight),
+        padLeft: parseFloat(cs.paddingLeft),
+        textWidth: r.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
+      };
+    });
+    if (proseGutter.padRight > 20)
+      fail(`card prose reserves ${proseGutter.padRight}px on the right — the 140px hover-action `
+        + "gutter is still winning on specificity, so the split view loses that much text width");
+    log(`✓ card prose keeps its width: padding-right ${proseGutter.padRight}px, `
+      + `${Math.round(proseGutter.textWidth)}px of text`);
+
+    // ── 14. A moved pane states its drift in the header, not in its own row ──
+    // Three stacked bands (head + note + status) cost 101px above the first
+    // line of code — more chrome than content on a six-line pane. The drift
+    // becomes a chip in the header band, which keeps it loud without giving it
+    // a row. It must still name the line the block was authored against: that
+    // is the one fact the header does not otherwise carry.
+    const moved = await page.evaluate(() => {
+      const sec = document.querySelector('section.block[data-block-id="b-3"]');
+      const pane = sec.querySelector(".codepane");
+      const chip = pane.querySelector(".cp-head .cp-chip");
+      const row = pane.querySelector(".cp-row");
+      return {
+        chip: chip && chip.dataset.status,
+        chipText: chip && chip.textContent,
+        chipTitle: chip && chip.getAttribute("title"),
+        statusRows: pane.querySelectorAll(".cp-status").length,
+        rowCount: pane.querySelectorAll(".cp-row").length,
+        chrome: row
+          ? Math.round(row.getBoundingClientRect().top - pane.getBoundingClientRect().top)
+          : null,
+      };
+    });
+    if (moved.chip !== "moved")
+      fail("the drifted pane carries no .cp-chip[data-status=moved] in its header, got: " + moved.chip);
+    if (moved.statusRows !== 0)
+      fail(`the drifted pane still renders ${moved.statusRows} .cp-status row(s) — with code on `
+        + "screen the chip is the whole notice");
+    if (!moved.rowCount) fail("the drifted pane rendered no code — a moved anchor still resolves");
+    const authored = String(MOVED_AUTHORED_LINE);
+    if (!(moved.chipText || "").includes(authored) && !(moved.chipTitle || "").includes(authored))
+      fail(`the chip drops the authored line ${authored} entirely (text="${moved.chipText}", `
+        + `title="${moved.chipTitle}") — that fact is nowhere else in the pane`);
+    if (moved.chrome > 45)
+      fail(`${moved.chrome}px of chrome above the first line of code — with the caption gone the `
+        + "header band is the only thing that should be up there");
+    log(`✓ moved pane: drift is a header chip ("${moved.chipText}"), no status row, `
+      + `${moved.chrome}px of chrome above the code`);
+
+    // ── 15. The pane paints no line numbers at all ─────────────────────────
+    // Reversed after seeing it rendered: an anchored-row-only number was
+    // still a number to read, and the header already says `file:134`. With
+    // the gutter gone the code sits closer to the pane's left edge, so the
+    // only thing that has to hold is that the anchor row's 3px inset bar does
+    // not paint over the first glyph of the line.
+    const ruler = await page.evaluate(() => {
+      const sec = document.querySelector('section.block[data-block-id="b-0"]');
+      const pane = sec.querySelector(".codepane");
+      const row = pane.querySelector(".cp-row.is-anchor");
+      const line = row.querySelector(".cp-line");
+      return {
+        numEls: pane.querySelectorAll(".cp-num").length,
+        noteEls: pane.querySelectorAll(".cp-note").length,
+        gutterVar: getComputedStyle(pane).getPropertyValue("--cp-gutter").trim(),
+        inset: line.getBoundingClientRect().left - row.getBoundingClientRect().left,
+        rowCount: pane.querySelectorAll(".cp-row").length,
+      };
+    });
+    if (ruler.numEls !== 0)
+      fail(`the pane still renders ${ruler.numEls} .cp-num element(s) — the ruler is back`);
+    if (ruler.noteEls !== 0)
+      fail(`the pane still renders ${ruler.noteEls} .cp-note element(s) — the caption is back`);
+    if (ruler.gutterVar)
+      fail(`--cp-gutter is still being set (${ruler.gutterVar}) — dead machinery for a gutter `
+        + "that no longer exists");
+    if (!(ruler.inset >= 4))
+      fail(`code lines start ${ruler.inset}px from the row's left edge — the 3px anchor bar will `
+        + "paint over the first glyph");
+    if (!ruler.rowCount) fail("the pane rendered no code at all");
+    log(`✓ no line numbers, no caption; ${ruler.rowCount} code rows inset ${Math.round(ruler.inset)}px `
+      + "clear of the anchor bar");
+
+    // ── 16. A pane with NO code keeps its full status sentence ──────────────
+    // The chip replaces the status row only when there is code to look at. An
+    // empty pane's whole content is the reason it is empty, so shortening that
+    // to a chip would leave a box that says nothing.
+    const staleNotice = await page.evaluate(() => {
+      const sec = document.querySelector('section.block[data-block-id="b-1"]');
+      const pane = sec.querySelector(".codepane");
+      const status = pane.querySelector(".cp-status");
+      return { hasStatus: !!status, text: status && status.textContent.trim(),
+               rows: pane.querySelectorAll(".cp-row").length };
+    });
+    if (staleNotice.rows !== 0) fail("fixture drift: b-1 should render no code rows");
+    if (!staleNotice.hasStatus || !staleNotice.text)
+      fail("the empty pane lost its status sentence — a chip alone leaves a box that says nothing");
+    log(`✓ empty pane keeps its full reason: "${staleNotice.text}"`);
 
     // ── 6. An anchorless document is untouched ──────────────────────────────
     const untouched = await pageB.evaluate(() => ({

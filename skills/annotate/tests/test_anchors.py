@@ -15,7 +15,15 @@ class TestAnchorProblem(unittest.TestCase):
         self.assertIsNone(anchors.anchor_problem(_ok()))
 
     def test_valid_anchor_with_optionals(self):
-        self.assertIsNone(anchors.anchor_problem(_ok(end_line=812, note="the dispatch point")))
+        self.assertIsNone(anchors.anchor_problem(_ok(end_line=812)))
+
+    def test_a_leftover_note_key_is_tolerated_not_refused(self):
+        # `note` used to be a real field, rendered as a caption above the pane,
+        # and was removed after being seen in place. Validation is a list of
+        # checks rather than a reject-unknown-keys gate, so a blocks.json
+        # written before the removal still passes -- it just stops rendering.
+        # Refusing those would break every workspace that already has one.
+        self.assertIsNone(anchors.anchor_problem(_ok(note="written before the removal")))
 
     def test_not_a_dict(self):
         self.assertIn("object", anchors.anchor_problem("nope"))
@@ -161,9 +169,12 @@ class TestResolveWindow(AnchorFixture):
         got = {l["n"]: l["text"] for l in out["lines"]}
         self.assertEqual(got[9], "    return 2")
 
-    def test_note_is_passed_through(self):
+    def test_note_is_not_carried_into_the_pane(self):
+        # The caption it fed is gone from the UI, so carrying it would be
+        # payload nobody reads -- and would keep the reference telling Claude
+        # to spend tokens authoring one.
         out = anchors.resolve_anchor(self.anchor(note="the second one"), self.root)
-        self.assertEqual(out["note"], "the second one")
+        self.assertNotIn("note", out)
 
     def test_oversized_window_is_truncated_with_a_count(self):
         big = self.root / "big.py"

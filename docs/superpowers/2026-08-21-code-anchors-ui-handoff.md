@@ -18,7 +18,7 @@ paints them as a full-bleed light slab in a second column beside the prose. A `S
 rule instructs Claude to anchor any block that asserts something about specific code, and
 `check_anchors` fails a bad citation before the URL is announced.
 
-**It works end to end.** 1076 Python tests, 17/17 browser e2e, dogfooded live. The remaining
+**It works end to end.** 1102 Python tests, 20/20 + 9/9 browser e2e, dogfooded live. The remaining
 work is UI polish, not correctness.
 
 ---
@@ -27,10 +27,11 @@ work is UI polish, not correctness.
 
 ```bash
 # full python suite (from the repo root)
-python3 -m pytest skills -q                       # expect 1076 passed
+python3 -m pytest skills -q                       # expect 1102 passed
 
 # the browser end-to-end (manual only — NOT in CI, by repo convention)
-NODE_PATH=$(npm root -g) node skills/annotate/tests/e2e/code-anchors.e2e.cjs   # expect 17/17
+NODE_PATH=$(npm root -g) node skills/annotate/tests/e2e/code-anchors.e2e.cjs   # expect 20/20
+NODE_PATH=$(npm root -g) node skills/annotate/tests/e2e/view-controls.e2e.cjs  # expect 9/9
 
 # the live dogfood page (8 blocks, real anchors, one deliberately stale)
 ./skills/annotate/ensure_server.sh
@@ -54,10 +55,14 @@ pixels.
 | File | What lives there |
 |---|---|
 | `skills/annotate/static/style.css` | `=== Code anchors ===` block, from line ~1515. Everything visual. |
-| `skills/annotate/static/script.js` | `codeWideKey` :692 · `highlightCodeLine` :697 · `renderCodePane` :716 · `renderCodeColumn` :834 · `setDocumentCodeFlag` :853 |
+| `skills/annotate/static/script.js` | `codeWideKey` · `highlightCodeLine` · `renderCodePane` · `renderCodeColumn` · `setDocumentCodeFlag` (line numbers drifted in the chrome pass — grep, do not trust them) |
 | `skills/annotate/static/export.js` | `STRIP` list — controls removed from an exported file |
 | `skills/annotate/tests/test_smoke_code_panes.py` | source-presence assertions on the CSS/JS |
-| `skills/annotate/tests/e2e/code-anchors.e2e.cjs` | the 17 behavioural assertions |
+| `skills/annotate/tests/e2e/code-anchors.e2e.cjs` | the 20 behavioural assertions |
+| `skills/annotate/tests/e2e/view-controls.e2e.cjs` | the 9 assertions for the two top-bar view controls |
+| `skills/annotate/static/highlighter.js` | the reading highlighter, self-contained |
+| `skills/annotate/tests/e2e/read-highlighter.e2e.cjs` | its 14 assertions, incl. the bugs in §7c |
+| `skills/annotate/tests/test_smoke_view_controls.py` | fast guards for those, including the CSS ordering trap |
 
 `skills/annotate/anchors.py` is the server side. You almost certainly do not need it for UI work.
 
@@ -101,7 +106,6 @@ Ground `#e3e7ee` · anchor row `#cbd9f2` · chrome `#d8dde7` · divider `#c3cad6
 | function / built-in | `#1e40af` | 7.03:1 AAA | 6.13:1 AA |
 | string | `#065f46` | 6.19:1 AA | 5.40:1 AA |
 | comment / meta | `#4e5665` | 5.96:1 AA | 5.19:1 AA |
-| gutter | `#5f6773` | 4.61:1 AA | *accent* `#1e40af` 6.13:1 |
 | status `moved` | `#92400e` | 5.72:1 AA | — |
 | status `stale`/`missing`/`refused` | `#991b1b` | 6.70:1 AA | — |
 
@@ -141,9 +145,11 @@ Every one of these actually happened on this branch.
    { display: none }` (style.css:596) and the split rule tie at specificity (0,4,1), and the
    split rule sits *later* — so without the guard, folding a code-bearing card does nothing.
    e2e item 12 covers this.
-3. **`main.prose p` beats `.cp-note`.** (0,1,2) vs (0,1,0). The note's own padding silently
-   did nothing and it inherited a 140px right gutter meant for prose hover buttons. Fixed by
-   scoping under `.codepane`. Any new `<p>` inside the pane has the same problem.
+3. **`main.prose p` beats any bare `.cp-*` paragraph rule.** (0,1,2) vs (0,1,0). This bit
+   `.cp-note` — its own padding silently did nothing and it inherited the 140px right gutter
+   meant for prose hover buttons — and then bit the CARD prose the same way (§7.1). The note
+   itself is gone now, but the trap is not: any new `<p>` inside a pane must be scoped under
+   `.codepane`, and any new rule for prose inside a card must carry `main.prose`.
 4. **Server filesystem paths must not reach non-owners.** `data-repo-root` /
    `data-project-name` are gated on `_is_owner()`, and `.cp-jump` is in `export.js`'s STRIP.
    Decision 3 covers code excerpts reaching strangers; it does **not** cover
@@ -152,38 +158,177 @@ Every one of these actually happened on this branch.
    ordinary fenced code blocks elsewhere in annotate. Every light rule is scoped under
    `.codepane`. Verified: a fenced block still renders `#1a1b26`. Re-verify if you touch the
    token rules — a page-wide recolour is the failure mode.
-6. **`highlightCodeLine` needs its length cap.** `text.length > 20000` → plain text. Without
+6. **Two panes build rows the same way — a blind replace hits both.** The pflow source pane
+   (`.pflow-row` / `.pflow-num`) and the code-anchor pane (`.cp-row`) both contained the
+   line `row.append(num, text);` at identical indentation. Removing the code pane's line
+   numbers with a global string replace silently stripped the FLOWCHART pane's gutter too;
+   nothing in the code-anchor tests noticed, and `pflow.e2e.cjs` caught it. Anchor edits to
+   the surrounding class name, and run the whole e2e sweep, not just the file you think you
+   touched.
+7. **`highlightCodeLine` needs its length cap.** `text.length > 20000` → plain text. Without
    it, an anchor into a minified file hands `hljs.highlightAuto` a 100KB line and stalls the
    render synchronously. The pane caps line *count* (40), never line *length*.
 
 ---
 
-## 7. Known UI issues — measured, not yet fixed
+## 7. UI issues — what the chrome pass fixed, and what it did not
 
-Numbers from the live dogfood page at 1440px viewport, 609px code column.
+**Fixed 2026-08-21** (commit on this branch). Two complaints from the repo owner drove it:
+the pane's stacked bars and line-number ruler distracted from what the code says, and the
+prose column was giving up width to a gutter reserved for buttons.
 
-| Block | rows | chrome px | code px | chrome share |
+*Numbers below are from the live dogfood page at 1440px, re-measured after the change.*
+
+| Block | chrome before | chrome after | code px | overflow |
 |---|---|---|---|---|
-| section-3 | 6 | **101** | 131 | **44%** |
-| section-2 | 9 | 101 | 189 | 35% |
-| section-7 (stale) | 0 | **101** | 0 | **100%** |
-| section-5 | 7 | 68 | 150 | 31% |
+| section-2 (moved) | 101 | **35** | 157 | 0 |
+| section-3 (moved) | 101 | **35** | 130 | 0 |
+| section-5 (ok) | 68 | **34** | 139 | 0 |
+| section-7 (stale) | 101 | **61** | 0 | 0 |
 
-1. **Chrome stacks up.** `.cp-head` (35px) + `.cp-note` (27px) + `.cp-status` (~39px when a
-   pane is `moved`) = **101px above the first line of code**. On a six-line pane that is more
-   chrome than content. Worth considering: fold the `moved` notice into the header line, or
-   make the note and status share a row.
-2. **A stale pane is 101px of pure chrome and zero code** — correct behaviourally (it must
-   never show wrong code) but visually it is a tall empty box.
-3. **Marginal horizontal overflow.** section-2 overflows by **15px**, section-3 by **8px**.
-   A small gutter reduction would remove the scrollbar entirely in both. section-4 overflows
-   by 1px — effectively a rounding artifact.
-4. **Blank context lines consume full rows.** Lines 132/133 in section-2 are empty and each
-   costs a 19px row of the 2-line context padding.
-5. **The dogfood doc's anchors have drifted** — several now render `moved: authored at line
-   123, now at line 134`, because the fix wave edited `anchors.py` underneath them. This is
-   the drift machinery working correctly, and it is a useful live specimen of the `moved`
-   state. Do not "fix" the anchors unless you want to lose that specimen.
+1. **The 140px prose gutter was still there, inside cards.** `main.prose p` sets
+   `padding: 4px 140px 4px 6px` at specificity (0,1,2); the `.card-body p` rule written to
+   release it is (0,1,1) and lost. The comment above it claimed the gutter "is gone" — it
+   never was. Same trap as `.cp-note` (§6.3), on the prose side, and no source-level test
+   could see it. Fixed by prefixing those rules with `main.prose`. **Card prose text went
+   314px → 442px, +41%.** `pre` is deliberately excluded — see the comment at that rule.
+2. **The chrome stack is one band.** `.cp-note` moved off its grey bar onto the code ground
+   as an italic caption; the `moved` notice became `.cp-chip` in the header. A pane with no
+   code (stale / missing / refused) still gets the full `.cp-status` sentence — its whole
+   content is the reason it is empty.
+3. **The pane paints no line numbers at all, and carries no caption.** Both went in stages,
+   and the intermediate steps are worth knowing about because they were each rendered,
+   looked at, and reversed:
+   - The ruler first became anchored-row-only, with the gutter kept for indent and sized
+     per pane in `ch`. Seen in place, an anchored-row-only number is *still a number to
+     read*, and the header already says `file:134`. So the number, the gutter and the
+     whole `--cp-gutter` mechanism are gone. `.cp-row` carries a flat 12px `padding-left`
+     instead — real geometry, which is what keeps the anchor row's 3px inset bar off the
+     first glyph. e2e item 15 measures that inset.
+   - `.cp-note` became an italic caption on the code ground, then was removed outright. The
+     `note` field went with it — out of `anchors.py`, out of `references/code-anchors.md` —
+     because a reference telling Claude to author a string nothing renders is both a false
+     doc and wasted tokens. **An anchor written before the removal is still accepted:**
+     `anchor_problem` is a list of checks, not a reject-unknown-keys gate, so an existing
+     `blocks.json` keeps validating and the string is simply ignored.
+4. **Blank context rows collapse to 9px** (`.cp-row.is-blank`). With nothing in them at all
+   they read as a hole in the pane at full row height.
+
+**Still open:****Still open:**
+
+- ~~**Horizontal overflow.**~~ **Gone.** Two things fixed it: dropping the 35px number
+  gutter, and the view controls giving the reader a wider column when a line still does not
+  fit. Measured on the dogfood page at 1440px: **zero panes overflow at the default width**,
+  and zero at every width/layout combination. The last stubborn case was
+  `anchors.py:135`'s docstring, which no gutter tuning ever reached.
+
+- **A stale pane is still a tall box.** 85px of chrome now rather than 101, but the box
+  height is set by the prose beside it (`.codepane { height: 100% }`), not by its content.
+- **The dogfood doc's anchors have drifted** — several render `moved`, because the fix wave
+  edited `anchors.py` underneath them. The drift machinery working correctly, and a useful
+  live specimen. Do not "fix" the anchors unless you want to lose it.
+
+## 7b. Page-wide view controls (added 2026-08-21)
+
+Two buttons in the top bar, both pure view preferences — they change how the reader sees
+the document, never what it says. Both stay live on the read-only share link for that
+reason, and both ride into an export.
+
+| control | id | body attribute | values |
+|---|---|---|---|
+| page width (cycles) | `#width-toggle` | `data-width` | `normal` 1040px · `wide` 1180px · `extra` 1600px |
+| code-pane layout | `#codelayout-toggle` | `data-code-layout` | `split` · `wide` |
+
+**Two things here are load-bearing and easy to break by accident.**
+
+1. **The width rules must stay BELOW `body[data-has-code="1"]` in style.css.** Both
+   selectors are specificity (0,1,1), so source order is the only thing that decides.
+   Reorder them and all three settings collapse to 1180px on any document that cites code —
+   measured, not guessed. Guarded twice: `test_smoke_view_controls.py` compares the indices
+   in milliseconds, and `view-controls.e2e.cjs` item 3 reads the computed value.
+2. **Wide mode is an override, never a rewrite.** It sets one body attribute; it does *not*
+   write `data-code-wide` on each block. That is what lets leaving wide mode hand the reader
+   back exactly the panes they promoted by hand, and only those. e2e item 6 round-trips it.
+
+An unchosen width is **derived**, not stored: with nothing in `localStorage`,
+`effectiveWidth()` reads `data-has-code` each time, so a document that gains its first
+anchor mid-poll still widens itself. Only an actual click persists a value.
+
+---
+
+## 7c. Reading highlighter (added 2026-08-21)
+
+Drag-select prose while it is on and the stretch keeps a marker background, so the page shows
+a trail of what has already been read. `#highlighter-toggle` in the top bar, with
+`#highlighter-clear` beside it. Front-end only — nothing reaches the server.
+
+Lives in its own `skills/annotate/static/highlighter.js`, loaded after `subunits.js`.
+
+**Painted with the CSS Custom Highlight API, not with wrapper spans.** This is the choice
+everything else follows from: block content is written with `innerHTML`, then walked twice
+more — `subunits.js` wraps sentences, `search.js` inserts `<mark class="search-hit">` — so
+wrapper elements would be shredded by one and would shred the other. Ranges painted from
+outside the DOM avoid all of it, and mean an export cannot inherit one reader's progress.
+
+**Storage:** `annotate.read:<rid>:<blockId>` → `{v, ranges:[[start,end],…]}`, offsets counted
+over *prose text only*. A block's marks are dropped when its version moves, since Claude
+rewrote the text they pointed at.
+
+**Colour** is page-wide and picked from a five-swatch popover on `#highlighter-palette`
+(same `initTopPanels` machinery as the legend, so Esc / click-outside / one-at-a-time come
+free — its click-outside exemption is now a per-panel `dismissOnOutsideClick` flag rather
+than a hardcoded check for the legend's id). Painted by
+`body[data-highlight-color="…"] ::highlight(annotate-read)`; verified in a browser that
+`::highlight()` does honour an ancestor selector, since it is a pseudo on the originating
+element and cannot be styled inline.
+
+Each colour measured against all three colours prose uses on it — body `#3a3d44`, bold
+`#1d1d1f`, link `#1e40af`. None is below AA; worst in the set is pink on a link at 4.81:1.
+
+| | hex | body | bold | link |
+|---|---|---|---|---|
+| yellow | `#fcd34d` | 7.54 | 11.67 | 6.05 |
+| green | `#6ee7b7` | 7.14 | 11.04 | 5.72 |
+| orange | `#fdba74` | 6.45 | 9.98 | 5.17 |
+| blue | `#93c5fd` | 6.03 | 9.33 | 4.84 |
+| pink | `#f9a8d4` | 6.00 | 9.28 | 4.81 |
+
+**Two colours that had to go with it.** The pale blue `.sub-unit:hover` wash read as a second
+kind of highlight in the same family as the selection — removed; the hover cue was never the
+wash, it is the control strip appearing (`.sub-unit:hover .unit-strip`, still there, and the
+e2e asserts both halves so removing one cannot silently remove the other). And `::selection`
+goes neutral grey while the highlighter is on: the accent blue over a marker colour
+composites into a hue that is in no palette — measured over yellow it lands on
+`rgb(207,193,104)`, an olive-green that reads as a third highlight colour.
+
+### Three bugs this shipped with, then didn't
+
+Each was found by sabotaging a passing test, and each now has one that reproduces it.
+
+1. **A control click erased what you just highlighted.** A drag deliberately leaves its text
+   selected — `script.js:189` quotes the live selection into a comment — so the *next* click
+   arrives with a live selection over already-highlighted words, takes the erase branch, and
+   destroys the mark. `onMouseUp` now ignores mouseups on `button, a, input, textarea,
+   .page-header, footer`. Deliberately not "must be inside `main.prose`": a drag released in
+   the page margin is still a reading gesture.
+2. **Revealing the eraser shifted the bar 26–30px.** `.header-actions` is right-aligned, so a
+   `display: none` → `inline-flex` button pushes its neighbours sideways — far enough to
+   slide the eraser under a pointer that had not moved since the click that revealed it. The
+   next click would hit clear-all and wipe the page. The slot is now always reserved
+   (`visibility` rather than `display`).
+3. **The offset test proved nothing.** The obvious test — highlight, reload, check the words —
+   *cannot* catch a walker that miscounts UI text, because storing and restoring use the same
+   walker and the error cancels. It only shows up when the UI text differs between the two
+   moments, which is what really happens: `.unit-chip` and `.unit-composer` appear inside a
+   paragraph *after* a reader has highlighted things. Item 7b adds UI text ahead of a stored
+   highlight and repaints. Sabotaged, it reports the highlight landing on
+   `"highlights.🗑✓💬\nMarbled quartz hums…"` — the strip's emoji counted as prose.
+
+4. **A CSS-rule check would not have proved the picker works.** `::highlight()` is painted by
+   the engine — there is no element to inspect and no computed style to read — so the colour
+   test screenshots the highlighted words, hands the PNG back into the page as a data URL,
+   draws it on a canvas and takes the modal pixel. It measures `252,211,77` → `249,168,212`.
+   Asserting the CSS rule exists would only have proved a rule was *written*, not that it won.
 
 ---
 

@@ -208,13 +208,24 @@ body.exported .export-foot {
     const hasCode = document.body.dataset.hasCode === "1"
       ? ' data-has-code="1"' : "";
 
+    // The reader's view preferences are how the author laid the document out,
+    // so they travel with it. There is no JS in an export to re-derive them
+    // and no control to change them, which is exactly why they have to be
+    // baked onto <body> rather than left to the default.
+    const view = ["width", "codeLayout"].map((k) => {
+      const v = document.body.dataset[k];
+      if (!v) return "";
+      const attr = k === "codeLayout" ? "data-code-layout" : "data-" + k;
+      return ` ${attr}="${esc(v)}"`;
+    }).join("");
+
     const css = await embedFonts(dedupeFontSrc(await collectCss()));
     return (
       "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n" +
       '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
       "<title>" + esc(title) + "</title>\n" +
       "<style>\n" + css + "\n" + EXPORT_CSS + "</style>\n" +
-      '</head>\n<body class="exported"' + hasCode + '>\n' +
+      '</head>\n<body class="exported"' + hasCode + view + '>\n' +
       buildHeader(title, respId) +
       buildProse() +
       buildFooter() +
