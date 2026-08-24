@@ -64,3 +64,8 @@
   background: #B85C2E; animation: deckpulse 1s ease-in-out infinite; }
 @keyframes deckpulse { 50% { opacity: .3 } }
 .slidewrap.fresh .slideframe { box-shadow: 0 0 0 2px #1F7A5C, 0 4px 12px rgba(18,22,28,.10); }
+
+.deckempty { max-width: 620px; margin: 60px auto; padding: 22px 24px;
+  border: 1px dashed var(--border); border-radius: 10px; background: var(--surface);
+  font-size: 13px; line-height: 1.6; color: var(--text); }
+.deckempty .hd { font-weight: 620; color: var(--text-strong); margin-bottom: 6px; }

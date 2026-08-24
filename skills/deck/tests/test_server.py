@@ -163,3 +163,37 @@ def test_comment_count_counts_events(dirs):
     handlers.handle_submit(FakeHandler(), dirs, {
         "slide": 3, "path": ".kick", "comment": "one"})
     assert handlers.comment_count(dirs) == 1
+
+
+def test_model_reports_a_missing_deck_instead_of_raising(dirs):
+    deck = Path(json.loads((Path(dirs["state_dir"]) / "meta.json").read_text())["deck"])
+    deck.unlink()
+    h = FakeHandler()
+    deck_server.Handlers().serve_data(h, dirs, "model")
+    assert h.status == 404
+    assert "unreadable" in h.body()
+
+
+def test_submit_reports_a_missing_deck_instead_of_raising(dirs):
+    deck = Path(json.loads((Path(dirs["state_dir"]) / "meta.json").read_text())["deck"])
+    deck.unlink()
+    h = FakeHandler()
+    deck_server.Handlers().handle_submit(h, dirs, {
+        "slide": 3, "path": ".kick", "comment": "hello"})
+    assert h.status == 404
+    assert not list((Path(dirs["state_dir"]) / "events").glob("*.json"))
+
+
+def test_a_file_with_no_slides_is_served_as_an_empty_model(tmp_path):
+    state = tmp_path / "state"
+    (state / "events").mkdir(parents=True)
+    (state / "consumed").mkdir(parents=True)
+    page = tmp_path / "panel.html"
+    page.write_text("<html><body><div id='app'>not a deck</div></body></html>",
+                    encoding="utf-8")
+    d = {"state_dir": str(state)}
+    deck_server.Handlers().create_session_extra({"deck": str(page)}, d)
+    h = FakeHandler()
+    deck_server.Handlers().serve_data(h, d, "model")
+    assert h.status == 200
+    assert json.loads(h.body())["slides"] == []

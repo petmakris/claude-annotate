@@ -213,6 +213,17 @@
 
     const body = document.getElementById("deckbody");
     body.textContent = "";
+    if (!state.model.slides.length) {
+      // Pointing /deck at a demo panel or a diagram page is an easy mistake;
+      // an empty page would look like a rendering failure.
+      const empty = el("div", "deckempty");
+      empty.appendChild(el("div", "hd", "No slides in this file"));
+      empty.appendChild(el("div", null,
+        "claude-deck addresses <section class=\"slide\"> elements, and this " +
+        "file has none. Point it at a deck rather than a standalone page."));
+      body.appendChild(empty);
+      return state.model;
+    }
     for (const slide of state.model.slides) {
       const wrap = el("div", "slidewrap");
       wrap.dataset.slide = String(slide.index);
@@ -394,8 +405,14 @@
     if (fp && fp !== lastFingerprint) {
       lastFingerprint = fp;
       // The file changed on disk. Re-read the model, because line numbers and
-      // even the element set may have moved, then repaint every slide.
-      await reloadEverything();
+      // even the element set may have moved, then repaint every slide. core.js
+      // does not await this, so a failed refetch must not become an unhandled
+      // rejection — the next poll retries anyway.
+      try {
+        await reloadEverything();
+      } catch (e) {
+        console.warn("deck reload failed", e);
+      }
     }
   }
 

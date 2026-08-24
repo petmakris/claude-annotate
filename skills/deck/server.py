@@ -101,8 +101,15 @@ class Handlers:
             return
 
         if query == "model":
-            deck = deck_path(dirs)
-            parsed = model_module.parse_deck(deck.read_text(encoding="utf-8"))
+            try:
+                deck = deck_path(dirs)
+                raw = deck.read_text(encoding="utf-8")
+            except OSError as exc:
+                # The file can vanish or be renamed under a long-lived
+                # workspace. Say so instead of raising into the shared server.
+                _send_text(h, 404, f"deck unreadable: {exc}")
+                return
+            parsed = model_module.parse_deck(raw)
             parsed["deck"] = str(deck)
             parsed["fingerprint"] = _fingerprint(deck)
             _send_json(h, 200, parsed)
@@ -147,8 +154,12 @@ class Handlers:
             _send_text(h, 400, "missing path")
             return
 
-        deck = deck_path(dirs)
-        parsed = model_module.parse_deck(deck.read_text(encoding="utf-8"))
+        try:
+            deck = deck_path(dirs)
+            parsed = model_module.parse_deck(deck.read_text(encoding="utf-8"))
+        except OSError as exc:
+            _send_text(h, 404, f"deck unreadable: {exc}")
+            return
         known = {(e["slide"], e["path"])
                  for s in parsed["slides"] for e in s["elements"]}
         slide = payload.get("slide")
