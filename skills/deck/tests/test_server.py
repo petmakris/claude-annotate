@@ -197,3 +197,16 @@ def test_a_file_with_no_slides_is_served_as_an_empty_model(tmp_path):
     deck_server.Handlers().serve_data(h, d, "model")
     assert h.status == 200
     assert json.loads(h.body())["slides"] == []
+
+
+def test_comment_count_survives_the_watcher_filing_an_event_away(dirs):
+    handlers = deck_server.Handlers()
+    sub = FakeHandler()
+    handlers.handle_submit(sub, dirs, {"slide": 3, "path": ".kick", "comment": "one"})
+    event_id = json.loads(sub.body())["event_id"]
+    state = Path(dirs["state_dir"])
+    # what watcher.sh does once Claude acks: ack lands, event json moves
+    (state / "consumed" / f"{event_id}.ack").touch()
+    (state / "events" / f"{event_id}.json").rename(
+        state / "consumed" / f"{event_id}.json")
+    assert handlers.comment_count(dirs) == 1

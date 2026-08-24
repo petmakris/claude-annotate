@@ -183,10 +183,22 @@ class Handlers:
         _send_json(h, 202, {"event_id": event_id, "status": "queued"})
 
     def comment_count(self, dirs: dict) -> int:
-        events_dir = Path(dirs["state_dir"]) / "events"
-        if not events_dir.is_dir():
-            return 0
-        return sum(1 for p in events_dir.iterdir() if p.suffix == ".json")
+        """Distinct comments, queued and already handled.
+
+        The watcher MOVES a handled event out of events/ into consumed/, so
+        counting events/ alone reports 0 for a workspace that has taken
+        twenty comments. Dedup by stem: an event that is both queued and
+        acked (a brief race) must not count twice.
+        """
+        state_dir = Path(dirs["state_dir"])
+        ids: set[str] = set()
+        events_dir = state_dir / "events"
+        if events_dir.is_dir():
+            ids |= {p.stem for p in events_dir.glob("*.json")}
+        consumed_dir = state_dir / "consumed"
+        if consumed_dir.is_dir():
+            ids |= {p.stem for p in consumed_dir.glob("*.ack")}
+        return len(ids)
 
 
 def _send_text(h, status, body):
