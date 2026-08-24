@@ -145,3 +145,27 @@ def test_the_title_is_the_first_of_a_repeated_title_block():
             '<div class="title">first</div><div class="title">second</div>'
             '</section></div>')
     assert model_module.parse_deck(html)["slides"][0]["title"] == "first"
+
+
+DEMO = Path(__file__).resolve().parents[1] / "demo" / "sample-deck.html"
+
+
+def test_the_demo_deck_parses_into_every_shape_the_model_addresses():
+    slides = model_module.parse_deck(DEMO.read_text(encoding="utf-8"))["slides"]
+    assert [s["kind"] for s in slides] == [
+        "cover", "divider", "content", "content", "divider", "content"]
+    paths = {e["path"] for s in slides for e in s["elements"]}
+    for expected in (".title", ".dname", ".conseq", ".tbl",
+                     ".pro > p:nth-of-type(1)", ".bullets > li:nth-of-type(1)",
+                     ".snotes > li:nth-of-type(1)"):
+        assert expected in paths, expected
+
+
+def test_no_two_elements_on_a_slide_share_an_address():
+    # (path, ord) is what a comment travels as. Two elements sharing one would
+    # send the wrong line range to Claude.
+    for source in (FIXTURE, DEMO):
+        for slide in model_module.parse_deck(
+                source.read_text(encoding="utf-8"))["slides"]:
+            keys = [(e["path"], e["ord"]) for e in slide["elements"]]
+            assert len(keys) == len(set(keys)), (source.name, slide["index"], keys)
