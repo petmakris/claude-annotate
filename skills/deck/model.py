@@ -55,10 +55,35 @@ _OPAQUE = {"script", "style", "template", "svg"}
 _VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link",
          "meta", "param", "source", "track", "wbr"}
 
-# A new one of these implies the end of the open one — HTMLParser does no
-# implied-end-tag inference, and decks are written by hand.
-_SELF_CLOSING_PEERS = {"li": {"li"}, "p": {"p"}, "td": {"td", "th"},
-                       "th": {"td", "th"}, "tr": {"tr"}, "option": {"option"}}
+# HTMLParser does no implied-end-tag inference and decks are written by hand,
+# so this module has to do what a browser does — and do it the SAME way, or
+# the browser and the model disagree about which element a comment addressed.
+#
+# HTML's "special" category. The spec's <li> algorithm walks outward and gives
+# up at any special element other than address/div/p, which is why a nested
+# <ul> protects the <li> it sits in: no browser closes the outer item, so this
+# module must not either.
+_SPECIAL = {
+    "address", "applet", "area", "article", "aside", "base", "basefont",
+    "bgsound", "blockquote", "body", "br", "button", "caption", "center",
+    "col", "colgroup", "dd", "details", "dir", "div", "dl", "dt", "embed",
+    "fieldset", "figcaption", "figure", "footer", "form", "frame", "frameset",
+    "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hgroup", "hr",
+    "html", "iframe", "img", "input", "keygen", "li", "link", "listing",
+    "main", "marquee", "menu", "meta", "nav", "noembed", "noframes",
+    "noscript", "object", "ol", "p", "param", "plaintext", "pre", "script",
+    "section", "select", "source", "style", "summary", "table", "tbody", "td",
+    "template", "textarea", "tfoot", "th", "thead", "title", "tr", "track",
+    "ul", "wbr", "xmp"}
+_LI_WALK_CONTINUES = {"address", "div", "p"}
+
+# Start tags that close an open <p>. An unclosed lede followed by a <div> is
+# ordinary hand-written markup; without this the <p> swallowed its siblings.
+_CLOSES_P = {
+    "address", "article", "aside", "blockquote", "details", "div", "dl",
+    "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2", "h3",
+    "h4", "h5", "h6", "header", "hgroup", "hr", "main", "menu", "nav", "ol",
+    "p", "pre", "section", "summary", "table", "ul"}
 
 
 def _classes(attrs: list[tuple[str, str | None]]) -> list[str]:
@@ -71,7 +96,8 @@ def _classes(attrs: list[tuple[str, str | None]]) -> list[str]:
 class _Frame:
     """One open element."""
 
-    __slots__ = ("tag", "kind", "element", "leaf_counts", "leaf_seen", "cls")
+    __slots__ = ("tag", "kind", "element", "leaf_counts", "leaf_seen", "cls",
+                 "last_line")
 
     def __init__(self, tag: str, kind: str | None = None,
                  element: dict | None = None, cls: str = "") -> None:
@@ -81,6 +107,7 @@ class _Frame:
         self.cls = cls
         self.leaf_counts: dict[str, int] = {}
         self.leaf_seen = False
+        self.last_line = 0
 
 
 class _DeckParser(HTMLParser):
@@ -152,15 +179,17 @@ class _DeckParser(HTMLParser):
         line = self.getpos()[0]
         cls = _classes(attrs)
 
-        # implied end tags, so <li>a<li>b</ul> does not swallow the slide
-        peers = _SELF_CLOSING_PEERS.get(tag)
-        if peers:
-            for frame in reversed(self._stack):
-                if frame.tag in peers:
-                    self._pop_to(frame.tag, line)
-                    break
-                if frame.kind in ("slide", "block"):
-                    break
+        self._imply_end_tags(tag, line)
+
+        parent = self._stack[-1] if self._stack else None
+        # Count EVERY classed direct child of the slide, including the ones no
+        # element is made from. The browser resolves a block by its position
+        # among the slide's children, so a skipped <svg class="diag"> that is
+        # not counted here shifts every later .diag onto the wrong node.
+        block_cls = ""
+        if parent is not None and parent.kind == "slide" and cls:
+            block_cls = cls[0]
+            self._block_counts[block_cls] = self._block_counts.get(block_cls, 0) + 1
 
         if tag in _OPAQUE:
             self._opaque = 1
@@ -168,9 +197,6 @@ class _DeckParser(HTMLParser):
 
         kind: str | None = None
         element: dict | None = None
-        block_cls = ""
-
-        parent = self._stack[-1] if self._stack else None
 
         if tag == "section" and "slide" in cls and self._find("slide") is None:
             # a nested section.slide is markup, not a second slide
@@ -180,13 +206,11 @@ class _DeckParser(HTMLParser):
                      "title": "", "elements": []}
             self.slides.append(slide)
             self._block_counts = {}
+            block_cls = ""
             kind, element = "slide", slide
 
-        elif (parent is not None and parent.kind == "slide" and cls
-                and cls[0] not in _SKIP_CLASSES):
-            block_cls = cls[0]
-            n = self._block_counts.get(block_cls, 0)
-            self._block_counts[block_cls] = n + 1
+        elif block_cls and block_cls not in _SKIP_CLASSES:
+            n = self._block_counts[block_cls] - 1
             kind = "block"
             element = {"slide": self.slides[-1]["index"], "path": "." + block_cls,
                        "component": block_cls, "block_class": block_cls,
@@ -214,12 +238,51 @@ class _DeckParser(HTMLParser):
 
         self._separate(tag)
         if tag not in _VOID:
-            self._stack.append(_Frame(tag, kind, element, block_cls))
+            frame = _Frame(tag, kind, element, block_cls)
+            frame.last_line = line
+            self._stack.append(frame)
+
+    def _imply_end_tags(self, tag: str, line: int) -> None:
+        """Close what a browser would close when `tag` starts."""
+        if tag in _CLOSES_P:
+            for frame in reversed(self._stack):
+                if frame.tag == "p":
+                    self._pop_to("p", line)
+                    break
+                if frame.kind in ("slide", "block") or frame.tag in _SPECIAL:
+                    break
+
+        if tag == "li":
+            for frame in reversed(self._stack):
+                if frame.tag == "li":
+                    self._pop_to("li", line)
+                    break
+                if frame.kind in ("slide", "block"):
+                    break
+                # a nested <ul>/<ol>/<table> protects the item it sits in
+                if frame.tag in _SPECIAL and frame.tag not in _LI_WALK_CONTINUES:
+                    break
+
+        if tag in ("td", "th", "tr"):
+            wanted = {"td", "th"} if tag in ("td", "th") else {"tr"}
+            for frame in reversed(self._stack):
+                if frame.tag in wanted:
+                    self._pop_to(frame.tag, line)
+                    break
+                if frame.kind in ("slide", "block") or frame.tag == "table":
+                    break
 
     def handle_startendtag(self, tag, attrs):
-        # self-closing: never opens a block or a leaf, but <br/> still splits
-        if not self._opaque:
-            self._separate(tag)
+        # Self-closing: never opens a block or a leaf. It is still a child of
+        # the slide in the browser's DOM, so it must still be counted, and
+        # <br/> must still split words.
+        if self._opaque:
+            return
+        parent = self._stack[-1] if self._stack else None
+        cls = _classes(attrs)
+        if parent is not None and parent.kind == "slide" and cls:
+            self._block_counts[cls[0]] = self._block_counts.get(cls[0], 0) + 1
+        self._separate(tag)
 
     def handle_endtag(self, tag):
         if self._opaque:
@@ -249,14 +312,20 @@ class _DeckParser(HTMLParser):
         if self._opaque:
             return
         if self._stack:
+            if data.strip():
+                self._stack[-1].last_line = self.getpos()[0]
             self._buf.append(data)
 
     def close(self):
         super().close()
-        # an unclosed document still yields what it managed to open
-        line = self.getpos()[0]
+        # An unclosed document still yields what it managed to open, but the
+        # range must not run to end-of-file: Claude replaces a line range, and
+        # a range ending at EOF would delete the rest of the deck.
         while self._stack:
-            self._close(self._stack.pop(), line)
+            frame = self._stack.pop()
+            end = frame.last_line or (
+                frame.element["line_start"] if frame.element else 0)
+            self._close(frame, end)
 
 
 def parse_deck(html: str) -> dict:

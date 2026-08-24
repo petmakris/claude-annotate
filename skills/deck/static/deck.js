@@ -85,8 +85,9 @@
       const doc = f.contentDocument;
       if (!doc) return;
       neutraliseHarness(doc);
-      const slides = doc.querySelectorAll(".slide");
-      slides.forEach((s, i) => { s.style.display = (i === index - 1) ? "" : "none"; });
+      slideSections(doc).forEach((s, i) => {
+        s.style.display = (i === index - 1) ? "" : "none";
+      });
       attachTargets(doc, index, wrap);
       wrap.dispatchEvent(new CustomEvent("deck:slide-ready", { detail: { doc, index } }));
     });
@@ -121,6 +122,15 @@
      model addresses. querySelectorAll would also return nested matches and a
      block whose class is second in the list, and then every index after the
      stray one would point at the wrong element. */
+  /* Top-level slides only. The model does not treat a section.slide nested
+     inside another as a slide, so counting them here would put every later
+     slide one out — frame N would render the nested section and slide N's
+     targets would resolve against the wrong document node. */
+  function slideSections(doc) {
+    return [...doc.querySelectorAll(".slide")].filter(
+      n => !(n.parentElement && n.parentElement.closest(".slide")));
+  }
+
   function slideBlocks(slide, cls) {
     return [...slide.children].filter(
       n => n.classList && n.classList[0] === cls);
@@ -133,7 +143,9 @@
     return [...block.querySelectorAll("p, li")]
       .filter(n => {
         const outer = n.parentElement && n.parentElement.closest("p, li");
-        return !(outer && block.contains(outer));
+        // `block.contains(block)` is true, so a block that is itself a <p> or
+        // an <li> would otherwise filter out every leaf inside it.
+        return !(outer && outer !== block && block.contains(outer));
       })
       .filter(n => n.tagName.toLowerCase() === tag);
   }
@@ -143,7 +155,7 @@
      the two disagree on nesting, and a disagreement means the browser
      highlights one element while Claude edits another. */
   function resolveElement(doc, slideIndex, element) {
-    const slide = doc.querySelectorAll(".slide")[slideIndex - 1];
+    const slide = slideSections(doc)[slideIndex - 1];
     if (!slide || !element) return null;
     const block = slideBlocks(slide, element.block_class)[element.block_ord];
     if (!block) return null;

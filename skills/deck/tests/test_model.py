@@ -272,3 +272,90 @@ def test_every_element_names_its_block_and_its_leaf():
     els = _els(_wrap('<div class="pro"><p>a</p></div>\n<div class="k">b</div>'))
     assert (els[0]["leaf_tag"], els[0]["leaf_n"]) == ("p", 1)
     assert (els[1]["leaf_tag"], els[1]["leaf_n"]) == (None, None)
+
+
+def test_a_nested_list_does_not_close_the_item_it_sits_in():
+    # No browser closes the outer <li> here — the spec's algorithm gives up at
+    # the <ul>. The model must agree, or the browser resolves a different
+    # element than the one Claude is told to edit.
+    els = _els(_wrap('<ul class="bul">\n  <li>Top level point\n'
+                     '    <ul><li>sub A</li><li>sub B</li></ul>\n  </li>\n'
+                     '  <li>Second top point</li>\n</ul>'))
+    assert [e["path"] for e in els] == [
+        ".bul > li:nth-of-type(1)", ".bul > li:nth-of-type(2)"]
+    assert els[1]["text"] == "Second top point"
+    assert els[0]["line_end"] == 5   # spans the nested list, as the item does
+
+
+def test_an_unclosed_paragraph_is_closed_by_a_block_level_sibling():
+    els = _els(_wrap('<p class="lede">An unclosed lede\n'
+                     '<div class="conseq">The consequence</div>\n'
+                     '<div class="title">And the title</div>'))
+    assert [(e["path"], e["text"]) for e in els] == [
+        (".lede", "An unclosed lede"),
+        (".conseq", "The consequence"),
+        (".title", "And the title")]
+
+
+def test_a_skipped_sibling_still_takes_its_place_in_the_block_count():
+    # The browser counts the <svg> among the slide's children, so the caption
+    # is the SECOND .diag. Not counting it here resolved the caption onto the
+    # diagram.
+    for sibling in ('<svg class="diag"><line x1="0"></svg>',
+                    '<img class="diag"/>', '<img class="diag">'):
+        els = _els(_wrap(sibling + '\n<div class="diag">The caption</div>'))
+        assert [(e["text"], e["block_ord"]) for e in els] == [("The caption", 1)], sibling
+
+
+def test_an_unterminated_block_does_not_claim_the_rest_of_the_file():
+    # Claude replaces a line range. A range running to end-of-file would
+    # delete everything after the element.
+    els = _els('<div class="deck"><section class="slide">\n'
+               '<div class="k">only</div>\n<div class="j">dangling\n\n\n')
+    assert [(e["path"], e["line_start"], e["line_end"]) for e in els] == [
+        (".k", 2, 2), (".j", 3, 3)]
+
+
+MALFORMED = Path(__file__).resolve().parent / "fixtures" / "malformed-deck.html"
+
+
+def test_the_malformed_fixture_matches_what_a_browser_sees():
+    """Every row here was checked against Chromium's DOM for the same file.
+
+    The point is not that the model is lenient — it is that the model and the
+    browser agree. Where they disagree, the user clicks one element and Claude
+    edits another, silently.
+    """
+    slides = model_module.parse_deck(
+        MALFORMED.read_text(encoding="utf-8"))["slides"]
+    got = [[(e["path"], e["ord"], e["block_ord"], e["text"]) for e in s["elements"]]
+           for s in slides]
+    assert got == [
+        # a nested <ul> does not close the <li> it sits in
+        [(".title", 0, 0, "Nested list"),
+         (".bul > li:nth-of-type(1)", 0, 0, "Top level point sub point A sub point B"),
+         (".bul > li:nth-of-type(2)", 0, 0, "Second top point")],
+        # an unclosed <p> is closed by its block-level siblings
+        [(".lede", 0, 0, "An unclosed lede"),
+         (".conseq", 0, 0, "The consequence line"),
+         (".title", 0, 0, "And the title")],
+        # a skipped <svg>/<img/> sibling still takes its place in the count
+        [(".diag", 0, 1, "The caption under the diagram"),
+         (".ph", 0, 1, "Caption after a self-closed image")],
+        # a nested section.slide is a block, not a slide
+        [(".title", 0, 0, "Outer slide"),
+         (".slide", 0, 0, "nested section content"),
+         (".m", 0, 0, "After the nested section")],
+        # unclosed <li> and implicit table cells
+        [(".bul > li:nth-of-type(1)", 0, 0, "one"),
+         (".bul > li:nth-of-type(2)", 0, 0, "two"),
+         (".title", 0, 0, "Title after an unclosed item"),
+         (".tbl", 0, 0, "A B C D")],
+    ]
+
+
+def test_the_malformed_fixture_has_no_duplicate_addresses():
+    for slide in model_module.parse_deck(
+            MALFORMED.read_text(encoding="utf-8"))["slides"]:
+        keys = [(e["path"], e["ord"]) for e in slide["elements"]]
+        assert len(keys) == len(set(keys))

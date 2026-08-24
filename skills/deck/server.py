@@ -108,7 +108,7 @@ class Handlers:
             # "revalidate every time", not "do not cache", so a changed file
             # is still picked up on the very next request.
             etag = '"%s"' % hashlib.sha1(raw).hexdigest()
-            if h.headers.get("If-None-Match") == etag:
+            if _matches_etag(h.headers.get("If-None-Match"), etag):
                 h.send_response(304)
                 h.send_header("ETag", etag)
                 h.send_header("Cache-Control", "no-cache")
@@ -236,6 +236,26 @@ class Handlers:
         if consumed_dir.is_dir():
             ids |= {p.stem for p in consumed_dir.glob("*.ack")}
         return len(ids)
+
+
+def _matches_etag(header: str | None, etag: str) -> bool:
+    """True if the client already holds this version.
+
+    Browsers revalidate with a weak validator (`W/"..."`) and may send several
+    comma-separated tags. An exact string compare misses both and answers 200
+    with the whole file — the bandwidth the ETag exists to save.
+    """
+    if not header:
+        return False
+    if header.strip() == "*":
+        return True
+    for candidate in header.split(","):
+        candidate = candidate.strip()
+        if candidate.startswith("W/"):
+            candidate = candidate[2:].strip()
+        if candidate == etag:
+            return True
+    return False
 
 
 def _send_text(h, status, body):
