@@ -169,3 +169,106 @@ def test_no_two_elements_on_a_slide_share_an_address():
                 source.read_text(encoding="utf-8"))["slides"]:
             keys = [(e["path"], e["ord"]) for e in slide["elements"]]
             assert len(keys) == len(set(keys)), (source.name, slide["index"], keys)
+
+
+# --- malformed and adversarial markup -------------------------------------
+# Decks are hand-written single files. Every case below was a real defect.
+
+def _els(html):
+    return [e for s in model_module.parse_deck(html)["slides"]
+            for e in s["elements"]]
+
+
+def _wrap(inner):
+    return '<div class="deck"><section class="slide">\n' + inner + '\n</section></div>'
+
+
+def test_a_text_only_block_survives_a_same_class_block_that_had_leaves():
+    els = _els(_wrap('<div class="col"><p>has a paragraph</p></div>\n'
+                     '<div class="col">plain text</div>'))
+    assert [(e["path"], e["text"]) for e in els] == [
+        (".col > p:nth-of-type(1)", "has a paragraph"),
+        (".col", "plain text")]
+
+
+def test_the_block_ordinal_is_not_the_path_ordinal():
+    # .col#0 as an address is the slide's SECOND .col block. Conflating the
+    # two numbers made the browser highlight one element and Claude edit
+    # another.
+    els = _els(_wrap('<div class="col"><p>x</p></div>\n<div class="col">plain</div>'))
+    plain = next(e for e in els if e["path"] == ".col")
+    assert plain["ord"] == 0
+    assert plain["block_ord"] == 1
+
+
+def test_blocks_with_different_leaf_counts_keep_their_own_block_ordinal():
+    els = _els(_wrap('<div class="stg"><p>b1 p1</p></div>\n'
+                     '<div class="stg"><p>b2 p1</p><p>b2 p2</p></div>'))
+    assert [(e["path"], e["ord"], e["block_ord"], e["text"]) for e in els] == [
+        (".stg > p:nth-of-type(1)", 0, 0, "b1 p1"),
+        (".stg > p:nth-of-type(1)", 1, 1, "b2 p1"),
+        (".stg > p:nth-of-type(2)", 0, 1, "b2 p2")]
+
+
+def test_a_paragraph_inside_a_list_item_does_not_close_the_item():
+    els = _els(_wrap('<div class="body"><ul><li><p>inner</p>\ntrailing</li></ul>\n'
+                     '<p>sibling</p></div>'))
+    assert [(e["path"], e["text"]) for e in els] == [
+        (".body > li:nth-of-type(1)", "inner trailing"),
+        (".body > p:nth-of-type(1)", "sibling")]
+
+
+def test_an_unclosed_list_item_does_not_swallow_the_rest_of_the_slide():
+    els = _els(_wrap('<ul class="bul"><li>one<li>two</ul>\n'
+                     '<div class="title">Title after the list</div>'))
+    assert [e["path"] for e in els] == [
+        ".bul > li:nth-of-type(1)", ".bul > li:nth-of-type(2)", ".title"]
+
+
+def test_an_svg_drawn_without_self_closing_tags_does_not_unbalance_the_slide():
+    els = _els(_wrap('<div class="diag"><svg><line x1="0"><polygon points="0"></svg></div>\n'
+                     '<div class="title">Title after svg</div>'))
+    assert [e["path"] for e in els] == [".diag", ".title"]
+
+
+def test_stray_end_tags_are_ignored_rather_than_raising():
+    els = _els(_wrap('<div class="pro"><p>text</p></div></div></section>'))
+    assert [e["text"] for e in els] == ["text"]
+
+
+def test_style_and_script_bodies_are_not_element_text():
+    els = _els(_wrap('<div class="pro"><style>.x{color:red}</style>Real text</div>'))
+    assert [e["text"] for e in els] == ["Real text"]
+
+
+def test_template_contents_are_skipped_because_the_browser_cannot_see_them():
+    els = _els(_wrap('<div class="pro"><template><p>hidden</p></template><p>real</p></div>'))
+    assert [(e["path"], e["text"]) for e in els] == [
+        (".pro > p:nth-of-type(1)", "real")]
+
+
+def test_a_self_closed_br_separates_words():
+    els = _els(_wrap('<div class="pro">alpha<br/>beta</div>'))
+    assert els[0]["text"] == "alpha beta"
+
+
+def test_a_nested_slide_section_does_not_end_the_slide_it_sits_in():
+    els = _els(_wrap('<div class="k">outer</div>\n'
+                     '<section class="slide"><div class="j">inner</div></section>\n'
+                     '<div class="m">after inner</div>'))
+    assert [e["text"] for e in els][-1] == "after inner"
+    assert len(model_module.parse_deck(
+        _wrap('<section class="slide"></section>'))["slides"]) == 1
+
+
+def test_an_unfinished_document_still_yields_what_it_opened():
+    els = _els('<div class="deck"><section class="slide">\n<div class="k">only</div>')
+    assert [e["text"] for e in els] == ["only"]
+
+
+def test_every_element_names_its_block_and_its_leaf():
+    for e in _els(_wrap('<div class="pro"><p>a</p></div>\n<div class="k">b</div>')):
+        assert e["block_class"] and isinstance(e["block_ord"], int)
+    els = _els(_wrap('<div class="pro"><p>a</p></div>\n<div class="k">b</div>'))
+    assert (els[0]["leaf_tag"], els[0]["leaf_n"]) == ("p", 1)
+    assert (els[1]["leaf_tag"], els[1]["leaf_n"]) == (None, None)

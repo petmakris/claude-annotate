@@ -18,6 +18,7 @@ class FakeHandler:
     def __init__(self):
         self.status = None
         self.headers_sent = {}
+        self.headers = {}
         self.wfile = io.BytesIO()
 
     def send_response(self, code):
@@ -265,3 +266,102 @@ def test_a_nonsense_ordinal_is_refused(dup_dirs):
     deck_server.Handlers().handle_submit(h, dup_dirs, {
         "slide": 1, "path": ".stg", "ord": "second", "comment": "nope"})
     assert h.status == 400
+
+
+class FakeHandlerWithHeaders(FakeHandler):
+    def __init__(self, headers=None):
+        super().__init__()
+        self.headers = headers or {}
+
+
+def test_the_deck_carries_a_validator_so_every_frame_does_not_refetch_it(dirs):
+    h = FakeHandlerWithHeaders()
+    deck_server.Handlers().serve_data(h, dirs, "deck")
+    assert h.status == 200
+    etag = h.headers_sent["ETag"]
+    assert h.headers_sent["Cache-Control"] == "no-cache"
+
+    h2 = FakeHandlerWithHeaders({"If-None-Match": etag})
+    deck_server.Handlers().serve_data(h2, dirs, "deck")
+    assert h2.status == 304
+    assert h2.body() == ""
+
+
+def test_the_validator_changes_when_the_deck_changes(dirs):
+    h = FakeHandlerWithHeaders()
+    deck_server.Handlers().serve_data(h, dirs, "deck")
+    etag = h.headers_sent["ETag"]
+
+    deck = Path(json.loads((Path(dirs["state_dir"]) / "meta.json").read_text())["deck"])
+    deck.write_text(deck.read_text(encoding="utf-8").replace(
+        "Mandatory documents", "Mandatory papers"), encoding="utf-8")
+
+    h2 = FakeHandlerWithHeaders({"If-None-Match": etag})
+    deck_server.Handlers().serve_data(h2, dirs, "deck")
+    assert h2.status == 200
+    assert h2.headers_sent["ETag"] != etag
+
+
+# --- reading files that are not what they claim to be ----------------------
+
+def test_a_symlink_to_a_non_html_file_is_refused(tmp_path):
+    state = tmp_path / "state"
+    state.mkdir()
+    secret = tmp_path / "id_rsa"
+    secret.write_text("PRIVATE KEY MATERIAL", encoding="utf-8")
+    link = tmp_path / "deck.html"
+    link.symlink_to(secret)
+    with pytest.raises(ValueError, match="must be an .html file"):
+        deck_server.Handlers().create_session_extra(
+            {"deck": str(link)}, {"state_dir": str(state)})
+
+
+def test_a_symlink_to_a_real_deck_is_accepted_and_stored_resolved(tmp_path):
+    state = tmp_path / "state"
+    state.mkdir()
+    real = tmp_path / "real-deck.html"
+    shutil.copy(FIXTURE, real)
+    link = tmp_path / "link.html"
+    link.symlink_to(real)
+    deck_server.Handlers().create_session_extra(
+        {"deck": str(link)}, {"state_dir": str(state)})
+    meta = json.loads((state / "meta.json").read_text())
+    assert meta["deck"] == str(real.resolve())
+
+
+def test_a_deck_that_is_not_utf8_is_reported_not_raised(dirs):
+    deck = Path(json.loads((Path(dirs["state_dir"]) / "meta.json").read_text())["deck"])
+    deck.write_bytes("<div class='deck'><section class='slide'>caf\xe9</section></div>"
+                     .encode("latin-1"))
+    h = FakeHandler()
+    deck_server.Handlers().serve_data(h, dirs, "model")
+    assert h.status == 404
+
+    h2 = FakeHandler()
+    deck_server.Handlers().handle_submit(h2, dirs, {
+        "slide": 1, "path": ".k", "comment": "hi"})
+    assert h2.status == 404
+
+
+def test_a_corrupt_meta_json_is_reported_not_raised(dirs):
+    (Path(dirs["state_dir"]) / "meta.json").write_text("{not json", encoding="utf-8")
+    for route in ("deck", "model"):
+        h = FakeHandler()
+        deck_server.Handlers().serve_data(h, dirs, route)
+        assert h.status == 404, route
+    # the page shell and the poll must still answer
+    h = FakeHandler()
+    deck_server.Handlers().serve_root(h, dirs)
+    assert h.status == 200
+    h = FakeHandler()
+    deck_server.Handlers().serve_poll(h, dirs)
+    assert h.status == 200
+
+
+def test_a_half_written_heartbeat_does_not_break_the_poll(dirs):
+    # watcher.sh truncates the file before writing the new timestamp.
+    (Path(dirs["state_dir"]) / "watcher_heartbeat").write_text("", encoding="utf-8")
+    h = FakeHandler()
+    deck_server.Handlers().serve_poll(h, dirs)
+    assert h.status == 200
+    assert json.loads(h.body())["watcher_seen_at"] == 0

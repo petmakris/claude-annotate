@@ -69,3 +69,6 @@
   border: 1px dashed var(--border); border-radius: 10px; background: var(--surface);
   font-size: 13px; line-height: 1.6; color: var(--text); }
 .deckempty .hd { font-weight: 620; color: var(--text-strong); margin-bottom: 6px; }
+
+.slideframe-pending { background: repeating-linear-gradient(
+  135deg, var(--surface-soft) 0 12px, var(--surface) 12px 24px); }

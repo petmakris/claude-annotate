@@ -22,6 +22,11 @@ from skills.deck import model as model_module
 SHARED_STATIC_DIR = Path(__file__).resolve().parent.parent / "_shared" / "web_companion" / "static"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
+# Everything that reading a deck (or its meta.json) can go wrong with. A
+# Latin-1 deck raises UnicodeDecodeError, a truncated meta.json raises
+# JSONDecodeError, and neither is an OSError — both used to 500 the page.
+DECK_ERRORS = (OSError, KeyError, ValueError, json.JSONDecodeError)
+
 PORT_RANGE = range(3090, 3091)
 BANNER = "deck-server v1"
 
@@ -63,23 +68,28 @@ class Handlers:
         raw = payload.get("deck")
         if not isinstance(raw, str) or not raw.strip():
             raise ValueError("payload missing 'deck' (absolute path to the deck .html)")
-        deck = Path(raw).expanduser()
+        # Resolve BEFORE checking the suffix. What gets stored and served is
+        # the resolved path, so checking the supplied one lets `deck.html`
+        # pointing at `id_rsa` through — and every GET under /s/<slug>/ is
+        # ungated by design, so a shared link would then serve that file.
+        deck = Path(raw).expanduser().resolve()
         if not deck.is_file():
             raise ValueError(f"deck not found: {deck}")
         if deck.suffix.lower() != ".html":
-            raise ValueError(f"deck must be an .html file: {deck}")
+            raise ValueError(
+                f"deck must be an .html file (resolved to {deck.name}): {deck}")
         write_text_atomic(Path(dirs["state_dir"]) / "meta.json", json.dumps({
-            "deck": str(deck.resolve()),
+            "deck": str(deck),
             "title": deck.stem,
             "created_at": int(time.time()),
         }, indent=2))
-        return {"deck": str(deck.resolve()), "title": deck.stem}
+        return {"deck": str(deck), "title": deck.stem}
 
     # -- reads -----------------------------------------------------------
     def serve_root(self, h: BaseHTTPRequestHandler, dirs: dict) -> None:
         try:
             title = deck_path(dirs).stem
-        except (OSError, KeyError, json.JSONDecodeError):
+        except DECK_ERRORS:
             title = "deck"
         sid = Path(dirs["state_dir"]).parent.name
         _send_html(h, 200, PAGE.format(title=title, sid=sid))
@@ -88,14 +98,28 @@ class Handlers:
         if query == "deck":
             try:
                 raw = deck_path(dirs).read_bytes()
-            except OSError as exc:
+            except DECK_ERRORS as exc:
                 _send_text(h, 404, f"deck unreadable: {exc}")
+                return
+            # One page mounts one frame per slide, all pointing here, and a
+            # deck with embedded images runs to tens of megabytes. Without a
+            # validator each frame refetches the whole file — 25 slides of a
+            # 15MB deck moved 386MB on every repaint. no-cache means
+            # "revalidate every time", not "do not cache", so a changed file
+            # is still picked up on the very next request.
+            etag = '"%s"' % hashlib.sha1(raw).hexdigest()
+            if h.headers.get("If-None-Match") == etag:
+                h.send_response(304)
+                h.send_header("ETag", etag)
+                h.send_header("Cache-Control", "no-cache")
+                h.end_headers()
                 return
             # byte-for-byte. No parsing, no rewriting.
             h.send_response(200)
             h.send_header("Content-Type", "text/html; charset=utf-8")
             h.send_header("Content-Length", str(len(raw)))
-            h.send_header("Cache-Control", "no-store")
+            h.send_header("ETag", etag)
+            h.send_header("Cache-Control", "no-cache")
             h.end_headers()
             h.wfile.write(raw)
             return
@@ -104,9 +128,10 @@ class Handlers:
             try:
                 deck = deck_path(dirs)
                 raw = deck.read_text(encoding="utf-8")
-            except OSError as exc:
-                # The file can vanish or be renamed under a long-lived
-                # workspace. Say so instead of raising into the shared server.
+            except DECK_ERRORS as exc:
+                # The file can vanish, be renamed, or turn out not to be UTF-8
+                # under a long-lived workspace. Say so instead of raising into
+                # the shared server, which would answer an opaque 500.
                 _send_text(h, 404, f"deck unreadable: {exc}")
                 return
             parsed = model_module.parse_deck(raw)
@@ -129,10 +154,15 @@ class Handlers:
         acked = {p.stem for p in consumed_dir.glob("*.ack")} if consumed_dir.is_dir() else set()
         try:
             version = _fingerprint(deck_path(dirs))
-        except (OSError, KeyError, json.JSONDecodeError):
+        except DECK_ERRORS:
             version = ""
-        hb_file = state_dir / "watcher_heartbeat"
-        hb = int(hb_file.read_text().strip()) if hb_file.is_file() else 0
+        # watcher.sh writes this with `date +%s > file`, a truncate then a
+        # write. A poll landing inside that window reads "" and int() raises.
+        hb = 0
+        try:
+            hb = int((state_dir / "watcher_heartbeat").read_text().strip())
+        except (OSError, ValueError):
+            pass
         _send_json(h, 200, {
             # key name is dictated by core.js:110 — it reads .blocks/.threads only
             "blocks": {"deck": version},
@@ -157,7 +187,7 @@ class Handlers:
         try:
             deck = deck_path(dirs)
             parsed = model_module.parse_deck(deck.read_text(encoding="utf-8"))
-        except OSError as exc:
+        except DECK_ERRORS as exc:
             _send_text(h, 404, f"deck unreadable: {exc}")
             return
         # A path is not unique: real decks carry several blocks with the same

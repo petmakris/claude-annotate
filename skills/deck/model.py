@@ -8,17 +8,30 @@ survive. Callers get line ranges and read the file themselves.
 Addressability rule, deliberately narrow:
   * every direct child of `section.slide` that carries a class, except `.num`
     (the harness renumbers it at runtime, so it is not content)
-  * every `<p>` and `<li>` inside one of those children
+  * every outermost `<p>` and `<li>` inside one of those children
 
 That covers prose, bullets and speaker notes without inventing a schema for
 markup nobody has written yet. A table is one target, not one per row: <td>
 is not a leaf tag, so the whole block is addressed at once.
 
-A path is NOT unique on its own. Real decks put several blocks with the same
-class on one slide (five `.stg` boxes, two `.ctxp` lists), so every element
-also carries `ord` — its position among the elements on that slide sharing its
-path. (path, ord) is the address; path alone would silently resolve to the
-first one and let an edit land on the wrong element.
+An element carries THREE numbers, because one is not enough:
+
+  `ord`        its position among the elements on that slide sharing its
+               `path`. (slide, path, ord) is the address a comment travels as.
+  `block_ord`  the position of its OWNING BLOCK among the slide's direct
+               children whose first class matches. Not the same number: a
+               block with leaves is not itself an element, so the emitted
+               `.col` may be the slide's second `.col` while its `ord` is 0.
+  `leaf_n`     which <p>/<li> inside that block, counted the way this module
+               counts them — outermost only.
+
+The browser resolves with `block_ord`/`leaf_n`, never by running `path` as a
+CSS selector: `>` means direct child to CSS but "anywhere inside" here, and
+CSS `nth-of-type` counts nested elements this module deliberately skips.
+
+Malformed input must not raise. An open tag stack (rather than a depth
+counter) means a stray `</div>` is ignored and an unclosed `<li>` is closed by
+the next one, so one bad slide costs that slide, not the rest of the file.
 """
 from __future__ import annotations
 
@@ -26,11 +39,26 @@ from html.parser import HTMLParser
 
 ADDRESSABLE_LEAF_TAGS = ("p", "li")
 _SKIP_CLASSES = {"num"}
+
 # Tags that separate words. Text is captured as a flat run, so without this a
 # table reads "NowLater" and a two-cell row loses the gap between its cells.
 # Inline tags are deliberately absent: <b> inside a sentence must not split it.
-_SEPARATORS = {"p", "li", "tr", "td", "th", "div", "br", "section", "aside", "ul", "ol"}
-_VOID = {"br", "hr", "img", "meta", "link", "input", "source", "path", "circle", "rect"}
+_SEPARATORS = {"p", "li", "tr", "td", "th", "div", "br", "section", "aside",
+               "ul", "ol", "table", "h1", "h2", "h3", "h4", "blockquote"}
+
+# Never content, and never a container of content. `svg` is here because a
+# deck's diagrams are drawn with tags this module would otherwise have to
+# enumerate (`line`, `polygon`, `use`, …) to keep the stack balanced.
+_OPAQUE = {"script", "style", "template", "svg"}
+
+# HTML void elements: they never close, so they must never be pushed.
+_VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link",
+         "meta", "param", "source", "track", "wbr"}
+
+# A new one of these implies the end of the open one — HTMLParser does no
+# implied-end-tag inference, and decks are written by hand.
+_SELF_CLOSING_PEERS = {"li": {"li"}, "p": {"p"}, "td": {"td", "th"},
+                       "th": {"td", "th"}, "tr": {"tr"}, "option": {"option"}}
 
 
 def _classes(attrs: list[tuple[str, str | None]]) -> list[str]:
@@ -40,103 +68,195 @@ def _classes(attrs: list[tuple[str, str | None]]) -> list[str]:
     return []
 
 
+class _Frame:
+    """One open element."""
+
+    __slots__ = ("tag", "kind", "element", "leaf_counts", "leaf_seen", "cls")
+
+    def __init__(self, tag: str, kind: str | None = None,
+                 element: dict | None = None, cls: str = "") -> None:
+        self.tag = tag
+        self.kind = kind            # None | "slide" | "block" | "leaf"
+        self.element = element
+        self.cls = cls
+        self.leaf_counts: dict[str, int] = {}
+        self.leaf_seen = False
+
+
 class _DeckParser(HTMLParser):
     def __init__(self) -> None:
         # convert_charrefs decodes &mdash; for display. The file is untouched.
         super().__init__(convert_charrefs=True)
         self.slides: list[dict] = []
-        self._slide: dict | None = None
-        self._slide_depth = 0
-        self._depth = 0
-        self._block: dict | None = None   # the current direct child of the slide
-        self._leaf: dict | None = None    # the current <p>/<li> inside it
-        self._leaf_counts: dict[str, int] = {}
+        self._stack: list[_Frame] = []
         self._buf: list[str] = []
+        self._opaque = 0            # depth inside script/style/template/svg
+        self._block_counts: dict[str, int] = {}   # per slide, per class
 
-    # -- helpers ---------------------------------------------------------
+    # -- stack helpers ---------------------------------------------------
+    def _find(self, kind: str) -> _Frame | None:
+        for frame in reversed(self._stack):
+            if frame.kind == kind:
+                return frame
+        return None
+
+    def _open_slide(self) -> dict | None:
+        frame = self._find("slide")
+        return frame.element if frame else None
+
+    def _open_block(self) -> _Frame | None:
+        # A block is only "open" if no slide was opened after it.
+        for frame in reversed(self._stack):
+            if frame.kind == "slide":
+                return None
+            if frame.kind == "block":
+                return frame
+        return None
+
+    # -- text ------------------------------------------------------------
     def _start_capture(self) -> None:
         self._buf = []
 
     def _captured(self) -> str:
         return " ".join("".join(self._buf).split())
 
-    def _emit(self, target: dict, end_line: int) -> None:
-        target["text"] = self._captured()
-        target["line_end"] = end_line
-        assert self._slide is not None
-        self._slide["elements"].append(target)
+    def _separate(self, tag: str) -> None:
+        if tag in _SEPARATORS and self._stack:
+            self._buf.append(" ")
+
+    # -- emit ------------------------------------------------------------
+    def _close(self, frame: _Frame, line: int) -> None:
+        if frame.kind == "slide":
+            return
+        if frame.kind not in ("block", "leaf"):
+            return
+        slide = self._open_slide()
+        if slide is None or frame.element is None:
+            return
+        if frame.kind == "block" and frame.leaf_seen:
+            # a block with leaves of its own is a container, not a target
+            self._start_capture()
+            return
+        frame.element["text"] = self._captured()
+        frame.element["line_end"] = line
+        slide["elements"].append(frame.element)
+        self._start_capture()
 
     # -- parser hooks ----------------------------------------------------
     def handle_starttag(self, tag, attrs):
+        if self._opaque:
+            if tag in _OPAQUE and tag not in _VOID:
+                self._opaque += 1
+            return
+
         line = self.getpos()[0]
         cls = _classes(attrs)
 
-        if tag == "section" and "slide" in cls:
-            kind = "cover" if "tslide" in cls else "divider" if "divider" in cls else "content"
-            self._slide = {"index": len(self.slides) + 1, "kind": kind,
-                           "title": "", "elements": []}
-            self.slides.append(self._slide)
-            self._slide_depth = self._depth
-            self._block = None
-            self._leaf = None
-            self._leaf_counts = {}
+        # implied end tags, so <li>a<li>b</ul> does not swallow the slide
+        peers = _SELF_CLOSING_PEERS.get(tag)
+        if peers:
+            for frame in reversed(self._stack):
+                if frame.tag in peers:
+                    self._pop_to(frame.tag, line)
+                    break
+                if frame.kind in ("slide", "block"):
+                    break
 
-        elif self._slide is not None and self._depth == self._slide_depth + 1 and cls:
-            if cls[0] not in _SKIP_CLASSES:
-                self._block = {"slide": self._slide["index"], "path": "." + cls[0],
-                               "component": cls[0], "line_start": line,
-                               "line_end": line, "text": ""}
-                self._leaf_counts = {}
+        if tag in _OPAQUE:
+            self._opaque = 1
+            return
+
+        kind: str | None = None
+        element: dict | None = None
+        block_cls = ""
+
+        parent = self._stack[-1] if self._stack else None
+
+        if tag == "section" and "slide" in cls and self._find("slide") is None:
+            # a nested section.slide is markup, not a second slide
+            slide = {"index": len(self.slides) + 1,
+                     "kind": ("cover" if "tslide" in cls else
+                              "divider" if "divider" in cls else "content"),
+                     "title": "", "elements": []}
+            self.slides.append(slide)
+            self._block_counts = {}
+            kind, element = "slide", slide
+
+        elif (parent is not None and parent.kind == "slide" and cls
+                and cls[0] not in _SKIP_CLASSES):
+            block_cls = cls[0]
+            n = self._block_counts.get(block_cls, 0)
+            self._block_counts[block_cls] = n + 1
+            kind = "block"
+            element = {"slide": self.slides[-1]["index"], "path": "." + block_cls,
+                       "component": block_cls, "block_class": block_cls,
+                       "block_ord": n, "leaf_tag": None, "leaf_n": None,
+                       "line_start": line, "line_end": line, "text": ""}
+            self._start_capture()
+
+        elif tag in ADDRESSABLE_LEAF_TAGS:
+            block = self._open_block()
+            if block is not None and self._find("leaf") is None:
+                block.leaf_seen = True
+                n = block.leaf_counts.get(tag, 0) + 1
+                block.leaf_counts[tag] = n
+                assert block.element is not None
+                kind = "leaf"
+                element = {
+                    "slide": block.element["slide"],
+                    "path": f"{block.element['path']} > {tag}:nth-of-type({n})",
+                    "component": block.element["component"],
+                    "block_class": block.element["block_class"],
+                    "block_ord": block.element["block_ord"],
+                    "leaf_tag": tag, "leaf_n": n,
+                    "line_start": line, "line_end": line, "text": ""}
                 self._start_capture()
 
-        elif self._block is not None and tag in ADDRESSABLE_LEAF_TAGS and self._leaf is None:
-            n = self._leaf_counts.get(tag, 0) + 1
-            self._leaf_counts[tag] = n
-            self._leaf = {"slide": self._slide["index"],
-                          "path": f"{self._block['path']} > {tag}:nth-of-type({n})",
-                          "component": self._block["component"],
-                          "line_start": line, "line_end": line, "text": ""}
-            self._start_capture()
-
         self._separate(tag)
         if tag not in _VOID:
-            self._depth += 1
+            self._stack.append(_Frame(tag, kind, element, block_cls))
 
     def handle_startendtag(self, tag, attrs):
-        pass  # self-closing: never opens a block or a leaf
+        # self-closing: never opens a block or a leaf, but <br/> still splits
+        if not self._opaque:
+            self._separate(tag)
 
     def handle_endtag(self, tag):
+        if self._opaque:
+            if tag in _OPAQUE:
+                self._opaque -= 1
+            return
+        if tag in _VOID:
+            return
         self._separate(tag)
-        if tag not in _VOID:
-            self._depth -= 1
-        line = self.getpos()[0]
+        self._pop_to(tag, self.getpos()[0])
 
-        if self._leaf is not None and tag in ADDRESSABLE_LEAF_TAGS:
-            self._emit(self._leaf, line)
-            self._leaf = None
-            self._start_capture()
+    def _pop_to(self, tag: str, line: int) -> None:
+        """Close frames up to and including the innermost `tag`.
+
+        A stray end tag with no matching open frame is ignored, which is what
+        keeps a malformed slide from taking the rest of the document with it.
+        """
+        if not any(frame.tag == tag for frame in self._stack):
             return
-
-        if self._block is not None and self._slide is not None \
-                and self._depth == self._slide_depth + 1:
-            # a block with addressable leaves is a container, not a target
-            has_leaves = any(e["path"].startswith(self._block["path"] + " > ")
-                             for e in self._slide["elements"])
-            if not has_leaves:
-                self._emit(self._block, line)
-            self._block = None
-            return
-
-        if tag == "section" and self._slide is not None and self._depth == self._slide_depth:
-            self._slide = None
-
-    def _separate(self, tag: str) -> None:
-        if tag in _SEPARATORS and (self._leaf is not None or self._block is not None):
-            self._buf.append(" ")
+        while self._stack:
+            frame = self._stack.pop()
+            self._close(frame, line)
+            if frame.tag == tag:
+                return
 
     def handle_data(self, data):
-        if self._leaf is not None or self._block is not None:
+        if self._opaque:
+            return
+        if self._stack:
             self._buf.append(data)
+
+    def close(self):
+        super().close()
+        # an unclosed document still yields what it managed to open
+        line = self.getpos()[0]
+        while self._stack:
+            self._close(self._stack.pop(), line)
 
 
 def parse_deck(html: str) -> dict:

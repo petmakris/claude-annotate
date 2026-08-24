@@ -30,21 +30,32 @@
     return r.json();
   }
 
-  /* The harness writes an inline zoom on .deck to fit the window, appends a
-     .pg div to every slide while renumbering .num, and adds two floating
-     buttons plus a notes drawer to <body>. Undo all of it AFTER load so
-     nothing injected is ever mistaken for content or offered as a target. */
+  /* With the frame sandboxed the deck's own script never runs, so the three
+     things it does — zoom-to-fit, page-number injection, floating chrome —
+     never happen. This still undoes them, because a deck may carry an inline
+     zoom or a hand-written .pg in the file itself, and because the frame is
+     the only place it is safe to touch anything at all. The FILE is never
+     modified. */
   function neutraliseHarness(doc) {
     const deck = doc.querySelector(".deck");
     if (deck) deck.style.zoom = "";
     doc.querySelectorAll(".slide .pg").forEach(n => n.remove());
     doc.querySelectorAll(".slide .num").forEach(n => { n.dataset.deckIgnore = "1"; });
     const style = doc.createElement("style");
-    style.textContent =
+    let css =
       ".deck{zoom:1 !important;gap:0 !important;display:block !important}" +
       ".slide{margin:0 !important;box-shadow:none !important}" +
-      "body{padding:0 !important;margin:0 !important;background:#fff !important}" +
-      "body > *:not(.deck){display:none !important}";
+      "body{padding:0 !important;margin:0 !important;background:#fff !important}";
+    // Only hide the deck's siblings when there IS a .deck wrapper. Some decks
+    // put their slides straight in <body>; hiding everything that is not
+    // .deck would then hide the slides themselves and render every frame
+    // blank while the model still reported content.
+    if (deck && deck.parentElement === doc.body) {
+      css += "body > *:not(.deck){display:none !important}";
+    } else {
+      css += "body > *:not(.slide):not(style):not(script){display:none !important}";
+    }
+    style.textContent = css;
     doc.head.appendChild(style);
   }
 
@@ -57,6 +68,12 @@
     holder.style.height = Math.round(SLIDE_H * SCALE) + "px";
 
     const f = document.createElement("iframe");
+    // The deck is a file the user owns, and it carries its own <script>. Same
+    // origin without this attribute would let that script read the write
+    // token out of sessionStorage and call the owner-only APIs. allow-scripts
+    // is deliberately absent: this page already undoes everything the deck's
+    // harness does, so nothing of value is lost by never running it.
+    f.setAttribute("sandbox", "allow-same-origin");
     f.width = SLIDE_W;
     f.height = SLIDE_H;
     f.style.width = SLIDE_W + "px";
@@ -75,7 +92,9 @@
     });
     holder.appendChild(f);
     const body = wrap.querySelector(".slidebody");
-    body.insertBefore(holder, body.firstChild);
+    const pending = body.querySelector(".slideframe-pending");
+    if (pending) body.replaceChild(holder, pending);
+    else body.insertBefore(holder, body.firstChild);
     return f;
   }
 
@@ -98,8 +117,6 @@
   const selectListeners = [];
   window.ClaudeDeck.onSelect = fn => selectListeners.push(fn);
 
-  const LEAF_RE = /^(\.[^\s>]+) > ([a-z]+):nth-of-type\((\d+)\)$/;
-
   /* The slide's direct children whose FIRST class is `cls` — exactly what the
      model addresses. querySelectorAll would also return nested matches and a
      block whose class is second in the list, and then every index after the
@@ -109,25 +126,29 @@
       n => n.classList && n.classList[0] === cls);
   }
 
-  /* Turn a model address back into a live element inside the frame.
-     `ord` disambiguates: a slide can carry five blocks with the same class,
-     and a leaf path repeats once per such block. Resolution is structural
-     rather than by querySelector, because the model counts <p>/<li> anywhere
-     inside a block while CSS `>` means direct child — ".snotes > li" would
-     otherwise miss a list wrapped in a <ul>. */
-  function resolveElement(doc, slideIndex, path, ord) {
+  /* The <p>/<li> the model counts inside a block: outermost only. A <p>
+     nested in an <li> is not a target, so it must not consume an index
+     either — CSS nth-of-type would count it and shift everything after. */
+  function leafNodes(block, tag) {
+    return [...block.querySelectorAll("p, li")]
+      .filter(n => {
+        const outer = n.parentElement && n.parentElement.closest("p, li");
+        return !(outer && block.contains(outer));
+      })
+      .filter(n => n.tagName.toLowerCase() === tag);
+  }
+
+  /* Turn a model element back into a live node inside the frame. Driven by
+     block_ord/leaf_n from the model, never by running `path` as a selector:
+     the two disagree on nesting, and a disagreement means the browser
+     highlights one element while Claude edits another. */
+  function resolveElement(doc, slideIndex, element) {
     const slide = doc.querySelectorAll(".slide")[slideIndex - 1];
-    if (!slide) return null;
-    const n = ord || 0;
-    const m = LEAF_RE.exec(path);
-    try {
-      if (!m) return slideBlocks(slide, path.slice(1))[n] || null;
-      const block = slideBlocks(slide, m[1].slice(1))[n];
-      if (!block) return null;
-      return block.querySelectorAll(m[2])[Number(m[3]) - 1] || null;
-    } catch (e) {
-      return null;
-    }
+    if (!slide || !element) return null;
+    const block = slideBlocks(slide, element.block_class)[element.block_ord];
+    if (!block) return null;
+    if (!element.leaf_tag) return block;
+    return leafNodes(block, element.leaf_tag)[element.leaf_n - 1] || null;
   }
 
   function isVisible(node) {
@@ -162,7 +183,7 @@
     if (!slide) return;
 
     for (const element of slide.elements) {
-      const node = resolveElement(doc, slideIndex, element.path, element.ord);
+      const node = resolveElement(doc, slideIndex, element);
       if (!node) continue;
       if (node.dataset.deckIgnore === "1") continue;
       if (!isVisible(node)) continue;
@@ -218,6 +239,37 @@
     wrap.querySelector(".slidebody").appendChild(col);
   }
 
+  /* A frame holds a whole copy of the deck document, and a deck with embedded
+     images runs to tens of megabytes. Mounting all of them at once meant 25
+     copies in memory before the reader had scrolled past slide two, so a slide
+     keeps a same-size placeholder until it comes near the viewport. */
+  function placeholder(wrap) {
+    const holder = el("div", "slideframe slideframe-pending");
+    holder.style.width = Math.round(SLIDE_W * SCALE) + "px";
+    holder.style.height = Math.round(SLIDE_H * SCALE) + "px";
+    const body = wrap.querySelector(".slidebody");
+    body.insertBefore(holder, body.firstChild);
+  }
+
+  const observer = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const wrap = entry.target;
+      observer.unobserve(wrap);
+      mountSlide(wrap, Number(wrap.dataset.slide));
+    }
+  }, { rootMargin: "1200px 0px" });
+
+  /* Mount one slide now, whether or not it is on screen. */
+  function mountNow(index) {
+    const wrap = document.querySelector('.slidewrap[data-slide="' + index + '"]');
+    if (!wrap) return null;
+    if (wrap.querySelector("iframe")) return wrap.querySelector("iframe");
+    observer.unobserve(wrap);
+    return mountSlide(wrap, index);
+  }
+  window.ClaudeDeck.mountNow = mountNow;
+
   async function renderDeck() {
     state.model = await fetchJSON("model");
 
@@ -228,6 +280,7 @@
     head.appendChild(el("span", "sp"));
 
     const body = document.getElementById("deckbody");
+    observer.disconnect();
     body.textContent = "";
     if (!state.model.slides.length) {
       // Pointing /deck at a demo panel or a diagram page is an easy mistake;
@@ -252,8 +305,9 @@
       wrap.appendChild(el("div", "slidebody"));
 
       body.appendChild(wrap);
-      mountSlide(wrap, slide.index);
+      placeholder(wrap);
       buildNotes(wrap, slide);
+      observer.observe(wrap);
     }
     return state.model;
   }
@@ -294,14 +348,20 @@
     const quote = el("div", "quote", "“" + (e.text || "(empty)").slice(0, 220) + "”");
     const body = el("div", "body");
     const ta = el("textarea");
-    ta.placeholder = "What should change?";
+    ta.placeholder = (!window.WebCompanion || window.WebCompanion.writable)
+      ? "What should change?"
+      : "This is a read-only link — comments cannot be sent from it.";
     const row = el("div", "row");
     const hint = el("span", "ph", "⌘↵ send");
     hint.style.border = "none";
     hint.style.padding = "0";
     const sp = el("span", "sp");
     const cancel = el("button", null, "Cancel");
-    const send = el("button", "send", "Send to Claude");
+    const writable = !window.WebCompanion || window.WebCompanion.writable;
+    const send = el("button", "send",
+      writable ? "Send to Claude" : "Read-only link");
+    send.disabled = !writable;
+    if (!writable) send.title = "This link does not carry write access.";
     const err = el("div", "err");
     err.style.display = "none";
 
@@ -385,6 +445,7 @@
     if (!wrap) return;
     const holder = wrap.querySelector(".slideframe");
     if (holder) holder.remove();
+    placeholder(wrap);
     mountSlide(wrap, index);
     flash(index);
   }
@@ -396,7 +457,13 @@
 
   async function reloadEverything() {
     const before = state.model ? signature(state.model) : [];
+    // renderDeck empties #deckbody, which collapses the document height and
+    // clamps the scroll to the top. Reading a deck and being thrown back to
+    // slide 1 on every edit is the whole page's worth of annoyance.
+    const y = window.scrollY;
+    closePopup();
     await renderDeck();
+    window.scrollTo(0, y);
     const after = signature(state.model);
     after.forEach((sig, i) => { if (before[i] !== sig) flash(i + 1); });
   }
@@ -422,15 +489,16 @@
     const fp = poll.blocks && poll.blocks.deck;
     if (lastFingerprint === null) { lastFingerprint = fp; return; }
     if (fp && fp !== lastFingerprint) {
-      lastFingerprint = fp;
       // The file changed on disk. Re-read the model, because line numbers and
-      // even the element set may have moved, then repaint every slide. core.js
-      // does not await this, so a failed refetch must not become an unhandled
-      // rejection — the next poll retries anyway.
+      // even the element set may have moved, then repaint every slide.
+      // The fingerprint advances only on success: recording it first would
+      // strand the page on stale content for good, because the retry the
+      // next poll is supposed to make would see no change to react to.
       try {
         await reloadEverything();
+        lastFingerprint = fp;
       } catch (e) {
-        console.warn("deck reload failed", e);
+        console.warn("deck reload failed, will retry on the next poll", e);
       }
     }
   }

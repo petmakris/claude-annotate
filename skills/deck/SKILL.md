@@ -135,6 +135,13 @@ Finally write the ack and end the turn with no terminal output:
 touch "<consumed_dir>/<event_id>.ack"
 ```
 
+## One caution about sharing
+
+Reads under `/s/<slug>/` are ungated by design — that is what makes a workspace
+link shareable. For a deck that means anyone who can reach the port and knows the
+slug can read the whole file. On loopback that is only you. If the server has been
+bound beyond loopback, do not open a deck you would not hand over.
+
 ## What this skill does not do
 
 - It does not create decks.
