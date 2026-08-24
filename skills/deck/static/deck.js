@@ -234,9 +234,173 @@
   window.ClaudeDeck.renderDeck = renderDeck;
   window.ClaudeDeck.mountSlide = mountSlide;
 
+  /* ------------------------------------------------------------------ *
+   * Comment popup
+   * ------------------------------------------------------------------ */
+
+  let popup = null;
+
+  function clearSelection() {
+    document.querySelectorAll(".snoteitem.deck-selected")
+            .forEach(n => n.classList.remove("deck-selected"));
+    document.querySelectorAll("#deckbody iframe").forEach(f => {
+      const d = f.contentDocument;   // same-origin, so this is reachable
+      if (d) d.querySelectorAll(".deck-selected")
+              .forEach(n => n.classList.remove("deck-selected"));
+    });
+  }
+
+  function closePopup() {
+    if (popup) { popup.remove(); popup = null; }
+    clearSelection();
+  }
+
+  function openPopup(sel) {
+    if (popup) { popup.remove(); popup = null; }
+    const e = sel.element;
+    popup = el("div");
+    popup.id = "deckpop";
+
+    const ph = el("div", "ph",
+      "Slide " + e.slide + " · " + e.path + " · line " + e.line_start);
+    const quote = el("div", "quote", "“" + (e.text || "(empty)").slice(0, 220) + "”");
+    const body = el("div", "body");
+    const ta = el("textarea");
+    ta.placeholder = "What should change?";
+    const row = el("div", "row");
+    const hint = el("span", "ph", "⌘↵ send");
+    hint.style.border = "none";
+    hint.style.padding = "0";
+    const sp = el("span", "sp");
+    const cancel = el("button", null, "Cancel");
+    const send = el("button", "send", "Send to Claude");
+    const err = el("div", "err");
+    err.style.display = "none";
+
+    row.append(hint, sp, cancel, send);
+    body.append(ta, row, err);
+    popup.append(ph, quote, body);
+    document.body.appendChild(popup);
+
+    // place under the element, clamped to the viewport
+    const top = window.scrollY + sel.rect.top + sel.rect.height + 8;
+    const left = Math.min(
+      window.scrollX + sel.rect.left,
+      window.scrollX + document.documentElement.clientWidth - 356);
+    popup.style.top = top + "px";
+    popup.style.left = Math.max(8, left) + "px";
+    ta.focus();
+
+    cancel.addEventListener("click", closePopup);
+
+    async function submit() {
+      const text = ta.value.trim();
+      if (!text) { err.textContent = "Say what should change."; err.style.display = ""; return; }
+      send.disabled = true;
+      send.textContent = "Sending…";
+      try {
+        await window.WebCompanion.api.submit({
+          slide: e.slide,
+          path: e.path,
+          component: e.component,
+          line_start: e.line_start,
+          line_end: e.line_end,
+          text: e.text,
+          comment: text,
+        });
+        if (sel.node) sel.node.classList.add("deck-working");
+        closePopup();
+      } catch (ex) {
+        err.textContent = String(ex.message || ex);
+        err.style.display = "";
+        send.disabled = false;
+        send.textContent = "Send to Claude";
+      }
+    }
+
+    send.addEventListener("click", submit);
+    ta.addEventListener("keydown", ev => {
+      if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") { ev.preventDefault(); submit(); }
+      if (ev.key === "Escape") closePopup();
+    });
+  }
+
+  window.ClaudeDeck.openPopup = openPopup;
+  window.ClaudeDeck.closePopup = closePopup;
+  window.ClaudeDeck.onSelect(openPopup);
+
+  document.addEventListener("mousedown", ev => {
+    if (popup && !popup.contains(ev.target) && !ev.target.closest(".snoteitem")) closePopup();
+  });
+
+  /* ------------------------------------------------------------------ *
+   * Busy state and repaint
+   * ------------------------------------------------------------------ */
+
+  let lastFingerprint = null;
+
+  function flash(index) {
+    const wrap = document.querySelector('.slidewrap[data-slide="' + index + '"]');
+    if (!wrap) return;
+    wrap.classList.add("fresh");
+    setTimeout(() => wrap.classList.remove("fresh"), 2500);
+  }
+
+  function reloadSlide(index) {
+    const wrap = document.querySelector('.slidewrap[data-slide="' + index + '"]');
+    if (!wrap) return;
+    const holder = wrap.querySelector(".slideframe");
+    if (holder) holder.remove();
+    mountSlide(wrap, index);
+    flash(index);
+  }
+
+  function signature(model) {
+    return model.slides.map(s => JSON.stringify(s.elements.map(e => [e.path, e.text])));
+  }
+
+  async function reloadEverything() {
+    const before = state.model ? signature(state.model) : [];
+    await renderDeck();
+    const after = signature(state.model);
+    after.forEach((sig, i) => { if (before[i] !== sig) flash(i + 1); });
+  }
+
+  function setBusy(on, queued) {
+    let banner = document.getElementById("deckbusy");
+    if (!on) { if (banner) banner.remove(); return; }
+    if (!banner) {
+      banner = el("div");
+      banner.id = "deckbusy";
+      banner.appendChild(el("span", "dot"));
+      banner.appendChild(el("span", "tx"));
+      document.getElementById("deckhead").after(banner);
+    }
+    banner.querySelector(".tx").textContent =
+      "Claude is editing the deck… " + (queued > 1 ? "(" + queued + " queued)" : "");
+  }
+
+  /* Driven by core.js's own 1s poll rather than a second timer of our own. */
+  async function onPoll(poll) {
+    if (!poll) return;
+    setBusy(poll.busy, poll.queued);
+    const fp = poll.blocks && poll.blocks.deck;
+    if (lastFingerprint === null) { lastFingerprint = fp; return; }
+    if (fp && fp !== lastFingerprint) {
+      lastFingerprint = fp;
+      // The file changed on disk. Re-read the model, because line numbers and
+      // even the element set may have moved, then repaint every slide.
+      await reloadEverything();
+    }
+  }
+
+  window.ClaudeDeck.reloadSlide = reloadSlide;
+  window.ClaudeDeck.reloadEverything = reloadEverything;
+  window.ClaudeDeck.onPoll = onPoll;
+
   document.addEventListener("DOMContentLoaded", () => {
     if (window.WebCompanion && window.WebCompanion.init) {
-      window.WebCompanion.init({ onPollDelta: () => {} });
+      window.WebCompanion.init({ onPollDelta: onPoll });
     }
     renderDeck().catch(err => {
       document.getElementById("deckbody").textContent = "Could not render deck: " + err.message;

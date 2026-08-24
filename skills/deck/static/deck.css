@@ -32,3 +32,33 @@
   background: rgba(0,113,227,.07); }
 .snoteitem.deck-working { border-color: #B85C2E; background: rgba(184,92,46,.09); }
 .snotecol .none { font-size: 12px; color: var(--text-dim); font-style: italic; }
+
+#deckpop { position: absolute; width: 340px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px; z-index: 40;
+  box-shadow: 0 12px 32px rgba(18,22,28,.16); overflow: hidden; }
+#deckpop .ph { padding: 8px 12px; border-bottom: 1px solid var(--border);
+  background: var(--surface-soft); font-family: monospace; font-size: 10px;
+  letter-spacing: 1.1px; text-transform: uppercase; color: var(--text-dim); }
+#deckpop .quote { padding: 9px 12px; border-bottom: 1px solid var(--border);
+  font-size: 11.5px; line-height: 1.5; color: var(--text-dim);
+  max-height: 64px; overflow: hidden; }
+#deckpop .body { padding: 10px 12px; }
+#deckpop textarea { width: 100%; min-height: 64px; border: 1px solid var(--border);
+  border-radius: 7px; padding: 8px 9px; font: inherit; font-size: 12.5px;
+  resize: vertical; outline: none; }
+#deckpop textarea:focus { border-color: var(--accent); }
+#deckpop .row { display: flex; gap: 7px; margin-top: 9px; align-items: center; }
+#deckpop .row .sp { flex: 1; }
+#deckpop button { font: inherit; font-size: 12px; padding: 5px 12px;
+  border-radius: 7px; border: 1px solid var(--border); background: var(--surface);
+  cursor: pointer; }
+#deckpop button.send { background: #B85C2E; border-color: #B85C2E; color: #fff; }
+#deckpop .err { color: #B3357A; font-size: 11px; margin-top: 6px; }
+
+#deckbusy { display: flex; align-items: center; gap: 8px; padding: 7px 12px;
+  background: #FBF0E8; border: 1px solid #EBCDBA; border-radius: 8px;
+  color: #B85C2E; font-size: 12px; margin: 8px 0; }
+#deckbusy .dot { width: 8px; height: 8px; border-radius: 50%;
+  background: #B85C2E; animation: deckpulse 1s ease-in-out infinite; }
+@keyframes deckpulse { 50% { opacity: .3 } }
+.slidewrap.fresh .slideframe { box-shadow: 0 0 0 2px #1F7A5C, 0 4px 12px rgba(18,22,28,.10); }
