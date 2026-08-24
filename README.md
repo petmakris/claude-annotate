@@ -25,7 +25,7 @@ your machine.
 
 That registers the marketplace, which publishes two plugins. Install either or both:
 
-    /plugin install claude-annotate      # read long answers in a browser, comment on any block
+    /plugin install claude-annotate      # comment on a long answer, or on a rendered slide deck
     /plugin install claude-ide-review    # ask questions on a PR diff line or walkthrough step, in IntelliJ
 
 `claude-ide-review` also needs the IntelliJ half, which is a separate download —
@@ -47,6 +47,21 @@ Your browser opens. Every block is clickable. Comment on one, and Claude's reply
 replaces it in place; the rest of the page does not move or reload.
 
 ![The comment flow up close: type a correction, submit the round, the block updates](docs/img/comment-flow.gif)
+
+## Decks
+
+`/deck <path to a deck .html>` opens a presentation the same way, except the
+document is a file you already own. Every slide renders as itself, in order, at
+the size it will be shown. Click any line — a title, a paragraph, a bullet, a
+speaker note — say what should change, and Claude edits that line in the file.
+
+The deck is never rewritten wholesale. A comment resolves to a line range, not
+to a search string, so an edit is one line in `git diff` and the entities,
+attribute case and formatting everywhere else survive untouched.
+
+    /deck ~/decks/2026-quarterly-review
+
+A folder resolves to the `.html` inside it with the same name.
 
 ## Not just prose
 
