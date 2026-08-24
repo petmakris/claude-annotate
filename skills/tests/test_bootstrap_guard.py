@@ -58,6 +58,11 @@ ALLOWED_BLOCKS = {
         "skills/walkthrough/README.md",
         "python3 -m pytest skills/walkthrough/tests/ -v",
     ),
+    # Same case for the deck skill.
+    (
+        "skills/deck/README.md",
+        "python3 -m pytest skills/deck/tests/ -v",
+    ),
 }
 
 # Scanner-health canary. Not the source of truth (the scan is), but if a fence
