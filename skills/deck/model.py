@@ -80,10 +80,17 @@ _LI_WALK_CONTINUES = {"address", "div", "p"}
 # Start tags that close an open <p>. An unclosed lede followed by a <div> is
 # ordinary hand-written markup; without this the <p> swallowed its siblings.
 _CLOSES_P = {
-    "address", "article", "aside", "blockquote", "details", "div", "dl",
-    "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2", "h3",
-    "h4", "h5", "h6", "header", "hgroup", "hr", "main", "menu", "nav", "ol",
-    "p", "pre", "section", "summary", "table", "ul"}
+    "address", "article", "aside", "blockquote", "center", "details",
+    "dialog", "dir", "div", "dl", "dd", "dt", "fieldset", "figcaption",
+    "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header",
+    "hgroup", "hr", "li", "listing", "main", "menu", "nav", "ol", "p",
+    "plaintext", "pre", "section", "summary", "table", "ul", "xmp"}
+
+# A browser drops these when they appear outside a table, so a slide child
+# spelled this way exists in the file and not in the DOM. Counting it would
+# shift every later block of the same class onto the wrong node.
+_TABLE_INTERNAL = {"tr", "td", "th", "tbody", "thead", "tfoot", "caption",
+                   "colgroup", "col"}
 
 
 def _classes(attrs: list[tuple[str, str | None]]) -> list[str]:
@@ -152,7 +159,7 @@ class _DeckParser(HTMLParser):
             self._buf.append(" ")
 
     # -- emit ------------------------------------------------------------
-    def _close(self, frame: _Frame, line: int) -> None:
+    def _close(self, frame: _Frame, line: int, implied: bool = False) -> None:
         if frame.kind == "slide":
             return
         if frame.kind not in ("block", "leaf"):
@@ -165,7 +172,11 @@ class _DeckParser(HTMLParser):
             self._start_capture()
             return
         frame.element["text"] = self._captured()
-        frame.element["line_end"] = line
+        # An implied close is triggered by the NEXT element's start tag, whose
+        # line is one past this element. Stamping it would make two
+        # addressable elements claim overlapping ranges, and Claude replacing
+        # the first range would delete the second.
+        frame.element["line_end"] = frame.last_line if implied else line
         slide["elements"].append(frame.element)
         self._start_capture()
 
@@ -187,7 +198,8 @@ class _DeckParser(HTMLParser):
         # among the slide's children, so a skipped <svg class="diag"> that is
         # not counted here shifts every later .diag onto the wrong node.
         block_cls = ""
-        if parent is not None and parent.kind == "slide" and cls:
+        if (parent is not None and parent.kind == "slide" and cls
+                and tag not in _TABLE_INTERNAL):
             block_cls = cls[0]
             self._block_counts[block_cls] = self._block_counts.get(block_cls, 0) + 1
 
@@ -242,12 +254,22 @@ class _DeckParser(HTMLParser):
             frame.last_line = line
             self._stack.append(frame)
 
+    def _bubble(self, frame: _Frame) -> None:
+        """A closed child's extent belongs to its parent too.
+
+        `last_line` only advances for text arriving while a frame is topmost,
+        so without this a block whose content all sits in children would end
+        on its own opening line and Claude would read the wrong lines.
+        """
+        if self._stack and frame.last_line > self._stack[-1].last_line:
+            self._stack[-1].last_line = frame.last_line
+
     def _imply_end_tags(self, tag: str, line: int) -> None:
         """Close what a browser would close when `tag` starts."""
         if tag in _CLOSES_P:
             for frame in reversed(self._stack):
                 if frame.tag == "p":
-                    self._pop_to("p", line)
+                    self._pop_to("p", line, implied=True)
                     break
                 if frame.kind in ("slide", "block") or frame.tag in _SPECIAL:
                     break
@@ -255,7 +277,7 @@ class _DeckParser(HTMLParser):
         if tag == "li":
             for frame in reversed(self._stack):
                 if frame.tag == "li":
-                    self._pop_to("li", line)
+                    self._pop_to("li", line, implied=True)
                     break
                 if frame.kind in ("slide", "block"):
                     break
@@ -267,7 +289,7 @@ class _DeckParser(HTMLParser):
             wanted = {"td", "th"} if tag in ("td", "th") else {"tr"}
             for frame in reversed(self._stack):
                 if frame.tag in wanted:
-                    self._pop_to(frame.tag, line)
+                    self._pop_to(frame.tag, line, implied=True)
                     break
                 if frame.kind in ("slide", "block") or frame.tag == "table":
                     break
@@ -280,7 +302,8 @@ class _DeckParser(HTMLParser):
             return
         parent = self._stack[-1] if self._stack else None
         cls = _classes(attrs)
-        if parent is not None and parent.kind == "slide" and cls:
+        if (parent is not None and parent.kind == "slide" and cls
+                and tag not in _TABLE_INTERNAL):
             self._block_counts[cls[0]] = self._block_counts.get(cls[0], 0) + 1
         self._separate(tag)
 
@@ -294,7 +317,7 @@ class _DeckParser(HTMLParser):
         self._separate(tag)
         self._pop_to(tag, self.getpos()[0])
 
-    def _pop_to(self, tag: str, line: int) -> None:
+    def _pop_to(self, tag: str, line: int, implied: bool = False) -> None:
         """Close frames up to and including the innermost `tag`.
 
         A stray end tag with no matching open frame is ignored, which is what
@@ -304,16 +327,29 @@ class _DeckParser(HTMLParser):
             return
         while self._stack:
             frame = self._stack.pop()
-            self._close(frame, line)
-            if frame.tag == tag:
+            # Only the frame this end tag names really ends here. Anything
+            # popped on the way is closed implicitly by it, and ends where its
+            # own content did — `</ul>` on line 5 does not mean the <li> above
+            # it runs to line 5, and a range that said so would delete the
+            # `</ul>` when Claude replaced it.
+            last = frame.tag == tag
+            self._close(frame, line, implied or not last)
+            self._bubble(frame)
+            if last:
                 return
 
     def handle_data(self, data):
         if self._opaque:
             return
         if self._stack:
-            if data.strip():
-                self._stack[-1].last_line = self.getpos()[0]
+            stripped = data.rstrip()
+            if stripped.strip():
+                # getpos() is where the chunk STARTS. A run of text spanning
+                # three lines arrives as one chunk, so the last line it
+                # occupies has to be counted, not assumed.
+                end = self.getpos()[0] + stripped.count("\n")
+                if end > self._stack[-1].last_line:
+                    self._stack[-1].last_line = end
             self._buf.append(data)
 
     def close(self):
@@ -326,6 +362,7 @@ class _DeckParser(HTMLParser):
             end = frame.last_line or (
                 frame.element["line_start"] if frame.element else 0)
             self._close(frame, end)
+            self._bubble(frame)
 
 
 def parse_deck(html: str) -> dict:

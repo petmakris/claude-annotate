@@ -359,3 +359,46 @@ def test_the_malformed_fixture_has_no_duplicate_addresses():
             MALFORMED.read_text(encoding="utf-8"))["slides"]:
         keys = [(e["path"], e["ord"]) for e in slide["elements"]]
         assert len(keys) == len(set(keys))
+
+
+# --- line ranges must not reach past the element ---------------------------
+# Claude replaces a line range. A range that reaches one line too far deletes
+# whatever starts on that line — a sibling element, or a closing tag.
+
+def test_an_implicitly_closed_item_ends_where_its_own_text_ends():
+    els = _els(_wrap('<ul class="bul">\n<li>First bullet\n<li>Second bullet\n</ul>'))
+    assert [(e["text"], e["line_start"], e["line_end"]) for e in els] == [
+        ("First bullet", 3, 3), ("Second bullet", 4, 4)]
+
+
+def test_an_unclosed_paragraph_does_not_claim_its_siblings_line():
+    els = _els(_wrap('<p class="lede">An unclosed lede\n'
+                     '<div class="conseq">The consequence</div>\n'
+                     '<div class="title">The title</div>'))
+    ranges = [(e["path"], e["line_start"], e["line_end"]) for e in els]
+    assert ranges == [(".lede", 2, 2), (".conseq", 3, 3), (".title", 4, 4)]
+    # nothing may contain the line another element starts on
+    for path, start, end in ranges:
+        for other, ostart, _ in ranges:
+            if other != path:
+                assert not (start < ostart <= end), (path, other)
+
+
+def test_an_element_spanning_several_lines_keeps_all_of_them():
+    els = _els(_wrap('<div class="pro">text spanning\ntwo lines'))
+    assert (els[0]["line_start"], els[0]["line_end"]) == (2, 3)
+    els = _els(_wrap('<ul class="bul">\n<li>First bullet\nwrapping\n<li>Second\n</ul>'))
+    assert [(e["line_start"], e["line_end"]) for e in els] == [(3, 4), (5, 5)]
+
+
+def test_a_definition_list_paragraph_stops_at_the_next_term():
+    els = _els(_wrap('<dl class="dl"><dt>Term<p>the para<dd>the definition</dl>'))
+    assert [(e["path"], e["text"]) for e in els] == [
+        (".dl > p:nth-of-type(1)", "the para")]
+
+
+def test_a_table_row_outside_a_table_is_not_counted_as_a_slide_child():
+    # The browser drops it, so counting it would shift the real .x onto it.
+    els = _els(_wrap('<tr class="x"><td>dropped</td></tr>\n'
+                     '<div class="x">The real x</div>'))
+    assert [(e["text"], e["block_ord"]) for e in els] == [("The real x", 0)]
