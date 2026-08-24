@@ -160,20 +160,27 @@ class Handlers:
         except OSError as exc:
             _send_text(h, 404, f"deck unreadable: {exc}")
             return
-        known = {(e["slide"], e["path"])
-                 for s in parsed["slides"] for e in s["elements"]}
-        slide = payload.get("slide")
-        if (slide, path) not in known:
-            _send_text(h, 400, f"unknown element: slide {slide} {path}")
+        # A path is not unique: real decks carry several blocks with the same
+        # class on one slide. (path, ord) is the address; matching on path
+        # alone would land every comment on the first one.
+        ordinal = payload.get("ord", 0)
+        if not isinstance(ordinal, int) or ordinal < 0:
+            _send_text(h, 400, "ord must be a non-negative integer")
             return
-
-        current = next(e for s in parsed["slides"] for e in s["elements"]
-                       if e["slide"] == slide and e["path"] == path)
+        slide = payload.get("slide")
+        current = next(
+            (e for s in parsed["slides"] for e in s["elements"]
+             if e["slide"] == slide and e["path"] == path and e["ord"] == ordinal),
+            None)
+        if current is None:
+            _send_text(h, 400, f"unknown element: slide {slide} {path} #{ordinal}")
+            return
         event_id = events_module.append(Path(dirs["state_dir"]) / "events", {
             "type": "deck_comment",
             "deck": str(deck),
             "slide": slide,
             "path": path,
+            "ord": ordinal,
             "component": current["component"],
             "line_start": current["line_start"],
             "line_end": current["line_end"],

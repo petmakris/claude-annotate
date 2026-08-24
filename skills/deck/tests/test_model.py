@@ -109,3 +109,39 @@ def test_block_tags_keep_neighbouring_cells_apart():
             '</section></div>')
     el = model_module.parse_deck(html)["slides"][0]["elements"][0]
     assert el["text"] == "Now Later One Two"
+
+
+def test_every_element_carries_an_ordinal():
+    for slide in _parsed()["slides"]:
+        assert all(e["ord"] == 0 for e in slide["elements"]), \
+            "the fixture has no duplicate addresses"
+
+
+def test_repeated_blocks_are_told_apart_by_ordinal():
+    # Real decks put several boxes with the same class on one slide.
+    html = ('<div class="deck"><section class="slide">'
+            '<div class="stg">first</div><div class="stg">second</div>'
+            '<div class="stg">third</div></section></div>')
+    els = model_module.parse_deck(html)["slides"][0]["elements"]
+    assert [(e["path"], e["ord"], e["text"]) for e in els] == [
+        (".stg", 0, "first"), (".stg", 1, "second"), (".stg", 2, "third")]
+
+
+def test_a_repeated_leaf_path_is_numbered_by_its_owning_block():
+    html = ('<div class="deck"><section class="slide">'
+            '<div class="ctxp"><ul><li>a</li><li>b</li></ul></div>'
+            '<div class="ctxp"><ul><li>c</li><li>d</li></ul></div>'
+            '</section></div>')
+    els = model_module.parse_deck(html)["slides"][0]["elements"]
+    assert [(e["path"], e["ord"], e["text"]) for e in els] == [
+        (".ctxp > li:nth-of-type(1)", 0, "a"),
+        (".ctxp > li:nth-of-type(2)", 0, "b"),
+        (".ctxp > li:nth-of-type(1)", 1, "c"),
+        (".ctxp > li:nth-of-type(2)", 1, "d")]
+
+
+def test_the_title_is_the_first_of_a_repeated_title_block():
+    html = ('<div class="deck"><section class="slide">'
+            '<div class="title">first</div><div class="title">second</div>'
+            '</section></div>')
+    assert model_module.parse_deck(html)["slides"][0]["title"] == "first"

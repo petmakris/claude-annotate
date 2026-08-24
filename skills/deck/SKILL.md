@@ -90,10 +90,15 @@ You wake on a `WEBCOMPANION_EVENT skill=deck` banner. The payload is one comment
 
 ```json
 {"type":"deck_comment","deck":"/abs/path/deck.html","slide":6,
- "path":".pro > p:nth-of-type(1)","component":"pro",
+ "path":".pro > p:nth-of-type(1)","ord":0,"component":"pro",
  "line_start":404,"line_end":405,
  "text":"Every proposal has to satisfy…","comment":"Open on the constraint."}
 ```
+
+`ord` is the element's position among the ones on that slide sharing its path —
+decks put several blocks with the same class on one slide, so the path alone is
+not an address. You do not need it: `line_start`/`line_end` already point at the
+right element. It is in the payload so the address is complete.
 
 **Read the line range, do not grep the text.** `text` is decoded for display; the file holds
 `&mdash;`, `&nbsp;` and `&#9492;` beside their literal characters. A grep for the decoded string

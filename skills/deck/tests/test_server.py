@@ -210,3 +210,58 @@ def test_comment_count_survives_the_watcher_filing_an_event_away(dirs):
     (state / "events" / f"{event_id}.json").rename(
         state / "consumed" / f"{event_id}.json")
     assert handlers.comment_count(dirs) == 1
+
+
+@pytest.fixture
+def dup_dirs(tmp_path):
+    """A workspace on a deck that repeats a class on one slide."""
+    state = tmp_path / "state"
+    (state / "events").mkdir(parents=True)
+    (state / "consumed").mkdir(parents=True)
+    deck = tmp_path / "dup.html"
+    deck.write_text(
+        '<div class="deck"><section class="slide">\n'
+        '<div class="stg">first</div>\n'
+        '<div class="stg">second</div>\n'
+        '</section></div>\n', encoding="utf-8")
+    d = {"state_dir": str(state)}
+    deck_server.Handlers().create_session_extra({"deck": str(deck)}, d)
+    return d
+
+
+def test_the_ordinal_picks_which_repeated_block_was_commented_on(dup_dirs):
+    h = FakeHandler()
+    deck_server.Handlers().handle_submit(h, dup_dirs, {
+        "slide": 1, "path": ".stg", "ord": 1, "comment": "shorten the second"})
+    assert h.status == 202
+    body = json.loads(
+        next((Path(dup_dirs["state_dir"]) / "events").glob("*.json")).read_text())
+    assert body["ord"] == 1
+    assert body["text"] == "second"
+    assert body["line_start"] == 3
+
+
+def test_a_missing_ordinal_still_means_the_first(dup_dirs):
+    h = FakeHandler()
+    deck_server.Handlers().handle_submit(h, dup_dirs, {
+        "slide": 1, "path": ".stg", "comment": "shorten the first"})
+    assert h.status == 202
+    body = json.loads(
+        next((Path(dup_dirs["state_dir"]) / "events").glob("*.json")).read_text())
+    assert body["text"] == "first"
+    assert body["line_start"] == 2
+
+
+def test_an_out_of_range_ordinal_is_refused(dup_dirs):
+    h = FakeHandler()
+    deck_server.Handlers().handle_submit(h, dup_dirs, {
+        "slide": 1, "path": ".stg", "ord": 5, "comment": "nope"})
+    assert h.status == 400
+    assert not list((Path(dup_dirs["state_dir"]) / "events").glob("*.json"))
+
+
+def test_a_nonsense_ordinal_is_refused(dup_dirs):
+    h = FakeHandler()
+    deck_server.Handlers().handle_submit(h, dup_dirs, {
+        "slide": 1, "path": ".stg", "ord": "second", "comment": "nope"})
+    assert h.status == 400

@@ -98,20 +98,31 @@
   const selectListeners = [];
   window.ClaudeDeck.onSelect = fn => selectListeners.push(fn);
 
-  const LEAF_RE = /^(.+?) > ([a-z]+):nth-of-type\((\d+)\)$/;
+  const LEAF_RE = /^(\.[^\s>]+) > ([a-z]+):nth-of-type\((\d+)\)$/;
 
-  /* Turn a model path back into a live element inside the frame.
-     A leaf path is resolved structurally rather than by querySelector: the
-     model counts <p>/<li> anywhere inside the block, but CSS `>` means direct
-     child, so ".snotes > li:nth-of-type(1)" would miss a list wrapped in a
-     <ul>. Resolving block-then-tag-index matches how the model counted. */
-  function resolveElement(doc, slideIndex, path) {
+  /* The slide's direct children whose FIRST class is `cls` — exactly what the
+     model addresses. querySelectorAll would also return nested matches and a
+     block whose class is second in the list, and then every index after the
+     stray one would point at the wrong element. */
+  function slideBlocks(slide, cls) {
+    return [...slide.children].filter(
+      n => n.classList && n.classList[0] === cls);
+  }
+
+  /* Turn a model address back into a live element inside the frame.
+     `ord` disambiguates: a slide can carry five blocks with the same class,
+     and a leaf path repeats once per such block. Resolution is structural
+     rather than by querySelector, because the model counts <p>/<li> anywhere
+     inside a block while CSS `>` means direct child — ".snotes > li" would
+     otherwise miss a list wrapped in a <ul>. */
+  function resolveElement(doc, slideIndex, path, ord) {
     const slide = doc.querySelectorAll(".slide")[slideIndex - 1];
     if (!slide) return null;
+    const n = ord || 0;
     const m = LEAF_RE.exec(path);
     try {
-      if (!m) return slide.querySelector(path);
-      const block = slide.querySelector(m[1]);
+      if (!m) return slideBlocks(slide, path.slice(1))[n] || null;
+      const block = slideBlocks(slide, m[1].slice(1))[n];
       if (!block) return null;
       return block.querySelectorAll(m[2])[Number(m[3]) - 1] || null;
     } catch (e) {
@@ -151,11 +162,15 @@
     if (!slide) return;
 
     for (const element of slide.elements) {
-      const node = resolveElement(doc, slideIndex, element.path);
+      const node = resolveElement(doc, slideIndex, element.path, element.ord);
       if (!node) continue;
       if (node.dataset.deckIgnore === "1") continue;
       if (!isVisible(node)) continue;
+      // Two model elements must never share one node; if they did, the second
+      // listener would answer for a click on the first.
+      if (node.dataset.deckTarget !== undefined) continue;
       node.dataset.deckTarget = element.path;
+      node.dataset.deckOrd = String(element.ord || 0);
       node.addEventListener("click", ev => {
         ev.preventDefault();
         ev.stopPropagation();
@@ -195,6 +210,7 @@
       for (const element of notes) {
         const item = el("div", "snoteitem", element.text);
         item.dataset.deckPath = element.path;
+        item.dataset.deckOrd = String(element.ord || 0);
         item.addEventListener("click", () => fire(element, item, null, wrap));
         col.appendChild(item);
       }
@@ -273,7 +289,8 @@
     popup.id = "deckpop";
 
     const ph = el("div", "ph",
-      "Slide " + e.slide + " · " + e.path + " · line " + e.line_start);
+      "Slide " + e.slide + " · " + e.path + (e.ord ? " #" + (e.ord + 1) : "") +
+      " · line " + e.line_start);
     const quote = el("div", "quote", "“" + (e.text || "(empty)").slice(0, 220) + "”");
     const body = el("div", "body");
     const ta = el("textarea");
@@ -313,6 +330,7 @@
         await window.WebCompanion.api.submit({
           slide: e.slide,
           path: e.path,
+          ord: e.ord || 0,
           component: e.component,
           line_start: e.line_start,
           line_end: e.line_end,
@@ -372,7 +390,8 @@
   }
 
   function signature(model) {
-    return model.slides.map(s => JSON.stringify(s.elements.map(e => [e.path, e.text])));
+    return model.slides.map(
+      s => JSON.stringify(s.elements.map(e => [e.path, e.ord, e.text])));
   }
 
   async function reloadEverything() {

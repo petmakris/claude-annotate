@@ -13,6 +13,12 @@ Addressability rule, deliberately narrow:
 That covers prose, bullets and speaker notes without inventing a schema for
 markup nobody has written yet. A table is one target, not one per row: <td>
 is not a leaf tag, so the whole block is addressed at once.
+
+A path is NOT unique on its own. Real decks put several blocks with the same
+class on one slide (five `.stg` boxes, two `.ctxp` lists), so every element
+also carries `ord` — its position among the elements on that slide sharing its
+path. (path, ord) is the address; path alone would silently resolve to the
+first one and let an edit land on the wrong element.
 """
 from __future__ import annotations
 
@@ -139,12 +145,26 @@ def parse_deck(html: str) -> dict:
     parser.feed(html)
     parser.close()
     for slide in parser.slides:
+        _number_duplicates(slide)
         slide["title"] = _title_for(slide)
     return {"slides": parser.slides}
 
 
+def _number_duplicates(slide: dict) -> None:
+    """Give every element its position among same-path siblings."""
+    seen: dict[str, int] = {}
+    for element in slide["elements"]:
+        n = seen.get(element["path"], 0)
+        seen[element["path"]] = n + 1
+        element["ord"] = n
+
+
 def _title_for(slide: dict) -> str:
-    by_path = {e["path"]: e["text"] for e in slide["elements"]}
+    # First occurrence wins: a slide with two .title blocks is titled by the
+    # one the reader meets first.
+    by_path: dict[str, str] = {}
+    for e in slide["elements"]:
+        by_path.setdefault(e["path"], e["text"])
     for path in (".title", ".dname", ".dkick"):
         if by_path.get(path):
             return by_path[path]
