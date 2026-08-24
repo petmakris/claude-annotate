@@ -1,5 +1,6 @@
 /* Chrome only. The slide canvas inside the frame keeps the deck's own look. */
-#app { max-width: 1260px; margin: 0 auto; padding: 20px 24px 120px; }
+#app { max-width: 1260px; margin: 0 auto; padding: 20px 24px 120px;
+  --frame-w: 780px; }
 #deckhead { position: sticky; top: 0; z-index: 30; background: var(--surface);
   border-bottom: 1px solid var(--border); display: flex; align-items: center;
   gap: 12px; padding: 10px 4px; }
@@ -8,7 +9,8 @@
 #deckhead .sp { flex: 1; }
 
 .slidewrap { position: relative; margin: 0 auto 26px; }
-.slidelabel { display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+.slidelabel { width: var(--frame-w); display: flex; align-items: center; gap: 8px;
+  margin-bottom: 6px;
   font-family: monospace; font-size: 10px; letter-spacing: 1.4px;
   text-transform: uppercase; color: var(--text-dim); }
 .slidelabel .ln { flex: 1; height: 1px; background: var(--border); }

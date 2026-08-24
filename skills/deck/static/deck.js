@@ -330,7 +330,12 @@
   window.ClaudeDeck.onSelect(openPopup);
 
   document.addEventListener("mousedown", ev => {
-    if (popup && !popup.contains(ev.target) && !ev.target.closest(".snoteitem")) closePopup();
+    if (!popup) return;
+    // ev.target is not always an Element (document, text nodes), so never
+    // reach for closest() without checking.
+    const t = ev.target instanceof Element ? ev.target : null;
+    if (t && (popup.contains(t) || t.closest(".snoteitem"))) return;
+    closePopup();
   });
 
   /* ------------------------------------------------------------------ *
