@@ -10,8 +10,9 @@ Addressability rule, deliberately narrow:
     (the harness renumbers it at runtime, so it is not content)
   * every `<p>` and `<li>` inside one of those children
 
-That covers prose, bullets, table rows and speaker notes without inventing a
-schema for markup nobody has written yet.
+That covers prose, bullets and speaker notes without inventing a schema for
+markup nobody has written yet. A table is one target, not one per row: <td>
+is not a leaf tag, so the whole block is addressed at once.
 """
 from __future__ import annotations
 
@@ -19,6 +20,10 @@ from html.parser import HTMLParser
 
 ADDRESSABLE_LEAF_TAGS = ("p", "li")
 _SKIP_CLASSES = {"num"}
+# Tags that separate words. Text is captured as a flat run, so without this a
+# table reads "NowLater" and a two-cell row loses the gap between its cells.
+# Inline tags are deliberately absent: <b> inside a sentence must not split it.
+_SEPARATORS = {"p", "li", "tr", "td", "th", "div", "br", "section", "aside", "ul", "ol"}
 _VOID = {"br", "hr", "img", "meta", "link", "input", "source", "path", "circle", "rect"}
 
 
@@ -87,6 +92,7 @@ class _DeckParser(HTMLParser):
                           "line_start": line, "line_end": line, "text": ""}
             self._start_capture()
 
+        self._separate(tag)
         if tag not in _VOID:
             self._depth += 1
 
@@ -94,6 +100,7 @@ class _DeckParser(HTMLParser):
         pass  # self-closing: never opens a block or a leaf
 
     def handle_endtag(self, tag):
+        self._separate(tag)
         if tag not in _VOID:
             self._depth -= 1
         line = self.getpos()[0]
@@ -116,6 +123,10 @@ class _DeckParser(HTMLParser):
 
         if tag == "section" and self._slide is not None and self._depth == self._slide_depth:
             self._slide = None
+
+    def _separate(self, tag: str) -> None:
+        if tag in _SEPARATORS and (self._leaf is not None or self._block is not None):
+            self._buf.append(" ")
 
     def handle_data(self, data):
         if self._leaf is not None or self._block is not None:

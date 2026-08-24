@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sample deck — claude-deck</title>
+<style>
+  :root{--ink:#16181d;--paper:#faf9f6;--accent:#c2622f;--faint:#8a8a84;--mono:ui-monospace,Menlo,monospace}
+  *{box-sizing:border-box}
+  body{margin:0;padding:40px;background:#e6e6e2;font-family:Georgia,'Times New Roman',serif;color:var(--ink)}
+  .deck{display:flex;flex-direction:column;align-items:center;gap:28px}
+  .slide{
+    position:relative;width:1280px;height:720px;background:var(--paper);
+    padding:64px 80px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.18);
+  }
+  .num{position:absolute;left:-46px;top:6px;color:#cfcec6;font-family:var(--mono);font-size:13px}
+  .pg{position:absolute;right:40px;bottom:18px;color:var(--faint);font-size:12px;font-family:var(--mono)}
+  .kick{font-family:var(--mono);font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--accent)}
+  .title{font-size:52px;line-height:1.12;margin-top:18px;max-width:1000px}
+  .pro{position:absolute;left:80px;right:80px;font-size:22px;line-height:1.55}
+  .pro p{margin:0 0 18px}
+  .conseq{position:absolute;left:80px;right:80px;font-size:20px;line-height:1.5;
+    border-left:4px solid var(--accent);padding-left:18px;color:#3a3a34}
+  .bullets{position:absolute;left:80px;right:80px;font-size:22px;line-height:1.6}
+  .bullets li{margin-bottom:14px}
+  .tbl{position:absolute;left:80px;right:80px;font-size:19px}
+  .tbl table{border-collapse:collapse;width:100%}
+  .tbl td,.tbl th{border-bottom:1px solid #dedcd4;padding:10px 8px;text-align:left}
+  .tslide{background:var(--ink);color:var(--paper)}
+  .tslide .kick{color:var(--accent)}
+  .tslide .title{font-size:60px}
+  .lede{position:absolute;left:80px;right:200px;top:420px;font-size:22px;line-height:1.5;color:#cfcec6}
+  .divider{background:var(--ink);color:var(--paper)}
+  .ghost{position:absolute;right:60px;top:120px;font-size:340px;color:rgba(250,249,246,.05);line-height:1}
+  .dkick{font-family:var(--mono);font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-top:200px}
+  .dname{font-size:64px;margin-top:16px}
+  .dtag{font-size:22px;color:#cfcec6;margin-top:24px;max-width:760px}
+  .snotes{display:none}
+  .present-btn{position:fixed;right:18px;bottom:18px;padding:8px 14px;font-family:var(--mono);font-size:12px}
+  .notesdrawer{position:fixed;right:0;top:0;width:340px;height:100%;background:#fff;
+    box-shadow:-4px 0 18px rgba(0,0,0,.15);transform:translateX(100%);transition:transform .18s}
+  .notesdrawer.open{transform:none}
+  body.present{overflow:hidden;background:#000;padding:0}
+  body.present .slide{display:none}
+  body.present .slide.current{display:block}
+</style>
+</head>
+<body>
+<div class="deck">
+
+<section class="slide tslide"><span class="num">1</span>
+  <div class="kick">CLAUDE-DECK &middot; SAMPLE</div>
+  <div class="title">A deck you can talk back to</div>
+  <div class="lede">Click any line on any slide, say what should change, and the file on disk changes.</div>
+  <aside class="snotes"><ul>
+    <li>Open by saying what the tool is for, in one sentence.</li>
+    <li>Do not demo the plumbing yet &mdash; the room wants the promise first.</li>
+  </ul></aside>
+</section>
+
+<section class="slide divider" id="sec-loop"><span class="num">d</span>
+  <div class="ghost">01</div>
+  <div class="dkick">SECTION 01</div>
+  <div class="dname">The editing loop</div>
+  <div class="dtag">What happens between a click in the browser and a line changing in the file.</div>
+  <aside class="snotes"><ul>
+    <li>One breath here. The divider exists so the room registers a topic change.</li>
+  </ul></aside>
+</section>
+
+<section class="slide"><span class="num">2</span>
+  <div class="kick">01 &middot; HOW IT WORKS</div>
+  <div class="title">The browser reads, Claude writes</div>
+  <div class="pro" style="top:230px">
+    <p>The page renders the deck as itself &mdash; every slide, in order, at the size it will be shown.</p>
+    <p>Clicking an element resolves it to a line range in the source file, not to a search string.</p>
+    <p>Your comment becomes one queued instruction; nothing else touches the file.</p>
+  </div>
+  <div class="conseq" style="top:520px">A comment is a request, not an edit. The tool never rewrites the document on your behalf &mdash; it hands Claude an address and waits.</div>
+  <aside class="snotes"><ul>
+    <li>Land the address point: line ranges survive entities, a text search does not.</li>
+    <li>If asked why one comment at a time &mdash; edits interact.</li>
+  </ul></aside>
+</section>
+
+<section class="slide"><span class="num">3</span>
+  <div class="kick">01 &middot; WHAT IS ADDRESSABLE</div>
+  <div class="title">Everything with a class, and every line inside it</div>
+  <div class="bullets" style="top:250px"><ul>
+    <li>Each direct child of a slide that carries a class becomes a target.</li>
+    <li>Each paragraph and list item inside one of those becomes its own target.</li>
+    <li>The gutter number is skipped, because the harness rewrites it at load.</li>
+    <li>Speaker notes are hidden in the slide, so they get a column of their own.</li>
+  </ul></div>
+  <aside class="snotes"><ul>
+    <li>Four rules, no schema. Anything narrower needs markup nobody has written.</li>
+  </ul></aside>
+</section>
+
+<section class="slide divider" id="sec-limits"><span class="num">d</span>
+  <div class="ghost">02</div>
+  <div class="dkick">SECTION 02</div>
+  <div class="dname">Where it stops</div>
+  <div class="dtag">The things this phase deliberately does not do.</div>
+  <aside class="snotes"><ul>
+    <li>Say the limits out loud before anyone finds them.</li>
+  </ul></aside>
+</section>
+
+<section class="slide"><span class="num">4</span>
+  <div class="kick">02 &middot; SCOPE</div>
+  <div class="title">In this phase, and after it</div>
+  <div class="tbl" style="top:250px">
+    <table>
+      <tr><th>Now</th><th>Later</th></tr>
+      <tr><td>Comment on any element</td><td>Reorder slides</td></tr>
+      <tr><td>One instruction per send</td><td>Batch a whole review</td></tr>
+      <tr><td>Repaint when the file changes</td><td>Check the text still fits the slide</td></tr>
+    </table>
+  </div>
+  <div class="conseq" style="top:560px">The right-hand column is not a promise of dates &mdash; it is the order the work is queued in.</div>
+  <aside class="snotes"><ul>
+    <li>Do not read the table aloud. Point at it and say the one line under it.</li>
+    <li>If asked about dates, the answer is the queue order, not a calendar.</li>
+  </ul></aside>
+</section>
+
+</div>
+
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const deck = document.querySelector('.deck');
+  let i = 0, on = false;
+
+  slides.forEach((sl, k) => {
+    const pg = document.createElement('div');
+    pg.className = 'pg';
+    pg.textContent = (k + 1) + ' / ' + slides.length;
+    sl.appendChild(pg);
+    const num = sl.querySelector('.num');
+    if (num) num.textContent = (k + 1);
+  });
+
+  function applyZoom() {
+    if (on) { deck.style.zoom = '1'; return; }
+    const byW = (window.innerWidth - 80) / 1280;
+    const byH = (window.innerHeight - 80) / 720;
+    deck.style.zoom = Math.max(0.5, Math.min(byW, byH, 1.5));
+  }
+  function show(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((sl, k) => sl.classList.toggle('current', k === i));
+  }
+  function enter() { on = true; document.body.classList.add('present'); deck.style.zoom = '1'; show(i); }
+  function exit()  { on = false; document.body.classList.remove('present'); applyZoom(); }
+
+  const drawer = document.createElement('aside');
+  drawer.className = 'notesdrawer';
+  document.body.appendChild(drawer);
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'f' || e.key === 'F') { e.preventDefault(); on ? exit() : enter(); }
+    if (!on) return;
+    if (e.key === 'ArrowRight') { e.preventDefault(); show(i + 1); }
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); show(i - 1); }
+    if (e.key === 'Escape')     { exit(); }
+  });
+  window.addEventListener('resize', applyZoom);
+  applyZoom();
+
+  const btn = document.createElement('button');
+  btn.className = 'present-btn';
+  btn.textContent = '▶ Present';
+  btn.onclick = enter;
+  document.body.appendChild(btn);
+})();
+</script>
+</body>
+</html>

@@ -93,3 +93,19 @@ def test_component_is_the_first_class_of_the_owning_block():
 def test_every_element_carries_its_slide_number():
     for slide in _parsed()["slides"]:
         assert all(e["slide"] == slide["index"] for e in slide["elements"])
+
+
+def test_inline_tags_do_not_split_a_sentence():
+    el = next(e for e in _parsed()["slides"][2]["elements"]
+              if e["path"] == ".pro > p:nth-of-type(1)")
+    assert el["text"] == "Every proposal has to satisfy two independent sets of rules."
+
+
+def test_block_tags_keep_neighbouring_cells_apart():
+    # A table is one target; without a separator its cells would read "NowLater".
+    html = ('<div class="deck"><section class="slide">'
+            '<div class="tbl"><table><tr><th>Now</th><th>Later</th></tr>'
+            '<tr><td>One</td><td>Two</td></tr></table></div>'
+            '</section></div>')
+    el = model_module.parse_deck(html)["slides"][0]["elements"][0]
+    assert el["text"] == "Now Later One Two"
