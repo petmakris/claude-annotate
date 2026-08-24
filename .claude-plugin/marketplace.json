@@ -13,7 +13,8 @@
       "description": "Read Claude's long answers in a browser and comment on any block; Claude rewrites that block in place. Requires Python 3.9+ on PATH (standard library only, nothing to install).",
       "skills": [
         "./skills/annotate",
-        "./skills/annotate-doctor"
+        "./skills/annotate-doctor",
+        "./skills/deck"
       ]
     },
     {
