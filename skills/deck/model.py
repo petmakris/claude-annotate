@@ -29,6 +29,12 @@ The browser resolves with `block_ord`/`leaf_n`, never by running `path` as a
 CSS selector: `>` means direct child to CSS but "anywhere inside" here, and
 CSS `nth-of-type` counts nested elements this module deliberately skips.
 
+Known limit: a browser foster-parents a <div> written directly inside a
+<table> outside any cell, moving it BEFORE the table in the DOM. This module
+leaves it where the file put it, so such a slide resolves that block onto the
+wrong node. No deck writes that markup, and matching the browser would mean
+carrying insertion-mode state — more machinery than the rest of this module.
+
 Malformed input must not raise. An open tag stack (rather than a depth
 counter) means a stray `</div>` is ignored and an unclosed `<li>` is closed by
 the next one, so one bad slide costs that slide, not the rest of the file.
@@ -176,7 +182,8 @@ class _DeckParser(HTMLParser):
         # line is one past this element. Stamping it would make two
         # addressable elements claim overlapping ranges, and Claude replacing
         # the first range would delete the second.
-        frame.element["line_end"] = frame.last_line if implied else line
+        frame.element["line_end"] = (
+            (frame.last_line or frame.element["line_start"]) if implied else line)
         slide["elements"].append(frame.element)
         self._start_capture()
 
@@ -250,9 +257,11 @@ class _DeckParser(HTMLParser):
 
         self._separate(tag)
         if tag not in _VOID:
-            frame = _Frame(tag, kind, element, block_cls)
-            frame.last_line = line
-            self._stack.append(frame)
+            # last_line deliberately starts at 0 = "no content seen". Seeding
+            # it with the opening line makes a contentless child hand its
+            # parent a line the parent has nothing on, and if the next element
+            # starts there the parent's range covers it.
+            self._stack.append(_Frame(tag, kind, element, block_cls))
 
     def _bubble(self, frame: _Frame) -> None:
         """A closed child's extent belongs to its parent too.
@@ -261,7 +270,8 @@ class _DeckParser(HTMLParser):
         so without this a block whose content all sits in children would end
         on its own opening line and Claude would read the wrong lines.
         """
-        if self._stack and frame.last_line > self._stack[-1].last_line:
+        if (frame.last_line and self._stack
+                and frame.last_line > self._stack[-1].last_line):
             self._stack[-1].last_line = frame.last_line
 
     def _imply_end_tags(self, tag: str, line: int) -> None:

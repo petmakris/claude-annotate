@@ -402,3 +402,27 @@ def test_a_table_row_outside_a_table_is_not_counted_as_a_slide_child():
     els = _els(_wrap('<tr class="x"><td>dropped</td></tr>\n'
                      '<div class="x">The real x</div>'))
     assert [(e["text"], e["block_ord"]) for e in els] == [("The real x", 0)]
+
+
+def test_a_contentless_child_does_not_extend_its_parents_range():
+    # An empty <span> on the line where the NEXT element starts used to hand
+    # its parent that line, and replacing the parent's range deleted the next
+    # element. Found by fuzzing; no real deck contains it.
+    els = _els(_wrap('<div class="pro">\n<p>First paragraph\n'
+                     '<span><p>Second paragraph</p></span></div>'))
+    assert [(e["text"], e["line_start"], e["line_end"]) for e in els] == [
+        ("First paragraph", 3, 3), ("Second paragraph", 4, 4)]
+
+    els = _els(_wrap('<p class="lede">Lede text\n'
+                     '<span><div class="conseq">Consequence</div></span>'))
+    assert [(e["text"], e["line_start"], e["line_end"]) for e in els] == [
+        ("Lede text", 2, 2), ("Consequence", 3, 3)]
+
+
+def test_a_child_that_does_carry_text_still_extends_its_parent():
+    # The counterpart: this range genuinely spans two lines, and trimming it
+    # would leave Claude reading half the sentence.
+    els = _els(_wrap('<div class="pro">\n<p>First paragraph\n'
+                     '<em>emphasis</em>\n<p>Second</p></div>'))
+    assert [(e["text"], e["line_start"], e["line_end"]) for e in els] == [
+        ("First paragraph emphasis", 3, 4), ("Second", 5, 5)]
