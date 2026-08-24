@@ -92,7 +92,7 @@ for tool in bash curl; do
 done
 
 # --- state directories -----------------------------------------------------
-for skill in annotate walkthrough interactive-review; do
+for skill in annotate walkthrough interactive-review deck; do
   dir="$HOME/.claude/$skill"
   if [ ! -d "$dir" ]; then
     ok "$skill — no state yet (never run on this machine)"
@@ -105,7 +105,7 @@ for skill in annotate walkthrough interactive-review; do
 done
 
 # --- server ----------------------------------------------------------------
-for skill in annotate walkthrough interactive-review; do
+for skill in annotate walkthrough interactive-review deck; do
   info="$HOME/.claude/$skill/server.json"
   [ -f "$info" ] || continue
   url="$(sed -n 's/.*"url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$info" | head -n 1)"
