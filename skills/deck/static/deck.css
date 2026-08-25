@@ -1,5 +1,5 @@
 /* Chrome only. The slide canvas inside the frame keeps the deck's own look. */
-#app { max-width: 1260px; margin: 0 auto; padding: 20px 24px 120px;
+#app { max-width: 2200px; margin: 0 auto; padding: 20px 32px 120px;
   --frame-w: 780px; }
 #deckhead { position: sticky; top: 0; z-index: 30; background: var(--surface);
   border-bottom: 1px solid var(--border); display: flex; align-items: center;

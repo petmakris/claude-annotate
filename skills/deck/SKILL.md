@@ -110,6 +110,33 @@ sed -n '404,405p' /abs/path/deck.html
 
 Then edit with the Edit tool, matching the **raw** source you just read.
 
+## Ground the words before you write them
+
+A deck names real systems, screens and features, and its copy is only as good as the
+vocabulary it uses. **When a comment asks you to rewrite anything that names a product
+concept, find out what the project's own documentation calls it before you propose
+wording.** A term you invent will sound official on a slide and be wrong in the room.
+
+Look in this order, cheapest first:
+
+1. **A connected wiki or knowledge search tool**, if this session has one — Confluence,
+   a docs MCP server, a knowledge cache. This is usually the fastest route to the term a
+   real user would recognise, because it is the same text the product's own users read.
+2. **The repository's own docs** — `docs/`, `README`, ADRs, specs, design notes.
+3. **The tracker item the slide is about**, if the deck names one. An epic or ticket
+   description carries the wording the team actually settled on.
+
+Then prefer the product's own noun over a paraphrase, and say where you got it. If nothing
+confirms a term, **keep the existing wording and tell the user it is unconfirmed** — an
+honest gap beats a confident invention.
+
+Two limits on this. Grounding is **read-only**: it may open documentation and trackers,
+never write to them. And it does not license a rewrite nobody asked for — it changes the
+words you choose inside the edit the comment already requested.
+
+When the comment asks for **options rather than a change**, answer in the terminal with the
+candidate wordings and leave the file alone until the user picks one.
+
 **Rules that are not negotiable:**
 
 - **Never reserialise the file.** Change only the substring you mean. A parse-and-rewrite changes

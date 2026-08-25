@@ -10,8 +10,41 @@
   "use strict";
 
   const BASE = location.pathname.endsWith("/") ? location.pathname : location.pathname + "/";
-  const SCALE = 0.6094;              // 780 / 1280
   const SLIDE_W = 1280, SLIDE_H = 720;
+  // The slide frame used to be a fixed 780px regardless of screen size, which
+  // left most of a wide monitor empty. SCALE is now derived from the actual
+  // viewport on load and on resize, so the frame grows to fill the space
+  // available once the notes column has what it needs, capped at native
+  // resolution (SCALE 1) so it never upscales past its own crispness.
+  const MIN_FRAME_W = 480, MAX_FRAME_W = 1280, NOTES_MIN = 300, GAP = 16, APP_PAD = 64;
+  let SCALE = 0.6094;
+
+  function computeScale() {
+    const availW = document.documentElement.clientWidth - APP_PAD;
+    const frameW = Math.max(MIN_FRAME_W, Math.min(MAX_FRAME_W, availW - NOTES_MIN - GAP));
+    SCALE = frameW / SLIDE_W;
+    const app = document.getElementById("app");
+    if (app) app.style.setProperty("--frame-w", Math.round(frameW) + "px");
+    return frameW;
+  }
+
+  /* Resize the already-mounted frames in place rather than remounting them —
+     remounting would reload every deck iframe on every resize tick. */
+  function relayoutFrames() {
+    computeScale();
+    document.querySelectorAll(".slideframe").forEach(holder => {
+      holder.style.width = Math.round(SLIDE_W * SCALE) + "px";
+      holder.style.height = Math.round(SLIDE_H * SCALE) + "px";
+      const f = holder.querySelector("iframe");
+      if (f) f.style.transform = "scale(" + SCALE + ")";
+    });
+  }
+
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(relayoutFrames, 120);
+  });
 
   // One frame per slide, so there is no single shared doc to hold onto.
   const state = { model: null, base: BASE };
@@ -520,6 +553,7 @@
   window.ClaudeDeck.onPoll = onPoll;
 
   document.addEventListener("DOMContentLoaded", () => {
+    computeScale();
     if (window.WebCompanion && window.WebCompanion.init) {
       window.WebCompanion.init({ onPollDelta: onPoll });
     }
