@@ -18,7 +18,37 @@ comments; **you** edit the file. Nothing else writes it.
 
 1. Resolve the deck file from the argument. A folder means the `.html` inside it with the same
    name as the folder.
-2. Ensure the server is running, then create or attach a workspace. One block, because the
+
+2. **Load the house style before anything else, and say out loud that you did.** A deck belongs
+   to somebody who has already decided how their decks read — how long a slide may be, which
+   words they refuse, what goes on a slide at all versus what they say over a live demo. Opening
+   a deck without that is how you spend a session re-learning it one comment at a time.
+
+   The decks folder is the deck's grandparent directory (`$DECKS/<deck-folder>/<deck>.html`).
+   Read whichever of these exist, in this order — later files add to earlier ones, never replace
+   them:
+
+   ```bash
+   DECKS="$(cd "$(dirname "$DECK_PATH")/.." && pwd)"
+   for f in "$DECKS/PRESENTATION-STYLE.md" "$DECKS/README.md"; do
+     [ -f "$f" ] && echo "=== $f ===" && cat "$f"
+   done
+   ls "$DECKS/playbooks" 2>/dev/null
+   ```
+
+   If `$DECKS/playbooks/` exists, it holds one folder per recurring meeting. Read the one whose
+   slug matches this deck — a `2026.05.14-Board-Update` deck reads `playbooks/board-update/`. Read
+   every file in it. The style file governs length, wording and density; the playbook governs
+   structure and running order.
+
+   Then, in the same turn, tell the user in **two or three lines** what you loaded and the two or
+   three constraints you will be holding to. Not a summary of the file — the specific limits that
+   will bind the next edit, so they can correct you before you make one.
+
+   If no style file exists, say so plainly in one line and carry on. Do not invent house rules,
+   and do not go looking for them in other repositories.
+
+3. Ensure the server is running, then create or attach a workspace. One block, because the
    guard has to run before the first `python3` call:
 
 ```bash
@@ -66,9 +96,9 @@ curl -sf -X POST "$SERVER_URL/api/sessions" -H 'Content-Type: application/json' 
   -d "$(printf '{"cwd": "%s", "title": "%s", "deck": "%s"}' "$PWD" "$DECK_NAME" "$DECK_PATH")"
 ```
 
-3. Announce the `localhost_url`. **Do not append a query string to it** — the session router
+4. Announce the `localhost_url`. **Do not append a query string to it** — the session router
    matches the path exactly and `?cb=1` returns 404.
-4. Arm the watcher with `Monitor` (`persistent: true`), using the `sid`, `state_dir`,
+5. Arm the watcher with `Monitor` (`persistent: true`), using the `sid`, `state_dir`,
    `events_dir` and `consumed_dir` from the response:
 
 ```bash
@@ -82,7 +112,7 @@ CLAUDE_SID="$CLAUDE_CODE_SESSION_ID" \
 "$PLUGIN_ROOT/skills/_shared/web_companion/watcher.sh"
 ```
 
-5. End the turn.
+6. End the turn.
 
 ## Handling a comment
 
@@ -137,6 +167,27 @@ words you choose inside the edit the comment already requested.
 When the comment asks for **options rather than a change**, answer in the terminal with the
 candidate wordings and leave the file alone until the user picks one.
 
+## Hold every edit to the house style
+
+The style file you loaded at step 2 is not background reading. It is the standard each edit is
+measured against, and the comment that arrived is usually narrower than the rule that applies.
+
+- **Shorter is the default direction.** A deck comes to you because it is too long far more
+  often than because it is too thin. When a comment asks you to fix wording, the fix that
+  removes a clause beats the fix that swaps one. Do not add a sentence to a slide unless the
+  comment asked for something the slide does not already say.
+- **Report the size of what you changed.** After an edit, say how the block moved — words
+  before, words after. A rewrite that lands 20% longer is a regression even when the wording is
+  better, and the user cannot see that from the browser until it overflows.
+- **Name the rule you applied.** One clause is enough: "cut the mechanics clause, kept the
+  stake". It lets the user correct the rule rather than re-litigating each slide.
+- **A crowded slide usually needs a picture rather than tighter prose.** If a comment on a slide
+  can only be answered by trimming prose that is already tight, say so and propose the picture
+  instead of shaving words. Do not draw it until the user agrees.
+- **When the comment and the style file disagree, the comment wins for that edit** — it is the
+  user speaking now. Make the edit, then say in one line which rule it departs from, so they can
+  decide whether the rule has changed.
+
 **Rules that are not negotiable:**
 
 - **Never reserialise the file.** Change only the substring you mean. A parse-and-rewrite changes
@@ -158,9 +209,10 @@ After editing, confirm the deck still parses and the element you touched is stil
 curl -s "$SERVER_URL/s/<slug>/model" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d["slides"]), "slides")'
 ```
 
-The browser repaints on its own within a second of the file changing. Report what you changed.
-Whether the new text still **fits** its slide is not checked in this phase — say so if an edit
-made a block materially longer.
+The browser repaints on its own within a second of the file changing. Report what you changed,
+the word count before and after, and the house rule you applied. Whether the new text still
+**fits** its slide is not checked in this phase — so an edit that made a block longer must be
+called out, not left for the user to discover when it overflows.
 
 Finally write the ack and end the turn with no terminal output:
 
