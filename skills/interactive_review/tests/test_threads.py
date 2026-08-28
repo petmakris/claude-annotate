@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from skills.interactive_review.threads import (
+from skills._shared.web_companion.threads import (
     load, save_atomic, append_message, valid_anchor, list_versions, delete,
     set_anchor_text_if_absent
 )

@@ -105,7 +105,7 @@ public final class ReviewSessionService implements Disposable {
         String[] parts = anchor.split(":", 3);
         String where = parts.length >= 3
             ? lastSegment(parts[0]) + ":" + parts[2]
-            : anchor;
+            : (ReviewAnchor.isGeneral(anchor) ? "whole PR" : anchor);
         com.intellij.notification.Notification n = new com.intellij.notification.Notification(
             "Interactive Review",
             "Claude answered",
@@ -123,15 +123,19 @@ public final class ReviewSessionService implements Disposable {
      *  one, else drive the GitHub PR diff to the file + line. */
     private static void openThread(Project project, ReviewSessionClient client, String anchor) {
         String[] parts = anchor.split(":", 3);
-        if (parts.length < 3) return;
-        String path = parts[0];
-        String side = parts[1];
-        int line0;
-        try {
-            line0 = Math.max(0, Integer.parseInt(parts[2].split("-", 2)[0]) - 1);
-        } catch (NumberFormatException e) {
+        if (parts.length < 3) {
+            // Whole-PR thread: no file to open. The action used to do nothing
+            // at all — show the thread over the IDE frame, as the panel does.
+            com.intellij.openapi.wm.IdeFrame frame =
+                com.intellij.openapi.wm.WindowManager.getInstance().getIdeFrame(project);
+            if (frame != null) SynthesisPopup.showDetached(project, frame.getComponent(), anchor);
             return;
         }
+        String path = parts[0];
+        String side = parts[1];
+        int start = ReviewAnchor.startLine(parts[2]);
+        if (start < 0) return;
+        int line0 = Math.max(0, start - 1);
         com.intellij.openapi.editor.ex.EditorEx editor =
             SpikeDiffExtension.editorFor(path + ":" + side);
         if (editor != null) {

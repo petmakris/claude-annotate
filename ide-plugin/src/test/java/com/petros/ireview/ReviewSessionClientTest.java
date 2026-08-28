@@ -144,6 +144,115 @@ class ReviewSessionClientTest {
     }
 
     @Test
+    void singleDeadPollDoesNotFreezeALiveSession() throws Exception {
+        // The reported bug: a review the user had just started showed
+        // "session ended — read-only" while its watcher was still beating.
+        // /poll's "dead" verdict is INFERRED from one heartbeat sample, and one
+        // bad sample (the heartbeat file read mid-rewrite) closed a latch that
+        // never re-checks. One flicker must not freeze the panel.
+        try (FakeReviewServer server = new FakeReviewServer()) {
+            server.sessionsJson =
+                "[{\"sid\":\"abc\",\"pr_ref\":\"PR1\",\"title\":\"t\",\"state_dir\":\"/tmp/x\"}]";
+            server.watcherSeenAt = System.currentTimeMillis() / 1000; // watcher is alive
+            CountDownLatch attached = new CountDownLatch(1);
+            ReviewSessionClient client = new ReviewSessionClient(
+                server.baseUrl(), "/proj/acme-shop", Duration.ofMillis(80));
+            client.addListener(new ReviewSessionClient.Listener() {
+                @Override public void onAttached(ReviewSessionClient.SessionInfo info) { attached.countDown(); }
+            });
+            client.start();
+            assertTrue(attached.await(2, TimeUnit.SECONDS));
+
+            // Exactly one poll reports ended=true, reason "dead"; every other
+            // poll reports the session alive.
+            int before = server.pollCount.get();
+            server.deadPollsRemaining.set(1);
+            // Bounded: a client that wrongly latched stops polling altogether,
+            // so this must never wait on pollCount forever.
+            long deadline = System.currentTimeMillis() + 3000;
+            while (server.pollCount.get() < before + 6 && System.currentTimeMillis() < deadline) {
+                Thread.sleep(40);
+            }
+
+            assertNotEquals(ReviewSessionClient.State.ENDED, client.state(),
+                "one inferred-dead poll must not latch a live session read-only");
+            assertTrue(client.currentSession().isPresent());
+
+            // Still writable: the panel is not frozen.
+            client.postComment("foo:R:1", "hi", "").get(2, TimeUnit.SECONDS);
+            assertEquals(1, server.submitCount.get(), "a live session must still accept submits");
+            client.stop();
+        }
+    }
+
+    @Test
+    void sustainedDeadPollsStillFreeze() throws Exception {
+        // The confirmation requirement must not swallow a real death: a watcher
+        // that is genuinely gone reports "dead" on every poll, so the latch
+        // still closes.
+        try (FakeReviewServer server = new FakeReviewServer()) {
+            server.sessionsJson =
+                "[{\"sid\":\"abc\",\"pr_ref\":\"PR1\",\"title\":\"t\",\"state_dir\":\"/tmp/x\"}]";
+            server.watcherSeenAt = System.currentTimeMillis() / 1000;
+            CountDownLatch attached = new CountDownLatch(1);
+            CountDownLatch ended = new CountDownLatch(1);
+            ReviewSessionClient client = new ReviewSessionClient(
+                server.baseUrl(), "/proj/acme-shop", Duration.ofMillis(80));
+            client.addListener(new ReviewSessionClient.Listener() {
+                @Override public void onAttached(ReviewSessionClient.SessionInfo info) { attached.countDown(); }
+                @Override public void onStateChanged(ReviewSessionClient.State s) {
+                    if (s == ReviewSessionClient.State.ENDED) ended.countDown();
+                }
+            });
+            client.start();
+            assertTrue(attached.await(2, TimeUnit.SECONDS));
+            server.endedReason = "dead";
+            server.ended = true;
+            assertTrue(ended.await(3, TimeUnit.SECONDS),
+                "a watcher that stays dead must still freeze the panel");
+            client.stop();
+        }
+    }
+
+    @Test
+    void sessionEndedSseFrameLatchesWithoutWaitingForAPoll() throws Exception {
+        // The server sends `session-ended` only when a finished/cancelled
+        // marker exists — authoritative. Ignoring it meant the client saw only
+        // "the stream ended" and reconnected on its 2s timer until a /poll
+        // happened to latch.
+        try (FakeReviewServer server = new FakeReviewServer()) {
+            server.sessionsJson =
+                "[{\"sid\":\"abc\",\"pr_ref\":\"PR1\",\"title\":\"t\",\"state_dir\":\"/tmp/x\"}]";
+            server.watcherSeenAt = System.currentTimeMillis() / 1000;
+            CountDownLatch attached = new CountDownLatch(1);
+            CountDownLatch ended = new CountDownLatch(1);
+            // Poll slowly, so only the SSE frame can produce a timely latch.
+            ReviewSessionClient client = new ReviewSessionClient(
+                server.baseUrl(), "/proj/acme-shop", Duration.ofSeconds(30));
+            client.addListener(new ReviewSessionClient.Listener() {
+                @Override public void onAttached(ReviewSessionClient.SessionInfo info) { attached.countDown(); }
+                @Override public void onStateChanged(ReviewSessionClient.State s) {
+                    if (s == ReviewSessionClient.State.ENDED) ended.countDown();
+                }
+            });
+            client.start();
+            assertTrue(attached.await(3, TimeUnit.SECONDS));
+
+            server.pushSseEvent("session-ended", "{}");
+            assertTrue(ended.await(3, TimeUnit.SECONDS),
+                "session-ended must freeze the panel without waiting for a poll");
+
+            // And it must stop reconnecting rather than churn a new stream
+            // every 2s while frozen.
+            int opens = server.streamOpens.get();
+            Thread.sleep(2500);
+            assertEquals(opens, server.streamOpens.get(),
+                "a frozen session must not reopen the stream");
+            client.stop();
+        }
+    }
+
+    @Test
     void newLiveSessionSupersedesFrozenPanel() throws Exception {
         try (FakeReviewServer server = new FakeReviewServer()) {
             server.sessionsJson =

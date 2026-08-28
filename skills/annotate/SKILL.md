@@ -116,4 +116,4 @@ can run `/annotate resume <slug>` — see `references/resuming.md`.
 
 ## Maintainer notes
 
-Cost/token characteristics of the skill are documented in `docs/token-budget.md` (not needed at runtime).
+`docs/` is the maintainer's shelf, never loaded at runtime: `token-budget.md` (cost characteristics), `gallery.html` (every block kind on one page against the real stylesheets — open it after a visual change), `free-html-direction.md` (open discussion on replacing typed kinds with free-form HTML), `richer-block-kinds-plan-archived.md` (the superseded plan, kept as history).

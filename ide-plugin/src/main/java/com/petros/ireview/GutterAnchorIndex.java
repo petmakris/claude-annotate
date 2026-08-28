@@ -29,12 +29,12 @@ public final class GutterAnchorIndex {
         for (var e : cache.entrySet()) {
             String anchor = e.getKey();
             if (!anchor.startsWith(prefix)) continue;
-            int recorded;
-            try {
-                recorded = Integer.parseInt(anchor.substring(prefix.length()));
-            } catch (NumberFormatException nfe) {
-                continue; // general/non-line anchor
-            }
+            // The tail is "42" or "42-48"; a range anchors on its first line.
+            // Parsing the whole tail as an int silently dropped every range
+            // thread from the gutter — the row existed in the panel but the
+            // diff line carried no icon.
+            int recorded = ReviewAnchor.startLine(anchor.substring(prefix.length()));
+            if (recorded < 0) continue; // general/non-line anchor
             var res = AnchorResolver.resolve(lines, recorded, e.getValue().anchorText(), k);
             int displayLine;
             Kind kind = res.kind();

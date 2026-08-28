@@ -28,6 +28,16 @@ final class GhPrDiffOpener {
 
     private static final Logger LOG = Logger.getInstance(GhPrDiffOpener.class);
 
+    /**
+     * Cap on the `gh pr view` shell-out. The no-timeout overload blocks until
+     * the process exits, forever — a `gh` stalled on the network, or a
+     * credential helper waiting on input that never comes, parked the pooled
+     * thread permanently and the "open PR diff" click simply never resolved,
+     * with no error shown. Matches the Python side's own 60s cap on the same
+     * command.
+     */
+    private static final int GH_TIMEOUT_MS = 60_000;
+
     private GhPrDiffOpener() {}
 
     /** Open the PR diff and show its first changed file. */
@@ -45,7 +55,10 @@ final class GhPrDiffOpener {
                                        @Nullable String filePath, @NotNull String side, int line0) {
         long number = parseNumber(session.prRef());
         if (number <= 0) {
-            notifyWarn(project, "No PR number", "Couldn't read a PR number from \"" + session.prRef() + "\".");
+            notifyWarn(project, "No PR number",
+                "Couldn't read a PR number from \"" + session.prRef() + "\". This button needs a "
+                + "PR number, an owner/repo#number, or a pull-request URL — a branch name is not "
+                + "enough to open the GitHub diff.");
             return;
         }
         String repoRoot = project.getBasePath();
@@ -99,7 +112,13 @@ final class GhPrDiffOpener {
                 gh, "pr", "view", String.valueOf(number), "--json", "id", "--jq", ".id")
                 .withWorkDirectory(repoRoot)
                 .withEnvironment(com.intellij.util.EnvironmentUtil.getEnvironmentMap());
-            ProcessOutput out = ExecUtil.execAndGetOutput(cl);
+            ProcessOutput out = ExecUtil.execAndGetOutput(cl, GH_TIMEOUT_MS);
+            if (out.isTimeout()) {
+                LOG.warn("gh pr view timed out after " + GH_TIMEOUT_MS + "ms");
+                return NodeIdResult.failed("`gh pr view " + number + "` didn't finish within "
+                    + (GH_TIMEOUT_MS / 1000) + "s. Check `gh auth status` — a credential helper "
+                    + "waiting for input will hang here.");
+            }
             if (out.getExitCode() == 0 && !out.getStdout().isBlank()) {
                 return NodeIdResult.ok(out.getStdout().trim());
             }
@@ -114,13 +133,42 @@ final class GhPrDiffOpener {
         }
     }
 
-    /** First run of digits in the PR ref ("6272", "owner/repo#6272", a URL …). */
-    private static long parseNumber(@NotNull String prRef) {
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\d+").matcher(prRef);
+    /** {@code .../pull/6272}, with or without a trailing path. */
+    private static final java.util.regex.Pattern PULL_URL =
+        java.util.regex.Pattern.compile("/pull/(\\d+)(?:[/?#].*)?$");
+    /** {@code owner/repo#6272} or a bare {@code #6272}. */
+    private static final java.util.regex.Pattern HASH_REF =
+        java.util.regex.Pattern.compile("#(\\d+)$");
+    /** A bare PR number and nothing else. */
+    private static final java.util.regex.Pattern BARE_NUMBER =
+        java.util.regex.Pattern.compile("\\d+");
+
+    /**
+     * The PR number in a ref, or -1 when the ref names no PR.
+     *
+     * Only the three documented shapes count: a bare number, {@code
+     * owner/repo#6272}, and a pull URL. This used to take the first run of
+     * digits anywhere in the string, which is wrong for the third thing a ref
+     * is allowed to be — a branch. "release-2024" resolved to PR 2024 and
+     * "PMP-272-external-pre-trade-checks" to PR 272, and the plugin opened the
+     * diff of a real but unrelated pull request. Returning -1 sends the caller
+     * down its existing "No PR number" warning instead.
+     */
+    static long parseNumber(@NotNull String prRef) {
+        String ref = prRef.trim();
+        for (var pattern : java.util.List.of(PULL_URL, HASH_REF)) {
+            java.util.regex.Matcher m = pattern.matcher(ref);
+            if (m.find()) return parseLongOrMinusOne(m.group(1));
+        }
+        return BARE_NUMBER.matcher(ref).matches() ? parseLongOrMinusOne(ref) : -1;
+    }
+
+    private static long parseLongOrMinusOne(String digits) {
         try {
-            return m.find() ? Long.parseLong(m.group()) : -1;
+            long n = Long.parseLong(digits);
+            return n > 0 ? n : -1;
         } catch (NumberFormatException e) {
-            return -1;
+            return -1;  // more digits than a long holds
         }
     }
 

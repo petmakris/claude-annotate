@@ -9,11 +9,12 @@ writes a blocks.json with an intro + two high-fidelity mockup blocks (one
 interactive). Prints the session URL to open in a browser.
 """
 import json
-import os
 import sys
 import tempfile
 import urllib.request
 from pathlib import Path
+
+from skills._shared.web_companion.atomic import write_text_atomic
 
 PORT = sys.argv[1]
 BASE = f"http://localhost:{PORT}"
@@ -172,9 +173,7 @@ doc = {
          "spec": {"title": "Settings panel", "html": SETTINGS}},
     ],
 }
-tmp = response_dir / "blocks.json.tmp"
-tmp.write_text(json.dumps(doc))
-os.replace(tmp, response_dir / "blocks.json")
+write_text_atomic(response_dir / "blocks.json", json.dumps(doc))
 
 print("RESPONSE_DIR=" + str(response_dir))
 print("OPEN_URL=" + sess["url"])

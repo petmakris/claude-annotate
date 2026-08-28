@@ -1,6 +1,6 @@
 ---
 name: audit-engine-boundary
-description: Audit the shared server engine boundary — that `skills/_shared/web_companion/` is the one copy, reached by import rather than reimplemented, and that the three skills do not collide on ports or state directories. Finds hand-rolled reimplementations of engine behaviour, resurrected vendoring artifacts, overlapping PORT_RANGEs and duplicate skill_names. Reports in plain English. Use when the user says "/audit-engine-boundary", "check the engine boundary", or asks whether the shared server is still shared.
+description: Audit the shared server engine boundary — that `skills/_shared/web_companion/` is the one copy, reached by import rather than reimplemented, and that the four skills do not collide on ports or state directories. Finds hand-rolled reimplementations of engine behaviour, resurrected vendoring artifacts, overlapping PORT_RANGEs and duplicate skill_names. Reports in plain English. Use when the user says "/audit-engine-boundary", "check the engine boundary", or asks whether the shared server is still shared.
 user-invocable: true
 ---
 
@@ -23,7 +23,7 @@ Report only what these do not enforce, plus anywhere either has gone stale.
 ## Step 1 — load the sources of truth
 
 1. `skills/_shared/web_companion/` — every module, and what each provides.
-2. `skills/annotate/server.py`, `skills/interactive_review/server.py`, `skills/walkthrough/server.py` — the three consumers.
+2. `skills/annotate/server.py`, `skills/deck/server.py`, `skills/interactive_review/server.py`, `skills/walkthrough/server.py` — the four consumers. Deck is easy to miss because no Java client talks to it.
 3. `skills/_shared/web_companion/server.py` — the `run()` signature, which is how a skill declares `skill_name` and `port_range`.
 
 ## The rules
@@ -31,13 +31,13 @@ Report only what these do not enforce, plus anywhere either has gone stale.
 - **Rule 1 — the engine is imported, never reimplemented.** A skill that hand-rolls behaviour the engine already provides is a **Critical** Violation: its own atomic write instead of `atomic.py`, its own on-disk event queue instead of `events.py` (the queue the watcher reads to wake Claude — not a browser-facing SSE transport), its own session-directory walk instead of `sessions.py`, its own thread store instead of `threads.py`. This is how two copies come back without a single banner reappearing. The fix is always the same: import it.
 - **Rule 2 — no import reaches the engine by another path.** Every engine import must read `skills._shared.web_companion.*`. A `sys.path` manipulation, a relative import climbing out of a skill, or a duplicated module file is **Critical**.
 - **Rule 3 — vendoring stays dead.** Any resurrected `VENDOR*` file, `GENERATED FILE` banner, or sync/check script anywhere in the tree is **Critical**. The covering tests above catch the two known filenames; this rule covers the rest of the shape, including a new script under `tools/` or a CI job that re-derives the tree.
-- **Rule 4 — port ranges stay disjoint.** `PORT_RANGE` in the three skill servers must not overlap. Today: annotate 3080, interactive-review 54620–54640, walkthrough 54660–54680. An overlap is **Critical** — two skills race for a port and the loser reports a stale one.
+- **Rule 4 — port ranges stay disjoint.** `PORT_RANGE` in the four skill servers must not overlap. Today: annotate 3080, deck 3090, interactive-review 54620–54640, walkthrough 54660–54680. An overlap is **Critical** — two skills race for a port and the loser reports a stale one.
 - **Rule 5 — `skill_name` is unique per skill.** The value each skill passes to `run(skill_name=...)` determines `~/.claude/<skill_name>/server.json`, which carries the live port and the write token. Two skills sharing a name is **Critical**: each would overwrite the other's connection details and intermittently drive the other's server.
 - **Rule 6 — engine changes that only one consumer uses.** A function in the engine called by exactly one skill is a **Decision**, not a Violation. It may be a shared capability nobody adopted yet, or skill-specific logic that leaked into the shared layer. Ask which.
 
 ## Closed allowlist — never flag these
 
-1. The three per-skill `server.py` **handler** modules. They are meant to be distinct — the engine owns transport, the skill owns its routes' meaning.
+1. The four per-skill `server.py` **handler** modules. They are meant to be distinct — the engine owns transport, the skill owns its routes' meaning.
 2. The 8-line per-skill `ensure_server.sh` shims. They deliberately delegate to the 153-line one in `_shared`.
 3. `skills/_shared/web_companion/tests/` naming engine internals — that is its job.
 4. This audit suite (`.claude/skills/audit*/`) naming engine modules to describe them.
@@ -48,7 +48,7 @@ Report only what these do not enforce, plus anywhere either has gone stale.
 
 ## Step 2 — scan
 
-Enumerate engine modules and the public names each exports. Grep the three skill servers for those names to find who imports what. Grep the same files for the behaviours in Rule 1 implemented locally. Extract each `PORT_RANGE` and each `run(skill_name=...)` argument and diff them. Build the file universe from `git ls-files`.
+Enumerate engine modules and the public names each exports. Grep the four skill servers for those names to find who imports what. Grep the same files for the behaviours in Rule 1 implemented locally. Extract each `PORT_RANGE` and each `run(skill_name=...)` argument and diff them. Build the file universe from `git ls-files`.
 
 ## Step 3 — severity
 

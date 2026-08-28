@@ -2194,3 +2194,99 @@ body[data-pane-theme="contrast"] .codepane {
   }
   .code-col { border-left: none; border-top: 1px solid var(--border); }
 }
+
+/* ── Maximize: a picture block at viewport width ───────────────────────────
+   Why a button and not just wider cards: a sequence diagram is rendered at its
+   authored pixel size so its type never shrinks, which means a wide one
+   scrolls sideways inside the reading column. This lifts one block out of that
+   column for as long as you are looking at it. maximize.js drives all of it.
+
+   The card is NOT moved in the DOM — it is promoted in place with
+   position:fixed. Moving it made script.js's render loop paint a replacement
+   for the block it found missing, leaving two nodes on one data-block-id. */
+
+/* The header control. Always visible — it is a VIEW control, not one of the
+   feedback verbs in .hover-actions, and those hide on purpose. It sits just
+   left of .section-pill so the pill stays the rightmost thing in every header. */
+.max-toggle {
+  flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; margin-right: 8px; padding: 0;
+  border: 1px solid transparent; border-radius: 7px;
+  background: transparent; color: var(--text-dim);
+  cursor: pointer; transition: background .12s, color .12s, border-color .12s;
+}
+.max-toggle svg {
+  width: 14px; height: 14px;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.max-toggle:hover {
+  background: var(--surface-soft); border-color: var(--border); color: var(--text-strong);
+}
+.max-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.max-toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+
+/* Scrim + top bar. z-index 1200 clears the popover layer (1000 in popover.css),
+   because a maximized block is the most recent thing the user opened. */
+.max-chrome[hidden] { display: none; }
+.max-scrim {
+  position: fixed; inset: 0; z-index: 1200;
+  background: var(--bg, #eef1f8);
+}
+.max-bar {
+  position: fixed; top: 0; left: 0; right: 0; height: 49px; z-index: 1202;
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.max-title {
+  font-weight: 600; color: var(--text-strong); font-size: 14px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.max-spacer { flex: 1; }
+.max-btn {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  height: 28px; padding: 0 11px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text);
+  font: inherit; font-size: 12.5px; cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.max-btn:hover { background: var(--surface-soft); color: var(--text-strong); }
+.max-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.max-btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.max-close { width: 32px; padding: 0; }
+.max-close svg {
+  width: 14px; height: 14px;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* Scroll-lock the column underneath: without it a wheel gesture over the
+   maximized card chains through to the document, and the page you come back to
+   has moved. */
+body.has-max-overlay { overflow: hidden; }
+
+/* The promoted card. It keeps its place in main.prose — this only changes where
+   it paints — so max-width has to beat the reading column's --content-max,
+   which it inherits from its real parent. */
+section.block.card.is-maximized {
+  position: fixed; top: 49px; left: 0; right: 0; bottom: 0; z-index: 1201;
+  max-width: none; width: auto; margin: 16px;
+  overflow: auto;
+  box-shadow: 0 18px 50px rgba(20, 30, 60, .16);
+}
+section.block.card.is-maximized .block-content { padding-bottom: 4px; }
+
+/* Fit-to-width: a transform, never a re-render. transform-origin is the
+   top-left corner because a diagram is read from there. */
+section.block.card.is-fit .block-content { overflow: visible; }
+section.block.card.is-fit .block-content > svg {
+  transform: scale(var(--max-fit-scale, 1));
+  transform-origin: top left;
+}
+/* A transform does not shrink the layout box, so a scaled-down picture would
+   leave a tall band of empty card below it. maximize.js measures the scaled
+   height and writes it here. */
+section.block.card.is-fit .block-content { height: var(--max-fit-h); }

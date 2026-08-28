@@ -49,6 +49,12 @@ public final class WalkthroughSessionClient {
         default void onThreadChanged(String anchor, ThreadState thread) {}
         default void onPendingChanged(String anchor, boolean pending) {}
         default void onStateChanged(State state) {}
+        /** A non-fatal problem worth surfacing to the user (e.g. the steps or
+         *  thread seed gave up after retries and the tour may be incomplete).
+         *  Mirrors {@link ReviewSessionClient.Listener#onWarning} — without it
+         *  an exhausted seed left an empty "live" panel that read as "Claude
+         *  produced no steps". */
+        default void onWarning(String message) {}
     }
 
     private static final Duration STALE_AFTER = Duration.ofSeconds(15);
@@ -388,7 +394,8 @@ public final class WalkthroughSessionClient {
      * GET steps.json and publish it if it actually changed. Retries transient
      * failures up to 3x with a 500ms backoff — same as {@link ReviewSessionClient
      * #seedCache} — so a blip on the initial seed doesn't leave the tour empty
-     * until the next SSE event. Aborts early if the client is closed or {@code
+     * until the next SSE event. On exhaustion it fires {@link Listener#onWarning},
+     * exactly as seedCache does, rather than going quietly empty. Aborts early if the client is closed or {@code
      * gen} has been superseded by a newer attach/reconnect.
      */
     private void loadSteps(String sid, long gen) {
@@ -409,6 +416,7 @@ public final class WalkthroughSessionClient {
                     return;
                 }
             } catch (Exception ignored) {
+                // Transient GET failure — the retry loop is the handling.
             }
             try {
                 Thread.sleep(500);
@@ -417,6 +425,8 @@ public final class WalkthroughSessionClient {
                 return;
             }
         }
+        warnListeners("Couldn't load the walkthrough steps from the server — "
+            + "the tour may be empty until the connection recovers.", gen);
     }
 
     /**
@@ -439,6 +449,7 @@ public final class WalkthroughSessionClient {
                     return;
                 }
             } catch (Exception ignored) {
+                // Transient GET failure — the retry loop is the handling.
             }
             try {
                 Thread.sleep(500);
@@ -447,6 +458,15 @@ public final class WalkthroughSessionClient {
                 return;
             }
         }
+        warnListeners("Couldn't load existing threads from the walkthrough server — "
+            + "answers already given may be missing until the connection recovers.", gen);
+    }
+
+    /** Fire onWarning, but only while this seed is still the current attach —
+     *  a superseded generation must not warn about a session nobody is on. */
+    private void warnListeners(String message, long gen) {
+        if (closed || gen != sseGen.get()) return;
+        for (Listener l : listeners) l.onWarning(message);
     }
 
     private void openSse(String sid) {
@@ -457,6 +477,8 @@ public final class WalkthroughSessionClient {
         try {
             sseTask = sseExec.submit(() -> runSse(sid, uri, gen));
         } catch (java.util.concurrent.RejectedExecutionException ignored) {
+            // stop() raced us between the guard above and the submit — the
+            // stream we would have opened has nothing left to feed.
         }
     }
 
@@ -480,6 +502,8 @@ public final class WalkthroughSessionClient {
         try {
             conn.done().join();
         } catch (Throwable ignored) {
+            // Task cancelled/interrupted, or an unexpected join failure — fall
+            // through to the single reconnect guard below, which decides.
         } finally {
             // Only clear it if it's still ours — a newer openSse() may have
             // already replaced (and closed) it.
@@ -498,6 +522,7 @@ public final class WalkthroughSessionClient {
             exec.schedule(() -> { if (gen == sseGen.get() && !closed) openSse(sid); },
                 2, TimeUnit.SECONDS);
         } catch (java.util.concurrent.RejectedExecutionException ignored) {
+            // stop() raced us between the guard and the schedule — nothing to do.
         }
     }
 

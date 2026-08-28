@@ -1,8 +1,11 @@
 """Unified-diff parser + gh-CLI fetcher for interactive-review.
 
 The skill snapshots a PR's diff at session-open time. The diff comes from
-`gh pr diff` (raw unified-diff format). We parse it into a typed structure
-(FileChange / Hunk / Line) the renderer can consume directly.
+`gh pr diff` and is written to disk as the raw patch — IntelliJ's own diff
+viewer parses it, so nothing in production consumes the typed structure below.
+`parse_unified_diff` (FileChange / Hunk / Line) is kept as a tested library
+surface for anything that later needs the model; its JSON serialiser was
+removed once it had no callers at all.
 
 Line anchors used by the rest of the skill have the form:
     <path>:<side>:<linenum>           e.g. src/server.py:R:42
@@ -106,30 +109,6 @@ def parse_unified_diff(text: str) -> list[FileChange]:
     if current_file is not None:
         files.append(current_file)
     return [f for f in files if f.path and f.path != "/dev/null"]
-
-
-def files_to_json(files: list[FileChange]) -> list[dict]:
-    out = []
-    for f in files:
-        added = sum(1 for h in f.hunks for l in h.lines if l.side == "added")
-        removed = sum(1 for h in f.hunks for l in h.lines if l.side == "removed")
-        out.append({
-            "path": f.path,
-            "added": added,
-            "removed": removed,
-            "hunks": [
-                {
-                    "old_start": h.old_start, "old_lines": h.old_lines,
-                    "new_start": h.new_start, "new_lines": h.new_lines,
-                    "lines": [
-                        {"side": l.side, "old": l.old, "new": l.new, "text": l.text}
-                        for l in h.lines
-                    ],
-                }
-                for h in f.hunks
-            ],
-        })
-    return out
 
 
 # A pr_ref reaches `gh` argv verbatim, and session-create is a network-facing

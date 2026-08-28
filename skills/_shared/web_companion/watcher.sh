@@ -18,6 +18,33 @@ set -u
 
 mkdir -p "$EVENTS_DIR" "$CONSUMED_DIR"
 
+# Write one heartbeat, atomically.
+#
+# `date +%s > file` truncates the target FIRST and only fills it once the
+# forked `date` has run — leaving the file empty for milliseconds on every
+# beat (measured: ~0.6% of reads land in that window). A reader that catches
+# it empty sees "no heartbeat ever written", which /poll reads as a dead
+# session; the IDE then latches read-only on a session that is very much
+# alive. Write to a private temp in the same directory and rename(2) over the
+# target instead, so every reader sees either the old beat or the new one.
+# The temp name carries $$ because several watchers may share one STATE_DIR.
+beat() {
+  _now=$(date +%s)
+  _tmp="$STATE_DIR/.watcher_heartbeat.$$.tmp"
+  if printf '%s\n' "$_now" > "$_tmp" 2>/dev/null; then
+    mv -f "$_tmp" "$STATE_DIR/watcher_heartbeat" 2>/dev/null || rm -f "$_tmp"
+  fi
+  if [ -n "${CLAUDE_SID:-}" ]; then
+    mkdir -p "$STATE_DIR/watchers"
+    # Dot-prefixed and not *.hb, so an in-flight temp is never counted as an
+    # attached session by attached_count()'s watchers/*.hb glob.
+    _wtmp="$STATE_DIR/watchers/.hb.$$.tmp"
+    if printf '%s\n' "$_now" > "$_wtmp" 2>/dev/null; then
+      mv -f "$_wtmp" "$STATE_DIR/watchers/$CLAUDE_SID.hb" 2>/dev/null || rm -f "$_wtmp"
+    fi
+  fi
+}
+
 while [ ! -f "$STATE_DIR/finished" ] && [ ! -f "$STATE_DIR/cancelled" ]; do
   # Workspace reaped (GC/retention) -> nothing left to watch. Without this
   # the loop would spin forever writing heartbeats into a void.
@@ -25,11 +52,7 @@ while [ ! -f "$STATE_DIR/finished" ] && [ ! -f "$STATE_DIR/cancelled" ]; do
     printf 'WEBCOMPANION_CANCELLED skill=%s sid=%s\n' "$SKILL" "$SID"
     exit 0
   fi
-  date +%s > "$STATE_DIR/watcher_heartbeat"
-  if [ -n "${CLAUDE_SID:-}" ]; then
-    mkdir -p "$STATE_DIR/watchers"
-    date +%s > "$STATE_DIR/watchers/$CLAUDE_SID.hb"
-  fi
+  beat
   # Fixed-width event-id filenames sort chronologically (see events.append).
   evt=$(ls "$EVENTS_DIR"/*.json 2>/dev/null | sort | head -n1)
   if [ -n "$evt" ]; then
@@ -49,11 +72,7 @@ while [ ! -f "$STATE_DIR/finished" ] && [ ! -f "$STATE_DIR/cancelled" ]; do
         # Keep the heartbeat fresh while blocked on the ack, otherwise
         # /poll's watcher_seen_at goes stale for up to 30 min and the page
         # would wrongly look like the watcher died.
-        date +%s > "$STATE_DIR/watcher_heartbeat"
-        if [ -n "${CLAUDE_SID:-}" ]; then
-          mkdir -p "$STATE_DIR/watchers"
-          date +%s > "$STATE_DIR/watchers/$CLAUDE_SID.hb"
-        fi
+        beat
         sleep 1
       done
       if [ -f "$CONSUMED_DIR/$id.ack" ]; then

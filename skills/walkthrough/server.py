@@ -10,21 +10,32 @@ from __future__ import annotations
 import json
 import sys
 import time
-import urllib.parse
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
 from skills._shared.web_companion import server as wc_server
+from skills._shared.web_companion import stream as stream_module
 from skills._shared.web_companion import events as events_module
 from skills._shared.web_companion import uploads as uploads_module
 from skills._shared.web_companion.atomic import write_text_atomic
-from skills.interactive_review import threads as threads_module
+from skills._shared.web_companion import threads as threads_module
 from skills.walkthrough import steps as steps_module
 
-SHARED_STATIC_DIR = Path(__file__).resolve().parent.parent / "_shared" / "web_companion" / "static"
+# The engine owns its own layout; ask it where its static files are rather
+# than rebuilding the path by hand. Four skills hard-coding
+# `../_shared/web_companion/static` meant moving that folder broke all four
+# silently — the expression still resolves, it just resolves to nothing.
+SHARED_STATIC_DIR = wc_server.SHARED_STATIC_DIR
 
 PORT_RANGE = range(54660, 54681)
-NEVER_ARMED_GRACE = 300  # s; no-heartbeat sessions older than this are dead
+NEVER_ARMED_GRACE = 1800  # s; a session that never wrote a heartbeat is dead
+# past this. Measured from the state dir's mtime, i.e. roughly session-create
+# time, and it must comfortably exceed the longest gap a caller can put between
+# creating the session and arming the watcher — because once it expires the
+# server reports ended_reason "dead" on EVERY poll, which the IDE latches
+# read-only for good. At the old 300s, a caller that seeded a batch of threads
+# before arming froze its own live session. The cost of erring high is only
+# that a session whose Claude died before arming lingers in the panel.
 BANNER = "walkthrough-server v1"
 
 IDE_PAGE = """<!DOCTYPE html>
@@ -110,88 +121,40 @@ class Handlers:
         if query == "threads.json":
             _send_json(h, 200, self.threads_bulk(dirs))
             return
-        if query.startswith("thread"):
-            qs = query.split("?", 1)[1] if "?" in query else ""
-            anchor = urllib.parse.parse_qs(qs).get("anchor", [None])[0]
-            if not anchor:
-                _send_text(h, 400, "missing anchor")
-                return
-            anchor = urllib.parse.unquote(anchor)
-            if not steps_module.valid_anchor(anchor):
-                _send_text(h, 400, "bad anchor")
-                return
-            _send_json(h, 200, threads_module.load(state_dir / "threads", anchor))
-            return
         _send_text(h, 404, "not found")
 
     def _serve_stream(self, h: BaseHTTPRequestHandler, dirs: dict) -> None:
-        """SSE: thread-changed / thread-deleted / steps-changed / heartbeat.
+        """SSE: steps-changed on top of the shared thread stream.
 
-        Self-correcting: every wake (and every 30s timeout) re-reads state from
-        disk rather than trusting the wake signal, so a missed notify cannot
-        strand the IDE on stale content.
+        `steps-changed` is walkthrough's own frame — the tour's step list can
+        be regenerated mid-session — so it rides the engine loop's `extra`
+        hook rather than forking the loop.
         """
-        sid = dirs.get("_sid")
         state_dir = Path(dirs["state_dir"])
-        h.send_response(200)
-        h.send_header("Content-Type", "text/event-stream")
-        h.send_header("Cache-Control", "no-cache")
-        h.send_header("Connection", "keep-alive")
-        h.send_header("X-Accel-Buffering", "no")
-        h.end_headers()
+        last_ts = [None]  # None = not yet sent; forces the first tick to emit
 
-        def emit(name: str, obj: dict) -> bool:
-            try:
-                h.wfile.write(f"event: {name}\ndata: {json.dumps(obj)}\n\n".encode())
-                h.wfile.flush()
+        def emit_steps(emit) -> bool:
+            ts = steps_module.generated_ts(state_dir)
+            first = last_ts[0] is None
+            if not first and ts == last_ts[0]:
                 return True
-            except (BrokenPipeError, ConnectionResetError):
-                return False
-
-        if not emit("connected", {}):
-            return
-        if not self._registry or not sid:
-            return
-
-        last_steps_ts = steps_module.generated_ts(state_dir)
-        if last_steps_ts:
+            last_ts[0] = ts
+            if first and not ts:
+                # Nothing generated yet. Stay silent on the opening frame — the
+                # client's empty state is already right. A LATER drop to 0 does
+                # emit, so a client that had steps learns they went away.
+                return True
             doc = steps_module.load_steps(state_dir) or EMPTY_DOC
-            if not emit("steps-changed", {"generated_ts": last_steps_ts,
-                                          "count": len(doc.get("steps", []))}):
-                return
-        last_threads = self.threads_bulk(dirs)
-        for anchor, info in last_threads.items():
-            if not emit("thread-changed", {"anchor": anchor, **info}):
-                return
+            return emit("steps-changed",
+                        {"generated_ts": ts, "count": len(doc.get("steps", []))})
 
-        waiter = self._registry.waiter(sid)
-        while True:
-            woke = waiter.wait(timeout=30)
-            if _is_terminal(state_dir):
-                # Tell the client the session is over and end the stream —
-                # otherwise this loop re-reads every thread file every 30s
-                # per connected client, forever.
-                emit("session-ended", {})
-                return
-            steps_ts = steps_module.generated_ts(state_dir)
-            if steps_ts != last_steps_ts:
-                last_steps_ts = steps_ts
-                doc = steps_module.load_steps(state_dir) or EMPTY_DOC
-                if not emit("steps-changed", {"generated_ts": steps_ts,
-                                              "count": len(doc.get("steps", []))}):
-                    return
-            new_threads = self.threads_bulk(dirs)
-            for anchor in list(last_threads):
-                if anchor not in new_threads and not emit("thread-deleted", {"anchor": anchor}):
-                    return
-            for anchor, info in new_threads.items():
-                old = last_threads.get(anchor)
-                if (old is None or old.get("version") != info.get("version")) \
-                        and not emit("thread-changed", {"anchor": anchor, **info}):
-                    return
-            last_threads = new_threads
-            if not woke and not emit("heartbeat", {}):
-                return
+        stream_module.serve(
+            h, dirs,
+            registry=self._registry,
+            threads_bulk=self.threads_bulk,
+            is_terminal=_is_terminal,
+            extra=emit_steps,
+        )
 
     def handle_submit(self, h: BaseHTTPRequestHandler, dirs: dict, payload: dict) -> None:
         state_dir = Path(dirs["state_dir"])
@@ -235,14 +198,22 @@ class Handlers:
     def serve_poll(self, h: BaseHTTPRequestHandler, dirs: dict) -> None:
         state_dir = Path(dirs["state_dir"])
         versions = threads_module.list_versions(state_dir / "threads")
+        hb_path = state_dir / "watcher_heartbeat"
+        armed = hb_path.exists()
         try:
-            hb = int((state_dir / "watcher_heartbeat").read_text().strip())
+            hb = int(hb_path.read_text().strip())
         except (FileNotFoundError, ValueError, OSError):
             hb = 0
         # No beat ever written: fall back to creation age so a session whose
         # Claude crashed before arming the watcher doesn't look live forever.
         if hb:
             age = int(time.time()) - hb
+        elif armed:
+            # The file is there but this read couldn't parse it. A live watcher
+            # rewrites it every ~1s, so an unreadable sample proves nothing —
+            # never death. Report age unknown; the next poll decides. (Same
+            # defect and fix as interactive_review's serve_poll.)
+            age = None
         else:
             try:
                 created = int(state_dir.stat().st_mtime)

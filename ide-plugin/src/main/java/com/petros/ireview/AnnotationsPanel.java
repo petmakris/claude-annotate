@@ -60,6 +60,10 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
     private final JBTextField searchField = new JBTextField();
     private final JButton openDiffButton = new JButton("Open PR diff in IDE", AllIcons.Actions.Diff);
     private final JButton endReviewButton = new JButton(AllIcons.Actions.Cancel);
+    /** The only way to START a whole-PR thread from the IDE. Every anchor the
+     *  gutter builds is file:side:line, so without this button __general__ was
+     *  a thread only Claude could open. */
+    private final JButton askGeneralButton = new JButton(AllIcons.Actions.AddMulticaret);
     private final Map<String, Integer> seenVersions = new HashMap<>();
     /** Memo for {@link #isStale}: anchor → (document stamp, thread version,
      *  result). The document scan is O(lines) per row; without this it reruns
@@ -178,8 +182,13 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
         endReviewButton.setToolTipText("End this review session — stops the watcher and "
             + "clears it from the IDE. Cannot be undone.");
         endReviewButton.addActionListener(e -> endReview());
+        askGeneralButton.setToolTipText("Ask Claude about the pull request as a whole — "
+            + "a thread with no file or line, shown here as \"whole PR\"");
+        askGeneralButton.addActionListener(e ->
+            SynthesisPopup.showDetached(project, list, ReviewAnchor.GENERAL));
         JPanel openRow = new JPanel(new BorderLayout(6, 0));
         openRow.setBorder(JBUI.Borders.empty(0, 8, 4, 8));
+        openRow.add(askGeneralButton, BorderLayout.WEST);
         openRow.add(openDiffButton, BorderLayout.CENTER);
         openRow.add(endReviewButton, BorderLayout.EAST);
 
@@ -292,6 +301,9 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
         boolean hasSession = client.currentSession().isPresent();
         ReviewSessionClient.State st = client.state();
         openDiffButton.setEnabled(hasSession);
+        // The popup itself refuses input on a frozen session, but an ENDED
+        // review has nothing to ask, so don't offer the button at all.
+        askGeneralButton.setEnabled(hasSession && st != ReviewSessionClient.State.ENDED);
         // "End review" only makes sense for a session that is still running —
         // an already-ENDED (frozen) session has nothing left to end.
         endReviewButton.setEnabled(hasSession && st != ReviewSessionClient.State.ENDED);
@@ -359,12 +371,19 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
         List<AnnotationEntry> rows = new ArrayList<>();
         for (var e : client.snapshotCache().entrySet()) {
             String anchor = e.getKey();
-            if (!q.isEmpty() && !anchor.toLowerCase().contains(q)) continue;
             var thread = e.getValue();
+            String rowTitle = PanelRowTitle.resolve(
+                thread.title(), thread.question(), thread.synthesis(), anchor);
+            // Match the title as well as the anchor: the title is the row's
+            // bold line, so filtering on a word the user can read returned
+            // nothing when only the anchor was searched.
+            if (!q.isEmpty()
+                    && !anchor.toLowerCase().contains(q)
+                    && !rowTitle.toLowerCase().contains(q)) continue;
             int last = seenVersions.getOrDefault(anchor, 0);
             rows.add(new AnnotationEntry(
                 anchor,
-                PanelRowTitle.resolve(thread.title(), thread.question(), thread.synthesis(), anchor),
+                rowTitle,
                 thread.version(),
                 thread.updatedAt(),
                 thread.version() > last,
@@ -439,9 +458,11 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
 
         // Meta line: file:side:line (muted, WEST) + v# / state (EAST).
         String[] parts = entry.anchor().split(":", 3);
-        String pathOnly = parts.length >= 1 ? lastSegment(parts[0]) : entry.anchor();
-        String lineRef = parts.length >= 3 ? ":" + parts[1] + ":" + parts[2] : "";
-        JLabel locLbl = new JLabel(pathOnly + lineRef);
+        // A whole-PR thread has no path to show; "__general__" reads as a bug.
+        String location = parts.length >= 3
+            ? lastSegment(parts[0]) + ":" + parts[1] + ":" + parts[2]
+            : (ReviewAnchor.isGeneral(entry.anchor()) ? "whole PR" : entry.anchor());
+        JLabel locLbl = new JLabel(location);
         locLbl.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 11).deriveFont(10.5f));
         locLbl.setForeground(stale ? JBColor.GRAY : new Color(0x8a, 0x8d, 0x93));
 
@@ -573,8 +594,8 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
         if (memo != null && memo.docStamp() == stamp && memo.version() == ts.version()) {
             return memo.stale();
         }
-        int recorded;
-        try { recorded = Integer.parseInt(p[2]); } catch (NumberFormatException e) { return false; }
+        int recorded = ReviewAnchor.startLine(p[2]);
+        if (recorded < 0) return false;
         var lines = new ArrayList<String>();
         for (int i = 0; i < doc.getLineCount(); i++) {
             lines.add(doc.getText(new com.intellij.openapi.util.TextRange(
@@ -588,16 +609,19 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
 
     private void onRowClicked(AnnotationEntry entry) {
         String[] parts = entry.anchor().split(":", 3);
-        if (parts.length < 3) return;
-        String path = parts[0];
-        String side = parts[1];
-        int line;
-        try {
-            String lineStr = parts[2].split("-", 2)[0];
-            line = Integer.parseInt(lineStr);
-        } catch (NumberFormatException e) {
+        if (parts.length < 3) {
+            // A whole-PR anchor (__general__) has no file:side:line to open, so
+            // there is no diff editor to scroll to. Returning here left the row
+            // silently dead — show its thread over the panel instead.
+            seenVersions.put(entry.anchor(), entry.version());
+            rebuild();
+            SynthesisPopup.showDetached(project, list, entry.anchor());
             return;
         }
+        String path = parts[0];
+        String side = parts[1];
+        int line = ReviewAnchor.startLine(parts[2]);
+        if (line < 0) return;
         int line0 = Math.max(0, line - 1);
 
         seenVersions.put(entry.anchor(), entry.version());

@@ -16,7 +16,7 @@ Two plugins share one root and are separated only by their `skills` arrays, so `
 ## Covering tests — read these first, do not duplicate them
 
 - `skills/tests/test_repo_structure.py::test_marketplace_publishes_two_plugins_from_one_root`
-- `skills/tests/test_repo_structure.py::test_plugin_skill_lists_partition_the_skills_tree`
+- `skills/tests/test_repo_structure.py::test_plugin_skill_lists_cover_the_skills_tree`
 - `skills/tests/test_repo_structure.py::test_no_root_plugin_json`
 - `skills/tests/test_repo_structure.py::test_every_probe_asks_for_the_real_marketplace_name`
 - `skills/tests/test_repo_structure.py::test_every_probe_marker_file_exists`
@@ -33,7 +33,7 @@ These cover the mechanical checks thoroughly. Report only what they do not enfor
 
 ## The rules
 
-- **Rule 1 — a skill directory with no `SKILL.md` ships nothing, and no test notices.** `skills/_shared/` and `skills/tests/` are the two legitimate no-`SKILL.md` directories under `skills/`, allowlisted below. `test_plugin_skill_lists_partition_the_skills_tree` builds its on-disk set only from directories that already contain a `SKILL.md` — a directory without one never enters that comparison at all, so it is invisible by construction, not merely unlisted. A *third* such directory — one that reads like an abandoned or half-authored skill — is **Critical**.
+- **Rule 1 — a skill directory with no `SKILL.md` ships nothing, and no test notices.** `skills/_shared/` and `skills/tests/` are the two legitimate no-`SKILL.md` directories under `skills/`, allowlisted below. `test_plugin_skill_lists_cover_the_skills_tree` builds its on-disk set only from directories that already contain a `SKILL.md` — a directory without one never enters that comparison at all, so it is invisible by construction, not merely unlisted. A *third* such directory — one that reads like an abandoned or half-authored skill — is **Critical**.
 - **Rule 2 — descriptions are the install-time prose.** An entry `description` that restates the plugin name and nothing more is **Medium**: it is what a user reads when choosing whether to install. The covering tests only require a description to be non-empty, not substantive.
 - **Rule 3 — a root-shared surface reaches both plugins.** Anything at the repository root that Claude Code loads per-plugin — `hooks/`, and `commands/` or `agents/` if they ever appear — is claimed by both entries, and no covering test reads `hooks/hooks.json` at all. A hook there that is not inert for the plugin it was not written for is **Critical**. Today `hooks/hooks.json` registers `progress_publish.py`, which keys off a per-session registry at `~/.claude/annotate/pending-<session_id>.json` written only by the annotate skill; on a session that never used annotate the file does not exist, the lookup raises `FileNotFoundError`, and the hook returns before writing anything — so under `claude-ide-review` (interactive_review, walkthrough) it does nothing and always exits 0. A newly added hook without that property is a Violation.
 - **Rule 4 — the IDE half is named honestly.** `claude-ide-review`'s description must state that it requires the companion IntelliJ plugin. Without the IDE half its commands fail by doing nothing visible, which reads as a broken skill. A description that omits it is **Medium**; the covering tests do not read description content.

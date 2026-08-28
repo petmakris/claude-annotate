@@ -1,6 +1,6 @@
 # Free-HTML direction — tradeoffs and minimal mechanism
 
-Discussion document, not a final plan. We're considering reversing the typed-kinds plan (`richer-block-kinds-plan.md`) in favor of letting Claude emit free-form HTML. The motivation: typed kinds bake our 2026 imagination of "what visuals matter" into the tool, and that constraint gets more expensive as Claude's HTML/CSS authoring improves.
+Discussion document, not a final plan. We're considering reversing the typed-kinds plan (`richer-block-kinds-plan-archived.md`) in favor of letting Claude emit free-form HTML. The motivation: typed kinds bake our 2026 imagination of "what visuals matter" into the tool, and that constraint gets more expensive as Claude's HTML/CSS authoring improves.
 
 ## 1. Tradeoffs
 

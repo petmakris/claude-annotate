@@ -8,7 +8,7 @@ Long responses (multi-step plans, analyses, lists of findings) get pushed to a b
 
 ### Capabilities
 
-- **Granular review rounds** — hover any list item, paragraph, table row, or code block; mark ✓ agree / ✕ dismiss / 💬 comment locally, then submit the whole round as one event Claude applies in a single pass.
+- **Granular review rounds** — hover any list item, paragraph, table row, or code block; give it one of four verdicts — comment, delete, keep as written, or compact — then submit the whole round as one event Claude applies in a single pass.
 
 ## How it works
 
@@ -35,7 +35,7 @@ Long responses (multi-step plans, analyses, lists of findings) get pushed to a b
 ## Files
 
 - `SKILL.md` — Full skill definition and implementation guide (API contracts, event flow, all edge cases).
-- `server.py` — Thin wrapper exposing `/api/sessions` to create a new session.
+- `server.py` — Handlers over `skills/_shared/web_companion`: the page, the block data, comment submission and the liveness poll. Session creation is the engine's route, not this file's.
 - `blocks.py` — Block document model and update logic.
 - `static/` — HTML/JS/CSS for the browser page.
 - `ensure_server.sh` — Idempotent startup script (delegates to shared library).

@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from skills.interactive_review.server import Handlers
-from skills.interactive_review import threads as threads_module
+from skills._shared.web_companion import threads as threads_module
 
 
 def make_handler(body=b""):
@@ -46,38 +46,6 @@ def test_serve_root_points_to_ide(tmp_path):
     written = handler.wfile.getvalue()
     assert b"IntelliJ" in written
     assert b"review.js" not in written
-
-
-def test_serve_root_closed_when_finished(tmp_path):
-    dirs = make_dirs(tmp_path)
-    (dirs["state_dir"] / "finished").write_text("")
-    h = Handlers()
-    handler = make_handler()
-    h.serve_root(handler, dirs)
-    handler.send_response.assert_called_with(200)
-    assert b"closed" in handler.wfile.getvalue()
-
-
-def test_serve_thread_returns_empty_for_missing(tmp_path):
-    dirs = make_dirs(tmp_path)
-    h = Handlers()
-    handler = make_handler()
-    h.serve_data(handler, dirs, "thread?anchor=src%2Fx.py%3AR%3A42")
-    handler.send_response.assert_called_with(200)
-    body = json.loads(handler.wfile.getvalue())
-    assert body["anchor"] == "src/x.py:R:42"
-    assert body["version"] == 0
-    assert body["messages"] == []
-
-
-def test_serve_thread_400_on_bad_anchor(tmp_path):
-    dirs = make_dirs(tmp_path)
-    h = Handlers()
-    handler = make_handler()
-    h.serve_data(handler, dirs, "thread?anchor=garbage")
-    handler.send_response.assert_called_with(400)
-
-
 def test_handle_submit_queues_event_and_appends_user(tmp_path):
     dirs = make_dirs(tmp_path)
     h = Handlers()
@@ -283,7 +251,7 @@ def test_threads_bulk_returns_anchor_to_latest_synthesis(tmp_path):
     threads_dir = state_dir / "threads"
     threads_dir.mkdir(parents=True)
 
-    from skills.interactive_review import threads as th
+    from skills._shared.web_companion import threads as th
     th.append_message(threads_dir, "foo.java:R:10",
                       {"role": "user", "ts": 1, "text": "q1", "source_event_id": "e1"})
     th.append_message(threads_dir, "foo.java:R:10",
@@ -307,7 +275,7 @@ def test_threads_bulk_skips_threads_with_no_claude_messages(tmp_path):
     state_dir = tmp_path / "state"
     threads_dir = state_dir / "threads"
     threads_dir.mkdir(parents=True)
-    from skills.interactive_review import threads as th
+    from skills._shared.web_companion import threads as th
     th.append_message(threads_dir, "only-user.java:R:1",
                       {"role": "user", "ts": 1, "text": "q", "source_event_id": "e1"})
 
@@ -339,7 +307,7 @@ def test_threads_bulk_returns_anchor_text(tmp_path):
     h.handle_submit(handler, dirs, {"anchor": "src/x.py:R:42", "type": "comment",
                                     "text": "why?", "anchor_text": "  return foo()"})
     # Give the thread a claude reply so threads_bulk surfaces it.
-    from skills.interactive_review import threads as tm
+    from skills._shared.web_companion import threads as tm
     tm.append_message(dirs["state_dir"] / "threads", "src/x.py:R:42",
                       {"role": "claude", "ts": 2, "text": "because.", "source_event_id": "c1"})
     bulk = h.threads_bulk(dirs)
@@ -353,7 +321,7 @@ def test_threads_bulk_returns_title_and_question(tmp_path):
     # User asks (creates the thread with a question), then Claude answers with a title.
     h.handle_submit(handler, dirs, {"anchor": "src/x.py:R:42", "type": "comment",
                                     "text": "why is this null-checked?"})
-    from skills.interactive_review import threads as tm
+    from skills._shared.web_companion import threads as tm
     tm.append_message(dirs["state_dir"] / "threads", "src/x.py:R:42",
                       {"role": "claude", "ts": 9, "text": "Because foo() can return null.",
                        "source_event_id": "c1"},
@@ -368,7 +336,7 @@ def test_threads_bulk_defaults_title_and_question_empty(tmp_path):
     dirs = make_dirs(tmp_path)
     h = Handlers()
     threads_dir = dirs["state_dir"] / "threads"
-    from skills.interactive_review import threads as tm
+    from skills._shared.web_companion import threads as tm
     # Claude-origin thread: a claude message, no user message, no title.
     tm.append_message(threads_dir, "src/x.py:R:7",
                       {"role": "claude", "ts": 1, "text": "finding", "source_event_id": "c1"})
@@ -664,3 +632,49 @@ def test_serve_poll_dead_when_never_armed_and_old(tmp_path, monkeypatch):
     body = json.loads(handler.wfile.getvalue().decode())
     assert body["ended"] is True
     assert body["ended_reason"] == "dead"
+
+
+def test_serve_poll_not_dead_when_heartbeat_unreadable(tmp_path):
+    """An empty/truncated heartbeat is not evidence of death.
+
+    The regression: watcher.sh used to write the beat with `date +%s > file`,
+    which truncates first, so ~0.6% of reads saw an empty file. serve_poll read
+    that as "never armed", fell back to state_dir mtime, and declared a live
+    session dead — which the IDE latched read-only, permanently.
+    """
+    import os
+    h = Handlers()
+    dirs = make_dirs(tmp_path)
+    # Create the file BEFORE ageing the directory: writing into a directory
+    # bumps its mtime, which is exactly what the grace fallback reads.
+    (dirs["state_dir"] / "watcher_heartbeat").write_text("")   # caught mid-write
+    old = time.time() - 3600
+    os.utime(dirs["state_dir"], (old, old))     # old enough to fail the grace
+    handler = make_handler()
+    h.serve_poll(handler, dirs)
+    body = json.loads(handler.wfile.getvalue().decode())
+    assert body["ended"] is False
+    assert body["ended_reason"] is None
+
+
+def test_threads_bulk_question_is_the_one_the_latest_reply_answers(tmp_path):
+    """`question` pairs with `latest_synthesis`, so a follow-up must win.
+
+    The regression: this took the FIRST user message while walkthrough's copy
+    of the same function took the last, so a thread with a follow-up showed a
+    different question in each skill.
+    """
+    dirs = make_dirs(tmp_path)
+    threads_dir = dirs["state_dir"] / "threads"
+    anchor = "src/x.py:R:42"
+    for msg in (
+        {"role": "user", "ts": 1, "text": "why is this null-checked?", "source_event_id": "u1"},
+        {"role": "claude", "ts": 2, "text": "because the caller may pass null.",
+         "title": "Null check", "source_event_id": "c1"},
+        {"role": "user", "ts": 3, "text": "which caller?", "source_event_id": "u2"},
+        {"role": "claude", "ts": 4, "text": "OrdersSyncService.", "source_event_id": "c2"},
+    ):
+        threads_module.append_message(threads_dir, anchor, msg)
+    row = Handlers().threads_bulk(dirs)[anchor]
+    assert row["latest_synthesis"] == "OrdersSyncService."
+    assert row["question"] == "which caller?"

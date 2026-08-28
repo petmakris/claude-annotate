@@ -56,9 +56,9 @@ public final class ReviewSessionClient {
      * Session lifecycle, in precedence order ENDED > PAUSED > DISCONNECTED >
      * ACTIVE. PAUSED = watcher silent past STALE_AFTER but recoverable (the
      * user may re-arm). ENDED = the server reported the session terminal
-     * (cancelled/finished) or watcher-dead past the reap threshold; it is a
-     * one-way latch — the panel freezes read-only and never un-freezes for the
-     * same sid. OFFLINE means discovery cannot reach the server at all (as
+     * (cancelled/finished), or repeatedly reported it watcher-dead past the
+     * reap threshold (see {@link #DEAD_CONFIRMATIONS}); it is a one-way latch —
+     * the panel freezes read-only and never un-freezes for the same sid. OFFLINE means discovery cannot reach the server at all (as
      * opposed to DORMANT: server reachable, no session for this cwd).
      */
     public enum State { DORMANT, CONNECTING, ACTIVE, DISCONNECTED, PAUSED, ENDED, OFFLINE }
@@ -86,6 +86,24 @@ public final class ReviewSessionClient {
      * dropped poll must not wipe the cache and blank the panel.
      */
     private static final int DISCOVERY_FAILURE_THRESHOLD = 3;
+
+    /**
+     * Consecutive {@code ended_reason="dead"} polls required before the ENDED
+     * latch closes.
+     *
+     * The server splits its two end verdicts: "cancelled"/"finished" come from
+     * a marker file on disk and are facts, so they latch on the first poll.
+     * "dead" is INFERRED from one sample of the watcher heartbeat, and a single
+     * bad sample (a heartbeat file caught mid-rewrite) used to freeze a live
+     * session read-only forever, because the latch never re-checks. Require the
+     * server to say "dead" on {@value} consecutive polls — a real death says it
+     * every time, a sampling artifact never does twice in a row.
+     */
+    private static final int DEAD_CONFIRMATIONS = 3;
+
+    /** Consecutive {@code ended_reason="dead"} polls seen so far; any other
+     *  poll outcome resets it. */
+    private int deadPolls = 0;
 
     /**
      * How long an anchor may stay pending without an answer before the spinner
@@ -423,6 +441,7 @@ public final class ReviewSessionClient {
         if (endedLatched) return; // frozen; nothing un-freezes the same sid
         long seenAt;
         boolean ended;
+        String endedReason;
         try {
             HttpRequest req = HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + sid + "/poll")).timeout(REQUEST_TIMEOUT).GET().build();
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
@@ -431,12 +450,20 @@ public final class ReviewSessionClient {
             seenAt = o.has("watcher_seen_at") && !o.get("watcher_seen_at").isJsonNull()
                 ? o.get("watcher_seen_at").getAsLong() : 0;
             ended = o.has("ended") && !o.get("ended").isJsonNull() && o.get("ended").getAsBoolean();
+            endedReason = str(o, "ended_reason");
         } catch (Exception e) {
             return; // transient — leave state as-is, next poll retries
         }
-        // Authoritative end (cancelled/finished, or watcher-dead past the
-        // server's reap threshold) → freeze read-only, one-way.
-        if (ended) { latchEnded(); return; }
+        // Authoritative end: "cancelled"/"finished" are marker files on disk,
+        // so one poll is proof — freeze read-only immediately, one-way.
+        // "dead" is inferred from a single heartbeat sample, so it must repeat
+        // (see DEAD_CONFIRMATIONS) before it may close the same one-way latch.
+        if (ended) {
+            if (!"dead".equals(endedReason)) { latchEnded(); return; }
+            if (++deadPolls >= DEAD_CONFIRMATIONS) { latchEnded(); return; }
+            return;  // provisional — stay as-is; the next poll confirms or clears
+        }
+        deadPolls = 0;
         // No heartbeat written yet (session just armed) → not dead, leave alone.
         if (seenAt <= 0) return;
         long ageMs = System.currentTimeMillis() - seenAt * 1000;
@@ -459,6 +486,7 @@ public final class ReviewSessionClient {
      *                    OFFLINE when the server itself is unreachable. */
     private void handleNoSession(State finalState) {
         endedLatched = false;
+        deadPolls = 0;
         if (current != null) {
             current = null;
             cache.clear();
@@ -473,6 +501,7 @@ public final class ReviewSessionClient {
 
     private void attach(SessionInfo s) {
         endedLatched = false;
+        deadPolls = 0;
         current = s;
         // Switching sessions: drop any cached state from the previous SID.
         // Otherwise the side panel keeps showing dead threads from the old
@@ -624,6 +653,26 @@ public final class ReviewSessionClient {
             data = com.google.gson.JsonParser.parseString(e.data()).getAsJsonObject();
         } catch (Exception ex) {
             return; // non-JSON heartbeat/connected frames
+        }
+        if ("session-ended".equals(name)) {
+            // The server sends this only when a `finished`/`cancelled` marker
+            // exists on disk — the authoritative end, same tier as /poll's
+            // ended_reason "cancelled"/"finished", so it latches immediately.
+            // Without handling it the server closed the stream, this client saw
+            // only "stream ended", and reconnected every 2s until the next poll
+            // happened to latch.
+            if (gen != sseGen.get() || closed) return; // superseded stream
+            // Hop to the polling pool: latchEnded() closes the very stream this
+            // callback is running inside, and every other caller already
+            // latches from there.
+            if (!exec.isShutdown()) {
+                try {
+                    exec.execute(this::latchEnded);
+                } catch (java.util.concurrent.RejectedExecutionException ignored) {
+                    // stop() raced us — the session is going away anyway.
+                }
+            }
+            return;
         }
         if ("thread-deleted".equals(name)) {
             String anchor = str(data, "anchor");

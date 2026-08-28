@@ -11,21 +11,32 @@ from __future__ import annotations
 import json
 import sys
 import time
-import urllib.parse
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
 from skills._shared.web_companion import server as wc_server
+from skills._shared.web_companion import stream as stream_module
 from skills._shared.web_companion.atomic import write_text_atomic
 from skills._shared.web_companion import events as events_module
 from skills._shared.web_companion import uploads as uploads_module
 from skills.interactive_review import diff as diff_module
-from skills.interactive_review import threads as threads_module
+from skills._shared.web_companion import threads as threads_module
 
-SHARED_STATIC_DIR = Path(__file__).resolve().parent.parent / "_shared" / "web_companion" / "static"
+# The engine owns its own layout; ask it where its static files are rather
+# than rebuilding the path by hand. Four skills hard-coding
+# `../_shared/web_companion/static` meant moving that folder broke all four
+# silently — the expression still resolves, it just resolves to nothing.
+SHARED_STATIC_DIR = wc_server.SHARED_STATIC_DIR
 
 PORT_RANGE = range(54620, 54641)
-NEVER_ARMED_GRACE = 300  # s; no-heartbeat sessions older than this are dead
+NEVER_ARMED_GRACE = 1800  # s; a session that never wrote a heartbeat is dead
+# past this. Measured from the state dir's mtime, i.e. roughly session-create
+# time, and it must comfortably exceed the longest gap a caller can put between
+# creating the session and arming the watcher — because once it expires the
+# server reports ended_reason "dead" on EVERY poll, which the IDE latches
+# read-only for good. At the old 300s, a caller that seeded a batch of threads
+# before arming froze its own live session. The cost of erring high is only
+# that a session whose Claude died before arming lingers in the panel.
 BANNER = "interactive-review-server v1"
 
 WARN_DIFF_BYTES = 1 * 1024 * 1024   # soft warning surfaced to the user
@@ -100,100 +111,34 @@ class Handlers:
                 "updated_at": last.get("ts", 0),
                 "anchor_text": t.get("anchor_text", ""),
                 "title": t.get("title", ""),
-                "question": user_msgs[0].get("text", "") if user_msgs else "",
+                # The LAST question, not the first: this field is shown next to
+                # `latest_synthesis`, which is the last Claude reply, so it has
+                # to be the question that reply answers. Walkthrough's copy of
+                # this function already did it this way; on any thread with a
+                # follow-up the two skills displayed different questions for
+                # identically-shaped data.
+                "question": user_msgs[-1].get("text", "") if user_msgs else "",
             }
         return result
 
     def serve_data(self, h: BaseHTTPRequestHandler, dirs: dict, query: str) -> None:
         state_dir = Path(dirs["state_dir"])
-        threads_dir = state_dir / "threads"
         if query == "stream":
             self._serve_stream(h, dirs)
             return
         if query == "threads.json":
             _send_json(h, 200, self.threads_bulk(dirs))
             return
-        if query.startswith("thread"):
-            qs = query.split("?", 1)[1] if "?" in query else ""
-            params = urllib.parse.parse_qs(qs)
-            anchor = params.get("anchor", [None])[0]
-            if not anchor:
-                _send_text(h, 400, "missing anchor")
-                return
-            anchor = urllib.parse.unquote(anchor)
-            if not threads_module.valid_anchor(anchor):
-                _send_text(h, 400, "bad anchor")
-                return
-            t = threads_module.load(threads_dir, anchor)
-            _send_json(h, 200, t)
-            return
         _send_text(h, 404, "not found")
 
     def _serve_stream(self, h: BaseHTTPRequestHandler, dirs: dict) -> None:
-        sid = dirs.get("_sid")
-        h.send_response(200)
-        h.send_header("Content-Type", "text/event-stream")
-        h.send_header("Cache-Control", "no-cache")
-        h.send_header("Connection", "keep-alive")
-        h.send_header("X-Accel-Buffering", "no")
-        h.end_headers()
-        try:
-            h.wfile.write(b"event: connected\ndata: {}\n\n")
-            h.wfile.flush()
-        except (BrokenPipeError, ConnectionResetError):
-            return
-        if not self._registry or not sid:
-            # Registry not injected — should not happen in production.
-            return
-        waiter = self._registry.waiter(sid)
-        last_threads = self.threads_bulk(dirs)
-        for anchor, info in last_threads.items():
-            payload = json.dumps({"anchor": anchor, **info})
-            try:
-                h.wfile.write(f"event: thread-changed\ndata: {payload}\n\n".encode())
-                h.wfile.flush()
-            except (BrokenPipeError, ConnectionResetError):
-                return
-        while True:
-            woke = waiter.wait(timeout=30)
-            if _is_terminal(Path(dirs["state_dir"])):
-                # Tell the client the session is over and end the stream —
-                # otherwise this loop re-reads every thread file every 30s
-                # per connected client, forever.
-                try:
-                    h.wfile.write(b"event: session-ended\ndata: {}\n\n")
-                    h.wfile.flush()
-                except (BrokenPipeError, ConnectionResetError):
-                    pass
-                return
-            # Always re-check threads — self-correcting against a missed wake
-            new_threads = self.threads_bulk(dirs)
-            # Deletions: anchors present last time but missing now.
-            for anchor in list(last_threads):
-                if anchor not in new_threads:
-                    payload = json.dumps({"anchor": anchor})
-                    try:
-                        h.wfile.write(f"event: thread-deleted\ndata: {payload}\n\n".encode())
-                        h.wfile.flush()
-                    except (BrokenPipeError, ConnectionResetError):
-                        return
-            for anchor, info in new_threads.items():
-                old = last_threads.get(anchor)
-                if old is None or old.get("version") != info.get("version"):
-                    payload = json.dumps({"anchor": anchor, **info})
-                    try:
-                        h.wfile.write(f"event: thread-changed\ndata: {payload}\n\n".encode())
-                        h.wfile.flush()
-                    except (BrokenPipeError, ConnectionResetError):
-                        return
-            last_threads = new_threads
-            # Heartbeat only if no wakeup (keep proxies alive)
-            if not woke:
-                try:
-                    h.wfile.write(b"event: heartbeat\ndata: {}\n\n")
-                    h.wfile.flush()
-                except (BrokenPipeError, ConnectionResetError):
-                    return
+        """SSE: thread-changed / thread-deleted / session-ended / heartbeat."""
+        stream_module.serve(
+            h, dirs,
+            registry=self._registry,
+            threads_bulk=self.threads_bulk,
+            is_terminal=_is_terminal,
+        )
 
     def handle_thread_delete(self, h: BaseHTTPRequestHandler, dirs: dict, payload: dict) -> None:
         state_dir = Path(dirs["state_dir"])
@@ -256,9 +201,13 @@ class Handlers:
         threads_dir = state_dir / "threads"
         versions = threads_module.list_versions(threads_dir)
         hb_path = state_dir / "watcher_heartbeat"
+        armed = hb_path.exists()
         try:
             hb = int(hb_path.read_text().strip())
         except (FileNotFoundError, ValueError, OSError):
+            # The file is missing (never armed) OR it exists and this read
+            # caught it mid-rewrite / failed transiently. Those are opposite
+            # facts and must not collapse into the same answer — see `armed`.
             hb = 0
         # Liveness: a session is ENDED if explicitly cancelled/finished, or if
         # its watcher has been silent past REAP_AFTER. When no beat was ever
@@ -267,6 +216,14 @@ class Handlers:
         # look live forever.
         if hb:
             age = int(time.time()) - hb
+        elif armed:
+            # A heartbeat file exists but this read couldn't parse it. A live
+            # watcher rewrites it every ~1s, so an unreadable sample is
+            # evidence of nothing — never of death. Report age unknown and let
+            # the next poll (~1s later) decide. Collapsing this into the
+            # never-armed branch below declared live sessions dead, and the
+            # IDE's ENDED latch made that permanent.
+            age = None
         else:
             try:
                 created = int(state_dir.stat().st_mtime)

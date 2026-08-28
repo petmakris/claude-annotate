@@ -17,6 +17,8 @@
   // these are deleted rather than styled away.
   const STRIP = [
     ".hover-actions",       // block control strip
+    ".max-toggle",          // maximize: a view control with no JS in the export to run it
+    ".max-overlay",         // ...and its overlay, if the export ran while one was open
     ".unit-strip",          // per-unit control strip
     ".unit-chip",           // a pinned comment's text, rendered in the prose
     ".unit-composer",       // an open per-unit comment box

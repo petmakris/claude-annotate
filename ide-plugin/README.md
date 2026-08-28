@@ -27,22 +27,36 @@ with this plugin installed, leaving your real IDE untouched.
 
 ## Iterating against your real IDE
 
-`./reload` runs `prepareSandbox`, which is what actually refreshes the plugin your
-IDE loads. `./reload --watch` rebuilds on every save, so you only ever restart.
+    ./reload            # then restart IntelliJ
+    ./reload --watch    # rebuild on every save; then you ONLY ever restart
 
-The IDE loads the sandbox through a symlink you create once, under the JetBrains
-config directory — which is in a different place on each OS:
+`./reload` does two things: `prepareSandbox` (which copies the plugin jar and its
+dependency jars into `.intellijPlatform/sandbox/<IU-version>/`), then points your
+IDE's plugin symlink at that sandbox. It prints which one it linked:
 
-    macOS    ~/Library/Application Support/JetBrains/IntelliJIdea<version>
-    Linux    ~/.config/JetBrains/IntelliJIdea<version>     (or $XDG_CONFIG_HOME)
-    Windows  %APPDATA%/JetBrains/IntelliJIdea<version>
+    ✓ IntelliJIdea2026.2 → IU-2026.2.1
 
-    <that dir>/plugins/claude-ide-review
-      -> <this dir>/.intellijPlatform/sandbox/.../plugins/claude-ide-review
+Both steps run every time, and the second is why. The sandbox directory is named
+after the IDE **build**, so an IDE upgrade makes `prepareSandbox` write to a brand
+new sandbox while the symlink still points at the old one — and the IDE then loads
+a stale jar with no error anywhere, so every change you make appears to do nothing.
+`./reload` re-links on each run, which is the only reliable defence.
 
-That symlink is keyed to the IDE build. After an IDE point upgrade, `prepareSandbox`
-writes to a *new* sandbox directory while the symlink still points at the old one —
-the IDE then silently loads a stale jar. Repoint it and restart.
+It finds the config directory from the IDE's own `product-info.json`
+(`dataDirectoryName`) rather than guessing, so it is correct on every OS:
+
+    macOS    ~/Library/Application Support/JetBrains/<dataDirectoryName>
+    Linux    ~/.config/JetBrains/<dataDirectoryName>      (or $XDG_CONFIG_HOME)
+    Windows  %APPDATA%/JetBrains/<dataDirectoryName>
+
+If it cannot find your IDE, set `IREVIEW_LOCAL_IDE_PATH` to its `Contents/`
+directory. If another config directory still links into this repo, `./reload`
+says so — that is a build you no longer run, and its link can be deleted.
+
+**Confirming which jar is loaded.** The Review Annotations panel shows a build
+stamp bottom-right (`b177 · 08:11:23`) — the git commit count and build time
+baked into the jar. If it is older than your last `./reload`, the IDE is running
+a stale plugin.
 
 ## How it talks to the Claude Code side
 

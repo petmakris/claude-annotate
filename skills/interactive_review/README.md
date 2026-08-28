@@ -37,7 +37,7 @@ Each question is one wake-up; Claude answers that question and goes back to slee
 ## Files
 
 - `SKILL.md` — Full skill definition: invocation, session creation, watcher protocol, Mode D event handling, edge cases.
-- `server.py` — Thin wrapper exposing `/api/sessions`; `create_session_extra` runs `gh pr diff`/`gh pr view`.
+- `server.py` — Handlers over `skills/_shared/web_companion`: thread reads, comment submission, the liveness poll and the SSE stream. `create_session_extra` is the engine's session-create hook, and runs `gh pr diff`/`gh pr view`.
 - `diff.py` — Diff parsing and hunk utilities.
 - `threads.py` — Thread append logic with atomic write and dedup.
 - `ensure_server.sh` — Idempotent server startup (delegates to shared library).

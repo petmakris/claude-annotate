@@ -61,10 +61,39 @@ public final class SynthesisPopup {
         return p != null && !p.isDisposed() && p.isVisible();
     }
 
+    /** Open the popup for a diff-line anchor, positioned against its editor. */
     public static void show(@NotNull Project project,
                             @NotNull EditorEx editor,
                             @NotNull String anchor,
                             int visualLine) {
+        show(project, anchor,
+             () -> lineTextAt(editor.getDocument(), visualLine),
+             popup -> popup.showInBestPositionFor(editor));
+    }
+
+    /**
+     * Open the popup for an anchor that has no diff line to sit on — the
+     * whole-PR {@code __general__} thread. There is no editor to position
+     * against and no line of code to quote, so it opens over {@code owner}
+     * (the side-panel list) with an empty anchor text.
+     */
+    public static void showDetached(@NotNull Project project,
+                                    @NotNull Component owner,
+                                    @NotNull String anchor) {
+        show(project, anchor, () -> "", popup -> popup.showInCenterOf(owner));
+    }
+
+    /**
+     * @param anchorTextSupplier the code the question is about, echoed back to
+     *        Claude so a drifted anchor can still be resolved; empty when the
+     *        anchor is not a line.
+     * @param shower places the built popup on screen — the only step that needs
+     *        to know whether an editor is involved.
+     */
+    private static void show(@NotNull Project project,
+                             @NotNull String anchor,
+                             @NotNull java.util.function.Supplier<String> anchorTextSupplier,
+                             @NotNull java.util.function.Consumer<JBPopup> shower) {
         ReviewSessionClient client = ReviewSessionService.get(project).client();
         String popupKey = popupKey(project, anchor);
 
@@ -213,7 +242,7 @@ public final class SynthesisPopup {
         // CardLayout swap between synthesis content and thinking spinner.
         // Prefer JCEF (real browser) for the synthesis card; fall back to the
         // JEditorPane (synthesisScroll) when JCEF is unavailable.
-        final SynthesisBrowser browser = JBCefApp.isSupported() ? new SynthesisBrowser(project) : null;
+        final SynthesisBrowser browser = tryCreateBrowser(project);
         JComponent synthesisCard = browser != null ? (JComponent) browser.getComponent() : synthesisScroll;
         java.awt.CardLayout cards = new java.awt.CardLayout();
         JPanel centerCards = new JPanel(cards);
@@ -300,7 +329,7 @@ public final class SynthesisPopup {
             thinking.set(true);
             renderCurrent.run();
             startElapsed.run();
-            String anchorText = lineTextAt(editor.getDocument(), visualLine);
+            String anchorText = anchorTextSupplier.get();
             client.postComment(anchor, q, anchorText).whenComplete((v, t) -> SwingUtilities.invokeLater(() -> {
                 if (t != null) {
                     thinking.set(false);
@@ -460,7 +489,31 @@ public final class SynthesisPopup {
                 stopElapsed.run();
             }
         });
-        popup.showInBestPositionFor(editor);
+        shower.accept(popup);
+    }
+
+    /**
+     * The JCEF-backed synthesis view, or null when this IDE cannot give us one.
+     *
+     * Both failure modes have to be caught here, because this is the only place
+     * that touches JCEF at all:
+     *   - {@code isSupported()} false — JCEF present but off (remote dev, a
+     *     JRE without the bundled browser).
+     *   - {@link LinkageError} — the class is not on this plugin's classloader
+     *     at all. JCEF was part of com.intellij.modules.platform up to build
+     *     261 and became a separate bundled plugin in 262, so an IDE upgrade
+     *     alone made this reference unresolvable and every panel-row click
+     *     threw NoClassDefFoundError onto the EDT. plugin.xml now asks for
+     *     com.intellij.modules.jcef by name; this catch is the belt to that
+     *     braces, for the user who disabled it.
+     * Either way the caller renders into the JEditorPane instead.
+     */
+    private static SynthesisBrowser tryCreateBrowser(@NotNull Project project) {
+        try {
+            return JBCefApp.isSupported() ? new SynthesisBrowser(project) : null;
+        } catch (LinkageError | RuntimeException e) {
+            return null;
+        }
     }
 
     private static String truncate(String s, int max) {

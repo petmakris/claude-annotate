@@ -19,7 +19,8 @@ from skills._shared.web_companion import server as wc_server
 from skills._shared.web_companion import events as events_module
 from skills._shared.web_companion import uploads as uploads_module
 from skills._shared.web_companion.atomic import write_text_atomic
-from skills._shared.web_companion.templates import html_escape, render_page
+from skills._shared.web_companion.templates import html_escape
+from skills.annotate.page import render_page
 from skills.annotate import anchors as anchors_module
 from skills.annotate import blocks as blocks_model
 from skills.annotate import versions as versions_module
@@ -29,7 +30,11 @@ from skills.annotate.diagrams.flowchart import render as render_flowchart
 from skills.annotate.pflow import PflowError, compile_source as compile_pflow
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-SHARED_STATIC_DIR = Path(__file__).resolve().parent.parent / "_shared" / "web_companion" / "static"
+# The engine owns its own layout; ask it where its static files are rather
+# than rebuilding the path by hand. Four skills hard-coding
+# `../_shared/web_companion/static` meant moving that folder broke all four
+# silently — the expression still resolves, it just resolves to nothing.
+SHARED_STATIC_DIR = wc_server.SHARED_STATIC_DIR
 
 # One fixed, memorable port — not a range.
 #
@@ -529,7 +534,12 @@ class Handlers:
                 '<script src="/static/subunits.js" defer></script><script src="/static/highlighter.js" defer></script>'
                 '<script src="/static/fuse.min.js" defer></script>'
                 '<script src="/static/search.js" defer></script>'
-                '<script src="/static/voice.js" defer></script>')
+                '<script src="/static/voice.js" defer></script>'
+                # Maximize reads section[data-kind] and mounts into
+                # .card-head, both of which script.js builds — so it has to
+                # run after it. Both are defer: document order is execution
+                # order.
+                '<script src="/static/maximize.js" defer></script>')
         # The repo root, so script.js knows a code anchor is openable at all and
         # shows the control. render_page escapes it — it's a filesystem path headed
         # straight into an HTML attribute.
@@ -967,6 +977,7 @@ def _render_block_for_raw(blk: dict, version: int, repo_root=None) -> dict:
             # response and blank the page. The message lands in <title>.
             svg = (
                 f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 36" '
+                f'width="360" height="36" '
                 f'class="annotate-seq annotate-seq-error" '
                 f'data-block-id="{html_escape(blk["id"])}" '
                 f'role="img" aria-label="sequence diagram failed to render">'

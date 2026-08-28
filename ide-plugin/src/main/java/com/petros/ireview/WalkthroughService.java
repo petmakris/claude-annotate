@@ -90,13 +90,20 @@ public final class WalkthroughService implements Disposable {
         client.stop();
     }
 
-    /** Read the walkthrough server URL from ~/.claude/walkthrough/server.json. */
+    /**
+     * Read the walkthrough server URL from ~/.claude/walkthrough/server.json.
+     * The skill writes that file on server start (and rewrites it on every
+     * restart). Returns null if not present or unreadable — caller falls back
+     * to a default.
+     */
     private static String resolveServerUrl() {
         Path p = Path.of(System.getProperty("user.home"), ".claude", "walkthrough", "server.json");
         try {
             Matcher m = Pattern.compile("\"url\"\\s*:\\s*\"([^\"]+)\"").matcher(Files.readString(p));
             if (m.find()) return m.group(1);
         } catch (IOException ignored) {
+            // No file yet, or a torn read — the caller's default URL applies
+            // and the next failed discovery poll re-reads it.
         }
         return null;
     }

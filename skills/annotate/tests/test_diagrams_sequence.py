@@ -118,10 +118,10 @@ def test_render_returns_svg_element():
     assert 'data-block-id="b-0"' in svg
 
 
-def test_render_emits_one_actor_pill_per_actor():
+def test_render_emits_one_actor_box_per_actor():
     svg = render(_spec_3actors(), block_id="b-0")
-    # Each actor renders as a <rect class="actor-pill"> + <text class="actor-label">.
-    assert svg.count('class="actor-pill"') == 3
+    # Each actor renders as a <rect class="actor-box"> + <text class="actor-label">.
+    assert svg.count('class="actor-box"') == 3
     assert ">Alpha<" in svg
     assert ">Beta<" in svg
     assert ">Gamma<" in svg
@@ -165,18 +165,28 @@ def test_render_includes_data_step_id_per_row():
         assert f'data-step-id="{sid}"' in svg
 
 
-def test_render_arrow_class_per_type():
+def test_render_arrows_share_one_class_and_differ_by_shape():
+    """Colour is carried by tone, not by arrow type, so every arrow uses the
+    same `arr` class. request/event differ by the dash array, self by shape."""
     svg = render(_spec_one_of_each_arrow(), block_id="b-0")
-    assert 'class="arr-request"' in svg
-    assert 'class="arr-event"' in svg
-    assert 'class="arr-self"' in svg
+    assert svg.count('class="arr"') == 3
+    assert 'stroke-dasharray="5 4"' in svg  # the event arrow
 
 
 def test_render_self_loop_is_path_not_line():
     svg = render(_spec_one_of_each_arrow(), block_id="b-0")
-    # Self loops use <path d="..."> ; cross-actor uses <line>.
-    assert re.search(r'<path[^>]*class="arr-self"', svg) is not None
-    assert re.search(r'<line[^>]*class="arr-request"', svg) is not None
+    # Self calls use <path d="..."> ; cross-actor uses <line>.
+    assert re.search(r'<path class="arr" fill="none" d="M ', svg) is not None
+    assert re.search(r'<line class="arr" x1=', svg) is not None
+
+
+def test_render_tone_adds_class_and_plain_does_not():
+    spec = _spec_one_of_each_arrow()
+    spec["steps"][0]["tone"] = "hot"
+    svg = render(spec, block_id="b-0")
+    assert 'class="arr t-hot"' in svg
+    assert 'class="arrow-label t-hot"' in svg
+    assert 'class="arr"' in svg  # the untoned ones stay plain
 
 
 def test_render_emits_step_label_and_sub():
@@ -225,16 +235,16 @@ def test_render_emits_phase_label_per_phase():
     assert svg.count('class="phase-label"') == 2
 
 
-def test_render_emits_phase_band_rect_per_phase():
+def test_render_emits_phase_rule_per_phase():
     svg = render(_spec_with_phases(), block_id="b-0")
-    assert svg.count('class="phase-band"') == 2
+    assert svg.count('class="phase-rule"') == 2
 
 
 def test_render_omits_phases_when_absent():
     spec = _spec_with_phases()
     del spec["phases"]
     svg = render(spec, block_id="b-0")
-    assert 'class="phase-band"' not in svg
+    assert 'class="phase-rule"' not in svg
     assert 'class="phase-label"' not in svg
 
 

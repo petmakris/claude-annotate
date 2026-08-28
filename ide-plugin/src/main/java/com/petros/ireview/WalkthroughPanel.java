@@ -135,8 +135,23 @@ public final class WalkthroughPanel implements Disposable {
             @Override public void onThreadChanged(String anchor, WalkthroughSessionClient.ThreadState t) { invokeRebuild(); }
             @Override public void onPendingChanged(String anchor, boolean pending) { invokeRebuild(); }
             @Override public void onStateChanged(WalkthroughSessionClient.State s) { invokeRebuild(); }
-            @Override public void onDetached() { invokeRebuild(); }
+            @Override public void onDetached() {
+                warning = null;   // per-session; must not survive into the next tour
+                invokeRebuild();
+            }
+            @Override public void onAttached(WalkthroughSessionClient.SessionInfo info) {
+                warning = null;
+                invokeRebuild();
+            }
+            @Override public void onWarning(String message) {
+                warning = message;
+                invokeRebuild();
+            }
         };
+
+    /** A non-fatal client warning (e.g. the steps seed gave up) shown in the
+     *  footer instead of the state line. Null when there is nothing to say. */
+    private volatile String warning = null;
 
     public WalkthroughPanel(Project project) {
         this.project = project;
@@ -241,6 +256,10 @@ public final class WalkthroughPanel implements Disposable {
         // instead of the rows themselves, so the list stays compact and top-anchored.
         steps.add(Box.createVerticalGlue());
         status.setText(statusText());
+        status.setToolTipText(warning);
+        status.setForeground(warning != null
+            ? new JBColor(new Color(0xc0, 0x32, 0x21), new Color(0xf8, 0x73, 0x71))
+            : UIUtil.getLabelDisabledForeground());
         finish(true);
     }
 
@@ -516,6 +535,9 @@ public final class WalkthroughPanel implements Disposable {
     }
 
     private String statusText() {
+        // A warning outranks the state line: "reconnecting…" next to an empty
+        // tour still reads as "Claude produced no steps".
+        if (warning != null) return warning;
         WalkthroughSessionClient.State s = service.client().state();
         return switch (s) {
             case ENDED -> "session ended — read only";

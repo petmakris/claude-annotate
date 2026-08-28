@@ -1,27 +1,136 @@
-/* sequence-diagram block styling — light theme only */
+/* sequence-diagram block styling — light theme only.
+   Fixed-pitch grid: the SVG carries its own pixel width and the card scrolls,
+   so a twelve-actor diagram renders at the same type size as a two-actor one.
+   Sizes here must stay in sync with the seq-* entries in text_metrics.STYLES. */
 
-.annotate-seq { display: block; width: 100%; height: auto; }
+.annotate-seq { display: block; width: auto; max-width: none; height: auto; }
 
-.annotate-seq .actor-pill   { fill: var(--surface-soft); stroke: var(--accent); stroke-width: 1.2; }
-.annotate-seq .actor-label  { fill: var(--text-strong); font-weight: 600; font-size: 11px;
-                              font-family: inherit; }
-/* Lifelines: --border (#ebeae5) is too pale on white. Use a damped --text-dim. */
-.annotate-seq .lane         { stroke: color-mix(in srgb, var(--text-dim) 45%, transparent);
-                              stroke-dasharray: 3 4; stroke-width: 1; }
+/* The card is the scroll container. Without this the fixed-width SVG would be
+   clipped by .block-content's overflow, which is the whole point of not
+   scaling: wide diagrams scroll, they never shrink. */
+section.block[data-kind="sequence"] .block-content {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+}
 
-.annotate-seq .phase-band   { fill: var(--surface); }
-.annotate-seq .phase-label  { fill: var(--text-dim); font-size: 9px;
-                              letter-spacing: 1.4px; font-weight: 700; }
+/* ── tone palette ──────────────────────────────────────────────────
+   A tone is what the reader should conclude from an edge, not the mechanism
+   that carried it. `plain` is the unclassed default. */
+.annotate-seq {
+  --t-plain:    #3c4c5b;
+  --t-edge:     #3a6d99;
+  --t-internal: #a2560a;
+  --t-service:  #0c6d63;
+  --t-cheap:    #7c8a97;
+  --t-hot:      #a3364f;
+  --t-good:     #2c6b4c;
+  --t-dropped:  #98a2ad;
+  --t-internal-bg: #f8ecdd;
+  --t-hot-bg:      #f8e6ea;
+  --t-good-bg:     #e2f0e8;
+  --t-edge-bg:     #e4edf5;
+  --t-service-bg:  #dff0ed;
+  --t-cheap-bg:    #eef0f4;
+}
 
-.annotate-seq .arrow-label  { fill: var(--text-strong); font-size: 11px; font-weight: 500;
-                              font-family: inherit; transition: fill .12s; }
-.annotate-seq .arrow-sub    { fill: var(--text-dim); font-size: 9.5px; font-style: italic; }
-.annotate-seq .legend-text  { fill: var(--text-dim); font-size: 10px; }
+.annotate-seq .actor-box   { fill: #ffffff; stroke: color-mix(in srgb, var(--text-dim) 55%, transparent);
+                             stroke-width: 1.2; }
+.annotate-seq .actor-box.t-edge     { stroke: var(--t-edge); }
+.annotate-seq .actor-box.t-internal { stroke: var(--t-internal); }
+.annotate-seq .actor-box.t-service  { stroke: var(--t-service); }
+.annotate-seq .actor-box.t-cheap    { stroke: var(--t-cheap); }
+.annotate-seq .actor-box.t-hot      { stroke: var(--t-hot); }
+.annotate-seq .actor-box.t-good     { stroke: var(--t-good); }
+.annotate-seq .actor-box.t-dropped  { stroke: var(--t-dropped); }
 
-/* Arrow strokes — saturated enough to read on a light background. */
-.annotate-seq .arr-request { stroke: #6d28d9; stroke-width: 1.6; fill: none; transition: stroke-width .12s; }
-.annotate-seq .arr-event   { stroke: #b45309; stroke-width: 1.5; stroke-dasharray: 5 4; fill: none; transition: stroke-width .12s; }
-.annotate-seq .arr-self    { stroke: #047857; stroke-width: 1.5; fill: none; transition: stroke-width .12s; }
+.annotate-seq .actor-label { fill: var(--text-strong); font-weight: 500; font-size: 10px;
+                             font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace; }
+
+/* Lifelines: --border (#d4d8e0) is too pale on white. Use a damped --text-dim. */
+.annotate-seq .lane        { stroke: color-mix(in srgb, var(--text-dim) 45%, transparent);
+                             stroke-dasharray: 3 4; stroke-width: 1; fill: none; }
+
+.annotate-seq .arr         { stroke: var(--t-plain); stroke-width: 1.3; fill: none;
+                             transition: stroke-width .12s; }
+.annotate-seq .arr-head    { fill: var(--t-plain); }
+.annotate-seq .arrow-label { fill: var(--text-strong); font-size: 11.5px; font-weight: 500;
+                             font-family: inherit; transition: fill .12s; }
+.annotate-seq .arrow-sub   { fill: var(--text-dim); font-size: 10px;
+                             font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace; }
+
+.annotate-seq .row-num     { fill: var(--text-dim); font-size: 10px; font-weight: 500;
+                             font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace; }
+.annotate-seq .row-note    { fill: var(--text-dim); font-size: 10px;
+                             font-variant-numeric: tabular-nums;
+                             font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace; }
+
+/* Per-tone ink. One rule per tone covers the arrow, its head, its label, its
+   sub-caption and its gutter note, so a toned row reads as one object. */
+.annotate-seq .arr.t-edge,     .annotate-seq .legend-swatch.t-edge     { stroke: var(--t-edge); }
+.annotate-seq .arr.t-internal, .annotate-seq .legend-swatch.t-internal { stroke: var(--t-internal); }
+.annotate-seq .arr.t-service,  .annotate-seq .legend-swatch.t-service  { stroke: var(--t-service); }
+.annotate-seq .arr.t-cheap,    .annotate-seq .legend-swatch.t-cheap    { stroke: var(--t-cheap); }
+.annotate-seq .arr.t-good,     .annotate-seq .legend-swatch.t-good     { stroke: var(--t-good); }
+.annotate-seq .arr.t-dropped,  .annotate-seq .legend-swatch.t-dropped  { stroke: var(--t-dropped); }
+/* hot and good are the two "look here" tones: heavier stroke earns the look. */
+.annotate-seq .arr.t-hot,      .annotate-seq .legend-swatch.t-hot      { stroke: var(--t-hot); }
+.annotate-seq .arr.t-hot, .annotate-seq .arr.t-good { stroke-width: 1.9; }
+
+.annotate-seq .arr-head.t-edge     { fill: var(--t-edge); }
+.annotate-seq .arr-head.t-internal { fill: var(--t-internal); }
+.annotate-seq .arr-head.t-service  { fill: var(--t-service); }
+.annotate-seq .arr-head.t-cheap    { fill: var(--t-cheap); }
+.annotate-seq .arr-head.t-hot      { fill: var(--t-hot); }
+.annotate-seq .arr-head.t-good     { fill: var(--t-good); }
+.annotate-seq .arr-head.t-dropped  { fill: var(--t-dropped); }
+
+.annotate-seq .arrow-label.t-edge, .annotate-seq .arrow-sub.t-edge,
+.annotate-seq .row-note.t-edge         { fill: var(--t-edge); }
+.annotate-seq .arrow-label.t-internal, .annotate-seq .arrow-sub.t-internal,
+.annotate-seq .row-note.t-internal     { fill: var(--t-internal); }
+.annotate-seq .arrow-label.t-service, .annotate-seq .arrow-sub.t-service,
+.annotate-seq .row-note.t-service      { fill: var(--t-service); }
+.annotate-seq .arrow-label.t-cheap, .annotate-seq .arrow-sub.t-cheap,
+.annotate-seq .row-note.t-cheap        { fill: var(--t-cheap); }
+.annotate-seq .arrow-label.t-hot, .annotate-seq .arrow-sub.t-hot,
+.annotate-seq .row-note.t-hot          { fill: var(--t-hot); font-weight: 600; }
+.annotate-seq .arrow-label.t-good, .annotate-seq .arrow-sub.t-good,
+.annotate-seq .row-note.t-good         { fill: var(--t-good); font-weight: 600; }
+/* `dropped` is the tone for a call the proposal removes — struck through, so
+   the diagram can show the before and the after in one picture. */
+.annotate-seq .arrow-label.t-dropped, .annotate-seq .arrow-sub.t-dropped,
+.annotate-seq .row-note.t-dropped      { fill: var(--t-dropped);
+                                         text-decoration: line-through;
+                                         text-decoration-color: var(--t-hot); }
+
+/* Bands: a narrated aside laid across the actors it concerns. */
+.annotate-seq .band        { fill: var(--surface-soft); stroke: var(--border); stroke-width: 1; }
+.annotate-seq .band.t-internal { fill: var(--t-internal-bg); stroke: var(--t-internal); }
+.annotate-seq .band.t-hot      { fill: var(--t-hot-bg);      stroke: var(--t-hot); }
+.annotate-seq .band.t-good     { fill: var(--t-good-bg);     stroke: var(--t-good); }
+.annotate-seq .band.t-edge     { fill: var(--t-edge-bg);     stroke: var(--t-edge); }
+.annotate-seq .band.t-service  { fill: var(--t-service-bg);  stroke: var(--t-service); }
+.annotate-seq .band.t-cheap    { fill: var(--t-cheap-bg);    stroke: var(--t-cheap); }
+.annotate-seq .band-text   { fill: var(--text-dim); font-size: 10.5px;
+                             font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace; }
+.annotate-seq .band-text.t-internal { fill: var(--t-internal); font-weight: 500; }
+.annotate-seq .band-text.t-hot      { fill: var(--t-hot);      font-weight: 500; }
+.annotate-seq .band-text.t-good     { fill: var(--t-good);     font-weight: 500; }
+.annotate-seq .band-text.t-edge     { fill: var(--t-edge);     font-weight: 500; }
+.annotate-seq .band-text.t-service  { fill: var(--t-service);  font-weight: 500; }
+
+/* Phase separator: a hairline plus a name on its own row. The old full-width
+   wash put the phase name on the same baseline band as the first arrow label
+   and the two overlapped; giving the label a row of its own is the fix. */
+.annotate-seq .phase-rule  { stroke: var(--border); stroke-width: 1; }
+.annotate-seq .phase-label { fill: var(--text-dim); font-size: 9px;
+                             letter-spacing: 1.4px; font-weight: 700;
+                             text-transform: uppercase; }
+
+.annotate-seq .legend-swatch { stroke: var(--t-plain); stroke-width: 3; stroke-linecap: round; }
+.annotate-seq .legend-text   { fill: var(--text-dim); font-size: 11.5px;
+                               font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace; }
 
 /* No pointer cursor and no hover emphasis on a step: a step is not a click
    target any more (comments on a picture are whole-block, from the card
@@ -39,9 +148,7 @@
    lights up accent so the pairing is unmistakable. */
 .annotate-seq .step-row[data-card-focus] .row-bg { fill: color-mix(in srgb, var(--accent) 15%, transparent); }
 .annotate-seq .step-row[data-card-focus] .arrow-label { fill: var(--accent); }
-.annotate-seq .step-row[data-card-focus] .arr-request,
-.annotate-seq .step-row[data-card-focus] .arr-event,
-.annotate-seq .step-row[data-card-focus] .arr-self { stroke-width: 2.4; }
+.annotate-seq .step-row[data-card-focus] .arr { stroke-width: 2.4; }
 
 /* ── flowchart block (kind: "flowchart") — hand-built SVG, Direction B ── */
 .annotate-flow { display: block; width: 100%; height: auto; }

@@ -38,13 +38,16 @@ Both plugins drive the same local server engine, which lives once in this reposi
 ## Use
 
 Ask for something long — a migration plan, a critique of a design, a list of
-findings. Claude routes answers with several distinct parts through the view on
-its own. To push an answer that has already landed:
+findings, then push it into the view:
 
     /annotate
 
 Your browser opens. Every block is clickable. Comment on one, and Claude's reply
 replaces it in place; the rest of the page does not move or reload.
+
+That first `/annotate` also arms the session: from then on every substantive
+answer goes to the browser instead of the terminal, until you say "respond in
+terminal". Nothing routes there on its own before you ask.
 
 ![The comment flow up close: type a correction, submit the round, the block updates](docs/img/comment-flow.gif)
 

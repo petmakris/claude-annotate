@@ -34,6 +34,26 @@ class GutterAnchorIndexTest {
         assertTrue(idx.get(2).stale());
     }
 
+    @Test void rangeAnchorGetsAGutterIconAtItsFirstLine() {
+        // The regression: a "R:2-4" thread parsed as an int, threw, and was
+        // skipped as if it were the __general__ anchor — so the panel listed a
+        // thread whose diff line carried no icon at all.
+        var lines = List.of("a", "  return foo();", "b", "c");
+        var cache = Map.of("file.java:R:2-4",
+            new ThreadState("syn", 1, "return foo();", "", ""));
+        var idx = GutterAnchorIndex.build(lines, cache, "file.java", "R", K);
+        assertTrue(idx.containsKey(2), "range thread must paint on its first line");
+        assertEquals("file.java:R:2-4", idx.get(2).ownerAnchor());
+        assertFalse(idx.get(2).stale());
+    }
+
+    @Test void generalAnchorGetsNoGutterIcon() {
+        var lines = List.of("  return foo();");
+        var cache = Map.of("__general__", new ThreadState("s", 1, "", "", ""));
+        var idx = GutterAnchorIndex.build(lines, cache, "file.java", "R", K);
+        assertTrue(idx.isEmpty(), "a whole-PR thread has no line to sit on");
+    }
+
     @Test void ignoresOtherFilesAndSides() {
         var lines = List.of("  return foo();");
         var cache = Map.of(

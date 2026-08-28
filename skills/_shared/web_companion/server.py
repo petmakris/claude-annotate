@@ -1025,12 +1025,17 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
     home_info_dir = Path(os.path.expanduser(f"~/.claude/{skill_name}"))
     home_info_dir.mkdir(parents=True, exist_ok=True)
     info_path = home_info_dir / "server.json"
-    # 0600 before the token is in it: this file is now a credential, and a
-    # world-readable moment between write and chmod is a real window on a
-    # shared machine.
-    info_path.touch(mode=0o600, exist_ok=True)
+    # Atomic, and 0600 for the whole life of the bytes: this file is a
+    # credential (it carries write_token), so a world-readable moment would be
+    # a real window on a shared machine — and a torn read is a real window too.
+    # The IDE plugin re-reads this file on every failed discovery poll and
+    # regex-matches "url"; a reader landing inside a plain write() got a
+    # truncated file, missed the match, and silently fell back to a hardcoded
+    # port. write_text_atomic writes through tempfile.mkstemp (created 0600)
+    # and os.replace()s it into place, so readers see the old file or the new
+    # one and never a half-written one.
+    write_text_atomic(info_path, json.dumps(info))
     info_path.chmod(0o600)
-    info_path.write_text(json.dumps(info))
     # stdout goes to the server log, which is not 0600 — publish everything
     # except the credential there.
     sys.stdout.write(json.dumps({k: v for k, v in info.items()

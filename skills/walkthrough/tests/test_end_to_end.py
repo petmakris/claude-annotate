@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 from skills.walkthrough.server import Handlers
 from skills.walkthrough import steps as steps_module
-from skills.interactive_review import threads as threads_module
+from skills._shared.web_companion import threads as threads_module
 
 
 def make_handler():

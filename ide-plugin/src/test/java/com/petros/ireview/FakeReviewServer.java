@@ -51,6 +51,18 @@ public final class FakeReviewServer implements AutoCloseable {
     public volatile boolean ended = false;
     /** ended_reason returned by /poll when ended; null → JSON null. */
     public volatile String endedReason = null;
+    /**
+     * Remaining number of /poll requests to answer with
+     * {@code ended=true, ended_reason="dead"} regardless of {@link #ended},
+     * simulating the server's INFERRED death verdict flickering on for a poll
+     * or two (a heartbeat file read while it was being rewritten). Decrements
+     * per /poll; 0 → answer from {@link #ended} / {@link #endedReason}.
+     */
+    public final java.util.concurrent.atomic.AtomicInteger deadPollsRemaining =
+        new java.util.concurrent.atomic.AtomicInteger();
+    /** Count of GETs that reached /poll. */
+    public final java.util.concurrent.atomic.AtomicInteger pollCount =
+        new java.util.concurrent.atomic.AtomicInteger();
     /** Count of POSTs that reached /api/submit. */
     public final java.util.concurrent.atomic.AtomicInteger submitCount =
         new java.util.concurrent.atomic.AtomicInteger();
@@ -134,12 +146,16 @@ public final class FakeReviewServer implements AutoCloseable {
             return;
         }
         if (path.endsWith("/poll")) {
+            pollCount.incrementAndGet();
             long seen = watcherSeenAt != null ? watcherSeenAt : 0;
             long stepsTs = stepsGeneratedAt != null ? stepsGeneratedAt : 0;
-            String reasonJson = endedReason == null ? "null" : "\"" + endedReason + "\"";
+            boolean flickerDead = deadPollsRemaining.getAndUpdate(n -> n > 0 ? n - 1 : 0) > 0;
+            boolean isEnded = flickerDead || ended;
+            String reason = flickerDead ? "dead" : endedReason;
+            String reasonJson = reason == null ? "null" : "\"" + reason + "\"";
             byte[] body = ("{\"threads\":{},\"watcher_seen_at\":" + seen
                 + ",\"steps_generated_at\":" + stepsTs
-                + ",\"finished\":false,\"ended\":" + (ended ? "true" : "false")
+                + ",\"finished\":false,\"ended\":" + (isEnded ? "true" : "false")
                 + ",\"ended_reason\":" + reasonJson + "}").getBytes(StandardCharsets.UTF_8);
             ex.getResponseHeaders().add("Content-Type", "application/json");
             ex.sendResponseHeaders(200, body.length);

@@ -17,9 +17,14 @@ from pathlib import Path
 from skills._shared.web_companion import server as wc_server
 from skills._shared.web_companion import events as events_module
 from skills._shared.web_companion.atomic import write_text_atomic
+from skills._shared.web_companion.templates import html_escape
 from skills.deck import model as model_module
 
-SHARED_STATIC_DIR = Path(__file__).resolve().parent.parent / "_shared" / "web_companion" / "static"
+# The engine owns its own layout; ask it where its static files are rather
+# than rebuilding the path by hand. Four skills hard-coding
+# `../_shared/web_companion/static` meant moving that folder broke all four
+# silently — the expression still resolves, it just resolves to nothing.
+SHARED_STATIC_DIR = wc_server.SHARED_STATIC_DIR
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 # Everything that reading a deck (or its meta.json) can go wrong with. A
@@ -33,12 +38,24 @@ BANNER = "deck-server v1"
 # Static assets are mounted at /static/ by the shared server, not under the
 # session path — a relative href here would resolve to /s/<sid>/core.css and
 # fall through to serve_data as an unknown route.
-PAGE = """<!DOCTYPE html>
+def _page(title: str, sid: str) -> str:
+    """Deck's page shell.
+
+    engine-exempt: deliberately not `templates.render_page`. That shell always
+    pulls in markdown-it, which deck renders none of, and loads core.js
+    non-deferred, while both of deck's scripts must defer.
+
+    What it does take from the engine is the part that matters — every
+    interpolated value goes through `html_escape`. Deck's title is a deck
+    FILENAME, i.e. user-controlled, and the previous raw `{title}` splice put
+    whatever was in that name straight into <title>.
+    """
+    return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
-<title>{title} — claude-deck</title>
+<title>{html_escape(title)} — claude-deck</title>
 <link rel="stylesheet" href="/static/core.css">
 <link rel="stylesheet" href="/static/deck.css">
-</head><body data-response-id="{sid}">
+</head><body data-response-id="{html_escape(sid)}">
 <div id="app"><div id="deckhead"></div><div id="deckbody"></div></div>
 <script src="/static/core.js" defer></script>
 <script src="/static/deck.js" defer></script>
@@ -92,7 +109,7 @@ class Handlers:
         except DECK_ERRORS:
             title = "deck"
         sid = Path(dirs["state_dir"]).parent.name
-        _send_html(h, 200, PAGE.format(title=title, sid=sid))
+        _send_html(h, 200, _page(title, sid))
 
     def serve_data(self, h: BaseHTTPRequestHandler, dirs: dict, query: str) -> None:
         if query == "deck":
@@ -138,10 +155,6 @@ class Handlers:
             parsed["deck"] = str(deck)
             parsed["fingerprint"] = _fingerprint(deck)
             _send_json(h, 200, parsed)
-            return
-
-        if query == "poll":
-            self.serve_poll(h, dirs)
             return
 
         _send_text(h, 404, f"unknown route: {query}")

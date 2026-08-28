@@ -107,6 +107,16 @@ dependencies {
         // (GHPRProjectViewModel.openPullRequestDiff) so we can drive the
         // GitHub diff view (with inline PR comments) instead of an isolated one.
         bundledPlugin("org.jetbrains.plugins.github")
+        // com.intellij.ui.jcef (the browser behind SynthesisBrowser) used to sit
+        // in the platform's own lib/. From build 262 it ships as the bundled
+        // "Web Browser (JCEF)" plugin, so without this declaration compiling
+        // against a 262+ IDE fails with "package com.intellij.ui.jcef does not
+        // exist". Declared only when the resolved IDE actually carries that
+        // plugin directory, so a 261 IDE (where the id does not exist) still
+        // resolves.
+        if (File(candidate, "plugins/jcef-plugin").isDirectory) {
+            bundledPlugin("com.intellij.modules.jcef")
+        }
         // Java code instrumentation is enabled by default in plugin 2.2+.
     }
 }

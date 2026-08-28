@@ -140,7 +140,13 @@ One sentence in terminal:
 
 ## Arm the watcher
 
-After telling the user, start the watcher with `Monitor` (`persistent: true`):
+Arm it **immediately** after telling the user, before any other work — before
+seeding threads, before reading code, before answering anything. Until the
+watcher writes its first heartbeat the server has no liveness signal and falls
+back to the session's age; past `NEVER_ARMED_GRACE` (30 min) it reports the
+session dead on every poll, and the IDE freezes the panel read-only for good.
+
+Start the watcher with `Monitor` (`persistent: true`):
 
 ```bash
 PLUGIN_ROOT=$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.claude/interactive-review/server.json")))["plugin_root"])')

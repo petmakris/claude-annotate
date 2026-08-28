@@ -365,3 +365,28 @@ def test_a_half_written_heartbeat_does_not_break_the_poll(dirs):
     deck_server.Handlers().serve_poll(h, dirs)
     assert h.status == 200
     assert json.loads(h.body())["watcher_seen_at"] == 0
+
+
+def _page_shell(tmp_path, deck_name):
+    """serve_root's HTML for a workspace attached to a deck named `deck_name`."""
+    state = tmp_path / "state"
+    (state / "events").mkdir(parents=True)
+    (state / "consumed").mkdir(parents=True)
+    deck = tmp_path / deck_name
+    shutil.copy(FIXTURE, deck)
+    d = {"state_dir": str(state)}
+    deck_server.Handlers().create_session_extra({"deck": str(deck)}, d)
+    h = FakeHandler()
+    deck_server.Handlers().serve_root(h, d)
+    return h
+
+
+def test_a_deck_name_with_markup_is_escaped_in_the_title(tmp_path):
+    # The title is a FILENAME — user-controlled. It used to be spliced raw.
+    # (No "/" in the name: the filesystem would not allow it anyway.)
+    h = _page_shell(tmp_path, 'q3<b>&"x.html')
+    assert h.status == 200
+    body = h.body()
+    assert 'q3<b>&"x' not in body
+    assert "q3&lt;b&gt;&amp;&quot;x" in body
+

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 from skills.walkthrough.server import Handlers
 from skills.walkthrough import steps as steps_module
-from skills.interactive_review import threads as threads_module
+from skills._shared.web_companion import threads as threads_module
 
 
 def make_handler(body=b""):
@@ -68,32 +68,6 @@ def test_steps_json_empty_before_generation(tmp_path):
     handler.send_response.assert_called_with(200)
     body = json.loads(handler.wfile.getvalue())
     assert body == {"question": "", "kind": "", "generated_ts": 0, "steps": []}
-
-
-def test_steps_json_after_generation(tmp_path):
-    dirs = make_dirs(tmp_path)
-    steps_module.write_steps(dirs["state_dir"], doc())
-    h, handler = Handlers(), make_handler()
-    h.serve_data(handler, dirs, "steps.json")
-    body = json.loads(handler.wfile.getvalue())
-    assert body["steps"][0]["title"] == "Entry point"
-    assert body["generated_ts"] == 1784720471
-
-
-def test_thread_endpoint_rejects_non_step_anchor(tmp_path):
-    h, handler = Handlers(), make_handler()
-    h.serve_data(handler, make_dirs(tmp_path), "thread?anchor=src%2Fx.java%3AR%3A12")
-    handler.send_response.assert_called_with(400)
-
-
-def test_thread_endpoint_returns_empty_thread(tmp_path):
-    h, handler = Handlers(), make_handler()
-    h.serve_data(handler, make_dirs(tmp_path), "thread?anchor=step%3A3")
-    body = json.loads(handler.wfile.getvalue())
-    assert body["anchor"] == "step:3"
-    assert body["messages"] == []
-
-
 def test_threads_bulk_skips_threads_without_claude_reply(tmp_path):
     dirs = make_dirs(tmp_path)
     threads_dir = dirs["state_dir"] / "threads"
@@ -213,3 +187,105 @@ def test_submit_queues_event_and_appends_user_message(tmp_path):
     thread = threads_module.load(dirs["state_dir"] / "threads", "step:2")
     assert thread["messages"][0]["role"] == "user"
     assert thread["messages"][0]["source_event_id"] == f"user-{body['event_id']}"
+
+
+def test_serve_poll_not_dead_when_heartbeat_unreadable(tmp_path):
+    """An empty/truncated heartbeat is not evidence of death.
+
+    Same defect and fix as interactive_review's serve_poll: watcher.sh used to
+    truncate the heartbeat before filling it, so a read could land on an empty
+    file, which was read as "never armed" and aged out a live session.
+    """
+    import os
+    dirs = make_dirs(tmp_path)
+    # Create the file BEFORE ageing the directory: writing into a directory
+    # bumps its mtime, which is exactly what the grace fallback reads.
+    (dirs["state_dir"] / "watcher_heartbeat").write_text("")   # caught mid-write
+    old = time.time() - 3600
+    os.utime(dirs["state_dir"], (old, old))
+    h, handler = Handlers(), make_handler()
+    h.serve_poll(handler, dirs)
+    body = json.loads(handler.wfile.getvalue())
+    assert body["ended"] is False
+    assert body["ended_reason"] is None
+
+
+# ---------------------------------------------------------------------------
+# SSE stream. Walkthrough's copy of this loop had no tests at all until it was
+# moved onto the shared engine loop; these cover the steps-changed frame, which
+# is the only part still owned by this skill.
+# ---------------------------------------------------------------------------
+
+import threading
+
+
+class _BreakingBytesIO(BytesIO):
+    """Bounded sink — raises BrokenPipeError so the stream loop terminates."""
+    def __init__(self, max_writes=3):
+        super().__init__()
+        self._write_count = 0
+        self._max_writes = max_writes
+
+    def write(self, b):
+        self._write_count += 1
+        if self._write_count > self._max_writes:
+            raise BrokenPipeError("simulated disconnect")
+        return super().write(b)
+
+    def flush(self):
+        pass
+
+
+def _stream_output(dirs, sid, max_writes=6, before_start=None):
+    from skills._shared.web_companion.sessions import Registry
+    from pathlib import Path as _Path
+    dirs["_sid"] = sid
+    reg = Registry(state_root=_Path("/tmp/never-written"))
+    reg.waiter(sid)
+    wfile = _BreakingBytesIO(max_writes=max_writes)
+    h = MagicMock()
+    h.wfile = wfile
+    handlers = Handlers()
+    handlers.set_registry(reg)
+    if before_start:
+        before_start(handlers)
+    t = threading.Thread(target=handlers._serve_stream, args=(h, dirs))
+    t.daemon = True
+    t.start()
+    t.join(timeout=3)
+    return wfile.getvalue().decode("utf-8")
+
+
+def test_serve_stream_sends_connected_first(tmp_path):
+    dirs = make_dirs(tmp_path)
+    assert "event: connected" in _stream_output(dirs, "wt-sid-1", max_writes=2)
+
+
+def test_serve_stream_emits_steps_changed_when_steps_exist(tmp_path):
+    dirs = make_dirs(tmp_path)
+    steps_module.write_steps(dirs["state_dir"], doc())
+    out = _stream_output(dirs, "wt-sid-2")
+    assert "event: steps-changed" in out
+    assert '"generated_ts": 1784720471' in out
+    assert '"count": %d' % len(doc()["steps"]) in out
+
+
+def test_serve_stream_is_silent_about_steps_before_any_are_generated(tmp_path):
+    dirs = make_dirs(tmp_path)
+    # No write_steps yet: the client's empty state is already right, so the
+    # opening frames must not claim a steps-changed.
+    out = _stream_output(dirs, "wt-sid-3")
+    assert "event: connected" in out
+    assert "event: steps-changed" not in out
+
+
+def test_serve_stream_emits_thread_changed_for_existing_threads(tmp_path):
+    dirs = make_dirs(tmp_path)
+    threads_dir = dirs["state_dir"] / "threads"
+    threads_module.append_message(threads_dir, "step:1",
+                                  {"role": "user", "ts": 1, "text": "why?", "source_event_id": "e1"})
+    threads_module.append_message(threads_dir, "step:1",
+                                  {"role": "claude", "ts": 2, "text": "because of the gate."})
+    out = _stream_output(dirs, "wt-sid-4")
+    assert "event: thread-changed" in out
+    assert "because of the gate." in out

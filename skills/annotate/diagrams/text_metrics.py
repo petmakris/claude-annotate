@@ -37,10 +37,21 @@ STYLES: dict[str, Style] = {
     "flow-method":      Style(MONO, MONO_FALLBACK, 11.5, 16),
     "flow-sub":         Style(SANS_400, SANS_400["x"], 11.0, 15),
     "edge-label":       Style(SANS_600, SANS_600["x"], 11.0, 14),
-    # .annotate-seq
-    "actor-label":      Style(SANS_600, SANS_600["x"], 11.0, 14),
-    "arrow-label":      Style(SANS_600, SANS_600["x"], 11.0, 14),
-    "arrow-sub":        Style(SANS_400, SANS_400["x"], 9.5, 12),
+    # .annotate-seq — the seq-* keys are what the fixed-pitch renderer measures.
+    # Labels are measured with the 600 table although the CSS sets weight 500:
+    # Bricolage 500 sits between the 400 and 600 instances, so measuring with
+    # 600 over-estimates by a hair and every fit decision errs toward roomy.
+    "seq-name":         Style(MONO, MONO_FALLBACK, 10.0, 13),
+    "seq-label":        Style(SANS_600, SANS_600["x"], 11.5, 15),
+    "seq-tag":          Style(MONO, MONO_FALLBACK, 10.0, 13),
+    "seq-note":         Style(MONO, MONO_FALLBACK, 10.0, 13),
+    "seq-band":         Style(MONO, MONO_FALLBACK, 10.5, 14),
+    "seq-legend":       Style(MONO, MONO_FALLBACK, 11.5, 15),
+    # Retained: the geometry suite and older callers measure actor/arrow text
+    # through these names.
+    "actor-label":      Style(MONO, MONO_FALLBACK, 10.0, 13),
+    "arrow-label":      Style(SANS_600, SANS_600["x"], 11.5, 15),
+    "arrow-sub":        Style(MONO, MONO_FALLBACK, 10.0, 13),
 }
 
 
