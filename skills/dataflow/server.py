@@ -50,7 +50,11 @@ def _shell(title: str, body: str, *, script: bool = True) -> str:
     here, because the same render has to run again when SSE reports the
     document changed. One renderer, not two that drift.
     """
-    js = '<script src="/static/dataflow.js" defer></script>' if script else ""
+    # markdown-it first: Claude writes replies as raw markdown, and a reply
+    # rendered as plain text shows its own asterisks and pipe tables to the
+    # reader. Both are `defer`, so load order is document order.
+    js = ('<script src="/static/markdown-it.min.js" defer></script>'
+          '<script src="/static/dataflow.js" defer></script>') if script else ""
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'

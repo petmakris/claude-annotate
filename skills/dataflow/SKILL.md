@@ -205,8 +205,12 @@ create a second session.
         {"id": "ctl", "layer": "api", "role": "Controller",
          "name": "OrderShareController",
          "file": "src/main/java/com/acmeshop/api/OrderShareController.java", "line": 24,
-         "summary": "`POST` /orders/{id}/share → ShareResultDto",
-         "members": [{"text": "share(id, ShareRequestDto) → ShareResultDto", "line": 31}],
+         "summary": "The only HTTP way in or out of sharing.",
+         "members": [
+           {"text": "public ShareResultDto share(@PathVariable long id, @RequestBody ShareRequestDto body)",
+            "line": 31, "tag": "POST",
+            "detail": "Converts, then delegates. Returns the **re-read** result, not the payload it was handed."},
+           {"text": "private final ShareService shareService", "line": 27}],
          "edges": [{"to": "conv", "label": "converts via"}]},
 
         {"id": "conv", "layer": "mapper", "role": "Mapper — has a file",
@@ -245,11 +249,25 @@ Field rules:
   layer is a box in the column. Order the nodes the way the request travels.
 - `role` is the small label above the name: `Controller`, `DTO`, `Service`,
   `Domain`, `Repository`, `Table`, `Mapper — has a file`, `Mapper — no file`.
-- `summary` shows while the node is collapsed: 1–3 short lines, the shape of
-  the thing. Newlines are kept. `` `code` `` and `**bold**` render; no HTML.
-- `members` are the lines worth jumping to — fields, methods, columns, branches
-  — each with the `line` that opens it. Omit `line` for a member that describes
-  the node rather than sitting on one line.
+- `summary` is **one line** (180 chars max, enforced): what this node *is* and
+  why it is on the path. **Never a list of its members** — the members list
+  them, and a summary that repeats them makes the reader read the same
+  endpoints twice and the node's own claim not at all.
+- `members` are the body of the node — one row each, and the reader's index
+  into the file:
+  - `text` is the **real signature, copied from the source**, return type
+    included: `public ResponseEntity<ProposalConfigDto> saveConfigForOrganization(ProposalConfigDto dto)`,
+    not `saveConfigForOrganization(dto)`. The reader is looking for the line
+    they are about to open; a paraphrase is not what they will find there.
+  - `line` opens that exact line. Omit it only for a row that describes the
+    node rather than sitting on one line.
+  - `detail` is optional markdown that **makes the row expandable in place** —
+    what this method does, what it calls, what surprises. Put it on the rows
+    that carry the behaviour; a row with no detail stays a one-liner.
+  - `tag` is an optional badge of at most 12 characters: `GET`, `PUT`,
+    `@Transactional`, `throws`, `record`, `PK`.
+  - **One row per endpoint, per field, per column.** Do not merge two methods
+    into one row, and do not add a row that summarises the other rows.
 - `edges` point at other node ids, with a verb-ish `label`. Set `join: true`
   on an edge that crosses between slices; both nodes then show a ◆ JOIN badge.
 - `flag` is a short amber warning on the node header: `no foreign key`,
@@ -272,6 +290,9 @@ Hard rules. A diagram that breaks one is a defect, not a style choice.
 - **Nodes read in request order**, not file or package order.
 - **`note` earns its place.** It says what a competent reader would assume
   wrongly. A note that restates the summary is noise.
+- **Signatures are verbatim.** Copy them from the file you read, with return
+  type and parameter types. A signature you shortened is a signature the
+  reader will not find.
 - **Cross-node re-pass.** Before writing, read the nodes together and fix what
   only shows up in aggregate: a mapper whose two sides do not match, an edge
   with no counterpart, a summary that repeats its neighbour, a slice whose

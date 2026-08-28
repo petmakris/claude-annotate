@@ -54,6 +54,38 @@
 
   const anchorOf = (id) => "node:" + id;
 
+  // Claude writes replies as raw markdown. `html: false` makes markdown-it
+  // escape any tag in the source, so the rendered string is safe to assign —
+  // the same setting annotate uses for comment bodies.
+  const MD = (typeof window.markdownit === "function")
+    ? window.markdownit({ html: false, linkify: true, typographer: false, breaks: true })
+    : null;
+
+  // A link whose href is a repository-relative `path:line` is an editor
+  // target, not a web address. Rewriting it to open through the server keeps
+  // a citation in a reply as clickable as a member row.
+  const EDITOR_HREF = /^(?!\w+:)([^\s?#]+\.[A-Za-z0-9]+):(\d+)$/;
+
+  function markdown(text) {
+    const box = el("div", "md");
+    if (!MD) { box.textContent = String(text ?? ""); return box; }
+    box.innerHTML = MD.render(String(text ?? ""));
+    box.querySelectorAll("a[href]").forEach((a) => {
+      const m = EDITOR_HREF.exec(a.getAttribute("href") || "");
+      if (!m) {
+        // A real URL: never navigate the page away from the diagram.
+        a.target = "_blank";
+        a.rel = "noreferrer noopener";
+        return;
+      }
+      a.classList.add("editor-link");
+      a.href = "#";
+      a.title = "open " + m[1] + ":" + m[2];
+      a.onclick = (ev) => { ev.preventDefault(); openInEditor(a, m[1], Number(m[2])); };
+    });
+    return box;
+  }
+
   function toast(msg, bad) {
     let t = document.getElementById("toast");
     if (!t) { t = el("div"); t.id = "toast"; document.body.append(t); }
@@ -120,7 +152,7 @@
     const ask = el("button", "ic ask" + (THREADS[anchor] || PENDING.has(anchor) ? " has" : ""), "✻");
     ask.title = "ask Claude about this node";
     ask.onclick = (ev) => { ev.stopPropagation(); expand(wrap, true); openAskForm(wrap, n); };
-    acts.append(jump, ask, el("span", "chev", "▶"));
+    acts.append(jump, ask, el("span", "chev", "▸"));
 
     head.append(left, acts);
     head.onclick = () => expand(wrap, !wrap.classList.contains("open"));
@@ -128,27 +160,61 @@
     /* body ------------------------------------------------------------- */
     const body = el("div", "nbody");
 
+    // The header's ⌘ already opens this file at this line, and every member row
+    // opens its own. A third opener here was the same action in a third style.
+    // The path's remaining job is telling you which module you are in, so it is
+    // one quiet line, tail-truncated, with the whole path on hover.
     const path = el("div", "path");
-    path.append(el("b", null, n.file));
-    const openBtn = el("button", "op", "open :" + n.line);
-    openBtn.onclick = () => openInEditor(openBtn, n.file, n.line);
-    path.append(openBtn);
+    const segs = n.file.split("/");
+    path.textContent = segs.length > 4 ? "…/" + segs.slice(-4).join("/") : n.file;
+    path.title = n.file + ":" + n.line;
     body.append(path);
 
     if ((n.members || []).length) {
       const box = el("div", "members");
       n.members.forEach((m) => {
-        const row = el("div", "mem");
-        const txt = el("span");
+        // One row per member, carrying its real signature. A row with a
+        // `detail` opens underneath itself: the reader stays on the line they
+        // were reading instead of being sent to a panel about it.
+        // A row with neither a badge nor a detail is supporting cast — an
+        // injected field next to an endpoint. Structural, not a guess about
+        // its text.
+        const secondary = !m.tag && !m.detail;
+        const row = el("div", "mem" + (m.detail ? " has-detail" : "")
+                              + (secondary ? " secondary" : ""));
+        const head = el("div", "mem-head");
+
+        // The affordance goes where the eye starts, not in the far gutter.
+        head.append(el("span", "mem-chev", m.detail ? "▸" : ""));
+
+        const txt = el("span", "mem-sig");
+        if (m.tag) {
+          const tag = el("span", "mem-tag", m.tag);
+          // An HTTP verb is what you scan a controller for; a `class` or
+          // `record` badge is only structure. They should not look alike.
+          if (/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/.test(m.tag.trim())) {
+            tag.classList.add("verb", "verb-" + m.tag.trim().toLowerCase());
+          }
+          txt.append(tag);
+        }
         txt.append(inline(m.text));
-        row.append(txt);
+        head.append(txt);
+
+        const tools = el("span", "mem-tools");
         if (m.line) {
           const b = el("button", "ln", ":" + m.line);
           b.title = "open " + n.file + ":" + m.line;
-          b.onclick = () => openInEditor(b, n.file, m.line);
-          row.append(b);
-        } else {
-          row.append(el("span"));
+          b.onclick = (ev) => { ev.stopPropagation(); openInEditor(b, n.file, m.line); };
+          tools.append(b);
+        }
+        head.append(tools);
+        row.append(head);
+
+        if (m.detail) {
+          const d = el("div", "mem-detail");
+          d.append(markdown(m.detail));
+          row.append(d);
+          head.onclick = () => row.classList.toggle("open");
         }
         box.append(row);
       });
@@ -209,7 +275,7 @@
       }
       const a = el("div", "msg claude");
       a.append(el("div", "who", "✻ claude" + (info.title ? " — " + info.title : "")),
-               document.createTextNode(info.latest_synthesis || ""));
+               markdown(info.latest_synthesis || ""));
       box.append(a);
     }
     if (PENDING.has(anchor)) {

@@ -169,3 +169,36 @@ def test_written_document_is_indented_json(tmp_path):
     raw = (tmp_path / flow.FLOW_FILE).read_text()
     assert raw.startswith("{\n")
     json.loads(raw)
+
+
+# ---------------------------------------------------------------- members
+def test_a_member_may_carry_a_detail_and_a_tag():
+    doc = _doc()
+    doc["slices"][0]["nodes"][0]["members"] = [
+        {"text": "public ShareResultDto share(long id)", "line": 31,
+         "tag": "POST", "detail": "Converts, then delegates."}]
+    assert flow.validate(doc) == []
+
+
+def test_a_blank_detail_is_refused():
+    # An empty detail renders an expandable row that opens onto nothing.
+    doc = _doc()
+    doc["slices"][0]["nodes"][0]["members"] = [{"text": "m()", "detail": "  "}]
+    assert any("detail" in e for e in flow.validate(doc))
+
+
+def test_a_tag_is_a_badge_not_a_sentence():
+    doc = _doc()
+    doc["slices"][0]["nodes"][0]["members"] = [
+        {"text": "m()", "tag": "this is far too long to be a badge"}]
+    assert any("badge" in e for e in flow.validate(doc))
+
+
+def test_a_summary_that_lists_the_members_is_refused():
+    # The layout exists to stop the node restating its own member list; length
+    # is the mechanical proxy for "one line about the node".
+    doc = _doc()
+    doc["slices"][0]["nodes"][0]["summary"] = "x" * (flow.MAX_SUMMARY_LEN + 1)
+    assert any("say what the node IS" in e for e in flow.validate(doc))
+    doc["slices"][0]["nodes"][0]["summary"] = "The only HTTP way in or out."
+    assert flow.validate(doc) == []

@@ -57,7 +57,7 @@ h1 .seed{font-family:var(--mono);font-size:17px;background:#fdf2e3;color:var(--d
 /* ---------- board ---------- */
 .board{display:flex;gap:22px;align-items:flex-start;overflow-x:auto;padding-bottom:8px}
 .slice{border:1px solid var(--line);border-radius:11px;background:#fff;padding:15px 15px 19px;
-       flex:1 1 0;min-width:390px}
+       flex:1 0 430px;min-width:0}
 .slice-hd{display:flex;align-items:baseline;gap:9px;margin-bottom:13px;padding-bottom:10px;
           border-bottom:1px dashed var(--line-2)}
 .slice-hd .n{font-family:var(--mono);font-size:11px;font-weight:700;color:#fff;background:var(--ink);
@@ -66,7 +66,7 @@ h1 .seed{font-family:var(--mono);font-size:17px;background:#fdf2e3;color:var(--d
 .slice-hd .q{color:var(--ink-3);font-size:12px;margin-left:auto;font-style:italic;text-align:right}
 
 /* ---------- node ---------- */
-.node{border:1px solid var(--line-2);border-radius:8px;background:#fff;
+.node{border:1px solid var(--line-2);border-radius:8px;background:#fff;min-width:0;
       transition:box-shadow .12s,border-color .12s}
 .node:hover{border-color:var(--ink-3)}
 .node.open{box-shadow:0 3px 14px rgba(0,0,0,.07)}
@@ -77,7 +77,7 @@ h1 .seed{font-family:var(--mono);font-size:17px;background:#fdf2e3;color:var(--d
 .node[data-layer=domain]{border-left:4px solid var(--domain)}
 .node[data-layer=infra]{border-left:4px solid var(--infra)}
 .node[data-layer=db]{border-left:4px solid var(--db)}
-.nhead{display:grid;grid-template-columns:1fr auto;gap:8px;padding:9px 11px 9px 12px;
+.nhead{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:9px 11px 9px 12px;
        cursor:pointer;align-items:start}
 .role{font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;
       display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap}
@@ -104,19 +104,56 @@ h1 .seed{font-family:var(--mono);font-size:17px;background:#fdf2e3;color:var(--d
 .chev{color:var(--ink-3);font-size:11px;transition:transform .15s;width:16px;text-align:center}
 .node.open .chev{transform:rotate(90deg)}
 
-.nbody{display:none;border-top:1px dashed var(--line-2);padding:12px 13px 13px}
+.nbody{display:none;border-top:1px dashed var(--line-2);padding:12px 13px 13px;min-width:0}
 .node.open .nbody{display:block}
-.path{font-family:var(--mono);font-size:10px;color:var(--ink-3);word-break:break-all;
-      margin-bottom:11px;display:flex;gap:6px;align-items:baseline}
-.path b{color:var(--ink-2);font-weight:500}
-.path .op{border:0;background:#eef3ff;color:var(--api);font-family:var(--mono);font-size:9.5px;
-          font-weight:700;padding:2px 7px;border-radius:4px;cursor:pointer;white-space:nowrap;flex:none}
-.path .op:hover{background:var(--api);color:#fff}
-.members{margin:0 0 11px;background:#fcfcfb;border:1px solid var(--line);border-radius:7px;overflow:hidden}
-.mem{display:grid;grid-template-columns:1fr auto;gap:9px;padding:5px 10px;font-family:var(--mono);
-     font-size:11.5px;line-height:1.6;border-top:1px solid #f0efeb;align-items:baseline}
+/* Where you are, not what you do — so it never competes with the openers. */
+.path{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-bottom:9px;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}
+/* No border: the node already has one, and a box inside a box adds a frame
+   without adding a boundary the reader needed. Rows are separated by hairlines. */
+.members{margin:0 0 11px;border-top:1px solid var(--line)}
+/* A member row: the signature, and — when it has one — its own detail opening
+   underneath it. Two levels is the whole point: the node is a list of methods,
+   and a method is read where it sits. */
+.mem{border-top:1px solid #f0efeb}
 .mem:first-child{border-top:0}
-.mem:hover{background:#f6f5f2}
+.mem-head{display:grid;grid-template-columns:13px minmax(0,1fr) auto;gap:7px;padding:5px 9px;
+          font-family:var(--mono);font-size:11.5px;line-height:1.6;align-items:baseline;
+          overflow-wrap:anywhere}
+/* A wrapped signature keeps its method name leftmost and insets the rest, so
+   a four-line PUT still reads as one thing. */
+.mem-sig{min-width:0;padding-left:1.7em;text-indent:-1.7em}
+.mem.has-detail > .mem-head{cursor:pointer}
+.mem-head:hover{background:#f6f5f2}
+.mem.open > .mem-head{background:#f4f3f0}
+.mem-tag{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.06em;
+         background:#eceae4;color:#6b6a62;padding:1px 5px;border-radius:3px;margin-right:7px;
+         vertical-align:1px;text-indent:0}
+.mem-tag.verb{color:#fff}
+.mem-tag.verb-get{background:#2563eb}
+.mem-tag.verb-post{background:#0d8a5f}
+.mem-tag.verb-put{background:#c2680a}
+.mem-tag.verb-patch{background:#7c3aed}
+.mem-tag.verb-delete{background:#d92d20}
+/* An injected field is not an endpoint. Same list, lower voice. */
+.mem.secondary .mem-sig{color:var(--ink-3)}
+.mem.secondary:hover .mem-sig{color:var(--ink-2)}
+.mem-tools{display:flex;align-items:center;gap:5px;flex:none}
+/* Visible enough to read as an affordance. At --line-2 it disappeared, which
+   is the "how does this expand?" problem coming back as a colour choice. */
+.mem-chev{color:var(--ink-3);font-size:9px;transition:transform .15s,color .15s;
+          display:inline-block;text-align:center}
+.mem.has-detail > .mem-head:hover .mem-chev{color:var(--ink)}
+.mem.open .mem-chev{transform:rotate(90deg)}
+.mem-detail{display:none;padding:2px 12px 11px 29px;font-family:var(--sans);font-size:12.5px;
+            color:var(--ink-2);line-height:1.55;border-left:2px solid var(--line-2);margin-left:10px}
+.mem.open > .mem-detail{display:block}
+.mem-detail .md pre{border-color:var(--line)}
+.mem-detail .md table{font-size:11px}
+.mem-detail .md th,.mem-detail .md td{border-color:var(--line)}
+.mem-detail .md a{color:var(--api)}
+.mem-detail .md a.editor-link{border-bottom-color:var(--api)}
+.mem-detail .md a.editor-link:hover{background:var(--api)}
 .ln{border:0;background:none;font-family:var(--mono);font-size:10px;color:var(--api);
     cursor:pointer;padding:1px 4px;border-radius:3px;flex:none}
 .ln:hover{background:var(--api);color:#fff}
@@ -134,7 +171,8 @@ h1 .seed{font-family:var(--mono);font-size:17px;background:#fdf2e3;color:var(--d
 /* ---------- threads ---------- */
 .thread{margin-top:11px;border-top:1px dashed var(--line-2);padding-top:11px}
 .msg{border-radius:7px;padding:9px 11px;margin-bottom:7px;font-size:12.5px;line-height:1.55;
-     white-space:pre-wrap}
+     min-width:0;overflow-wrap:anywhere}
+.msg.user{white-space:pre-wrap}
 .msg.user{background:#f2f1ed;color:var(--ink-2)}
 .msg.claude{background:#e9f7f0;border:1px solid #b9e2cd;color:#0f3d2a}
 .msg .who{font-size:9px;letter-spacing:.09em;text-transform:uppercase;font-weight:800;
@@ -151,7 +189,7 @@ h1 .seed{font-family:var(--mono);font-size:17px;background:#fdf2e3;color:var(--d
 .ask-form button[disabled]{opacity:.5;cursor:default}
 
 /* ---------- hops and mappers ---------- */
-.hop{display:grid;grid-template-columns:52px 1fr;align-items:center;min-height:44px;padding:1px 0}
+.hop{display:grid;grid-template-columns:52px minmax(0,1fr);align-items:center;min-height:44px;padding:1px 0}
 .arrows{display:flex;justify-content:center;gap:9px;color:var(--ink-3);font-size:16px}
 .arrows .dn{color:#3f3e39}
 .arrows .up{color:#0d8a5f}
@@ -176,3 +214,31 @@ h1 .seed{font-family:var(--mono);font-size:17px;background:#fdf2e3;color:var(--d
        transition:.18s;pointer-events:none;z-index:90;max-width:440px}
 #toast.on{opacity:1;transform:none}
 #toast.bad{background:#7f1d1d}
+
+/* ---------- rendered markdown inside a reply ---------- */
+/* Claude's replies carry tables, fenced JSON and citation links. Each of
+   those is wider than a column at some point, so each scrolls inside its own
+   box rather than widening the node. */
+.md > :first-child{margin-top:0}
+.md > :last-child{margin-bottom:0}
+.md p{margin:0 0 8px}
+.md ul,.md ol{margin:0 0 8px;padding-left:19px}
+.md li{margin-bottom:3px}
+.md h1,.md h2,.md h3,.md h4{font-size:12.5px;font-weight:700;margin:12px 0 6px;letter-spacing:.01em}
+.md code{font-family:var(--mono);font-size:11.5px;background:rgba(0,0,0,.06);padding:1px 4px;border-radius:3px}
+.md pre{background:#fff;border:1px solid #b9e2cd;border-radius:6px;padding:10px 12px;margin:0 0 8px;
+        overflow-x:auto;max-width:100%}
+.md pre code{background:none;padding:0;font-size:11px;line-height:1.65;white-space:pre}
+.md table{display:block;overflow-x:auto;max-width:100%;border-collapse:collapse;margin:0 0 8px;
+          font-size:11.5px}
+/* The table scrolls in its own box, so cells must not break mid-word to fit
+   a width they are not bound by — `proposalManagem/ent` is worse than a scroll. */
+.md th,.md td{border:1px solid #b9e2cd;padding:4px 9px;text-align:left;vertical-align:top;
+              overflow-wrap:normal;word-break:normal}
+.md th{background:rgba(13,138,95,.09);font-weight:700;white-space:nowrap}
+.md blockquote{margin:0 0 8px;padding-left:11px;border-left:2px solid #b9e2cd;color:#3c6b56}
+.md a{color:#0a6b48}
+.md a.editor-link{text-decoration:none;border-bottom:1px dotted #0a6b48;cursor:pointer;
+                  font-family:var(--mono);font-size:11px}
+.md a.editor-link:hover{background:#0a6b48;color:#fff;border-bottom-color:transparent}
+.md hr{border:0;border-top:1px solid #b9e2cd;margin:10px 0}

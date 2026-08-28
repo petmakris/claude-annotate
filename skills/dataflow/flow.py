@@ -16,7 +16,9 @@ One document per session at <state_dir>/dataflow.json:
             "file": "advisory/.../InteractionChannelManagement.java", "line": 13,
             "summary": "...", "note": "...", "flag": "no JPA entity",
             "implicit": false,
-            "members": [{"text": "record InteractionChannel(...)", "line": 19}],
+            "members": [{"text": "public InteractionChannel(String code, ...)",
+                          "line": 19, "tag": "record",
+                          "detail": "markdown; makes the row expandable"}],
             "edges": [{"to": "psvc", "label": "read by", "join": true}]}
          ]}
       ]
@@ -52,6 +54,8 @@ MIN_SLICES, MAX_SLICES = 1, 4
 MIN_NODES, MAX_NODES = 2, 24      # per slice
 MAX_TOTAL_NODES = 48              # a runaway generator is a bug, not a diagram
 MAX_MODEL_CLAIMS = 6
+MAX_TAG_LEN = 12            # a member badge: GET, PUT, @Transactional, throws
+MAX_SUMMARY_LEN = 180       # one line about the node, never a list of its members
 
 FLOW_FILE = "dataflow.json"
 _ANCHOR_RE = re.compile(r"^node:([a-z0-9][a-z0-9_-]{0,39})$")
@@ -162,6 +166,13 @@ def _node_errors(where: str, n: object, node_ids: set[str],
         v = n.get(field)
         if v is not None and (not isinstance(v, str) or not v.strip()):
             errors.append(f"{where} {field}, when present, must be non-empty")
+    # A summary that enumerates the members is the duplication this layout
+    # exists to remove: the reader reads the endpoints twice and the node's
+    # own claim not at all. Length is the only mechanical proxy for "one line".
+    summary = n.get("summary")
+    if isinstance(summary, str) and len(summary) > MAX_SUMMARY_LEN:
+        errors.append(f"{where} summary must be at most {MAX_SUMMARY_LEN} characters "
+                      f"— say what the node IS; the members list what it has")
     if "implicit" in n and not isinstance(n["implicit"], bool):
         errors.append(f"{where} implicit must be a boolean")
     if n.get("implicit") and n.get("layer") != "mapper":
@@ -200,6 +211,14 @@ def _node_errors(where: str, n: object, node_ids: set[str],
 
 
 def _member_errors(where: str, m: object) -> list[str]:
+    """A member is one row: a real signature, and optionally what it does.
+
+    Rows carry the signature verbatim — return type included — because the
+    reader is looking for the method they are about to open, and a paraphrase
+    is not the thing they will find in the file. `detail` makes the row
+    expandable in place, which is what keeps a node one list instead of a
+    summary that restates the list underneath it.
+    """
     if not isinstance(m, dict):
         return [f"{where} must be an object"]
     errors = []
@@ -211,6 +230,16 @@ def _member_errors(where: str, m: object) -> list[str]:
     if line is not None and (not isinstance(line, int) or isinstance(line, bool)
                              or line < 0):
         errors.append(f"{where} line must be a non-negative integer or absent")
+    detail = m.get("detail")
+    if detail is not None and (not isinstance(detail, str) or not detail.strip()):
+        errors.append(f"{where} detail, when present, must be a non-empty string")
+    tag = m.get("tag")
+    if tag is not None:
+        if not isinstance(tag, str) or not tag.strip():
+            errors.append(f"{where} tag, when present, must be a non-empty string")
+        elif len(tag) > MAX_TAG_LEN:
+            errors.append(f"{where} tag must be at most {MAX_TAG_LEN} characters "
+                          f"— it is a badge, not a sentence")
     return errors
 
 
