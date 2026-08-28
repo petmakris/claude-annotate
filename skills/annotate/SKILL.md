@@ -51,6 +51,22 @@ When in doubt, prefer the annotation view. Once you've decided to route, follow 
 
 While the session is live, the browser is the output channel: route every response that meets any trigger above, and the terminal carries only the URL announcement, one-line status notes, and answers genuinely too small to annotate — see `references/pushing.md` § The live-session rule.
 
+## Verbosity mode — compact by default
+
+Every push carries a verbosity mode: **`compact`** (the default) or **`detailed`**.
+Resolve the mode in this order, first match wins:
+
+1. **Argument** — `/annotate detailed` or `/annotate compact` sets the mode
+   explicitly (with or without content to push; combines with `resume`).
+2. **The user's words this conversation** — "give me the full detail", "the
+   long version" → `detailed`; "shorten this", "too much to read" → `compact`.
+3. **Default** — `compact`.
+
+The mode persists for the live session until the user switches it, and it decides
+*how much of the composed response renders as blocks*, never *what you concluded*.
+The composition contracts for both modes live in `references/pushing.md`
+§ Verbosity mode — read that section as part of every push.
+
 ## Block-kind menu
 
 Composing a push is a two-pass job: split the response into blocks, then run this menu over **every** block — assign the first kind whose trigger matches, and fall back to `kind: "markdown"` (plain markdown; may contain inline HTML — see `references/pushing.md`) only for blocks no richer kind claims. Markdown is the fallback per block, not the default for the response. Before emitting a non-markdown kind, **`Read` that kind's reference for the exact spec shape**:

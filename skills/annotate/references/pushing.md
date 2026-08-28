@@ -199,9 +199,47 @@ To resume a previously-closed conversation's workspace (`/annotate resume
 this same `workspace` marker so the push flow above attaches to it
 automatically.
 
+## Verbosity mode — the composition contract
+
+The mode (resolved by SKILL.md § Verbosity mode: argument > user's words >
+default `compact`) decides how much of the response renders as blocks. It never
+changes what you concluded — in compact mode the full findings stay in
+conversation context, ready to be folded into a block when a comment asks.
+
+### `compact` (default) — the page IS this shape
+
+At most **5 blocks**, a ~2-minute read:
+
+1. **Triage block** — titled like "The only N things that need you" (N ≤ 4):
+   the decisions, blockers, and questions that require the reader's judgment,
+   one short item each, every item a `data-annotate-id` sub-unit.
+2. **Digest block** — everything else, **one line per item**, each line a
+   commentable `data-annotate-id` row. A row is a claim plus its consequence,
+   not a summary of a section.
+3. **"What you do NOT need to re-check" block** (only when you verified work) —
+   ≤ 4 bullets naming what was already confirmed, so the reader can skip it
+   with confidence.
+4. **A `choice` block** when the response ends in a decision the user makes.
+
+Diagrams, per-finding code quotes, and long evidence are **not** rendered in
+compact mode — they surface later, one block at a time, via the expand path
+below. Glossary entries still apply.
+
+**Expanding on demand:** a comment on a triage item or digest row is a request
+for that item's full detail. Answer it by rewriting *that block* (or appending
+one block for the item) with the full evidence — quoted code, failure scenario,
+fix — per `references/handling-events.md`. Never re-render the whole page to
+detailed because one row was asked about.
+
+### `detailed` — full composition
+
+The response renders block-per-point exactly as "How to push a response" below
+describes: every finding its own block, diagrams where a kind claims them,
+evidence and code quotes inline. Use only when the mode resolved to `detailed`.
+
 ## How to push a response
 
-1. **Split, then capability-check every block.** Split the response into logical units (a paragraph, a heading + its prose, one bullet, one code block; aim for 3-15 lines — small enough to read one at a time, large enough to carry a self-contained thought). Then walk the kind menu (SKILL.md § Block-kind menu) over each unit and assign the first kind whose trigger matches — `sequence`, `flowchart`, `diagram`, `choice`, or `mockup` — with `kind: "markdown"` as the fallback for units no richer kind claims. Before writing the files, re-scan a block list that came out all-markdown against the menu once: a response about interacting systems, branching logic, or a decision the user must make typically mixes kinds. **Independent of kind, also decide each block's `code` anchors** — see `references/code-anchors.md`.
+1. **Split, then capability-check every block.** (In `compact` mode the block list is the compact contract in § Verbosity mode above — the kind menu still applies to the blocks it produces.) Split the response into logical units (a paragraph, a heading + its prose, one bullet, one code block; aim for 3-15 lines — small enough to read one at a time, large enough to carry a self-contained thought). Then walk the kind menu (SKILL.md § Block-kind menu) over each unit and assign the first kind whose trigger matches — `sequence`, `flowchart`, `diagram`, `choice`, or `mockup` — with `kind: "markdown"` as the fallback for units no richer kind claims. Before writing the files, re-scan a block list that came out all-markdown against the menu once: a response about interacting systems, branching logic, or a decision the user must make typically mixes kinds. **Independent of kind, also decide each block's `code` anchors** — see `references/code-anchors.md`.
 2. Write `meta.json` first (at `<response_dir>/meta.json`):
    ```json
    {"response_id": "resp-<unix-timestamp>",
