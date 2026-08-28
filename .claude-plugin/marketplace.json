@@ -14,6 +14,7 @@
       "skills": [
         "./skills/annotate",
         "./skills/annotate-doctor",
+        "./skills/dataflow",
         "./skills/deck"
       ]
     },

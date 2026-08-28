@@ -63,6 +63,11 @@ ALLOWED_BLOCKS = {
         "skills/deck/README.md",
         "python3 -m pytest skills/deck/tests/ -v",
     ),
+    # Same case for the dataflow skill.
+    (
+        "skills/dataflow/README.md",
+        "python3 -m pytest skills/dataflow/tests/ -v",
+    ),
 }
 
 # Scanner-health canary. Not the source of truth (the scan is), but if a fence
