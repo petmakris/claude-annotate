@@ -202,3 +202,72 @@ def test_a_summary_that_lists_the_members_is_refused():
     assert any("say what the node IS" in e for e in flow.validate(doc))
     doc["slices"][0]["nodes"][0]["summary"] = "The only HTTP way in or out."
     assert flow.validate(doc) == []
+
+
+# ----------------------------------------------------------------- routes
+def _routed():
+    """A document with two field-carrying rows and a route over them."""
+    doc = _doc()
+    doc["slices"][0]["nodes"][0]["members"] = [
+        {"text": "String code", "line": 12, "field": "code"}]
+    doc["slices"][0]["nodes"][1]["members"] = [
+        {"text": "code VARCHAR(255)", "line": 7, "field": "code"}]
+    doc["routes"] = [{"id": "code", "label": "code", "title": "code → code",
+                      "hops": [{"node": "ctl", "field": "code"},
+                               {"node": "tbl", "field": "code",
+                                "destination": True}]}]
+    return doc
+
+
+def test_a_route_over_field_carrying_rows_validates():
+    assert flow.validate(_routed()) == []
+
+
+def test_routes_are_optional():
+    assert flow.validate(_doc()) == []
+
+
+def test_a_hop_must_point_at_a_row_that_declares_that_field():
+    # A hop that resolves to nothing highlights nothing, which reads as the
+    # route being wrong about the code rather than about itself.
+    doc = _routed()
+    doc["routes"][0]["hops"][1]["field"] = "ghost"
+    errors = flow.validate(doc)
+    assert any("tbl.ghost" in e and "no member declares" in e for e in errors)
+
+
+def test_a_hop_must_point_at_a_node_that_exists():
+    doc = _routed()
+    doc["routes"][0]["hops"][0]["node"] = "nowhere"
+    assert any("nowhere.code" in e for e in flow.validate(doc))
+
+
+def test_a_route_needs_more_than_one_hop():
+    doc = _routed()
+    doc["routes"][0]["hops"] = doc["routes"][0]["hops"][:1]
+    assert any("not a path" in e for e in flow.validate(doc))
+
+
+def test_route_ids_are_unique():
+    doc = _routed()
+    doc["routes"].append(dict(doc["routes"][0]))
+    assert any("duplicate route id" in e for e in flow.validate(doc))
+
+
+@pytest.mark.parametrize("flag", ["rename", "fork", "destination"])
+def test_hop_flags_must_be_booleans(flag):
+    doc = _routed()
+    doc["routes"][0]["hops"][0][flag] = "yes"
+    assert any(flag in e for e in flow.validate(doc))
+
+
+def test_a_route_needs_a_label_and_a_title():
+    doc = _routed()
+    doc["routes"][0]["label"] = " "
+    assert any("label" in e for e in flow.validate(doc))
+
+
+def test_a_field_id_must_be_a_slug():
+    doc = _doc()
+    doc["slices"][0]["nodes"][0]["members"] = [{"text": "x", "field": "Not A Slug"}]
+    assert any("field must match" in e for e in flow.validate(doc))

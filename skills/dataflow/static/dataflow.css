@@ -242,3 +242,57 @@ h1 .seed{font-family:var(--mono);font-size:17px;background:#fdf2e3;color:var(--d
                   font-family:var(--mono);font-size:11px}
 .md a.editor-link:hover{background:#0a6b48;color:#fff;border-bottom-color:transparent}
 .md hr{border:0;border-top:1px solid #b9e2cd;margin:10px 0}
+
+/* ---------- tracing one property across the board ---------- */
+/* Selecting a route does not draw a second diagram. It changes what this one
+   emphasises: nodes off the path recede, rows on the path light up, and the
+   trail spells the hops out linearly for the reader who wants the summary. */
+.routebar{border-top:1px dashed var(--line)}
+.rb-lb{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;
+       color:var(--ink-3);margin-right:3px}
+.rchip{border:1px solid var(--line-2);background:#fff;border-radius:99px;padding:3px 11px;
+       font-family:var(--mono);font-size:11.5px;color:var(--ink-2);cursor:pointer}
+.rchip:hover{border-color:var(--ink-3);color:var(--ink)}
+.rchip.on{background:var(--ask);color:#fff;border-color:var(--ask)}
+
+.mem-trace{border:1px solid var(--line-2);background:#fff;border-radius:5px;padding:0 6px;
+           font-family:var(--mono);font-size:9.5px;color:var(--ink-3);cursor:pointer;line-height:1.6}
+.mem-trace:hover{background:var(--ask);color:#fff;border-color:var(--ask)}
+.mem.routable > .mem-head .mem-sig{text-decoration-color:var(--line-2)}
+
+/* the trail */
+.trail{background:#e9f7f0;border:1px solid #b9e2cd;border-radius:10px;padding:13px 17px;margin:22px 0 10px}
+.trail-head{display:flex;align-items:baseline;gap:12px;margin-bottom:9px}
+.trail-title{font-size:13.5px;font-weight:640;color:#0f3d2a;font-family:var(--mono)}
+.trail-close{margin-left:auto;border:0;background:none;color:#0a6b48;font-size:11.5px;
+             cursor:pointer;text-decoration:underline}
+.trail-line{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.trail-arrow{color:var(--ask);font-size:13px}
+.trail-hop{border:1px solid #b9e2cd;background:#fff;border-radius:6px;padding:3px 9px;
+           font-family:var(--mono);font-size:11px;color:#0f3d2a;cursor:pointer;display:flex;gap:7px}
+.trail-hop:hover{border-color:var(--ask)}
+.trail-hop b{color:var(--ask)}
+.trail-hop .trail-where{opacity:.55}
+/* A rename is the hop no grep survives, and a fork is where one field becomes
+   several. Both are why this took four files to answer by hand. */
+.trail-hop.rn{background:#fff8e6;border-color:#e8c86a}
+.trail-hop.rn b{color:#b45309}
+.trail-hop.fork{background:#f7f2ff;border-color:#c9b6f5}
+.trail-hop.fork b{color:#6d28d9}
+.trail-hop.dest{background:var(--db);border-color:var(--db);color:#fff}
+.trail-hop.dest b{color:#fff}
+.trail-hop.dest .trail-where{opacity:.7}
+.trail-note{margin-top:10px;font-size:13px;color:#2f4d40}
+.trail-note .md p{margin:0 0 6px}
+.trail-note .md code{background:#fff}
+
+/* the board under a selected route */
+body.routing .node{opacity:.28;transition:opacity .2s}
+body.routing .node.on-route{opacity:1;border-color:var(--ask);
+                            box-shadow:0 0 0 2px rgba(13,138,95,.16)}
+body.routing .hop .arrows{opacity:.3}
+body.routing .mem{opacity:.45}
+body.routing .mem.on-route{opacity:1;background:#e9f7f0;box-shadow:inset 3px 0 0 var(--ask)}
+body.routing .mem.on-route .mem-sig{color:#0f3d2a;font-weight:600}
+body.routing .mem.on-route.secondary .mem-sig{color:#0f3d2a}
+body.routing .mem.on-route .mem-trace{background:var(--ask);color:#fff;border-color:var(--ask)}

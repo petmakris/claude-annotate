@@ -56,6 +56,8 @@ MAX_TOTAL_NODES = 48              # a runaway generator is a bug, not a diagram
 MAX_MODEL_CLAIMS = 6
 MAX_TAG_LEN = 12            # a member badge: GET, PUT, @Transactional, throws
 MAX_SUMMARY_LEN = 180       # one line about the node, never a list of its members
+MAX_ROUTES = 24             # traced properties held on one document
+MIN_HOPS = 2                # a route with one point is not a path
 
 FLOW_FILE = "dataflow.json"
 _ANCHOR_RE = re.compile(r"^node:([a-z0-9][a-z0-9_-]{0,39})$")
@@ -124,6 +126,80 @@ def validate(doc: dict) -> list[str]:
     for owner, target in edge_targets:
         if target not in node_ids:
             errors.append(f"{owner} edge points at unknown node {target!r}")
+    errors.extend(_route_errors(doc.get("routes"), slices))
+    return errors
+
+
+def _route_errors(routes: object, slices: object) -> list[str]:
+    """A route is one property's path, as a list of rows that already exist.
+
+    Every hop names a (node, field) pair, and both must resolve — a hop that
+    points at nothing highlights nothing, which reads to the user as the route
+    being wrong about the code rather than the document being wrong about
+    itself.
+    """
+    if routes is None:
+        return []
+    if not isinstance(routes, list):
+        return ["routes must be a list"]
+    if len(routes) > MAX_ROUTES:
+        return [f"routes must contain at most {MAX_ROUTES} routes"]
+
+    # (node_id, field) -> exists
+    known: set[tuple[str, str]] = set()
+    if isinstance(slices, list):
+        for sl in slices:
+            if not isinstance(sl, dict):
+                continue
+            for n in sl.get("nodes", []) or []:
+                if not isinstance(n, dict) or not isinstance(n.get("id"), str):
+                    continue
+                for m in n.get("members", []) or []:
+                    if isinstance(m, dict) and isinstance(m.get("field"), str):
+                        known.add((n["id"], m["field"]))
+
+    errors: list[str] = []
+    seen: set[str] = set()
+    for i, r in enumerate(routes):
+        where = f"routes[{i}]"
+        if not isinstance(r, dict):
+            errors.append(f"{where} must be an object")
+            continue
+        rid = r.get("id")
+        if not _is_id(rid):
+            errors.append(f"{where} id must match [a-z0-9][a-z0-9_-]*")
+        elif rid in seen:
+            errors.append(f"{where} duplicate route id {rid!r}")
+        else:
+            seen.add(rid)
+        for field in ("label", "title"):
+            if not isinstance(r.get(field), str) or not r[field].strip():
+                errors.append(f"{where} {field} must be a non-empty string")
+        note = r.get("note")
+        if note is not None and (not isinstance(note, str) or not note.strip()):
+            errors.append(f"{where} note, when present, must be non-empty")
+        hops = r.get("hops")
+        if not isinstance(hops, list):
+            errors.append(f"{where} hops must be a list")
+            continue
+        if len(hops) < MIN_HOPS:
+            errors.append(f"{where} must have at least {MIN_HOPS} hops "
+                          "— a single point is not a path")
+        for j, h in enumerate(hops):
+            hw = f"{where}.hops[{j}]"
+            if not isinstance(h, dict):
+                errors.append(f"{hw} must be an object")
+                continue
+            node, field = h.get("node"), h.get("field")
+            if not _is_id(node) or not _is_id(field):
+                errors.append(f"{hw} must name a node and a field")
+                continue
+            if (node, field) not in known:
+                errors.append(f"{hw} points at {node}.{field}, which no member "
+                              "declares — add `field` to that member row")
+            for opt in ("rename", "fork", "destination"):
+                if opt in h and not isinstance(h[opt], bool):
+                    errors.append(f"{hw} {opt} must be a boolean")
     return errors
 
 
@@ -240,6 +316,12 @@ def _member_errors(where: str, m: object) -> list[str]:
         elif len(tag) > MAX_TAG_LEN:
             errors.append(f"{where} tag must be at most {MAX_TAG_LEN} characters "
                           f"— it is a badge, not a sentence")
+    # `field` makes this row addressable by a route. It is the whole merge
+    # between the class view and the property view: a route is an ordered list
+    # of rows that already exist, not a second diagram drawn beside them.
+    field = m.get("field")
+    if field is not None and not _is_id(field):
+        errors.append(f"{where} field must match [a-z0-9][a-z0-9_-]*")
     return errors
 
 

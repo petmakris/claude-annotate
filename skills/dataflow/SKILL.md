@@ -266,8 +266,39 @@ Field rules:
     that carry the behaviour; a row with no detail stays a one-liner.
   - `tag` is an optional badge of at most 12 characters: `GET`, `PUT`,
     `@Transactional`, `throws`, `record`, `PK`.
+  - `field` is an optional slug that makes the row **addressable by a route**
+    (below). Give it to rows that carry one property: a record component, a
+    column, a JSON key, or the expression that moves the value at that hop.
   - **One row per endpoint, per field, per column.** Do not merge two methods
     into one row, and do not add a row that summarises the other rows.
+- `routes` (optional, top level) is what makes this a property tool rather
+  than a class diagram. **A route is one property's path, expressed as an
+  ordered list of rows that already exist** — selecting it dims the rest of
+  the board, opens the nodes it passes through, and lights those rows. There
+  is no second diagram.
+
+  ```json
+  "routes": [
+    {"id": "code", "label": "code",
+     "title": "InteractionChannelDto.code → client_interaction_channel",
+     "note": "Seven hops and **two renames** — no grep follows that.",
+     "hops": [{"node": "dto",  "field": "code"},
+              {"node": "icm",  "field": "code", "fork": true},
+              {"node": "ci",   "field": "channel", "rename": true},
+              {"node": "tbl2", "field": "channel", "destination": true}]}
+  ]
+  ```
+
+  - Every hop must resolve to a member row that declares that `field`, or the
+    document is rejected — a hop that highlights nothing reads as the route
+    being wrong about the code.
+  - `rename: true` marks the hop where **the property changes name**. Those
+    are the hops no grep and no "find usages" survives, and they are the
+    reason the tool exists — never leave one unmarked.
+  - `fork: true` marks a hop where one property becomes several, or where the
+    path splits between slices.
+  - `destination: true` marks a resting place: a column, a JSON key, or a
+    decision the value is consumed by.
 - `edges` point at other node ids, with a verb-ish `label`. Set `join: true`
   on an edge that crosses between slices; both nodes then show a ◆ JOIN badge.
 - `flag` is a short amber warning on the node header: `no foreign key`,
@@ -293,6 +324,13 @@ Hard rules. A diagram that breaks one is a defect, not a style choice.
 - **Signatures are verbatim.** Copy them from the file you read, with return
   type and parameter types. A signature you shortened is a signature the
   reader will not find.
+- **Trace the properties that are hard, not all of them.** A route earns its
+  place when following the property by hand costs several files — a rename, a
+  fork, a crossing between slices. A field that keeps its name from DTO to
+  column does not need one, except as one deliberate contrast so the reader
+  can see what ordinary looks like. Aim for 2–6 routes.
+- **Every rename is marked.** A route that walks through a rename without
+  `rename: true` has hidden the single most expensive hop in it.
 - **Cross-node re-pass.** Before writing, read the nodes together and fix what
   only shows up in aggregate: a mapper whose two sides do not match, an edge
   with no counterpart, a summary that repeats its neighbour, a slice whose

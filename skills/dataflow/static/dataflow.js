@@ -181,7 +181,9 @@
         // its text.
         const secondary = !m.tag && !m.detail;
         const row = el("div", "mem" + (m.detail ? " has-detail" : "")
-                              + (secondary ? " secondary" : ""));
+                              + (secondary ? " secondary" : "")
+                              + (m.field ? " routable" : ""));
+        if (m.field) { row.dataset.field = m.field; row.dataset.node = n.id; }
         const head = el("div", "mem-head");
 
         // The affordance goes where the eye starts, not in the far gutter.
@@ -215,6 +217,17 @@
           d.append(markdown(m.detail));
           row.append(d);
           head.onclick = () => row.classList.toggle("open");
+        }
+        // A routable row is a handle on the property, not just a line of the
+        // class: clicking the field name traces it end to end.
+        if (m.field) {
+          const r = routeFor(n.id, m.field);
+          if (r) {
+            const go = el("button", "mem-trace", "⇢ trace");
+            go.title = "trace " + m.field + " end to end";
+            go.onclick = (ev) => { ev.stopPropagation(); selectRoute(r.id); };
+            tools.insertBefore(go, tools.firstChild);
+          }
         }
         box.append(row);
       });
@@ -333,6 +346,71 @@
     ta.focus();
   }
 
+  /* --------------------------------------------------------------- routes */
+  // A route is an ordered list of member rows that already exist on the board.
+  // Selecting one does not draw a second diagram — it changes what the same
+  // diagram emphasises, which is the whole point of merging the two views.
+  let ROUTE = null;
+
+  const routes = () => (FLOW && FLOW.routes) || [];
+  const routeFor = (node, field) =>
+    routes().find((r) => (r.hops || []).some((h) => h.node === node && h.field === field));
+
+  function selectRoute(id) {
+    ROUTE = (ROUTE === id) ? null : id;
+    paintRoute();
+  }
+
+  function paintRoute() {
+    const r = routes().find((x) => x.id === ROUTE);
+    document.body.classList.toggle("routing", !!r);
+    document.querySelectorAll(".rchip").forEach((c) =>
+      c.classList.toggle("on", !!r && c.dataset.route === r.id));
+    document.querySelectorAll(".node").forEach((n) => n.classList.remove("on-route"));
+    document.querySelectorAll(".mem").forEach((m) => m.classList.remove("on-route"));
+    const trail = document.getElementById("trail");
+    if (!r) { if (trail) trail.hidden = true; return; }
+
+    (r.hops || []).forEach((h) => {
+      const row = document.querySelector(
+        `.mem[data-node="${h.node}"][data-field="${h.field}"]`);
+      if (!row) return;
+      row.classList.add("on-route");
+      const node = row.closest(".node");
+      node.classList.add("on-route");
+      // A node on the route opens itself: the reader asked where the value
+      // goes, and a collapsed node answers that with a closed box.
+      expand(node, true);
+    });
+
+    trail.hidden = false;
+    trail.replaceChildren();
+    const head = el("div", "trail-head");
+    head.append(el("span", "trail-title", r.title));
+    const close = el("button", "trail-close", "clear");
+    close.onclick = () => { ROUTE = null; paintRoute(); };
+    head.append(close);
+    trail.append(head);
+
+    const line = el("div", "trail-line");
+    (r.hops || []).forEach((h, i) => {
+      if (i) line.append(el("span", "trail-arrow", "→"));
+      const hop = el("button", "trail-hop"
+        + (h.rename ? " rn" : "") + (h.fork ? " fork" : "")
+        + (h.destination ? " dest" : ""));
+      hop.append(el("b", null, h.field));
+      hop.append(el("span", "trail-where", h.node));
+      hop.onclick = () => goTo(h.node);
+      line.append(hop);
+    });
+    trail.append(line);
+    if (r.note) {
+      const note = el("div", "trail-note");
+      note.append(markdown(r.note));
+      trail.append(note);
+    }
+  }
+
   /* --------------------------------------------------------------- board */
   function render() {
     const doc = FLOW || {};
@@ -372,10 +450,30 @@
       const on = b.classList.contains("on");
       document.querySelectorAll(".note").forEach((x) => { x.style.display = on ? "" : "none"; });
     }, true));
-    header.append(hdr, bar);
+    // The route bar is part of the chrome, not of a node: a property is a
+    // question about the whole board.
+    if (routes().length) {
+      const rb = el("div", "bar routebar");
+      rb.append(el("span", "rb-lb", "trace a field"));
+      routes().forEach((r) => {
+        const c = el("button", "rchip", r.label);
+        c.dataset.route = r.id;
+        c.title = r.title;
+        c.onclick = () => selectRoute(r.id);
+        rb.append(c);
+      });
+      header.append(hdr, bar, rb);
+    } else {
+      header.append(hdr, bar);
+    }
     app.append(header);
 
     const wrap = el("div", "wrap");
+
+    const trail = el("div", "trail");
+    trail.id = "trail";
+    trail.hidden = true;
+    wrap.append(trail);
 
     /* the model — the claims this diagram makes, stated not implied */
     if ((doc.model || []).length) {
@@ -439,6 +537,7 @@
     wrap.append(legend);
 
     app.append(wrap);
+    paintRoute();
   }
 
   /* ---------------------------------------------------------------- live */
