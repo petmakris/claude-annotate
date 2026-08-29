@@ -134,6 +134,13 @@ the sidebar or one settings row instead of the whole mock.
   The server's landing page lists every workspace with a delete button, and
   `/annotate resume <slug>` reattaches Claude to one. (Set
   `WEBCOMPANION_RETENTION_DAYS=N` to opt back into N-day auto-expiry.)
+  Workspaces are stored centrally, at `~/.claude/<skill>/workspaces/<sid>/`,
+  never inside the project they were created from — so deleting a throwaway
+  git worktree doesn't take its annotations with it. Set
+  `WEBCOMPANION_WORKSPACE_ROOT=/abs/path` to keep them somewhere else (the
+  skill name is appended, so all four skills can share one volume); the
+  server moves workspaces written under the old per-project layout into the
+  central home on its next start.
 
 ## How it works
 

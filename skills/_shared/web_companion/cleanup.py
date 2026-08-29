@@ -26,6 +26,7 @@ import re
 import shutil
 from pathlib import Path
 
+from skills._shared.web_companion import paths
 from skills._shared.web_companion.atomic import write_text_atomic
 
 # Shape of server-minted sids (sessions.Registry.make_sid). The stray sweep
@@ -232,3 +233,110 @@ def _sweep_by_mtime(paths, retention_seconds: float, now: float,
             summary[counter] += 1
         except OSError:
             summary["errors"] += 1
+
+
+def migrate_workspaces(state_root: Path, workspace_root: Path,
+                       skill_name: str) -> dict[str, int]:
+    """Move every registered workspace still living inside a project directory
+    into `workspace_root`, and rewrite sessions.json to match.
+
+    Workspaces used to be created under ``<cwd>/.claude/<skill>/<sid>/`` — see
+    ``paths`` for why that was wrong. This runs at server startup, before
+    ``sweep_state`` and ``Registry.rehydrate``, so by the time anything reads
+    the registry every row already points at the central home.
+
+    Per row:
+
+    - already under `workspace_root` -> backfill its ``workspace.json`` marker
+      if missing, and count it as ``already_home``;
+    - directory gone -> left alone, so ``sweep_state`` prunes the row as usual;
+    - destination already exists -> refused and counted as an error, never
+      clobbered: two trees claiming one sid means something is wrong that a
+      silent overwrite would destroy the evidence of;
+    - otherwise -> moved, every path value under the old base re-rooted onto
+      the new one, and a marker written from the row's ``_cwd``.
+
+    ``_cwd`` is a parent of the old base, never under it, so the re-rooting
+    leaves it untouched by construction — the project root must keep naming
+    the project even after the content stops living there.
+
+    Idempotent, and never raises: a migration failure must not stop the server
+    from starting, and the un-migrated row keeps working where it is.
+    """
+    state_root, workspace_root = Path(state_root), Path(workspace_root)
+    summary = {"moved": 0, "already_home": 0, "errors": 0}
+    sessions_file = state_root / "sessions.json"
+    try:
+        snapshot = json.loads(sessions_file.read_text())
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return summary
+    if not isinstance(snapshot, dict):
+        return summary
+
+    updated: dict = {}
+    changed = False
+    for sid, dirs in snapshot.items():
+        state_dir_str = dirs.get("state_dir") if isinstance(dirs, dict) else None
+        if not state_dir_str:
+            updated[sid] = dirs          # unrecognizable entry — leave it alone
+            continue
+        base = Path(state_dir_str).parent
+        if base.parent == workspace_root:
+            summary["already_home"] += 1
+            if not (base / paths.MARKER_FILE).exists():
+                paths.write_marker(base, sid, skill_name, dirs.get("_cwd", ""))
+            updated[sid] = dirs
+            continue
+        if not base.is_dir():
+            updated[sid] = dirs          # gone: sweep_state prunes it next
+            continue
+        dest = workspace_root / sid
+        if dest.exists():
+            summary["errors"] += 1
+            updated[sid] = dirs
+            continue
+        try:
+            workspace_root.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(base), str(dest))
+        except (OSError, shutil.Error):
+            summary["errors"] += 1
+            updated[sid] = dirs
+            continue
+        updated[sid] = _reroot(dirs, base, dest)
+        paths.write_marker(dest, sid, skill_name, dirs.get("_cwd", ""))
+        _rmdir_if_empty(base.parent)     # the vacated <cwd>/.claude/<skill>
+        summary["moved"] += 1
+        changed = True
+
+    if changed:
+        try:
+            write_text_atomic(sessions_file, json.dumps(updated, indent=2))
+        except OSError:
+            summary["errors"] += 1
+    return summary
+
+
+def _reroot(dirs: dict, old_base: Path, new_base: Path) -> dict:
+    """Rewrite every path value under `old_base` onto `new_base`, verbatim for
+    the rest. `_cwd` sits above `old_base`, so it passes through untouched."""
+    out = {}
+    for key, value in dirs.items():
+        try:
+            p = Path(value)
+        except TypeError:
+            out[key] = value
+            continue
+        if p == old_base or p.is_relative_to(old_base):
+            out[key] = str(new_base / p.relative_to(old_base))
+        else:
+            out[key] = value
+    return out
+
+
+def _rmdir_if_empty(path: Path) -> None:
+    """Remove a now-empty directory the migration emptied. rmdir refuses a
+    non-empty directory, so a project that keeps other state there is safe."""
+    try:
+        path.rmdir()
+    except OSError:
+        pass

@@ -17,6 +17,7 @@ import json
 import sys
 from pathlib import Path
 
+from skills._shared.web_companion import paths as paths_module
 from skills.annotate import anchors as anchors_module
 
 
@@ -52,17 +53,33 @@ def check(doc: dict, root) -> list:
 
 
 def _derive_workspace_root(blocks_path: Path):
-    """If `blocks_path` sits at <root>/.claude/annotate/<sid>/response/
-    blocks.json, return <root>. Otherwise None.
+    """The repo root this session was created in, from the workspace itself,
+    or None if the workspace does not say.
 
     The server stamps a session's root (dirs["_cwd"]) once at create time
     and never refreshes it on the attach path -- so `/annotate resume` from
     a different directory can hand this check a root that names the wrong
-    repo, while blocks.json's own location on disk still names the right
-    one. A hand-made fixture (as this module's own tests use) won't match
-    this shape, and the caller falls back to the passed root exactly as
-    before.
+    repo, while the workspace still knows the right one. A hand-made fixture
+    (as this module's own tests use) says nothing either way, and the caller
+    falls back to the passed root exactly as before.
+
+    Two sources, newest first:
+
+    - <base>/workspace.json's `cwd`, written at create time. This is the only
+      source that still works now that workspaces live in one central place
+      (see web_companion/paths.py) rather than inside their project;
+    - the legacy layout <root>/.claude/annotate/<sid>/response/blocks.json,
+      where the path itself named the root. Kept for a workspace written
+      before the move whose registry row was never migrated.
     """
+    base = blocks_path.resolve().parent.parent
+    cwd = paths_module.read_marker(base).get("cwd")
+    if isinstance(cwd, str) and cwd:
+        try:
+            return Path(cwd).resolve()
+        except (OSError, ValueError):
+            return None
+
     parts = blocks_path.resolve().parts
     if len(parts) < 5:
         return None

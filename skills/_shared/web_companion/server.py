@@ -28,7 +28,7 @@ from skills._shared.web_companion.handlers import HandlersProtocol
 from skills._shared.web_companion.sessions import Registry, SID_RE
 from skills._shared.web_companion import uploads as upload_module
 from skills._shared.web_companion import static_serve
-from skills._shared.web_companion import cleanup
+from skills._shared.web_companion import cleanup, paths
 from skills._shared.web_companion.atomic import write_text_atomic
 
 SHARED_STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -248,6 +248,10 @@ def create_or_attach(registry, skill_name, payload, cwd, mkdirs, on_create=None,
     sid = registry.make_sid()
     dirs = mkdirs(sid)
     dirs["_cwd"] = str(cwd)
+    # The workspace no longer sits inside its project, so its path no longer
+    # names the project. Record that inside the tree, or nothing on disk knows
+    # which repo the anchors in this workspace resolve against.
+    paths.write_marker(paths.base_of(dirs), sid, skill_name, cwd)
     if on_create is not None:
         try:
             on_create(dirs)
@@ -459,7 +463,20 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
 
     write_token = _resolve_write_token()
 
-    state_root = Path(os.path.expanduser(f"~/.claude/{skill_name}"))
+    state_root = paths.state_root(skill_name)
+    workspace_base = paths.workspace_root(skill_name)
+
+    # Workspaces used to be written inside the project directory they were
+    # created from, so removing a throwaway git worktree destroyed them. They
+    # now live under workspace_base; move any that predate that, BEFORE the
+    # sweep, so sweep_state and rehydrate both see the settled paths.
+    try:
+        mig = cleanup.migrate_workspaces(state_root, workspace_base, skill_name)
+        if mig["moved"] or mig["errors"]:
+            sys.stdout.write(json.dumps({"type": "migrate", "skill": skill_name, **mig}) + "\n")
+            sys.stdout.flush()
+    except Exception:
+        pass
 
     # Reconcile state before we rehydrate: prune registry rows whose dirs are
     # already gone, and — only when WEBCOMPANION_RETENTION_DAYS is set to a
@@ -920,19 +937,9 @@ def run(skill_name: str, port_range: range, handlers: HandlersProtocol,
                 self._send_text(400, "cwd must be an absolute existing directory")
                 return
             def _mkdirs(sid):
-                base = cwd / ".claude" / skill_name / sid
-                response_dir = base / "response"
-                annotations_dir = base / "annotations"
-                state_dir = base / "state"
-                events_dir = state_dir / "events"
-                consumed_dir = state_dir / "consumed"
-                for d in (response_dir, annotations_dir, state_dir, events_dir, consumed_dir):
-                    d.mkdir(parents=True, exist_ok=True)
-                return {
-                    "response_dir": response_dir, "annotations_dir": annotations_dir,
-                    "state_dir": state_dir, "events_dir": events_dir,
-                    "consumed_dir": consumed_dir,
-                }
+                # Central home, not `cwd`: see paths.workspace_root. `cwd`
+                # still reaches the session as `_cwd`, the project root.
+                return paths.make_session_dirs(workspace_base, sid)
 
             extra_holder = {}
 

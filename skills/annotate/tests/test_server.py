@@ -39,12 +39,16 @@ def _start_server(fake_home: Path) -> tuple[subprocess.Popen, dict]:
         [sys.executable, "-m", "skills.annotate.server"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
     )
-    line = proc.stdout.readline().decode("utf-8")
-    if not line:
-        proc.wait(timeout=2)
-        raise RuntimeError(f"server died before printing info: {proc.stderr.read().decode('utf-8')}")
-    info = json.loads(line)
-    return proc, info
+    # Startup emits a cleanup/migrate summary line before the info line when
+    # it had anything to reconcile, so read until the one we came for.
+    while True:
+        line = proc.stdout.readline().decode("utf-8")
+        if not line:
+            proc.wait(timeout=2)
+            raise RuntimeError(f"server died before printing info: {proc.stderr.read().decode('utf-8')}")
+        info = json.loads(line)
+        if info.get("type") == "server-started":
+            return proc, info
 
 
 def _create_session(port: int, cwd: Path) -> dict:
@@ -101,9 +105,21 @@ class ServerStartupTests(unittest.TestCase):
         for key in ("response_dir", "annotations_dir", "state_dir", "events_dir", "consumed_dir"):
             self.assertIn(key, self.sess, f"{key} missing from session response")
             self.assertTrue(Path(self.sess[key]).is_dir(), f"{key} should be a directory")
-        # Per-cwd location.
-        expected_base = self.project / ".claude" / "annotate" / self.sess["sid"]
+        # Central location, NOT inside the project: a workspace must outlive
+        # the directory it was created from (a throwaway git worktree, say).
+        expected_base = (self.fake_home / ".claude" / "annotate" / "workspaces"
+                         / self.sess["sid"])
         self.assertEqual(Path(self.sess["response_dir"]).parent, expected_base)
+        self.assertFalse((self.project / ".claude").exists(),
+                         "nothing may be written inside the project directory")
+
+    def test_workspace_records_its_project(self):
+        # The tree no longer sits under its project, so it has to name it.
+        base = Path(self.sess["response_dir"]).parent
+        marker = json.loads((base / "workspace.json").read_text())
+        self.assertEqual(marker["cwd"], str(self.project))
+        self.assertEqual(marker["sid"], self.sess["sid"])
+        self.assertEqual(marker["skill"], "annotate")
 
     def test_session_includes_localhost_url(self):
         self.assertIn("localhost_url", self.sess)

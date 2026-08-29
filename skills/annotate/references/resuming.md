@@ -162,3 +162,28 @@ message and stop — same "re-run `ensure_server.sh` and retry" pattern as
 `references/handling-events.md` § Edge cases for a transient failure. Never
 let a resume attempt fall through into creating (or attaching to) the wrong
 workspace silently.
+
+## Where a workspace lives
+
+`~/.claude/annotate/workspaces/<sid>/`, alongside the registry that indexes it
+— **never** inside the directory it was created from. That is the point: a
+workspace created from a throwaway git worktree used to be written into that
+worktree, so removing the worktree destroyed the annotations, and the next
+server start pruned the registry row too — a resume then answered 404 with
+nothing left to say a workspace had ever existed.
+
+Consequences worth knowing when resuming:
+
+- The workspace's path no longer names its project, so `workspace.json` at the
+  top of the tree records it: `{"sid", "skill", "cwd"}`. That `cwd` is the repo
+  root code anchors resolve against, and `check_anchors` reads it.
+- `_cwd` in the registry still means the project root, unchanged by the move.
+  A workspace resumed from a different directory still belongs to the repo it
+  was created in.
+- Workspaces written under the old per-project layout are moved into this home
+  automatically on the next server start, keeping their `sid` and `slug` — a
+  resume by slug works across the move with nothing to do by hand.
+- `WEBCOMPANION_WORKSPACE_ROOT=/abs/path` relocates the base (the skill name is
+  appended, so all four skills can share one volume). A relative value is
+  ignored in favour of the default rather than resolved against the server's
+  cwd.
