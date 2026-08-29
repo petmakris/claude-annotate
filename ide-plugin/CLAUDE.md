@@ -87,3 +87,28 @@ Chromium gotcha that has bitten this file: its UA stylesheet declares
 `pre{font-family:monospace}` **directly on the element**, and a direct
 declaration beats an inherited one — so a `font-family` set on `body` is
 silently ignored inside `<pre>` and must be restated on `pre code`.
+
+## Swing gotcha: sizing a font in a panel
+
+`JBUI.scaleFontSize(...)` returns an **int**. So this:
+
+    label.setFont(JBFont.label().deriveFont(JBUI.scaleFontSize(15f)));
+
+binds to `Font.deriveFont(int STYLE)`, not `deriveFont(float SIZE)`. Two silent
+consequences, neither of which any test or compiler sees:
+
+- the size is discarded — the text never grows, only the padding around it does;
+- the number is read as a style bitmask, so `15` is `BOLD|ITALIC` and the text
+  renders in italics nobody asked for.
+
+Always size through **`JBUI.Fonts.label(float)`**, which has no int overload:
+
+    label.setFont(JBUI.Fonts.label(15f));          // plain
+    label.setFont(JBUI.Fonts.label(22f).asBold()); // bold
+
+`ShortcutCatalogTest.thePanelNeverSizesAFontThroughDeriveFont` fails the build if
+`deriveFont(` reappears in `ShortcutsPanel`.
+
+The same lesson as the Chromium `<pre>` note above: the defect is invisible in
+source and obvious in a screenshot. For a Swing panel there is no browser to
+measure in — deploy with `./reload`, restart, and look at it.

@@ -1,11 +1,9 @@
 package com.petros.ireview;
 
-import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import org.jetbrains.annotations.NotNull;
@@ -21,19 +19,6 @@ public final class WalkthroughActions {
     public static final String PREV_ID = "com.petros.ireview.WalkthroughPrev";
     public static final String ASK_ID = "com.petros.ireview.WalkthroughAsk";
     public static final String TOGGLE_ID = "com.petros.ireview.WalkthroughToggleMode";
-
-    /** Key legend for the HUD, read from the live keymap so it can never drift. */
-    public static String hintText() {
-        return shortcut(PREV_ID) + " back · " + shortcut(NEXT_ID) + " next · "
-             + shortcut(ASK_ID) + " ask · " + shortcut(TOGGLE_ID) + " card";
-    }
-
-    private static String shortcut(String actionId) {
-        AnAction action = ActionManager.getInstance().getAction(actionId);
-        if (action == null) return "";
-        var shortcuts = action.getShortcutSet().getShortcuts();
-        return shortcuts.length == 0 ? "" : KeymapUtil.getShortcutText(shortcuts[0]);
-    }
 
     private abstract static class Base extends AnAction {
         @Override public void update(@NotNull AnActionEvent e) {

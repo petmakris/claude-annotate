@@ -107,6 +107,10 @@ dependencies {
         // (GHPRProjectViewModel.openPullRequestDiff) so we can drive the
         // GitHub diff view (with inline PR comments) instead of an isolated one.
         bundledPlugin("org.jetbrains.plugins.github")
+        // git4idea, for the Smart Diff actions: file history, blob contents
+        // and the branch list. Declared directly rather than leaning on the
+        // GitHub plugin dragging it in.
+        bundledPlugin("Git4Idea")
         // com.intellij.ui.jcef (the browser behind SynthesisBrowser) used to sit
         // in the platform's own lib/. From build 262 it ships as the bundled
         // "Web Browser (JCEF)" plugin, so without this declaration compiling

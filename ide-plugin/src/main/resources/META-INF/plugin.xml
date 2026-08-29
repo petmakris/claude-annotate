@@ -21,6 +21,11 @@
     <!-- Bundled GitHub plugin: lets us open the real PR diff view via
          GHPRProjectViewModel.openPullRequestDiff (with inline PR comments). -->
     <depends>org.jetbrains.plugins.github</depends>
+    <!-- git4idea. Reached us transitively through the GitHub plugin before the
+         diff actions existed; asked for by name now, because a transitive edge
+         is not a contract and losing it breaks SmartDiffService at runtime with
+         nothing failing at compile time. -->
+    <depends>Git4Idea</depends>
     <!-- JCEF (the browser behind SynthesisBrowser). Part of the platform up to
          build 261, a separate bundled plugin from 262 — so it has to be asked
          for by name or its classes are invisible to this plugin's loader.
@@ -28,6 +33,13 @@
     <depends optional="true" config-file="jcef.xml">com.intellij.modules.jcef</depends>
 
     <extensions defaultExtensionNs="com.intellij">
+        <notificationGroup id="Claude IDE Review" displayType="BALLOON"/>
+        <projectService serviceImplementation="com.petros.ireview.SmartDiffService"/>
+        <projectService serviceImplementation="com.petros.ireview.DiffSettings"/>
+        <projectConfigurable parentId="tools"
+                             id="com.petros.ireview.settings"
+                             displayName="Claude IDE Review"
+                             instance="com.petros.ireview.DiffSettings$Ui"/>
         <diff.DiffExtension implementation="com.petros.ireview.SpikeDiffExtension"/>
         <editorFactoryListener implementation="com.petros.ireview.WorkingCopyAskGutter"/>
         <editorFactoryListener implementation="com.petros.ireview.WalkthroughGutter"/>
@@ -48,33 +60,61 @@
     </extensions>
 
     <actions>
+        <action id="com.petros.ireview.SmartDiff"
+                class="com.petros.ireview.SmartDiffActions$Forward"
+                text="Smart Diff: This File"
+                description="Show this file's uncommitted change, or the last commit if it has none; press again to walk further back.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt D"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt D"/>
+        </action>
+        <action id="com.petros.ireview.SmartDiffBack"
+                class="com.petros.ireview.SmartDiffActions$Back"
+                text="Smart Diff: Step Back"
+                description="Step one level back toward the working copy.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt COMMA"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt COMMA"/>
+        </action>
+        <action id="com.petros.ireview.DiffAgainstBase"
+                class="com.petros.ireview.SmartDiffActions$AgainstBase"
+                text="Diff Against Base Branch"
+                description="Compare this file with the base branch, with no branch picker.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt B"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt B"/>
+        </action>
+        <action id="com.petros.ireview.ShortcutsPanel"
+                class="com.petros.ireview.ShortcutsPanel$Show"
+                text="Keyboard Shortcuts"
+                description="Show every key this plugin adds, and the stock git keys beside them.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="meta K"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="meta K"/>
+        </action>
         <action id="com.petros.ireview.WalkthroughNext"
                 class="com.petros.ireview.WalkthroughActions$Next"
                 text="Walkthrough: Next Step"
                 description="Move to the next step of the active walkthrough.">
-            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="control alt shift RIGHT"/>
-            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="control alt shift RIGHT"/>
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt CLOSE_BRACKET"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt CLOSE_BRACKET"/>
         </action>
         <action id="com.petros.ireview.WalkthroughPrev"
                 class="com.petros.ireview.WalkthroughActions$Prev"
                 text="Walkthrough: Previous Step"
                 description="Move to the previous step of the active walkthrough.">
-            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="control alt shift LEFT"/>
-            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="control alt shift LEFT"/>
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt OPEN_BRACKET"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt OPEN_BRACKET"/>
         </action>
         <action id="com.petros.ireview.WalkthroughAsk"
                 class="com.petros.ireview.WalkthroughActions$Ask"
                 text="Walkthrough: Ask About This Step"
                 description="Ask Claude a question about the active walkthrough step.">
-            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="control alt shift A"/>
-            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="control alt shift A"/>
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt A"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt A"/>
         </action>
         <action id="com.petros.ireview.WalkthroughToggleMode"
                 class="com.petros.ireview.WalkthroughActions$ToggleMode"
                 text="Walkthrough: Show/Hide Inline Card"
                 description="Show or hide the walkthrough's inline step card in the editor.">
-            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="control alt shift W"/>
-            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="control alt shift W"/>
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt W"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt W"/>
         </action>
     </actions>
 </idea-plugin>

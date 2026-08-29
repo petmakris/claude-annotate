@@ -1,13 +1,9 @@
 package com.petros.ireview;
 
-import com.intellij.openapi.actionSystem.ActionManager;
-import com.intellij.openapi.actionSystem.AnAction;
-import com.intellij.openapi.actionSystem.Shortcut;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.event.VisibleAreaListener;
-import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBLabel;
@@ -363,17 +359,13 @@ public final class WalkthroughHud {
     }
 
     /**
-     * Reads the live keymap the same way {@link WalkthroughActions#hintText()}
-     * does, from {@code actionId}, so the button tooltip can never drift from
-     * the actual bound shortcut. Duplicated in miniature here rather than
-     * calling into {@code WalkthroughActions} because its lookup is private
-     * and combines all four actions into one string — this needs just one.
+     * The bound shortcut as a tooltip suffix, e.g. {@code "  (\u2325])"}, or nothing
+     * when the action is unbound. The lookup itself lives in {@link Shortcuts}
+     * so the tooltip can never name a different key from the ⌘K panel.
      */
     private static String shortcutSuffix(String actionId) {
-        AnAction action = ActionManager.getInstance().getAction(actionId);
-        if (action == null) return "";
-        Shortcut[] shortcuts = action.getShortcutSet().getShortcuts();
-        return shortcuts.length == 0 ? "" : "  (" + KeymapUtil.getShortcutText(shortcuts[0]) + ")";
+        String text = Shortcuts.text(actionId);
+        return text.isEmpty() ? "" : "  (" + text + ")";
     }
 
     /**
