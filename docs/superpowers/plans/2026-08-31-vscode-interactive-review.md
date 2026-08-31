@@ -706,11 +706,10 @@ You wake here when a task-notification's first stdout line is one of the
    `---payload---` and `---end---`: `{"anchor": "<path>:<side>:<line>",
    "text": "<question>", "images": [...]}`.
 2. **Find the session's state_dir.** You have it already if you created this
-   session's watcher this turn (`WC_STATE_DIR` from Task 5's output). If
-   you're resuming a session from an earlier turn, re-derive it: `webcompanion
-   push` isn't re-runnable for this, so instead read `~/.claude/webcompanion/`
-   is not a documented lookup path for this — keep the `WC_STATE_DIR` value
-   from when you armed the watcher; it does not change for the life of the
+   session's watcher this turn (`WC_STATE_DIR` from Task 5's output). There is
+   no documented way to re-derive it later — `webcompanion` has no "look up a
+   session's state_dir by sid" command — so keep the `WC_STATE_DIR` value from
+   when you armed the watcher; it does not change for the life of the
    session.
 3. **Read `<state_dir>/diff.patch`** and the item at anchor `__meta__`
    (`webcompanion` has no "get one item" CLI, so read it via
