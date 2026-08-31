@@ -12,6 +12,7 @@ failures=0
 ok()   { printf 'ok    %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; failures=$((failures + 1)); }
 fix()  { printf '        %s\n' "$1"; }
+info() { printf 'info  %s\n' "$1"; }
 
 printf 'claude-annotate doctor\n'
 printf 'claude-annotate is the marketplace that ships this plugin and claude-ide-review.\n\n'
@@ -118,6 +119,42 @@ for skill in annotate walkthrough interactive-review deck; do
     ok "$skill — server not running (it starts on next use)"
   fi
 done
+
+# --- webcompanion -----------------------------------------------------------
+# Optional: only show-diff's per-line VS Code comments need it, and show-diff
+# degrades to a read-only diff without it. Unlike every other check above,
+# this is NOT shipped by this plugin -- it is a separate package
+# (github.com/petmakris/webcompanion), installed via pipx, and nothing in
+# `/plugin install` or `/plugin update` touches it. So "not installed" is
+# reported as info, not a failure: it usually just means the feature was
+# never opted into. "installed but broken" (wrong contract, service down) IS
+# a failure -- something the user set up is not working.
+#
+# WC_REQUIRED_CONTRACT mirrors vscode-plugin/src/webcompanionClient.js:9 and
+# skills/show_diff/show-diff.sh's own copy of the same constant. All three
+# must move together when the contract version changes.
+WC_REQUIRED_CONTRACT=1
+if command -v webcompanion >/dev/null 2>&1; then
+  where="$(command -v webcompanion)"
+  version_out="$(webcompanion --version 2>&1 | tr -d '\n')"
+  contract="$(printf '%s' "$version_out" | sed -n 's/.*(contract \([0-9][0-9]*\)).*/\1/p')"
+  if [ -z "$contract" ]; then
+    fail "webcompanion — installed but --version did not report a contract number: $version_out ($where)"
+    fix "This is likely older than this plugin expects."
+    fix "Upgrade it: pipx upgrade webcompanion"
+  elif [ "$contract" != "$WC_REQUIRED_CONTRACT" ]; then
+    fail "webcompanion — contract $contract does not match the $WC_REQUIRED_CONTRACT this plugin expects ($where)"
+    fix "Upgrade it: pipx upgrade webcompanion"
+  elif webcompanion status >/dev/null 2>&1; then
+    ok "webcompanion — $version_out, service running ($where)"
+  else
+    fail "webcompanion — installed but the service is not running ($where)"
+    fix "Start it: webcompanion install-service"
+  fi
+else
+  info "webcompanion — not installed (optional; only needed for show-diff's per-line comments)"
+  fix "Install it: pipx install webcompanion && webcompanion install-service"
+fi
 
 # --- hook wiring -----------------------------------------------------------
 # The PostToolUse hook ships inside the plugin: hooks/hooks.json declares it,

@@ -51,10 +51,14 @@ STUB
 # fresh clone or CI box has neither. `push --eval` mints a session id and a real state
 # dir (under $WC_TEST_STATE_DIR) and prints plain KEY=value lines, the same shape the
 # real CLI's --eval produces, which is what makes `eval "$WC_OUT"` in show-diff.sh work
-# against it unchanged.
+# against it unchanged. `--version` answers contract 1 by default; set
+# WC_TEST_CONTRACT to simulate a stale install that reports a different contract.
 cat > "$BIN/webcompanion" <<'STUB'
 #!/usr/bin/env bash
 case "${1:-}" in
+  --version)
+    echo "webcompanion 1.0.0 (contract ${WC_TEST_CONTRACT:-1})"
+    ;;
   push)
     sid="stub-$$-$RANDOM"
     state_dir="$WC_TEST_STATE_DIR/$sid"
@@ -171,6 +175,16 @@ if [ -n "$wc_state_dir" ] && [ -s "$wc_state_dir/diff.patch" ]; then
 else
   FAIL=$((FAIL+1)); echo "FAIL: diff.patch was not written into WC_STATE_DIR"
 fi
+
+# --- 11. a stale webcompanion (wrong contract) degrades to read-only, clearly -----------
+stale_out="$(WC_TEST_CONTRACT=99 "$SCRIPT" "$CLONE" master under-review 2>&1)"
+assert_contains "$stale_out" "out of date" "a contract mismatch is reported as out of date, not unreachable"
+assert_contains "$stale_out" "pipx upgrade webcompanion" "the fix is named"
+case "$stale_out" in
+  *"WC_SID="*) FAIL=$((FAIL+1)); echo "FAIL: pushed a session despite the contract mismatch";;
+  *) PASS=$((PASS+1));;
+esac
+assert_contains "$stale_out" "opened in VS Code" "the diff still opens even though webcompanion is stale"
 
 echo
 echo "passed $PASS, failed $FAIL"

@@ -1,6 +1,6 @@
 ---
 name: annotate-doctor
-description: Check that this machine can run claude-annotate and claude-ide-review — python3 and its version, curl, state directory permissions, and server health. Invoked only when the user types `/annotate-doctor`, or when a skill's preflight has just failed and the user asks why. Never self-triggers. Reports problems and prints the command the user should run; never installs anything.
+description: Check that this machine can run claude-annotate and claude-ide-review — python3 and its version, curl, state directory permissions, server health, and the separately-installed webcompanion daemon show-diff depends on. Invoked only when the user types `/annotate-doctor`, or when a skill's preflight has just failed and the user asks why. Never self-triggers. Reports problems and prints the command the user should run; for webcompanion specifically, offers to run that command itself once the user confirms — every other remedy stays report-only.
 allowed-tools:
   - Bash
   - Read
@@ -63,9 +63,38 @@ Show the user the output verbatim — it is already written for a human, and
 paraphrasing loses the exact commands. Then add one sentence naming the single
 most important thing to fix, if anything failed.
 
-Do **not** run any remedy yourself. The commands it prints install software or
+Do **not** run any remedy yourself, with exactly one exception: the
+`webcompanion` line, covered next. For every other FAIL — python3, bash,
+curl, state directories, hooks — the commands it prints install software or
 change permissions on the user's machine; those are theirs to run. Offer to
 explain a line if they want, and stop there.
+
+## Offering to fix webcompanion
+
+`webcompanion` is the one line in this report naming something this plugin
+does not ship — it lives in its own repository and is installed separately,
+so it is also the one thing plausible for Claude to fix directly: the fix is
+always a single `pipx` or `webcompanion` command, never a system package
+manager or a permissions change. If the report's `webcompanion` line is
+`info` (not installed) or `FAIL` (stale contract, or installed but the
+service is not running):
+
+1. **Ask, in one sentence**, whether to install/fix it now, naming which of
+   the two it is. Do not run anything before the user answers.
+2. **If they decline or don't answer yet**, stop — same as any other line in
+   this report.
+3. **If they agree**, run exactly the command doctor.sh printed under that
+   line's `fix` text (`pipx install webcompanion && webcompanion
+   install-service`, `pipx upgrade webcompanion`, or `webcompanion
+   install-service` on its own) via Bash. If `pipx` itself is missing, say so
+   and stop — installing `pipx` is a system package-manager action and stays
+   out of scope here, same as the python3/bash/curl remedies above.
+4. **Re-run the diagnostic** (the `Run it` block above) and report the new
+   `webcompanion` line, not just "done" — the user should see the same kind
+   of evidence the rest of this report gives them.
+
+This is additive only: a machine that never uses `show-diff`'s comment
+feature can ignore an `info` line about `webcompanion` same as before.
 
 If every check passes but the user still sees a problem, the useful next
 questions are which skill they invoked, and what the terminal showed.

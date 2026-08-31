@@ -348,15 +348,29 @@ echo "  files     $FILES"
 # unreachable webcompanion is not a reason to fail a diff that already
 # opened -- it degrades to the old read-only behavior, silently.
 # ---------------------------------------------------------------------------
+# Contract 1, matching vscode-plugin/src/webcompanionClient.js:9 and the daemon's own
+# `X-WebCompanion-Contract` header. Checked here too because this path talks to
+# `webcompanion` over its CLI, not HTTP, so there is no 426 to catch a stale binary --
+# an old `webcompanion` that is merely missing a flag like `--eval` would otherwise fail
+# inside the `push` call below and get misreported as "unreachable" rather than "too old".
+WC_REQUIRED_CONTRACT=1
+
 if command -v webcompanion >/dev/null 2>&1; then
-  ITEMS_JSON="$(mktemp)"
-  trap 'rm -f "$ITEMS_JSON"' EXIT
-  if $WORKTREE; then
-    META_HEAD="worktree"
+  WC_VERSION_OUT="$(webcompanion --version 2>&1)"
+  WC_CONTRACT="$(printf '%s' "$WC_VERSION_OUT" | sed -n 's/.*(contract \([0-9][0-9]*\)).*/\1/p')"
+  if [[ -z "$WC_CONTRACT" || "$WC_CONTRACT" != "$WC_REQUIRED_CONTRACT" ]]; then
+    echo "  (webcompanion is out of date for this plugin -- diff opened read-only)" >&2
+    echo "  installed: ${WC_VERSION_OUT:-unparseable --version output}, need contract $WC_REQUIRED_CONTRACT" >&2
+    echo "  run: pipx upgrade webcompanion" >&2
   else
-    META_HEAD="$HEAD_SHA"
-  fi
-  REPO="$REPO" BASE_SHA="$BASE_SHA" META_HEAD="$META_HEAD" python3 -c '
+    ITEMS_JSON="$(mktemp)"
+    trap 'rm -f "$ITEMS_JSON"' EXIT
+    if $WORKTREE; then
+      META_HEAD="worktree"
+    else
+      META_HEAD="$HEAD_SHA"
+    fi
+    REPO="$REPO" BASE_SHA="$BASE_SHA" META_HEAD="$META_HEAD" python3 -c '
 import json, os
 print(json.dumps({"items": {"__meta__": {
     "checkout": os.environ["REPO"],
@@ -365,28 +379,28 @@ print(json.dumps({"items": {"__meta__": {
 }}}))
 ' > "$ITEMS_JSON"
 
-  WC_OUT="$(webcompanion push --kind show-diff --cwd "$REPO" \
-    --title "$TITLE" --items "$ITEMS_JSON" --eval 2>&1)" && {
-    eval "$WC_OUT"
-    if [[ -n "${WC_STATE_DIR:-}" ]]; then
-      if $WORKTREE; then
-        git -C "$REPO" diff --no-color "$BASE_SHA" > "$WC_STATE_DIR/diff.patch" 2>/dev/null || true
-      else
-        git -C "$REPO" diff --no-color "$BASE_SHA..$HEAD_SHA" > "$WC_STATE_DIR/diff.patch" 2>/dev/null || true
+    WC_OUT="$(webcompanion push --kind show-diff --cwd "$REPO" \
+      --title "$TITLE" --items "$ITEMS_JSON" --eval 2>&1)" && {
+      eval "$WC_OUT"
+      if [[ -n "${WC_STATE_DIR:-}" ]]; then
+        if $WORKTREE; then
+          git -C "$REPO" diff --no-color "$BASE_SHA" > "$WC_STATE_DIR/diff.patch" 2>/dev/null || true
+        else
+          git -C "$REPO" diff --no-color "$BASE_SHA..$HEAD_SHA" > "$WC_STATE_DIR/diff.patch" 2>/dev/null || true
+        fi
       fi
-    fi
-    echo "$WC_OUT"
-    echo "  comments: open in VS Code, click a line, ask a question"
+      echo "$WC_OUT"
+      echo "  comments: open in VS Code, click a line, ask a question"
 
-    # The window is already open on this exact repo/base/head; firing the diff URI a
-    # second time is idempotent (openDiff() just recomputes the same file list) and is
-    # the only channel the running extension has for learning the session id, since it
-    # never sees this script's stdout. Only fired once WC_SID actually came back --
-    # webcompanion being unreachable above already logged its own message and there is
-    # no sid to add.
-    if [[ -n "${WC_SID:-}" ]]; then
-      SID_URI=$(REPO="$REPO" BASE_SHA="$BASE_SHA" HEAD_SHA="$HEAD_SHA" TITLE="$TITLE" \
-        EXTENSION_ID="$EXTENSION_ID" WC_SID="$WC_SID" python3 -c '
+      # The window is already open on this exact repo/base/head; firing the diff URI a
+      # second time is idempotent (openDiff() just recomputes the same file list) and is
+      # the only channel the running extension has for learning the session id, since it
+      # never sees this script's stdout. Only fired once WC_SID actually came back --
+      # webcompanion being unreachable above already logged its own message and there is
+      # no sid to add.
+      if [[ -n "${WC_SID:-}" ]]; then
+        SID_URI=$(REPO="$REPO" BASE_SHA="$BASE_SHA" HEAD_SHA="$HEAD_SHA" TITLE="$TITLE" \
+          EXTENSION_ID="$EXTENSION_ID" WC_SID="$WC_SID" python3 -c '
 import os, urllib.parse
 q = urllib.parse.urlencode({
     "repo":  os.environ["REPO"],
@@ -396,7 +410,8 @@ q = urllib.parse.urlencode({
     "sid":   os.environ["WC_SID"],
 })
 print("vscode://" + os.environ["EXTENSION_ID"] + "/diff?" + q)')
-      open "$SID_URI"
-    fi
-  } || echo "  (webcompanion unreachable -- diff opened read-only: $WC_OUT)" >&2
+        open "$SID_URI"
+      fi
+    } || echo "  (webcompanion unreachable -- diff opened read-only: $WC_OUT)" >&2
+  fi
 fi

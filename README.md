@@ -32,8 +32,12 @@ That registers the marketplace, which publishes two plugins. Install either or b
 grab the `.zip` from [Releases](https://github.com/petmakris/claude-annotate/releases)
 and install it via **Settings → Plugins → ⚙ → Install Plugin from Disk…**
 
-Both plugins drive the same local server engine, which lives once in this repository at
-`skills/_shared/web_companion/`.
+`annotate`, `deck`, `dataflow`, `walkthrough` and `interactive_review` drive the same
+local server engine, which lives once in this repository at `skills/_shared/web_companion/`.
+`show_diff`'s per-line diff comments instead depend on
+[webcompanion](https://github.com/petmakris/webcompanion), a standalone daemon
+installed separately (see [Related](#related)) — `show_diff` still opens diffs without it,
+only the comment feature is unavailable.
 
 ## Use
 
@@ -157,11 +161,21 @@ not over a LAN hostname.
 
 ## Related
 
-Both plugins drive the same local server engine. The engine lives here in
-`skills/_shared/web_companion/` and is edited in place. The separate repositories
-[web-companion](https://github.com/petmakris/web-companion) and
+Five of the six skills (`annotate`, `deck`, `dataflow`, `walkthrough`,
+`interactive_review`) drive the same local server engine, which lives here in
+`skills/_shared/web_companion/` and is edited in place.
+
+`show_diff` is the exception: its per-line VS Code comments depend on
+[webcompanion](https://github.com/petmakris/webcompanion), a standalone daemon
+published from its own repository and installed separately
+(`pipx install webcompanion`). Run `/annotate-doctor` to check whether it's installed
+and running, or to have it install and start it for you.
+
+The older, similarly-named repositories
+[web-companion](https://github.com/petmakris/web-companion) (hyphenated) and
 [claude-ide-review](https://github.com/petmakris/claude-ide-review) are superseded
-by this repository; they are kept for their history only.
+by this repository and kept for their history only — they predate `webcompanion`
+above and are unrelated to it.
 
 ## License
 

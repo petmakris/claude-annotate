@@ -29,6 +29,25 @@ class DoctorTests(unittest.TestCase):
             env={"HOME": str(self.home), "PATH": str(bin_dir)},
         )
 
+    def _webcompanion_stub(self, bin_dir: Path, *, contract="1",
+                            status_ok=True, reports_contract=True) -> None:
+        """A fake `webcompanion` CLI answering only what doctor.sh calls."""
+        version_line = (
+            f"webcompanion 1.0.0 (contract {contract})"
+            if reports_contract else "webcompanion 1.0.0"
+        )
+        status_exit = 0 if status_ok else 1
+        target = bin_dir / "webcompanion"
+        target.write_text(
+            "#!/bin/sh\n"
+            "case \"$1\" in\n"
+            f"  --version) echo '{version_line}'; exit 0 ;;\n"
+            f"  status) exit {status_exit} ;;\n"
+            "  *) exit 0 ;;\n"
+            "esac\n"
+        )
+        target.chmod(0o755)
+
     def test_is_executable_and_posix_sh(self):
         self.assertTrue(DOCTOR.exists())
         self.assertTrue(DOCTOR.stat().st_mode & 0o111, "doctor.sh must be executable")
@@ -153,6 +172,52 @@ class DoctorTests(unittest.TestCase):
             any(l.startswith("ok") for l in python_lines),
             f"python3 should pass on this host: {python_lines}",
         )
+
+    def test_webcompanion_not_installed_is_informational_not_a_failure(self):
+        # It is optional and shipped from a separate repository -- absence must
+        # not fail an otherwise-healthy machine that never opted into show-diff.
+        bin_dir = sanitized_path_dir(self.tmp, with_python=True)
+        result = self._run(bin_dir)
+        wc_lines = [l for l in result.stdout.splitlines() if "webcompanion" in l]
+        self.assertTrue(wc_lines, "doctor must mention webcompanion")
+        self.assertTrue(wc_lines[0].startswith("info"), wc_lines)
+        self.assertEqual(result.returncode, 0,
+                         "an uninstalled optional dependency must not fail the doctor")
+
+    def test_webcompanion_installed_matching_contract_and_running_is_ok(self):
+        bin_dir = sanitized_path_dir(self.tmp, with_python=True)
+        self._webcompanion_stub(bin_dir, contract="1", status_ok=True)
+        result = self._run(bin_dir)
+        wc_lines = [l for l in result.stdout.splitlines() if "webcompanion" in l]
+        self.assertTrue(any(l.startswith("ok") for l in wc_lines), wc_lines)
+        self.assertIn("service running", result.stdout)
+        self.assertEqual(result.returncode, 0)
+
+    def test_webcompanion_contract_mismatch_fails_with_upgrade_command(self):
+        bin_dir = sanitized_path_dir(self.tmp, with_python=True)
+        self._webcompanion_stub(bin_dir, contract="99", status_ok=True)
+        result = self._run(bin_dir)
+        self.assertNotEqual(result.returncode, 0)
+        wc_fail = [l for l in result.stdout.splitlines()
+                   if l.startswith("FAIL") and "webcompanion" in l]
+        self.assertTrue(wc_fail, result.stdout)
+        self.assertIn("contract 99", wc_fail[0])
+        self.assertIn("pipx upgrade webcompanion", result.stdout)
+
+    def test_webcompanion_installed_but_service_not_running_fails(self):
+        bin_dir = sanitized_path_dir(self.tmp, with_python=True)
+        self._webcompanion_stub(bin_dir, contract="1", status_ok=False)
+        result = self._run(bin_dir)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("service is not running", result.stdout)
+        self.assertIn("webcompanion install-service", result.stdout)
+
+    def test_webcompanion_unparseable_version_fails(self):
+        bin_dir = sanitized_path_dir(self.tmp, with_python=True)
+        self._webcompanion_stub(bin_dir, reports_contract=False)
+        result = self._run(bin_dir)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("did not report a contract number", result.stdout)
 
     def test_never_writes_outside_state_dir(self):
         bin_dir = sanitized_path_dir(self.tmp, with_python=True)
