@@ -78,5 +78,11 @@
         }
       ]
     }
+  },
+  "scripts": {
+    "test": "mocha test/**/*.test.js"
+  },
+  "devDependencies": {
+    "mocha": "^11.8.0"
   }
 }

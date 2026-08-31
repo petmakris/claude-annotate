@@ -5,4 +5,5 @@ install.sh
 uninstall.sh
 README.md
 node_modules/**
+test/**
 **/.DS_Store
