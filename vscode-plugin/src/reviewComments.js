@@ -14,9 +14,14 @@ function anchorFor(files, { gitPath, ref }, line, { worktree = false } = {}) {
   const file = files.find((f) => f.name === gitPath);
   if (!file) return null;
   let side;
-  if (worktree && !ref) side = 'R';
-  else if (ref === file.originalRef) side = 'L';
+  // originalRef/modifiedRef comparisons run first: an added file has
+  // originalRef === '' (no base blob), so checking `worktree && !ref` first
+  // would mis-side that empty left pane as R. Only a ref that matches
+  // neither known side falls to the worktree fallback, which is the live
+  // modified side addressed with no ref at all.
+  if (ref === file.originalRef) side = 'L';
   else if (ref === file.modifiedRef) side = 'R';
+  else if (worktree && !ref) side = 'R';
   else return null;
   return `${gitPath}:${side}:${line + 1}`; // anchors are 1-based, VS Code ranges are 0-based
 }
@@ -68,7 +73,18 @@ function setCurrentDiff(info) {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = null;
   if (!info.sid) return;
-  pollTimer = setInterval(() => pollOnce().catch(() => {}), POLL_MS);
+  pollTimer = setInterval(() => pollOnce().catch((err) => {
+    // A contract mismatch will never self-resolve by retrying -- the spec
+    // requires it surface as a visible warning naming which side is old,
+    // never a silent dead poll -- so stop here instead of hammering the
+    // daemon every POLL_MS with a request that will keep failing the same
+    // way. Any other error (a transient network hiccup, a 404 once the
+    // session has already ended) is worth retrying and stays swallowed.
+    if (String(err && err.message).includes('contract')) {
+      vscode.window.showWarningMessage(err.message);
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+  }), POLL_MS);
 }
 
 // Polls the daemon for every anchor whose thread has moved since we last
@@ -80,6 +96,10 @@ async function pollOnce() {
   const cfg = await loadConfig();
   const client = new WebCompanionClient(`http://${cfg.bind}:${cfg.port}`);
   const status = await client.getPoll(current.sid);
+  if (status.finished || status.cancelled) {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    return;
+  }
   for (const [anchor, version] of Object.entries(status.threads || {})) {
     const known = openThreads.get(anchor);
     if (known && known.version === version) continue;
@@ -92,16 +112,27 @@ async function pollOnce() {
 // numbers); VS Code ranges are 0-based, hence the -1 here mirroring the +1
 // in anchorFor above.
 function renderThread(anchor, thread, version) {
-  const [gitPath, side, lineStr] = anchor.split(':');
+  // Parsed from the right: the format is always <path>:<side>:<line>, and a
+  // git path may itself legally contain a colon on Unix, which would shift
+  // a plain split(':') on every field after it.
+  const lastColon = anchor.lastIndexOf(':');
+  const sideColon = anchor.lastIndexOf(':', lastColon - 1);
+  const gitPath = anchor.slice(0, sideColon);
+  const side = anchor.slice(sideColon + 1, lastColon);
+  const lineStr = anchor.slice(lastColon + 1);
   const line = parseInt(lineStr, 10) - 1;
   const file = current.files.find((f) => f.name === gitPath);
   if (!file) return;
+  // path matches diff.js's blobUri() convention exactly -- an absolute
+  // path, not a repo-relative one -- so a thread this poll loop constructs
+  // attaches to the same pmdiff:// URI identity an already-open editor
+  // holds, rather than a different one VS Code treats as unrelated.
   const uri = side === 'L'
-    ? vscode.Uri.from({ scheme: 'pmdiff', path: gitPath,
+    ? vscode.Uri.from({ scheme: 'pmdiff', path: path.join(current.repo, gitPath),
         query: Buffer.from(JSON.stringify({ repo: current.repo, ref: file.originalRef, gitPath })).toString('base64') })
     : (current.worktree
         ? vscode.Uri.file(path.join(current.repo, gitPath))
-        : vscode.Uri.from({ scheme: 'pmdiff', path: gitPath,
+        : vscode.Uri.from({ scheme: 'pmdiff', path: path.join(current.repo, gitPath),
             query: Buffer.from(JSON.stringify({ repo: current.repo, ref: file.modifiedRef, gitPath })).toString('base64') }));
   const range = new vscode.Range(line, 0, line, 0);
   const comments = (thread.messages || []).map((m) => ({

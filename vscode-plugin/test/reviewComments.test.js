@@ -29,4 +29,13 @@ describe('anchorFor', () => {
       anchorFor(files, { gitPath: 'src/unrelated.py', ref: 'head-sha' }, 5),
       null);
   });
+
+  it('builds an L-side anchor for an added file\'s empty left pane in live/worktree mode', () => {
+    const added = [
+      { name: 'src/new.py', originalRef: '', modifiedRef: '' },
+    ];
+    assert.strictEqual(
+      anchorFor(added, { gitPath: 'src/new.py', ref: '' }, 0, { worktree: true }),
+      'src/new.py:L:1');
+  });
 });
