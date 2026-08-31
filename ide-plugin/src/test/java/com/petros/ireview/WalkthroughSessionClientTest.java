@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
@@ -395,6 +396,33 @@ class WalkthroughSessionClientTest {
                 assertTrue(client.doc().isEmpty());
                 assertTrue(client.threadFor("step:1").isEmpty());
                 assertNotEquals(WalkthroughSessionClient.State.ENDED, client.state());
+            } finally {
+                client.stop();
+            }
+        }
+    }
+
+    @Test void reReadsBaseUrlSupplierAfterAFailedDiscoveryPoll() throws Exception {
+        try (FakeReviewServer server = new FakeReviewServer()) {
+            server.sessionsJson = sessionsRow("wt6");
+            server.stepsJson = STEPS;
+            server.watcherSeenAt = System.currentTimeMillis() / 1000;
+
+            // First call hands back a URL with nothing listening, so the very
+            // first poll fails; every later call hands back the real fake
+            // server's URL. If the supplier is only read once (the bug),
+            // discovery never recovers.
+            AtomicInteger calls = new AtomicInteger();
+            java.util.function.Supplier<String> supplier = () ->
+                calls.incrementAndGet() == 1 ? "http://127.0.0.1:1" : server.baseUrl();
+
+            WalkthroughSessionClient client = new WalkthroughSessionClient(
+                supplier, "/proj", Duration.ofMillis(50));
+            client.start();
+            try {
+                await(() -> client.currentSession().isPresent());
+                assertTrue(calls.get() > 1,
+                    "supplier should be re-invoked after the first failed poll");
             } finally {
                 client.stop();
             }

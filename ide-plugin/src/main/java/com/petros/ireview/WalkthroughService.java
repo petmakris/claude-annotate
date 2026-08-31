@@ -4,13 +4,9 @@ import com.intellij.openapi.Disposable;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.project.Project;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Project-level holder of one walkthrough client + controller.
@@ -29,10 +25,18 @@ public final class WalkthroughService implements Disposable {
     private final WalkthroughInlay inline;
 
     public WalkthroughService(Project project) {
-        String baseUrl = resolveServerUrl();
         String cwd = project.getBasePath();
+        // The URL supplier re-reads on every failed discovery poll, so a
+        // server restart (or the webcompanion daemon appearing where the
+        // legacy per-skill server used to be) is picked up without an IDE
+        // restart. Previously this resolved once here and was baked into the
+        // client at construction — a daemon restart on a new port stranded
+        // the panel until the IDE itself restarted.
         this.client = new WalkthroughSessionClient(
-            baseUrl != null ? baseUrl : "http://127.0.0.1:54660",
+            () -> ServerDiscovery.resolve(
+                Path.of(System.getProperty("user.home")),
+                legacyServerJsonPath(),
+                "http://127.0.0.1:54660"),
             cwd != null ? cwd : System.getProperty("user.home"),
             Duration.ofSeconds(5));
         this.controller = new WalkthroughController(new WalkthroughNavigator.Ide(project));
@@ -91,20 +95,12 @@ public final class WalkthroughService implements Disposable {
     }
 
     /**
-     * Read the walkthrough server URL from ~/.claude/walkthrough/server.json.
-     * The skill writes that file on server start (and rewrites it on every
-     * restart). Returns null if not present or unreadable — caller falls back
-     * to a default.
+     * The legacy walkthrough server's discovery file,
+     * ~/.claude/walkthrough/server.json — the skill writes it on server start
+     * and rewrites it on every restart. {@link ServerDiscovery} tries the
+     * webcompanion daemon's own config first and falls back to this.
      */
-    private static String resolveServerUrl() {
-        Path p = Path.of(System.getProperty("user.home"), ".claude", "walkthrough", "server.json");
-        try {
-            Matcher m = Pattern.compile("\"url\"\\s*:\\s*\"([^\"]+)\"").matcher(Files.readString(p));
-            if (m.find()) return m.group(1);
-        } catch (IOException ignored) {
-            // No file yet, or a torn read — the caller's default URL applies
-            // and the next failed discovery poll re-reads it.
-        }
-        return null;
+    private static Path legacyServerJsonPath() {
+        return Path.of(System.getProperty("user.home"), ".claude", "walkthrough", "server.json");
     }
 }

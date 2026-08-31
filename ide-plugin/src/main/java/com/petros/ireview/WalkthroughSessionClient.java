@@ -68,7 +68,10 @@ public final class WalkthroughSessionClient {
      */
     private static final int DISCOVERY_FAILURE_THRESHOLD = 2;
 
-    private final String baseUrl;
+    /** Re-resolved on discovery failure — the server may have restarted on a
+     *  new port and rewritten server.json (see {@link #refreshBaseUrl()}). */
+    private volatile String baseUrl;
+    private final java.util.function.Supplier<String> baseUrlSupplier;
     private final String projectCwd;
     private final Duration pollInterval;
 
@@ -101,7 +104,18 @@ public final class WalkthroughSessionClient {
     private volatile int discoveryFailures = 0;
 
     public WalkthroughSessionClient(String baseUrl, String projectCwd, Duration pollInterval) {
-        this.baseUrl = baseUrl;
+        this(() -> baseUrl, projectCwd, pollInterval);
+    }
+
+    /**
+     * @param baseUrlSupplier resolves the server's base URL; re-invoked after a
+     *        failed discovery poll so a server restart on a new port (which
+     *        rewrites server.json) is picked up without an IDE restart.
+     */
+    public WalkthroughSessionClient(java.util.function.Supplier<String> baseUrlSupplier,
+                                    String projectCwd, Duration pollInterval) {
+        this.baseUrlSupplier = baseUrlSupplier;
+        this.baseUrl = baseUrlSupplier.get();
         this.projectCwd = projectCwd;
         this.pollInterval = pollInterval;
     }
@@ -253,6 +267,9 @@ public final class WalkthroughSessionClient {
         try {
             found = fetchNewestSession();
         } catch (Exception e) {
+            // Server unreachable. It may have restarted on a new port —
+            // re-resolve server.json (cheap file read) before the next try.
+            refreshBaseUrl();
             discoveryFailures++;
             if (!endedLatched && discoveryFailures >= DISCOVERY_FAILURE_THRESHOLD) handleNoSession();
             return;
@@ -291,6 +308,18 @@ public final class WalkthroughSessionClient {
         if (!root.isJsonArray() || root.getAsJsonArray().isEmpty()) return null;
         JsonObject o = root.getAsJsonArray().get(0).getAsJsonObject();
         return new SessionInfo(str(o, "sid"), str(o, "title"), str(o, "state_dir"));
+    }
+
+    /** Re-resolve the server URL after a failed discovery poll: the server may
+     *  have restarted on a new port and rewritten server.json. Cheap (one file
+     *  read behind the supplier), so every failed poll re-checks. */
+    private void refreshBaseUrl() {
+        try {
+            String next = baseUrlSupplier.get();
+            if (next != null && !next.equals(baseUrl)) baseUrl = next;
+        } catch (RuntimeException ignored) {
+            // keep the current URL; the next failure retries the read
+        }
     }
 
     /**

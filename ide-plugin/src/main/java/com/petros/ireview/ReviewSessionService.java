@@ -4,14 +4,10 @@ import com.intellij.openapi.Disposable;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.project.Project;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Project-level holder of one {@link ReviewSessionClient}.
@@ -31,13 +27,15 @@ public final class ReviewSessionService implements Disposable {
 
     public ReviewSessionService(Project project) {
         String cwd = project.getBasePath();
-        // The URL supplier re-reads server.json on every failed discovery poll,
-        // so a server restart on a new port is picked up without an IDE restart.
+        // The URL supplier re-reads on every failed discovery poll, so a
+        // server restart (or the webcompanion daemon appearing where the
+        // legacy per-skill server used to be) is picked up without an IDE
+        // restart.
         this.client = new ReviewSessionClient(
-            () -> {
-                String url = resolveServerUrl();
-                return url != null ? url : "http://127.0.0.1:54620";
-            },
+            () -> ServerDiscovery.resolve(
+                Path.of(System.getProperty("user.home")),
+                legacyServerJsonPath(),
+                "http://127.0.0.1:54620"),
             cwd != null ? cwd : System.getProperty("user.home"),
             Duration.ofSeconds(5)
         );
@@ -164,19 +162,12 @@ public final class ReviewSessionService implements Disposable {
     }
 
     /**
-     * Read the interactive_review server URL from
-     * ~/.claude/interactive-review/server.json. The skill writes that file on
-     * server start (and rewrites it on every restart). Returns null if not
-     * present or unreadable — caller falls back to a default.
+     * The legacy interactive_review server's discovery file,
+     * ~/.claude/interactive-review/server.json — the skill writes it on
+     * server start and rewrites it on every restart. {@link ServerDiscovery}
+     * tries the webcompanion daemon's own config first and falls back to this.
      */
-    private static String resolveServerUrl() {
-        Path p = Path.of(System.getProperty("user.home"), ".claude", "interactive-review", "server.json");
-        try {
-            String json = Files.readString(p);
-            Matcher m = Pattern.compile("\"url\"\\s*:\\s*\"([^\"]+)\"").matcher(json);
-            if (m.find()) return m.group(1);
-        } catch (IOException ignored) {
-        }
-        return null;
+    private static Path legacyServerJsonPath() {
+        return Path.of(System.getProperty("user.home"), ".claude", "interactive-review", "server.json");
     }
 }
