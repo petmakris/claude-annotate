@@ -34,6 +34,11 @@ STUB
 cat > "$BIN/open" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$1" >> "$SHOW_DIFF_TEST_URIS"
+# Stand in for the real extension: it fires a "diff" verdict into PMDIFF_LOG the moment
+# it handles the URI. Without this, verdict() polls a log line that never arrives and
+# show-diff.sh burns all 3 retry attempts (~40s) before giving up on every single case.
+repo="$(python3 -c 'import sys, urllib.parse as u; print(u.parse_qs(u.urlparse(sys.argv[1]).query).get("repo", [""])[0])' "$1")"
+python3 -c 'import json, os, sys; print(json.dumps({"repo": sys.argv[1], "event": "diff"}))' "$repo" >> "$PMDIFF_LOG"
 STUB
 # The script polls the front window's title until it names the project. Answering with the
 # project name immediately is what keeps the test fast; answering at all is what exercises
@@ -68,7 +73,9 @@ echo three > "$CLONE/c.txt"; git -C "$CLONE" add -A; git -C "$CLONE" commit -qm 
 export SHOW_DIFF_TEST_WINDOW="clone"
 export SHOW_DIFF_TEST_URIS="$WORK/uris.txt"
 export SHOW_DIFF_HISTORY="$WORK/reviews.jsonl"
+export PMDIFF_LOG="$WORK/pmdiff.log"
 : > "$SHOW_DIFF_TEST_URIS"
+: > "$PMDIFF_LOG"
 
 have_ref() { git -C "$CLONE" rev-parse --verify --quiet "$1^{commit}" >/dev/null; }
 
@@ -128,6 +135,16 @@ assert_contains "$again" "the sixth thing" "the new commit subjects are named"
 # --- 9. reopening an unchanged branch says so -------------------------------------------
 same="$("$SCRIPT" "$CLONE" master under-review 2>&1)"
 assert_contains "$same" "unchanged since you last opened" "an unmoved branch is reported as unmoved"
+
+# --- 10. a successful run also creates a webcompanion session ---------------------------
+wc_out="$("$SCRIPT" "$CLONE" master under-review 2>&1)"
+assert_contains "$wc_out" "WC_SID=" "a webcompanion session is created for the diff"
+assert_contains "$wc_out" "WC_URL=" "the webcompanion URL is reported"
+assert_contains "$wc_out" "WC_STATE_DIR=" "the webcompanion state dir is reported"
+wc_sid="$(printf '%s\n' "$wc_out" | sed -n 's/^WC_SID=//p' | tail -1)"
+if [ -n "$wc_sid" ]; then
+  webcompanion end --sid "$wc_sid" --cancel >/dev/null 2>&1
+fi
 
 echo
 echo "passed $PASS, failed $FAIL"

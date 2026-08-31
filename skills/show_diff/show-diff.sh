@@ -342,3 +342,41 @@ else
   echo "  head      $HEAD_REV  (${HEAD_SHA:0:10})"
 fi
 echo "  files     $FILES"
+
+# ---------------------------------------------------------------------------
+# Interactive review: create a webcompanion session for this diff so VS
+# Code's comment UI (vscode-plugin) has something to talk to. A missing or
+# unreachable webcompanion is not a reason to fail a diff that already
+# opened -- it degrades to the old read-only behavior, silently.
+# ---------------------------------------------------------------------------
+if command -v webcompanion >/dev/null 2>&1; then
+  ITEMS_JSON="$(mktemp)"
+  trap 'rm -f "$ITEMS_JSON"' EXIT
+  if $WORKTREE; then
+    META_HEAD="worktree"
+  else
+    META_HEAD="$HEAD_SHA"
+  fi
+  REPO="$REPO" BASE_SHA="$BASE_SHA" META_HEAD="$META_HEAD" python3 -c '
+import json, os
+print(json.dumps({"items": {"__meta__": {
+    "checkout": os.environ["REPO"],
+    "base": os.environ["BASE_SHA"],
+    "head": os.environ["META_HEAD"],
+}}}))
+' > "$ITEMS_JSON"
+
+  WC_OUT="$(webcompanion push --kind show-diff --cwd "$REPO" \
+    --title "$TITLE" --items "$ITEMS_JSON" --eval 2>&1)" && {
+    eval "$WC_OUT"
+    if [[ -n "${WC_STATE_DIR:-}" ]]; then
+      if $WORKTREE; then
+        git -C "$REPO" diff --no-color "$BASE_SHA" > "$WC_STATE_DIR/diff.patch" 2>/dev/null || true
+      else
+        git -C "$REPO" diff --no-color "$BASE_SHA..$HEAD_SHA" > "$WC_STATE_DIR/diff.patch" 2>/dev/null || true
+      fi
+    fi
+    echo "$WC_OUT"
+    echo "  comments: open in VS Code, click a line, ask a question"
+  } || echo "  (webcompanion unreachable -- diff opened read-only: $WC_OUT)" >&2
+fi
