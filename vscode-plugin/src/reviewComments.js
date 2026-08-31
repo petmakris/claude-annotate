@@ -18,7 +18,7 @@ function anchorFor(files, { gitPath, ref }, line, { worktree = false } = {}) {
   else if (ref === file.originalRef) side = 'L';
   else if (ref === file.modifiedRef) side = 'R';
   else return null;
-  return `${gitPath}:${side}:${line}`;
+  return `${gitPath}:${side}:${line + 1}`; // anchors are 1-based, VS Code ranges are 0-based
 }
 
 let vscode;
