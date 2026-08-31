@@ -1,4 +1,16 @@
-// Stub: Task 9 replaces this with the real "read ~/.claude/webcompanion/config.json"
-// logic, shared with its poll loop. Kept minimal here so reviewComments.js has something
-// to require while that task is not yet done.
-module.exports = { loadConfig: async () => ({ bind: '127.0.0.1', port: 3080 }) };
+// Reads webcompanion's own config file -- the fixed, documented path every
+// consumer (the CLI, and now this extension) reads, per the daemon's
+// "one file, no discovery poll" design.
+
+const fs = require('fs/promises');
+const os = require('os');
+const path = require('path');
+
+const DEFAULT_PATH = path.join(os.homedir(), '.claude', 'webcompanion', 'config.json');
+
+async function loadConfig(configPath = DEFAULT_PATH) {
+  const raw = await fs.readFile(configPath, 'utf8');
+  return JSON.parse(raw);
+}
+
+module.exports = { loadConfig, DEFAULT_PATH };
