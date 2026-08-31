@@ -1,5 +1,4 @@
-
- #!/usr/bin/env bash
+#!/usr/bin/env bash
 # Open one diff in VS Code's multi-file diff editor.
 #
 #   show-diff.sh <checkout> <base-rev> <head-rev|--worktree> [title]
