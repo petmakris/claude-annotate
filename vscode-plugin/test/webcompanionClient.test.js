@@ -29,7 +29,9 @@ describe('WebCompanionClient', () => {
 
   it('submit posts anchor and text as JSON, returns event_id', async () => {
     let body = '';
+    let contentLength;
     server = await fakeDaemon((req, res) => {
+      contentLength = req.headers['content-length'];
       req.on('data', (c) => (body += c));
       req.on('end', () => {
         res.writeHead(202, { 'Content-Type': 'application/json' });
@@ -40,6 +42,13 @@ describe('WebCompanionClient', () => {
     const result = await client.submit('sid1', 'a.py:R:1', 'why?');
     assert.strictEqual(result.event_id, 'e1');
     assert.deepStrictEqual(JSON.parse(body), { anchor: 'a.py:R:1', text: 'why?' });
+    // The daemon is a bare Python http.server, which never decodes a chunked
+    // body -- Node defaults to chunked whenever a POST body's length isn't
+    // declared up front, and a Node fake server (unlike the real daemon)
+    // decodes chunked transparently, so this is the one thing standing
+    // between a passing suite and a submit that silently reaches the real
+    // daemon as an empty body.
+    assert.strictEqual(contentLength, String(Buffer.byteLength(body)));
   });
 
   it('a 426 response rejects with a ContractMismatch-shaped error', async () => {

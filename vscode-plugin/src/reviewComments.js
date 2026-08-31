@@ -167,7 +167,16 @@ function register(context) {
       if (!anchor) return;
       const cfg = await loadConfig();
       const client = new WebCompanionClient(`http://${cfg.bind}:${cfg.port}`);
-      await client.submit(current.sid, anchor, reply.text);
+      try {
+        await client.submit(current.sid, anchor, reply.text);
+      } catch (err) {
+        // Without this, a rejected submit (daemon down, contract mismatch, a
+        // real server-side bug) throws from inside a VS Code command handler,
+        // which VS Code only logs to the extension host log -- the comment
+        // box just closes with the typed text gone and nothing visibly wrong.
+        vscode.window.showErrorMessage(`Could not send the comment to Claude: ${err.message}`);
+        return;
+      }
       reply.thread.comments = [
         ...reply.thread.comments,
         { body: reply.text, mode: vscode.CommentMode.Preview,

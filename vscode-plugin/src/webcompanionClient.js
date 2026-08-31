@@ -19,7 +19,16 @@ class WebCompanionClient {
       const mod = url.protocol === 'https:' ? https : http;
       const data = body !== undefined ? JSON.stringify(body) : null;
       const headers = { 'X-WebCompanion-Contract': String(CONTRACT) };
-      if (data) headers['Content-Type'] = 'application/json';
+      // Without an explicit Content-Length, Node's http client defaults to
+      // chunked transfer-encoding once write()/end() are called separately --
+      // and the daemon's plain http.server never decodes a chunked body, so
+      // it silently sees an empty one. Every POST from this client carries a
+      // body known in full upfront, so declaring its length here is always
+      // correct and avoids chunking entirely.
+      if (data) {
+        headers['Content-Type'] = 'application/json';
+        headers['Content-Length'] = Buffer.byteLength(data);
+      }
       const req = mod.request(url, { method, headers }, (res) => {
         let raw = '';
         res.on('data', (c) => (raw += c));
