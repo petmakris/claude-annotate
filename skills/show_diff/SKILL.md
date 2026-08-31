@@ -23,7 +23,7 @@ The two tools this skill exists to drive:
 - `wp diffable [workspace] [--json]` — every checkout under `~/projects/wp/`, what branch
   it is on, what that branch is stacked on, and how many files each candidate base
   differs by. This is where the resolution comes from. Never re-derive it with raw git.
-- `skills/show-diff/show-diff.sh <checkout> <base-rev> <head-rev|--worktree> [title]` —
+- `skills/show_diff/show-diff.sh <checkout> <base-rev> <head-rev|--worktree> [title]` —
   resolves the revs, fetching an `origin/<branch>` this clone has never seen, which is
   what the base of a stacked branch usually is. Then it opens the project's window, waits
   until that window is in front, and fires a URI the `petros-makris.petros-makris-vscode`
@@ -166,17 +166,28 @@ unreachable — the diff is open read-only and there is nothing to arm.
 ## Mode D — answering a question on a diff line
 
 You wake here when a task-notification's first stdout line is one of the
-`WEBCOMPANION_*` banners above, for a `skill=show-diff` session.
+`WEBCOMPANION_*` banners above, for a `skill=show-diff` session. A
+`WEBCOMPANION_DROPPED` banner (see the banner list under "Arm the watcher")
+means step 6 below never happened for an earlier event — the watcher gave up
+re-emitting it — so tell the user plainly that a question went unanswered and
+ask them to re-ask it on the line, rather than trying to reconstruct it.
 
 1. **Parse the banner** for `sid` and `event_id`. Read the payload between
    `---payload---` and `---end---`: `{"anchor": "<path>:<side>:<line>",
    "text": "<question>", "images": [...]}`.
-2. **Find the session's state_dir.** You have it already if you created this
-   session's watcher this turn (`WC_STATE_DIR` from Task 5's output). There is
-   no documented way to re-derive it later — `webcompanion` has no "look up a
-   session's state_dir by sid" command — so keep the `WC_STATE_DIR` value from
-   when you armed the watcher; it does not change for the life of the
-   session.
+2. **Find the session's state_dir.** You have it already if you kept the
+   `WC_STATE_DIR` value from when you armed the watcher; it does not change
+   for the life of the session. If you no longer have it, it can be
+   re-derived from the sid — `resolve_session_dirs(kind, sid)` in
+   `webcompanion.commands.watch` is the daemon's own lookup, the same one
+   `watch` and `ack` use internally:
+
+   ```bash
+   python3 -c '
+   from webcompanion.commands.watch import resolve_session_dirs
+   print(resolve_session_dirs("show-diff", "<sid>")["state_dir"])
+   '
+   ```
 3. **Read `<state_dir>/diff.patch`** and the item at anchor `__meta__`
    (`webcompanion` has no "get one item" CLI, so read it via
    `python3 -c` importing `webcompanion.client`):
@@ -203,6 +214,17 @@ You wake here when a task-notification's first stdout line is one of the
    ```bash
    webcompanion reply --sid <sid> --anchor "<anchor>" --text <path-to-answer-file>
    ```
+6. **Ack the event.** `webcompanion watch` is blocked waiting for this event's
+   ack file — up to 30 minutes — and re-emits the same `WEBCOMPANION_EVENT`
+   (and wakes you again) up to twice more if it never sees one, so this step
+   is not optional cleanup:
+
+   ```bash
+   webcompanion ack --sid <sid> --event-id <event_id>
+   ```
+
+   Do this only after step 5 succeeds — an ack written before the reply lands
+   would mark the question answered when it is not.
 
 ## Never summarise the diff
 
