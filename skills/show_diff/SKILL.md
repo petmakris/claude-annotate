@@ -144,12 +144,76 @@ The two tools this skill exists to drive:
 - **A very large diff.** Open it anyway; the multi-file editor loads lazily. Mention the
   file count so the user knows what they are looking at.
 
+## Arm the watcher
+
+If the script's output included a `WC_SID=` line, comments are live for this
+diff in VS Code. Arm a watcher immediately, in the same turn:
+
+```bash
+Monitor: command = "webcompanion watch --kind show-diff --sid <WC_SID>", persistent = true
+description: "show-diff-review sid=<WC_SID>"
+```
+
+The watcher prints the same banners `interactive_review`'s watcher does:
+`WEBCOMPANION_EVENT skill=show-diff sid=<sid> event_id=<id>` (followed by
+`---payload---`, the event JSON, `---end---`), `WEBCOMPANION_FINISHED`,
+`WEBCOMPANION_CANCELLED`, `WEBCOMPANION_DROPPED`. Each wakes you once; the
+watcher stays alive across many questions until the session ends.
+
+If the script's output had no `WC_SID=` line, `webcompanion` was
+unreachable — the diff is open read-only and there is nothing to arm.
+
+## Mode D — answering a question on a diff line
+
+You wake here when a task-notification's first stdout line is one of the
+`WEBCOMPANION_*` banners above, for a `skill=show-diff` session.
+
+1. **Parse the banner** for `sid` and `event_id`. Read the payload between
+   `---payload---` and `---end---`: `{"anchor": "<path>:<side>:<line>",
+   "text": "<question>", "images": [...]}`.
+2. **Find the session's state_dir.** You have it already if you created this
+   session's watcher this turn (`WC_STATE_DIR` from Task 5's output). There is
+   no documented way to re-derive it later — `webcompanion` has no "look up a
+   session's state_dir by sid" command — so keep the `WC_STATE_DIR` value from
+   when you armed the watcher; it does not change for the life of the
+   session.
+3. **Read `<state_dir>/diff.patch`** and the item at anchor `__meta__`
+   (`webcompanion` has no "get one item" CLI, so read it via
+   `python3 -c` importing `webcompanion.client`):
+
+   ```bash
+   python3 -c '
+   from webcompanion.commands._common import client_from_config
+   import json
+   print(json.dumps(client_from_config().get_item("<sid>", "__meta__")["body"]))
+   '
+   ```
+
+   This gives `{"checkout": ..., "base": ..., "head": ...}` — use `checkout`
+   to `Read`/`Grep` surrounding source for context beyond the diff hunk.
+4. **Compose a short, code-aware answer** in markdown, 2-4 sentences
+   typically, fenced code blocks for snippet suggestions. If you spot a real
+   bug, flag it and suggest a fix as a code block — never modify the
+   checkout itself, this is a read-only review view exactly like
+   `interactive_review`.
+5. **Write the answer to a file, then post it** — never interpolate the
+   answer into a shell command; it may contain backticks, quotes, or
+   `$(...)`:
+
+   ```bash
+   webcompanion reply --sid <sid> --anchor "<anchor>" --text <path-to-answer-file>
+   ```
+
 ## Never summarise the diff
 
 **This skill opens a diff and stops.** After the script reports, say nothing about what the
 change does, means, or is for. No overview, no "what you're looking at", no grouping of the
 files into themes, no naming of the idea behind them, no note about which file is the
 interesting one. Not as a courtesy, not as an opener, not in one line.
+
+This governs the turn the diff opens, before anyone has asked anything. Mode D above answers
+a question the user actually asked about one line — that is not a summary of the diff, and
+this rule does not reach it.
 
 The reason is not tone, it is truth. Everything available at this point is filenames and
 counts, and a filename is not evidence: `InteractionChannelNames` reads like a second new
