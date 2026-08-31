@@ -325,7 +325,7 @@ function windowHolds(repo) {
   });
 }
 
-async function openDiff({ repo, base, head, title }) {
+async function openDiff({ repo, base, head, title, sid }) {
   if (!windowHolds(repo)) {
     const held = (vscode.workspace.workspaceFolders || []).map(f => f.uri.fsPath).join(', ');
     note({ event: 'wrong-window', repo, held });
@@ -428,6 +428,27 @@ async function openDiff({ repo, base, head, title }) {
   } catch (err) {
     // The file list is an addition; losing it must not cost the diff itself.
     note({ event: 'file-list-failed', label, error: String(err && err.stack || err) });
+  }
+  // `live` (not `worktree`) is the flag reviewComments.js needs: it is true exactly when
+  // the modified side is a real file:// document rather than a pmdiff:// blob, whether
+  // that is because head IS the working tree or because a clean checkout happens to sit
+  // on headSha already -- both cases address the right-hand side without a ref.
+  try {
+    require('./reviewComments').setCurrentDiff({
+      repo,
+      worktree: live,
+      sid: sid || '',
+      files: changes.map(({ oldPath, newPath }) => {
+        const name = newPath || oldPath;
+        return {
+          name,
+          originalRef: oldPath ? baseSha : '',
+          modifiedRef: newPath ? (live ? '' : headSha) : '',
+        };
+      }),
+    });
+  } catch (err) {
+    note({ event: 'review-comments-failed', label, error: String(err && err.stack || err) });
   }
   await closeOurDiffTabs('replaced');
   rememberLabel(label);
@@ -568,7 +589,7 @@ function register(context) {
           vscode.window.showErrorMessage('diff URI needs repo, base and head.');
           return;
         }
-        openDiff({ repo, base, head, title: q.get('title') || undefined })
+        openDiff({ repo, base, head, title: q.get('title') || undefined, sid: q.get('sid') || '' })
           .catch(err => vscode.window.showErrorMessage(`diff failed: ${err.message}`));
       },
     }),

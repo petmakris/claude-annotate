@@ -37,6 +37,10 @@
         "command": "petrosMakris.clearDiff",
         "title": "Clear Diff",
         "category": "Petros"
+      },
+      {
+        "command": "petrosMakris.submitReviewComment",
+        "title": "Ask Claude"
       }
     ],
     "configuration": {
@@ -75,6 +79,13 @@
           "command": "petrosMakris.clearDiff",
           "when": "view == petrosMakris.diffFiles",
           "group": "navigation"
+        }
+      ],
+      "comments/commentThread/context": [
+        {
+          "command": "petrosMakris.submitReviewComment",
+          "group": "inline",
+          "when": "commentController == petrosMakrisReview"
         }
       ]
     }

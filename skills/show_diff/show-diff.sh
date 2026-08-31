@@ -378,5 +378,26 @@ print(json.dumps({"items": {"__meta__": {
     fi
     echo "$WC_OUT"
     echo "  comments: open in VS Code, click a line, ask a question"
+
+    # The window is already open on this exact repo/base/head; firing the diff URI a
+    # second time is idempotent (openDiff() just recomputes the same file list) and is
+    # the only channel the running extension has for learning the session id, since it
+    # never sees this script's stdout. Only fired once WC_SID actually came back --
+    # webcompanion being unreachable above already logged its own message and there is
+    # no sid to add.
+    if [[ -n "${WC_SID:-}" ]]; then
+      SID_URI=$(REPO="$REPO" BASE_SHA="$BASE_SHA" HEAD_SHA="$HEAD_SHA" TITLE="$TITLE" \
+        EXTENSION_ID="$EXTENSION_ID" WC_SID="$WC_SID" python3 -c '
+import os, urllib.parse
+q = urllib.parse.urlencode({
+    "repo":  os.environ["REPO"],
+    "base":  os.environ["BASE_SHA"],
+    "head":  os.environ["HEAD_SHA"],
+    "title": os.environ["TITLE"],
+    "sid":   os.environ["WC_SID"],
+})
+print("vscode://" + os.environ["EXTENSION_ID"] + "/diff?" + q)')
+      open "$SID_URI"
+    fi
   } || echo "  (webcompanion unreachable -- diff opened read-only: $WC_OUT)" >&2
 fi

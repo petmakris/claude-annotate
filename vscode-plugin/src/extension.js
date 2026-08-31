@@ -15,6 +15,7 @@ const vscode = require('vscode');
 const fs = require('fs/promises');
 const path = require('path');
 const diff = require('./diff');
+const reviewComments = require('./reviewComments');
 
 const STATE_KEY = 'petrosMakris.markdownTheme';
 const OWN_SLOT_MARKER = 'petros-makris.petros-makris-vscode';
@@ -124,6 +125,10 @@ function activate(context) {
   // module: it shares nothing with the markdown themes above except this
   // extension's activation.
   diff.register(context);
+  // Makes every line of a diff diff.js opens askable: a CommentController that turns a
+  // clicked line into a webcompanion anchor. Kept in its own module, same reasoning as
+  // diff.js above.
+  reviewComments.register(context);
   // Fire-and-forget: refresh active.css from persisted slug, and strip
   // stale markdown.styles entries left by older versions.
   refreshOnActivation(context).catch(err => console.error(err));
