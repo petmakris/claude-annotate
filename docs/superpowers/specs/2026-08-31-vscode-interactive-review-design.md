@@ -54,15 +54,24 @@ it. What's new is a step after: the skill computes the local diff itself
 parses it with `interactive_review/diff.py`'s existing `parse_unified_diff`
 and reuses its `<path>:<side>:<linenum>` anchor scheme unchanged — that
 module lives under the skill, not `_shared/web_companion`, so it is
-untouched by the webcompanion cutover and needs no porting. The result is
-written as `{"items": {anchor: body}}` and handed to the daemon:
+untouched by the webcompanion cutover and needs no porting.
+
+Verification during planning found the diff content itself doesn't need to
+go to the daemon at all: `diff.py`'s own docstring says nothing in
+production ever consumes its parsed structure — IntelliJ's diff viewer
+parses `diff.patch` client-side, and VS Code's diff view already has the
+real files open natively. So the session carries one small item,
+`__meta__` (`{checkout, base, head}`), not the diff's content:
 
 ```
 webcompanion push --kind show-diff --cwd <checkout> --items items.json --eval
 ```
 
 This creates the session and returns `sid`/`url` (via `--eval`'s
-`WC_SID=`/`WC_URL=` output). The skill then arms a watcher exactly as
+`WC_SID=`/`WC_URL=` output, extended during planning to also report
+`WC_STATE_DIR=` so the skill can snapshot `diff.patch` into the session's
+own workspace — the same consistency guarantee `interactive_review`
+already gives a long-lived PR review). The skill then arms a watcher exactly as
 `interactive_review` does today, substituting `webcompanion watch --sid
 <sid>` for `watcher.sh` — same `WEBCOMPANION_EVENT` / `WEBCOMPANION_FINISHED`
 / `WEBCOMPANION_CANCELLED` / `WEBCOMPANION_DROPPED` banners, same
@@ -88,15 +97,23 @@ registering a `vscode.CommentController` with a `commentingRangeProvider`
 scoped to those same URIs — every line of a diff already open becomes
 askable, with no second rendering surface and no webview.
 
-That module is a plain HTTP/SSE client of the daemon's v1 contract, built
-fresh (TypeScript has no equivalent to hand-port from) but against a fixed,
-already-specified surface:
+That module is a plain HTTP client of the daemon's v1 contract, built fresh
+(there's no JS client to hand-port from) against a fixed, already-specified
+surface. Verification during planning read `webcompanion/src/webcompanion/
+server.py` and `stream.py` directly rather than trusting this spec's first
+draft, which named an SSE `document-changed` frame that was never
+implemented — the daemon's real change-notification frames are
+`item-changed`, `thread-changed`, and `thread-deleted`. Given that, and
+given a documented poll endpoint already exists, the client polls instead
+of opening an SSE stream — no reconnect/backoff logic needed in an
+extension host, and a show-diff session is short-lived enough that a ~2s
+poll interval costs nothing a reader would notice:
 
 ```
 GET  /api/sessions?cwd=<repo>&kind=show-diff   -> find the open session
 POST /s/<sid>/api/submit   {anchor, text}       -> ask a question
-GET  /s/<sid>/stream                            -> SSE: item-changed, document-changed
-GET  /s/<sid>/items/<anchor>                    -> pull the updated thread
+GET  /s/<sid>/poll                              -> {threads: {anchor: version}, ...}
+GET  /s/<sid>/threads/<anchor>                  -> pull the updated thread
 ```
 
 Every request carries `X-WebCompanion-Contract: 1`; a `426` response is
@@ -111,13 +128,16 @@ under it.
 
 ## Testing
 
-- `show_diff`'s new diff-to-items step gets unit tests in the same style as
-  `interactive_review/tests/test_diff.py` — a fixed checkout fixture, assert
-  the right anchors and bodies come out of a known `git diff`.
-- The `webcompanion push`/`watch` invocations are tested against the real
-  daemon (`python3 -m webcompanion serve` in the test process), not a fake
-  server double — the daemon is stdlib-only and already the pattern
-  `webcompanion`'s own 350-test suite uses.
+- `webcompanion` itself needed two small, verified-missing pieces before
+  `show_diff` could be built on it at all: a CLI command to post a thread
+  reply without shell-interpolating arbitrary markdown (nothing did this;
+  `update.py` only replaces an item's body), and a way for `push --eval` to
+  report the session's `state_dir` (needed to snapshot `diff.patch`, since
+  the HTTP response never carries a local filesystem path). Both get tests
+  in `webcompanion`'s own suite, run against the real daemon
+  (`python3 -m webcompanion serve` in the test process, via its existing
+  `wired`/`daemon` fixtures) — not a fake server double, which is already
+  the pattern its 350-test suite uses.
 - The VS Code client is new test surface for this repo — no existing harness
   covers a VS Code extension here. Needs its own (`@vscode/test-electron` or
   a mocked `vscode` module); the implementation plan pins down which.
