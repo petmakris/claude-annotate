@@ -23,10 +23,11 @@
       "version": "0.1.0",
       "source": "./",
       "strict": false,
-      "description": "Ask Claude questions on a PR diff line or a code walkthrough step, inside IntelliJ. Requires Python 3.9+ on PATH (standard library only, nothing to install) and the companion IntelliJ plugin.",
+      "description": "Ask Claude questions on a PR diff line, a local diff line, or a code walkthrough step, inside IntelliJ or VS Code. Requires Python 3.9+ on PATH and either the companion IntelliJ plugin or the vscode-plugin extension.",
       "skills": [
         "./skills/interactive_review",
         "./skills/walkthrough",
+        "./skills/show_diff",
         "./skills/annotate-doctor"
       ]
     }
