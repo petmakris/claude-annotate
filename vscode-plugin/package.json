@@ -1,0 +1,82 @@
+{
+  "name": "petros-makris-vscode",
+  "displayName": "Petros Makris",
+  "description": "Personal VS Code customizations: dark color theme, markdown preview theme switcher, and branch-diff URI handler.",
+  "version": "1.7.0",
+  "publisher": "petros-makris",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Themes",
+    "Other"
+  ],
+  "main": "./src/extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onUri"
+  ],
+  "contributes": {
+    "themes": [
+      {
+        "label": "Petros Makris",
+        "uiTheme": "vs-dark",
+        "path": "./themes/Petros-Makris-color-theme.json"
+      }
+    ],
+    "markdown.previewStyles": [
+      "./dist/markdown-themes/active.css"
+    ],
+    "commands": [
+      {
+        "command": "petrosMakris.setMarkdownTheme",
+        "title": "Set Markdown Preview Theme",
+        "category": "Petros"
+      },
+      {
+        "command": "petrosMakris.clearDiff",
+        "title": "Clear Diff",
+        "category": "Petros"
+      }
+    ],
+    "configuration": {
+      "title": "Petros Makris",
+      "properties": {
+        "petrosMakris.markdownPreviewMaxWidth": {
+          "type": "integer",
+          "default": 1200,
+          "minimum": 600,
+          "maximum": 2400,
+          "description": "Maximum content width (in pixels) for the markdown preview theme. Re-open the preview after changing this for it to take effect."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "petrosMakrisDiff",
+          "title": "Diff",
+          "icon": "$(diff-multiple)"
+        }
+      ]
+    },
+    "views": {
+      "petrosMakrisDiff": [
+        {
+          "id": "petrosMakris.diffFiles",
+          "name": "Files",
+          "contextualTitle": "Diff"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "petrosMakris.clearDiff",
+          "when": "view == petrosMakris.diffFiles",
+          "group": "navigation"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,8 @@
+.gitignore
+.vscodeignore
+build.sh
+install.sh
+uninstall.sh
+README.md
+node_modules/**
+**/.DS_Store
