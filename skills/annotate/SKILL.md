@@ -92,20 +92,18 @@ for the field shape, the limits, and the check to run before announcing the URL.
 
 ## Session lifecycle
 
-The web companion server is a **single `nohup` process shared across every
-Claude Code session** on this machine, not one per conversation. `ensure_server.sh`
-starts it the first time anyone needs it; every later call from any session just
-confirms it's already up. It survives this conversation ending, and self-shuts
-after **24h with no activity** (any request resets the clock).
+Storage, the page, comment threads and the event queue all belong to the
+**webcompanion daemon** — one always-on service per machine, shared with every
+other skill and IDE plugin that talks to it, and kept alive by launchd (macOS)
+or systemd (Linux). annotate ships no server of its own: it renders its blocks,
+pushes them as items, and registers its own front end as the session's
+renderer. There is nothing to start per session, no port to negotiate, and the
+daemon outlives every conversation using it.
 
-Workspaces (one per `sid`/`slug`) persist on disk **until explicitly
-deleted** — via the landing page's delete button or `POST
-/api/sessions/delete` — at `~/.claude/annotate/workspaces/<sid>/` (addressed by
-`slug` in URLs and `/annotate resume`, stored under `sid`) independent of
-whether any Claude session is currently attached to them. A conversation
-ending doesn't delete its workspace — the page stays live, and it's still
-there to come back to later. (Setting `WEBCOMPANION_RETENTION_DAYS` to a
-positive number opts back into auto-expiry; see `references/resuming.md`.)
+Sessions persist **until explicitly deleted**, at
+`~/.claude/webcompanion/workspaces/annotate/<sid>/`, addressed by `slug` in URLs
+and in `/annotate resume`; a conversation ending doesn't delete one. Slugs are
+unique **within a kind**, so pass `--kind annotate` wherever one is ambiguous.
 
 Because of this, don't mint a fresh workspace on every push within one
 conversation — `references/pushing.md` § "Create-or-attach a workspace for

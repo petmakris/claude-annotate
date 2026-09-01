@@ -102,11 +102,12 @@ Run /annotate-doctor for a full check of this machine.
 EOF
   exit 1
 fi
-python3 -m skills.annotate.check_anchors "<response_dir>/blocks.json" "$PWD"
+cd "$PLUGIN_ROOT" && PYTHONPATH="$PLUGIN_ROOT" \
+  python3 -m skills.annotate.check_anchors "<path/to/blocks.json>" "$PWD"
 ```
 
 `$PWD` here is a best guess, not authoritative: the root that actually matters is
-the directory the session was **created** in, which the server stamped once and
+the directory the session was **created** in, which the daemon stamped once and
 does not refresh when you `/annotate resume` from somewhere else. If `$PWD`
 disagrees with the workspace `blocks.json` itself lives under, the check refuses
 outright — naming both paths — rather than silently validating against the wrong

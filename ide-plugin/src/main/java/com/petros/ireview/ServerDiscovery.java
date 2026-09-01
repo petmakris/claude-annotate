@@ -53,7 +53,10 @@ final class ServerDiscovery {
         }
     }
 
-    private static String readLegacyServerJson(Path serverJson) {
+    /** Package-visible so {@link ReviewSessionClient} can query the legacy
+     *  server directly as a fallback when the daemon has no matching session
+     *  for this skill — see the comment on {@code fetchNewestSession()}. */
+    static String readLegacyServerJson(Path serverJson) {
         try {
             Matcher m = URL_FIELD.matcher(Files.readString(serverJson));
             if (m.find()) return m.group(1);

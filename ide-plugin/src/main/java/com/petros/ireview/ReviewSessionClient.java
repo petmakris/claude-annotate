@@ -6,6 +6,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -349,6 +350,24 @@ public final class ReviewSessionClient {
     // --- internal ---
 
     private void pollDiscover() {
+        // This runs under scheduleWithFixedDelay: if ANY exception escapes
+        // this method, the JDK silently cancels all future executions of
+        // this task — no log line, no crash, the reconnect loop is just gone
+        // forever until the IDE restarts. Every code path below (attach(),
+        // pollLiveness(), handleNoSession(), and the listener notifications
+        // they trigger via setState()) must never be allowed to propagate
+        // out of here. The inner try/catch around fetchNewestSession() below
+        // is deliberately narrower — it exists to distinguish "server
+        // unreachable" from other failures — so it does not cover this.
+        try {
+            pollDiscoverUnguarded();
+        } catch (Exception e) {
+            System.err.println("[claude-ide-review] pollDiscover failed; will retry on the next tick: " + e);
+            e.printStackTrace();
+        }
+    }
+
+    private void pollDiscoverUnguarded() {
         SessionInfo found;
         try {
             found = fetchNewestSession();
@@ -405,7 +424,49 @@ public final class ReviewSessionClient {
         // return is reserved for "the server answered 200 and the list is
         // empty" (mirrors WalkthroughSessionClient).
         if (resp.statusCode() != 200) throw new java.io.IOException("HTTP " + resp.statusCode());
-        return parseFirstSession(resp.body());
+        SessionInfo found = parseFirstSession(resp.body());
+        if (found != null) return found;
+        // ServerDiscovery prefers the shared webcompanion daemon over this
+        // skill's own legacy per-skill server whenever the daemon's
+        // config.json exists — but this skill still only ever CREATES
+        // sessions on the legacy server (ensure_server.sh has no daemon
+        // awareness yet). So a daemon that exists but was never told about
+        // this session answers with an empty (post-kind-filter) list forever,
+        // and the legacy server — which actually has it — is never consulted
+        // again once ServerDiscovery has committed to the daemon's URL. Try
+        // it directly, once, as a fallback: cheap (one file read + one HTTP
+        // call), and only reached when the primary source came up empty.
+        return fetchFromLegacyServer();
+    }
+
+    /** Queries ~/.claude/interactive-review/server.json's server directly,
+     *  bypassing ServerDiscovery's daemon preference. See fetchNewestSession()
+     *  for why this fallback exists. Never throws — a missing/unreadable
+     *  legacy server.json, or that server being unreachable, just means there
+     *  is no legacy fallback available, not a discovery failure. */
+    private SessionInfo fetchFromLegacyServer() {
+        try {
+            Path legacyServerJson = Path.of(System.getProperty("user.home"), ".claude", "interactive-review", "server.json");
+            String legacyUrl = ServerDiscovery.readLegacyServerJson(legacyServerJson);
+            if (legacyUrl == null || legacyUrl.equals(baseUrl)) return null; // no file, or it's what we already tried
+            String url = legacyUrl + "/api/sessions?cwd=" + URLEncoder.encode(projectCwd, StandardCharsets.UTF_8);
+            HttpRequest req = HttpRequest.newBuilder(URI.create(url)).timeout(REQUEST_TIMEOUT).GET().build();
+            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() != 200) return null;
+            SessionInfo found = parseFirstSession(resp.body());
+            if (found != null) {
+                // Every other method in this class (pollLiveness, openSse,
+                // seedCache, submitEvent, ...) reads the baseUrl field, not a
+                // per-call argument — if we don't switch it here, the very
+                // next request after a successful legacy-fallback attach()
+                // goes right back to the daemon and 404s on a sid it has
+                // never heard of.
+                baseUrl = legacyUrl;
+            }
+            return found;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** Re-resolve the server URL after a failed discovery poll: the server may
@@ -528,6 +589,17 @@ public final class ReviewSessionClient {
                 HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
                 if (resp.statusCode() == 200) {
                     applySeed(parseThreadsBulk(resp.body()), gen);
+                    // Clear any earlier "didn't load" warning: runSse() re-runs
+                    // this on every SSE (re)connect, so a seed that failed once
+                    // (a slow moment right after IDE startup, say) but then
+                    // succeeds on the automatic 2s reconnect must retract the
+                    // warning — otherwise the footer keeps telling the user the
+                    // panel is incomplete forever, even once every thread is
+                    // actually back. AnnotationsPanel treats a null message as
+                    // "no warning" the same way onAttached/onDetached already do.
+                    if (!closed && gen == sseGen.get()) {
+                        for (Listener l : listeners) l.onWarning(null);
+                    }
                     return;
                 }
             } catch (Exception ignored) {
@@ -732,7 +804,18 @@ public final class ReviewSessionClient {
         }
         // Notify outside the lock; listeners bridge to the EDT and re-read
         // state() there, so they always converge on the latest value.
-        for (Listener l : listeners) l.onStateChanged(s);
+        // Each listener is isolated: this loop runs inside pollDiscover(),
+        // which runs on a scheduleWithFixedDelay task — one listener
+        // throwing must not stop the others from being notified, and must
+        // never escape to kill that scheduled task (see pollDiscover()).
+        for (Listener l : listeners) {
+            try {
+                l.onStateChanged(s);
+            } catch (Exception e) {
+                System.err.println("[claude-ide-review] a Listener threw from onStateChanged(" + s + "), continuing: " + e);
+                e.printStackTrace();
+            }
+        }
     }
 
     // --- json helpers ---
@@ -741,12 +824,37 @@ public final class ReviewSessionClient {
         return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
+    /**
+     * The shared webcompanion daemon (preferred by ServerDiscovery when its
+     * config.json exists) hosts every skill's sessions in one registry,
+     * tagged by "kind" — "show-diff", "walkthrough", "interactive-review",
+     * etc. The legacy per-skill server (the fallback) only ever returns its
+     * own kind and never tags it at all. array[0] used to be trusted blindly:
+     * on a daemon with other skills' sessions for the same project (e.g. a
+     * pile of leftover show-diff sessions from reviewing this same PR), that
+     * silently attached to someone else's dead session instead of this
+     * skill's live one — same symptom as a genuinely dead session (frozen
+     * heartbeat, permanently PAUSED) but for a completely different reason,
+     * and with none of this skill's fields (pr_ref/title) populated on the
+     * wrong entry either. Filter to our own kind (or an untagged legacy
+     * response) before taking the newest — sid's leading yyMMdd-HHmmss makes
+     * plain string ordering also chronological ordering.
+     */
+    private static final String KIND = "interactive-review";
+
     private static SessionInfo parseFirstSession(String json) {
         com.google.gson.JsonElement root = com.google.gson.JsonParser.parseString(json);
-        if (!root.isJsonArray() || root.getAsJsonArray().isEmpty()) return null;
-        com.google.gson.JsonObject o = root.getAsJsonArray().get(0).getAsJsonObject();
+        if (!root.isJsonArray()) return null;
+        com.google.gson.JsonObject newest = null;
+        for (com.google.gson.JsonElement el : root.getAsJsonArray()) {
+            com.google.gson.JsonObject o = el.getAsJsonObject();
+            String kind = o.has("kind") && !o.get("kind").isJsonNull() ? o.get("kind").getAsString() : null;
+            if (kind != null && !KIND.equals(kind)) continue;
+            if (newest == null || str(o, "sid").compareTo(str(newest, "sid")) > 0) newest = o;
+        }
+        if (newest == null) return null;
         return new SessionInfo(
-            str(o, "sid"), str(o, "pr_ref"), str(o, "title"), str(o, "state_dir"));
+            str(newest, "sid"), str(newest, "pr_ref"), str(newest, "title"), str(newest, "state_dir"));
     }
 
     private static Map<String, ThreadState> parseThreadsBulk(String json) {

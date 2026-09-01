@@ -27,7 +27,7 @@ When invoked this way, treat the user's message as the trigger only — **do not
 2. **Preserve the substance, re-compose the presentation.** Every claim, finding, number, name, and code block from the terminal answer appears on the page — add no new conclusions, drop nothing substantive. The terminal text was the draft rendering; the browser page is the finished one: run the same capability check as forward mode ("How to push a response" step 1), so a described interaction flow becomes a `sequence` block, branching logic a `flowchart`, a decision the user must make a `choice`, and prose no richer kind claims stays `markdown`.
 3. Strip terminal-only artifacts: `assistant:` / system metadata wrappers if any, and any per-turn-hook trailer (e.g. a trailing absolute path a dump hook appended).
 4. If your most recent prior assistant message is empty, trivial (a one-line acknowledgement), or contains only tool-call narration without standalone prose, do **not** push it. Instead, go live with nothing pushed (see "The live-session rule" below). Don't invent content; reply once in terminal so the user knows annotate is on.
-5. Then follow the exact same flow as forward mode: `ensure_server.sh` → POST `/api/sessions` → write `meta.json` then `blocks.json` → announce the URL → **start the watcher** (see "Arming the watcher" below) → end your turn.
+5. Then follow the exact same flow as forward mode: confirm the daemon → write `blocks.json` → `python3 -m skills.annotate.push` → announce the URL → **start the watcher** (see "Arming the watcher" below) → end your turn.
 
 ## The live-session rule — the browser is the output channel
 
@@ -41,163 +41,90 @@ While the session is live:
 
 **Token-budget note:** postmortem mode does not produce a new response. The only outputs in your terminal turn are short status lines (creating session, writing files, announcing URL). Keep terminal text minimal.
 
-## On every invocation: ensure the server is running
+## On every invocation: the daemon must be running
 
-The server is a long-lived singleton shared across all Claude Code sessions. Each turn, run this **once** before composing a response:
+annotate no longer ships a server. Storage, comment threads, the event queue
+and the page itself all belong to the **webcompanion daemon** — one always-on
+service per machine, shared with every other skill and IDE plugin that talks
+to it. It is installed and kept alive by launchd (macOS) or systemd (Linux),
+so there is nothing to start per session and no port to negotiate.
 
-```bash
-if ! command -v python3 >/dev/null 2>&1; then
-  cat >&2 <<'EOF'
-claude-annotate: python3 was not found on PATH.
-claude-annotate is the marketplace that ships this plugin and claude-ide-review.
-
-This plugin needs Python 3.9 or newer (standard library only — nothing to
-pip install).
-
-  macOS:  xcode-select --install     # or: brew install python
-  Linux:  install python3 with your distribution's package manager
-
-Run /annotate-doctor for a full check of this machine.
-EOF
-  exit 1
-fi
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(python3 -c '
-import json, os, sys
-NAME, MARKER = "claude-annotate", "skills/annotate/ensure_server.sh"
-ok = lambda r: bool(r) and os.path.isfile(os.path.join(r, MARKER))
-for entry in os.environ.get("PATH", "").split(os.pathsep):
-    if os.path.basename(entry) == "bin" and ok(os.path.dirname(entry)):
-        print(os.path.dirname(entry)); sys.exit()
-try:
-    root = json.load(open(os.path.expanduser("~/.claude/annotate/server.json")))["plugin_root"]
-except Exception:
-    root = None
-if ok(root):
-    print(root); sys.exit()
-try:
-    root = json.load(open(os.path.expanduser("~/.claude/plugins/known_marketplaces.json")))[NAME]["installLocation"]
-except Exception:
-    root = None
-if ok(root):
-    print(root); sys.exit()
-sys.exit(f"could not locate the {NAME} plugin root")
-')}"
-[ -n "$PLUGIN_ROOT" ] || { echo "claude-annotate: plugin root not found" >&2; exit 1; }
-"$PLUGIN_ROOT/skills/annotate/ensure_server.sh"
-```
-
-`$CLAUDE_PLUGIN_ROOT` is **not** exported into the Bash tool's shell, so the root is resolved by probing, in order: every `bin/` directory on `PATH` (Claude Code adds `<plugin-root>/bin` for both `--plugin-dir` and marketplace installs, even when that directory does not exist), then a server this plugin already started, then the marketplace registry. Each candidate must actually contain `ensure_server.sh` — the check is a marker file, not a directory name, so it survives being cloned under any name. It's idempotent and fast (<100 ms when the server is already up). Internally it delegates to `skills/_shared/web_companion/ensure_server.sh` — no need to call that directly. Do **not** use `run_in_background: true` — wait for it to return. If it exits non-zero, surface the stderr to the user and stop.
-
-## Create-or-attach a workspace for this conversation
-
-Workspaces outlive a single push — they persist on disk until explicitly
-deleted and survive Claude exiting (see SKILL.md § Session lifecycle). So don't mint a fresh one on
-every push: **create once per conversation, then attach on every push after
-that**, so all of a conversation's pushes land in the same `blocks.json` at the
-same URL.
-
-After `ensure_server.sh` succeeds, read `$HOME/.claude/annotate/server.json` to get the server URL:
+Confirm it is up before composing anything:
 
 ```bash
-SERVER_URL=$(python3 -c 'import json,os; print(json.load(open(os.path.expanduser("~/.claude/annotate/server.json")))["url"])')
+webcompanion status
 ```
 
-The workspace this conversation is using (if any) is tracked in the per-conversation
-pending registry, `~/.claude/annotate/pending-${CLAUDE_CODE_SESSION_ID}.json` — the
-same file "Arming the watcher" (below) appends a round entry to on every push. Each
-entry carries a `workspace` key once one exists:
+If that fails, stop and tell the user — do **not** try to start it yourself
+(a client that auto-starts a service races every other client doing the same):
+
+```
+webcompanion doctor      # both interpreters, config, zipapp, launchd job, health
+```
+
+If `webcompanion` is not on PATH at all, the daemon has never been installed
+on this machine:
+
+```
+pipx install webcompanion && webcompanion install-service
+```
+
+## Push the document
+
+Write `blocks.json` (the authoring format described in "How to push a
+response" below) to any path you like — your scratchpad is the natural home,
+since it is no longer a file a server reads, only an input to the push:
 
 ```bash
-REG="$HOME/.claude/annotate/pending-${CLAUDE_CODE_SESSION_ID}.json"
-WORKSPACE=$(python3 -c '
-import json, sys
-try:
-    rounds = json.load(open(sys.argv[1]))
-except (FileNotFoundError, json.JSONDecodeError):
-    rounds = []
-for r in reversed(rounds):
-    w = r.get("workspace")
-    if w:
-        print(json.dumps(w))
-        break
-' "$REG")
+cd "$PLUGIN_ROOT" && PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.push \
+  --blocks <path/to/blocks.json> \
+  --cwd "$PWD" \
+  --title "<short title>" \
+  --eval
 ```
 
-### First push of this conversation (`$WORKSPACE` empty)
+`--eval` prints three lines to consume with `eval`:
 
-No prior push, and `/annotate resume` wasn't invoked (see `references/resuming.md`).
-Create fresh — no `attach`:
-
-```bash
-curl -sf -X POST "$SERVER_URL/api/sessions" \
-  -H 'Content-Type: application/json' \
-  -d "$(printf '{"cwd": "%s", "title": "%s", "project": "%s"}' "$PWD" "$TITLE" "$(basename "$PWD")")"
+```
+WC_SID=<session id>       # what `webcompanion ack` and `webcompanion watch` take
+WC_SLUG=<short name>      # what the URL is built from, and what `/annotate resume` takes
+WC_URL=<localhost url>    # what you announce
 ```
 
-`title` is this work's short title — the server slugifies it (deduping against
-any live collision) into `slug`. Pass an explicit `"slug": "..."` too if you want
-a specific short name instead of the auto-slugified title.
+**First push of a conversation**: omit `--slug`; a session is created and its
+slug derived from the title. **Every push after that**: pass
+`--slug "$WC_SLUG"` so the push lands on the page the user already has open
+instead of minting a second URL beside it.
 
-**Before creating**, check whether this project already has a live workspace and
-offer to resume it instead of silently forking a second one — see
-`references/resuming.md` § Auto-offer.
+The push does four things in one step, all of which used to be yours to
+orchestrate: it renders every diagram block to SVG (the daemon stores items
+opaquely and renders nothing, so this happens once, here, at push time), it
+replaces the stored document wholesale, it keeps a snapshot of what the
+document said beforehand so the "what changed" pane has something to diff
+against, and it registers annotate's own page as the session's renderer.
 
-### Subsequent pushes in this conversation (`$WORKSPACE` non-empty)
+Code anchors are the deliberate exception: they are pushed **unresolved**,
+because the daemon re-resolves them on every read. An anchor therefore keeps
+tracking its line as the file changes underneath a page that stays open —
+which is the whole reason the `snippet` field exists.
 
-Attach to the same workspace instead of creating a new one:
+### The URLs
 
-```bash
-SLUG=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["slug"])' "$WORKSPACE")
-curl -sf -X POST "$SERVER_URL/api/sessions" \
-  -H 'Content-Type: application/json' \
-  -d "$(printf '{"cwd": "%s", "title": "%s", "slug": "%s", "attach": true}' "$PWD" "$TITLE" "$SLUG")"
-```
-
-### Response shape (both calls)
-
-```json
-{"sid":"...","slug":"...","created":true,
- "url":"http://HOST:PORT/s/SLUG/",
- "localhost_url":"http://localhost:PORT/s/SLUG/",
- "owner_url":"http://HOST:PORT/s/SLUG/#k=TOKEN",
- "response_dir":"...","annotations_dir":"...","state_dir":"...",
- "events_dir":"...","consumed_dir":"..."}
-```
-
-The **create** call returns `created: true` with a fresh `sid`/`slug`/directories.
-The **attach** call returns `created: false` with the **same** `sid` and
-directories as the workspace's first push — `blocks.json` under that
-`response_dir` is the same file every push in this conversation updates in
-place, not a new one each time.
-
-Save `sid`, `slug`, `url`, `localhost_url`, `response_dir`, `state_dir`,
-`events_dir`, `consumed_dir` for the rest of this turn. Announce **the slug
-URL** — the URLs are built from `slug`, not `sid` (`/s/<slug>/`), so that's
-what the user should bookmark or type into `/annotate resume`. When two of
-them are identical (no Tailscale host configured, `url` already on a loopback
-host), announce just one. (`annotations_dir` is no longer used by the annotate
-skill but is still returned by the server.)
-
-**Three URLs, and they are not interchangeable.** Writes require either a
+Three of them, and they are not interchangeable. Writes require either a
 loopback connection or the capability token; reads never do.
 
 | Field | Who it's for | Can it change the document? |
 |-------|--------------|------------------------------|
-| `localhost_url` | the user, on this machine | yes — loopback is the owner |
+| `localhost_url` (`WC_URL`) | the user, on this machine | yes — loopback is the owner |
 | `url` | **shareable** — a colleague on the LAN/Tailnet | no, read-only |
 | `owner_url` | the user, from another of their devices | yes — carries the token |
 
-Announce `localhost_url` first (browser features needing a secure context,
-like voice dictation, only work there). Offer `url` when the user wants to
-share, and say plainly that it is read-only.
+Announce `WC_URL` first (browser features needing a secure context, like voice
+dictation, only work there). Offer `url` when the user wants to share, and say
+plainly that it is read-only.
 
 **Never print `owner_url` unless the user asked to work from another device.**
 It carries the write token; treat it like a credential, not like a link.
-
-To resume a previously-closed conversation's workspace (`/annotate resume
-<slug>`, or no arg to list candidates), see `references/resuming.md` — it sets
-this same `workspace` marker so the push flow above attaches to it
-automatically.
 
 ## Verbosity mode — the composition contract
 
@@ -240,36 +167,36 @@ evidence and code quotes inline. Use only when the mode resolved to `detailed`.
 ## How to push a response
 
 1. **Split, then capability-check every block.** (In `compact` mode the block list is the compact contract in § Verbosity mode above — the kind menu still applies to the blocks it produces.) Split the response into logical units (a paragraph, a heading + its prose, one bullet, one code block; aim for 3-15 lines — small enough to read one at a time, large enough to carry a self-contained thought). Then walk the kind menu (SKILL.md § Block-kind menu) over each unit and assign the first kind whose trigger matches — `sequence`, `flowchart`, `diagram`, `choice`, or `mockup` — with `kind: "markdown"` as the fallback for units no richer kind claims. Before writing the files, re-scan a block list that came out all-markdown against the menu once: a response about interacting systems, branching logic, or a decision the user must make typically mixes kinds. **Independent of kind, also decide each block's `code` anchors** — see `references/code-anchors.md`.
-2. Write `meta.json` first (at `<response_dir>/meta.json`):
+2. Write `blocks.json` anywhere convenient (your scratchpad). It is an input to
+   the push, not a file a server reads, so its location no longer matters:
    ```json
    {"response_id": "resp-<unix-timestamp>",
     "title": "<short title>",
-    "claude_session_id": "$CLAUDE_CODE_SESSION_ID"}
-   ```
-   Read `claude_session_id` from the `CLAUDE_CODE_SESSION_ID` env var (exposed to all Bash tool calls).
-3. Then write `blocks.json` at `<response_dir>/blocks.json`:
-   ```json
-   {"response_id": "<same as meta>",
-    "title": "<same as meta>",
     "blocks": [
       {"id": "section-1", "title": "<short header>", "markdown": "<first block's markdown>"},
       {"id": "section-2", "title": "<short header>", "markdown": "<second block's markdown>"},
       ...
     ]}
    ```
-   Block ids are sequential `section-1`, `section-2`, `section-3`, ... starting from 1. Each block also carries a **`title`** — a 2-5 word header shown on the block's collapsible card (e.g. `"What happens when you comment"`). Keep it a noun phrase, not a sentence. If you omit it, the client derives a header from the block's first heading or sentence, but an authored title is almost always cleaner. **When you author a `title`, do not also repeat it as a leading `#`/`##` heading inside that block's markdown** — the card already shows the title, so a duplicate heading reads twice. **Do not write a `version` field** — the server derives per-block versions from a content-hash chain stored in a sibling `versions.json`. Any `version` field you write is stripped on save and ignored on read.
+   Block ids are sequential `section-1`, `section-2`, ... from 1. Each block also carries a **`title`** — a 2-5 word header shown on the block's collapsible card (e.g. `"What happens when you comment"`). Keep it a noun phrase, not a sentence. If you omit it, the client derives a header from the block's first heading or sentence, but an authored title is almost always cleaner. **When you author a `title`, do not also repeat it as a leading `#`/`##` heading inside that block's markdown** — the card already shows the title, so a duplicate heading reads twice. **Do not write a `version` field** — the daemon derives every item's version from its content hash, so a version you write is a second source of truth that will disagree.
 
    For non-markdown blocks (`kind: "sequence"|"flowchart"|"diagram"|"choice"|"mockup"`), read the exact spec shape in `references/block-kinds/<kind>.md`.
 
-4. Order matters: write `meta.json` before `blocks.json`, both atomically (write to `*.tmp` then `mv`).  The server reads both per request; an in-flight half-write falls back to the waiting page.
-4b. **Check the anchors** before announcing anything:
+3. **Check the anchors** before pushing:
 
-    python3 -m skills.annotate.check_anchors "<response_dir>/blocks.json" "$PWD"
+   ```bash
+   cd "$PLUGIN_ROOT" && PYTHONPATH="$PLUGIN_ROOT" \
+     python3 -m skills.annotate.check_anchors "<path/to/blocks.json>" "$PWD"
+   ```
 
-    Exit 0 means every anchor resolves. Non-zero prints one problem per line
-    naming the block and the anchor — fix `blocks.json` and re-run. A broken
-    anchor caught here costs a rewrite; the same anchor caught by the reader
-    costs their trust in every other citation on the page.
+   Exit 0 means every anchor resolves. Non-zero prints one problem per line
+   naming the block and the anchor — fix `blocks.json` and re-run. A broken
+   anchor caught here costs a rewrite; the same anchor caught by the reader
+   costs their trust in every other citation on the page.
+
+4. **Push it** with the command in "Push the document" above, and capture
+   `WC_SID` / `WC_SLUG` / `WC_URL`.
+
 5. Tell the user, announcing **both** URLs (the loopback one first, since it's the one where voice dictation works):
    **"Response in browser → `<localhost_url>` (or `<url>` to open from another device).  Click any block to comment; the page updates that block in place when I respond."**
    If `localhost_url` and `url` are identical, announce just the one.
@@ -360,61 +287,49 @@ The `role` field is what makes the glossary useful for debugging — it tells th
 
 ## Arming the watcher
 
-After writing `meta.json` + `blocks.json` and announcing the URL, start a long-lived `Monitor` keyed to this session's directories.  Use `persistent: true` — the watcher lives for the whole session and emits one notification per submitted comment.
-
-Invocation:
-
-```bash
-PLUGIN_ROOT=$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.claude/annotate/server.json")))["plugin_root"])')
-SKILL=annotate \
-SID="<sid>" \
-STATE_DIR="<state_dir>" \
-EVENTS_DIR="<events_dir>" \
-CONSUMED_DIR="<consumed_dir>" \
-CLAUDE_SID="$CLAUDE_CODE_SESSION_ID" \
-"$PLUGIN_ROOT/skills/_shared/web_companion/watcher.sh"
-```
-
-Substitute `<sid>`, `<state_dir>`, `<events_dir>`, `<consumed_dir>` from the session-create response (returned by `POST /api/sessions`). `CLAUDE_SID` is this Claude Code session's own id — read from the `CLAUDE_CODE_SESSION_ID` env var (exposed to all Bash tool calls, same one used for `meta.json`'s `claude_session_id` and the pending registry below). The watcher writes a per-session heartbeat file keyed by it (`state/watchers/<CLAUDE_SID>.hb`), which is how the server counts distinct live Claude sessions attached to one shared workspace. It's optional — an unset `CLAUDE_SID` doesn't break the watcher, it just isn't counted.
-
-Pass this command as the `Monitor` tool's `command` with `persistent: true` and a short `description` like `"annotate-wait sid=<sid>"`.
-
-The watcher emits these stdout banners:
-
-- **`WEBCOMPANION_EVENT skill=annotate sid=<sid> event_id=<id>`** — one per submitted comment.  Followed by `---payload---`, the event JSON, and `---end---`.
-- **`WEBCOMPANION_FINISHED skill=annotate sid=<sid>`** — when the user clicks Done.
-- **`WEBCOMPANION_CANCELLED skill=annotate sid=<sid>`** — when the user cancels (terminal `scrap it`, etc.).
-
-Each stdout line wakes you once.  The watcher stays alive across many events until the session terminates. When an event fires, follow `references/handling-events.md`.
-
-After arming, also append a record to the pending registry so terminal-cancellation can find this session. This is also where the **workspace marker** used by "Create-or-attach a workspace" above gets written — pass the workspace's `sid` and `slug` (from the session-create/attach response) as `$SID`/`$SLUG`:
+There is no watcher script any more — the daemon ships its own, and it emits
+the same banners this skill has always read:
 
 ```bash
-mkdir -p ~/.claude/annotate
-REG="$HOME/.claude/annotate/pending-${CLAUDE_CODE_SESSION_ID}.json"
-python3 - "$REG" "$SID" "$RID" "$TITLE" "$STATE_DIR" "$EVENTS_DIR" "$CONSUMED_DIR" "$SLUG" <<'PY'
-import json, os, sys
-path, sid, rid, title, state_dir, events_dir, consumed_dir, slug = sys.argv[1:]
-try:
-    data = json.load(open(path))
-except FileNotFoundError:
-    data = []
-data.append({"sid": sid, "rid": rid, "title": title,
-             "state_dir": state_dir, "events_dir": events_dir,
-             "consumed_dir": consumed_dir,
-             "workspace": {"sid": sid, "slug": slug}})
-tmp = path + ".tmp"
-json.dump(data, open(tmp, "w"), indent=2)
-os.replace(tmp, path)
-PY
+webcompanion watch --kind annotate --sid "$WC_SID"
 ```
 
-`workspace` is a new key added to each round entry alongside the existing
-`sid`/`rid`/`title`/`state_dir`/`events_dir`/`consumed_dir` fields — it doesn't
-collide with them. `hooks/progress_publish.py` and `references/handling-events.md`
-§ Terminal cancellation only ever read `state_dir`/`events_dir`/`consumed_dir`
-off each entry, so the extra key is inert to both; "Create-or-attach a
-workspace" above is the only reader of `workspace`, and it always looks at the
-**last** entry with one set.
+Pass that as the `Monitor` tool's `command` with `persistent: true` and a
+`description` like `"annotate-wait sid=$WC_SID"`.
+
+Banners, unchanged:
+
+- **`WEBCOMPANION_EVENT skill=annotate sid=<sid> event_id=<id>`** — one per
+  submitted comment, followed by `---payload---`, the event JSON, `---end---`.
+- **`WEBCOMPANION_FINISHED`** / **`WEBCOMPANION_CANCELLED`**.
+
+**One obligation that is new and is not optional.** Every event you answer
+must be acknowledged, or the daemon re-emits it — three times, thirty minutes
+apart — and then drops it:
+
+```bash
+webcompanion ack --sid "$WC_SID" --event-id "<event_id>"
+```
+
+This replaces writing an `.ack` file into a consumed directory. Everywhere
+`references/handling-events.md` says "write the `.ack`", run this instead; the
+rule about *when* (after the rewrite, never before) is unchanged.
+
+### The event payload
+
+The daemon stores `{anchor, text, images}` and nothing else, so annotate's
+richer vocabulary travels as JSON inside `text` — always JSON, never
+sometimes-prose, so there is nothing to guess:
+
+```json
+{"type": "round", "reactions": [...], "text": ""}
+{"type": "choice", "block_id": "section-5", "selected_options": ["o1"], "text": ""}
+{"type": "comment", "block_id": "section-2", "step_id": "d-fields", "text": "…"}
+```
+
+`anchor` is the region the user was looking at — `<block-id>`, or
+`<block-id>#<sub-unit>` for a comment on a row inside a block, or
+`__general__` for the page-level composer. Parse `text` as JSON first; the
+`type` inside decides which section of `handling-events.md` applies.
 
 The registry persists across watchers within a single Claude Code session. It is *not* shared across sessions (keyed by `CLAUDE_CODE_SESSION_ID`).

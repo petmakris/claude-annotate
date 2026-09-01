@@ -15,7 +15,7 @@ left, per `references/pushing.md`.
 
 Every step below needs the server URL. `/annotate resume` reaches this file
 **directly** from SKILL.md's router — it never passes through
-`references/pushing.md`, so it never runs `ensure_server.sh`. That makes the
+`references/pushing.md`, so it never confirms the daemon itself. That makes the
 block below this skill's first `python3` call on a resume, and it carries its
 own guard for the same reason `references/pushing.md` does:
 
@@ -72,12 +72,12 @@ SERVER_URL=$(python3 -c 'import json,os; print(json.load(open(os.path.expanduser
    `$SLUG` is the resume argument; `$ROW_TITLE` is the matched row's `title`
    (attaching by slug never overwrites an existing workspace's title, so this
    is cosmetic — send it anyway for consistency with `references/pushing.md`
-   § "Subsequent pushes"). This returns `created: false` and the same `sid`/`response_dir`/`state_dir`/
-   `events_dir`/`consumed_dir`/`url`/`localhost_url` the workspace has always
+   § "Subsequent pushes"). Pass `--slug` to `skills.annotate.push`; it resolves the
+   existing session and returns the same `WC_SID`/`WC_SLUG`/`WC_URL` the workspace has always
    had.
 
 4. **Set the conversation's workspace marker and re-arm a watcher** on the
-   returned `state_dir`/`events_dir`/`consumed_dir` — exactly the "Arming the
+   returned `WC_SID` — exactly the "Arming the
    watcher" procedure in `references/pushing.md`, sourced from this attach
    response instead of a create response. That step is also what writes the
    `workspace: {"sid","slug"}` marker into
@@ -146,8 +146,8 @@ finds any live (non-`"done"`) row, don't create — offer the choice instead:
 for `interactive_review`. It returns only `{"sid", "pr_ref", "title",
 "state_dir"}` — no `slug`, no `project`, no `last_active` — and `title`/`pr_ref`
 come from a `state_dir/meta.json` file the annotate skill never writes (that's
-a different file from the `response_dir/meta.json` `references/pushing.md`
-writes on every push), so for annotate-created sessions `title` there is
+a different file from the `__doc__` item `references/pushing.md` writes on
+every push), so for annotate-created sessions `title` there is
 always `""`. It also can't hand back a slug URL to announce. `?scope=all` is
 the query that carries `slug`/`project`/`last_active`/`status`
 (`skills/_shared/web_companion/server.py` — see `list_rows`,
@@ -158,7 +158,7 @@ client-side by project. Resume and the auto-offer both do the same.
 ## Never crash on a bad slug
 
 If `<slug>` doesn't resolve, or the server is unreachable, degrade to a plain
-message and stop — same "re-run `ensure_server.sh` and retry" pattern as
+message and stop — same "check `webcompanion status` and retry" pattern as
 `references/handling-events.md` § Edge cases for a transient failure. Never
 let a resume attempt fall through into creating (or attaching to) the wrong
 workspace silently.
