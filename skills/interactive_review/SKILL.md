@@ -258,6 +258,53 @@ went unanswered and was dropped — please re-ask it on the line."*
   (e.g. "Null check on portfolio lookup", "Why the fee branch is skipped").
   Refresh it each answer so it stays accurate as the synthesis absorbs new
   questions. The IDE panel shows this as the row's title.
+- **Structure, don't just write prose.** The IDE renders four markdown
+  patterns specially — use them, don't just write one dense paragraph:
+  - **Opening verdict.** If the reply has a one-line takeaway, open with a
+    block quote whose first character is a severity symbol: `✓` (agrees /
+    correct), `!` (critical), or `⚠` (important). It renders as a colour-coded
+    pill instead of quoted text, and also drives the thread list's severity
+    dot (see `AnnotationsPanel.severityColor`) — so use it whenever the
+    finding actually has one of those three severities, not decoratively. A
+    second line in the same quote renders as a dimmer subtitle underneath.
+  - **Section labels.** Use `####` to break the answer into named sections
+    (e.g. `#### Why one method, not two`, `#### Evidence`) — it renders as a
+    small-caps label with a trailing rule, not a fourth heading weight.
+  - **Evidence as code, not inline chips.** When you're citing something
+    provable — two call sites that differ by one argument, a stack trace,
+    the shape of a fix — put it in a fenced code block rather than stringing
+    inline `` `code` `` spans through a sentence. Inline code stays for
+    naming a symbol mid-sentence; fenced code is for showing something.
+  - **Later block quotes are asides.** Any `>` block that is *not* the
+    opening line renders as an accent-tinted callout card, for a genuinely
+    separate side note (e.g. "one thing this doesn't fix").
+
+  Example:
+  ````markdown
+  > ✓ Correct and intentional
+  > confirmed against the OpenAPI contract and the test file
+
+  #### Why one method, not two
+
+  `sendOrders` isn't defined in `HttpDatasourceHttpClient` itself — it comes
+  from `CoreBankingOrdersContract` in the external `wp_integration_layer_contract`
+  library. The contract already models a check and a real transmission as
+  one endpoint with a `dryRun` flag, not two endpoints.
+
+  #### Evidence
+
+  ```java
+  httpClient.sendOrders(BANK_ID_STRING, false, "fr", ...) // real send
+  httpClient.sendOrders(BANK_ID_STRING, true,  "fr", ...) // pre-trade check
+  ```
+
+  > New at this boundary: `OrdersEndpointTimeoutClient` applies a dedicated
+  > read timeout only to `/orders`, because this call now runs synchronously
+  > while an advisor waits.
+  ````
+  Not every reply needs all four — a quick factual answer with no verdict and
+  no aside is still fine as plain prose. Reach for structure when the reply
+  actually has a verdict, distinct sections, or provable evidence to show.
 
 ## Re-apply safety
 

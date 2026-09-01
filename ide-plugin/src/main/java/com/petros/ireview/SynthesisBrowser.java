@@ -95,8 +95,9 @@ public final class SynthesisBrowser implements Disposable {
         // reads larger than a monospaced one.
         Font uiFont = JBUI.Fonts.label();
         int editorSize = scheme.getEditorFontSize();
-        int proseSize = clampInt(editorSize - 1, Math.max(13, uiFont.getSize()), 26);
-        int monoSize = clampInt(proseSize - 1, 12, 25);
+        int baseProseSize = clampInt(editorSize - 1, Math.max(13, uiFont.getSize()), 26);
+        int proseSize = clampInt(baseProseSize + PanelZoom.delta(), 9, 40);
+        int monoSize = clampInt(proseSize - 1, 8, 38);
         String proseFont = quote(uiFont.getFamily());
         String monoFont = quote(scheme.getEditorFontName());
 

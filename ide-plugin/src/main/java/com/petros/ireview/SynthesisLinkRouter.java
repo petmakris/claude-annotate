@@ -77,15 +77,15 @@ public final class SynthesisLinkRouter {
                     }
                     return;
                 }
-                com.intellij.openapi.ui.popup.JBPopupFactory.getInstance()
-                    .createPopupChooserBuilder(java.util.Arrays.asList(candidates))
-                    .setTitle("Multiple matches for '" + identifier + "'")
-                    .setItemChosenCallback(item -> {
-                        if (item instanceof com.intellij.pom.Navigatable nav) {
-                            nav.navigate(true);
-                        }
-                    })
-                    .createPopup()
+                // JBPopupFactory.createPopupChooserBuilder(List<PsiElement>) is asserted against
+                // by the platform ("Do not use PsiElement for popup model") — PsiTargetNavigator
+                // is the supported way to show a disambiguation popup over PSI targets; its popup
+                // already navigates to the chosen element itself, no manual callback needed.
+                com.intellij.psi.PsiElement[] elements =
+                    java.util.Arrays.copyOf(candidates, candidates.length, com.intellij.psi.PsiElement[].class);
+                String title = "Multiple matches for '" + identifier + "'";
+                new com.intellij.codeInsight.navigation.PsiTargetNavigator<>(elements)
+                    .createPopup(project, title)
                     .showCenteredInCurrentWindow(project);
             })
         .submit(AppExecutorUtil.getAppExecutorService());

@@ -348,20 +348,43 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
         new JBColor(new Color(0xc0, 0x32, 0x21), new Color(0xe0, 0x55, 0x5a));
     private static final JBColor SEVERITY_IMPORTANT =
         new JBColor(new Color(0xa6, 0x72, 0x0a), new Color(0xd9, 0xa5, 0x34));
+    private static final JBColor SEVERITY_OK =
+        new JBColor(new Color(0x2f, 0x8f, 0x4e), new Color(0x5f, 0xb8, 0x65));
     private static final JBColor SEVERITY_NONE = JBColor.GRAY;
 
     /**
-     * A row's dot color, read from the leading "**Critical —" / "**Important —"
-     * convention Claude's own replies use when posting a finding (see the
-     * interactive_review skill) — not a stored field, so this is a best-effort
-     * hint, not a guarantee. Anything else (a design discussion, a resolved
-     * note, the whole-PR summary) reads as neutral rather than guessing.
+     * A row's dot color. Prefers the reply's opening "> <symbol> ..." verdict
+     * line (see the interactive_review skill's response-style guide: ✓ ok, !
+     * critical, ⚠ important) and falls back to the older leading "**Critical —"
+     * / "**Important —" bold-prefix convention for replies posted before that
+     * convention existed. Neither is a stored field, so this is a best-effort
+     * hint, not a guarantee — anything else (a design discussion, the whole-PR
+     * summary) reads as neutral rather than guessing.
      */
     private static JBColor severityColor(String synthesis) {
         String s = synthesis == null ? "" : synthesis.stripLeading();
+        JBColor fromVerdict = verdictSeverityColor(s);
+        if (fromVerdict != null) return fromVerdict;
         if (s.regionMatches(true, 0, "**Critical", 0, "**Critical".length())) return SEVERITY_CRITICAL;
         if (s.regionMatches(true, 0, "**Important", 0, "**Important".length())) return SEVERITY_IMPORTANT;
         return SEVERITY_NONE;
+    }
+
+    /**
+     * Reads severity from the opening block quote's leading symbol, e.g.
+     * "> ✓ Correct and intentional". Returns null when the reply doesn't open
+     * with a block quote, or the block quote's leading symbol isn't one of the
+     * three severity markers — the caller falls back to the older heuristic.
+     */
+    private static JBColor verdictSeverityColor(String s) {
+        if (!s.startsWith(">")) return null;
+        String firstLine = s.substring(1).stripLeading();
+        int newline = firstLine.indexOf('\n');
+        if (newline >= 0) firstLine = firstLine.substring(0, newline);
+        if (firstLine.startsWith("✓")) return SEVERITY_OK;
+        if (firstLine.startsWith("⚠")) return SEVERITY_IMPORTANT;
+        if (firstLine.startsWith("!")) return SEVERITY_CRITICAL;
+        return null;
     }
 
     private void refreshTitle() {

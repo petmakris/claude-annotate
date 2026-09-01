@@ -2,9 +2,15 @@ package com.petros.ireview;
 
 import org.commonmark.Extension;
 import org.commonmark.ext.gfm.tables.TablesExtension;
+import org.commonmark.node.BlockQuote;
 import org.commonmark.node.Code;
+import org.commonmark.node.Document;
+import org.commonmark.node.Heading;
 import org.commonmark.node.Link;
 import org.commonmark.node.Node;
+import org.commonmark.node.SoftLineBreak;
+import org.commonmark.node.HardLineBreak;
+import org.commonmark.node.Text;
 import org.commonmark.parser.Parser;
 import org.commonmark.renderer.NodeRenderer;
 import org.commonmark.renderer.html.AttributeProvider;
@@ -73,6 +79,8 @@ public final class SynthesisHtmlRenderer {
             .attributeProviderFactory(ctx -> new NavLinkAttributeProvider())
             .nodeRendererFactory(SymbolCodeRenderer::new)
             .nodeRendererFactory(AltTextImageRenderer::new)
+            .nodeRendererFactory(VerdictBlockQuoteRenderer::new)
+            .nodeRendererFactory(SectionHeadingRenderer::new)
             .build();
 
     /**
@@ -130,7 +138,8 @@ public final class SynthesisHtmlRenderer {
           +   "--tk-number:" + k.number() + ";--tk-comment:" + k.comment() + ";"
           +   "--tk-metadata:" + k.metadata() + ";--tk-function:" + k.function() + ";"
           +   "--tk-type:" + k.type() + ";--tk-field:" + k.field() + ";"
-          +   "--tk-variable:" + k.variable() + ";--tk-constant:" + k.constant() + ";}"
+          +   "--tk-variable:" + k.variable() + ";--tk-constant:" + k.constant() + ";"
+          +   "--accent:" + t.accent() + ";}"
 
           + "html,body{margin:0;padding:0;}"
           + "body{background:" + t.background() + ";color:" + t.foreground() + ";"
@@ -206,9 +215,43 @@ public final class SynthesisHtmlRenderer {
           + "table{border-collapse:collapse;margin:0 0 14px;font-size:.95em;}"
           + "th,td{border:1px solid " + t.border() + ";padding:6px 10px;text-align:left;}"
           + "th{background:" + t.codeBackground() + ";color:" + t.strongForeground() + ";font-weight:620;}"
-          + "blockquote{margin:0 0 14px;padding:2px 0 2px 12px;"
-          +   "border-left:2px solid " + t.border() + ";color:" + t.mutedForeground() + ";}"
-          + "hr{border:0;border-top:1px solid " + t.border() + ";margin:20px 0;}";
+          + "hr{border:0;border-top:1px solid " + t.border() + ";margin:20px 0;}"
+
+          // The reply's opening "> <symbol> ..." line, read by VerdictBlockQuoteRenderer:
+          // a colour-coded pill instead of a quoted paragraph, so the verdict reads
+          // before the reasoning. See interactive_review/SKILL.md for the convention.
+          + ".verdict{display:flex;align-items:flex-start;gap:10px;margin:0 0 16px;}"
+          + ".verdict-icon{width:20px;height:20px;border-radius:50%;flex-shrink:0;"
+          +   "display:flex;align-items:center;justify-content:center;"
+          +   "font-size:11px;font-weight:700;margin-top:1px;line-height:1;}"
+          + ".verdict-ok .verdict-icon{background:rgba(95,184,101,.16);color:#5fb865;"
+          +   "border:1px solid rgba(95,184,101,.45);}"
+          + ".verdict-crit .verdict-icon{background:rgba(224,85,90,.16);color:#e0555a;"
+          +   "border:1px solid rgba(224,85,90,.45);}"
+          + ".verdict-imp .verdict-icon{background:rgba(217,165,52,.16);color:#d9a534;"
+          +   "border:1px solid rgba(217,165,52,.45);}"
+          + ".verdict-info .verdict-icon{background:" + t.codeBackground() + ";"
+          +   "color:" + t.mutedForeground() + ";border:1px solid " + t.border() + ";}"
+          + ".verdict-text{font-weight:620;color:" + t.strongForeground() + ";}"
+          + ".verdict-sub{font-weight:400;color:" + t.mutedForeground() + ";"
+          +   "font-size:.92em;margin-top:3px;}"
+
+          // #### in the reply, read by SectionHeadingRenderer: a labelled divider
+          // between sections instead of another heading the same weight as h1-h3.
+          + ".sect-label{display:flex;align-items:center;gap:8px;margin:20px 0 8px;"
+          +   "font-size:.72em;font-weight:700;letter-spacing:.07em;text-transform:uppercase;"
+          +   "color:var(--accent);}"
+          + ".sect-label::after{content:'';flex:1;height:1px;"
+          +   "background:" + t.border() + ";}"
+
+          // Any later "> ..." block quote (i.e. not the opening verdict): an aside,
+          // set apart from the surrounding prose instead of just indented text.
+          + ".callout{display:flex;gap:10px;margin:0 0 14px;padding:10px 12px;"
+          +   "border-radius:8px;background:color-mix(in srgb,var(--accent) 14%,transparent);"
+          +   "border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);}"
+          + ".callout-mark{color:var(--accent);font-weight:700;font-size:14px;line-height:1.4;}"
+          + ".callout-body p{margin:0 0 8px;}"
+          + ".callout-body p:last-child{margin-bottom:0;}";
     }
 
     /** Rewrites non-http destinations to ireview-nav:// and classes both kinds. */
@@ -251,6 +294,183 @@ public final class SynthesisHtmlRenderer {
             html.text(literal);
             html.tag("/code");
             html.tag("/a");
+        }
+    }
+
+    private static Map<String, String> attrs(String key, String value) {
+        Map<String, String> m = new LinkedHashMap<>();
+        m.put(key, value);
+        return m;
+    }
+
+    /**
+     * Renders the reply's opening "> <symbol> ..." block quote as a colour-coded
+     * verdict pill (see the interactive_review skill's response-style guide for
+     * the ✓ / ! / ⚠ convention), and any later block quote as a plain callout
+     * card. Registering this for {@link BlockQuote} replaces commonmark's default
+     * handling for every block quote in the document — there's no third case to
+     * fall back to, the two branches here are exhaustive.
+     */
+    private static final class VerdictBlockQuoteRenderer implements NodeRenderer {
+        private final HtmlNodeRendererContext context;
+        private final HtmlWriter html;
+
+        VerdictBlockQuoteRenderer(HtmlNodeRendererContext context) {
+            this.context = context;
+            this.html = context.getWriter();
+        }
+
+        @Override
+        public Set<Class<? extends Node>> getNodeTypes() {
+            return Set.of(BlockQuote.class);
+        }
+
+        @Override
+        public void render(Node node) {
+            BlockQuote quote = (BlockQuote) node;
+            boolean isOpeningVerdict = quote.getParent() instanceof Document && quote.getPrevious() == null;
+            if (isOpeningVerdict) {
+                renderVerdict(quote);
+            } else {
+                renderCallout(quote);
+            }
+        }
+
+        private void renderVerdict(BlockQuote quote) {
+            String severity = "info";
+            Node headline = quote.getFirstChild();
+            Node leadingRun = (headline != null) ? headline.getFirstChild() : null;
+            // Strip the leading symbol off the first text run so it isn't
+            // repeated inside the headline text itself.
+            if (leadingRun instanceof Text text) {
+                String literal = text.getLiteral();
+                String trimmed = literal.stripLeading();
+                if (trimmed.startsWith("✓")) {
+                    severity = "ok";
+                    text.setLiteral(trimmed.substring(1).stripLeading());
+                } else if (trimmed.startsWith("⚠")) {
+                    severity = "imp";
+                    text.setLiteral(trimmed.substring(1).stripLeading());
+                } else if (trimmed.startsWith("!")) {
+                    severity = "crit";
+                    text.setLiteral(trimmed.substring(1).stripLeading());
+                }
+            }
+            String icon = switch (severity) {
+                case "ok" -> "✓";
+                case "crit" -> "!";
+                case "imp" -> "⚠";
+                default -> "•";
+            };
+
+            html.line();
+            html.tag("div", attrs("class", "verdict verdict-" + severity));
+            html.tag("div", attrs("class", "verdict-icon"));
+            html.raw(icon);
+            html.tag("/div");
+            html.tag("div", attrs("class", "verdict-text"));
+            if (headline != null) {
+                // A second "> ..." line with no blank line between is the
+                // natural way to write this, and commonmark keeps that as ONE
+                // paragraph with a line-break node in the middle rather than
+                // two paragraphs — so the split happens here, not at the
+                // block level.
+                Node afterBreak = renderUntilLineBreak(headline);
+                Node subtitleParagraph = headline.getNext();
+                if (afterBreak != null || subtitleParagraph != null) {
+                    html.tag("div", attrs("class", "verdict-sub"));
+                    for (Node inline = afterBreak; inline != null; inline = inline.getNext()) {
+                        context.render(inline);
+                    }
+                    for (Node b = subtitleParagraph; b != null; b = b.getNext()) {
+                        for (Node inline = b.getFirstChild(); inline != null; inline = inline.getNext()) {
+                            context.render(inline);
+                        }
+                    }
+                    html.tag("/div");
+                }
+            }
+            html.tag("/div");
+            html.tag("/div");
+            html.line();
+        }
+
+        /**
+         * Renders the headline paragraph's inline children up to (not
+         * including) its first line break, and returns the sibling right
+         * after that break — the start of the subtitle, still inside the
+         * same paragraph — or null if the paragraph never breaks.
+         */
+        private Node renderUntilLineBreak(Node paragraph) {
+            for (Node inline = paragraph.getFirstChild(); inline != null; inline = inline.getNext()) {
+                if (inline instanceof SoftLineBreak || inline instanceof HardLineBreak) {
+                    return inline.getNext();
+                }
+                context.render(inline);
+            }
+            return null;
+        }
+
+        private void renderCallout(BlockQuote quote) {
+            html.line();
+            html.tag("div", attrs("class", "callout"));
+            html.tag("div", attrs("class", "callout-mark"));
+            html.raw("+");
+            html.tag("/div");
+            html.tag("div", attrs("class", "callout-body"));
+            for (Node child = quote.getFirstChild(); child != null; child = child.getNext()) {
+                context.render(child);
+            }
+            html.tag("/div");
+            html.tag("/div");
+            html.line();
+        }
+    }
+
+    /**
+     * Renders {@code ####} as a small-caps, accent-coloured section label with a
+     * trailing rule instead of a fourth heading weight; every other heading level
+     * keeps commonmark's default {@code h1}-{@code h3}/{@code h5}/{@code h6} tag,
+     * reproduced here because registering a renderer for {@link Heading} replaces
+     * the core renderer for all six levels, not just the one being customised.
+     */
+    private static final class SectionHeadingRenderer implements NodeRenderer {
+        private final HtmlNodeRendererContext context;
+        private final HtmlWriter html;
+
+        SectionHeadingRenderer(HtmlNodeRendererContext context) {
+            this.context = context;
+            this.html = context.getWriter();
+        }
+
+        @Override
+        public Set<Class<? extends Node>> getNodeTypes() {
+            return Set.of(Heading.class);
+        }
+
+        @Override
+        public void render(Node node) {
+            Heading heading = (Heading) node;
+            if (heading.getLevel() == 4) {
+                html.line();
+                html.tag("div", attrs("class", "sect-label"));
+                renderChildren(heading);
+                html.tag("/div");
+                html.line();
+                return;
+            }
+            String tag = "h" + heading.getLevel();
+            html.line();
+            html.tag(tag, context.extendAttributes(node, tag, Map.of()));
+            renderChildren(heading);
+            html.tag("/" + tag);
+            html.line();
+        }
+
+        private void renderChildren(Node parent) {
+            for (Node child = parent.getFirstChild(); child != null; child = child.getNext()) {
+                context.render(child);
+            }
         }
     }
 

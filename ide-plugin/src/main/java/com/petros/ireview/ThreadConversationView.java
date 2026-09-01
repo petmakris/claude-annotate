@@ -71,6 +71,7 @@ final class ThreadConversationView implements Disposable {
     private javax.swing.Timer elapsedTimer;
     private javax.swing.Timer stillWaitingTimer;
     private long startedAt;
+    private Runnable zoomListenerRunnable;
 
     ThreadConversationView(@NotNull Project project,
                            @NotNull String anchor,
@@ -146,6 +147,10 @@ final class ThreadConversationView implements Disposable {
         input = new JTextArea(INPUT_ROWS, 50);
         input.setLineWrap(true);
         input.setWrapStyleWord(true);
+        // Stock JTextArea falls back to a bare Monospaced default on most
+        // look-and-feels — visibly detached from the Inter-derived UI font
+        // everywhere else in this panel. Match it explicitly.
+        input.setFont(JBUI.Fonts.label(13f + PanelZoom.delta() * 0.5f));
         JScrollPane inputScroll = new JScrollPane(input);
         inputScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         inputScroll.setBorder(BorderFactory.createLineBorder(JBColor.border(), 1, true));
@@ -171,6 +176,13 @@ final class ThreadConversationView implements Disposable {
             synthesisPane.setCaretPosition(0);
         };
         renderCurrent.run();
+
+        Runnable zoomListener = () -> {
+            input.setFont(JBUI.Fonts.label(13f + PanelZoom.delta() * 0.5f));
+            renderCurrent.run();
+        };
+        PanelZoom.addListener(zoomListener);
+        this.zoomListenerRunnable = zoomListener;
 
         Runnable stopElapsed = () -> {
             if (elapsedTimer != null) { elapsedTimer.stop(); elapsedTimer = null; }
@@ -315,6 +327,7 @@ final class ThreadConversationView implements Disposable {
     @Override
     public void dispose() {
         client.removeListener(listener);
+        if (zoomListenerRunnable != null) PanelZoom.removeListener(zoomListenerRunnable);
         stopElapsedRunnable.run();
         if (browser != null) Disposer.dispose(browser);
     }
@@ -335,7 +348,7 @@ final class ThreadConversationView implements Disposable {
         var scheme = com.intellij.openapi.editor.colors.EditorColorsManager
                 .getInstance().getGlobalScheme();
         String editorFont = scheme.getEditorFontName();
-        int editorFontSize = Math.max(10, scheme.getEditorFontSize() - 1);
+        int editorFontSize = Math.max(9, Math.min(40, scheme.getEditorFontSize() - 1 + PanelZoom.delta()));
         String fontFamily = "'" + editorFont.replace("'", "\\'") + "', monospace";
         return "<html><head><style>"
              + "body { font-family: " + fontFamily

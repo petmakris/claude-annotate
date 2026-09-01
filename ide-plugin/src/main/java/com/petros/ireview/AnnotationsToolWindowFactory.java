@@ -1,11 +1,14 @@
 package com.petros.ireview;
 
+import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowFactory;
 import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentFactory;
 import org.jetbrains.annotations.NotNull;
+
+import java.util.List;
 
 public final class AnnotationsToolWindowFactory implements ToolWindowFactory {
     @Override
@@ -15,5 +18,8 @@ public final class AnnotationsToolWindowFactory implements ToolWindowFactory {
             .createContent(panel.getComponent(), "", false);
         content.setDisposer(panel);
         toolWindow.getContentManager().addContent(content);
+
+        List<AnAction> zoom = List.of(new ZoomActions.Out(), new ZoomActions.In(), new ZoomActions.Reset());
+        toolWindow.setTitleActions(zoom);
     }
 }
