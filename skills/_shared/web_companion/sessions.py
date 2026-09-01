@@ -1,6 +1,7 @@
 """Session registry shared by all web_companion skills.
 
-Migrated from skills/annotate/server.py:67-163. Each instance is
+Migrated from annotate's own server (deleted when annotate moved onto the
+webcompanion daemon; see git history). Each instance is
 parameterized by a state_root (where sessions.json lives) so multiple
 skills can coexist with separate registries.
 """

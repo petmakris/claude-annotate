@@ -13,7 +13,7 @@ and dropped in the middle. The pane's note rendering had never once run.
 The smoke tests could not see this: they assert that renderDiffPane *contains*
 the string "diff-lost", and it did. Nothing fed it.
 """
-from skills.annotate.server import _render_block_for_raw
+from skills.annotate.render import render_block
 
 
 def _markdown_block(**extra):
@@ -21,10 +21,8 @@ def _markdown_block(**extra):
 
 
 def test_a_change_note_reaches_the_client():
-    out = _render_block_for_raw(
-        _markdown_block(change_note="Why: you marked it.\nLost: the rate limit."),
-        version=2,
-    )
+    out = render_block(
+        _markdown_block(change_note="Why: you marked it.\nLost: the rate limit."))
     assert out.get("change_note") == "Why: you marked it.\nLost: the rate limit."
 
 
@@ -35,31 +33,28 @@ def test_a_block_without_a_note_carries_no_empty_one():
     nothing invites a later `if ("change_note" in blk)` that renders an empty
     bordered box above every diff.
     """
-    assert "change_note" not in _render_block_for_raw(_markdown_block(), version=1)
+    assert "change_note" not in render_block(_markdown_block())
 
 
 def test_an_empty_note_is_not_passed_through():
-    assert "change_note" not in _render_block_for_raw(
-        _markdown_block(change_note="   "), version=1
-    )
+    assert "change_note" not in render_block(_markdown_block(change_note="   "))
 
 
 def test_a_non_string_note_is_dropped():
     """blocks.json is model-authored, so the type is not guaranteed."""
     for junk in (5, ["Why: no"], {"why": "no"}, True):
-        out = _render_block_for_raw(_markdown_block(change_note=junk), version=1)
+        out = render_block(_markdown_block(change_note=junk))
         assert "change_note" not in out, f"{junk!r} reached the client"
 
 
 def test_the_note_rides_along_with_a_diagram_block_too():
     """A compact can drop detail from a diagram's caption as easily as prose."""
-    out = _render_block_for_raw(
+    out = render_block(
         {
             "id": "b-2",
             "kind": "flowchart",
             "spec": {"nodes": [], "edges": []},
             "change_note": "Why: you marked it compact.",
         },
-        version=3,
     )
     assert out.get("change_note") == "Why: you marked it compact."

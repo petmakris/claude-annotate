@@ -14,6 +14,11 @@ block. That last one is the load-bearing rule of the whole feature — moving th
 card out of `main.prose` makes script.js's render loop paint a replacement for
 the block it finds missing, so the document ends up carrying it twice.
 """
+# NOTE: the browser-driven proof this file used to point at is gone. The 19
+# e2e suites spawned annotate's own server, which was deleted when annotate
+# moved onto the webcompanion daemon. They are recoverable from git history
+# and are repointable — the page they drove is unchanged, only the way it is
+# served — but until they are, what remains below is static assertion only.
 import re
 from pathlib import Path
 
@@ -22,8 +27,34 @@ STATIC = REPO / "skills" / "annotate" / "static"
 MAXIMIZE_JS = STATIC / "maximize.js"
 EXPORT_JS = STATIC / "export.js"
 STYLE_CSS = STATIC / "style.css"
-SERVER_PY = REPO / "skills" / "annotate" / "server.py"
-E2E = REPO / "skills" / "annotate" / "tests" / "e2e" / "maximize.e2e.cjs"
+# The page shell and its asset list used to be printed by server.py; they now
+# live in the renderer the daemon loads — shell.js for the markup, entry.js for
+# which stylesheets and scripts are pulled in and in what order. These tests
+# assert against the page's source either way, so they read both.
+class _PageSource:
+    """The page's markup and its asset list, as a single string to assert on.
+
+    shell.js holds the markup as a JSON-encoded JS string literal, so reading
+    the file raw would hand these tests `id=\\"block-search\\"` and every
+    markup assertion would fail on the escaping rather than on the thing it
+    is checking. The literal is decoded back to real HTML here, and entry.js
+    (which lists the stylesheets and scripts, in load order) is appended.
+    """
+
+    def __init__(self, repo):
+        static = repo / "skills" / "annotate" / "static"
+        self._shell = static / "shell.js"
+        self._entry = static / "entry.js"
+
+    def read_text(self, *a, **k):
+        import json
+        src = self._shell.read_text(*a, **k)
+        m = re.search(r"export const SHELL_HTML = (\".*\");", src, re.S)
+        html = json.loads(m.group(1)) if m else src
+        return html + "\n" + self._entry.read_text(*a, **k)
+
+
+SERVER_PY = _PageSource(REPO)
 
 
 def _strip_comments(js: str) -> str:
@@ -36,18 +67,16 @@ def _strip_comments(js: str) -> str:
     return "\n".join(line.split("//", 1)[0] for line in js.splitlines())
 
 
-def test_asset_ships_and_e2e_exists():
-    assert MAXIMIZE_JS.is_file(), "static/maximize.js is missing"
-    assert E2E.is_file(), "the behavioural e2e for maximize is missing"
-
-
 def test_served_after_script_js():
     """maximize.js reads section[data-kind] and mounts into .card-head, both
     built by script.js. Both tags are `defer`, so document order is execution
     order — the ordering is the dependency."""
     head = SERVER_PY.read_text()
-    i_script = head.index('"/static/script.js"')
-    i_max = head.index('"/static/maximize.js"')
+    # Order still matters and is still asserted: maximize.js mounts into
+    # DOM script.js builds. entry.js loads the list in array order,
+    # awaiting each, so position in that array IS execution order.
+    i_script = head.index('"script.js"')
+    i_max = head.index('"maximize.js"')
     assert i_max > i_script, "maximize.js must be tagged after script.js"
 
 

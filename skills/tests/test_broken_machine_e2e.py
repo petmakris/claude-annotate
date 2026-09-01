@@ -54,7 +54,11 @@ class BrokenMachineTests(unittest.TestCase):
         self.assertIn("xcode-select --install", result.stdout)
 
     def test_launching_a_skill_names_the_plugin_once(self):
-        script = REPO_ROOT / "skills" / "annotate" / "ensure_server.sh"
+                # Was annotate's launcher until annotate moved onto the webcompanion daemon
+        # and stopped shipping a server. The behaviour under test belongs to the
+        # shared launcher, not to any one skill, so this now points at deck — one of
+        # the four skills that still run a server of their own.
+        script = REPO_ROOT / "skills" / "deck" / "ensure_server.sh"
         result = subprocess.run(
             [str(self.bin / "bash"), str(script)],
             capture_output=True, text=True, timeout=20,

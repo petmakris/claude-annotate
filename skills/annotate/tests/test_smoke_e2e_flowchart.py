@@ -1,5 +1,5 @@
 """End-to-end: a realistic flowchart block renders through the /raw path."""
-from skills.annotate.server import _render_block_for_raw
+from skills.annotate.render import render_block
 
 _SPEC = {
     "title": "Both actions funnel into one guard",
@@ -27,9 +27,7 @@ _SPEC = {
 
 
 def test_full_flowchart_renders():
-    out = _render_block_for_raw(
-        {"id": "section-5", "kind": "flowchart", "spec": _SPEC}, version=1
-    )
+    out = render_block({"id": "section-5", "kind": "flowchart", "spec": _SPEC})
     svg = out["svg"]
     assert svg.startswith("<svg") and svg.rstrip().endswith("</svg>")
     for nid in ("a", "b", "c", "d", "e", "f", "g", "h"):

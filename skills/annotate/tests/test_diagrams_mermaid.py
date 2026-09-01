@@ -13,7 +13,7 @@ from skills.annotate.diagrams.mermaid import (
     _strip_init_directives,
     _normalize_line_breaks,
 )
-from skills.annotate.server import _render_block_for_raw
+from skills.annotate.render import render_block
 
 
 def _minimal_spec():
@@ -217,7 +217,7 @@ def test_render_converts_literal_newline_in_label_to_break():
 @requires_mmdc
 def test_server_renders_diagram_block():
     blk = {"id": "section-1", "kind": "diagram", "spec": _minimal_spec()}
-    out = _render_block_for_raw(blk, version=1)
+    out = render_block(blk)
     assert out["kind"] == "diagram"
     assert "<svg" in out["svg"]
     assert out["spec"] == _minimal_spec()
@@ -227,6 +227,6 @@ def test_server_diagram_render_failure_yields_error_pill():
     # Unknown type → mermaid.validate raises → server catches → error pill,
     # never an exception that blanks /raw. (No mmdc needed: validation fails first.)
     blk = {"id": "section-9", "kind": "diagram", "spec": {"type": "gantt", "source": "x"}}
-    out = _render_block_for_raw(blk, version=1)
+    out = render_block(blk)
     assert out["kind"] == "diagram"
     assert "diagram render failed" in out["svg"]

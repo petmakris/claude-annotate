@@ -4,8 +4,8 @@ from skills.annotate import anchors
 
 
 def _ok(**over):
-    a = {"file": "skills/annotate/server.py", "line": 801,
-         "snippet": "def _render_block_for_raw(blk: dict, version: int) -> dict:"}
+    a = {"file": "skills/annotate/render.py", "line": 22,
+         "snippet": "def render_block(blk: dict) -> dict:"}
     a.update(over)
     return a
 
@@ -15,7 +15,7 @@ class TestAnchorProblem(unittest.TestCase):
         self.assertIsNone(anchors.anchor_problem(_ok()))
 
     def test_valid_anchor_with_optionals(self):
-        self.assertIsNone(anchors.anchor_problem(_ok(end_line=812)))
+        self.assertIsNone(anchors.anchor_problem(_ok(end_line=33)))  # valid span after `line`
 
     def test_a_leftover_note_key_is_tolerated_not_refused(self):
         # `note` used to be a real field, rendered as a caption above the pane,
@@ -45,10 +45,10 @@ class TestAnchorProblem(unittest.TestCase):
         self.assertIn("line", anchors.anchor_problem(_ok(line=True)))
 
     def test_end_line_must_not_precede_line(self):
-        self.assertIn("end_line", anchors.anchor_problem(_ok(end_line=800)))
+        self.assertIn("end_line", anchors.anchor_problem(_ok(end_line=21)))  # BEFORE `line`
 
     def test_end_line_equal_to_line_is_fine(self):
-        self.assertIsNone(anchors.anchor_problem(_ok(end_line=801)))
+        self.assertIsNone(anchors.anchor_problem(_ok(end_line=22)))  # equal to `line`
 
     def test_snippet_must_be_non_empty(self):
         self.assertIn("snippet", anchors.anchor_problem(_ok(snippet="   ")))

@@ -1,4 +1,4 @@
-from skills.annotate.server import _render_block_for_raw
+from skills.annotate.render import render_block
 
 
 def _blk():
@@ -12,7 +12,7 @@ def _blk():
 
 
 def test_flowchart_block_renders_svg():
-    out = _render_block_for_raw(_blk(), version=1)
+    out = render_block(_blk())
     assert out["kind"] == "flowchart"
     assert out["svg"].startswith("<svg")
     assert 'class="annotate-flow"' in out["svg"]
@@ -22,6 +22,6 @@ def test_flowchart_block_renders_svg():
 def test_flowchart_bad_spec_yields_error_pill_not_crash():
     blk = _blk()
     blk["spec"]["edges"] = [{"from": "a", "to": "ghost"}]  # dangling edge
-    out = _render_block_for_raw(blk, version=1)
+    out = render_block(blk)
     assert "render failed" in out["svg"]
     assert "annotate-flow" in out["svg"]

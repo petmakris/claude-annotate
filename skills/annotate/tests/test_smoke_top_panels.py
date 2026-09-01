@@ -22,7 +22,34 @@ REPO = Path(__file__).resolve().parents[3]
 STATIC = REPO / "skills" / "annotate" / "static"
 SCRIPT_JS = STATIC / "script.js"
 STYLE_CSS = STATIC / "style.css"
-SERVER_PY = REPO / "skills" / "annotate" / "server.py"
+# The page shell and its asset list used to be printed by server.py; they now
+# live in the renderer the daemon loads — shell.js for the markup, entry.js for
+# which stylesheets and scripts are pulled in and in what order. These tests
+# assert against the page's source either way, so they read both.
+class _PageSource:
+    """The page's markup and its asset list, as a single string to assert on.
+
+    shell.js holds the markup as a JSON-encoded JS string literal, so reading
+    the file raw would hand these tests `id=\\"block-search\\"` and every
+    markup assertion would fail on the escaping rather than on the thing it
+    is checking. The literal is decoded back to real HTML here, and entry.js
+    (which lists the stylesheets and scripts, in load order) is appended.
+    """
+
+    def __init__(self, repo):
+        static = repo / "skills" / "annotate" / "static"
+        self._shell = static / "shell.js"
+        self._entry = static / "entry.js"
+
+    def read_text(self, *a, **k):
+        import json
+        src = self._shell.read_text(*a, **k)
+        m = re.search(r"export const SHELL_HTML = (\".*\");", src, re.S)
+        html = json.loads(m.group(1)) if m else src
+        return html + "\n" + self._entry.read_text(*a, **k)
+
+
+SERVER_PY = _PageSource(REPO)
 
 
 def _hides_when_hidden(css, selector):

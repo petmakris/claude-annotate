@@ -4,7 +4,7 @@
 #
 # Required env:
 #   SKILL    — short skill name (e.g. "annotate", "interactive-review")
-#   MODULE   — Python module path (e.g. "skills.annotate.server")
+#   MODULE   — Python module path (e.g. "skills.deck.server")
 #   BANNER   — string that /health must contain (e.g. "annotate-server v1")
 #   PLUGIN_ROOT — absolute path to the plugin root that contains "skills/"
 #
