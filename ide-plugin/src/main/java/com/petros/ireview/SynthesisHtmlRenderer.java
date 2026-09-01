@@ -136,7 +136,7 @@ public final class SynthesisHtmlRenderer {
           + "body{background:" + t.background() + ";color:" + t.foreground() + ";"
           +   "font-family:" + t.proseFont() + ",-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;"
           +   "font-size:" + t.proseSize() + "px;line-height:1.62;"
-          +   "padding:14px 18px 20px;max-width:82ch;"
+          +   "box-sizing:border-box;width:100%;padding:14px 18px 20px;"
           +   "-webkit-font-smoothing:antialiased;overflow-wrap:break-word;}"
           + "body>*:first-child{margin-top:0;}"
           + "p{margin:0 0 12px;}"

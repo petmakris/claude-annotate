@@ -29,11 +29,20 @@ import java.awt.Font;
  */
 public final class SynthesisBrowser implements Disposable {
 
+    private final Project project;
     private final JBCefBrowser browser;
     private final String navScript;
 
     public SynthesisBrowser(@NotNull Project project) {
-        this.browser = new JBCefBrowser();
+        this.project = project;
+        // Off-screen rendering: without it, this is a heavyweight native
+        // Chromium window, and Swing's CardLayout — used by SynthesisPopup to
+        // flip between this card and the "thinking" spinner card — cannot
+        // reliably paint a lightweight sibling over a heavyweight one. The
+        // browser can stay visually on top of the spinner even after
+        // cards.show() hides it. OSR paints into an ordinary Swing-managed
+        // bitmap instead, so it behaves like any other component here.
+        this.browser = JBCefBrowser.createBuilder().setOffScreenRendering(true).build();
         Disposer.register(this, browser);
 
         JBCefJSQuery linkQuery = JBCefJSQuery.create((JBCefBrowserBase) browser);
@@ -59,7 +68,7 @@ public final class SynthesisBrowser implements Disposable {
     }
 
     public void render(@NotNull String markdown) {
-        browser.loadHTML(SynthesisHtmlRenderer.toDocument(markdown, currentTheme(), navScript));
+        browser.loadHTML(SynthesisHtmlRenderer.toDocument(markdown, currentTheme(project), navScript));
     }
 
     @Override
@@ -68,14 +77,14 @@ public final class SynthesisBrowser implements Disposable {
     }
 
     /**
-     * Builds the popup's theme from the live IDE: prose in the UI font, code in
-     * the editor font, and every syntax colour read from the editor scheme — so
-     * switching IDE theme re-themes the popup with no work here.
+     * Builds the popup's theme. Fonts and sizes always follow the live editor
+     * (see below), but the colours are either read from the editor scheme or,
+     * when {@link DiffSettings#useMaterialTheme()} is on (the default), a
+     * fixed high-contrast Material-style palette that stays legible and
+     * distinct regardless of which editor theme is currently active.
      */
-    private static SynthesisHtmlRenderer.Theme currentTheme() {
+    private static SynthesisHtmlRenderer.Theme currentTheme(@NotNull Project project) {
         EditorColorsScheme scheme = EditorColorsManager.getInstance().getGlobalScheme();
-        Color bg = scheme.getDefaultBackground();
-        Color fg = scheme.getDefaultForeground();
 
         // Sizing follows the EDITOR font size, not the UI label font. The popup
         // sits beside the diff and is read like the code it discusses, so the
@@ -88,18 +97,58 @@ public final class SynthesisBrowser implements Disposable {
         int editorSize = scheme.getEditorFontSize();
         int proseSize = clampInt(editorSize - 1, Math.max(13, uiFont.getSize()), 26);
         int monoSize = clampInt(proseSize - 1, 12, 25);
+        String proseFont = quote(uiFont.getFamily());
+        String monoFont = quote(scheme.getEditorFontName());
 
+        if (DiffSettings.get(project).useMaterialTheme()) {
+            return materialTheme(proseFont, proseSize, monoFont, monoSize);
+        }
+
+        Color bg = scheme.getDefaultBackground();
+        Color fg = scheme.getDefaultForeground();
         return new SynthesisHtmlRenderer.Theme(
             hex(bg),
             hex(fg),
             hex(contrast(fg, bg, 26)),
             hex(blend(fg, bg, 0.42f)),
-            quote(uiFont.getFamily()), proseSize,
-            quote(scheme.getEditorFontName()), monoSize,
+            proseFont, proseSize,
+            monoFont, monoSize,
             "#4f83ed",
             hex(shift(bg, 12)),
             hex(shift(bg, 36)),
             tokens(scheme, fg));
+    }
+
+    /**
+     * A fixed dark, high-contrast palette in the spirit of Material Theme /
+     * One Dark Pro: an elevated near-black surface, near-white prose text, and
+     * saturated (not desaturated-to-match-editor) syntax colours. Independent
+     * of {@code EditorColorsScheme} on purpose — the popup is meant to read as
+     * its own surface next to the code, not blend into it.
+     */
+    private static SynthesisHtmlRenderer.Theme materialTheme(
+            String proseFont, int proseSize, String monoFont, int monoSize) {
+        return new SynthesisHtmlRenderer.Theme(
+            "#1a1d23",              // background — elevated dark surface
+            "#eceff4",              // foreground — near-white prose text
+            "#ffffff",              // strongForeground — headings/bold at full white
+            "#9aa4b2",              // mutedForeground — list markers, rules
+            proseFont, proseSize,
+            monoFont, monoSize,
+            "#6ea8fe",              // accent — bright, high-contrast link blue
+            "#252a33",              // codeBackground — one step up from the surface
+            "#3a4150",              // border
+            new SynthesisHtmlRenderer.Tokens(
+                "#c792ea",          // keyword — violet
+                "#a2e57b",          // string — green
+                "#f78c6c",          // number — orange
+                "#7b8496",          // comment — blue-grey, italic
+                "#ffcb6b",          // metadata — amber
+                "#82aaff",          // function — blue
+                "#ffcb6b",          // type — amber
+                "#f07178",          // field — coral
+                "#eceff4",          // variable — prose foreground
+                "#89ddff"));        // constant — cyan
     }
 
     /**

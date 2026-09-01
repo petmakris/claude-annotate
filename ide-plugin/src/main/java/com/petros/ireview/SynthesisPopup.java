@@ -50,6 +50,11 @@ public final class SynthesisPopup {
      *  "still waiting" state — mirrors ReviewSessionClient's pending timeout. */
     private static final int STILL_WAITING_AFTER_MS = 120_000;
 
+    /** Visible rows in the question box. Was 1 (Enter still inserts a newline
+     *  in a JTextArea — only Cmd/Ctrl+Enter submits — but a multi-line
+     *  question just scrolled invisibly inside a 1-row viewport). */
+    private static final int INPUT_ROWS = 3;
+
     private static String popupKey(@NotNull Project project, @NotNull String anchor) {
         return project.getLocationHash() + "|" + anchor;
     }
@@ -251,10 +256,11 @@ public final class SynthesisPopup {
         centerCards.add(errorCard, "error");
         centerCards.setPreferredSize(new Dimension(520, 130));
 
-        JTextArea input = new JTextArea(2, 50);
+        JTextArea input = new JTextArea(INPUT_ROWS, 50);
         input.setLineWrap(true);
         input.setWrapStyleWord(true);
         JScrollPane inputScroll = new JScrollPane(input);
+        inputScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         inputScroll.setBorder(BorderFactory.createLineBorder(JBColor.border(), 1, true));
 
         // renderCurrent captures synthesisPane/browser and thinking; called on EDT.
@@ -381,10 +387,13 @@ public final class SynthesisPopup {
             @Override public void actionPerformed(ActionEvent e) { submit.run(); }
         });
 
-        // Compact south region: input row + Ask button side-by-side.
+        // South region: input + Ask button side-by-side. INPUT_ROWS keeps a
+        // few lines visible (Enter inserts a newline in a JTextArea; only
+        // Cmd/Ctrl+Enter submits, see below) instead of the previous 1-row box
+        // that made anything past the first line scroll off invisibly.
         // No "Ask a question (Cmd/Ctrl-Enter)" label — use placeholder text instead.
         // Ask button is small, no label.
-        input.setRows(1);
+        input.setRows(INPUT_ROWS);
         input.setBorder(JBUI.Borders.empty(2, 6));
         askBtn.setMargin(JBUI.emptyInsets());
         askBtn.setBorder(JBUI.Borders.empty(0, 10));
