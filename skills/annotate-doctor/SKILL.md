@@ -1,6 +1,6 @@
 ---
 name: annotate-doctor
-description: Check that this machine can run claude-annotate and claude-ide-review — python3 and its version, curl, state directory permissions, server health, and the separately-installed webcompanion daemon show-diff depends on. Invoked only when the user types `/annotate-doctor`, or when a skill's preflight has just failed and the user asks why. Never self-triggers. Reports problems and prints the command the user should run; for webcompanion specifically, offers to run that command itself once the user confirms — every other remedy stays report-only.
+description: Check that this machine can run claude-annotate and claude-ide-review — python3 and its version, curl, state directory permissions, server health, and the separately-installed webcompanion daemon that annotate and show-diff both depend on. Invoked only when the user types `/annotate-doctor`, or when a skill's preflight has just failed and the user asks why. Never self-triggers. Reports problems and prints the command the user should run; for webcompanion specifically, offers to run that command itself once the user confirms — every other remedy stays report-only.
 allowed-tools:
   - Bash
   - Read
@@ -75,9 +75,9 @@ explain a line if they want, and stop there.
 does not ship — it lives in its own repository and is installed separately,
 so it is also the one thing plausible for Claude to fix directly: the fix is
 always a single `pipx` or `webcompanion` command, never a system package
-manager or a permissions change. If the report's `webcompanion` line is
-`info` (not installed) or `FAIL` (stale contract, or installed but the
-service is not running):
+manager or a permissions change. If the report's `webcompanion` line is a
+`FAIL` — not installed, stale contract, or installed but the service is not
+running:
 
 1. **Ask, in one sentence**, whether to install/fix it now, naming which of
    the two it is. Do not run anything before the user answers.
@@ -93,8 +93,12 @@ service is not running):
    `webcompanion` line, not just "done" — the user should see the same kind
    of evidence the rest of this report gives them.
 
-This is additive only: a machine that never uses `show-diff`'s comment
-feature can ignore an `info` line about `webcompanion` same as before.
+**This line is not optional any more.** It used to be, and this section
+used to say a machine that never touched `show-diff` could ignore it.
+`annotate` now ships no server of its own and opens every page through the
+daemon, so a machine without it has a dead `/annotate` — which is why the
+line reports `FAIL` rather than `info`, and why it is worth offering to fix
+rather than merely noting.
 
 If every check passes but the user still sees a problem, the useful next
 questions are which skill they invoked, and what the terminal showed.

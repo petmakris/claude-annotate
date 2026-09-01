@@ -173,16 +173,23 @@ class DoctorTests(unittest.TestCase):
             f"python3 should pass on this host: {python_lines}",
         )
 
-    def test_webcompanion_not_installed_is_informational_not_a_failure(self):
-        # It is optional and shipped from a separate repository -- absence must
-        # not fail an otherwise-healthy machine that never opted into show-diff.
+    def test_webcompanion_not_installed_is_a_failure(self):
+        # This assertion was inverted when annotate moved onto the daemon. It
+        # used to say "info, never a failure", because webcompanion was
+        # optional -- only show-diff wanted it, and show-diff degrades to a
+        # read-only diff without it. annotate now ships no server of its own,
+        # so a machine without the daemon cannot open an annotation page at
+        # all. Reporting that as an informational note would tell a user whose
+        # /annotate is dead that everything is fine.
         bin_dir = sanitized_path_dir(self.tmp, with_python=True)
         result = self._run(bin_dir)
         wc_lines = [l for l in result.stdout.splitlines() if "webcompanion" in l]
         self.assertTrue(wc_lines, "doctor must mention webcompanion")
-        self.assertTrue(wc_lines[0].startswith("info"), wc_lines)
-        self.assertEqual(result.returncode, 0,
-                         "an uninstalled optional dependency must not fail the doctor")
+        self.assertTrue(wc_lines[0].startswith("FAIL"), wc_lines)
+        self.assertIn("annotate", wc_lines[0],
+                      "the failure must say WHY it is required, not just that it is")
+        self.assertEqual(result.returncode, 1,
+                         "a missing hard dependency must fail the doctor")
 
     def test_webcompanion_installed_matching_contract_and_running_is_ok(self):
         bin_dir = sanitized_path_dir(self.tmp, with_python=True)

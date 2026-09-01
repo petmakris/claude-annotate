@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
-"""PostToolUse hook: publish a coarse, sanitized progress label for the
+"""DORMANT since annotate moved onto the webcompanion daemon.
+
+Nothing invokes this any more: hooks/hooks.json no longer registers it, and
+the gate it used to run behind looked for ``~/.claude/annotate/pending-*.json``,
+a registry the daemon push does not write. It is kept rather than deleted
+because the feature it implements is worth having back — the daemon can carry
+a progress label as an ordinary item, which the page would read the same way
+it reads a block. That is a change to the page and to the push, not to this
+file, which is why this file survives the cutover unedited below.
+
+The original contract, still accurate for how it worked, follows.
+
+PostToolUse hook: publish a coarse, sanitized progress label for the
 annotate web companion — entirely outside the model loop, so it costs zero
 Claude tokens.
 

@@ -93,7 +93,12 @@ for tool in bash curl; do
 done
 
 # --- state directories -----------------------------------------------------
-for skill in annotate walkthrough interactive-review deck; do
+# annotate is deliberately absent: its sessions live under the daemon now
+# (~/.claude/webcompanion/workspaces/annotate/), so a missing or unwritable
+# ~/.claude/annotate says nothing about whether annotate works. dataflow was
+# missing from this list for its whole life — a broken dataflow install
+# reported as healthy because nothing here ever looked at it.
+for skill in walkthrough interactive-review deck dataflow; do
   dir="$HOME/.claude/$skill"
   if [ ! -d "$dir" ]; then
     ok "$skill — no state yet (never run on this machine)"
@@ -105,8 +110,17 @@ for skill in annotate walkthrough interactive-review deck; do
   fi
 done
 
-# --- server ----------------------------------------------------------------
-for skill in annotate walkthrough interactive-review deck; do
+# --- per-skill servers -----------------------------------------------------
+# The four skills below still run a server of their own. annotate does not,
+# and has not since it moved onto the daemon: it is checked by the
+# webcompanion block further down instead. A stale ~/.claude/annotate/server.json
+# may still be on disk from before that move — it is reported and offered for
+# removal rather than probed, because nothing will ever answer on that port again.
+if [ -f "$HOME/.claude/annotate/server.json" ]; then
+  info "annotate — leftover server.json from before the daemon cutover"
+  fix "Safe to delete: rm \"$HOME/.claude/annotate/server.json\" \"$HOME/.claude/annotate/server.pid\""
+fi
+for skill in walkthrough interactive-review deck dataflow; do
   info="$HOME/.claude/$skill/server.json"
   [ -f "$info" ] || continue
   url="$(sed -n 's/.*"url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$info" | head -n 1)"
@@ -121,14 +135,16 @@ for skill in annotate walkthrough interactive-review deck; do
 done
 
 # --- webcompanion -----------------------------------------------------------
-# Optional: only show-diff's per-line VS Code comments need it, and show-diff
-# degrades to a read-only diff without it. Unlike every other check above,
+# REQUIRED, and no longer merely optional: annotate ships no server of its own
+# and cannot start a session without the daemon. show-diff also needs it for
+# per-line VS Code comments, though show-diff alone degrades to a read-only
+# diff. Because annotate hard-depends on it, "not installed" is a FAILURE
+# here, not an informational note. Unlike every other check above,
 # this is NOT shipped by this plugin -- it is a separate package
 # (github.com/petmakris/webcompanion), installed via pipx, and nothing in
-# `/plugin install` or `/plugin update` touches it. So "not installed" is
-# reported as info, not a failure: it usually just means the feature was
-# never opted into. "installed but broken" (wrong contract, service down) IS
-# a failure -- something the user set up is not working.
+# `/plugin install` or `/plugin update` touches it, so it has to be installed
+# once by hand. "installed but broken" (wrong contract, service down) is a
+# failure for the same reason: something the user set up is not working.
 #
 # WC_REQUIRED_CONTRACT mirrors vscode-plugin/src/webcompanionClient.js:9 and
 # skills/show_diff/show-diff.sh's own copy of the same constant. All three
@@ -152,7 +168,7 @@ if command -v webcompanion >/dev/null 2>&1; then
     fix "Start it: webcompanion install-service"
   fi
 else
-  info "webcompanion — not installed (optional; only needed for show-diff's per-line comments)"
+  fail "webcompanion — not installed; annotate cannot run without it"
   fix "Install it: pipx install webcompanion && webcompanion install-service"
 fi
 

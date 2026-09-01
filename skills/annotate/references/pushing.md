@@ -69,6 +69,56 @@ on this machine:
 pipx install webcompanion && webcompanion install-service
 ```
 
+## Resolve the plugin root
+
+Every command below runs out of the plugin's own tree, and
+`$CLAUDE_PLUGIN_ROOT` is **not** exported into the Bash tool's shell. Run this
+once per turn, before the first of them. The guard is not ceremony: without
+it, a machine with no python3 gets a bare traceback instead of a sentence
+naming the plugin and the fix.
+
+```bash
+if ! command -v python3 >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+claude-annotate: python3 was not found on PATH.
+claude-annotate is the marketplace that ships this plugin and claude-ide-review.
+
+This plugin needs Python 3.9 or newer (standard library only — nothing to
+pip install).
+
+  macOS:  xcode-select --install     # or: brew install python
+  Linux:  install python3 with your distribution's package manager
+
+Run /annotate-doctor for a full check of this machine.
+EOF
+  exit 1
+fi
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(python3 -c '
+import json, os, sys
+NAME, MARKER = "claude-annotate", "skills/annotate/push.py"
+ok = lambda r: bool(r) and os.path.isfile(os.path.join(r, MARKER))
+for entry in os.environ.get("PATH", "").split(os.pathsep):
+    if os.path.basename(entry) == "bin" and ok(os.path.dirname(entry)):
+        print(os.path.dirname(entry)); sys.exit()
+try:
+    root = json.load(open(os.path.expanduser("~/.claude/plugins/known_marketplaces.json")))[NAME]["installLocation"]
+except Exception:
+    root = None
+if ok(root):
+    print(root); sys.exit()
+sys.exit(f"could not locate the {NAME} plugin root")
+')}"
+[ -n "$PLUGIN_ROOT" ] || { echo "claude-annotate: plugin root not found" >&2; exit 1; }
+```
+
+Two candidates, in order: every `bin/` directory on `PATH` (Claude Code adds
+`<plugin-root>/bin` for both `--plugin-dir` and marketplace installs, even
+when that directory does not exist), then the marketplace registry. Each
+candidate must actually contain `skills/annotate/push.py`, so the check is a
+marker file rather than a directory name and survives the plugin being cloned
+under any name. It used to probe a third place — the running server's own
+`server.json` — which went away with the server.
+
 ## Push the document
 
 Write `blocks.json` (the authoring format described in "How to push a
