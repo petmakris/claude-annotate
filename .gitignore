@@ -11,3 +11,6 @@ __pycache__/
 # superpowers brainstorming companion (mockups, ephemeral state)
 .superpowers/
 .playwright-mcp/
+
+# isolated workspaces for superpowers:using-git-worktrees
+.worktrees/
