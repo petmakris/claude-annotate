@@ -31,9 +31,41 @@ No code is modified — this is a tool for understanding.
 The argument is a seed: a class name from any layer, a feature name, or an
 endpoint path. You resolve it to real classes yourself.
 
-## On every invocation: ensure the server is running
+## On every invocation: the daemon must be running
 
-Run this once at the top of every invocation, before anything else:
+dataflow no longer ships a server. Storage, comment threads, the event queue
+and the page itself all belong to the **webcompanion daemon** — one always-on
+service per machine, shared with every other skill and IDE plugin that talks
+to it. It is installed and kept alive by launchd (macOS) or systemd (Linux),
+so there is nothing to start per session and no port to negotiate.
+
+Confirm it is up before doing anything else:
+
+```bash
+webcompanion status
+```
+
+If that fails, stop and tell the user — do **not** try to start it yourself
+(a client that auto-starts a service races every other client doing the same):
+
+```
+webcompanion doctor      # both interpreters, config, zipapp, launchd job, health
+```
+
+If `webcompanion` is not on PATH at all, the daemon has never been installed
+on this machine:
+
+```
+pipx install webcompanion && webcompanion install-service
+```
+
+## Resolve the plugin root
+
+`skills.dataflow.push` and `skills.dataflow.flow` both run out of the plugin's
+own tree, and `$CLAUDE_PLUGIN_ROOT` is **not** exported into the Bash tool's
+shell. Run this once per turn, before the first command that needs it — the
+guard is not ceremony: without it, a machine with no python3 gets a bare
+traceback instead of a sentence naming the plugin and the fix.
 
 ```bash
 if ! command -v python3 >/dev/null 2>&1; then
@@ -53,18 +85,11 @@ EOF
 fi
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(python3 -c '
 import json, os, sys
-NAME, MARKER = "claude-annotate", "skills/dataflow/ensure_server.sh"
+NAME, MARKER = "claude-annotate", "skills/dataflow/push.py"
 ok = lambda r: bool(r) and os.path.isfile(os.path.join(r, MARKER))
 for entry in os.environ.get("PATH", "").split(os.pathsep):
     if os.path.basename(entry) == "bin" and ok(os.path.dirname(entry)):
         print(os.path.dirname(entry)); sys.exit()
-for skill in ("dataflow", "annotate", "walkthrough"):
-    try:
-        root = json.load(open(os.path.expanduser(f"~/.claude/{skill}/server.json")))["plugin_root"]
-    except Exception:
-        continue
-    if ok(root):
-        print(root); sys.exit()
 try:
     root = json.load(open(os.path.expanduser("~/.claude/plugins/known_marketplaces.json")))[NAME]["installLocation"]
 except Exception:
@@ -74,40 +99,20 @@ if ok(root):
 sys.exit(f"could not locate the {NAME} plugin root")
 ')}"
 [ -n "$PLUGIN_ROOT" ] || { echo "claude-annotate: plugin root not found" >&2; exit 1; }
-"$PLUGIN_ROOT/skills/dataflow/ensure_server.sh"
 ```
 
-Idempotent and fast (<100 ms when already up). Do **not** use
-`run_in_background: true`. If it exits non-zero, surface the stderr and stop.
+Two candidates, in order: every `bin/` directory on `PATH` (Claude Code adds
+`<plugin-root>/bin` for both `--plugin-dir` and marketplace installs, even
+when that directory does not exist), then the marketplace registry. Each
+candidate must actually contain `skills/dataflow/push.py`, so the check is a
+marker file rather than a directory name and survives the plugin being cloned
+under any name.
 
-## Create the session
-
-Do this **before** exploring, so the user has a page to watch while you read.
-
-Write the seed to `~/.claude/dataflow/.seed.txt` and the question to
-`~/.claude/dataflow/.question.txt` with the `Write` tool, so neither passes
-through the shell. Then:
-
-```bash
-SERVER_URL=$(python3 -c 'import json,os; print(json.load(open(os.path.expanduser("~/.claude/dataflow/server.json")))["url"])')
-BODY=$(CWD="$PWD" python3 -c '
-import json, os
-p = os.path.expanduser("~/.claude/dataflow/")
-seed = open(p + ".seed.txt").read().strip()
-q = open(p + ".question.txt").read().strip() or seed
-print(json.dumps({"cwd": os.environ["CWD"], "seed": seed, "question": q,
-                  "claude_session_id": os.environ.get("CLAUDE_CODE_SESSION_ID", "")}))
-')
-curl -sf --max-time 90 -X POST "$SERVER_URL/api/sessions" \
-  -H 'Content-Type: application/json' -d "$BODY"
-```
-
-`cwd` **must be the repository root** — it is the root `/api/open` resolves
-every node path against, so a node's `file` is relative to it. The response
-carries `sid`, `url`, `state_dir`, `events_dir`, `consumed_dir`. Save them.
-
-Prior dataflows created by *this Claude session* are cancelled server-side
-automatically.
+**There is no longer a step that creates an empty session before you explore.**
+`push.py` mints the session and installs the document in the same call, and it
+needs a real document to push — so the page now appears once you have traced
+the code and written `dataflow.json`, in "Write the document" below, not
+before.
 
 ## Trace the code
 
@@ -166,25 +171,69 @@ Bad: "This feature has a controller, a service and a repository."
 
 ## Write the document
 
-`Write` the draft to `<state_dir>/.dataflow.draft.json`, then validate and
-install it — never hand-write `dataflow.json`:
+`Write` the draft to your scratchpad as `dataflow.draft.json`, then validate
+it — never push an unvalidated document:
 
 ```bash
-PLUGIN_ROOT=$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.claude/dataflow/server.json")))["plugin_root"])')
-PYTHONPATH="$PLUGIN_ROOT" STATE_DIR="$STATE_DIR" python3 - <<'PY'
-import json, os, time
+PYTHONPATH="$PLUGIN_ROOT" python3 - <<'PY'
+import json, time
 from pathlib import Path
-from skills.dataflow.flow import write_flow, count_nodes
-sd = Path(os.environ["STATE_DIR"])
-doc = json.loads((sd / ".dataflow.draft.json").read_text())
+from skills.dataflow import flow
+p = Path("<scratchpad>/dataflow.draft.json")
+doc = json.loads(p.read_text())
 doc["generated_ts"] = int(time.time())
-write_flow(sd, doc)
-print(f"wrote {count_nodes(doc)} nodes in {len(doc['slices'])} slices")
+errors = flow.validate(doc)
+if errors:
+    raise SystemExit("\n".join(errors))
+p.write_text(json.dumps(doc, indent=2))
+print(f"validated: {flow.count_nodes(doc)} nodes in {len(doc['slices'])} slices")
 PY
 ```
 
-`ValueError` lists every problem at once. Fix the draft and re-run — do not
-create a second session.
+A non-zero exit lists every problem at once. Fix the draft and re-run — do not
+push an invalid document.
+
+Then push it. **First push of a conversation**: this both mints the session
+and installs the document as the `__flow__` item in one call:
+
+```bash
+PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.dataflow.push \
+  --flow <scratchpad>/dataflow.draft.json --cwd "$PWD" --title "<seed>"
+```
+
+Run this from the repository you are tracing — never from `$PLUGIN_ROOT` — so
+`$PWD` really is the repo root; `PYTHONPATH` alone is what makes
+`skills.dataflow.push` importable regardless of where you stand.
+
+`--cwd` **must be the repository root** — `push.py` stores it as the
+document's own `cwd` field, and `dataflow.js` joins that onto each node's
+repository-relative `file` to build the absolute path it POSTs to
+`/api/open`. The daemon's `/api/open` does no path resolution itself: it only
+accepts an absolute path already inside a session's workspace, so get `--cwd`
+wrong and every "open in editor" click 403s. The output is JSON: `sid`,
+`slug`, `kind`, `url`, `token`. Save `sid` and `url` — you need `sid` to arm
+the watcher and to answer questions, and `url` is what you tell the user.
+
+**A second `/dataflow` in one conversation no longer closes the first one.**
+The old per-skill server set `supersede_by_claude_session = True` so a repeat
+invocation replaced the earlier session rather than leaving two armed
+watchers racing. `push.py` deliberately does not pass the daemon's own
+`supersede` flag (see `webcompanion_client.create_or_attach`): that flag ends
+every OTHER live session of the same kind in the same repo, regardless of
+which Claude conversation started it — turning it on here would also end an
+unrelated concurrent conversation's dataflow trace in the same repo, which
+the old flag never did. The accepted tradeoff is old sessions accumulating as
+extra browser tabs rather than risking silently ending someone else's work.
+
+**Regenerating the diagram mid-session** (the answer to a question needed a
+node that is not on the diagram): rewrite the draft with the new node added —
+**keep every existing node id**, since an id that disappears takes its
+thread's rendering with it — re-run the validation snippet above, then re-run
+the same push command with `--slug "<slug>"` added, so it lands on the page
+the user already has open instead of minting a second one. `push.py` sends
+`PATCH .../items {replace: true}`, which overwrites the stored `__flow__`
+item wholesale, and the page redraws itself over the daemon's own live-update
+stream.
 
 ### Document shape
 
@@ -344,23 +393,16 @@ One sentence in terminal, then stop:
 
 ## Arm the watcher
 
-Arm it **immediately** after telling the user, before any other work. Until the
-watcher writes its first heartbeat the server has no liveness signal and falls
-back to the session's age; past `NEVER_ARMED_GRACE` (30 min) it reports the
-session dead on every poll.
-
-Start it with `Monitor` (`persistent: true`):
+There is no watcher script of dataflow's own any more — the daemon ships its
+own, and it emits the same banners this skill has always read. Arm it
+**immediately** after telling the user, before any other work.
 
 ```bash
-PLUGIN_ROOT=$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.claude/dataflow/server.json")))["plugin_root"])')
-SKILL=dataflow \
-SID="<sid>" \
-STATE_DIR="<state_dir>" \
-EVENTS_DIR="<events_dir>" \
-CONSUMED_DIR="<consumed_dir>" \
-CLAUDE_SID="$CLAUDE_CODE_SESSION_ID" \
-"$PLUGIN_ROOT/skills/_shared/web_companion/watcher.sh"
+webcompanion watch --kind dataflow --sid "<sid>"
 ```
+
+Pass that as the `Monitor` tool's `command` with `persistent: true` and a
+`description` like `"dataflow-wait sid=<sid>"`.
 
 Banners: `WEBCOMPANION_EVENT skill=dataflow sid=<sid> event_id=<id>`,
 `WEBCOMPANION_FINISHED`, `WEBCOMPANION_CANCELLED`, `WEBCOMPANION_DROPPED`.
@@ -370,40 +412,48 @@ Banners: `WEBCOMPANION_EVENT skill=dataflow sid=<sid> event_id=<id>`,
 ### `WEBCOMPANION_EVENT` (a question on a node)
 
 1. **Parse the banner** for `sid` and `event_id`.
-2. **Read the payload** between `---payload---` and `---end---`:
-   `anchor` is always `node:<id>`; `type` is `comment` or `reject`; `text` is
-   the question; `images` is `[{token, path}]` — `Read` each before answering.
+2. **Read the payload** between `---payload---` and `---end---`: the daemon
+   stores exactly `{anchor, text, images}` — `anchor` is always `node:<id>`,
+   `text` is the question, `images` is `[{token, path}]` — `Read` each before
+   answering.
 3. **Compose the answer:**
-   - Read `<state_dir>/dataflow.json` and find the node by id. Its `file`,
-     `line`, `summary` and `note` are the subject.
+   - Fetch the current document —
+     `skills._shared.webcompanion_client.get_items(sid, kind="dataflow")["__flow__"]["body"]`
+     — and find the node by id. Its `file`, `line`, `summary` and `note` are
+     the subject.
    - `Read` the anchored file around that line. `Grep`/`Glob` for whatever the
      question pulls in beyond it.
-   - Other nodes' threads (`ls <state_dir>/threads/`) are READ-ONLY background.
-     Never write into another node's thread.
+   - Other nodes' threads —
+     `skills._shared.webcompanion_client.get_threads(sid, kind="dataflow")`
+     — are READ-ONLY background. Never write into another node's thread.
    - 2–4 sentences, naming actual methods, fields and line numbers. Do not
      modify code.
-4. **Append to that node's thread:**
+4. **Append to that node's thread, then acknowledge the event:**
 
-   a. `Write` the answer (raw markdown) to `<state_dir>/.reply.md`.
+   a. `Write` the answer (raw markdown) to your scratchpad as
+      `dataflow-reply.md`.
 
-   b. `Write` `<state_dir>/.reply.meta.json`:
-   ```json
-   {"anchor": "node:icm", "title": "<short headline>", "source_event_id": "<event_id>"}
+   b. Run — appends the reply to the node's thread:
+   ```bash
+   PYTHONPATH="$PLUGIN_ROOT" python3 -c "
+   import pathlib
+   from skills._shared import webcompanion_client as wc
+   text = pathlib.Path('<scratchpad>/dataflow-reply.md').read_text()
+   wc.append_thread('<sid>', 'node:<id>', text, kind='dataflow', role='agent',
+                    source_event_id='<event_id>', title='<short headline>')
+   "
    ```
 
-   c. Run — appends the reply AND acks the event in one command:
+   c. Then, and only then, acknowledge the event — or the daemon re-emits it
+      three times, thirty minutes apart, and finally drops it:
    ```bash
-   PLUGIN_ROOT=$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.claude/dataflow/server.json")))["plugin_root"])')
-   PYTHONPATH="$PLUGIN_ROOT" STATE_DIR="$STATE_DIR" \
-     python3 -m skills._shared.web_companion.reply_cli --ack "$EVENT_ID"
+   webcompanion ack --sid "<sid>" --event-id "<event_id>"
    ```
 5. **End your turn. No terminal output.** The watcher stays armed.
 
-**When the answer needs a node that is not on the diagram**, you may regenerate
-`dataflow.json` — re-run the install command with the new draft and a fresh
-`generated_ts`. The page redraws itself over SSE. **Keep every existing node
-id**: an id that disappears takes its thread's rendering with it. Say in the
-reply what you added.
+**When the answer needs a node that is not on the diagram**, you may
+regenerate the document — see "Regenerating the diagram mid-session" under
+"Write the document" above. Say in the reply what you added.
 
 ### `WEBCOMPANION_FINISHED` / `WEBCOMPANION_CANCELLED`
 
@@ -422,10 +472,11 @@ question went unanswered and was dropped — please re-ask it on the node."*
 - **Code-aware.** Name the actual variables, methods and lines.
 - **Cite nodes by name** when the answer lives elsewhere on the diagram.
 - **Honest uncertainty.** Name exactly what you would need to know.
-- **Headline title.** `title` in `.reply.meta.json`: plain text, ≤ 6 words.
+- **Headline title.** The `title` passed to `append_thread`: plain text,
+  ≤ 6 words.
 
 ## Terminal cancellation
 
 If the user says "scrap it" / "close the dataflow" while a watcher is armed,
-`POST /s/<sid>/api/cancel`; the watcher prints `WEBCOMPANION_CANCELLED` and
-exits on its own.
+run `webcompanion end --sid "<sid>" --cancel`; the watcher prints
+`WEBCOMPANION_CANCELLED` and exits on its own.

@@ -11,9 +11,6 @@
 (() => {
   "use strict";
 
-  const BASE = location.pathname.endsWith("/") ? location.pathname : location.pathname + "/";
-  const KEY = decodeURIComponent((BASE.match(/^\/s\/([^/]+)\//) || [])[1] || "");
-
   let FLOW = null;
   let THREADS = {};                 // anchor -> {latest_synthesis, question, ...}
   const PENDING = new Set();        // anchors whose question is queued
@@ -97,6 +94,18 @@
   }
 
   /* ---------------------------------------------------------------- open */
+  // `/api/open` ignores any session key — it only accepts an absolute path
+  // already inside some session's workspace, and does no resolution of its
+  // own. A node's `file` is repository-relative (flow.py forbids a leading
+  // "/"), so the absolute path has to be built here, by joining it onto the
+  // repo root the document carries as `FLOW.cwd` (set by push.py — see
+  // SKILL.md's "must be the repository root" note).
+  function absPath(file) {
+    const root = String((FLOW && FLOW.cwd) || "").replace(/\/+$/, "");
+    const rel = String(file || "").replace(/^\/+/, "");
+    return root ? root + "/" + rel : rel;
+  }
+
   // The page cannot open a file itself: file:// is refused from an http origin
   // and jetbrains:// had to guess the project name. The server just runs the
   // opener. Failures show the server's own reason, never a guess.
@@ -106,7 +115,7 @@
       const res = await fetch("/api/open", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: KEY, file, line }),
+        body: JSON.stringify({ file: absPath(file), line }),
       });
       if (!res.ok) {
         btn.classList.add("failed");
@@ -316,18 +325,9 @@
       if (!text) return;
       send.disabled = true;
       try {
-        const res = await fetch(BASE + "api/submit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ anchor: anchorOf(n.id), type: "comment", text }),
-        });
-        if (!res.ok) {
-          toast((await res.text()) || "could not send", true);
-          send.disabled = false;
-          return;
-        }
+        await window.WebCompanion.api.submit({ anchor: anchorOf(n.id), text });
       } catch (_) {
-        toast("server unreachable", true);
+        toast("could not send", true);
         send.disabled = false;
         return;
       }
@@ -564,40 +564,56 @@
     (FLOW.slices || []).flatMap((s) => s.nodes || []).find((n) => n.id === id);
 
   async function refetchFlow() {
-    const res = await fetch(BASE + "dataflow.json");
-    FLOW = await res.json();
+    const item = await window.WebCompanion.api.fetchJSON("items/__flow__");
+    FLOW = item.body;
     render();
   }
 
   function connect() {
-    const es = new EventSource(BASE + "stream");
-    es.addEventListener("connected", () => setLive(true, "claude connected"));
-    es.addEventListener("heartbeat", () => setLive(true, "claude connected"));
-    es.addEventListener("flow-changed", () => refetchFlow());
-    es.addEventListener("thread-changed", (e) => {
-      const d = JSON.parse(e.data);
-      applyThread(d.anchor, d);
+    window.WebCompanion.init({
+      onDelta(ev) {
+        if (ev.kind === "item" && ev.anchor === "__flow__" && !ev.initial) {
+          refetchFlow();
+          return;
+        }
+        if (ev.kind === "thread-deleted") {
+          delete THREADS[ev.anchor];
+          const node = findNode(ev.anchor.slice("node:".length));
+          const wrap = document.getElementById("n-" + (node ? node.id : ""));
+          if (node && wrap) renderThread(wrap.querySelector("[data-thread]"), node);
+          return;
+        }
+        if (ev.kind === "thread" && !ev.initial) {
+          // The daemon's thread-changed delta carries only {anchor, version} —
+          // re-derive from a fresh bulk fetch rather than trying to flatten one
+          // thread's delta in isolation, since WcThreads.derive expects the
+          // bulk shape.
+          window.WebCompanion.api.fetchJSON("threads").then((raw) => {
+            const derived = WcThreads.derive(raw);
+            applyThread(ev.anchor, derived[ev.anchor] || null);
+          });
+        }
+      },
     });
-    es.addEventListener("thread-deleted", (e) => {
-      const d = JSON.parse(e.data);
-      delete THREADS[d.anchor];
-      const node = findNode(d.anchor.slice("node:".length));
-      const wrap = document.getElementById("n-" + (node ? node.id : ""));
-      if (node && wrap) renderThread(wrap.querySelector("[data-thread]"), node);
-    });
-    es.addEventListener("session-ended", () => { setLive(false, "closed"); es.close(); });
-    // The browser reconnects an EventSource on its own; saying "reconnecting"
-    // rather than "dead" keeps the badge honest about what is happening.
-    es.onerror = () => setLive(false, "reconnecting…");
+    setLive(true, "claude connected");
+    // core.js exposes session-ended only as a body class
+    // ("session-finished"), not a callback — mirror the old "closed"
+    // indicator off that class rather than reintroducing a second
+    // connection tracker. There is no equivalent signal for a dropped
+    // stream falling back to polling, so the old "reconnecting…" state is
+    // dropped (see task report).
+    new MutationObserver(() => {
+      if (document.body.classList.contains("session-finished")) setLive(false, "closed");
+    }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
   }
 
   async function boot() {
-    const [f, t] = await Promise.all([
-      fetch(BASE + "dataflow.json").then((r) => r.json()),
-      fetch(BASE + "threads.json").then((r) => r.json()),
+    const [flowItem, rawThreads] = await Promise.all([
+      window.WebCompanion.api.fetchJSON("items/__flow__"),
+      window.WebCompanion.api.fetchJSON("threads"),
     ]);
-    FLOW = f;
-    THREADS = t || {};
+    FLOW = flowItem.body;
+    THREADS = WcThreads.derive(rawThreads);
     render();
     connect();
   }

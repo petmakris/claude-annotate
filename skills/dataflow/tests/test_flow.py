@@ -6,8 +6,6 @@ point somewhere — are enforced here rather than trusted to the generator.
 """
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from skills.dataflow import flow
@@ -134,26 +132,10 @@ def test_model_claims_are_capped_and_non_empty():
     assert flow.validate(_doc(model=None)) == []
 
 
-def test_write_and_load_round_trip(tmp_path):
-    flow.write_flow(tmp_path, _doc())
-    loaded = flow.load_flow(tmp_path)
-    assert loaded["seed"] == "Order"
-    assert flow.generated_ts(tmp_path) == 1_700_000_000
-    assert flow.count_nodes(loaded) == 2
-    assert flow.node_ids(loaded) == {"ctl", "tbl"}
-
-
-def test_write_refuses_an_invalid_document(tmp_path):
-    with pytest.raises(ValueError) as exc:
-        flow.write_flow(tmp_path, _doc(seed=""))
-    assert "seed" in str(exc.value)
-    assert not (tmp_path / flow.FLOW_FILE).exists()
-
-
-def test_load_survives_a_corrupt_file(tmp_path):
-    (tmp_path / flow.FLOW_FILE).write_text("{not json")
-    assert flow.load_flow(tmp_path) is None
-    assert flow.generated_ts(tmp_path) == 0
+def test_count_nodes_and_node_ids():
+    doc = _doc()
+    assert flow.count_nodes(doc) == 2
+    assert flow.node_ids(doc) == {"ctl", "tbl"}
 
 
 def test_anchor_round_trip():
@@ -162,13 +144,6 @@ def test_anchor_round_trip():
     assert flow.anchor_node_id("node:icm") == "icm"
     for bad in ("icm", "node:", "node:Icm", "node:../x", "step:1", None):
         assert not flow.valid_anchor(bad)
-
-
-def test_written_document_is_indented_json(tmp_path):
-    flow.write_flow(tmp_path, _doc())
-    raw = (tmp_path / flow.FLOW_FILE).read_text()
-    assert raw.startswith("{\n")
-    json.loads(raw)
 
 
 # ---------------------------------------------------------------- members

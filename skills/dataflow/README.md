@@ -10,23 +10,28 @@ gotcha, the thread. There is deliberately no separate class-reference section:
 hopping away from the diagram to read about it is the thing this replaces.
 
 - Skill contract: `SKILL.md`
-- Server: `server.py` (handlers over `skills/_shared/web_companion`), fixed port
-  3100, state root `~/.claude/dataflow/`.
-- Page: `static/dataflow.css` + `static/dataflow.js`. The board is rendered
-  client-side from `dataflow.json` so that one renderer also handles the redraw
-  when the document is regenerated mid-session.
-- Per-session state lives in `<project>/.claude/dataflow/<sid>/state/`:
-  `dataflow.json`, `threads/` (one file per node anchor), `events/`,
-  `consumed/`.
+- No server of its own: `push.py` writes the document straight to the
+  **webcompanion daemon** — one always-on service shared by every migrated
+  skill and IDE plugin — as the session's `__flow__` item.
+- Page: `static/dataflow.css` + `static/dataflow.js`, loaded by the daemon's
+  own shell page via `static/entry.js`. The board is rendered client-side from
+  the `__flow__` item so that one renderer also handles the redraw when the
+  document is regenerated mid-session.
+- Per-session state (the document, comment threads, the event queue) lives in
+  the daemon's own session directories, not under the project being traced.
 
 ## Three things it does that a static diagram cannot
 
-**Opening code.** Every node carries a repository-relative `file` and a `line`,
-and the page opens it through `POST /api/open` — the server runs
-`idea --line N <file>` itself. The `jetbrains://` scheme had to guess the IDE's
-project name from a directory basename and failed silently when it guessed
-wrong; a local process does not have that problem. The session's `cwd` is the
-repository root, which is what every node path resolves against.
+**Opening code.** Every node carries a repository-relative `file` and a
+`line`. `push.py` stores the repository root as the document's own `cwd`
+field, and `dataflow.js` joins that onto a node's `file` to build an absolute
+path before POSTing to the daemon's `POST /api/open` — which runs
+`idea --line N <file>` on that absolute path. The daemon does no path
+resolution of its own: it only accepts an absolute path already inside a
+session's workspace, so building it is the page's job. The `jetbrains://`
+scheme had to guess the IDE's project name from a directory basename and
+failed silently when it guessed wrong; a local process does not have that
+problem.
 
 **Asking about a node.** `✻` posts to `/s/<sid>/api/submit` with
 `anchor: "node:<id>"`. That queues an event, the watcher wakes Claude, and the
@@ -46,10 +51,11 @@ or the path splits), and **destination** (where it comes to rest).
 
 ## The document
 
-`dataflow.json` is written by Claude and rendered by the server. The server
-knows nothing about Java, Spring, DDD or layering — `flow.py` validates
-structure only, and `SKILL.md` owns the tracing method. That is what keeps the
-skill usable on a codebase nobody anticipated.
+`dataflow.json` is written by Claude, validated against `flow.py`'s own rules
+before it is pushed, and rendered by `static/dataflow.js` against the daemon's
+`__flow__` item. `flow.py` knows nothing about Java, Spring, DDD or layering —
+it validates structure only, and `SKILL.md` owns the tracing method. That is
+what keeps the skill usable on a codebase nobody anticipated.
 
 Node ids are unique across the whole document because a thread anchor is
 `node:<id>`; per-slice ids would make two nodes share one thread.

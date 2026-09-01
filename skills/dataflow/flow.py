@@ -1,6 +1,6 @@
-"""dataflow.json persistence for the dataflow skill.
+"""dataflow.json validation and anchor helpers for the dataflow skill.
 
-One document per session at <state_dir>/dataflow.json:
+The document shape:
 
     {
       "seed": "InteractionChannel",     # what the user asked about
@@ -25,24 +25,29 @@ One document per session at <state_dir>/dataflow.json:
     }
 
 Every node carries a real `file` and `line`: the page's only way to reach code
-is `POST /api/open`, so a node without an anchor is a node the reader cannot
-follow. That is why `file`/`line` are required and not optional — including on
-`implicit` mapper nodes, whose anchor is the place the framework is configured
-rather than a mapper class that does not exist.
+is the daemon's own `/api/open`, so a node without an anchor is a node the
+reader cannot follow. That is why `file`/`line` are required and not optional —
+including on `implicit` mapper nodes, whose anchor is the place the framework
+is configured rather than a mapper class that does not exist.
+
+`file` is validated as repository-relative (no leading `/`) precisely because
+`/api/open` does no path resolution of its own — it only accepts an absolute
+path already inside a session's workspace. `push.py` stashes the repository
+root as the document's own `cwd` field (outside this module's validated
+shape, since it is metadata about where the document was pushed from, not
+about a node), and `dataflow.js` joins `FLOW.cwd` onto a node's `file` to
+build that absolute path before it ever reaches `/api/open`.
 
 Node ids are unique across the WHOLE document, not per slice: a thread anchor
 is `node:<id>`, and per-slice ids would make two nodes share one thread.
 
-The document is frozen once written — only per-node threads change afterwards —
-and is written atomically so a reader never sees a half-written file.
+The document itself is stored by the webcompanion daemon as the `__flow__`
+item (see `push.py`) — this module owns none of that persistence, only the
+document's own rules and its anchor vocabulary.
 """
 from __future__ import annotations
 
-import json
 import re
-from pathlib import Path
-
-from skills._shared.web_companion.atomic import write_text_atomic
 
 # The layer vocabulary. Deliberately small and framework-neutral: the server
 # knows nothing about Java, Spring or DDD — SKILL.md owns that mapping.
@@ -59,7 +64,6 @@ MAX_SUMMARY_LEN = 180       # one line about the node, never a list of its membe
 MAX_ROUTES = 24             # traced properties held on one document
 MIN_HOPS = 2                # a route with one point is not a path
 
-FLOW_FILE = "dataflow.json"
 _ANCHOR_RE = re.compile(r"^node:([a-z0-9][a-z0-9_-]{0,39})$")
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
 
@@ -337,31 +341,6 @@ def _file_errors(where: str, file: object) -> list[str]:
 
 def _is_id(v: object) -> bool:
     return isinstance(v, str) and _ID_RE.match(v) is not None
-
-
-def write_flow(state_dir: Path, doc: dict) -> None:
-    """Validate and atomically write <state_dir>/dataflow.json. Raises ValueError."""
-    errors = validate(doc)
-    if errors:
-        raise ValueError("; ".join(errors))
-    write_text_atomic(Path(state_dir) / FLOW_FILE, json.dumps(doc, indent=2))
-
-
-def load_flow(state_dir: Path) -> dict | None:
-    p = Path(state_dir) / FLOW_FILE
-    try:
-        doc = json.loads(p.read_text())
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return None
-    return doc if isinstance(doc, dict) else None
-
-
-def generated_ts(state_dir: Path) -> int:
-    doc = load_flow(state_dir)
-    if not doc:
-        return 0
-    ts = doc.get("generated_ts")
-    return ts if isinstance(ts, int) and not isinstance(ts, bool) else 0
 
 
 def node_ids(doc: dict) -> set[str]:

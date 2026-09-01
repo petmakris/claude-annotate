@@ -4,8 +4,8 @@ SKILL = Path(__file__).resolve().parent.parent / "SKILL.md"
 
 REQUIRED_SECTIONS = [
     "## Invocation",
-    "## On every invocation: ensure the server is running",
-    "## Create the session",
+    "## On every invocation: the daemon must be running",
+    "## Resolve the plugin root",
     "## Trace the code",
     "## Write the document",
     "## Generation contract",
