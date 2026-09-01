@@ -56,4 +56,28 @@ class AnchorResolverTest {
         assertEquals(MOVED, r.kind());
         assertEquals(2, r.line());
     }
+
+    @Test void sharedFixtureCasesMatchPython() throws java.io.IOException {
+        // Loads the same JSON both AnchorResolverTest.java and
+        // test_anchor_migrate.py read, so a behavior change in one
+        // implementation that isn't mirrored in the other fails here.
+        try (var in = AnchorResolverTest.class.getResourceAsStream("/anchor_migration_fixtures.json")) {
+            assertNotNull(in, "anchor_migration_fixtures.json missing from test resources");
+            var json = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            var cases = com.google.gson.JsonParser.parseString(json).getAsJsonArray();
+            for (var el : cases) {
+                var c = el.getAsJsonObject();
+                java.util.List<String> lines = new java.util.ArrayList<>();
+                for (var l : c.getAsJsonArray("lines")) lines.add(l.getAsString());
+                var r = AnchorResolver.resolve(
+                    lines, c.get("recorded_line").getAsInt(),
+                    c.get("anchor_text").getAsString(), c.get("k").getAsInt());
+                assertEquals(
+                    AnchorResolver.Kind.valueOf(c.get("expected_kind").getAsString()), r.kind(),
+                    "case: " + c.get("name").getAsString());
+                assertEquals(c.get("expected_line").getAsInt(), r.line(),
+                    "case: " + c.get("name").getAsString());
+            }
+        }
+    }
 }
