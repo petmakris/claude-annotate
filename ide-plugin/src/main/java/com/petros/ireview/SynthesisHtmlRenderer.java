@@ -134,7 +134,10 @@ public final class SynthesisHtmlRenderer {
 
           + "html,body{margin:0;padding:0;}"
           + "body{background:" + t.background() + ";color:" + t.foreground() + ";"
-          +   "font-family:" + t.proseFont() + ",-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;"
+          // 'Inter' first: a purpose-built UI face, clearer at small sizes than
+          // most IDE default fonts. Falls through to the IDE's own UI font
+          // (t.proseFont()) on a machine that doesn't have Inter installed.
+          +   "font-family:'Inter'," + t.proseFont() + ",-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;"
           +   "font-size:" + t.proseSize() + "px;line-height:1.62;"
           +   "box-sizing:border-box;width:100%;padding:14px 18px 20px;"
           +   "-webkit-font-smoothing:antialiased;overflow-wrap:break-word;}"

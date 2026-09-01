@@ -8,35 +8,27 @@ import com.intellij.openapi.ui.popup.JBPopup;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.ui.JBColor;
-import com.intellij.ui.jcef.JBCefApp;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.AbstractAction;
-import javax.swing.BorderFactory;
-import javax.swing.JButton;
 import javax.swing.JComponent;
-import javax.swing.JEditorPane;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.Font;
 import java.awt.event.ActionEvent;
-import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Inline popup anchored to a diff line. Shows the current synthesis for the
- * anchor (or "no annotation yet") and lets the user submit a follow-up
- * question. Re-rendering on synthesis updates is handled by registering a
- * listener on ReviewSessionClient that lives as long as the popup is open.
+ * Inline popup anchored to a diff line. Owns the popup chrome (drag, close
+ * button, version label, Esc-to-close with an unsaved-input guard) around a
+ * {@link ThreadConversationView}, which does the actual rendering/asking.
  */
 public final class SynthesisPopup {
 
@@ -45,15 +37,6 @@ public final class SynthesisPopup {
      *  the same relative path, and an anchor-only key would cross-cancel them. */
     private static final java.util.Map<String, JBPopup> OPEN_POPUPS =
             new java.util.concurrent.ConcurrentHashMap<>();
-
-    /** How long the "Claude is answering…" card may spin before flipping to a
-     *  "still waiting" state — mirrors ReviewSessionClient's pending timeout. */
-    private static final int STILL_WAITING_AFTER_MS = 120_000;
-
-    /** Visible rows in the question box. Was 1 (Enter still inserts a newline
-     *  in a JTextArea — only Cmd/Ctrl+Enter submits — but a multi-line
-     *  question just scrolled invisibly inside a 1-row viewport). */
-    private static final int INPUT_ROWS = 3;
 
     private static String popupKey(@NotNull Project project, @NotNull String anchor) {
         return project.getLocationHash() + "|" + anchor;
@@ -109,15 +92,7 @@ public final class SynthesisPopup {
             existing.cancel();
         }
 
-        AtomicReference<Boolean> thinking = new AtomicReference<>(false);
         AtomicReference<JBPopup> popupRef = new AtomicReference<>();
-        // The last question submitted from this popup, so a failed submit can be
-        // restored/retried instead of lost. Mutable holders for the elapsed
-        // timer (answering state) captured by the lambdas below.
-        AtomicReference<String> lastQuestion = new AtomicReference<>();
-        final javax.swing.Timer[] elapsedTimer = {null};
-        final javax.swing.Timer[] stillWaitingTimer = {null};
-        final long[] startedAt = {0L};
 
         JPanel content = new JPanel(new BorderLayout());
         content.setBorder(JBUI.Borders.empty(4, 6));
@@ -178,233 +153,25 @@ public final class SynthesisPopup {
         headerRow.addMouseMotionListener(dragger);
         content.add(headerRow, BorderLayout.NORTH);
 
-        JEditorPane synthesisPane = new JEditorPane("text/html", "");
-        synthesisPane.setEditable(false);
-        synthesisPane.setOpaque(false);
-        synthesisPane.setBorder(JBUI.Borders.empty(2, 4));
-
-        synthesisPane.addHyperlinkListener(e -> {
-            if (e.getEventType() != javax.swing.event.HyperlinkEvent.EventType.ACTIVATED) return;
-            SynthesisLinkRouter.route(project, e.getDescription());
-        });
-
-        JScrollPane synthesisScroll = new JScrollPane(synthesisPane);
-        synthesisScroll.setBorder(BorderFactory.createLineBorder(JBColor.border(), 1, true));
-        synthesisScroll.setPreferredSize(new Dimension(520, 130));
-
-        // "Answering" card: echoes the question, a self-animating spinner, and a
-        // live elapsed-seconds counter. Claude appends the whole answer in one
-        // write (there's no token stream to show), so this is honest progress —
-        // not a fake typing effect.
-        JPanel thinkingCard = new JPanel(new java.awt.GridBagLayout());
-        thinkingCard.setBorder(BorderFactory.createLineBorder(JBColor.border(), 1, true));
-        JPanel thinkingInner = new JPanel();
-        thinkingInner.setLayout(new javax.swing.BoxLayout(thinkingInner, javax.swing.BoxLayout.Y_AXIS));
-        thinkingInner.setOpaque(false);
-        JLabel thinkingQuestion = new JLabel();
-        thinkingQuestion.setForeground(JBColor.GRAY);
-        thinkingQuestion.setFont(thinkingQuestion.getFont().deriveFont(Font.ITALIC, 11.5f));
-        thinkingQuestion.setAlignmentX(Component.CENTER_ALIGNMENT);
-        JPanel spinnerRow = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.CENTER, 8, 0));
-        spinnerRow.setOpaque(false);
-        spinnerRow.setAlignmentX(Component.CENTER_ALIGNMENT);
-        com.intellij.util.ui.AsyncProcessIcon spinner = new com.intellij.util.ui.AsyncProcessIcon("answering");
-        spinner.resume();  // start animating immediately; it's cheap
-        JLabel thinkingText = new JLabel("Claude is answering…");
-        thinkingText.setForeground(JBColor.GRAY);
-        spinnerRow.add(spinner);
-        spinnerRow.add(thinkingText);
-        // Shown only after the pending timeout: the spinner alone would claim
-        // progress forever, so after 120s the card admits it may be stuck and
-        // offers a way back to the synthesis view.
-        JButton waitDismissBtn = makeAccentButton("Dismiss");
-        waitDismissBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
-        waitDismissBtn.setVisible(false);
-        thinkingInner.add(thinkingQuestion);
-        thinkingInner.add(javax.swing.Box.createVerticalStrut(6));
-        thinkingInner.add(spinnerRow);
-        thinkingInner.add(javax.swing.Box.createVerticalStrut(10));
-        thinkingInner.add(waitDismissBtn);
-        thinkingCard.add(thinkingInner);
-
-        // "Error" card: a failed submit must never lose the user's question —
-        // the input is repopulated and Retry re-sends the exact text.
-        JPanel errorCard = new JPanel(new java.awt.GridBagLayout());
-        errorCard.setBorder(BorderFactory.createLineBorder(JBColor.border(), 1, true));
-        JPanel errorInner = new JPanel();
-        errorInner.setLayout(new javax.swing.BoxLayout(errorInner, javax.swing.BoxLayout.Y_AXIS));
-        errorInner.setOpaque(false);
-        JLabel errorMsg = new JLabel("Couldn't reach Claude — your question was kept.");
-        errorMsg.setForeground(new JBColor(new java.awt.Color(0xc0, 0x32, 0x21), new java.awt.Color(0xf8, 0x73, 0x71)));
-        errorMsg.setAlignmentX(Component.CENTER_ALIGNMENT);
-        JButton retryBtn = makeAccentButton("Retry");
-        retryBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
-        errorInner.add(errorMsg);
-        errorInner.add(javax.swing.Box.createVerticalStrut(10));
-        errorInner.add(retryBtn);
-        errorCard.add(errorInner);
-
-        // CardLayout swap between synthesis content and thinking spinner.
-        // Prefer JCEF (real browser) for the synthesis card; fall back to the
-        // JEditorPane (synthesisScroll) when JCEF is unavailable.
-        final SynthesisBrowser browser = tryCreateBrowser(project);
-        JComponent synthesisCard = browser != null ? (JComponent) browser.getComponent() : synthesisScroll;
-        java.awt.CardLayout cards = new java.awt.CardLayout();
-        JPanel centerCards = new JPanel(cards);
-        centerCards.add(synthesisCard, "synthesis");
-        centerCards.add(thinkingCard, "thinking");
-        centerCards.add(errorCard, "error");
-        centerCards.setPreferredSize(new Dimension(520, 130));
-
-        JTextArea input = new JTextArea(INPUT_ROWS, 50);
-        input.setLineWrap(true);
-        input.setWrapStyleWord(true);
-        JScrollPane inputScroll = new JScrollPane(input);
-        inputScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-        inputScroll.setBorder(BorderFactory.createLineBorder(JBColor.border(), 1, true));
-
-        // renderCurrent captures synthesisPane/browser and thinking; called on EDT.
-        Runnable renderCurrent = () -> {
-            if (thinking.get()) {
-                cards.show(centerCards, "thinking");
-                return;
-            }
-            cards.show(centerCards, "synthesis");
-            var cached = client.threadFor(anchor);
-            if (browser != null) {
-                browser.render(cached.isEmpty()
-                    ? "*No annotation yet. Ask a question to start.*"
-                    : cached.get().synthesis());
-                return;
-            }
-            if (cached.isEmpty()) {
-                synthesisPane.setText(wrapHtml("<i style='color:#7a7e85'>No annotation yet. Ask a question to start.</i>"));
-            } else {
-                synthesisPane.setText(wrapHtml(MarkdownLinkRenderer.toHtml(cached.get().synthesis())));
-            }
-            synthesisPane.setCaretPosition(0);
-        };
-        renderCurrent.run();
-
-        Runnable stopElapsed = () -> {
-            if (elapsedTimer[0] != null) { elapsedTimer[0].stop(); elapsedTimer[0] = null; }
-            if (stillWaitingTimer[0] != null) { stillWaitingTimer[0].stop(); stillWaitingTimer[0] = null; }
-            waitDismissBtn.setVisible(false);
-        };
-        Runnable startElapsed = () -> {
-            stopElapsed.run();
-            startedAt[0] = System.currentTimeMillis();
-            thinkingText.setText("Claude is answering…");
-            elapsedTimer[0] = new javax.swing.Timer(1000, e -> {
-                long secs = (System.currentTimeMillis() - startedAt[0]) / 1000;
-                thinkingText.setText("Claude is answering… " + secs + "s");
-            });
-            elapsedTimer[0].start();
-            // After the pending timeout, stop counting up and admit the answer
-            // may never come — with a way out that doesn't lose the popup.
-            stillWaitingTimer[0] = new javax.swing.Timer(STILL_WAITING_AFTER_MS, e -> {
-                if (!thinking.get()) return;
-                if (elapsedTimer[0] != null) { elapsedTimer[0].stop(); elapsedTimer[0] = null; }
-                thinkingText.setText("Still waiting — Claude may be busy");
-                waitDismissBtn.setVisible(true);
-                thinkingCard.revalidate();
-                thinkingCard.repaint();
-            });
-            stillWaitingTimer[0].setRepeats(false);
-            stillWaitingTimer[0].start();
-        };
-        waitDismissBtn.addActionListener(e -> {
-            thinking.set(false);
-            stopElapsed.run();
-            renderCurrent.run();
-        });
-
-        JButton askBtn = makeAccentButton("Ask");
-        askBtn.setMnemonic(KeyEvent.VK_A);
-        java.util.function.Consumer<String> submitText = raw -> {
-            ReviewSessionClient.State st = client.state();
-            if (st == ReviewSessionClient.State.PAUSED || st == ReviewSessionClient.State.ENDED
-                    || st == ReviewSessionClient.State.DORMANT
-                    || st == ReviewSessionClient.State.OFFLINE) return;
-            if (raw == null) return;
-            String q = raw.trim();
-            if (q.isEmpty()) return;
-            lastQuestion.set(q);
-            input.setText("");
-            thinkingQuestion.setText("“" + truncate(q, 72) + "”");
-            thinking.set(true);
-            renderCurrent.run();
-            startElapsed.run();
-            String anchorText = anchorTextSupplier.get();
-            client.postComment(anchor, q, anchorText).whenComplete((v, t) -> SwingUtilities.invokeLater(() -> {
-                if (t != null) {
-                    thinking.set(false);
-                    stopElapsed.run();
-                    input.setText(q);  // never lose the question
-                    cards.show(centerCards, "error");
+        // The reused core: rendered synthesis + thinking/error cards + the
+        // input/Ask row. This popup only owns the header (drag + close +
+        // version label) and the JBPopup chrome around it — see
+        // ThreadConversationView for everything else.
+        ThreadConversationView view = new ThreadConversationView(project, anchor, anchorTextSupplier,
+            new ThreadConversationView.Callbacks() {
+                @Override public void onSessionGone() {
+                    // The session is gone: an open popup would re-enable input that
+                    // can only fail. Close it rather than leave a zombie.
+                    JBPopup p = popupRef.get();
+                    if (p != null && !p.isDisposed()) p.cancel();
                 }
-                // On success, do nothing; the SSE thread-changed event calls
-                // onThreadChanged, which sets thinking=false and re-renders.
-            }));
-        };
-        Runnable submit = () -> submitText.accept(input.getText());
-        askBtn.addActionListener(e -> submit.run());
-        retryBtn.addActionListener(e -> submitText.accept(lastQuestion.get()));
-
-        // Liveness gating: a PAUSED/ENDED session has no Claude to answer, and
-        // a DORMANT/OFFLINE client has no session at all — so disable the
-        // input + Ask button and drop any stale spinner rather than accept a
-        // question that is guaranteed to fail. The popup is reachable straight
-        // from the gutter, bypassing the side panel, so it must enforce this
-        // itself rather than rely on the panel.
-        java.util.function.Consumer<ReviewSessionClient.State> applyLiveness = st -> {
-            boolean frozen = st == ReviewSessionClient.State.PAUSED
-                    || st == ReviewSessionClient.State.ENDED
-                    || st == ReviewSessionClient.State.DORMANT
-                    || st == ReviewSessionClient.State.OFFLINE;
-            input.setEnabled(!frozen);
-            askBtn.setEnabled(!frozen);
-            if (frozen) {
-                if (thinking.get()) { thinking.set(false); stopElapsed.run(); renderCurrent.run(); }
-                input.setToolTipText(switch (st) {
-                    case ENDED -> "Session ended — read-only";
-                    case PAUSED -> "Paused — reconnecting…";
-                    case OFFLINE -> "Review server offline";
-                    default -> "No active review session";
-                });
-            } else {
-                input.setToolTipText(null);
-            }
-        };
-        applyLiveness.accept(client.state());
-
-        // Cmd/Ctrl+Enter submits.
-        input.getInputMap(JComponent.WHEN_FOCUSED).put(
-                KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.META_DOWN_MASK), "submit");
-        input.getInputMap(JComponent.WHEN_FOCUSED).put(
-                KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK), "submit");
-        input.getActionMap().put("submit", new AbstractAction() {
-            @Override public void actionPerformed(ActionEvent e) { submit.run(); }
-        });
-
-        // South region: input + Ask button side-by-side. INPUT_ROWS keeps a
-        // few lines visible (Enter inserts a newline in a JTextArea; only
-        // Cmd/Ctrl+Enter submits, see below) instead of the previous 1-row box
-        // that made anything past the first line scroll off invisibly.
-        // No "Ask a question (Cmd/Ctrl-Enter)" label — use placeholder text instead.
-        // Ask button is small, no label.
-        input.setRows(INPUT_ROWS);
-        input.setBorder(JBUI.Borders.empty(2, 6));
-        askBtn.setMargin(JBUI.emptyInsets());
-        askBtn.setBorder(JBUI.Borders.empty(0, 10));
-
-        JPanel south = new JPanel(new BorderLayout(4, 0));
-        south.setBorder(JBUI.Borders.emptyTop(4));
-        south.add(inputScroll, BorderLayout.CENTER);
-        south.add(askBtn, BorderLayout.EAST);
-
-        content.add(centerCards, BorderLayout.CENTER);
-        content.add(south, BorderLayout.SOUTH);
+                @Override public void onThreadDeleted() {
+                    JBPopup p = popupRef.get();
+                    if (p != null && !p.isDisposed()) p.cancel();
+                }
+            });
+        content.add(view.getComponent(), BorderLayout.CENTER);
+        JTextArea input = view.getInputField();
 
         // Esc closes the popup, but never silently discards a half-typed
         // question: with non-empty input the first Esc warns (in the header) and
@@ -438,43 +205,6 @@ public final class SynthesisPopup {
             }
         });
 
-        // SSE listener: when the thread for OUR anchor updates, re-render.
-        // When it's deleted, dismiss the popup so the user doesn't keep
-        // interacting with a gone thread. Unregistered on popup close below.
-        ReviewSessionClient.Listener listener = new ReviewSessionClient.Listener() {
-            @Override
-            public void onStateChanged(ReviewSessionClient.State st) {
-                SwingUtilities.invokeLater(() -> applyLiveness.accept(st));
-            }
-            @Override
-            public void onDetached() {
-                // The session is gone: an open popup would re-enable input that
-                // can only fail. Close it rather than leave a zombie.
-                SwingUtilities.invokeLater(() -> {
-                    JBPopup p = popupRef.get();
-                    if (p != null && !p.isDisposed()) p.cancel();
-                });
-            }
-            @Override
-            public void onThreadChanged(String changedAnchor, String synthesis, int version) {
-                if (!changedAnchor.equals(anchor)) return;
-                SwingUtilities.invokeLater(() -> {
-                    thinking.set(false);
-                    stopElapsed.run();
-                    renderCurrent.run();
-                });
-            }
-            @Override
-            public void onThreadDeleted(String deletedAnchor) {
-                if (!deletedAnchor.equals(anchor)) return;
-                SwingUtilities.invokeLater(() -> {
-                    JBPopup p = popupRef.get();
-                    if (p != null && !p.isDisposed()) p.cancel();
-                });
-            }
-        };
-        client.addListener(listener);
-
         JBPopup popup = JBPopupFactory.getInstance()
                 .createComponentPopupBuilder(content, input)
                 .setRequestFocus(true)
@@ -488,109 +218,31 @@ public final class SynthesisPopup {
                 // dragger above makes the popup draggable from any background
                 // surface in the content/header panels.
                 .createPopup();
+        // setResizable(true) lets the user drag this bigger, but nothing was
+        // resetting it back on the next open — IntelliJ's popup machinery can
+        // carry a manual resize forward in-memory for the rest of the IDE
+        // session, so a single accidental drag made every later popup open
+        // oversized until a full restart. Force the declared size on every
+        // open regardless of any such carried-over state.
+        popup.setSize(new Dimension(480, 200));
         popupRef.set(popup);
-        if (browser != null) Disposer.register(popup, browser);
+        Disposer.register(popup, view);
         OPEN_POPUPS.put(popupKey, popup);
         popup.addListener(new com.intellij.openapi.ui.popup.JBPopupListener() {
             @Override public void onClosed(@NotNull com.intellij.openapi.ui.popup.LightweightWindowEvent e) {
                 OPEN_POPUPS.remove(popupKey, popup);
-                client.removeListener(listener);
-                stopElapsed.run();
             }
         });
         shower.accept(popup);
     }
 
-    /**
-     * The JCEF-backed synthesis view, or null when this IDE cannot give us one.
-     *
-     * Both failure modes have to be caught here, because this is the only place
-     * that touches JCEF at all:
-     *   - {@code isSupported()} false — JCEF present but off (remote dev, a
-     *     JRE without the bundled browser).
-     *   - {@link LinkageError} — the class is not on this plugin's classloader
-     *     at all. JCEF was part of com.intellij.modules.platform up to build
-     *     261 and became a separate bundled plugin in 262, so an IDE upgrade
-     *     alone made this reference unresolvable and every panel-row click
-     *     threw NoClassDefFoundError onto the EDT. plugin.xml now asks for
-     *     com.intellij.modules.jcef by name; this catch is the belt to that
-     *     braces, for the user who disabled it.
-     * Either way the caller renders into the JEditorPane instead.
-     */
-    private static SynthesisBrowser tryCreateBrowser(@NotNull Project project) {
-        try {
-            return JBCefApp.isSupported() ? new SynthesisBrowser(project) : null;
-        } catch (LinkageError | RuntimeException e) {
-            return null;
-        }
-    }
-
-    private static String truncate(String s, int max) {
-        return s.length() <= max ? s : s.substring(0, max - 1) + "…";
-    }
-
-    private static String lineTextAt(Document doc, int line0) {
+    /** Package-visible: also used by {@link AnnotationsPanel} to build the
+     *  anchor-text echo for its inline detail view. */
+    static String lineTextAt(Document doc, int line0) {
         if (line0 < 0 || line0 >= doc.getLineCount()) return "";
         int s = doc.getLineStartOffset(line0);
         int en = doc.getLineEndOffset(line0);
         return doc.getText(new TextRange(s, en));
-    }
-
-    private static String wrapHtml(String body) {
-        // Pick up the IDE editor font + size so the popup blends with the code.
-        var scheme = com.intellij.openapi.editor.colors.EditorColorsManager
-                .getInstance().getGlobalScheme();
-        String editorFont = scheme.getEditorFontName();
-        int editorFontSize = Math.max(10, scheme.getEditorFontSize() - 1); // a hair smaller than the editor
-
-        // Single-quote-escape font name in case it contains apostrophes.
-        String fontFamily = "'" + editorFont.replace("'", "\\'") + "', monospace";
-
-        return "<html><head><style>"
-             + "body { font-family: " + fontFamily
-             +        "; color: #d8d8d8; font-size: " + editorFontSize + "px;"
-             +        " line-height: 1.45; margin: 0; padding: 4px 6px; }"
-             + "b { color: #e4e4e4; }"
-             + "a.ref-code { color: #ce9178; text-decoration: none; }"
-             + "a.ref-ticket { color: #b5b6e3; text-decoration: none; }"
-             + "a.ref-sym { color: #ce9178; text-decoration: none; }"
-             + "a.ref-sym:hover { text-decoration: underline dashed; }"
-             + "pre.code-block { background: #1e1f22; color: #d8d8d8; padding: 6px 10px;"
-             +                 " margin: 4px 0; border: 1px solid #393b40;"
-             +                 " font-size: " + (editorFontSize - 1) + "px; }"
-             + "</style></head><body>"
-             + body + "</body></html>";
-    }
-
-    /**
-     * Build a button that visibly looks like a button: explicit accent
-     * background, white text, hover/pressed states. Bypasses macOS Aqua
-     * L&F which silently ignores setBackground on stock JButtons.
-     */
-    private static JButton makeAccentButton(String text) {
-        final java.awt.Color base = new java.awt.Color(0x3b, 0x72, 0xe8);
-        final java.awt.Color hover = new java.awt.Color(0x4f, 0x83, 0xed);
-        final java.awt.Color pressed = new java.awt.Color(0x2c, 0x5f, 0xd0);
-        JButton b = new JButton(text);
-        b.setUI(new javax.swing.plaf.basic.BasicButtonUI());
-        b.setOpaque(true);
-        b.setContentAreaFilled(true);
-        b.setBorderPainted(false);
-        b.setFocusPainted(false);
-        b.setBackground(base);
-        b.setForeground(java.awt.Color.WHITE);
-        b.setFont(b.getFont().deriveFont(java.awt.Font.BOLD));
-        b.setBorder(JBUI.Borders.empty(6, 18));
-        b.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
-        b.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override public void mouseEntered(java.awt.event.MouseEvent e) { b.setBackground(hover); }
-            @Override public void mouseExited(java.awt.event.MouseEvent e) { b.setBackground(base); }
-            @Override public void mousePressed(java.awt.event.MouseEvent e) { b.setBackground(pressed); }
-            @Override public void mouseReleased(java.awt.event.MouseEvent e) {
-                b.setBackground(b.contains(e.getPoint()) ? hover : base);
-            }
-        });
-        return b;
     }
 
     /**

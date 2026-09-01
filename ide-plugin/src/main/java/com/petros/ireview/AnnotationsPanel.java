@@ -2,6 +2,7 @@ package com.petros.ireview;
 
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.Disposer;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBList;
 import com.intellij.ui.components.JBScrollPane;
@@ -22,6 +23,7 @@ import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
@@ -43,7 +45,16 @@ import java.util.Map;
  * Side-panel component: a live list of every annotated line in the current
  * interactive_review session. Subscribes to ReviewSessionClient for updates.
  *
- * Click a row → open file at line + open the popup for that anchor.
+ * Click a row → the panel switches from the list to a dedicated detail view
+ * for that thread (a {@link ThreadConversationView}, the same rendering core
+ * the diff-gutter popup uses), with a back button returning to the list. For
+ * a diff-line anchor, the diff editor is also scrolled to that line so the
+ * code stays in view alongside the answer.
+ *
+ * This is a real IntelliJ ToolWindow (see plugin.xml's "Review Annotations"
+ * entry), so dock/undock/float/separate-window are already free from the
+ * platform's own View Mode menu — nothing extra to build there.
+ *
  * Yellow dot on rows whose version is greater than what the user last saw
  * (in-memory only; not persisted across IDE restart).
  */
@@ -65,6 +76,20 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
      *  a thread only Claude could open. */
     private final JButton askGeneralButton = new JButton(AllIcons.Actions.AddMulticaret);
     private final Map<String, Integer> seenVersions = new HashMap<>();
+
+    /** list ⇄ detail navigation, so the tool window shows one thread at a
+     *  time instead of only ever floating a popup over the diff. */
+    private final CardLayout cardLayout = new CardLayout();
+    private final JPanel cardsRoot = new JPanel(cardLayout);
+    private static final String CARD_LIST = "list";
+    private static final String CARD_DETAIL = "detail";
+    private final JButton backButton = new JButton("Back to threads", AllIcons.Actions.Back);
+    private final JLabel detailTitleLbl = new JLabel();
+    private final JLabel detailLocLbl = new JLabel();
+    private final JPanel detailBody = new JPanel(new BorderLayout());
+    /** The currently-open thread's conversation, or null while the list card
+     *  is showing. Disposed on every navigation away from it. */
+    private ThreadConversationView currentDetail;
     /** Memo for {@link #isStale}: anchor → (document stamp, thread version,
      *  result). The document scan is O(lines) per row; without this it reruns
      *  for every row on every rebuild. */
@@ -184,8 +209,7 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
         endReviewButton.addActionListener(e -> endReview());
         askGeneralButton.setToolTipText("Ask Claude about the pull request as a whole — "
             + "a thread with no file or line, shown here as \"whole PR\"");
-        askGeneralButton.addActionListener(e ->
-            SynthesisPopup.showDetached(project, list, ReviewAnchor.GENERAL));
+        askGeneralButton.addActionListener(e -> showDetail(ReviewAnchor.GENERAL));
         JPanel openRow = new JPanel(new BorderLayout(6, 0));
         openRow.setBorder(JBUI.Borders.empty(0, 8, 4, 8));
         openRow.add(askGeneralButton, BorderLayout.WEST);
@@ -215,6 +239,31 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
         root.add(headerWrap, BorderLayout.NORTH);
         root.add(new JBScrollPane(list), BorderLayout.CENTER);
         root.add(footerRow, BorderLayout.SOUTH);
+
+        // Detail card: back button + title/anchor header, and a body that
+        // hosts a fresh ThreadConversationView per opened thread.
+        backButton.setToolTipText("Back to the thread list");
+        backButton.addActionListener(e -> showList());
+        JPanel detailHeaderTop = new JPanel(new BorderLayout(6, 0));
+        detailHeaderTop.setBorder(JBUI.Borders.empty(4, 4, 0, 8));
+        detailHeaderTop.add(backButton, BorderLayout.WEST);
+        detailTitleLbl.setFont(detailTitleLbl.getFont().deriveFont(Font.BOLD, 12.5f));
+        detailLocLbl.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 11).deriveFont(10.5f));
+        detailLocLbl.setForeground(new Color(0x8a, 0x8d, 0x93));
+        JPanel detailTitles = new JPanel(new BorderLayout());
+        detailTitles.setBorder(JBUI.Borders.empty(2, 8, 6, 8));
+        detailTitles.add(detailTitleLbl, BorderLayout.NORTH);
+        detailTitles.add(detailLocLbl, BorderLayout.SOUTH);
+        JPanel detailHeader = new JPanel(new BorderLayout());
+        detailHeader.add(detailHeaderTop, BorderLayout.NORTH);
+        detailHeader.add(detailTitles, BorderLayout.SOUTH);
+
+        JPanel detailCard = new JPanel(new BorderLayout());
+        detailCard.add(detailHeader, BorderLayout.NORTH);
+        detailCard.add(detailBody, BorderLayout.CENTER);
+
+        cardsRoot.add(root, CARD_LIST);
+        cardsRoot.add(detailCard, CARD_DETAIL);
 
         listener = new ReviewSessionClient.Listener() {
             @Override public void onStateChanged(ReviewSessionClient.State state) {
@@ -278,7 +327,7 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
     }
 
     public JComponent getComponent() {
-        return root;
+        return cardsRoot;
     }
 
     @Override
@@ -287,12 +336,33 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
         if (spinTimer != null) spinTimer.stop();
         for (Timer t : transientTimers) t.stop();
         transientTimers.clear();
+        if (currentDetail != null) { Disposer.dispose(currentDetail); currentDetail = null; }
     }
 
     private static final JBColor LIVE_COLOR =
         new JBColor(new Color(0xb0, 0x90, 0x10), new Color(0xf1, 0xc4, 0x0f));
     private static final JBColor GONE_COLOR =
         new JBColor(new Color(0xc0, 0x32, 0x21), new Color(0xf8, 0x73, 0x71));
+
+    private static final JBColor SEVERITY_CRITICAL =
+        new JBColor(new Color(0xc0, 0x32, 0x21), new Color(0xe0, 0x55, 0x5a));
+    private static final JBColor SEVERITY_IMPORTANT =
+        new JBColor(new Color(0xa6, 0x72, 0x0a), new Color(0xd9, 0xa5, 0x34));
+    private static final JBColor SEVERITY_NONE = JBColor.GRAY;
+
+    /**
+     * A row's dot color, read from the leading "**Critical —" / "**Important —"
+     * convention Claude's own replies use when posting a finding (see the
+     * interactive_review skill) — not a stored field, so this is a best-effort
+     * hint, not a guarantee. Anything else (a design discussion, a resolved
+     * note, the whole-PR summary) reads as neutral rather than guessing.
+     */
+    private static JBColor severityColor(String synthesis) {
+        String s = synthesis == null ? "" : synthesis.stripLeading();
+        if (s.regionMatches(true, 0, "**Critical", 0, "**Critical".length())) return SEVERITY_CRITICAL;
+        if (s.regionMatches(true, 0, "**Important", 0, "**Important".length())) return SEVERITY_IMPORTANT;
+        return SEVERITY_NONE;
+    }
 
     private void refreshTitle() {
         titleLabel.setText(client.currentSession()
@@ -436,14 +506,23 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
 
         boolean stale = entry.stale();
 
-        // Title line: clean summary title (WEST) + ×/spinner (EAST).
-        JPanel titleLine = new JPanel(new BorderLayout());
-        titleLine.setOpaque(false);
+        // Title line: severity dot + clean summary title (WEST) + ×/spinner (EAST).
+        JPanel titleWest = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        titleWest.setOpaque(false);
+        JLabel dotLbl = new JLabel("●");
+        dotLbl.setFont(dotLbl.getFont().deriveFont(9f));
+        dotLbl.setForeground(severityColor(client.threadFor(entry.anchor())
+            .map(ReviewSessionClient.ThreadState::synthesis).orElse("")));
+        titleWest.add(dotLbl);
         JLabel titleLbl = new JLabel(truncate(entry.title(), 64));
         titleLbl.setFont(titleLbl.getFont().deriveFont(Font.BOLD, 12.5f));
         titleLbl.setForeground(stale ? JBColor.GRAY
             : (selected ? new Color(0xe8, 0xe8, 0xe8) : new Color(0xd0, 0xd2, 0xd6)));
-        titleLine.add(titleLbl, BorderLayout.WEST);
+        titleWest.add(titleLbl);
+
+        JPanel titleLine = new JPanel(new BorderLayout());
+        titleLine.setOpaque(false);
+        titleLine.add(titleWest, BorderLayout.WEST);
 
         JPanel rightCluster = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         rightCluster.setOpaque(false);
@@ -457,12 +536,7 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
         titleLine.add(rightCluster, BorderLayout.EAST);
 
         // Meta line: file:side:line (muted, WEST) + v# / state (EAST).
-        String[] parts = entry.anchor().split(":", 3);
-        // A whole-PR thread has no path to show; "__general__" reads as a bug.
-        String location = parts.length >= 3
-            ? lastSegment(parts[0]) + ":" + parts[1] + ":" + parts[2]
-            : (ReviewAnchor.isGeneral(entry.anchor()) ? "whole PR" : entry.anchor());
-        JLabel locLbl = new JLabel(location);
+        JLabel locLbl = new JLabel(locationLabelFor(entry.anchor()));
         locLbl.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 11).deriveFont(10.5f));
         locLbl.setForeground(stale ? JBColor.GRAY : new Color(0x8a, 0x8d, 0x93));
 
@@ -611,11 +685,10 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
         String[] parts = entry.anchor().split(":", 3);
         if (parts.length < 3) {
             // A whole-PR anchor (__general__) has no file:side:line to open, so
-            // there is no diff editor to scroll to. Returning here left the row
-            // silently dead — show its thread over the panel instead.
+            // there is no diff editor to scroll to — just show its thread.
             seenVersions.put(entry.anchor(), entry.version());
             rebuild();
-            SynthesisPopup.showDetached(project, list, entry.anchor());
+            showDetail(entry.anchor());
             return;
         }
         String path = parts[0];
@@ -628,30 +701,31 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
         rebuild();
 
         // Preferred: the file's diff viewer is already open and registered with
-        // SpikeDiffExtension — scroll into it and show the ask-Claude popup,
-        // keeping the user in PR review context.
+        // SpikeDiffExtension — scroll into it so the code stays visible next to
+        // the thread's detail view.
         com.intellij.openapi.editor.ex.EditorEx diffEditor =
             SpikeDiffExtension.editorFor(path + ":" + side);
         if (diffEditor != null) {
             // The anchor's line is side-relative; the unified viewer shows both
             // sides in one document, so translate before scrolling.
-            focusAndShowPopup(diffEditor, entry.anchor(),
+            focusEditorAndShowDetail(diffEditor, entry.anchor(),
                 SpikeDiffExtension.displayLineFor(path + ":" + side, line0));
             return;
         }
 
         // Fallback: no diff viewer open for this file. Drive the real GitHub PR
-        // diff to this file + line, then show the popup once its viewer renders
+        // diff to this file + line, then show the detail once its viewer renders
         // and registers with SpikeDiffExtension (one click does both).
         client.currentSession().ifPresent(s -> {
             GhPrDiffOpener.openAt(project, s, path, side, line0);
-            showPopupWhenDiffReady(entry.anchor(), path, side, line0);
+            showDetailWhenDiffReady(entry.anchor(), path, side, line0);
         });
     }
 
-    /** Scroll the diff editor to {@code line0}, focus its window, and show the popup. */
-    private void focusAndShowPopup(com.intellij.openapi.editor.ex.EditorEx diffEditor,
-                                   String anchor, int line0) {
+    /** Scroll the diff editor to {@code line0}, focus its window, and switch
+     *  the panel to this thread's detail view. */
+    private void focusEditorAndShowDetail(com.intellij.openapi.editor.ex.EditorEx diffEditor,
+                                          String anchor, int line0) {
         diffEditor.getCaretModel().moveToLogicalPosition(
             new com.intellij.openapi.editor.LogicalPosition(line0, 0));
         diffEditor.getScrollingModel().scrollToCaret(
@@ -662,12 +736,12 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
             window.requestFocus();
         }
         diffEditor.getContentComponent().requestFocusInWindow();
-        SynthesisPopup.show(project, diffEditor, anchor, line0);
+        showDetail(anchor);
     }
 
     /** Poll for the GH diff's viewer to register (it renders asynchronously) and,
-     *  once it's on screen, show the popup. Gives up after ~5s. */
-    private void showPopupWhenDiffReady(String anchor, String path, String side, int line0) {
+     *  once it's on screen, show the detail view. Gives up after ~5s. */
+    private void showDetailWhenDiffReady(String anchor, String path, String side, int line0) {
         Timer poll = new Timer(300, null);
         final int[] tries = {0};
         poll.addActionListener(e -> {
@@ -676,7 +750,7 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
             if (ed != null && ed.getComponent().isShowing()) {
                 poll.stop();
                 transientTimers.remove(poll);
-                focusAndShowPopup(ed, anchor,
+                focusEditorAndShowDetail(ed, anchor,
                     SpikeDiffExtension.displayLineFor(path + ":" + side, line0));
             } else if (tries[0] >= 16) {
                 poll.stop();  // GH diff didn't register a viewer for this file — give up quietly
@@ -686,6 +760,59 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
         poll.setRepeats(true);
         transientTimers.add(poll);
         poll.start();
+    }
+
+    /** Switch the panel from the list to {@code anchor}'s detail view,
+     *  building a fresh {@link ThreadConversationView} for it. */
+    private void showDetail(String anchor) {
+        if (currentDetail != null) {
+            Disposer.dispose(currentDetail);
+            currentDetail = null;
+        }
+        var thread = client.threadFor(anchor);
+        detailTitleLbl.setText(thread
+            .map(t -> PanelRowTitle.resolve(t.title(), t.question(), t.synthesis(), anchor))
+            .orElse(truncate(anchor, 64)));
+        detailLocLbl.setText(locationLabelFor(anchor));
+
+        String[] parts = anchor.split(":", 3);
+        java.util.function.Supplier<String> anchorTextSupplier = () -> {
+            if (parts.length < 3) return "";
+            var doc = SpikeDiffExtension.sideDocumentFor(parts[0] + ":" + parts[1]);
+            if (doc == null) return "";
+            int line0 = Math.max(0, ReviewAnchor.startLine(parts[2]) - 1);
+            return SynthesisPopup.lineTextAt(doc, line0);
+        };
+
+        currentDetail = new ThreadConversationView(project, anchor, anchorTextSupplier,
+            new ThreadConversationView.Callbacks() {
+                @Override public void onSessionGone() { showList(); }
+                @Override public void onThreadDeleted() { showList(); }
+            });
+        detailBody.removeAll();
+        detailBody.add(currentDetail.getComponent(), BorderLayout.CENTER);
+        detailBody.revalidate();
+        detailBody.repaint();
+        cardLayout.show(cardsRoot, CARD_DETAIL);
+    }
+
+    /** Back to the thread list, disposing whatever detail view was open. */
+    private void showList() {
+        cardLayout.show(cardsRoot, CARD_LIST);
+        if (currentDetail != null) {
+            Disposer.dispose(currentDetail);
+            currentDetail = null;
+        }
+    }
+
+    /** Shared by the list row (muted, small) and the detail header (same
+     *  format, just styled bigger there) — one place defining what a
+     *  location string looks like for an anchor. */
+    private static String locationLabelFor(String anchor) {
+        String[] parts = anchor.split(":", 3);
+        return parts.length >= 3
+            ? lastSegment(parts[0]) + ":" + parts[1] + ":" + parts[2]
+            : (ReviewAnchor.isGeneral(anchor) ? "whole PR" : anchor);
     }
 
     private static String truncate(String s, int max) {
