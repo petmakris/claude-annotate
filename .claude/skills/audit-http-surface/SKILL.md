@@ -22,7 +22,7 @@ There is no route registry. The HTTP surface is a sequence of `if self.path == "
 ## Step 1 — load the sources of truth
 
 1. `skills/_shared/web_companion/server.py` — the shared path dispatch, `_match_session` (the session-scoped route matcher), and `_is_owner` at the write gate.
-2. `skills/annotate/server.py`, `skills/deck/server.py`, `skills/interactive_review/server.py`, and `skills/walkthrough/server.py` — the four per-skill `Handlers` classes, in particular each `serve_data()`, where their routes actually live (see Step 2's third form). Deck is easy to forget because no Java client talks to it; skip it and a whole skill's surface stays out of the diff.
+2. `skills/interactive_review/server.py` and `skills/walkthrough/server.py` — the two remaining per-skill `Handlers` classes, in particular each `serve_data()`, where their routes actually live (see Step 2's third form).
 3. `ide-plugin/src/main/java/com/petros/ireview/ReviewSessionClient.java` and `WalkthroughSessionClient.java` — every path the client requests.
 4. `ide-plugin/src/test/java/com/petros/ireview/FakeReviewServer.java` — the test double.
 

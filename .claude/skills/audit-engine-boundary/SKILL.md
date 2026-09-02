@@ -23,7 +23,7 @@ Report only what these do not enforce, plus anywhere either has gone stale.
 ## Step 1 — load the sources of truth
 
 1. `skills/_shared/web_companion/` — every module, and what each provides.
-2. `skills/annotate/server.py`, `skills/deck/server.py`, `skills/interactive_review/server.py`, `skills/walkthrough/server.py` — the four consumers. Deck is easy to miss because no Java client talks to it.
+2. `skills/interactive_review/server.py`, `skills/walkthrough/server.py` — the two remaining consumers.
 3. `skills/_shared/web_companion/server.py` — the `run()` signature, which is how a skill declares `skill_name` and `port_range`.
 
 ## The rules

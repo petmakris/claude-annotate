@@ -47,7 +47,7 @@
   });
 
   // One frame per slide, so there is no single shared doc to hold onto.
-  const state = { model: null, base: BASE };
+  const state = { model: null, modelVersion: null, base: BASE };
   window.ClaudeDeck = { state: state };
 
   function el(tag, cls, text) {
@@ -113,7 +113,7 @@
     f.style.height = SLIDE_H + "px";
     f.style.transform = "scale(" + SCALE + ")";
     f.style.transformOrigin = "0 0";
-    f.src = BASE + "deck#slide-" + index;
+    f.src = BASE + "assets/content.html?v=" + state.modelVersion + "#slide-" + index;
     f.addEventListener("load", () => {
       const doc = f.contentDocument;
       if (!doc) return;
@@ -316,11 +316,18 @@
   window.ClaudeDeck.mountNow = mountNow;
 
   async function renderDeck() {
-    state.model = await fetchJSON("model");
+    const item = await fetchJSON("items/__model__");
+    state.model = item.body;
+    state.modelVersion = item.version;
 
     const head = document.getElementById("deckhead");
     head.textContent = "";
-    head.appendChild(el("span", "nm", state.model.deck.split("/").pop()));
+    // state.model.deck (the deck's absolute path) is only ever useful to
+    // Claude reading a later comment event, never to this page — the shell's
+    // own <title> already carries the deck's name (set server-side from the
+    // session's title, push.py's `deck.stem`), so the header reads it from
+    // there instead of the model.
+    head.appendChild(el("span", "nm", document.title || "Deck"));
     head.appendChild(el("span", "mt", state.model.slides.length + " slides"));
     head.appendChild(el("span", "sp"));
 
@@ -431,17 +438,24 @@
       if (!text) { err.textContent = "Say what should change."; err.style.display = ""; return; }
       send.disabled = true;
       send.textContent = "Sending…";
+      // The daemon's /api/submit stores exactly {anchor, text, images} and
+      // drops every other key, so the structured payload travels JSON-encoded
+      // inside `text` — the same bridge annotate/static/compat.js's own
+      // submit() uses for its multi-field feedback. The anchor still keys the
+      // comment to the element clicked, independent of what's inside `text`.
+      //
+      // `deck` (the file's absolute path) rides along here because push.py
+      // puts it on __model__ specifically so this envelope can carry it back
+      // out — the browser itself never reads state.model.deck for anything.
+      const anchor = "slide:" + e.slide + ":" + e.path + ":" + (e.ord || 0);
+      const envelope = {
+        type: "deck_comment", deck: state.model.deck, slide: e.slide, path: e.path,
+        ord: e.ord || 0, component: e.component, line_start: e.line_start,
+        line_end: e.line_end, text: e.text, comment: text,
+      };
       try {
-        await window.WebCompanion.api.submit({
-          slide: e.slide,
-          path: e.path,
-          ord: e.ord || 0,
-          component: e.component,
-          line_start: e.line_start,
-          line_end: e.line_end,
-          text: e.text,
-          comment: text,
-        });
+        await window.WebCompanion.api.submit({ anchor, text: JSON.stringify(envelope) });
+        setBusyLocal(true);
         if (sel.node) sel.node.classList.add("deck-working");
         closePopup();
       } catch (ex) {
@@ -475,8 +489,6 @@
   /* ------------------------------------------------------------------ *
    * Busy state and repaint
    * ------------------------------------------------------------------ */
-
-  let lastFingerprint = null;
 
   function flash(index) {
     const wrap = document.querySelector('.slidewrap[data-slide="' + index + '"]');
@@ -527,38 +539,61 @@
       "Claude is editing the deck… " + (queued > 1 ? "(" + queued + " queued)" : "");
   }
 
-  /* Driven by core.js's own 1s poll rather than a second timer of our own. */
-  async function onPoll(poll) {
-    if (!poll) return;
-    setBusy(poll.busy, poll.queued);
-    const fp = poll.blocks && poll.blocks.deck;
-    if (lastFingerprint === null) { lastFingerprint = fp; return; }
-    if (fp && fp !== lastFingerprint) {
-      // The file changed on disk. Re-read the model, because line numbers and
-      // even the element set may have moved, then repaint every slide.
-      // The fingerprint advances only on success: recording it first would
-      // strand the page on stale content for good, because the retry the
-      // next poll is supposed to make would see no change to react to.
-      try {
-        await reloadEverything();
-        lastFingerprint = fp;
-      } catch (e) {
-        console.warn("deck reload failed, will retry on the next poll", e);
-      }
-    }
+  // The daemon reports no busy/queued concept at all — /poll and the SSE
+  // frames only ever say WHICH anchor changed, never whether Claude is still
+  // working on one. Reconstructed the same way annotate/static/compat.js
+  // already had to for its own submit lock: optimistic-lock on submit,
+  // unlock only once an actual item-changed delta for __model__ arrives.
+  // Erring towards "locked a little too long" (a busy banner that outlives
+  // an ack that changed nothing) is the safe direction — the alternative,
+  // a page that looks idle while Claude is mid-edit, invites a second
+  // conflicting comment.
+  let busyLocal = false;
+  function setBusyLocal(v) {
+    busyLocal = !!v;
+    setBusy(busyLocal, 0);
+  }
+
+  function connect() {
+    window.WebCompanion.init({
+      onDelta(ev) {
+        if (ev.kind === "item" && ev.anchor === "__model__" && !ev.initial) {
+          setBusyLocal(false);
+          reloadEverything().catch(e =>
+            console.warn("deck reload failed, will retry on the next change", e));
+        }
+      },
+    });
   }
 
   window.ClaudeDeck.reloadSlide = reloadSlide;
   window.ClaudeDeck.reloadEverything = reloadEverything;
-  window.ClaudeDeck.onPoll = onPoll;
 
-  document.addEventListener("DOMContentLoaded", () => {
+  function boot() {
     computeScale();
-    if (window.WebCompanion && window.WebCompanion.init) {
-      window.WebCompanion.init({ onPollDelta: onPoll });
-    }
-    renderDeck().catch(err => {
+    renderDeck().then(() => {
+      if (window.WebCompanion && window.WebCompanion.init) {
+        connect();
+      }
+    }).catch(err => {
       document.getElementById("deckbody").textContent = "Could not render deck: " + err.message;
     });
-  });
+  }
+
+  // entry.js loads this file from a <script> element it creates itself,
+  // inside a promise chain (core.css, then deck.css, then this file) kicked
+  // off from a `type="module"` <script>. A module script's own top-level
+  // code runs before DOMContentLoaded fires, but the browser does not wait
+  // for THIS file's async loadStylesheet/loadScript chain to settle before
+  // firing it — so DOMContentLoaded has already happened by the time this
+  // script itself starts running, and a plain `document.addEventListener
+  // ("DOMContentLoaded", boot)` would never call `boot` at all. Checking
+  // `readyState` first is the same guard annotate's own late-loaded scripts
+  // (highlighter.js, search.js, export.js) already use for the identical
+  // reason.
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot, { once: true });
+  } else {
+    boot();
+  }
 })();

@@ -1,12 +1,13 @@
 ---
 name: deck
-description: Use when the user wants to review or change a single-file HTML presentation deck in a browser — "open the deck", "let me comment on these slides", "show me the deck and let me steer it". Renders every slide, lets any element be commented on, and edits the .html in place. Not for building a deck from scratch and not for generic HTML editing.
+description: Use when the user wants to review or change a single-file HTML presentation deck in a browser — "open the deck", "let me comment on these slides", "show me the deck and let me steer it". Renders every slide, lets any element be commented on, and edits the .html in place. Not for building a deck from scratch and not for generic HTML editing. Triggered by /deck <path>. Watcher events are WEBCOMPANION_EVENT / WEBCOMPANION_FINISHED / WEBCOMPANION_CANCELLED.
 argument-hint: "<path to a deck .html, or a folder containing one>"
 allowed-tools:
   - Bash
   - Read
   - Edit
   - Grep
+  - Monitor
 ---
 
 # /deck — comment on a rendered deck
@@ -16,8 +17,18 @@ comments; **you** edit the file. Nothing else writes it.
 
 ## Opening a deck
 
-1. Resolve the deck file from the argument. A folder means the `.html` inside it with the same
-   name as the folder.
+1. Resolve the deck file from the argument, and set `DECK_PATH`/`DECK_NAME` — every later step in
+   this skill uses both. A folder means the `.html` inside it with the same name as the folder.
+
+```bash
+ARG="<the argument exactly as given after /deck>"
+if [ -d "$ARG" ]; then
+  DECK_PATH="$(cd "$ARG" && pwd)/$(basename "$ARG").html"
+else
+  DECK_PATH="$(cd "$(dirname "$ARG")" && pwd)/$(basename "$ARG")"
+fi
+DECK_NAME="$(basename "$DECK_PATH" .html)"
+```
 
 2. **Load the house style before anything else, and say out loud that you did.** A deck belongs
    to somebody who has already decided how their decks read — how long a slide may be, which
@@ -48,8 +59,31 @@ comments; **you** edit the file. Nothing else writes it.
    If no style file exists, say so plainly in one line and carry on. Do not invent house rules,
    and do not go looking for them in other repositories.
 
-3. Ensure the server is running, then create or attach a workspace. One block, because the
-   guard has to run before the first `python3` call:
+3. **The daemon must be running.** deck no longer ships its own server — storage, the event
+   queue and the page itself all belong to the **webcompanion daemon**, one always-on service
+   per machine, shared with every other skill and IDE plugin that talks to it. Confirm it is up
+   before doing anything else:
+
+```bash
+webcompanion status
+```
+
+   If that fails, stop and tell the user — do **not** try to start it yourself (a client that
+   auto-starts a service races every other client doing the same):
+
+```
+webcompanion doctor      # both interpreters, config, zipapp, launchd job, health
+```
+
+   If `webcompanion` is not on PATH at all, the daemon has never been installed on this machine:
+
+```
+pipx install webcompanion && webcompanion install-service
+```
+
+   Then resolve the plugin root — `skills.deck.push` runs out of the plugin's own tree, and
+   `$CLAUDE_PLUGIN_ROOT` is **not** exported into the Bash tool's shell. Run this once per turn,
+   before the first command that needs it:
 
 ```bash
 if ! command -v python3 >/dev/null 2>&1; then
@@ -69,17 +103,11 @@ EOF
 fi
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(python3 -c '
 import json, os, sys
-NAME, MARKER = "claude-annotate", "skills/deck/ensure_server.sh"
+NAME, MARKER = "claude-annotate", "skills/deck/push.py"
 ok = lambda r: bool(r) and os.path.isfile(os.path.join(r, MARKER))
 for entry in os.environ.get("PATH", "").split(os.pathsep):
     if os.path.basename(entry) == "bin" and ok(os.path.dirname(entry)):
         print(os.path.dirname(entry)); sys.exit()
-try:
-    root = json.load(open(os.path.expanduser("~/.claude/deck/server.json")))["plugin_root"]
-except Exception:
-    root = None
-if ok(root):
-    print(root); sys.exit()
 try:
     root = json.load(open(os.path.expanduser("~/.claude/plugins/known_marketplaces.json")))[NAME]["installLocation"]
 except Exception:
@@ -89,34 +117,37 @@ if ok(root):
 sys.exit("could not locate the claude-annotate plugin root")
 ')}"
 [ -n "$PLUGIN_ROOT" ] || { echo "claude-annotate: plugin root not found" >&2; exit 1; }
-"$PLUGIN_ROOT/skills/deck/ensure_server.sh"
-
-SERVER_URL=$(python3 -c 'import json,os; print(json.load(open(os.path.expanduser("~/.claude/deck/server.json")))["url"])')
-curl -sf -X POST "$SERVER_URL/api/sessions" -H 'Content-Type: application/json' \
-  -d "$(printf '{"cwd": "%s", "title": "%s", "deck": "%s"}' "$PWD" "$DECK_NAME" "$DECK_PATH")"
 ```
 
-4. Announce the `localhost_url`. **Do not append a query string to it** — the session router
-   matches the path exactly and `?cb=1` returns 404.
-5. Arm the watcher with `Monitor` (`persistent: true`), using the `sid`, `state_dir`,
-   `events_dir` and `consumed_dir` from the response:
+   Then push the deck — this both mints the session and installs the parsed model as the
+   `__model__` item in one call:
 
 ```bash
-PLUGIN_ROOT=$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.claude/deck/server.json")))["plugin_root"])')
-SKILL=deck \
-SID="<sid>" \
-STATE_DIR="<state_dir>" \
-EVENTS_DIR="<events_dir>" \
-CONSUMED_DIR="<consumed_dir>" \
-CLAUDE_SID="$CLAUDE_CODE_SESSION_ID" \
-"$PLUGIN_ROOT/skills/_shared/web_companion/watcher.sh"
+PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.deck.push \
+  --deck "$DECK_PATH" --cwd "$PWD" --title "$DECK_NAME"
 ```
+
+   The output is JSON: `sid`, `slug`, `kind`, `url`, `token`. Save `sid` and `slug` — you need
+   `sid` to arm the watcher, and `slug` to re-push onto the same workspace after an edit.
+
+4. Announce the `url`.
+5. Arm the watcher with `Monitor` (`persistent: true`), using the `sid` from the push response:
+
+```bash
+webcompanion watch --kind deck --sid "<sid>"
+```
+
+   Pass that as the `Monitor` tool's `command`, with a `description` like `"deck-wait sid=<sid>"`.
 
 6. End the turn.
 
 ## Handling a comment
 
-You wake on a `WEBCOMPANION_EVENT skill=deck` banner. The payload is one comment:
+You wake on a `WEBCOMPANION_EVENT skill=deck sid=<sid> event_id=<id>` banner, followed by
+`---payload---`, the event JSON, and `---end---`. The daemon stores exactly
+`{"anchor": "...", "text": "...", "images": [...]}` — `anchor` is the clicked element's
+address (`slide:<n>:<path>:<ord>`), and `text` is not the comment itself but a
+**JSON-encoded envelope** you must `json.loads()` before reading anything out of it:
 
 ```json
 {"type":"deck_comment","deck":"/abs/path/deck.html","slide":6,
@@ -125,7 +156,9 @@ You wake on a `WEBCOMPANION_EVENT skill=deck` banner. The payload is one comment
  "text":"Every proposal has to satisfy…","comment":"Open on the constraint."}
 ```
 
-`ord` is the element's position among the ones on that slide sharing its path —
+`deck` is the absolute path to the file you edit — `push.py` stashes it onto the pushed
+model specifically so this envelope can carry it back to you; the browser itself never
+uses it. `ord` is the element's position among the ones on that slide sharing its path —
 decks put several blocks with the same class on one slide, so the path alone is
 not an address. You do not need it: `line_start`/`line_end` already point at the
 right element. It is in the payload so the address is complete.
@@ -203,28 +236,41 @@ measured against, and the comment that arrived is usually narrower than the rule
 - **Never write `.pg` or renumber `.num`.** The harness does both at runtime.
 - **Do not regenerate the PDF.** A stale `.pdf` beside an edited `.html` is not a defect.
 
-After editing, confirm the deck still parses and the element you touched is still addressable:
+After editing, **re-run `push.py` against the same slug** — this is the load-bearing step, not
+a courtesy check. It both re-copies the edited file into the workspace's asset directory (so
+the browser's iframe actually reloads the new content) and re-pushes `__model__` (so the daemon
+notifies the browser that something changed at all). Unlike the old server, nothing polls the
+file on disk any more: the browser learns of an edit only because Claude's own edit workflow
+re-runs this command.
 
 ```bash
-curl -s "$SERVER_URL/s/<slug>/model" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d["slides"]), "slides")'
+PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.deck.push \
+  --deck "$DECK_PATH" --cwd "$PWD" --slug "<slug>" --title "$DECK_NAME"
 ```
 
-The browser repaints on its own within a second of the file changing. Report what you changed,
-the word count before and after, and the house rule you applied. Whether the new text still
-**fits** its slide is not checked in this phase — so an edit that made a block longer must be
-called out, not left for the user to discover when it overflows.
-
-Finally write the ack and end the turn with no terminal output:
+To confirm the deck still parses and the element you touched is still addressable, read the
+model back:
 
 ```bash
-touch "<consumed_dir>/<event_id>.ack"
+PYTHONPATH="$PLUGIN_ROOT" python3 -c 'from skills._shared import webcompanion_client as wc; d=wc.get_items("<sid>", kind="deck")["__model__"]["body"]; print(len(d["slides"]), "slides")'
+```
+
+Report what you changed, the word count before and
+after, and the house rule you applied. Whether the new text still **fits** its slide is not
+checked in this phase — so an edit that made a block longer must be called out, not left for
+the user to discover when it overflows.
+
+Finally ack the event and end the turn with no terminal output:
+
+```bash
+webcompanion ack --sid "<sid>" --event-id "<event_id>"
 ```
 
 ## One caution about sharing
 
 Reads under `/s/<slug>/` are ungated by design — that is what makes a workspace
-link shareable. For a deck that means anyone who can reach the port and knows the
-slug can read the whole file. On loopback that is only you. If the server has been
+link shareable. For a deck that means anyone who can reach the daemon's port and knows the
+slug can read the whole file. On loopback that is only you. If the daemon has been
 bound beyond loopback, do not open a deck you would not hand over.
 
 ## What this skill does not do

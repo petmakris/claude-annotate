@@ -8,11 +8,11 @@ from pathlib import Path
 
 from skills.tests.sanitized_env import REPO_ROOT, sanitized_path_dir
 
-# Was annotate's launcher until annotate moved onto the webcompanion daemon
-# and stopped shipping a server. The behaviour under test belongs to the
-# shared launcher, not to any one skill, so this now points at deck — one of
-# the four skills that still run a server of their own.
-SCRIPT = REPO_ROOT / "skills" / "deck" / "ensure_server.sh"
+# Was annotate's launcher, then deck's, until each in turn moved onto the
+# webcompanion daemon and stopped shipping a server. The behaviour under test
+# belongs to the shared launcher, not to any one skill, so this now points at
+# walkthrough — one of the two skills that still run a server of their own.
+SCRIPT = REPO_ROOT / "skills" / "walkthrough" / "ensure_server.sh"
 
 
 class PreflightTests(unittest.TestCase):
