@@ -22,11 +22,21 @@ public final class FakeReviewServer implements AutoCloseable {
     public final ConcurrentLinkedQueue<String> sseQueue = new ConcurrentLinkedQueue<>();
     public volatile String sessionsJson = "[]";
     public volatile String threadsJson = "{}";
+    /**
+     * Body returned by the daemon's bulk {@code /s/<sid>/threads?kind=walkthrough}
+     * route: {@code {anchor: {anchor, version, messages: [...], title}}}. Kept
+     * separate from {@link #threadsJson} (the old flat-blob {@code
+     * /threads.json} route, still served for {@code ReviewSessionClientTest})
+     * since the two routes' response shapes are unrelated.
+     */
+    public volatile String bulkThreadsJson = "{}";
     /** Body returned by GET /s/<sid>/steps.json. */
     public volatile String stepsJson = "{\"steps\":[]}";
     /** Epoch seconds of the last watcher heartbeat returned by /poll; null → none yet (0). */
     public volatile Long watcherSeenAt = null;
-    /** {@code steps_generated_at} returned by /poll; null → 0. */
+    /** {@code steps_generated_at} returned by /poll; also doubles as the
+     *  {@code __steps__} item's version for the daemon-shaped {@code /items}
+     *  route and {@code /poll}'s {@code items} map; null → 0. */
     public volatile Long stepsGeneratedAt = null;
     /**
      * Remaining number of /api/sessions requests to answer with a malformed
@@ -47,6 +57,15 @@ public final class FakeReviewServer implements AutoCloseable {
         new java.util.concurrent.atomic.AtomicInteger();
     /** Status code sent while {@link #sessionsHttpErrorsRemaining} is positive. */
     public volatile int sessionsHttpErrorStatus = 503;
+    /**
+     * Remaining number of GET /s/&lt;sid&gt;/items requests to answer with a
+     * non-200 status (no body) instead of the real {@code __steps__} payload,
+     * simulating a transient blip on {@code loadSteps()}'s own bounded retry
+     * (e.g. right after a session switch). Decrements per request; 0 → respond
+     * normally.
+     */
+    public final java.util.concurrent.atomic.AtomicInteger itemsHttpErrorsRemaining =
+        new java.util.concurrent.atomic.AtomicInteger();
     /** When true, /poll reports ended=true (terminal or watcher-dead past reap). */
     public volatile boolean ended = false;
     /** ended_reason returned by /poll when ended; null → JSON null. */
@@ -145,6 +164,32 @@ public final class FakeReviewServer implements AutoCloseable {
             try (OutputStream os = ex.getResponseBody()) { os.write(body); }
             return;
         }
+        // The daemon's real bulk threads route: no trailing path segment, distinct
+        // from /threads.json above and from a per-anchor /threads/<anchor> shape
+        // neither this fixture nor any client currently needs.
+        if (path.endsWith("/threads")) {
+            byte[] body = bulkThreadsJson.getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "application/json");
+            ex.sendResponseHeaders(200, body.length);
+            try (OutputStream os = ex.getResponseBody()) { os.write(body); }
+            return;
+        }
+        // The daemon's real bulk items route: GET /s/<sid>/items?kind=walkthrough
+        // returns {"__steps__": {"body": <stepsJson>, "version": <int>}}.
+        if (path.endsWith("/items")) {
+            if (itemsHttpErrorsRemaining.getAndUpdate(n -> n > 0 ? n - 1 : 0) > 0) {
+                ex.sendResponseHeaders(500, -1);
+                ex.close();
+                return;
+            }
+            long version = stepsGeneratedAt != null ? stepsGeneratedAt : 0;
+            byte[] body = ("{\"__steps__\":{\"body\":" + stepsJson.trim()
+                + ",\"version\":" + version + "}}").getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "application/json");
+            ex.sendResponseHeaders(200, body.length);
+            try (OutputStream os = ex.getResponseBody()) { os.write(body); }
+            return;
+        }
         if (path.endsWith("/poll")) {
             pollCount.incrementAndGet();
             long seen = watcherSeenAt != null ? watcherSeenAt : 0;
@@ -153,9 +198,16 @@ public final class FakeReviewServer implements AutoCloseable {
             boolean isEnded = flickerDead || ended;
             String reason = flickerDead ? "dead" : endedReason;
             String reasonJson = reason == null ? "null" : "\"" + reason + "\"";
+            // finished/cancelled mirror the daemon's real poll shape, derived from
+            // the same ended/endedReason fields ReviewSessionClientTest already
+            // drives; ended/ended_reason/steps_generated_at stay for that test.
+            boolean finished = isEnded && "finished".equals(reason);
+            boolean cancelled = isEnded && "cancelled".equals(reason);
             byte[] body = ("{\"threads\":{},\"watcher_seen_at\":" + seen
                 + ",\"steps_generated_at\":" + stepsTs
-                + ",\"finished\":false,\"ended\":" + (isEnded ? "true" : "false")
+                + ",\"finished\":" + finished + ",\"cancelled\":" + cancelled
+                + ",\"items\":{\"__steps__\":" + stepsTs + "}"
+                + ",\"ended\":" + (isEnded ? "true" : "false")
                 + ",\"ended_reason\":" + reasonJson + "}").getBytes(StandardCharsets.UTF_8);
             ex.getResponseHeaders().add("Content-Type", "application/json");
             ex.sendResponseHeaders(200, body.length);

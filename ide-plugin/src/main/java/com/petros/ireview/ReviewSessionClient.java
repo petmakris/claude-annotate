@@ -255,10 +255,10 @@ public final class ReviewSessionClient {
         payload.put("text", text);
         payload.put("anchor_text", anchorText == null ? "" : anchorText);
         String body = GSON.toJson(payload);
-        HttpRequest req = HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + s.sid() + "/api/submit"))
+        HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + s.sid() + "/api/submit"))
             .header("Content-Type", "application/json")
             .timeout(REQUEST_TIMEOUT)
-            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .POST(HttpRequest.BodyPublishers.ofString(body)))
             .build();
         return http.sendAsync(req, HttpResponse.BodyHandlers.discarding())
             .whenComplete((resp, err) -> {
@@ -282,9 +282,9 @@ public final class ReviewSessionClient {
     public CompletableFuture<Void> cancelSession() {
         SessionInfo s = current;
         if (s == null) return CompletableFuture.failedFuture(new IllegalStateException("no session"));
-        HttpRequest req = HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + s.sid() + "/api/cancel"))
+        HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + s.sid() + "/api/cancel"))
             .timeout(REQUEST_TIMEOUT)
-            .POST(HttpRequest.BodyPublishers.noBody())
+            .POST(HttpRequest.BodyPublishers.noBody()))
             .build();
         return http.sendAsync(req, HttpResponse.BodyHandlers.discarding())
             .thenAccept(resp -> {
@@ -300,10 +300,10 @@ public final class ReviewSessionClient {
         SessionInfo s = current;
         if (s == null) return CompletableFuture.failedFuture(new IllegalStateException("no session"));
         String body = "{\"anchor\":" + jsonEscape(anchor) + "}";
-        HttpRequest req = HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + s.sid() + "/api/threads/delete"))
+        HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + s.sid() + "/api/threads/delete"))
             .header("Content-Type", "application/json")
             .timeout(REQUEST_TIMEOUT)
-            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .POST(HttpRequest.BodyPublishers.ofString(body)))
             .build();
         return http.sendAsync(req, HttpResponse.BodyHandlers.discarding())
             .thenAccept(resp -> {
@@ -417,7 +417,8 @@ public final class ReviewSessionClient {
 
     private SessionInfo fetchNewestSession() throws Exception {
         String url = baseUrl + "/api/sessions?cwd=" + URLEncoder.encode(projectCwd, StandardCharsets.UTF_8);
-        HttpRequest req = HttpRequest.newBuilder(URI.create(url)).timeout(REQUEST_TIMEOUT).GET().build();
+        HttpRequest req = WebCompanionHttp.withContract(
+                HttpRequest.newBuilder(URI.create(url)).timeout(REQUEST_TIMEOUT).GET()).build();
         HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
         // A non-200 is a failure, not "no session" — it must count against
         // DISCOVERY_FAILURE_THRESHOLD like a socket failure would. A null
@@ -450,7 +451,8 @@ public final class ReviewSessionClient {
             String legacyUrl = ServerDiscovery.readLegacyServerJson(legacyServerJson);
             if (legacyUrl == null || legacyUrl.equals(baseUrl)) return null; // no file, or it's what we already tried
             String url = legacyUrl + "/api/sessions?cwd=" + URLEncoder.encode(projectCwd, StandardCharsets.UTF_8);
-            HttpRequest req = HttpRequest.newBuilder(URI.create(url)).timeout(REQUEST_TIMEOUT).GET().build();
+            HttpRequest req = WebCompanionHttp.withContract(
+                    HttpRequest.newBuilder(URI.create(url)).timeout(REQUEST_TIMEOUT).GET()).build();
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() != 200) return null;
             SessionInfo found = parseFirstSession(resp.body());
@@ -504,7 +506,8 @@ public final class ReviewSessionClient {
         boolean ended;
         String endedReason;
         try {
-            HttpRequest req = HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + sid + "/poll")).timeout(REQUEST_TIMEOUT).GET().build();
+            HttpRequest req = WebCompanionHttp.withContract(
+                    HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + sid + "/poll")).timeout(REQUEST_TIMEOUT).GET()).build();
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() != 200) return;
             com.google.gson.JsonObject o = com.google.gson.JsonParser.parseString(resp.body()).getAsJsonObject();
@@ -584,8 +587,8 @@ public final class ReviewSessionClient {
     private void seedCache(String sid, long gen) {
         for (int attempt = 0; attempt < 3 && !closed && gen == sseGen.get(); attempt++) {
             try {
-                HttpRequest req = HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + sid + "/threads.json"))
-                    .timeout(REQUEST_TIMEOUT).GET().build();
+                HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + sid + "/threads.json"))
+                    .timeout(REQUEST_TIMEOUT).GET()).build();
                 HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
                 if (resp.statusCode() == 200) {
                     applySeed(parseThreadsBulk(resp.body()), gen);
