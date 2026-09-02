@@ -58,9 +58,9 @@ class BrokenMachineTests(unittest.TestCase):
         # each in turn moved onto the webcompanion daemon and stopped
         # shipping a server. The behaviour under test belongs to the shared
         # launcher, not to any one skill, so this now points at
-        # interactive_review — the one skill that still runs a server of its
+        # ask_diff — the one skill that still runs a server of its
         # own.
-        script = REPO_ROOT / "skills" / "interactive_review" / "ensure_server.sh"
+        script = REPO_ROOT / "skills" / "ask_diff" / "ensure_server.sh"
         result = subprocess.run(
             [str(self.bin / "bash"), str(script)],
             capture_output=True, text=True, timeout=20,

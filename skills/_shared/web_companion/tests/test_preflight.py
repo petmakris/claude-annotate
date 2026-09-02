@@ -11,9 +11,9 @@ from skills.tests.sanitized_env import REPO_ROOT, sanitized_path_dir
 # Was annotate's launcher, then deck's, then walkthrough's, until each in
 # turn moved onto the webcompanion daemon and stopped shipping a server. The
 # behaviour under test belongs to the shared launcher, not to any one skill,
-# so this now points at interactive_review — the one skill that still runs a
+# so this now points at ask_diff — the one skill that still runs a
 # server of its own.
-SCRIPT = REPO_ROOT / "skills" / "interactive_review" / "ensure_server.sh"
+SCRIPT = REPO_ROOT / "skills" / "ask_diff" / "ensure_server.sh"
 
 
 class PreflightTests(unittest.TestCase):
