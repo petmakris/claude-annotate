@@ -30,8 +30,25 @@ class WalkthroughSessionClientTest {
     }
 
     private static String sessionsRow(String sid) {
-        return "[{\"sid\":\"" + sid + "\",\"title\":\"how sharing is gated\","
-             + "\"state_dir\":\"/tmp/state\"}]";
+        return "[" + sessionRowObj(sid, "walkthrough") + "]";
+    }
+
+    private static String sessionRowObj(String sid, String kind) {
+        return "{\"sid\":\"" + sid + "\",\"title\":\"how sharing is gated\","
+             + "\"kind\":\"" + kind + "\"}";
+    }
+
+    /** Builds the bulk {@code /threads?kind=walkthrough} shape for one anchor
+     *  with a single agent message (and, optionally, a preceding user question). */
+    private static String bulkThreadRow(String anchor, String question, String synthesis,
+                                         int version, String title) {
+        StringBuilder messages = new StringBuilder("[");
+        if (question != null) {
+            messages.append("{\"role\":\"user\",\"text\":\"").append(question).append("\",\"ts\":1},");
+        }
+        messages.append("{\"role\":\"agent\",\"text\":\"").append(synthesis).append("\",\"ts\":2}]");
+        return "{\"" + anchor + "\":{\"anchor\":\"" + anchor + "\",\"version\":" + version
+            + ",\"messages\":" + messages + ",\"title\":\"" + title + "\"}}";
     }
 
     @Test void attachesAndLoadsSteps() throws Exception {
@@ -77,15 +94,19 @@ class WalkthroughSessionClientTest {
                 await(() -> client.isPending("step:2"));
                 assertTrue(server.lastSubmitBody.contains("\"anchor\":\"step:2\""));
                 assertTrue(server.lastSubmitBody.contains("is ordering guaranteed?"));
+                assertFalse(server.lastSubmitBody.contains("\"type\""));
 
-                server.pushSseEvent("thread-changed",
-                    "{\"anchor\":\"step:2\",\"latest_synthesis\":\"no, bean order\","
-                    + "\"version\":1,\"title\":\"Ordering\",\"question\":\"is ordering guaranteed?\"}");
+                // The daemon's real frame only carries {anchor, version} — the
+                // client must re-fetch the bulk shape to learn the rest.
+                server.bulkThreadsJson = bulkThreadRow("step:2", "is ordering guaranteed?",
+                    "no, bean order", 1, "Ordering");
+                server.pushSseEvent("thread-changed", "{\"anchor\":\"step:2\",\"version\":1}");
                 await(() -> client.threadFor("step:2").isPresent() && !client.isPending("step:2"));
                 var t = client.threadFor("step:2").orElseThrow();
                 assertEquals("no, bean order", t.synthesis());
                 assertEquals(1, t.version());
                 assertEquals("Ordering", t.title());
+                assertEquals("is ordering guaranteed?", t.question());
                 assertTrue(pendingEvents.contains("step:2=true"));
                 assertTrue(pendingEvents.contains("step:2=false"));
             } finally {
@@ -109,7 +130,7 @@ class WalkthroughSessionClientTest {
             try {
                 await(() -> client.currentSession().isPresent());
                 server.stepsJson = STEPS;
-                server.pushSseEvent("steps-changed", "{\"generated_ts\":7,\"count\":2}");
+                server.pushSseEvent("item-changed", "{\"anchor\":\"__steps__\",\"version\":1}");
                 await(() -> client.doc().steps().size() == 2);
                 assertTrue(sizes.contains(2));
             } finally {
@@ -218,9 +239,8 @@ class WalkthroughSessionClientTest {
             try {
                 await(() -> client.currentSession().isPresent() && client.doc().steps().size() == 2);
 
-                server.pushSseEvent("thread-changed",
-                    "{\"anchor\":\"step:1\",\"latest_synthesis\":\"yes\","
-                    + "\"version\":1,\"title\":\"T\",\"question\":\"q?\"}");
+                server.bulkThreadsJson = bulkThreadRow("step:1", "q?", "yes", 1, "T");
+                server.pushSseEvent("thread-changed", "{\"anchor\":\"step:1\",\"version\":1}");
                 await(() -> client.threadFor("step:1").isPresent());
 
                 // Exactly one /api/sessions request gets a malformed body,
@@ -289,9 +309,8 @@ class WalkthroughSessionClientTest {
             try {
                 await(() -> client.currentSession().isPresent() && client.doc().steps().size() == 2);
 
-                server.pushSseEvent("thread-changed",
-                    "{\"anchor\":\"step:1\",\"latest_synthesis\":\"yes\","
-                    + "\"version\":1,\"title\":\"T\",\"question\":\"q?\"}");
+                server.bulkThreadsJson = bulkThreadRow("step:1", "q?", "yes", 1, "T");
+                server.pushSseEvent("thread-changed", "{\"anchor\":\"step:1\",\"version\":1}");
                 await(() -> client.threadFor("step:1").isPresent());
 
                 // Exactly one /api/sessions request gets a 503, forcing
@@ -379,9 +398,8 @@ class WalkthroughSessionClientTest {
             try {
                 await(() -> client.currentSession().isPresent() && client.doc().steps().size() == 2);
 
-                server.pushSseEvent("thread-changed",
-                    "{\"anchor\":\"step:1\",\"latest_synthesis\":\"yes\","
-                    + "\"version\":1,\"title\":\"T\",\"question\":\"q?\"}");
+                server.bulkThreadsJson = bulkThreadRow("step:1", "q?", "yes", 1, "T");
+                server.pushSseEvent("thread-changed", "{\"anchor\":\"step:1\",\"version\":1}");
                 await(() -> client.threadFor("step:1").isPresent());
 
                 // The server never reports the session as ended (server.ended
@@ -423,6 +441,98 @@ class WalkthroughSessionClientTest {
                 await(() -> client.currentSession().isPresent());
                 assertTrue(calls.get() > 1,
                     "supplier should be re-invoked after the first failed poll");
+            } finally {
+                client.stop();
+            }
+        }
+    }
+
+    @Test void attachesToTheLexicographicallyGreatestSidNotArrayZero() throws Exception {
+        // Task 1's supersede=True guarantees the newest sid for a (kind, cwd)
+        // is the only one still live, but the daemon's array is neither sorted
+        // nor guaranteed to exclude terminal sessions — the client must pick
+        // the greatest sid itself, not array[0].
+        try (FakeReviewServer server = new FakeReviewServer()) {
+            server.sessionsJson = "[" + sessionRowObj("260901-100000-aaa", "walkthrough")
+                + "," + sessionRowObj("260902-100000-bbb", "walkthrough") + "]";
+            server.stepsJson = STEPS;
+            server.watcherSeenAt = System.currentTimeMillis() / 1000;
+            WalkthroughSessionClient client = new WalkthroughSessionClient(
+                server.baseUrl(), "/proj", Duration.ofMillis(100));
+            client.start();
+            try {
+                await(() -> client.currentSession().isPresent());
+                assertEquals("260902-100000-bbb", client.currentSession().orElseThrow().sid());
+            } finally {
+                client.stop();
+            }
+        }
+    }
+
+    @Test void switchingToASessionWhoseStepsVersionCollidesStillLoads() throws Exception {
+        // Critical finding: push.py writes every walkthrough session's __steps__
+        // item exactly once, always at version 1 — so switching from one tour
+        // to another lands on a version-1 collision every time. attach()/
+        // handleNoSession() must reset lastStepsVersion on every switch;
+        // otherwise, if the new session's own initial loadSteps() transiently
+        // fails, pollLiveness's version-equality guard never sees a difference
+        // (1 == 1) and no reload is ever retried again — the panel is stuck
+        // empty for that session's entire lifetime.
+        String steps2 = """
+            {"question":"q","kind":"explain","generated_ts":9,"steps":[
+              {"id":1,"title":"one","file":"a.java","line":1,"snippet":"x","role":"context","markdown":"m"},
+              {"id":2,"title":"two","file":"b.java","line":9,"snippet":"y","role":"seam","markdown":"m2"},
+              {"id":3,"title":"three","file":"c.java","line":3,"snippet":"z","role":"seam","markdown":"m3"}]}
+            """;
+        try (FakeReviewServer server = new FakeReviewServer()) {
+            server.sessionsJson = sessionsRow("wt12a");
+            server.stepsJson = STEPS;
+            server.stepsGeneratedAt = 1L;
+            server.watcherSeenAt = System.currentTimeMillis() / 1000;
+            WalkthroughSessionClient client = new WalkthroughSessionClient(
+                server.baseUrl(), "/proj", Duration.ofMillis(100));
+            client.start();
+            try {
+                await(() -> client.currentSession().isPresent() && client.doc().steps().size() == 2);
+                assertEquals("wt12a", client.currentSession().orElseThrow().sid());
+
+                // Switch to a second session whose __steps__ item is ALSO at
+                // version 1 (the exact colliding scenario) but with different
+                // content — and force the new session's own initial
+                // loadSteps() (run synchronously from runSse() on attach) to
+                // exhaust its 3-attempt retry loop, exactly like a daemon blip
+                // would.
+                server.itemsHttpErrorsRemaining.set(3);
+                server.stepsJson = steps2;
+                server.sessionsJson = sessionsRow("wt12b");
+
+                await(() -> client.currentSession().isPresent()
+                    && "wt12b".equals(client.currentSession().orElseThrow().sid()));
+
+                // The initial load failed on attach; only pollLiveness's
+                // periodic freshness check (driven by lastStepsVersion having
+                // been reset to 0 on the switch) can recover it from here.
+                await(() -> client.doc().steps().size() == 3);
+                assertEquals(9L, client.doc().generatedTs());
+            } finally {
+                client.stop();
+            }
+        }
+    }
+
+    @Test void ignoresARowWhoseKindIsNotWalkthrough() throws Exception {
+        // Belt-and-braces re-check: even though the query already filters by
+        // kind, a row the daemon (hypothetically) failed to filter must still
+        // be ignored client-side.
+        try (FakeReviewServer server = new FakeReviewServer()) {
+            server.sessionsJson = "[" + sessionRowObj("rv1", "review") + "]";
+            WalkthroughSessionClient client = new WalkthroughSessionClient(
+                server.baseUrl(), "/proj", Duration.ofMillis(50));
+            client.start();
+            try {
+                await(() -> server.requests.size() >= 3);
+                assertTrue(client.currentSession().isEmpty());
+                assertEquals(WalkthroughSessionClient.State.DORMANT, client.state());
             } finally {
                 client.stop();
             }

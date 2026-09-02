@@ -5,11 +5,12 @@ anchored steps; the IDE plugin (`ide-plugin`) walks the user through
 them and posts per-step questions back for Claude to answer in place.
 
 - Skill contract: `SKILL.md`
-- Server: `server.py` (handlers over `skills/_shared/web_companion`), port range
-  54660–54680, state root `~/.claude/walkthrough/`.
-- Per-session state lives in `<project>/.claude/walkthrough/<sid>/state/`:
-  `steps.json` (frozen after generation), `threads/` (one file per step anchor),
-  `events/`, `consumed/`.
+- No server of its own: `push.py` writes the steps document straight to the
+  **webcompanion daemon** — one always-on service shared by every migrated
+  skill and IDE plugin — as the session's `__steps__` item.
+- Per-session state (the steps document, comment threads, the event queue)
+  lives in the daemon's own session directories, not under the project being
+  toured.
 
 Run the tests from the repo root:
 

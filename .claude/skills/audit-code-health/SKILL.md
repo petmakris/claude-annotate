@@ -100,13 +100,13 @@ function lacks a direct unit test.
 - **Rule 5 — duplication that has diverged.** Two blocks of near-identical
   logic are **Medium** only when they have already drifted — identical
   copies are a Decision, drifted copies are a bug waiting to be found in one
-  place and not the other. Quote both locations. `threads_bulk()` in
-  `skills/interactive_review/server.py` and `skills/walkthrough/server.py`
-  is the shape to look for: both load a thread's messages and pick a
-  "question" to pair with the latest Claude reply, but one takes
-  `user_msgs[0]` and the other `user_msgs[-1]` — same scaffolding, different
-  behavior on any thread with more than one exchange. Each copy's own tests
-  pass; nothing catches the two disagreeing.
+  place and not the other. Quote both locations. A `user_msgs[0]` vs
+  `user_msgs[-1]` choice diverging between two otherwise-identical
+  thread-message-selection routines — both loading a thread's messages and
+  picking a "question" to pair with the latest Claude reply — is the shape
+  to look for: same scaffolding, different behavior on any thread with more
+  than one exchange. Each copy's own tests pass; nothing catches the two
+  disagreeing.
 - **Rule 6 — risky code with no test beside it.** A module that parses
   untrusted input, writes files, or spawns processes and has no test file
   anywhere in the tree is **Medium**. Name the specific risk, not the
@@ -143,19 +143,10 @@ function lacks a direct unit test.
    purpose. Route drift there belongs to `/audit-http-surface`, not here.
 4. Test files' own duplication — repetitive tests are usually clearer than
    abstracted ones.
-5. The three per-skill `server.py` handler modules' **structural** shape —
-   the `Handlers` class outline and its `serve_data`/`create_session_extra`
-   method set, plus byte-identical small helpers such as `_send_text`,
-   `_send_html`, `_send_json`, and `_is_terminal` repeated across
-   `skills/annotate/server.py`, `skills/interactive_review/server.py`, and
-   `skills/walkthrough/server.py` — that is `/audit-engine-boundary`'s call,
-   not this one's, and identical (undrifted) copies are a Decision under
-   Rule 5 regardless. This does **not** reach duplicated **implementation
-   bodies** between the three modules — for example the two `_serve_stream`
-   loops — which this audit owns under Rule 5: there is no engine module
-   either could import instead, so it is duplication between skills, not a
-   boundary violation, and it is reportable here the same as any other
-   drifted copy.
+5. The one remaining per-skill `server.py` handler module's (`skills/
+   interactive_review/server.py`) **structural** shape — its `Handlers`
+   class outline and its `serve_data`/`create_session_extra` method set —
+   is `/audit-engine-boundary`'s call, not this one's.
 6. Any line carrying `# health-exempt: <reason>`.
 7. A swallow around closing or releasing a resource during teardown —
    `close()`/`shutdown()`-shaped calls in a cleanup path, where the

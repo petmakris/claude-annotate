@@ -38,9 +38,41 @@ Use this instead of answering in terminal prose whenever the honest answer is
   copy by default, or the given ref range). You narrate the change; you do not
   make it.
 
-## On every invocation: ensure the server is running
+## On every invocation: the daemon must be running
 
-Run this once at the top of every invocation, before anything else:
+walkthrough no longer ships a server. Storage, comment threads and the event
+queue all belong to the **webcompanion daemon** — one always-on service per
+machine, shared with every other skill and IDE plugin that talks to it. It is
+installed and kept alive by launchd (macOS) or systemd (Linux), so there is
+nothing to start per session and no port to negotiate.
+
+Confirm it is up before doing anything else:
+
+```bash
+webcompanion status
+```
+
+If that fails, stop and tell the user — do **not** try to start it yourself
+(a client that auto-starts a service races every other client doing the same):
+
+```
+webcompanion doctor      # both interpreters, config, zipapp, launchd job, health
+```
+
+If `webcompanion` is not on PATH at all, the daemon has never been installed
+on this machine:
+
+```
+pipx install webcompanion && webcompanion install-service
+```
+
+## Resolve the plugin root
+
+`skills.walkthrough.push` and `skills.walkthrough.steps` both run out of the
+plugin's own tree, and `$CLAUDE_PLUGIN_ROOT` is **not** exported into the Bash
+tool's shell. Run this once per turn, before the first command that needs it —
+the guard is not ceremony: without it, a machine with no python3 gets a bare
+traceback instead of a sentence naming the plugin and the fix.
 
 ```bash
 if ! command -v python3 >/dev/null 2>&1; then
@@ -60,18 +92,11 @@ EOF
 fi
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(python3 -c '
 import json, os, sys
-NAME, MARKER = "claude-annotate", "skills/walkthrough/ensure_server.sh"
+NAME, MARKER = "claude-annotate", "skills/walkthrough/push.py"
 ok = lambda r: bool(r) and os.path.isfile(os.path.join(r, MARKER))
 for entry in os.environ.get("PATH", "").split(os.pathsep):
     if os.path.basename(entry) == "bin" and ok(os.path.dirname(entry)):
         print(os.path.dirname(entry)); sys.exit()
-for skill in ("walkthrough", "interactive-review"):
-    try:
-        root = json.load(open(os.path.expanduser(f"~/.claude/{skill}/server.json")))["plugin_root"]
-    except Exception:
-        continue
-    if ok(root):
-        print(root); sys.exit()
 try:
     root = json.load(open(os.path.expanduser("~/.claude/plugins/known_marketplaces.json")))[NAME]["installLocation"]
 except Exception:
@@ -81,81 +106,29 @@ if ok(root):
 sys.exit(f"could not locate the {NAME} plugin root")
 ')}"
 [ -n "$PLUGIN_ROOT" ] || { echo "claude-annotate: plugin root not found" >&2; exit 1; }
-"$PLUGIN_ROOT/skills/walkthrough/ensure_server.sh"
 ```
 
-`$CLAUDE_PLUGIN_ROOT` is **not** exported into the Bash tool's shell, so the root
-is resolved by probing, in order: every `bin/` directory on `PATH` (Claude Code
-adds `<plugin-root>/bin` for both `--plugin-dir` and marketplace installs, even
-when that directory does not exist), then any server this plugin already started,
-then the marketplace registry. Each candidate must actually contain
-`ensure_server.sh` — the check is a marker file, not a directory name, so it
-survives being cloned under any name. Idempotent and fast (<100 ms when already
-up). Do **not** use `run_in_background: true`. If it exits non-zero, surface the
-stderr to the user and stop.
+Two candidates, in order: every `bin/` directory on `PATH` (Claude Code adds
+`<plugin-root>/bin` for both `--plugin-dir` and marketplace installs, even
+when that directory does not exist), then the marketplace registry. Each
+candidate must actually contain `skills/walkthrough/push.py`, so the check is
+a marker file rather than a directory name and survives the plugin being
+cloned under any name.
 
-## Create a session
-
-Read `$HOME/.claude/walkthrough/server.json` for the server URL, then create the
-session. Do this **before** exploring — the session directory is where the steps
-will be written, and creating it early means a slow exploration doesn't leave the
-user staring at nothing.
-
-Write the user's question to `~/.claude/walkthrough/.question.txt` using the `Write` tool
-so it never passes through the shell (the directory already exists because
-`ensure_server.sh` ran first and wrote `server.json` there). Then run:
-
-```bash
-SERVER_URL=$(python3 -c 'import json,os; print(json.load(open(os.path.expanduser("~/.claude/walkthrough/server.json")))["url"])')
-BODY=$(CWD="$PWD" KIND="${KIND:-explain}" python3 -c '
-import json, os
-q = open(os.path.expanduser("~/.claude/walkthrough/.question.txt")).read().strip()
-print(json.dumps({"cwd": os.environ["CWD"], "question": q, "kind": os.environ["KIND"],
-                  "claude_session_id": os.environ.get("CLAUDE_CODE_SESSION_ID", "")}))
-')
-curl -sf --max-time 90 -X POST "$SERVER_URL/api/sessions" \
-  -H 'Content-Type: application/json' \
-  -d "$BODY"
-```
-
-`kind` is `explain` or `diff`. The response contains `sid`, `slug`, `url`,
-`state_dir`, `events_dir`, `consumed_dir`, `title`. Save `sid`, `state_dir`,
-`events_dir`, `consumed_dir` for the rest of this turn.
-
-**One active tour per project.** If `/api/sessions?cwd=$PWD` already lists a
-walkthrough session, cancel it first (`POST /s/<old_sid>/api/cancel`) so the
-plugin switches cleanly instead of showing two tours. (Prior tours created by
-*this Claude session* — any cwd — are superseded server-side automatically:
-the create call above carries `claude_session_id`, and the server cancels
-this session's other non-terminal walkthroughs before returning.)
+**There is no longer a step that creates an empty session before you
+explore.** `push.py` mints the session and installs the steps document in the
+same call, and it needs a real document to push — so the tour now appears
+once you have explored the code and written the document, in "Validate and
+push the document" below, not before.
 
 ## Generate the steps
 
 Explore, then write the step list. For `--diff` tours, start from
 `git diff` / `git diff <range>` and read the touched files around each hunk.
 
-Write the document with the `Write` tool to `<state_dir>/.steps.draft.json`, then
-validate and install it (never hand-write `steps.json` — validation is what keeps
-a malformed tour out of the IDE):
-
-```bash
-PLUGIN_ROOT=$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.claude/walkthrough/server.json")))["plugin_root"])')
-PYTHONPATH="$PLUGIN_ROOT" STATE_DIR="$STATE_DIR" python3 - <<'PY'
-import json, os, time
-from pathlib import Path
-from skills.walkthrough.steps import write_steps
-sd = Path(os.environ["STATE_DIR"])
-doc = json.loads((sd / ".steps.draft.json").read_text())
-doc["generated_ts"] = int(time.time())
-write_steps(sd, doc)
-print(f"wrote {len(doc['steps'])} steps")
-PY
-```
-
-If it raises `ValueError`, the message lists every problem. Fix the draft and
-re-run — do not create a second session.
-
-Document shape:
+Write the document with the `Write` tool to your scratchpad as
+`.steps.draft.json` — not into a session's state directory, since no session
+exists yet:
 
 ```json
 {
@@ -182,6 +155,53 @@ Document shape:
   or `edit-site` (green — where new code goes).
 - `id` values are positive integers, unique, in walking order.
 
+## Validate and push the document
+
+Never hand the document straight to `push.py` unvalidated — validation is
+what keeps a malformed tour out of the IDE:
+
+```bash
+PYTHONPATH="$PLUGIN_ROOT" python3 - <<'PY'
+import json, time
+from pathlib import Path
+from skills.walkthrough import steps as steps_module
+p = Path("<scratchpad>/.steps.draft.json")
+doc = json.loads(p.read_text())
+doc["generated_ts"] = int(time.time())
+errors = steps_module.validate(doc)
+if errors:
+    raise SystemExit("\n".join(errors))
+p.write_text(json.dumps(doc, indent=2))
+print(f"validated: {len(doc['steps'])} steps")
+PY
+```
+
+A non-zero exit lists every problem at once. Fix the draft and re-run — do not
+push an invalid document.
+
+Then push it. This both mints the session and installs the document as the
+`__steps__` item in one call:
+
+```bash
+PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.walkthrough.push \
+  --steps <scratchpad>/.steps.draft.json --cwd "$PWD"
+```
+
+Run this from the repository you are touring — never from `$PLUGIN_ROOT` — so
+`$PWD` really is the repo root. Deliberately **omit `--title`**: `push.py`
+falls back to the document's own `question` field when no title is given, and
+that field already reached the daemon safely through the `Write` tool inside
+`.steps.draft.json` — passing `--title "<question>"` here would re-embed the
+same free-form text into a shell argument and reopen the quoting hazard the
+`Write`-tool routing exists to avoid. The output is JSON: `sid`, `slug`,
+`kind`, `url`, `title`. Save `sid` — you need it to arm the watcher and to
+answer questions.
+
+**One active tour per project, atomically.** `push.py` passes `supersede=True`
+to the daemon: creating a new walkthrough session for this cwd ends any other
+live walkthrough session for this same cwd first, in the same call — there is
+no separate list-then-cancel step to run, this is automatic.
+
 ## Generation contract
 
 Hard rules. A tour that breaks one of these is a defect, not a style choice.
@@ -207,8 +227,8 @@ Hard rules. A tour that breaks one of these is a defect, not a style choice.
 - **Cross-block re-pass.** After drafting all steps, re-read them together and fix
   what only shows up in aggregate: a step repeating its neighbour, a jump with a
   missing bridge, a title that no longer matches its body, an ordering that only
-  made sense while you were writing it. Do this **before** writing `steps.json` —
-  steps are frozen once written.
+  made sense while you were writing it. Do this **before** writing the document —
+  steps are frozen once pushed.
 
 ## Tell the user where to walk
 
@@ -218,72 +238,68 @@ One sentence in terminal, then stop:
 
 ## Arm the watcher
 
-Arm it **immediately** after telling the user, before any other work. Until the
-watcher writes its first heartbeat the server has no liveness signal and falls
-back to the session's age; past `NEVER_ARMED_GRACE` (30 min) it reports the
-session dead on every poll, and the IDE freezes the panel read-only for good.
-
-Start the watcher with `Monitor` (`persistent: true`):
+There is no watcher script of walkthrough's own any more — the daemon ships
+its own, and it emits the same banners this skill has always read. Arm it
+**immediately** after telling the user, before any other work.
 
 ```bash
-PLUGIN_ROOT=$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.claude/walkthrough/server.json")))["plugin_root"])')
-SKILL=walkthrough \
-SID="<sid>" \
-STATE_DIR="<state_dir>" \
-EVENTS_DIR="<events_dir>" \
-CONSUMED_DIR="<consumed_dir>" \
-CLAUDE_SID="$CLAUDE_CODE_SESSION_ID" \
-"$PLUGIN_ROOT/skills/_shared/web_companion/watcher.sh"
+webcompanion watch --kind walkthrough --sid "<sid>"
 ```
 
+Pass that as the `Monitor` tool's `command` with `persistent: true` and a
+`description` like `"walkthrough-wait sid=<sid>"`.
+
 Banners: `WEBCOMPANION_EVENT skill=walkthrough sid=<sid> event_id=<id>`,
-`WEBCOMPANION_FINISHED`, `WEBCOMPANION_CANCELLED`, and
-`WEBCOMPANION_DROPPED skill=walkthrough sid=<sid> event_id=<id>` (the watcher
-gave up re-emitting an event that was never acked). Each stdout line wakes you
-once; the watcher stays alive across many events.
+`WEBCOMPANION_FINISHED`, `WEBCOMPANION_CANCELLED`, `WEBCOMPANION_DROPPED`.
+Each stdout line wakes you once; the watcher stays alive across many events.
 
 ## Mode D — handling a watcher event
 
 ### `WEBCOMPANION_EVENT` (a question on a step)
 
 1. **Parse the banner** for `sid` and `event_id`.
-2. **Read the payload** between `---payload---` and `---end---`:
-   - `anchor` — always `step:<id>`.
-   - `type` — `"comment"` (or `"reject"` if the user disagrees with a prior reply).
-   - `text` — the question.
-   - `images` — `[{token, path}]`; `Read` each path before answering if non-empty.
+2. **Read the payload** between `---payload---` and `---end---`: the daemon
+   stores exactly `{anchor, text, images}` — `anchor` is always `step:<id>`,
+   `text` is the question, `images` is `[{token, path}]` — `Read` each before
+   answering.
 3. **Compose the answer:**
-   - Read `<state_dir>/steps.json` and locate the step by id — its `file`, `line`,
-     and `markdown` are the subject of the question.
-   - `Read` the anchored file around that line. Use `Grep`/`Glob` for anything the
-     question pulls in beyond it.
-   - Skim the other steps' threads (`ls <state_dir>/threads/`) as background. They
-     are READ-ONLY input; never write into another step's thread.
+   - Fetch the current steps document —
+     `skills._shared.webcompanion_client.get_items(sid, kind="walkthrough")["__steps__"]["body"]`
+     — and locate the step by id. Its `file`, `line`, and `markdown` are the
+     subject of the question.
+   - `Read` the anchored file around that line. Use `Grep`/`Glob` for anything
+     the question pulls in beyond it.
+   - Other steps' threads —
+     `skills._shared.webcompanion_client.get_threads(sid, kind="walkthrough")`
+     — are READ-ONLY background. Never write into another step's thread.
    - 2–4 sentences, code-aware, markdown links inline, fenced code blocks for
      suggested snippets. **Do not modify code.**
-4. **Append to that step's thread.** Route content through files so nothing is
-   shell-quoted:
+4. **Append to that step's thread, then acknowledge the event:**
 
-   a. `Write` the answer (raw markdown) to `<state_dir>/.reply.md`.
+   a. `Write` the answer (raw markdown) to your scratchpad as
+      `walkthrough-reply.md`.
 
-   b. `Write` `<state_dir>/.reply.meta.json`:
-   ```json
-   {"anchor": "step:3", "title": "<short headline>", "source_event_id": "<event_id>"}
-   ```
-
-   c. Run — appends the reply AND acks the event in one command:
+   b. Run — appends the reply to the step's thread:
    ```bash
-   PLUGIN_ROOT=$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.claude/walkthrough/server.json")))["plugin_root"])')
-   PYTHONPATH="$PLUGIN_ROOT" STATE_DIR="$STATE_DIR" \
-     python3 -m skills._shared.web_companion.reply_cli --ack "$EVENT_ID"
+   PYTHONPATH="$PLUGIN_ROOT" python3 -c "
+   import pathlib
+   from skills._shared import webcompanion_client as wc
+   text = pathlib.Path('<scratchpad>/walkthrough-reply.md').read_text()
+   wc.append_thread('<sid>', 'step:<id>', text, kind='walkthrough', role='agent',
+                    source_event_id='<event_id>', title='<short headline>')
+   "
    ```
-   It handles anchor→filename encoding and `source_event_id` dedup, and only
-   writes the ack after the append succeeds — a crashed append re-emits.
+
+   c. Then, and only then, acknowledge the event — or the daemon re-emits it
+      three times, thirty minutes apart, and finally drops it:
+   ```bash
+   webcompanion ack --sid "<sid>" --event-id "<event_id>"
+   ```
 5. **End your turn. No terminal output.** The watcher stays armed.
 
-**Never rewrite `steps.json` in response to an event.** Steps are frozen. If the
-answer really needs a different path through the code, say so in the reply and
-offer to run a new `/walkthrough`.
+**Never rewrite the steps document in response to an event.** Steps are
+frozen. If the answer really needs a different path through the code, say so
+in the reply and offer to run a new `/walkthrough`.
 
 ### `WEBCOMPANION_FINISHED`
 
@@ -311,44 +327,43 @@ question went unanswered and was dropped — please re-ask it on the step."*
 - **Suggest, don't ask.** If a fix is warranted, show it as a code block. The user
   applies it.
 - **Honest uncertainty.** Name exactly what you would need to know. Don't hedge.
-- **Headline title.** Pass a `title` to `append_message`: plain text, ≤ 6 words,
+- **Headline title.** Pass a `title` to `append_thread`: plain text, ≤ 6 words,
   a noun phrase. Refresh it each answer.
 
 ## Terminal cancellation
 
-If the user says "scrap it" / "stop the walkthrough" while a watcher is armed:
-
-```bash
-SERVER_URL=$(python3 -c 'import json,os; print(json.load(open(os.path.expanduser("~/.claude/walkthrough/server.json")))["url"])')
-curl -sf --max-time 10 -X POST "$SERVER_URL/api/cancel_for_claude_session" \
-  -H 'Content-Type: application/json' \
-  -d "{\"claude_session_id\": \"$CLAUDE_CODE_SESSION_ID\"}"
-```
-
-The server writes the cancellation markers; each armed watcher emits
-`WEBCOMPANION_CANCELLED` on its next tick — handle per Mode D.
+If the user says "scrap it" / "stop the walkthrough" while a watcher is armed,
+run `webcompanion end --sid "<sid>" --cancel`; the watcher prints
+`WEBCOMPANION_CANCELLED` and exits on its own — handle per Mode D.
 
 ## Edge cases
 
 - **Question too broad** — would exceed 12 steps. Ask once for a narrower question;
   if refused, build the best 12-step spine and say what you dropped.
-- **Zero anchors found** — nothing in the codebase matches. Do **not** write
-  `steps.json`. Cancel the session, and in terminal say what you searched for and
-  what you found instead.
+- **Zero anchors found** — nothing in the codebase matches. Do **not** write or
+  push `.steps.draft.json` — there is nothing to cancel, since no session
+  exists until `push.py` runs. In terminal, say what you searched for and what
+  you found instead.
 - **`--diff` with an empty diff** — say so; do not create a session.
-- **Validation failure** — `write_steps` lists every problem. Fix the draft, re-run.
-  Never bypass validation by writing `steps.json` directly.
-- **Server unreachable** — re-run `ensure_server.sh` (it restarts the server) and
-  retry the failed request once.
+- **Validation failure** — the validate step (or `push.py` itself) lists every
+  problem. Fix the draft, re-run. Never skip validation by pushing an
+  unvalidated document directly.
+- **Daemon unreachable** — `push.py` raises `DaemonUnreachable`, printed to
+  stderr with the fix. Do not try to start the daemon yourself; run
+  `webcompanion status` / `webcompanion doctor` and tell the user what they
+  reported.
 - **Tour lost** — tours are ephemeral by design. If the session ends, say so
   plainly and offer to regenerate.
-- **Malformed event payload** — no reply; `python3 -m skills._shared.web_companion.reply_cli --ack "$EVENT_ID" --ack-only` so the event
-  isn't re-emitted forever.
-- **Question with special characters** — the question is written to a file with the
-  `Write` tool and never interpolated into a shell command or Python source, so
-  quotes, backslashes, backticks, and `$(...)` are all safe. Do not "simplify" this
-  into a shell-interpolated `printf`, `echo`, or assignment to `$QUESTION` — the
-  file routing is what keeps the question safe.
+- **Malformed event payload** — no reply; run
+  `webcompanion ack --sid "<sid>" --event-id "<event_id>"` directly so the
+  event isn't re-emitted forever.
+- **Question with special characters** — the question lives only inside
+  `.steps.draft.json`, written with the `Write` tool and never interpolated
+  into a shell command. Omitting `--title` on the push command (see "Validate
+  and push the document") is what keeps it that way — `push.py` reads the
+  question back out of the document itself instead of it being re-typed into
+  a shell argument. Do not add a `--title "<question>"` argument — that
+  reopens the exact quoting hazard this avoids.
 
 ## Token budget
 

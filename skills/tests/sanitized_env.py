@@ -21,9 +21,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 BASH = shutil.which("bash") or "/bin/bash"
 
 # Tools our shell scripts legitimately call. python3 is deliberately absent.
-# `dirname` matters: skills/walkthrough/ensure_server.sh:3 calls it before
-# anything else, so omitting it would make the preflight test fail for the
-# wrong reason.
+# `dirname` matters: skills/interactive_review/ensure_server.sh:3 calls it
+# before anything else, so omitting it would make the preflight test fail for
+# the wrong reason.
 _NEEDED = (
     "sh", "bash", "env", "cat", "sed", "grep", "mkdir", "rm", "rmdir",
     "date", "stat", "sleep", "seq", "ps", "curl", "uname", "tr",

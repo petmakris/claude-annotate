@@ -1,5 +1,6 @@
 package com.petros.ireview;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -27,8 +28,10 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Talks to the walkthrough server: discovers a session by cwd, loads steps.json,
- * opens an SSE stream for per-step threads, and posts questions.
+ * Talks to the webcompanion daemon: discovers a session by cwd, loads the
+ * {@code __steps__} item off its bulk-items route, opens an SSE stream for
+ * per-step threads, and posts questions. Every request carries
+ * {@code kind=walkthrough}, since every daemon route is kind-scoped.
  *
  * <p>Same lifecycle model as {@link ReviewSessionClient} — DORMANT → CONNECTING →
  * ACTIVE, with PAUSED when the watcher heartbeat goes stale and ENDED as a
@@ -37,7 +40,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public final class WalkthroughSessionClient {
 
-    public record SessionInfo(String sid, String title, String stateDir) {}
+    public record SessionInfo(String sid, String title) {}
     public record ThreadState(String synthesis, int version, String title, String question) {}
 
     public enum State { DORMANT, CONNECTING, ACTIVE, DISCONNECTED, PAUSED, ENDED }
@@ -58,6 +61,14 @@ public final class WalkthroughSessionClient {
     }
 
     private static final Duration STALE_AFTER = Duration.ofSeconds(15);
+    /** Hard end-of-life cutoff on watcher-heartbeat age, distinct from the soft
+     *  {@link #STALE_AFTER}-driven PAUSED state above. The daemon's poll has no
+     *  equivalent of this today (no default retention/expiry sweep exists yet —
+     *  a separate, not-yet-built initiative), so this reproduces client-side the
+     *  value the old per-skill server used to enforce server-side:
+     *  {@code skills/_shared/web_companion/server.py}'s {@code REAP_AFTER}
+     *  (180s) — a file this migration deletes. */
+    private static final long REAP_AFTER_MS = Duration.ofSeconds(180).toMillis();
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(5);
     private static final com.google.gson.Gson GSON = new com.google.gson.Gson();
     /**
@@ -91,6 +102,11 @@ public final class WalkthroughSessionClient {
     private final Map<String, ThreadState> threads = new ConcurrentHashMap<>();
     private final Map<String, Long> pending = new ConcurrentHashMap<>();
     private final AtomicReference<WalkthroughDoc> doc = new AtomicReference<>(WalkthroughDoc.EMPTY);
+    /** The {@code __steps__} item's version as of the last successful {@link
+     *  #loadSteps} call — set only when the daemon reports one, so {@link
+     *  #pollLiveness} can compare it against a poll's {@code items.__steps__}
+     *  version instead of the old {@code steps_generated_at}. */
+    private volatile int lastStepsVersion = 0;
 
     private volatile boolean closed = false;
     private volatile boolean endedLatched = false;
@@ -192,12 +208,12 @@ public final class WalkthroughSessionClient {
         markPending(anchor, token);
         Map<String, String> payload = new java.util.LinkedHashMap<>();
         payload.put("anchor", anchor);
-        payload.put("type", "comment");
         payload.put("text", text);
-        HttpRequest req = HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + s.sid() + "/api/submit"))
+        HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(
+                URI.create(baseUrl + "/s/" + s.sid() + "/api/submit?kind=walkthrough"))
             .header("Content-Type", "application/json")
             .timeout(REQUEST_TIMEOUT)
-            .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(payload)))
+            .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(payload))))
             .build();
         return http.sendAsync(req, HttpResponse.BodyHandlers.discarding())
             .whenComplete((resp, err) -> {
@@ -216,9 +232,10 @@ public final class WalkthroughSessionClient {
     public CompletableFuture<Void> cancelSession() {
         SessionInfo s = current;
         if (s == null) return CompletableFuture.failedFuture(new IllegalStateException("no session"));
-        HttpRequest req = HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + s.sid() + "/api/cancel"))
+        HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(
+                URI.create(baseUrl + "/s/" + s.sid() + "/api/cancel?kind=walkthrough"))
             .timeout(REQUEST_TIMEOUT)
-            .POST(HttpRequest.BodyPublishers.noBody())
+            .POST(HttpRequest.BodyPublishers.noBody()))
             .build();
         return http.sendAsync(req, HttpResponse.BodyHandlers.discarding())
             .thenAccept(resp -> {
@@ -293,9 +310,10 @@ public final class WalkthroughSessionClient {
     }
 
     private SessionInfo fetchNewestSession() throws Exception {
-        String url = baseUrl + "/api/sessions?cwd="
+        String url = baseUrl + "/api/sessions?kind=walkthrough&cwd="
             + URLEncoder.encode(projectCwd, StandardCharsets.UTF_8);
-        HttpRequest req = HttpRequest.newBuilder(URI.create(url)).timeout(REQUEST_TIMEOUT).GET().build();
+        HttpRequest req = WebCompanionHttp.withContract(
+                HttpRequest.newBuilder(URI.create(url)).timeout(REQUEST_TIMEOUT).GET()).build();
         HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
         // A non-200 (transient 500/503 while the server restarts or the registry is being
         // rewritten) is a failure, not "no session" — it must count against
@@ -305,9 +323,22 @@ public final class WalkthroughSessionClient {
         // answered 200 and the list is empty".
         if (resp.statusCode() != 200) throw new IOException("HTTP " + resp.statusCode());
         var root = JsonParser.parseString(resp.body());
-        if (!root.isJsonArray() || root.getAsJsonArray().isEmpty()) return null;
-        JsonObject o = root.getAsJsonArray().get(0).getAsJsonObject();
-        return new SessionInfo(str(o, "sid"), str(o, "title"), str(o, "state_dir"));
+        if (!root.isJsonArray()) return null;
+        // Belt-and-braces: re-check "kind" ourselves even though the query already
+        // filtered — and pick the lexicographically greatest "sid", not array[0]:
+        // Task 1's supersede=True guarantees the newest sid for this (kind, cwd) is
+        // the only one still live, but the array is neither sorted nor guaranteed to
+        // exclude terminal sessions.
+        SessionInfo newest = null;
+        for (var el : root.getAsJsonArray()) {
+            JsonObject o = el.getAsJsonObject();
+            if (!"walkthrough".equals(str(o, "kind"))) continue;
+            String sid = str(o, "sid");
+            if (newest == null || sid.compareTo(newest.sid()) > 0) {
+                newest = new SessionInfo(sid, str(o, "title"));
+            }
+        }
+        return newest;
     }
 
     /** Re-resolve the server URL after a failed discovery poll: the server may
@@ -324,43 +355,57 @@ public final class WalkthroughSessionClient {
 
     /**
      * Polls liveness AND — the cheap fix for the "tour invisible for up to
-     * 30s" gap — steps freshness. {@code serve_poll} returns {@code
-     * steps_generated_at} on every call; nothing on the server wakes the SSE
-     * stream when Claude writes a fresh steps.json (only {@code
-     * registry.note_change} does, and only submit/delete call that), so
-     * without this the IDE would only learn about new steps from the next
-     * SSE {@code steps-changed} event, which can lag up to 30s behind the
-     * waiter's timeout. This discovery loop already runs every {@code
-     * pollInterval} (~5s in production), so reading the field here and
-     * reloading on change bounds the delay at ~one poll interval with no new
-     * network traffic. The reload goes through {@link #loadSteps}, using the
-     * *current* SSE generation read fresh right before the call — that keeps
-     * the same stale-publish guard the SSE path relies on: if a reconnect
-     * bumps the generation while this call is in flight, loadSteps's loop
-     * condition sees the mismatch and aborts without publishing. Publishing
-     * twice (once from here, once from a concurrent SSE steps-changed) is
-     * harmless — loadSteps no-ops when generatedTs and step count already
-     * match.
+     * 30s" gap — steps freshness. {@code /poll} returns the {@code __steps__}
+     * item's version (under {@code items}) on every call; nothing on the
+     * server wakes the SSE stream the moment Claude writes a fresh steps
+     * document (only an {@code item-changed} frame does, fired on submit/
+     * delete), so without this the IDE would only learn about new steps from
+     * the next SSE event, which can lag behind the waiter's timeout. This
+     * discovery loop already runs every {@code pollInterval} (~5s in
+     * production), so reading the field here and reloading on change bounds
+     * the delay at ~one poll interval with no new network traffic. The
+     * reload goes through {@link #loadSteps}, using the *current* SSE
+     * generation read fresh right before the call — that keeps the same
+     * stale-publish guard the SSE path relies on: if a reconnect bumps the
+     * generation while this call is in flight, loadSteps's loop condition
+     * sees the mismatch and aborts without publishing. Publishing twice
+     * (once from here, once from a concurrent SSE item-changed) is harmless
+     * — loadSteps no-ops when generatedTs and step count already match.
      */
     private void pollLiveness(String sid) {
         if (endedLatched) return;
         long seenAt;
-        long stepsGeneratedAt;
-        boolean ended;
+        boolean finished;
+        boolean cancelled;
+        Integer stepsVersion;
         try {
-            HttpRequest req = HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + sid + "/poll"))
-                .timeout(REQUEST_TIMEOUT).GET().build();
+            HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(
+                    URI.create(baseUrl + "/s/" + sid + "/poll?kind=walkthrough"))
+                .timeout(REQUEST_TIMEOUT).GET()).build();
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() != 200) return;
             JsonObject o = JsonParser.parseString(resp.body()).getAsJsonObject();
             seenAt = o.has("watcher_seen_at") && !o.get("watcher_seen_at").isJsonNull()
                 ? o.get("watcher_seen_at").getAsLong() : 0;
-            stepsGeneratedAt = o.has("steps_generated_at") && !o.get("steps_generated_at").isJsonNull()
-                ? o.get("steps_generated_at").getAsLong() : 0;
-            ended = o.has("ended") && !o.get("ended").isJsonNull() && o.get("ended").getAsBoolean();
+            finished = o.has("finished") && !o.get("finished").isJsonNull()
+                && o.get("finished").getAsBoolean();
+            cancelled = o.has("cancelled") && !o.get("cancelled").isJsonNull()
+                && o.get("cancelled").getAsBoolean();
+            stepsVersion = null;
+            if (o.has("items") && o.get("items").isJsonObject()) {
+                JsonObject items = o.getAsJsonObject("items");
+                if (items.has("__steps__") && !items.get("__steps__").isJsonNull()) {
+                    stepsVersion = items.get("__steps__").getAsInt();
+                }
+            }
         } catch (Exception e) {
             return;
         }
+        long ageMs = seenAt > 0 ? System.currentTimeMillis() - seenAt * 1000 : -1;
+        // finished/cancelled are the daemon's own authoritative markers; the third
+        // disjunct reproduces the old server's hard REAP_AFTER cutoff — see
+        // REAP_AFTER_MS's javadoc — since the daemon has no equivalent of its own.
+        boolean ended = finished || cancelled || (seenAt > 0 && ageMs > REAP_AFTER_MS);
         if (ended) { latchEnded(); return; }
         // Skip the freshness reload while CONNECTING: attach() calls openSse(), whose
         // worker runs its own loadSteps() as the first thing it does, before the state
@@ -369,12 +414,10 @@ public final class WalkthroughSessionClient {
         // read doc as EMPTY before either has published, so the tour activates twice (two
         // openTextEditor + scrollToCaret, two full gutter repaints). Once the SSE worker's
         // initial load has run and the state has moved on, this reload is legitimate again.
-        if (state != State.CONNECTING
-                && stepsGeneratedAt > 0 && stepsGeneratedAt != doc.get().generatedTs()) {
+        if (state != State.CONNECTING && stepsVersion != null && stepsVersion != lastStepsVersion) {
             loadSteps(sid, sseGen.get());
         }
         if (seenAt <= 0) return;
-        long ageMs = System.currentTimeMillis() - seenAt * 1000;
         if (ageMs > STALE_AFTER.toMillis()) {
             if (state != State.PAUSED) {
                 for (String a : new java.util.ArrayList<>(pending.keySet())) clearPending(a);
@@ -400,6 +443,7 @@ public final class WalkthroughSessionClient {
             threads.clear();
             pending.clear();
             doc.set(WalkthroughDoc.EMPTY);
+            lastStepsVersion = 0;
             sseGen.incrementAndGet();
             cancelSse();
             for (Listener l : listeners) l.onDetached();
@@ -414,14 +458,16 @@ public final class WalkthroughSessionClient {
         threads.clear();
         pending.clear();
         doc.set(WalkthroughDoc.EMPTY);
+        lastStepsVersion = 0;
         setState(State.CONNECTING);
         for (Listener l : listeners) l.onAttached(s);
         openSse(s.sid());
     }
 
     /**
-     * GET steps.json and publish it if it actually changed. Retries transient
-     * failures up to 3x with a 500ms backoff — same as {@link ReviewSessionClient
+     * GET {@code __steps__} off the daemon's generic bulk-items route and
+     * publish it if it actually changed. Retries transient failures up to 3x
+     * with a 500ms backoff — same as {@link ReviewSessionClient
      * #seedCache} — so a blip on the initial seed doesn't leave the tour empty
      * until the next SSE event. On exhaustion it fires {@link Listener#onWarning},
      * exactly as seedCache does, rather than going quietly empty. Aborts early if the client is closed or {@code
@@ -430,11 +476,31 @@ public final class WalkthroughSessionClient {
     private void loadSteps(String sid, long gen) {
         for (int attempt = 0; attempt < 3 && !closed && gen == sseGen.get(); attempt++) {
             try {
-                HttpRequest req = HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + sid + "/steps.json"))
-                    .timeout(REQUEST_TIMEOUT).GET().build();
+                HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(
+                        URI.create(baseUrl + "/s/" + sid + "/items?kind=walkthrough"))
+                    .timeout(REQUEST_TIMEOUT).GET()).build();
                 HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
                 if (resp.statusCode() == 200) {
-                    WalkthroughDoc next = WalkthroughDoc.parse(resp.body());
+                    // Guard before touching any shared state: a superseded session's
+                    // in-flight response must not overwrite lastStepsVersion (or
+                    // doc/listeners) after a newer attach()/handleNoSession() has
+                    // already moved on — that reopened a narrower variant of the
+                    // same stuck-empty-panel bug this method's gen check exists to
+                    // prevent, caught in this phase's own fix-round re-review.
+                    if (closed || gen != sseGen.get()) return;
+                    JsonObject root = JsonParser.parseString(resp.body()).getAsJsonObject();
+                    // Absent "__steps__" means nothing pushed yet for this session
+                    // (confirmed live: a freshly-created session's /items answers
+                    // "{}") — WalkthroughDoc.parse(null) already degrades that to EMPTY.
+                    JsonObject stepsItem = root.has("__steps__") && root.get("__steps__").isJsonObject()
+                        ? root.getAsJsonObject("__steps__") : null;
+                    String body = stepsItem != null && stepsItem.has("body")
+                        ? stepsItem.get("body").toString() : null;
+                    WalkthroughDoc next = WalkthroughDoc.parse(body);
+                    if (stepsItem != null && stepsItem.has("version")
+                            && !stepsItem.get("version").isJsonNull()) {
+                        lastStepsVersion = stepsItem.get("version").getAsInt();
+                    }
                     WalkthroughDoc prev = doc.get();
                     if (prev.generatedTs() == next.generatedTs()
                             && prev.steps().size() == next.steps().size()) {
@@ -459,24 +525,19 @@ public final class WalkthroughSessionClient {
     }
 
     /**
-     * GET threads.json and seed the thread cache. Same bounded retry as
-     * {@link #loadSteps} for the same reason — a transient blip on attach
-     * shouldn't leave every step's thread pane empty.
+     * GET the bulk threads route and seed the thread cache. Same bounded
+     * retry as {@link #loadSteps} for the same reason — a transient blip on
+     * attach shouldn't leave every step's thread pane empty.
      */
     private void seedThreads(String sid, long gen) {
         for (int attempt = 0; attempt < 3 && !closed && gen == sseGen.get(); attempt++) {
             try {
-                HttpRequest req = HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + sid + "/threads.json"))
-                    .timeout(REQUEST_TIMEOUT).GET().build();
-                HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-                if (resp.statusCode() == 200) {
-                    JsonObject root = JsonParser.parseString(resp.body()).getAsJsonObject();
-                    for (var e : root.entrySet()) {
-                        JsonObject t = e.getValue().getAsJsonObject();
-                        applyThread(e.getKey(), toThreadState(t));
-                    }
-                    return;
+                Map<String, ThreadState> fetched = deriveThreads(sid);
+                if (closed || gen != sseGen.get()) return;
+                for (var e : fetched.entrySet()) {
+                    applyThread(e.getKey(), e.getValue());
                 }
+                return;
             } catch (Exception ignored) {
                 // Transient GET failure — the retry loop is the handling.
             }
@@ -491,6 +552,30 @@ public final class WalkthroughSessionClient {
             + "answers already given may be missing until the connection recovers.", gen);
     }
 
+    /**
+     * GET {@code /s/&lt;sid&gt;/threads?kind=walkthrough} (bulk shape:
+     * {@code {anchor: {anchor, version, messages: [{text, role, ts}], title}}})
+     * and derive each anchor's {@link ThreadState} the same way {@code
+     * skills/_shared/static/wc-threads.js}'s {@code derive()} does. A thread
+     * with no {@code role == "agent"} message yet is omitted entirely —
+     * matching that same {@code derive()} function's behavior — so the
+     * caller's own pending-spinner state isn't overwritten with nothing.
+     */
+    private Map<String, ThreadState> deriveThreads(String sid) throws Exception {
+        HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(
+                URI.create(baseUrl + "/s/" + sid + "/threads?kind=walkthrough"))
+            .timeout(REQUEST_TIMEOUT).GET()).build();
+        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() != 200) throw new IOException("HTTP " + resp.statusCode());
+        JsonObject root = JsonParser.parseString(resp.body()).getAsJsonObject();
+        Map<String, ThreadState> out = new java.util.LinkedHashMap<>();
+        for (var e : root.entrySet()) {
+            ThreadState state = toThreadState(e.getValue().getAsJsonObject());
+            if (state != null) out.put(e.getKey(), state);
+        }
+        return out;
+    }
+
     /** Fire onWarning, but only while this seed is still the current attach —
      *  a superseded generation must not warn about a session nobody is on. */
     private void warnListeners(String message, long gen) {
@@ -500,7 +585,7 @@ public final class WalkthroughSessionClient {
 
     private void openSse(String sid) {
         if (closed || sseExec.isShutdown()) return;
-        URI uri = URI.create(baseUrl + "/s/" + sid + "/stream");
+        URI uri = URI.create(baseUrl + "/s/" + sid + "/stream?kind=walkthrough");
         long gen = sseGen.incrementAndGet();
         cancelSse();
         try {
@@ -555,16 +640,22 @@ public final class WalkthroughSessionClient {
         }
     }
 
+    /**
+     * There is no {@code steps-changed} or per-skill custom frame under the
+     * daemon — only its generic {@code item-changed} ({anchor, version,
+     * initial?}) and {@code thread-changed}/{@code thread-deleted} frames.
+     * The JSON parse happens once here and is shared by every branch below.
+     */
     private void handleSseEvent(String sid, SseClient.Event e, long gen) {
         String name = e.name();
-        if ("steps-changed".equals(name)) {
-            loadSteps(sid, gen);
-            return;
-        }
         JsonObject data;
         try {
             data = JsonParser.parseString(e.data()).getAsJsonObject();
         } catch (Exception ex) {
+            return;
+        }
+        if ("item-changed".equals(name)) {
+            if ("__steps__".equals(str(data, "anchor"))) loadSteps(sid, gen);
             return;
         }
         String anchor = str(data, "anchor");
@@ -576,14 +667,46 @@ public final class WalkthroughSessionClient {
             return;
         }
         if (!"thread-changed".equals(name)) return;
-        applyThread(anchor, toThreadState(data));
+        // The frame itself only carries {anchor, version} — re-fetch the bulk
+        // shape and apply every anchor in it; applyThread's own version/
+        // synthesis-equality check already no-ops anything unchanged, so this
+        // is simpler and no less correct than threading the single anchor
+        // through (walkthrough tours are 5-12 steps — cheap either way).
+        try {
+            Map<String, ThreadState> fetched = deriveThreads(sid);
+            if (closed || gen != sseGen.get()) return;
+            for (var entry : fetched.entrySet()) {
+                applyThread(entry.getKey(), entry.getValue());
+            }
+        } catch (Exception ignored) {
+            // Transient GET failure — the next thread-changed event or poll retries.
+        }
     }
 
-    private ThreadState toThreadState(JsonObject o) {
-        int version = o.has("version") && !o.get("version").isJsonNull()
-            ? o.get("version").getAsInt() : 0;
-        return new ThreadState(str(o, "latest_synthesis"), version,
-            str(o, "title"), str(o, "question"));
+    /**
+     * Converts one entry of the bulk {@code /threads} route's response
+     * ({@code {anchor, version, messages: [{text, role, ts}], title}}) into a
+     * {@link ThreadState}, or {@code null} if the thread has no {@code
+     * role == "agent"} message yet (omitted by the caller — see {@link
+     * #deriveThreads}).
+     */
+    private ThreadState toThreadState(JsonObject t) {
+        JsonElement messagesEl = t.get("messages");
+        String synthesis = null;
+        String question = "";
+        if (messagesEl != null && messagesEl.isJsonArray()) {
+            for (JsonElement el : messagesEl.getAsJsonArray()) {
+                if (!el.isJsonObject()) continue;
+                JsonObject m = el.getAsJsonObject();
+                String role = str(m, "role");
+                if ("agent".equals(role)) synthesis = str(m, "text");
+                else if ("user".equals(role)) question = str(m, "text");
+            }
+        }
+        if (synthesis == null) return null;
+        int version = t.has("version") && !t.get("version").isJsonNull()
+            ? t.get("version").getAsInt() : 0;
+        return new ThreadState(synthesis, version, str(t, "title"), question);
     }
 
     private void applyThread(String anchor, ThreadState next) {
