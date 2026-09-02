@@ -362,7 +362,9 @@ would lose the question.
 
 ### `WEBCOMPANION_FINISHED`
 
-The user clicked Done. Ack in terminal: *"Review session for `<title>` closed."*
+The session ended — normally because Claude called `webcompanion end` (see "Ending the
+review" below); `ask_diff` has no IDE-side Done button. Ack in terminal: *"Review session for
+`<title>` closed."*
 
 ### `WEBCOMPANION_CANCELLED`
 
