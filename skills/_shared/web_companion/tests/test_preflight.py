@@ -8,12 +8,20 @@ from pathlib import Path
 
 from skills.tests.sanitized_env import REPO_ROOT, sanitized_path_dir
 
-# Was annotate's launcher, then deck's, then walkthrough's, until each in
-# turn moved onto the webcompanion daemon and stopped shipping a server. The
-# behaviour under test belongs to the shared launcher, not to any one skill,
-# so this now points at ask_diff — the one skill that still runs a
-# server of its own.
-SCRIPT = REPO_ROOT / "skills" / "ask_diff" / "ensure_server.sh"
+# Was annotate's launcher, then deck's, then walkthrough's, then ask_diff's,
+# until each in turn moved onto the webcompanion daemon and stopped shipping
+# a server of its own. ask_diff was the last one (see its Task 4 migration),
+# so this now runs the shared launcher directly instead of through any
+# skill's thin wrapper -- the behaviour under test always belonged to the
+# shared script, never to whichever skill happened to still call it.
+SCRIPT = REPO_ROOT / "skills" / "_shared" / "web_companion" / "ensure_server.sh"
+
+# The thin per-skill wrapper used to export these before sourcing SCRIPT.
+# python3 is checked before any of them are used, so their exact values
+# don't matter -- they only need to be present so the script's `: "${VAR:?}"`
+# guards don't fire before preflight() gets a chance to.
+WRAPPER_ENV = {"SKILL": "test", "MODULE": "skills.test.server",
+              "BANNER": "test-server", "PLUGIN_ROOT": str(REPO_ROOT)}
 
 
 class PreflightTests(unittest.TestCase):
@@ -30,7 +38,7 @@ class PreflightTests(unittest.TestCase):
             # not found") are always English — otherwise this test's meaning
             # depends on the developer's locale instead of the guard.
             env={"HOME": str(self.home), "PATH": str(bin_dir),
-                 "LC_ALL": "C", "LANG": "C"},
+                 "LC_ALL": "C", "LANG": "C", **WRAPPER_ENV},
         )
 
     def test_reports_missing_python_and_stops(self):

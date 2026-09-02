@@ -6,9 +6,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -22,16 +20,16 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Talks to the ask_diff server: discovers a session by cwd,
- * opens an SSE stream, caches per-anchor syntheses, and pushes events
- * to listeners.
+ * Talks to the shared webcompanion daemon under {@code kind=interactive-review}:
+ * discovers a session by cwd, opens an SSE stream, caches per-anchor
+ * syntheses, and pushes events to listeners.
  *
  * Thread-safe. Listeners are invoked on the SSE consumer thread; bridge
  * to the EDT in the UI components.
  */
 public final class ReviewSessionClient {
 
-    public record SessionInfo(String sid, String prRef, String title, String stateDir) {}
+    public record SessionInfo(String sid, String prRef, String title) {}
     public record ThreadState(String synthesis, int version, String anchorText,
                               String title, String question, long updatedAt) {
         /** Compat constructor for callers that don't carry a timestamp. */
@@ -57,10 +55,11 @@ public final class ReviewSessionClient {
      * Session lifecycle, in precedence order ENDED > PAUSED > DISCONNECTED >
      * ACTIVE. PAUSED = watcher silent past STALE_AFTER but recoverable (the
      * user may re-arm). ENDED = the server reported the session terminal
-     * (cancelled/finished), or repeatedly reported it watcher-dead past the
-     * reap threshold (see {@link #DEAD_CONFIRMATIONS}); it is a one-way latch —
-     * the panel freezes read-only and never un-freezes for the same sid. OFFLINE means discovery cannot reach the server at all (as
-     * opposed to DORMANT: server reachable, no session for this cwd).
+     * (cancelled/finished), or the watcher heartbeat has gone stale past the
+     * hard {@link #REAP_AFTER_MS} cutoff; it is a one-way latch — the panel
+     * freezes read-only and never un-freezes for the same sid. OFFLINE means
+     * discovery cannot reach the server at all (as opposed to DORMANT: server
+     * reachable, no session for this cwd).
      */
     public enum State { DORMANT, CONNECTING, ACTIVE, DISCONNECTED, PAUSED, ENDED, OFFLINE }
 
@@ -68,10 +67,26 @@ public final class ReviewSessionClient {
      * How long the watcher heartbeat may age before we treat the Claude
      * session as merely PAUSED. The watcher rewrites it every ~1s (even while
      * blocked on an ack), so anything past this is gone, not slow. The
-     * authoritative ENDED decision (reap threshold) is made by the server and
-     * delivered via the /poll "ended" flag.
+     * authoritative ENDED decision is either a marker file on disk
+     * ({@code finished}/{@code cancelled}, reported straight through /poll) or
+     * the hard {@link #REAP_AFTER_MS} cutoff below.
      */
     private static final Duration STALE_AFTER = Duration.ofSeconds(15);
+
+    /**
+     * Hard end-of-life cutoff on watcher-heartbeat age, distinct from the soft
+     * {@link #STALE_AFTER}-driven PAUSED state above. The daemon's /poll has
+     * no {@code ended}/{@code ended_reason} verdict of its own — only the raw
+     * {@code finished}/{@code cancelled} marker booleans and
+     * {@code watcher_seen_at} — so unlike the old per-skill server (which used
+     * to INFER a "dead" verdict server-side from one heartbeat sample, flaky
+     * enough that this client once needed a confirmation count before trusting
+     * it), there is nothing left to confirm: this value is read directly and
+     * deterministically every poll. Reproduces client-side the same 180s value
+     * the old per-skill server enforced server-side, matching {@link
+     * WalkthroughSessionClient}'s identical {@code REAP_AFTER_MS}.
+     */
+    private static final long REAP_AFTER_MS = Duration.ofSeconds(180).toMillis();
 
     /**
      * One-way latch: once the server says the attached session is ENDED, the
@@ -89,24 +104,6 @@ public final class ReviewSessionClient {
     private static final int DISCOVERY_FAILURE_THRESHOLD = 3;
 
     /**
-     * Consecutive {@code ended_reason="dead"} polls required before the ENDED
-     * latch closes.
-     *
-     * The server splits its two end verdicts: "cancelled"/"finished" come from
-     * a marker file on disk and are facts, so they latch on the first poll.
-     * "dead" is INFERRED from one sample of the watcher heartbeat, and a single
-     * bad sample (a heartbeat file caught mid-rewrite) used to freeze a live
-     * session read-only forever, because the latch never re-checks. Require the
-     * server to say "dead" on {@value} consecutive polls — a real death says it
-     * every time, a sampling artifact never does twice in a row.
-     */
-    private static final int DEAD_CONFIRMATIONS = 3;
-
-    /** Consecutive {@code ended_reason="dead"} polls seen so far; any other
-     *  poll outcome resets it. */
-    private int deadPolls = 0;
-
-    /**
      * How long an anchor may stay pending without an answer before the spinner
      * is cleared — no ack is coming if Claude is wedged or the event was lost,
      * and a forever-spinner blocks the gutter's ask affordance.
@@ -121,6 +118,12 @@ public final class ReviewSessionClient {
     private final Duration pollInterval;
     private volatile int discoveryFailures = 0;
     private static final com.google.gson.Gson GSON = new com.google.gson.Gson();
+
+    /** Discriminator field ("v") in the anchor_text JSON envelope postComment
+     *  sends inside the submit payload's text field — lets a reader (Task
+     *  4's SKILL.md) tell this structured shape apart from a plain comment
+     *  string. Bump only in lockstep with SKILL.md's parser. */
+    private static final int ANCHOR_TEXT_ENVELOPE_VERSION = 1;
 
     /** Per-request read timeout for the synchronous polls — without it a
      *  server that accepts the socket but stalls pins a discovery-pool thread
@@ -249,13 +252,25 @@ public final class ReviewSessionClient {
         }
         long token = submitSeq.incrementAndGet();
         markPending(anchor, token);
+        // The daemon's /api/submit handler (_submit) keeps only anchor/text/
+        // images from the payload and drops everything else — confirmed
+        // against server.py directly. anchor_text has nowhere else to ride,
+        // so it travels JSON-encoded inside text itself; SKILL.md's Mode D
+        // parses this identical {"v", "anchor_text", "comment"} envelope back
+        // out. "v" discriminates this structured envelope from a plain
+        // comment string (the daemon's own web page never sets it, and it
+        // also lets Mode D refuse a pathological user comment that merely
+        // happens to look like a JSON object with anchor_text/comment keys).
+        java.util.Map<String, Object> envelope = new java.util.LinkedHashMap<>();
+        envelope.put("v", ANCHOR_TEXT_ENVELOPE_VERSION);
+        envelope.put("anchor_text", anchorText == null ? "" : anchorText);
+        envelope.put("comment", text);
         java.util.Map<String, String> payload = new java.util.LinkedHashMap<>();
         payload.put("anchor", anchor);
-        payload.put("type", "comment");
-        payload.put("text", text);
-        payload.put("anchor_text", anchorText == null ? "" : anchorText);
+        payload.put("text", GSON.toJson(envelope));
         String body = GSON.toJson(payload);
-        HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + s.sid() + "/api/submit"))
+        HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(
+                URI.create(baseUrl + "/s/" + s.sid() + "/api/submit?kind=" + KIND))
             .header("Content-Type", "application/json")
             .timeout(REQUEST_TIMEOUT)
             .POST(HttpRequest.BodyPublishers.ofString(body)))
@@ -282,7 +297,8 @@ public final class ReviewSessionClient {
     public CompletableFuture<Void> cancelSession() {
         SessionInfo s = current;
         if (s == null) return CompletableFuture.failedFuture(new IllegalStateException("no session"));
-        HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + s.sid() + "/api/cancel"))
+        HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(
+                URI.create(baseUrl + "/s/" + s.sid() + "/api/cancel?kind=" + KIND))
             .timeout(REQUEST_TIMEOUT)
             .POST(HttpRequest.BodyPublishers.noBody()))
             .build();
@@ -300,7 +316,8 @@ public final class ReviewSessionClient {
         SessionInfo s = current;
         if (s == null) return CompletableFuture.failedFuture(new IllegalStateException("no session"));
         String body = "{\"anchor\":" + jsonEscape(anchor) + "}";
-        HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + s.sid() + "/api/threads/delete"))
+        HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(
+                URI.create(baseUrl + "/s/" + s.sid() + "/api/threads/delete?kind=" + KIND))
             .header("Content-Type", "application/json")
             .timeout(REQUEST_TIMEOUT)
             .POST(HttpRequest.BodyPublishers.ofString(body)))
@@ -416,7 +433,8 @@ public final class ReviewSessionClient {
     }
 
     private SessionInfo fetchNewestSession() throws Exception {
-        String url = baseUrl + "/api/sessions?cwd=" + URLEncoder.encode(projectCwd, StandardCharsets.UTF_8);
+        String url = baseUrl + "/api/sessions?kind=" + KIND + "&cwd="
+            + URLEncoder.encode(projectCwd, StandardCharsets.UTF_8);
         HttpRequest req = WebCompanionHttp.withContract(
                 HttpRequest.newBuilder(URI.create(url)).timeout(REQUEST_TIMEOUT).GET()).build();
         HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
@@ -425,50 +443,7 @@ public final class ReviewSessionClient {
         // return is reserved for "the server answered 200 and the list is
         // empty" (mirrors WalkthroughSessionClient).
         if (resp.statusCode() != 200) throw new java.io.IOException("HTTP " + resp.statusCode());
-        SessionInfo found = parseFirstSession(resp.body());
-        if (found != null) return found;
-        // ServerDiscovery prefers the shared webcompanion daemon over this
-        // skill's own legacy per-skill server whenever the daemon's
-        // config.json exists — but this skill still only ever CREATES
-        // sessions on the legacy server (ensure_server.sh has no daemon
-        // awareness yet). So a daemon that exists but was never told about
-        // this session answers with an empty (post-kind-filter) list forever,
-        // and the legacy server — which actually has it — is never consulted
-        // again once ServerDiscovery has committed to the daemon's URL. Try
-        // it directly, once, as a fallback: cheap (one file read + one HTTP
-        // call), and only reached when the primary source came up empty.
-        return fetchFromLegacyServer();
-    }
-
-    /** Queries ~/.claude/interactive-review/server.json's server directly,
-     *  bypassing ServerDiscovery's daemon preference. See fetchNewestSession()
-     *  for why this fallback exists. Never throws — a missing/unreadable
-     *  legacy server.json, or that server being unreachable, just means there
-     *  is no legacy fallback available, not a discovery failure. */
-    private SessionInfo fetchFromLegacyServer() {
-        try {
-            Path legacyServerJson = Path.of(System.getProperty("user.home"), ".claude", "interactive-review", "server.json");
-            String legacyUrl = ServerDiscovery.readLegacyServerJson(legacyServerJson);
-            if (legacyUrl == null || legacyUrl.equals(baseUrl)) return null; // no file, or it's what we already tried
-            String url = legacyUrl + "/api/sessions?cwd=" + URLEncoder.encode(projectCwd, StandardCharsets.UTF_8);
-            HttpRequest req = WebCompanionHttp.withContract(
-                    HttpRequest.newBuilder(URI.create(url)).timeout(REQUEST_TIMEOUT).GET()).build();
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-            if (resp.statusCode() != 200) return null;
-            SessionInfo found = parseFirstSession(resp.body());
-            if (found != null) {
-                // Every other method in this class (pollLiveness, openSse,
-                // seedCache, submitEvent, ...) reads the baseUrl field, not a
-                // per-call argument — if we don't switch it here, the very
-                // next request after a successful legacy-fallback attach()
-                // goes right back to the daemon and 404s on a sid it has
-                // never heard of.
-                baseUrl = legacyUrl;
-            }
-            return found;
-        } catch (Exception e) {
-            return null;
-        }
+        return parseFirstSession(resp.body());
     }
 
     /** Re-resolve the server URL after a failed discovery poll: the server may
@@ -499,38 +474,44 @@ public final class ReviewSessionClient {
      * signal is the watcher heartbeat, which the session rewrites every ~1s.
      * Poll it; if it has gone stale, flip to STALE so the UI stops claiming
      * "live" and submissions are refused.
+     *
+     * The daemon's real /poll shape ({@code {finished, cancelled,
+     * watcher_seen_at, items, threads}}) carries no {@code ended}/{@code
+     * ended_reason} verdict of its own — unlike the old per-skill server,
+     * which pre-computed and named one. {@code ended} here is recomputed
+     * client-side: {@code finished}/{@code cancelled} are authoritative
+     * marker-file facts (one poll is proof, latch immediately), and a watcher
+     * gone stale past {@link #REAP_AFTER_MS} is this client's own hard
+     * cutoff, matching {@link WalkthroughSessionClient}'s identical
+     * reasoning. No downstream UI text in this plugin distinguishes
+     * cancelled/finished/a stale watcher from one another (grepped for
+     * "ended_reason"/"cancelled"/"finished"/"dead" across every consumer
+     * class — none), so collapsing all three into one boolean loses nothing.
      */
     private void pollLiveness(String sid) {
         if (endedLatched) return; // frozen; nothing un-freezes the same sid
         long seenAt;
-        boolean ended;
-        String endedReason;
+        boolean finished;
+        boolean cancelled;
         try {
-            HttpRequest req = WebCompanionHttp.withContract(
-                    HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + sid + "/poll")).timeout(REQUEST_TIMEOUT).GET()).build();
+            HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(
+                    URI.create(baseUrl + "/s/" + sid + "/poll?kind=" + KIND))
+                .timeout(REQUEST_TIMEOUT).GET()).build();
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() != 200) return;
             com.google.gson.JsonObject o = com.google.gson.JsonParser.parseString(resp.body()).getAsJsonObject();
             seenAt = o.has("watcher_seen_at") && !o.get("watcher_seen_at").isJsonNull()
                 ? o.get("watcher_seen_at").getAsLong() : 0;
-            ended = o.has("ended") && !o.get("ended").isJsonNull() && o.get("ended").getAsBoolean();
-            endedReason = str(o, "ended_reason");
+            finished = o.has("finished") && !o.get("finished").isJsonNull() && o.get("finished").getAsBoolean();
+            cancelled = o.has("cancelled") && !o.get("cancelled").isJsonNull() && o.get("cancelled").getAsBoolean();
         } catch (Exception e) {
             return; // transient — leave state as-is, next poll retries
         }
-        // Authoritative end: "cancelled"/"finished" are marker files on disk,
-        // so one poll is proof — freeze read-only immediately, one-way.
-        // "dead" is inferred from a single heartbeat sample, so it must repeat
-        // (see DEAD_CONFIRMATIONS) before it may close the same one-way latch.
-        if (ended) {
-            if (!"dead".equals(endedReason)) { latchEnded(); return; }
-            if (++deadPolls >= DEAD_CONFIRMATIONS) { latchEnded(); return; }
-            return;  // provisional — stay as-is; the next poll confirms or clears
-        }
-        deadPolls = 0;
+        long ageMs = seenAt > 0 ? System.currentTimeMillis() - seenAt * 1000 : -1;
+        boolean ended = finished || cancelled || (seenAt > 0 && ageMs > REAP_AFTER_MS);
+        if (ended) { latchEnded(); return; }
         // No heartbeat written yet (session just armed) → not dead, leave alone.
         if (seenAt <= 0) return;
-        long ageMs = System.currentTimeMillis() - seenAt * 1000;
         if (ageMs > STALE_AFTER.toMillis()) {
             if (state != State.PAUSED) {
                 // Clear pending so spinners and the side-panel × recover —
@@ -550,7 +531,6 @@ public final class ReviewSessionClient {
      *                    OFFLINE when the server itself is unreachable. */
     private void handleNoSession(State finalState) {
         endedLatched = false;
-        deadPolls = 0;
         if (current != null) {
             current = null;
             cache.clear();
@@ -565,7 +545,6 @@ public final class ReviewSessionClient {
 
     private void attach(SessionInfo s) {
         endedLatched = false;
-        deadPolls = 0;
         current = s;
         // Switching sessions: drop any cached state from the previous SID.
         // Otherwise the side panel keeps showing dead threads from the old
@@ -575,7 +554,102 @@ public final class ReviewSessionClient {
         pending.clear();
         setState(State.CONNECTING);
         for (Listener l : listeners) l.onAttached(s);
+        // No I/O above this line — see loadPrRef()'s javadoc for why the
+        // __meta__ fetch that used to run right here (blocking, before
+        // openSse() had bumped the generation or closed the previous
+        // stream) was a real bug, not just a style preference.
         openSse(s.sid());
+    }
+
+    /**
+     * Bounded-retry fetch of {@code __meta__.body.pr_ref}, mirroring {@link
+     * #seedCache}'s own 3-attempts/500ms-backoff shape exactly. Called from
+     * {@link #runSse}, never from {@link #attach} — a prior version of this
+     * file called an earlier, single-shot version of this fetch directly
+     * from {@code attach()}, blocking it for up to {@link #REQUEST_TIMEOUT}
+     * BEFORE {@link #openSse} had bumped {@link #sseGen} or closed the
+     * previous session's stream. That left a window, for the whole fetch
+     * duration, where the OLD stream was still open and its {@code
+     * session-ended} frame's generation check still passed against the
+     * not-yet-bumped generation — exactly the moment {@code push.py}'s
+     * {@code create_or_attach(..., supersede=True)} fires {@code
+     * session-ended} on the old session, i.e. the ordinary
+     * supersede-on-new-review flow, not an edge case. Fixed by moving the
+     * fetch here: {@code runSse} only starts running AFTER {@code openSse}
+     * has already bumped the generation and closed the previous stream, so
+     * a stale frame from the old stream can no longer land inside this
+     * fetch's window — the generation it would need to match has already
+     * moved on before this method's first line runs.
+     *
+     * <p>Also fixes the separate "permanently empty prRef" bug the old
+     * single-shot version had: {@code push.py} creates the session row
+     * ({@code create_or_attach}) and writes {@code __meta__} in a SEPARATE,
+     * later call ({@code put_items}, which uploads the whole diff) — a
+     * discovery poll landing in that gap finds a real session with no
+     * {@code __meta__} yet. The retry loop below absorbs a miss within the
+     * same attach; skipping this method entirely once {@code prRef} is
+     * already known (it never changes for a session's lifetime — see {@code
+     * sync.py}'s resync, which always preserves it) means a miss that
+     * outlasts even the retry loop still gets one more attempt on every
+     * subsequent SSE reconnect, since {@code runSse} runs again each time.
+     */
+    private void loadPrRef(String sid, long gen) {
+        SessionInfo snapshot = current;
+        if (snapshot == null || !snapshot.sid().equals(sid) || !snapshot.prRef().isEmpty()) return;
+        for (int attempt = 0; attempt < 3 && !closed && gen == sseGen.get(); attempt++) {
+            String prRef = fetchPrRef(sid);
+            if (!prRef.isEmpty()) {
+                // Re-check AFTER the round trip, BEFORE publishing — the
+                // same guard handleSseEvent's own post-fetch mutations
+                // already use for their HTTP round trips.
+                if (closed || gen != sseGen.get()) return; // superseded mid-fetch
+                SessionInfo latest = current;
+                // Re-read (not the captured `snapshot`) and check its sid
+                // too: a switch landing between the fetch returning and this
+                // write must not stamp THIS fetch's answer (for `sid`) onto
+                // whatever session is current now.
+                if (latest == null || !latest.sid().equals(sid)) return;
+                current = new SessionInfo(sid, prRef, latest.title());
+                return;
+            }
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+        // Gave up for this attempt — no onWarning (unlike seedCache's
+        // exhausted-retry warning): an empty prRef degrades gracefully via
+        // GhPrDiffOpener's own "No PR number" message rather than making the
+        // whole panel look broken. The next SSE reconnect (a fresh runSse()
+        // call, hence a fresh call to this method) tries again from scratch.
+    }
+
+    /**
+     * Single GET of {@code __meta__.body.pr_ref}. Never called from {@link
+     * #attach} — see {@link #loadPrRef}'s javadoc. Falls back to "" on any
+     * failure (non-200, unparsable body, absent __meta__ item, or a
+     * __meta__ with no pr_ref yet) — matching this file's existing "never
+     * let a missing field crash discovery" posture; {@link #loadPrRef}
+     * retries this, and {@code GhPrDiffOpener} already handles an empty
+     * prRef with its own "No PR number" warning.
+     */
+    private String fetchPrRef(String sid) {
+        try {
+            HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(
+                    URI.create(baseUrl + "/s/" + sid + "/items?kind=" + KIND))
+                .timeout(REQUEST_TIMEOUT).GET()).build();
+            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() != 200) return "";
+            com.google.gson.JsonObject root = com.google.gson.JsonParser.parseString(resp.body()).getAsJsonObject();
+            if (!root.has("__meta__") || !root.get("__meta__").isJsonObject()) return "";
+            com.google.gson.JsonObject metaItem = root.getAsJsonObject("__meta__");
+            if (!metaItem.has("body") || !metaItem.get("body").isJsonObject()) return "";
+            return str(metaItem.getAsJsonObject("body"), "pr_ref");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /**
@@ -587,24 +661,20 @@ public final class ReviewSessionClient {
     private void seedCache(String sid, long gen) {
         for (int attempt = 0; attempt < 3 && !closed && gen == sseGen.get(); attempt++) {
             try {
-                HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(URI.create(baseUrl + "/s/" + sid + "/threads.json"))
-                    .timeout(REQUEST_TIMEOUT).GET()).build();
-                HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-                if (resp.statusCode() == 200) {
-                    applySeed(parseThreadsBulk(resp.body()), gen);
-                    // Clear any earlier "didn't load" warning: runSse() re-runs
-                    // this on every SSE (re)connect, so a seed that failed once
-                    // (a slow moment right after IDE startup, say) but then
-                    // succeeds on the automatic 2s reconnect must retract the
-                    // warning — otherwise the footer keeps telling the user the
-                    // panel is incomplete forever, even once every thread is
-                    // actually back. AnnotationsPanel treats a null message as
-                    // "no warning" the same way onAttached/onDetached already do.
-                    if (!closed && gen == sseGen.get()) {
-                        for (Listener l : listeners) l.onWarning(null);
-                    }
-                    return;
+                Map<String, ThreadState> fetched = deriveThreads(sid);
+                applySeed(fetched, gen);
+                // Clear any earlier "didn't load" warning: runSse() re-runs
+                // this on every SSE (re)connect, so a seed that failed once
+                // (a slow moment right after IDE startup, say) but then
+                // succeeds on the automatic 2s reconnect must retract the
+                // warning — otherwise the footer keeps telling the user the
+                // panel is incomplete forever, even once every thread is
+                // actually back. AnnotationsPanel treats a null message as
+                // "no warning" the same way onAttached/onDetached already do.
+                if (!closed && gen == sseGen.get()) {
+                    for (Listener l : listeners) l.onWarning(null);
                 }
+                return;
             } catch (Exception ignored) {
             }
             try {
@@ -625,11 +695,16 @@ public final class ReviewSessionClient {
         }
     }
 
-    /** Writes the seeded threads into the cache — but only while {@code gen}
+    /** Writes the fetched threads into the cache — but only while {@code gen}
      *  is still the current attach generation. A session switch during the
-     *  seed HTTP call must not write the old session's threads into the new
-     *  session's cache, so the generation is re-checked before every mutation,
-     *  not just once up front. */
+     *  bulk-threads HTTP call (the initial seed, or a thread-changed frame's
+     *  re-fetch — see {@link #handleSseEvent}) must not write the old
+     *  session's threads into the new session's cache, so the generation is
+     *  re-checked before every mutation, not just once up front. Used by both
+     *  {@link #seedCache} and {@link #handleSseEvent}'s thread-changed branch —
+     *  the daemon's frame carries only {anchor, version}, so learning the rest
+     *  always means re-fetching the same bulk shape the seed already knows how
+     *  to apply. */
     private void applySeed(Map<String, ThreadState> seeded, long gen) {
         for (var e : seeded.entrySet()) {
             if (closed || gen != sseGen.get()) return; // superseded mid-seed
@@ -642,15 +717,82 @@ public final class ReviewSessionClient {
             }
             cache.put(e.getKey(), incoming);
             cacheVersion.incrementAndGet();
+            // A version bump with identical text is still an answer (metadata-
+            // only synthesis update): pending must clear and listeners must
+            // repaint, otherwise the spinner spins forever on a deduped reply.
+            // Harmless no-op during the initial seed, since attach() already
+            // cleared pending before seedCache() runs.
+            clearPending(e.getKey());
             for (Listener l : listeners) {
                 l.onThreadChanged(e.getKey(), incoming.synthesis(), incoming.version());
             }
         }
     }
 
+    /**
+     * GET {@code /s/&lt;sid&gt;/threads?kind=interactive-review} (bulk shape:
+     * {@code {anchor: {anchor, version, messages: [{text, role, ts}], title?,
+     * anchor_text?}}}) and derive each anchor's {@link ThreadState} the same
+     * way {@code skills/_shared/static/wc-threads.js}'s {@code derive()} does,
+     * plus this skill's own {@code anchor_text} field that walkthrough's
+     * equivalent thread shape has no use for.
+     */
+    private Map<String, ThreadState> deriveThreads(String sid) throws Exception {
+        HttpRequest req = WebCompanionHttp.withContract(HttpRequest.newBuilder(
+                URI.create(baseUrl + "/s/" + sid + "/threads?kind=" + KIND))
+            .timeout(REQUEST_TIMEOUT).GET()).build();
+        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() != 200) throw new java.io.IOException("HTTP " + resp.statusCode());
+        com.google.gson.JsonObject root = com.google.gson.JsonParser.parseString(resp.body()).getAsJsonObject();
+        Map<String, ThreadState> out = new java.util.LinkedHashMap<>();
+        for (var e : root.entrySet()) {
+            if (!e.getValue().isJsonObject()) continue;
+            ThreadState state = toThreadState(e.getValue().getAsJsonObject());
+            if (state != null) out.put(e.getKey(), state);
+        }
+        return out;
+    }
+
+    /**
+     * Converts one entry of the bulk {@code /threads} route's response into a
+     * {@link ThreadState}, or {@code null} if the thread has no {@code
+     * role == "agent"} message yet — omitted entirely, matching {@code
+     * wc-threads.js}'s {@code derive()} (the page owns "pending" state for a
+     * question it just submitted; an empty entry would overwrite that with
+     * nothing). {@code role == "agent"} is the daemon's own default role and
+     * the value {@code sync.py} replays messages under — see this file's own
+     * report for the cross-check against Task 1/2's actual choice. The last
+     * "agent" message is the synthesis (and its {@code ts} is {@code
+     * updated_at}); the last "user" message is the question. {@code
+     * anchor_text} and {@code title} are thread-level fields, not per-message.
+     */
+    private static ThreadState toThreadState(com.google.gson.JsonObject t) {
+        com.google.gson.JsonElement messagesEl = t.get("messages");
+        String synthesis = null;
+        String question = "";
+        long updatedAt = 0L;
+        if (messagesEl != null && messagesEl.isJsonArray()) {
+            for (com.google.gson.JsonElement el : messagesEl.getAsJsonArray()) {
+                if (!el.isJsonObject()) continue;
+                com.google.gson.JsonObject m = el.getAsJsonObject();
+                String role = str(m, "role");
+                if ("agent".equals(role)) {
+                    synthesis = str(m, "text");
+                    updatedAt = m.has("ts") && !m.get("ts").isJsonNull() ? m.get("ts").getAsLong() : 0L;
+                } else if ("user".equals(role)) {
+                    question = str(m, "text");
+                }
+            }
+        }
+        if (synthesis == null) return null; // no agent reply yet — omit
+        int version = t.has("version") && !t.get("version").isJsonNull()
+            ? t.get("version").getAsInt() : 0;
+        return new ThreadState(synthesis, version, str(t, "anchor_text"), str(t, "title"), question, updatedAt);
+    }
+
     private void openSse(String sid) {
         if (closed || sseExec.isShutdown()) return;
-        URI uri = URI.create(baseUrl + "/s/" + sid + "/stream");
+        URI uri = URI.create(baseUrl + "/s/" + sid + "/stream?kind=" + KIND);
         long gen = sseGen.incrementAndGet();
         cancelSse();
         try {
@@ -663,6 +805,13 @@ public final class ReviewSessionClient {
     /** The blocking stream body. Runs on {@link #sseExec}. Only the current
      *  generation acts on events / reconnects; a superseded stream is inert. */
     private void runSse(String sid, URI uri, long gen) {
+        // Load pr_ref, if not already known, on every (re)connect — see
+        // loadPrRef()'s javadoc for why it lives here rather than in
+        // attach(): this runs strictly AFTER openSse() has already bumped
+        // sseGen and closed the previous stream, and a miss here self-heals
+        // on the next reconnect rather than staying "" forever.
+        loadPrRef(sid, gen);
+        if (gen != sseGen.get() || closed) return; // superseded while fetching pr_ref
         // Seed on every (re)connect: covers a failed initial seed and an outage
         // where SSE events were missed while disconnected. Its retry-sleeps are
         // on sseExec, so they never starve discovery polling.
@@ -677,7 +826,7 @@ public final class ReviewSessionClient {
         // submit comments that nothing will ever ack.
         if (!endedLatched && state != State.PAUSED) setState(State.ACTIVE);
         SseClient.Connection conn = SseClient.connect(http, uri,
-            ev -> handleSseEvent(ev, gen),
+            ev -> handleSseEvent(sid, ev, gen),
             t -> { if (gen == sseGen.get() && !endedLatched && state == State.ACTIVE)
                        setState(State.DISCONNECTED); });
         sseConnection = conn;
@@ -721,7 +870,7 @@ public final class ReviewSessionClient {
     /** Applies one SSE event to the cache. {@code gen} is re-checked right
      *  before each mutation — the caller's check alone leaves a window where a
      *  session switch lands between the check and the write. */
-    private void handleSseEvent(SseClient.Event e, long gen) {
+    private void handleSseEvent(String sid, SseClient.Event e, long gen) {
         String name = e.name();
         com.google.gson.JsonObject data;
         try {
@@ -731,11 +880,11 @@ public final class ReviewSessionClient {
         }
         if ("session-ended".equals(name)) {
             // The server sends this only when a `finished`/`cancelled` marker
-            // exists on disk — the authoritative end, same tier as /poll's
-            // ended_reason "cancelled"/"finished", so it latches immediately.
-            // Without handling it the server closed the stream, this client saw
-            // only "stream ended", and reconnected every 2s until the next poll
-            // happened to latch.
+            // exists on disk — the authoritative end (same tier pollLiveness's
+            // own finished/cancelled check treats as immediate), so it
+            // latches immediately. Without handling it the server closed the
+            // stream, this client saw only "stream ended", and reconnected
+            // every 2s until the next poll happened to latch.
             if (gen != sseGen.get() || closed) return; // superseded stream
             // Hop to the polling pool: latchEnded() closes the very stream this
             // callback is running inside, and every other caller already
@@ -760,44 +909,28 @@ public final class ReviewSessionClient {
             return;
         }
         if (!"thread-changed".equals(name)) return;
-        String anchor = str(data, "anchor");
-        if (anchor.isEmpty()) return;
-        String synthesis = str(data, "latest_synthesis");
-        int version = data.has("version") && !data.get("version").isJsonNull()
-            ? data.get("version").getAsInt() : 0;
-        String anchorText = str(data, "anchor_text");
-        String title = str(data, "title");
-        String question = str(data, "question");
-        long updatedAt = data.has("updated_at") && !data.get("updated_at").isJsonNull()
-            ? data.get("updated_at").getAsLong() : 0L;
-
-        ThreadState existing = cache.get(anchor);
-        if (existing != null
-                && existing.synthesis().equals(synthesis)
-                && existing.version() == version) {
-            return; // truly unchanged
+        // The daemon's real frame carries only {anchor, version[, initial]} —
+        // unlike the old per-skill server's frame, which inlined the whole
+        // synthesis/anchor_text/title/question. Learning the rest means
+        // re-fetching the bulk shape and re-deriving every anchor in it;
+        // applySeed's own version/synthesis-equality check already no-ops
+        // anything unchanged, so applying every anchor (not just the one this
+        // frame named) is simpler and no less correct.
+        if (gen != sseGen.get() || closed) return; // cheap check before a wasted fetch
+        try {
+            Map<String, ThreadState> fetched = deriveThreads(sid);
+            // Important-1 (Phase 3's fix-round lesson, applied from the start
+            // here): re-check generation/closed AFTER the round trip and
+            // BEFORE touching the cache — a session switch that lands while
+            // this GET is in flight must not let a superseded session's
+            // response overwrite the new session's cache. applySeed's own
+            // per-entry loop re-checks this again on top, belt-and-braces.
+            if (closed || gen != sseGen.get()) return;
+            applySeed(fetched, gen);
+        } catch (Exception ignored) {
+            // Transient GET failure — the next thread-changed event, or the
+            // next reconnect's seedCache(), retries.
         }
-        String priorAnchorText = existing != null ? existing.anchorText() : "";
-        String priorTitle = existing != null ? existing.title() : "";
-        String priorQuestion = existing != null ? existing.question() : "";
-        ThreadState next = new ThreadState(synthesis, version,
-            prefer(anchorText, priorAnchorText),
-            prefer(title, priorTitle),
-            prefer(question, priorQuestion),
-            updatedAt);
-        if (gen != sseGen.get() || closed) return; // superseded stream
-        cache.put(anchor, next);
-        cacheVersion.incrementAndGet();
-        // A version bump with identical text is still an answer (metadata-only
-        // synthesis update): pending must clear and listeners must repaint,
-        // otherwise the spinner spins forever on a deduped reply.
-        clearPending(anchor);
-        for (Listener l : listeners) l.onThreadChanged(anchor, synthesis, version);
-    }
-
-    /** Keep a previously-seen value if a later event omits the field. */
-    private static String prefer(String incoming, String prior) {
-        return (incoming != null && !incoming.isEmpty()) ? incoming : prior;
     }
 
     private void setState(State s) {
@@ -856,25 +989,12 @@ public final class ReviewSessionClient {
             if (newest == null || str(o, "sid").compareTo(str(newest, "sid")) > 0) newest = o;
         }
         if (newest == null) return null;
-        return new SessionInfo(
-            str(newest, "sid"), str(newest, "pr_ref"), str(newest, "title"), str(newest, "state_dir"));
-    }
-
-    private static Map<String, ThreadState> parseThreadsBulk(String json) {
-        Map<String, ThreadState> out = new HashMap<>();
-        com.google.gson.JsonObject root = com.google.gson.JsonParser.parseString(json).getAsJsonObject();
-        for (var e : root.entrySet()) {
-            com.google.gson.JsonObject t = e.getValue().getAsJsonObject();
-            out.put(e.getKey(), new ThreadState(
-                str(t, "latest_synthesis"),
-                t.has("version") && !t.get("version").isJsonNull() ? t.get("version").getAsInt() : 0,
-                str(t, "anchor_text"),
-                str(t, "title"),
-                str(t, "question"),
-                t.has("updated_at") && !t.get("updated_at").isJsonNull()
-                    ? t.get("updated_at").getAsLong() : 0L));
-        }
-        return out;
+        // The daemon's session row has a FIXED shape ({sid, slug, kind, cwd,
+        // title, url}) — no pr_ref field at all, unlike the legacy server's
+        // own shape (which this used to read pr_ref straight off of). title
+        // is present and safe to read here unchanged; prRef starts empty and
+        // is populated by loadPrRef(), called from runSse() — see its javadoc.
+        return new SessionInfo(str(newest, "sid"), "", str(newest, "title"));
     }
 
     /** Null-safe string field read; returns "" when absent or null. */

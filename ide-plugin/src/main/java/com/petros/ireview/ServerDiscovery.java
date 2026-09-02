@@ -53,10 +53,11 @@ final class ServerDiscovery {
         }
     }
 
-    /** Package-visible so {@link ReviewSessionClient} can query the legacy
-     *  server directly as a fallback when the daemon has no matching session
-     *  for this skill — see the comment on {@code fetchNewestSession()}. */
-    static String readLegacyServerJson(Path serverJson) {
+    /** Used only by {@link #resolve} above — {@link ReviewSessionClient} used
+     *  to call this directly as a legacy-server fallback when the daemon had
+     *  no matching session, but that bespoke fallback was removed once
+     *  ask_diff's {@code push.py} became the only thing creating sessions. */
+    private static String readLegacyServerJson(Path serverJson) {
         try {
             Matcher m = URL_FIELD.matcher(Files.readString(serverJson));
             if (m.find()) return m.group(1);

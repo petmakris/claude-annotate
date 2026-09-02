@@ -113,6 +113,18 @@ def test_create_or_attach_falls_through_to_create_when_slug_not_found(daemon):
     assert _FakeDaemon.seen[1][0] == "POST"
 
 
+def test_list_sessions(daemon):
+    _FakeDaemon.script = [(200, [{"sid": "s1", "slug": "s1", "kind": "interactive-review",
+                                 "cwd": "/repo", "title": "T", "url": "/s/s1/"}])]
+    rows = wc.list_sessions("/repo", "interactive-review")
+    assert rows == [{"sid": "s1", "slug": "s1", "kind": "interactive-review",
+                    "cwd": "/repo", "title": "T", "url": "/s/s1/"}]
+    method, path, headers, body = _FakeDaemon.seen[0]
+    assert method == "GET"
+    assert path == "/api/sessions?cwd=/repo&kind=interactive-review"
+    assert body is None
+
+
 def test_put_items_replace(daemon):
     _FakeDaemon.script = [(200, {"ok": True})]
     wc.put_items("s1", {"__flow__": {"a": 1}}, kind="dataflow", replace=True)

@@ -113,6 +113,21 @@ def create_or_attach(kind: str, cwd: str, *, title: str | None = None,
     return _request("POST", "/api/sessions", body)
 
 
+def list_sessions(cwd: str, kind: str) -> list[dict]:
+    """GET /api/sessions?cwd=&kind= -- every session in `kind` at `cwd`.
+
+    A bare JSON array, `_row()`'s shape per entry (`{sid, slug, kind, cwd,
+    title, url}`) -- not sorted, not filtered to live/non-terminal sessions.
+    A caller that needs "the" session applies its own selection on top of
+    this (e.g. `create_or_attach`'s own slug scan just above, which predates
+    this function and keeps its own identical query rather than depending on
+    it, to avoid a `list`-vs-empty-list `except` mismatch on the exact same
+    call two functions rely on differently).
+    """
+    return _request("GET", "/api/sessions" + "?cwd=%s&kind=%s"
+                    % (urllib.parse.quote(cwd), urllib.parse.quote(kind)))
+
+
 def put_items(sid: str, items: dict, *, kind: str, replace: bool = False) -> dict:
     return _request("PATCH", f"/s/{sid}/items" + _kind_qs(kind),
                     {"items": items, "replace": replace})
