@@ -2,7 +2,7 @@
   "name": "petros-makris-vscode",
   "displayName": "Petros Makris",
   "description": "Personal VS Code customizations: dark color theme, markdown preview theme switcher, and branch-diff URI handler.",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "publisher": "petros-makris",
   "engines": {
     "vscode": "^1.74.0"
