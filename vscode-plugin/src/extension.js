@@ -22,6 +22,8 @@ const OWN_SLOT_MARKER = 'petros-makris.petros-makris-vscode';
 const DEFAULT_SLUG = 'dracula-mono';
 
 const THEMES = [
+  { slug: 'slate-light',   label: 'Ink & Slate — Light' },
+  { slug: 'slate-dark',    label: 'Ink & Slate — Dark' },
   { slug: 'dracula-mono',  label: 'Dracula (Mono)' },
   { slug: 'rosepine-mono', label: 'Rose Pine (Mono)' },
   { slug: 'neon-mono',     label: 'Neon (Mono)' },

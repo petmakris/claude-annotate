@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the Petros Makris VS Code extension into a single .vsix file.
 #
-# - Copies the 8 markdown preview CSS files from ../markdown-preview/ into
+# - Copies the markdown preview CSS files from ../markdown-preview/ into
 #   dist/markdown-themes/ so they ship inside the .vsix.
 # - Runs vsce via npx (no global install required).
 # - Output overwrites petros-makris-vscode.vsix in place; that file is
@@ -29,6 +29,8 @@ THEMES=(
   dracula-mono
   rosepine-mono
   neon-mono
+  slate-light
+  slate-dark
 )
 for t in "${THEMES[@]}"; do
   cp "$CSS_SRC_DIR/$t.css" "$DIST_CSS_DIR/$t.css"
