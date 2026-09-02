@@ -256,6 +256,18 @@ ask them to re-ask it on the line, rather than trying to reconstruct it.
    Do this only after step 5 succeeds — an ack written before the reply lands
    would mark the question answered when it is not.
 
+## Ending the review
+
+When the user indicates they're done reviewing this diff — "looks good,"
+"thanks, that answers it," moving on to another diff or a different task —
+end the session:
+
+```bash
+webcompanion end --sid <sid>
+```
+
+The watcher prints `WEBCOMPANION_FINISHED` and exits on its own.
+
 ## Never summarise the diff
 
 **This skill opens a diff and stops.** After the script reports, say nothing about what the
