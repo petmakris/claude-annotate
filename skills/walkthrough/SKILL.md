@@ -330,6 +330,17 @@ question went unanswered and was dropped — please re-ask it on the step."*
 - **Headline title.** Pass a `title` to `append_thread`: plain text, ≤ 6 words,
   a noun phrase. Refresh it each answer.
 
+## When the walkthrough is done
+
+When the user reaches the last step with no more questions, or says they're
+done with the tour, end the session:
+
+```bash
+webcompanion end --sid "<sid>"
+```
+
+The watcher prints `WEBCOMPANION_FINISHED` and exits on its own.
+
 ## Terminal cancellation
 
 If the user says "scrap it" / "stop the walkthrough" while a watcher is armed,

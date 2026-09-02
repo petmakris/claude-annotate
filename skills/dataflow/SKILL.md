@@ -475,6 +475,18 @@ question went unanswered and was dropped — please re-ask it on the node."*
 - **Headline title.** The `title` passed to `append_thread`: plain text,
   ≤ 6 words.
 
+## Natural completion
+
+When the user indicates they have what they needed from the diagram —
+"thanks, that answers it," moving on to something unrelated, or asking to
+close it — end the session:
+
+```bash
+webcompanion end --sid "<sid>"
+```
+
+The watcher prints `WEBCOMPANION_FINISHED` and exits on its own.
+
 ## Terminal cancellation
 
 If the user says "scrap it" / "close the dataflow" while a watcher is armed,

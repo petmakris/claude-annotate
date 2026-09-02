@@ -477,6 +477,17 @@ watcher restarts and re-emits an event you've already handled, the second
 call is a no-op. Process the event normally each time — storage handles
 dedup.
 
+## Ending the review
+
+When the user indicates the review is complete — "looks good," "approved,"
+"done reviewing" — end the session:
+
+```bash
+webcompanion end --sid "<sid>"
+```
+
+The watcher prints `WEBCOMPANION_FINISHED` and exits on its own.
+
 ## Terminal cancellation
 
 If the user says "scrap it" / "stop the review" / equivalent while a watcher is armed:
