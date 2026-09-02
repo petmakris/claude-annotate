@@ -54,17 +54,21 @@ class BrokenMachineTests(unittest.TestCase):
         self.assertIn("xcode-select --install", result.stdout)
 
     def test_launching_a_skill_names_the_plugin_once(self):
-        # Was annotate's launcher, then deck's, then walkthrough's, until
-        # each in turn moved onto the webcompanion daemon and stopped
-        # shipping a server. The behaviour under test belongs to the shared
-        # launcher, not to any one skill, so this now points at
-        # ask_diff — the one skill that still runs a server of its
-        # own.
-        script = REPO_ROOT / "skills" / "ask_diff" / "ensure_server.sh"
+        # Was annotate's launcher, then deck's, then walkthrough's, then
+        # ask_diff's, until each in turn moved onto the webcompanion daemon
+        # and stopped shipping a server of its own. ask_diff was the last
+        # one (see its Task 4 migration) -- no skill ships a thin wrapper
+        # around this script any more, so this now runs the shared launcher
+        # directly, standing in for whatever wrapper used to export these
+        # env vars before sourcing it. The behaviour under test always
+        # belonged to the shared script, never to any one skill.
+        script = REPO_ROOT / "skills" / "_shared" / "web_companion" / "ensure_server.sh"
         result = subprocess.run(
             [str(self.bin / "bash"), str(script)],
             capture_output=True, text=True, timeout=20,
-            env={"HOME": str(self.home), "PATH": str(self.bin)},
+            env={"HOME": str(self.home), "PATH": str(self.bin),
+                 "SKILL": "test", "MODULE": "skills.test.server",
+                 "BANNER": "test-server", "PLUGIN_ROOT": str(REPO_ROOT)},
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stderr.count("claude-annotate:"), 1,

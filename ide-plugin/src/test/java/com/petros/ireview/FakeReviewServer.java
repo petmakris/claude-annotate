@@ -30,8 +30,25 @@ public final class FakeReviewServer implements AutoCloseable {
      * since the two routes' response shapes are unrelated.
      */
     public volatile String bulkThreadsJson = "{}";
+    /** Delay (ms) before answering the daemon-shaped bulk {@code GET
+     *  /s/<sid>/threads} route — simulates a slow thread-changed re-fetch for
+     *  ReviewSessionClientTest's generation-guard regression test. The body is
+     *  captured BEFORE the delay, mirroring {@link #threadsDelayMs}, so a test
+     *  can change {@link #bulkThreadsJson} mid-flight and the delayed response
+     *  still carries the old content. */
+    public volatile long bulkThreadsDelayMs = 0;
     /** Body returned by GET /s/<sid>/steps.json. */
     public volatile String stepsJson = "{\"steps\":[]}";
+    /**
+     * Body of the {@code __meta__} item's {@code body} field in the daemon-
+     * shaped bulk {@code GET /s/<sid>/items} route response — ReviewSessionClient's
+     * one-time {@code pr_ref} fetch on attach. {@code null} → the response has
+     * no {@code __meta__} key at all, matching a session with nothing pushed
+     * yet. Kept separate from {@link #stepsJson}/{@link #stepsGeneratedAt}
+     * (WalkthroughSessionClientTest's own {@code __steps__} fixture on this
+     * same route) since the two items are unrelated.
+     */
+    public volatile String metaJson = null;
     /** Epoch seconds of the last watcher heartbeat returned by /poll; null → none yet (0). */
     public volatile Long watcherSeenAt = null;
     /** {@code steps_generated_at} returned by /poll; also doubles as the
@@ -66,6 +83,13 @@ public final class FakeReviewServer implements AutoCloseable {
      */
     public final java.util.concurrent.atomic.AtomicInteger itemsHttpErrorsRemaining =
         new java.util.concurrent.atomic.AtomicInteger();
+    /** Delay (ms) before answering a successful GET /s/<sid>/items response —
+     *  simulates a slow __meta__ fetch for ReviewSessionClient's
+     *  loadPrRef()/fetchPrRef() regression tests. Applied AFTER the
+     *  itemsHttpErrorsRemaining check, so a scripted failure still answers
+     *  immediately; the body is captured before the delay, mirroring {@link
+     *  #bulkThreadsDelayMs}/{@link #threadsDelayMs}. */
+    public volatile long itemsDelayMs = 0;
     /** When true, /poll reports ended=true (terminal or watcher-dead past reap). */
     public volatile boolean ended = false;
     /** ended_reason returned by /poll when ended; null → JSON null. */
@@ -169,13 +193,23 @@ public final class FakeReviewServer implements AutoCloseable {
         // neither this fixture nor any client currently needs.
         if (path.endsWith("/threads")) {
             byte[] body = bulkThreadsJson.getBytes(StandardCharsets.UTF_8);
+            long delay = bulkThreadsDelayMs;
+            if (delay > 0) {
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
             ex.getResponseHeaders().add("Content-Type", "application/json");
             ex.sendResponseHeaders(200, body.length);
             try (OutputStream os = ex.getResponseBody()) { os.write(body); }
             return;
         }
         // The daemon's real bulk items route: GET /s/<sid>/items?kind=walkthrough
-        // returns {"__steps__": {"body": <stepsJson>, "version": <int>}}.
+        // returns {"__steps__": {"body": <stepsJson>, "version": <int>}}; for
+        // ReviewSessionClientTest (kind=interactive-review) it also carries
+        // {"__meta__": {"body": <metaJson>, "version": 1}} when metaJson is set.
         if (path.endsWith("/items")) {
             if (itemsHttpErrorsRemaining.getAndUpdate(n -> n > 0 ? n - 1 : 0) > 0) {
                 ex.sendResponseHeaders(500, -1);
@@ -183,8 +217,21 @@ public final class FakeReviewServer implements AutoCloseable {
                 return;
             }
             long version = stepsGeneratedAt != null ? stepsGeneratedAt : 0;
-            byte[] body = ("{\"__steps__\":{\"body\":" + stepsJson.trim()
-                + ",\"version\":" + version + "}}").getBytes(StandardCharsets.UTF_8);
+            StringBuilder sb = new StringBuilder("{\"__steps__\":{\"body\":").append(stepsJson.trim())
+                .append(",\"version\":").append(version).append("}");
+            if (metaJson != null) {
+                sb.append(",\"__meta__\":{\"body\":").append(metaJson.trim()).append(",\"version\":1}");
+            }
+            sb.append("}");
+            byte[] body = sb.toString().getBytes(StandardCharsets.UTF_8);
+            long delay = itemsDelayMs;
+            if (delay > 0) {
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
             ex.getResponseHeaders().add("Content-Type", "application/json");
             ex.sendResponseHeaders(200, body.length);
             try (OutputStream os = ex.getResponseBody()) { os.write(body); }
