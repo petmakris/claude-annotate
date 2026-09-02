@@ -1,4 +1,4 @@
-# interactive-review
+# ask-diff
 
 Per-line threaded Q&A on a GitHub PR diff, surfaced in IntelliJ via the IDE plugin.
 
@@ -11,7 +11,7 @@ The IDE client lives in `ide-plugin/` (a sibling of this repo's `skills/`). This
 ## How to invoke
 
 ```
-/interactive-review <PR>
+/ask-diff <PR>
 ```
 
 where `<PR>` is:

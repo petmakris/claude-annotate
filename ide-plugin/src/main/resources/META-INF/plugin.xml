@@ -6,7 +6,7 @@
     <description><![CDATA[
         IDE companion for the <a href="https://github.com/petmakris/claude-ide-review">claude-ide-review</a>
         Claude Code plugin. Ask Claude a question on any line of a GitHub PR diff
-        (<code>/interactive-review</code>) and get a threaded answer in place, or walk a
+        (<code>/ask-diff</code>) and get a threaded answer in place, or walk a
         codebase through anchored steps with Claude answering inline
         (<code>/walkthrough</code>).
         <br/><br/>

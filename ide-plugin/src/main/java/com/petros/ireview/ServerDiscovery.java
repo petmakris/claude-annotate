@@ -7,7 +7,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Shared dual discovery for the interactive_review and walkthrough services'
+ * Shared dual discovery for the ask_diff and walkthrough services'
  * base URL, tried in order:
  *
  * <ol>

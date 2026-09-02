@@ -3,7 +3,7 @@
 #
 # Regression: watcher.sh wrote it with `date +%s > file`, which truncates the
 # target and only fills it after forking `date` — leaving it empty for
-# milliseconds on every beat. interactive_review's /poll read an empty file as
+# milliseconds on every beat. ask_diff's /poll read an empty file as
 # "watcher never armed", fell back to the session's creation age, and declared
 # a live session dead; the IDE latched that read-only and never recovered.
 set -euo pipefail

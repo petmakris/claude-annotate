@@ -162,7 +162,7 @@ public final class ReviewSessionService implements Disposable {
     }
 
     /**
-     * The legacy interactive_review server's discovery file,
+     * The legacy ask_diff server's discovery file,
      * ~/.claude/interactive-review/server.json — the skill writes it on
      * server start and rewrites it on every restart. {@link ServerDiscovery}
      * tries the webcompanion daemon's own config first and falls back to this.

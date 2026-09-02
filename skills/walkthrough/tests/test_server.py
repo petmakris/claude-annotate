@@ -192,7 +192,7 @@ def test_submit_queues_event_and_appends_user_message(tmp_path):
 def test_serve_poll_not_dead_when_heartbeat_unreadable(tmp_path):
     """An empty/truncated heartbeat is not evidence of death.
 
-    Same defect and fix as interactive_review's serve_poll: watcher.sh used to
+    Same defect and fix as ask_diff's serve_poll: watcher.sh used to
     truncate the heartbeat before filling it, so a read could land on an empty
     file, which was read as "never armed" and aged out a live session.
     """

@@ -22,7 +22,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Talks to the interactive_review server: discovers a session by cwd,
+ * Talks to the ask_diff server: discovers a session by cwd,
  * opens an SSE stream, caches per-anchor syntheses, and pushes events
  * to listeners.
  *
@@ -245,7 +245,7 @@ public final class ReviewSessionClient {
         if (s == null) return CompletableFuture.failedFuture(new IllegalStateException("no session"));
         if (state == State.PAUSED || state == State.ENDED) {
             return CompletableFuture.failedFuture(new IllegalStateException(
-                "Claude session is gone — re-run /interactive-review to resume"));
+                "Claude session is gone — re-run /ask-diff to resume"));
         }
         long token = submitSeq.incrementAndGet();
         markPending(anchor, token);
@@ -536,7 +536,7 @@ public final class ReviewSessionClient {
                 setState(State.PAUSED);
             }
         } else if (state == State.PAUSED) {
-            // Watcher came back (user re-ran /interactive-review).
+            // Watcher came back (user re-ran /ask-diff).
             setState(State.ACTIVE);
         }
     }

@@ -43,7 +43,7 @@ import java.util.Map;
 
 /**
  * Side-panel component: a live list of every annotated line in the current
- * interactive_review session. Subscribes to ReviewSessionClient for updates.
+ * ask_diff session. Subscribes to ReviewSessionClient for updates.
  *
  * Click a row → the panel switches from the list to a dedicated detail view
  * for that thread (a {@link ThreadConversationView}, the same rendering core
@@ -135,10 +135,10 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
         list.getEmptyText().setText("No questions yet");
         list.getEmptyText().appendLine("Open the PR diff, hover a changed line, click 💬 to ask Claude.");
         list.getEmptyText().appendLine("");
-        list.getEmptyText().appendLine("Copy /interactive-review <PR>",
+        list.getEmptyText().appendLine("Copy /ask-diff <PR>",
             com.intellij.ui.SimpleTextAttributes.LINK_ATTRIBUTES,
             e -> java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
-                .setContents(new java.awt.datatransfer.StringSelection("/interactive-review "), null));
+                .setContents(new java.awt.datatransfer.StringSelection("/ask-diff "), null));
         MouseAdapter mouse = new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -354,7 +354,7 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
 
     /**
      * A row's dot color. Prefers the reply's opening "> <symbol> ..." verdict
-     * line (see the interactive_review skill's response-style guide: ✓ ok, !
+     * line (see the ask_diff skill's response-style guide: ✓ ok, !
      * critical, ⚠ important) and falls back to the older leading "**Critical —"
      * / "**Important —" bold-prefix convention for replies posted before that
      * convention existed. Neither is a stored field, so this is a best-effort

@@ -101,7 +101,7 @@ function lacks a direct unit test.
   logic are **Medium** only when they have already drifted — identical
   copies are a Decision, drifted copies are a bug waiting to be found in one
   place and not the other. Quote both locations. `threads_bulk()` in
-  `skills/interactive_review/server.py` and `skills/walkthrough/server.py`
+  `skills/ask_diff/server.py` and `skills/walkthrough/server.py`
   is the shape to look for: both load a thread's messages and pick a
   "question" to pair with the latest Claude reply, but one takes
   `user_msgs[0]` and the other `user_msgs[-1]` — same scaffolding, different
@@ -147,7 +147,7 @@ function lacks a direct unit test.
    the `Handlers` class outline and its `serve_data`/`create_session_extra`
    method set, plus byte-identical small helpers such as `_send_text`,
    `_send_html`, `_send_json`, and `_is_terminal` repeated across
-   `skills/annotate/server.py`, `skills/interactive_review/server.py`, and
+   `skills/annotate/server.py`, `skills/ask_diff/server.py`, and
    `skills/walkthrough/server.py` — that is `/audit-engine-boundary`'s call,
    not this one's, and identical (undrifted) copies are a Decision under
    Rule 5 regardless. This does **not** reach duplicated **implementation

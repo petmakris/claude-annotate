@@ -8,6 +8,24 @@ description: Open code diffs in VS Code's multi-file diff editor, and never summ
 Show the user their diffs in VS Code — resolved from a phrase, or picked from the list of
 everything reviewable when the user named nothing.
 
+## Where this skill is not the answer
+
+The IDE plugin's **base-branch key (⌥B) and Compare-with-branch (⇧⌘D) own one case: the
+user's own in-progress branch, in the checkout this session is running in, against its
+base.** Both open an IntelliJ diff whose right-hand pane is the live file, so the user can
+type into it; a VS Code window opened beside the IntelliJ one he is already editing in is
+a second place to look, not a better one.
+
+So when the request resolves to *this* checkout's own branch or uncommitted work, say in
+one line that ⌥B does it in the file he is in and ⇧⌘D does all N files, and open nothing.
+
+Three things override that and bring the work back here — the reasons this skill exists:
+
+- another checkout, or several at once (a workspace pick, the `wp diffable` inventory)
+- a base IntelliJ cannot name: a stacked branch's parent, a colleague's branch, an
+  `origin/<branch>` this clone has never fetched
+- the user asked for VS Code, for "one scroll", or for the whole repo in a single view
+
 **One project, one window, always.** Each repository's diff goes in the VS Code window
 holding that repository — never two projects' diffs in one window. This is not a
 preference to weigh; it is the rule. Run the script once per project, and **wait for each
@@ -23,6 +41,11 @@ The two tools this skill exists to drive:
 - `wp diffable [workspace] [--json]` — every checkout under `~/projects/wp/`, what branch
   it is on, what that branch is stacked on, and how many files each candidate base
   differs by. This is where the resolution comes from. Never re-derive it with raw git.
+- `@git pr-base --sha` — the commit a checkout's branch forked from, run inside that
+  checkout. When the checkout has a pinned `pr-base` branch this returns it; otherwise it
+  computes the merge base. It is the same left endpoint the IntelliJ keys use, which is
+  the whole reason to prefer it: two tools opening the same branch must not disagree about
+  where the branch started.
 - `skills/show_diff/show-diff.sh <checkout> <base-rev> <head-rev|--worktree> [title]` —
   resolves the revs, fetching an `origin/<branch>` this clone has never seen, which is
   what the base of a stacked branch usually is. Then it opens the project's window, waits
@@ -72,6 +95,13 @@ The two tools this skill exists to drive:
      PMP-281 in montblanc" → the checkout whose `branch` matches, `head` = its `head`
      sha, `base` = the `sha` of its first `bases` entry (`kind: "ancestor"`). Pass the
      **`sha`**, never the `ref`.
+
+     **A pinned `pr-base` wins.** When that checkout's first base entry lists `pr-base`
+     among its `aliases`, or `@git pr-base --sha` run there prints a sha, use that sha as
+     the base. The user pinned it precisely so every tool would name the same two commits,
+     and the pin holds still while `origin/master` moves — an unpinned base recomputed
+     here would drift away from what ⌥B opens in IntelliJ for the same branch, and the two
+     views would disagree about how many files the branch touches.
    - **"against master"**, "everything this adds to master" → the `bases` entry with
      `kind: "trunk"`. Its `sha` is already the merge-base, so pass it as-is; passing
      `origin/master` would show master's own newer commits as deletions.
@@ -154,7 +184,7 @@ Monitor: command = "webcompanion watch --kind show-diff --sid <WC_SID>", persist
 description: "show-diff-review sid=<WC_SID>"
 ```
 
-The watcher prints the same banners `interactive_review`'s watcher does:
+The watcher prints the same banners `ask_diff`'s watcher does:
 `WEBCOMPANION_EVENT skill=show-diff sid=<sid> event_id=<id>` (followed by
 `---payload---`, the event JSON, `---end---`), `WEBCOMPANION_FINISHED`,
 `WEBCOMPANION_CANCELLED`, `WEBCOMPANION_DROPPED`. Each wakes you once; the
@@ -206,7 +236,7 @@ ask them to re-ask it on the line, rather than trying to reconstruct it.
    typically, fenced code blocks for snippet suggestions. If you spot a real
    bug, flag it and suggest a fix as a code block — never modify the
    checkout itself, this is a read-only review view exactly like
-   `interactive_review`.
+   `ask_diff`.
 5. **Write the answer to a file, then post it** — never interpolate the
    answer into a shell command; it may contain backticks, quotes, or
    `$(...)`:

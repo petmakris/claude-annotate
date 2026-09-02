@@ -14,10 +14,16 @@ import java.util.Optional;
  *  1. the ref typed into Settings — accepted as given, because a ref can be
  *     valid and absent from our listing (an unfetched remote, a tag), and
  *     rejecting it here would be us second-guessing git;
- *  2. {@code origin/HEAD}, the repository's own declared default branch, but
+ *  2. {@link #PIN}, when the repository has one. Somebody ran
+ *     {@code @git pr-base --pin} in this checkout, which is a deliberate act
+ *     and not a guess: it records the commit the branch forked from, and it
+ *     holds still while the default branch moves. Every other diff tool here
+ *     resolves the same ref, so preferring it is what keeps the IntelliJ diff
+ *     and the terminal one naming the same two commits;
+ *  3. {@code origin/HEAD}, the repository's own declared default branch, but
  *     only when it still names a ref that exists — it survives the deletion of
  *     the branch it points at;
- *  3. {@link #candidates()}, in order.
+ *  4. {@link #candidates()}, in order.
  *
  * Resolving to nothing is a real outcome, not an error: the caller reports
  * which refs were tried rather than diffing against a guess.
@@ -28,6 +34,9 @@ public final class BaseBranchResolver {
 
     private static final List<String> CANDIDATES =
         List.of("origin/main", "origin/master", "main", "master");
+
+    /** The branch {@code @git pr-base --pin} writes; absent until somebody pins one. */
+    public static final String PIN = "pr-base";
 
     /** The guesses tried when Settings is empty and origin/HEAD is unusable, in order. */
     public static List<String> candidates() {
@@ -42,6 +51,9 @@ public final class BaseBranchResolver {
     public static Optional<String> resolve(String override, String symbolicRef, Collection<String> knownRefs) {
         if (override != null && !override.isBlank()) {
             return Optional.of(override.trim());
+        }
+        if (knownRefs.contains(PIN)) {
+            return Optional.of(PIN);
         }
         String head = shortName(symbolicRef);
         if (!head.isEmpty() && knownRefs.contains(head)) {

@@ -77,7 +77,7 @@ KNOWN_ENTRY_DOCS = {
     "skills/annotate/references/pushing.md",
     "skills/annotate/references/resuming.md",
     "skills/annotate/references/code-anchors.md",
-    "skills/interactive_review/SKILL.md",
+    "skills/ask_diff/SKILL.md",
     "skills/walkthrough/SKILL.md",
 }
 

@@ -3,7 +3,7 @@ package com.petros.ireview;
 /**
  * Parsing for the anchor strings the review server stores.
  *
- * Two shapes exist (see interactive_review/SKILL.md):
+ * Two shapes exist (see ask_diff/SKILL.md):
  *   <path>:<L|R>:<line>            a single diff line
  *   <path>:<L|R>:<start>-<end>     a range of diff lines
  * plus the whole-PR anchor {@code __general__}, which has no location at all.

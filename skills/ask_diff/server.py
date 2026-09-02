@@ -19,7 +19,7 @@ from skills._shared.web_companion import stream as stream_module
 from skills._shared.web_companion.atomic import write_text_atomic
 from skills._shared.web_companion import events as events_module
 from skills._shared.web_companion import uploads as uploads_module
-from skills.interactive_review import diff as diff_module
+from skills.ask_diff import diff as diff_module
 from skills._shared.web_companion import threads as threads_module
 
 # The engine owns its own layout; ask it where its static files are rather

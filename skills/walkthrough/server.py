@@ -212,7 +212,7 @@ class Handlers:
             # The file is there but this read couldn't parse it. A live watcher
             # rewrites it every ~1s, so an unreadable sample proves nothing —
             # never death. Report age unknown; the next poll decides. (Same
-            # defect and fix as interactive_review's serve_poll.)
+            # defect and fix as ask_diff's serve_poll.)
             age = None
         else:
             try:

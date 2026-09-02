@@ -23,7 +23,7 @@ Report only what these do not enforce, plus anywhere either has gone stale.
 ## Step 1 — load the sources of truth
 
 1. `skills/_shared/web_companion/` — every module, and what each provides.
-2. `skills/interactive_review/server.py`, `skills/walkthrough/server.py` — the two remaining consumers.
+2. `skills/ask_diff/server.py`, `skills/walkthrough/server.py` — the two remaining consumers.
 3. `skills/_shared/web_companion/server.py` — the `run()` signature, which is how a skill declares `skill_name` and `port_range`.
 
 ## The rules
@@ -42,8 +42,8 @@ Report only what these do not enforce, plus anywhere either has gone stale.
 3. `skills/_shared/web_companion/tests/` naming engine internals — that is its job.
 4. This audit suite (`.claude/skills/audit*/`) naming engine modules to describe them.
 5. The spec and plan documents under `docs/superpowers/`, which describe the vendoring that was removed.
-6. Each skill's `_serve_stream` HTTP transport framing — the browser-facing SSE loop in `skills/interactive_review/server.py` and `skills/walkthrough/server.py`. The engine has no SSE-serving module for either to reimplement, so this is skill-owned, not a Rule 1 Violation. Duplication between the two belongs to `/audit-code-health`'s Rule 5, not to this audit.
-7. Importing through a same-repo compatibility shim that is documented as a deliberate, migratable re-export — for example `skills/interactive_review/threads.py`, whose docstring says "Import sites can migrate at leisure; this alias keeps both old module paths working" — is a **Decision** (migrate now or later), not a Rule 2 Violation. Rule 2 still applies in full to `sys.path` manipulation, a relative import climbing out of a skill, and a duplicated module file, all of which stay Critical.
+6. Each skill's `_serve_stream` HTTP transport framing — the browser-facing SSE loop in `skills/ask_diff/server.py` and `skills/walkthrough/server.py`. The engine has no SSE-serving module for either to reimplement, so this is skill-owned, not a Rule 1 Violation. Duplication between the two belongs to `/audit-code-health`'s Rule 5, not to this audit.
+7. Importing through a same-repo compatibility shim that is documented as a deliberate, migratable re-export — for example `skills/ask_diff/threads.py`, whose docstring says "Import sites can migrate at leisure; this alias keeps both old module paths working" — is a **Decision** (migrate now or later), not a Rule 2 Violation. Rule 2 still applies in full to `sys.path` manipulation, a relative import climbing out of a skill, and a duplicated module file, all of which stay Critical.
 8. Any line carrying `# engine-exempt: <reason>`, or, for a Rule 1 finding, a justification attached to the duplicated code itself — its enclosing function's docstring, or a comment immediately preceding it — stating that the duplication is deliberate and why. The marker is preferred because it is greppable. A justification anywhere else in the file (a general file-level comment, a docstring on an unrelated function, a note in the module docstring) does not exempt the finding — it must sit on the code being flagged, not merely share a file with it.
 
 ## Step 2 — scan

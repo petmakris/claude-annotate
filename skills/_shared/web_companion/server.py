@@ -74,7 +74,7 @@ def _read_hb(state_dir):
 
 def _session_meta(registry, dirs, sid):
     """Legacy meta source: state_dir/meta.json (NOT registry meta), preserved
-    byte-for-byte from the pre-scope=all behavior so interactive_review is
+    byte-for-byte from the pre-scope=all behavior so ask_diff is
     unaffected."""
     meta = {}
     mp = Path(dirs["state_dir"]) / "meta.json"

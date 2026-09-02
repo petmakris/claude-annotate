@@ -51,6 +51,29 @@ class BaseBranchResolverTest {
     }
 
     @Test
+    void aPinnedPrBaseBeatsOriginHead() {
+        // Pinning is deliberate; origin/HEAD is the repository's guess at what
+        // the branch was cut from. The pin also holds still while the default
+        // branch moves, which is the whole reason it exists.
+        assertEquals(Optional.of("pr-base"),
+            BaseBranchResolver.resolve("", "refs/remotes/origin/main",
+                List.of("pr-base", "origin/main", "main")));
+    }
+
+    @Test
+    void theSettingsOverrideStillBeatsAPinnedPrBase() {
+        assertEquals(Optional.of("origin/develop"),
+            BaseBranchResolver.resolve("origin/develop", "refs/remotes/origin/main",
+                List.of("pr-base", "origin/main")));
+    }
+
+    @Test
+    void withNoPinTheOldOrderIsUnchanged() {
+        assertEquals(Optional.of("origin/main"),
+            BaseBranchResolver.resolve("", "refs/remotes/origin/main", TYPICAL));
+    }
+
+    @Test
     void originHeadWinsWhenNoOverrideIsSet() {
         assertEquals(Optional.of("origin/develop"),
             BaseBranchResolver.resolve("", "refs/remotes/origin/develop",

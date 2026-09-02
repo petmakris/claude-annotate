@@ -18,7 +18,7 @@ import java.awt.event.MouseEvent;
 /**
  * Status-bar widget showing the review session state with a glanceable colored
  * dot (green = live, amber = connecting/paused, red = ended, gray = idle) next
- * to the text. Click copies the /interactive-review command to the clipboard.
+ * to the text. Click copies the /ask-diff command to the clipboard.
  */
 public final class ReviewStatusBarWidget implements StatusBarWidget, CustomStatusBarWidget {
 
@@ -36,11 +36,11 @@ public final class ReviewStatusBarWidget implements StatusBarWidget, CustomStatu
     public ReviewStatusBarWidget(com.intellij.openapi.project.Project project, ReviewSessionClient client) {
         this.client = client;
         label.setBorder(JBUI.Borders.empty(0, 6));
-        label.setToolTipText("Click to copy /interactive-review command to clipboard");
+        label.setToolTipText("Click to copy /ask-diff command to clipboard");
         label.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
                 java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
-                    .setContents(new StringSelection("/interactive-review "), null);
+                    .setContents(new StringSelection("/ask-diff "), null);
             }
         });
         this.listener = new ReviewSessionClient.Listener() {
@@ -57,7 +57,7 @@ public final class ReviewStatusBarWidget implements StatusBarWidget, CustomStatu
             String dot;
             String text;
             switch (client.state()) {
-                case DORMANT -> { dot = GRAY; text = "Review: idle — /interactive-review <PR>"; }
+                case DORMANT -> { dot = GRAY; text = "Review: idle — /ask-diff <PR>"; }
                 case CONNECTING -> { dot = AMBER; text = "Review: connecting…"; }
                 case ACTIVE -> { dot = GREEN; text = "Review: " + prRefOr("active") + " ✓"; }
                 case DISCONNECTED -> { dot = AMBER; text = "Review: reconnecting…"; }

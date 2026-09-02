@@ -25,7 +25,7 @@
       "strict": false,
       "description": "Ask Claude questions on a PR diff line, a local diff line, or a code walkthrough step, inside IntelliJ or VS Code. Requires Python 3.9+ on PATH and either the companion IntelliJ plugin or the vscode-plugin extension. VS Code's per-line diff comments also need the separately-installed webcompanion daemon (run /annotate-doctor to check or install it); diffs still open without it.",
       "skills": [
-        "./skills/interactive_review",
+        "./skills/ask_diff",
         "./skills/walkthrough",
         "./skills/show_diff",
         "./skills/annotate-doctor"

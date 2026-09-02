@@ -108,9 +108,11 @@ public final class SmartDiffService {
                 DiffSettings.get(project).baseBranch(), originHead(repo), branchNames(repo));
 
             if (base.isEmpty()) {
-                info("No base branch found. Tried origin/HEAD and "
+                info("No base branch found. Tried " + BaseBranchResolver.PIN
+                    + ", origin/HEAD and "
                     + String.join(", ", BaseBranchResolver.candidates())
-                    + ". Name one in Settings → Tools → Claude IDE Review.");
+                    + ". Pin one with `@git pr-base --pin`, or name one in"
+                    + " Settings → Tools → Claude IDE Review.");
                 return;
             }
             show(file, contentAt(path, base.get()), base.get(), null, "Working copy");

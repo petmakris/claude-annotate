@@ -1,6 +1,6 @@
 ---
-name: interactive-review
-description: Per-line threaded Q&A on a GitHub PR diff, surfaced in IntelliJ via the IDE plugin. User clicks any diff line, asks a question, Claude wakes via WEBCOMPANION_EVENT, appends a reply to the line's thread, and the IDE refreshes that thread. Triggered by /interactive-review <PR>. Watcher events are WEBCOMPANION_EVENT / WEBCOMPANION_FINISHED / WEBCOMPANION_CANCELLED.
+name: ask-diff
+description: Per-line threaded Q&A on a GitHub PR diff, surfaced in IntelliJ via the IDE plugin. User clicks any diff line, asks a question, Claude wakes via WEBCOMPANION_EVENT, appends a reply to the line's thread, and the IDE refreshes that thread. Triggered by /ask-diff <PR> (called /interactive-review before 2026-09-02). Watcher events are WEBCOMPANION_EVENT / WEBCOMPANION_FINISHED / WEBCOMPANION_CANCELLED.
 allowed-tools:
   - Bash
   - Read
@@ -9,10 +9,19 @@ allowed-tools:
   - Glob
 ---
 
-# /interactive-review — per-line threaded Q&A on a PR diff
+# /ask-diff — per-line threaded Q&A on a PR diff
 
 > Requires the companion IntelliJ plugin. Without it this skill has nowhere to
 > render — install the `.zip` from the repository's Releases page first.
+
+> **The command renamed, the wire did not.** This skill answered to
+> `/interactive-review` until 2026-09-02; it was renamed because three separate
+> tools were called "review" and only one of them judges a PR. The `SKILL` /
+> `kind` identifier stays `interactive-review` everywhere below — in
+> `~/.claude/interactive-review/`, in the watcher's `skill=` field and in the
+> IDE plugin's `KIND` constant — because the separately-installed webcompanion
+> daemon and the shipped plugin `.zip` both key off that string. Changing it
+> would need all three released together; changing the command needed nothing.
 
 Surface a GitHub PR diff in IntelliJ (via the IDE plugin) where the user clicks any changed line to open a threaded conversation on it. Claude answers in that thread; the IDE refreshes the thread in place. No code is modified — this is a tool for *understanding* a PR, not rewriting it.
 
@@ -25,7 +34,7 @@ If a fix is warranted, suggest it as a markdown code block inside the thread. Ne
 The user types:
 
 ```
-/interactive-review <PR>
+/ask-diff <PR>
 ```
 
 where `<PR>` is one of:
@@ -56,7 +65,7 @@ EOF
 fi
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(python3 -c '
 import json, os, sys
-NAME, MARKER = "claude-annotate", "skills/interactive_review/ensure_server.sh"
+NAME, MARKER = "claude-annotate", "skills/ask_diff/ensure_server.sh"
 ok = lambda r: bool(r) and os.path.isfile(os.path.join(r, MARKER))
 for entry in os.environ.get("PATH", "").split(os.pathsep):
     if os.path.basename(entry) == "bin" and ok(os.path.dirname(entry)):
@@ -77,7 +86,7 @@ if ok(root):
 sys.exit(f"could not locate the {NAME} plugin root")
 ')}"
 [ -n "$PLUGIN_ROOT" ] || { echo "claude-annotate: plugin root not found" >&2; exit 1; }
-"$PLUGIN_ROOT/skills/interactive_review/ensure_server.sh"
+"$PLUGIN_ROOT/skills/ask_diff/ensure_server.sh"
 ```
 
 `$CLAUDE_PLUGIN_ROOT` is **not** exported into the Bash tool's shell, so the root is resolved by probing, in order: every `bin/` directory on `PATH` (Claude Code adds `<plugin-root>/bin` for both `--plugin-dir` and marketplace installs, even when that directory does not exist), then any server this plugin already started, then the marketplace registry. Each candidate must actually contain `ensure_server.sh` — the check is a marker file, not a directory name, so it survives being cloned under any name. Idempotent and fast (<100 ms when already up). Internally delegates to `skills/_shared/web_companion/ensure_server.sh` — do not call that directly. Do **not** use `run_in_background: true`. If it exits non-zero, surface the stderr to the user and stop.
@@ -117,7 +126,7 @@ The server's `create_session_extra` runs `gh pr diff` and `gh pr view`, then wri
 everything off the `sid` field and call `/s/<sid>/…` — the raw sid still routes,
 so the slug is not used here. Because this POST sends no `title`, the slug is
 derived from the repo basename (and de-duplicated across concurrent reviews of
-the same repo); it is cosmetic for interactive-review.
+the same repo); it is cosmetic for ask-diff.
 
 Save `url`, `sid`, `state_dir`, `events_dir`, `consumed_dir`, and `title` for the rest of this turn.
 

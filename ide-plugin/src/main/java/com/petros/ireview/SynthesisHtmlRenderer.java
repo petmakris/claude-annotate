@@ -219,7 +219,7 @@ public final class SynthesisHtmlRenderer {
 
           // The reply's opening "> <symbol> ..." line, read by VerdictBlockQuoteRenderer:
           // a colour-coded pill instead of a quoted paragraph, so the verdict reads
-          // before the reasoning. See interactive_review/SKILL.md for the convention.
+          // before the reasoning. See ask_diff/SKILL.md for the convention.
           + ".verdict{display:flex;align-items:flex-start;gap:10px;margin:0 0 16px;}"
           + ".verdict-icon{width:20px;height:20px;border-radius:50%;flex-shrink:0;"
           +   "display:flex;align-items:center;justify-content:center;"
@@ -305,7 +305,7 @@ public final class SynthesisHtmlRenderer {
 
     /**
      * Renders the reply's opening "> <symbol> ..." block quote as a colour-coded
-     * verdict pill (see the interactive_review skill's response-style guide for
+     * verdict pill (see the ask_diff skill's response-style guide for
      * the ✓ / ! / ⚠ convention), and any later block quote as a plain callout
      * card. Registering this for {@link BlockQuote} replaces commonmark's default
      * handling for every block quote in the document — there's no third case to

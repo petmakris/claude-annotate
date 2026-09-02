@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from skills.interactive_review.server import Handlers
+from skills.ask_diff.server import Handlers
 from skills._shared.web_companion import threads as threads_module
 
 
@@ -197,7 +197,7 @@ def test_create_session_extra_fetches_diff(tmp_path):
         "title": "Test PR", "headRefName": "feat", "baseRefName": "main",
         "author": {"login": "petros"}, "url": "https://example", "headRefOid": "deadbeef",
     }
-    with patch("skills.interactive_review.diff.fetch_pr_diff",
+    with patch("skills.ask_diff.diff.fetch_pr_diff",
                return_value=(sample_diff, sample_meta)):
         h = Handlers()
         extra = h.create_session_extra({"pr": "42"}, dirs)
@@ -217,7 +217,7 @@ def test_create_session_extra_requires_pr(tmp_path):
 
 def test_create_session_extra_wraps_gh_failure(tmp_path):
     dirs = make_dirs(tmp_path)
-    with patch("skills.interactive_review.diff.fetch_pr_diff",
+    with patch("skills.ask_diff.diff.fetch_pr_diff",
                side_effect=RuntimeError("not found")):
         h = Handlers()
         with pytest.raises(ValueError, match="gh pr fetch failed"):
@@ -227,7 +227,7 @@ def test_create_session_extra_wraps_gh_failure(tmp_path):
 def test_create_session_extra_rejects_oversized_diff(tmp_path):
     dirs = make_dirs(tmp_path)
     huge = "x" * (6 * 1024 * 1024)
-    with patch("skills.interactive_review.diff.fetch_pr_diff",
+    with patch("skills.ask_diff.diff.fetch_pr_diff",
                return_value=(huge, {"title": "Big PR"})):
         h = Handlers()
         with pytest.raises(ValueError, match="over the 5 MB limit"):
@@ -238,7 +238,7 @@ def test_create_session_extra_rejects_oversized_diff(tmp_path):
 def test_create_session_extra_warns_on_large_diff(tmp_path):
     dirs = make_dirs(tmp_path)
     big = "x" * (2 * 1024 * 1024)
-    with patch("skills.interactive_review.diff.fetch_pr_diff",
+    with patch("skills.ask_diff.diff.fetch_pr_diff",
                return_value=(big, {"title": "Largish PR"})):
         h = Handlers()
         extra = h.create_session_extra({"pr": "42"}, dirs)
@@ -263,7 +263,7 @@ def test_threads_bulk_returns_anchor_to_latest_synthesis(tmp_path):
     th.append_message(threads_dir, "bar.java:L:5",
                       {"role": "claude", "ts": 5, "text": "only one here"})
 
-    from skills.interactive_review.server import Handlers
+    from skills.ask_diff.server import Handlers
     h = Handlers()
     result = h.threads_bulk({"state_dir": state_dir})
     assert result["foo.java:R:10"]["latest_synthesis"] == "answer two — final synthesis"
@@ -279,13 +279,13 @@ def test_threads_bulk_skips_threads_with_no_claude_messages(tmp_path):
     th.append_message(threads_dir, "only-user.java:R:1",
                       {"role": "user", "ts": 1, "text": "q", "source_event_id": "e1"})
 
-    from skills.interactive_review.server import Handlers
+    from skills.ask_diff.server import Handlers
     result = Handlers().threads_bulk({"state_dir": state_dir})
     assert "only-user.java:R:1" not in result
 
 
 def test_threads_bulk_empty_when_no_threads_dir(tmp_path):
-    from skills.interactive_review.server import Handlers
+    from skills.ask_diff.server import Handlers
     result = Handlers().threads_bulk({"state_dir": tmp_path / "missing"})
     assert result == {}
 

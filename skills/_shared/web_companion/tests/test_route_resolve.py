@@ -11,5 +11,5 @@ def test_route_key_resolves_slug_then_sid(tmp_path):
     sid = r.resolve("pretty-name")
     assert sid == "260720-1-abc"
     assert r.lookup(sid) is not None
-    # And still by raw sid (interactive_review path).
+    # And still by raw sid (ask_diff path).
     assert r.lookup(r.resolve("260720-1-abc")) is not None

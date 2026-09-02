@@ -1,4 +1,4 @@
-"""Unified-diff parser + gh-CLI fetcher for interactive-review.
+"""Unified-diff parser + gh-CLI fetcher for ask-diff.
 
 The skill snapshots a PR's diff at session-open time. The diff comes from
 `gh pr diff` and is written to disk as the raw patch — IntelliJ's own diff

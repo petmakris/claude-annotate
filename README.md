@@ -32,12 +32,42 @@ That registers the marketplace, which publishes two plugins. Install either or b
 grab the `.zip` from [Releases](https://github.com/petmakris/claude-annotate/releases)
 and install it via **Settings → Plugins → ⚙ → Install Plugin from Disk…**
 
-`annotate`, `deck`, `dataflow`, `walkthrough` and `interactive_review` drive the same
+`annotate`, `deck`, `dataflow`, `walkthrough` and `ask_diff` drive the same
 local server engine, which lives once in this repository at `skills/_shared/web_companion/`.
 `show_diff`'s per-line diff comments instead depend on
 [webcompanion](https://github.com/petmakris/webcompanion), a standalone daemon
 installed separately (see [Related](#related)) — `show_diff` still opens diffs without it,
 only the comment feature is unavailable.
+
+## Which diff tool, when
+
+Six things in this setup can put a diff in front of you, and they used to be told apart
+only by which one you happened to remember. They are told apart by two questions now:
+which two commits, and can you type into the result.
+
+The left endpoint is one shared ref. `@git pr-base --pin` writes a `pr-base` branch at the
+commit your branch forked from, and it does not move when somebody else merges into
+master. Everything below resolves that same ref — the IntelliJ key through
+`BaseBranchResolver`, `cr -p` through `@git pr-base --sha`, `show-diff` through the base
+`wp diffable` reports. Re-pin after a rebase; nothing else moves it.
+
+| Tool | Two commits | Where | Editable |
+|------|-------------|-------|----------|
+| `cr` | last commit, `N` back, a sha, `a..b`, `-w` worktree vs HEAD | terminal (diffnav), pipeable | no |
+| `cr -p` | `pr-base` → worktree | terminal | no |
+| ⌥B (IDE plugin) | `pr-base` → the live file | IntelliJ, one file | **yes** |
+| ⇧⌘D | `pr-base` → worktree, every file | IntelliJ | **yes** |
+| `/show-diff` | any pair, another checkout, a colleague's branch | VS Code, one scroll | **yes** |
+| `/ask-diff` | a PR diff snapshot | IntelliJ, threaded | no — it answers questions |
+
+Your own in-progress branch belongs to the IntelliJ keys, because you are already in the
+file and the right-hand pane is the file itself. `/show-diff` is for what those keys
+cannot reach: another checkout, several at once, a stacked branch's parent, an
+`origin/<branch>` this clone has never fetched.
+
+`/ask-diff` was called `/interactive-review` until 2026-09-02, and `cr` fronted
+`@git review` until the same day. Neither of them judges a PR — one answers questions
+about a diff, the other reads one — so neither kept the word "review".
 
 ## Use
 
@@ -162,7 +192,7 @@ not over a LAN hostname.
 ## Related
 
 Five of the six skills (`annotate`, `deck`, `dataflow`, `walkthrough`,
-`interactive_review`) drive the same local server engine, which lives here in
+`ask_diff`) drive the same local server engine, which lives here in
 `skills/_shared/web_companion/` and is edited in place.
 
 `show_diff` is the exception: its per-line VS Code comments depend on

@@ -143,7 +143,7 @@ finds any live (non-`"done"`) row, don't create — offer the choice instead:
 ## Why not `GET /api/sessions?cwd=`
 
 `?cwd=<path>` is a **legacy, exact-path** query kept byte-for-byte compatible
-for `interactive_review`. It returns only `{"sid", "pr_ref", "title",
+for `ask_diff`. It returns only `{"sid", "pr_ref", "title",
 "state_dir"}` — no `slug`, no `project`, no `last_active` — and `title`/`pr_ref`
 come from a `state_dir/meta.json` file the annotate skill never writes (that's
 a different file from the `__doc__` item `references/pushing.md` writes on
