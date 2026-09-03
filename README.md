@@ -34,9 +34,9 @@ and install it via **Settings → Plugins → ⚙ → Install Plugin from Disk�
 
 `annotate`, `deck`, `dataflow`, `walkthrough` and `ask_diff` drive the same
 local server engine, which lives once in this repository at `skills/_shared/web_companion/`.
-`show_diff`'s per-line diff comments instead depend on
+`show-diff`'s per-line diff comments instead depend on
 [webcompanion](https://github.com/petmakris/webcompanion), a standalone daemon
-installed separately (see [Related](#related)) — `show_diff` still opens diffs without it,
+installed separately (see [Related](#related)) — `show-diff` still opens diffs without it,
 only the comment feature is unavailable.
 
 ## Which diff tool, when
@@ -195,7 +195,7 @@ Five of the six skills (`annotate`, `deck`, `dataflow`, `walkthrough`,
 `ask_diff`) drive the same local server engine, which lives here in
 `skills/_shared/web_companion/` and is edited in place.
 
-`show_diff` is the exception: its per-line VS Code comments depend on
+`show-diff` is the exception: its per-line VS Code comments depend on
 [webcompanion](https://github.com/petmakris/webcompanion), a standalone daemon
 published from its own repository and installed separately
 (`pipx install webcompanion`). Run `/annotate-doctor` to check whether it's installed

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for show-diff.sh, run by hand: ./skills/show_diff/test-show-diff.sh
+# Tests for show-diff.sh, run by hand: ./skills/show-diff/test-show-diff.sh
 #
 # The script's whole job is to reach VS Code and webcompanion, so every case here runs it
 # against stubs for `code`, `open`, `osascript` and `webcompanion` placed ahead of the real

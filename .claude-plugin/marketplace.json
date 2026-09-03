@@ -27,7 +27,7 @@
       "skills": [
         "./skills/ask_diff",
         "./skills/walkthrough",
-        "./skills/show_diff",
+        "./skills/show-diff",
         "./skills/annotate-doctor"
       ]
     }

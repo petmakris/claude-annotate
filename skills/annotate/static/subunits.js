@@ -817,6 +817,28 @@
     renderDock();
   }
 
+  // The daemon does not report consumed_events, so the branch above can never
+  // fire and `pendingRound` would stay set for the life of the page — the dock
+  // stuck on "Applying round…" while the blocks around it updated correctly.
+  // compat.js rebuilt the page lock client-side for exactly the same reason and
+  // announces it here; the dock rides that signal rather than inventing a
+  // second one. Busy going false means an item actually changed, which for
+  // annotate means the rewrite landed and the ack followed it.
+  //
+  // Guarded on `pendingRound` because clearRound() wipes `marks`: without it, a
+  // busy transition belonging to someone else's round would silently discard
+  // marks the user is still composing.
+  //
+  // Inherits compat.js's stated failure direction (see its note on
+  // setBusyLocal): an ack that rewrites nothing leaves the dock locked until
+  // the next change. Locked-too-long is visible and recoverable; unlocked-too-
+  // early lets the same round fire twice.
+  document.addEventListener("annotate:busy", (ev) => {
+    if (!pendingRound) return;
+    if (ev && ev.detail) return;
+    clearRound();
+  });
+
   window.AnnotateSubunits = {
     decorate, onPoll,
     // Block/step scope, driven by the card header strip in script.js.

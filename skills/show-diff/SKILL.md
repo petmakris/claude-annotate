@@ -46,7 +46,7 @@ The two tools this skill exists to drive:
   computes the merge base. It is the same left endpoint the IntelliJ keys use, which is
   the whole reason to prefer it: two tools opening the same branch must not disagree about
   where the branch started.
-- `skills/show_diff/show-diff.sh <checkout> <base-rev> <head-rev|--worktree> [title]` —
+- `skills/show-diff/show-diff.sh <checkout> <base-rev> <head-rev|--worktree> [title]` —
   resolves the revs, fetching an `origin/<branch>` this clone has never seen, which is
   what the base of a stacked branch usually is. Then it opens the project's window, waits
   until that window is in front, and fires a URI the `petros-makris.petros-makris-vscode`

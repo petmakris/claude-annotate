@@ -180,3 +180,41 @@ def test_block_controls_reveal_from_anywhere_in_the_header():
         "block controls no longer reveal from header hover"
     assert ".card-head .card-title:hover ~ .hover-actions" not in css, \
         "block controls are back to the title-only trigger that was rejected"
+
+
+def test_pending_round_has_a_reachable_clear_path():
+    """`clearRound()` must be reachable from something the daemon actually sends.
+
+    The dock's only clear path used to be `onPoll`'s `data.consumed_events`
+    branch. The daemon does not send that field — compat.js hands the poll
+    handler `consumed: []` — so the branch was dead and the Submit button sat
+    on "Applying round…" for the life of the page, cleared only by a reload.
+    Worse, `clearRound()` is also what wipes `marks` from localStorage, so a
+    reload re-armed Submit with marks Claude had already applied.
+
+    compat.js rebuilds the page lock client-side and announces it as
+    `annotate:busy`; the dock rides that same signal. This test fails if that
+    listener is removed, or if it stops guarding on `pendingRound` — without
+    the guard, an unrelated busy transition discards marks the user is still
+    composing.
+    """
+    src = SUBUNITS_JS.read_text()
+    listener = re.search(
+        r'document\.addEventListener\("annotate:busy",(.{0,400}?)\}\);',
+        src, re.S)
+    assert listener, "no annotate:busy listener — pendingRound has no reachable clear path"
+    body = listener.group(1)
+    assert "clearRound()" in body, "the annotate:busy listener must call clearRound()"
+    assert "pendingRound" in body, "the annotate:busy listener must guard on pendingRound"
+
+
+def test_compat_still_emits_the_signal_the_dock_rides():
+    """The dock's clear path depends on compat.js dispatching `annotate:busy`.
+
+    These two files are the only halves of one mechanism and neither imports
+    the other, so nothing but this test connects them.
+    """
+    compat = (STATIC / "compat.js").read_text()
+    assert 'CustomEvent("annotate:busy"' in compat, \
+        "compat.js stopped dispatching annotate:busy — the dock can no longer clear"
+

@@ -147,7 +147,7 @@ done
 # failure for the same reason: something the user set up is not working.
 #
 # WC_REQUIRED_CONTRACT mirrors vscode-plugin/src/webcompanionClient.js:9 and
-# skills/show_diff/show-diff.sh's own copy of the same constant. All three
+# skills/show-diff/show-diff.sh's own copy of the same constant. All three
 # must move together when the contract version changes.
 WC_REQUIRED_CONTRACT=1
 if command -v webcompanion >/dev/null 2>&1; then
