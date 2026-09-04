@@ -157,6 +157,13 @@ Apply the WHOLE round in one pass — this is the entire point of batching:
      dropped — answer a `comment` inside it first, and let the answer be what
      travels into the neighbour.
    - **`comment`** — the block-rewrite contract for the whole block.
+     **If the comment answers an open `choice` block anywhere on the page,
+     that choice is answered** — resolve it in this same pass, exactly as the
+     `type: "choice"` path would. A reader who types "let's do the second one"
+     into a comment box has decided; only the transport differs, and leaving
+     the card unresolved re-asks a question they consider closed. The reverse
+     also holds: acting on the decision without resolving the card is the
+     failure, not a missing extra step.
 3. For each remaining touched block, compose ONE new markdown that applies all
    of its unit reactions together:
    - **`delete`** — cut that sub-unit (the bullet / paragraph / row / fence
@@ -248,7 +255,7 @@ The block-rewrite contract's "touch only the blocks you actually need to
 change" is a rule about *gratuitous* rewrites; it was never a licence to leave
 a block saying something false.
 
-**Fix exactly two things:**
+**Fix exactly three things:**
 
 1. **References that no longer resolve** — a pointer to a removed block, a
    step number that shifted, a count or total that stopped adding up, a
@@ -256,6 +263,18 @@ a block saying something false.
 2. **Claims the change made false** — including claims that never name the
    block you changed. This is the case the smart-drop step cannot catch,
    because it looks for references rather than for meaning.
+3. **Spec blocks the change made false** — a `choice` still offering an option
+   you just carried out, a `flowchart` or `sequence` drawing a path the change
+   removed. Read every `spec` on the page, not just every `markdown`.
+
+Point 3 is the one that gets missed, and it fails loudly: a spec block's
+staleness lives in `spec`, not in prose, so a sweep that re-reads only markdown
+walks straight past it. A `choice` still offering finished work is the most
+visible staleness a page can carry — the reader is being asked to decide
+something you already did — and it is invisible to a grep for the block you
+changed, because nothing in it mentions that block. Resolve it with
+`blocks.convert_block_to_markdown` (state the decision and how it was reached),
+or re-pose it with `blocks.update_spec_block` when a real question remains.
 
 **Change nothing else.** Not wording, not tone, not ordering, not transitions,
 not anything that **still reads true**. "Wordy but accurate" is left alone. A

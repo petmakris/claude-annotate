@@ -179,3 +179,45 @@ def test_the_change_note_is_optional():
         "the change_note section does not say change_note itself is optional"
     assert "diff renders with or without it" in section, \
         "the change_note section does not say the diff renders without it"
+
+
+def test_the_sweep_covers_spec_blocks_not_just_prose():
+    """A stale `choice` is the most visible staleness a page can carry.
+
+    The sweep was written as "references that no longer resolve" plus "claims
+    the change made false", and both read as being about prose. A choice
+    block's staleness lives in `spec`, so a sweep that re-reads only markdown
+    walks straight past a card still offering work that is finished — and it
+    is invisible to a search for the block that changed, because nothing in it
+    mentions that block. Observed in the wild: a user answered a choice in a
+    comment, Claude did the work, and the card kept asking the question.
+    """
+    doc = CONTRACT.read_text(encoding="utf-8")
+    assert "Fix exactly three things" in doc, \
+        "the sweep no longer enumerates three things — did spec blocks get dropped?"
+    sweep = doc[doc.index("Fix exactly three things"):]
+    sweep = sweep[:sweep.index("Change nothing else")]
+    assert "spec" in sweep.lower(), \
+        "the sweep does not mention spec blocks"
+    assert "choice" in sweep.lower(), \
+        "the sweep does not name a stale choice as the case to catch"
+
+
+def test_a_comment_that_answers_a_choice_resolves_it():
+    """Deciding in prose is deciding.
+
+    A reader who types "let's do the second one" into a comment box has
+    answered the question; only the transport differs from clicking the card.
+    Without this rule the `comment` path folds the answer into prose, the work
+    gets done, and the choice block is left re-asking something the reader
+    considers closed.
+    """
+    doc = CONTRACT.read_text(encoding="utf-8")
+    marker = "If the comment answers an open `choice` block"
+    assert marker in doc, \
+        "the comment path does not say a prose answer resolves the choice"
+    section = doc[doc.index(marker):]
+    section = section[:section.index("\n3. For each remaining touched block")]
+    assert "resolve it in this same pass" in section, \
+        "the rule does not require resolving in the same pass"
+

@@ -218,3 +218,23 @@ def test_compat_still_emits_the_signal_the_dock_rides():
     assert 'CustomEvent("annotate:busy"' in compat, \
         "compat.js stopped dispatching annotate:busy — the dock can no longer clear"
 
+
+def test_the_page_unlocks_on_the_ack_not_only_on_a_content_change():
+    """Unlocking on an item change alone is not enough, and that was the bug.
+
+    A round of pure `keep` marks is answered without rewriting anything, so no
+    item version moves and no `item` delta arrives — the page sat on
+    "Applying round…" until the reader refreshed. The daemon now reports the
+    ack itself as an `event-acked` frame; compat must unlock on that. The item
+    branch stays as a fallback for a daemon too old to send it, which is why
+    this asserts the ack branch specifically rather than just "something
+    clears busy".
+    """
+    compat = (STATIC / "compat.js").read_text()
+    assert '"event-acked"' in compat, \
+        "compat.js does not handle the daemon's event-acked frame"
+    idx = compat.index('"event-acked"')
+    branch = compat[idx:idx + 200]
+    assert "setBusyLocal(false)" in branch, \
+        "the event-acked branch does not unlock the page"
+

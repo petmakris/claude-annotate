@@ -177,12 +177,17 @@
   //
   // The old server answered /poll with `busy: true` from the moment a
   // comment was queued until Claude wrote its ack, and the page rendered
-  // that as a banner and a lock. The daemon knows the same fact — the ack
-  // is a file in the session's own workspace — but does not report it, so
-  // there is nothing to read. Instead: lock on submit, and unlock when an
-  // item actually changes, because annotate rewrites a block and only then
-  // acks. The failure mode is an ack that rewrites nothing, which leaves
-  // the banner up until the next change; that is the direction to fail in.
+  // that as a banner and a lock. Lock on submit, and unlock on the daemon's
+  // `event-acked` frame — the ack itself, which is what the lock was always
+  // about.
+  //
+  // An item change unlocks too, as a belt-and-braces fallback for a daemon
+  // too old to send that frame. It is NOT sufficient on its own, which is the
+  // bug this replaced: a round of pure `keep` marks is answered without
+  // rewriting anything, so no version moves, and the page stayed locked on
+  // "Applying round…" until the reader hit refresh. "Answered, nothing needed
+  // changing" is a real outcome and has to look different from "still
+  // working".
   let busyLocal = false;
 
   function setBusyLocal(v) {
@@ -208,6 +213,7 @@
         if (k.startsWith("thread:")) threads[k.slice(7)] = v;
         else if (!k.startsWith("__")) blocks[k] = v;
       }
+      if (ev.kind === "event-acked") { if (busyLocal) setBusyLocal(false); return; }
       if (ev.kind === "item" && busyLocal) setBusyLocal(false);
       handler({ finished: false, busy: busyLocal, consumed: [], blocks, threads }, before);
     };
