@@ -1,7 +1,10 @@
 """Flowchart validator + renderer tests."""
 import pytest
 
-from skills.annotate.diagrams.flowchart import ValidationError, validate, render
+from skills.annotate.diagrams import flowchart as flowchart_module
+from skills.annotate.diagrams.flowchart import (
+    ValidationError, render, render_variants, validate,
+)
 
 
 def _spec():
@@ -170,3 +173,122 @@ def test_render_unknown_role_defaults_neutral():
     spec["nodes"][0]["role"] = "banana"
     svg = render(spec, block_id="s")
     assert "node-code" in svg  # neutral fallback class
+
+
+def test_render_accepts_a_variant_and_still_produces_svg():
+    svg = render(_spec(), "section-1", variant="wide")
+    assert svg.startswith("<svg")
+    assert 'class="annotate-flow"' in svg
+
+
+def test_render_variants_returns_layered_first():
+    svgs, names = render_variants(_spec(), "section-1")
+    assert names[0] == "layered"
+    assert set(names) <= {"layered", "compact", "wide", "tree"}
+    assert set(svgs) == set(names)
+    for svg in svgs.values():
+        assert svg.startswith("<svg")
+
+
+def test_render_variants_are_actually_different_pictures():
+    svgs, names = render_variants(_spec(), "section-1")
+    if len(names) > 1:
+        assert len(set(svgs.values())) == len(names)
+
+
+def test_edge_labels_survive_the_elk_path():
+    svg = render(_spec(), "section-1", variant="layered")
+    assert "OFF" in svg
+    assert "ON + doc missing" in svg
+    assert svg.count('class="edge-label"') == 2
+
+
+def test_render_variants_propagates_when_the_default_variant_fails(monkeypatch):
+    real_layout = flowchart_module.layout
+
+    def _boom(nodes, edges, variant):
+        if variant == "layered":
+            raise RuntimeError("elk exploded")
+        return real_layout(nodes, edges, variant)
+
+    monkeypatch.setattr(flowchart_module, "layout", _boom)
+    with pytest.raises(RuntimeError, match="elk exploded"):
+        render_variants(_spec(), "section-1")
+
+
+def test_render_variants_still_works_when_only_a_non_default_variant_fails(monkeypatch):
+    real_layout = flowchart_module.layout
+
+    def _boom(nodes, edges, variant):
+        if variant == "tree":
+            raise RuntimeError("tree exploded")
+        return real_layout(nodes, edges, variant)
+
+    monkeypatch.setattr(flowchart_module, "layout", _boom)
+    svgs, names = render_variants(_spec(), "section-1")
+    assert names[0] == "layered"
+    assert "tree" not in names
+    assert set(svgs) == set(names)
+
+
+# ---------------------------------------------------------------------------
+# A node's href reaches an <a> that script.js injects with the page's own
+# sanitizer deliberately bypassed — flowchart SVG is annotate's own drawing of
+# a validated spec, so it never goes through sanitizeFreeHtml. That made
+# `href: "javascript:alert(1)"` in a flowchart spec a one-click script in the
+# page, and it is checked in the renderer for that reason.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("href", [
+    "javascript:alert(1)",
+    "JaVaScRiPt:alert(1)",
+    # Chrome strips ASCII whitespace and control characters before it parses
+    # the scheme, so all three of these resolve to javascript: on click.
+    "java\tscript:alert(1)",
+    "java\nscript:alert(1)",
+    "  javascript:alert(1)",
+    "vbscript:msgbox(1)",
+    "data:text/html,<script>1</script>",
+    # A relative URL is not one of the four schemes the renderer emits and
+    # has no meaning in a flowchart, so it goes too.
+    "/x",
+    "nope.html",
+    "",
+    "   ",
+])
+def test_render_drops_a_node_href_with_a_disallowed_scheme(href):
+    spec = _spec()
+    spec["nodes"][1]["href"] = href
+    svg = render(spec, block_id="s")
+    assert "<a " not in svg, "a dropped href still produced an anchor"
+    assert "javascript" not in svg.lower()
+    assert "vbscript" not in svg.lower()
+    assert "data:text/html" not in svg
+    # The line falls back to plain text, exactly as it does for a `ref` that
+    # carried no href at all — never an underlined promise of a jump that
+    # goes nowhere.
+    assert '<text class="flow-ref flow-ref-plain"' in svg
+
+
+@pytest.mark.parametrize("href", [
+    "https://example.com/docs",
+    "http://example.com/docs",
+    "mailto:someone@example.com",
+    "#section-2",
+    "jetbrains://idea/navigate/reference?project=p&path=File.java:12",
+    # Case is not part of the scheme.
+    "HTTPS://EXAMPLE.COM/",
+])
+def test_render_keeps_a_node_href_with_an_allowed_scheme(href):
+    spec = _spec()
+    spec["nodes"][1]["href"] = href
+    svg = render(spec, block_id="s")
+    assert "<a " in svg
+    assert "flow-ref-plain" not in svg
+
+
+def test_render_drops_a_non_string_href():
+    spec = _spec()
+    spec["nodes"][1]["href"] = {"url": "https://example.com"}
+    svg = render(spec, block_id="s")
+    assert "<a " not in svg

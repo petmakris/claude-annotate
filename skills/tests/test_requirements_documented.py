@@ -18,7 +18,7 @@ def test_readme_states_requirements_before_install():
     assert body.index("## Requirements") < body.index("## Install"), \
         "requirements must appear before install instructions"
     section = body[body.index("## Requirements"):body.index("## Install")]
-    for token in ("python3", "3.9", "bash", "curl"):
+    for token in ("python3", "3.9", "bash", "curl", "node"):
         assert token in section, f"Requirements section must mention {token!r}"
     assert "pip install" in section, \
         "say there is nothing to pip install — it is the question everyone asks"

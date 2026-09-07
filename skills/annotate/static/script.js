@@ -1195,15 +1195,75 @@
     return wrap;
   }
 
+  // A block that laid out cleanly in more than one way ships every rendering
+  // and lets the reader pick. The choice is theirs alone: it lives in
+  // localStorage, is never sent to the daemon, and never reaches another
+  // viewer. Storage can throw outright in a private window or with site data
+  // blocked, so every access is guarded and an unreadable store simply means
+  // the block opens on its default.
+  const FLAVOUR_KEY = "annotate.flavour.";
+
+  function readFlavour(blockId) {
+    try {
+      return window.localStorage.getItem(FLAVOUR_KEY + blockId);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeFlavour(blockId, name) {
+    try {
+      window.localStorage.setItem(FLAVOUR_KEY + blockId, name);
+    } catch (e) {
+      /* per-viewer convenience only — losing it costs nothing */
+    }
+  }
+
+  function flavourLabel(name) {
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+
   // Paint a flowchart block: the server SVG, plus the source pane when the
-  // block was authored as pflow. Shared by create and update so an in-place
-  // refresh cannot leave one without the other.
+  // block was authored as pflow, plus the layout control when it shipped more
+  // than one rendering. Shared by create and update so an in-place refresh
+  // cannot leave one without the others.
   function paintFlowchart(content, blk) {
-    // Trusted server output — deliberately bypasses sanitizeFreeHtml so the
-    // class/data-* hit targets survive.
-    content.innerHTML = blk.svg || "";
-    const source = renderPflowSource(blk);
-    if (source) content.appendChild(source);
+    const names = blk.flavours || [];
+    const svgs = blk.svgs || {};
+
+    function buildFlavourControl(current) {
+      const wrap = document.createElement("div");
+      wrap.className = "flow-flavours";
+      wrap.setAttribute("role", "group");
+      wrap.setAttribute("aria-label", "Diagram layout");
+      names.forEach((name) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = flavourLabel(name);
+        b.dataset.flavour = name;
+        if (name === current) b.setAttribute("aria-pressed", "true");
+        else b.setAttribute("aria-pressed", "false");
+        b.addEventListener("click", () => {
+          writeFlavour(blk.id, name);
+          paint(name);
+        });
+        wrap.appendChild(b);
+      });
+      return wrap;
+    }
+
+    const paint = (name) => {
+      // Trusted server output — deliberately bypasses sanitizeFreeHtml so the
+      // class/data-* hit targets survive.
+      content.innerHTML = (name && svgs[name]) || blk.svg || "";
+      if (names.length > 1) content.prepend(buildFlavourControl(name));
+      const source = renderPflowSource(blk);
+      if (source) content.appendChild(source);
+    };
+
+    let chosen = names.length > 1 ? readFlavour(blk.id) : null;
+    if (names.indexOf(chosen) === -1) chosen = names[0] || null;
+    paint(chosen);
   }
 
   // Hovering either view lights the other: the id lives on the SVG node and on

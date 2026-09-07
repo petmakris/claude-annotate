@@ -92,6 +92,19 @@ for tool in bash curl; do
   fi
 done
 
+# --- flowchart layout --------------------------------------------------------
+# node runs the ELK layout engine behind the flowchart layout switcher
+# (elk_layout.py). Its absence degrades rather than fails: a flowchart block
+# still renders on the older grid layout, it just ships no layout control —
+# so this reports info, not FAIL.
+if command -v node >/dev/null 2>&1; then
+  ok "node — $(node --version 2>&1) ($(command -v node))"
+else
+  info "node — not found on PATH; kind: \"flowchart\" blocks fall back to the simpler grid layout and ship no layout control"
+  fix "macOS:  brew install node"
+  fix "Linux:  install node with your distribution's package manager"
+fi
+
 # --- state directories -----------------------------------------------------
 # annotate is deliberately absent: its sessions live under the daemon now
 # (~/.claude/webcompanion/workspaces/annotate/), so a missing or unwritable

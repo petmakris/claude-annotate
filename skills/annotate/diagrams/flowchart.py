@@ -1,22 +1,59 @@
 """Flowchart spec validator + server-side SVG renderer.
 
-Pure functions, no I/O. Called by server.py when rendering a block
-with kind == "flowchart". No Mermaid, no external process.
+Called by server.py when rendering a block with kind == "flowchart". No
+Mermaid.
 
-Geometry lives in ``flowchart_layout``; this module turns positions into SVG
-and routes the edges: adjacent layers get a vertical-tangent bezier that stays
-inside the row gap, layer-skipping edges get routed down a side gutter instead
-of cutting through whatever sits between them, and edge labels are nudged along
-their own path until they stop colliding with nodes and with each other.
+Geometry comes from ``elk_layout``, which shells out to a ``node`` subprocess
+and falls back to the pure-Python ``flowchart_layout`` when it cannot — so
+``render`` is not free of I/O or of an external process. This module's own
+drawing code is pure: it turns positions and routes into SVG. When ELK routed
+an edge, that route is drawn as-is; on the fallback path (or for any edge ELK
+didn't route), this module routes it itself — adjacent layers get a
+vertical-tangent bezier that stays inside the row gap, layer-skipping edges
+get routed down a side gutter instead of cutting through whatever sits
+between them — and edge labels are nudged along their own path until they
+stop colliding with nodes and with each other.
 """
 from __future__ import annotations
 
+import re
 from collections import deque
 from html import escape as _esc
 from typing import Any
 
-from .flowchart_layout import SIDE_GUTTER, layout
+from . import flavours
+from .elk_layout import layout
+from .flowchart_layout import SIDE_GUTTER
 from .text_metrics import line_h, text_px
+
+# A node's `href` is written straight into an <a> that script.js injects with
+# the page's own sanitizer deliberately bypassed — flowchart SVG is annotate's
+# own drawing of a validated spec, so it is not run through sanitizeFreeHtml —
+# which made `href="javascript:alert(1)"` in a flowchart spec a one-click
+# script in the page. Only these four schemes reach the anchor. `#fragment`
+# and `jetbrains:` are load-bearing: the first is the cross-block anchor
+# createBlockSection scrolls to, the second is the jump-to-source link.
+_ALLOWED_HREF_SCHEMES = ("http:", "https:", "mailto:", "jetbrains:")
+
+# Chrome strips ASCII whitespace and control characters out of a URL attribute
+# before it parses the scheme, so `java<TAB>script:` resolves to javascript:.
+# Reading the scheme the same way is what makes this a scheme check rather
+# than a spelling check.
+_STRIPPED_FROM_URL = re.compile(r"[\x00-\x20\x7f]")
+
+
+def _safe_href(href: Any) -> str | None:
+    """`href` if a browser would resolve it to an allowed scheme, else None."""
+    if not isinstance(href, str):
+        return None
+    collapsed = _STRIPPED_FROM_URL.sub("", href).lower()
+    if not collapsed:
+        return None
+    if collapsed.startswith("#"):
+        return href
+    if collapsed.startswith(_ALLOWED_HREF_SCHEMES):
+        return href
+    return None
 
 
 class ValidationError(ValueError):
@@ -93,8 +130,11 @@ def _text_lines(pos: dict[str, Any]) -> str:
     lines: list[tuple[str, str, str]] = pos["lines"]
 
     # Primary jump-to-source link line, in priority order ref > label > method
-    # (sub is never the link target).
-    href = node.get("href")
+    # (sub is never the link target). An href a browser would resolve to a
+    # scheme outside _ALLOWED_HREF_SCHEMES is dropped here rather than
+    # escaped, which leaves primary_kind None — so the line is drawn as plain
+    # text, exactly as it is for a `ref` that carried no href at all.
+    href = _safe_href(node.get("href"))
     primary_kind = None
     if href:
         kinds = {kind for _, _, kind in lines}
@@ -203,6 +243,25 @@ def _sample_polyline(points: list[tuple[float, float]], n: int = 24) -> list[tup
     return out
 
 
+def _trim_end(points: list[tuple[float, float]],
+              gap: float) -> list[tuple[float, float]]:
+    """Pull the last point back along its segment so the arrowhead sits clear.
+
+    ELK routes edge to node border; the marker is drawn at the path end, so
+    without this the head overlaps the box the same way an untrimmed bezier
+    would.
+    """
+    if len(points) < 2:
+        return points
+    (x0, y0), (x1, y1) = points[-2], points[-1]
+    dx, dy = x1 - x0, y1 - y0
+    dist = (dx * dx + dy * dy) ** 0.5
+    if dist <= gap:
+        return points
+    t = (dist - gap) / dist
+    return points[:-1] + [(x0 + dx * t, y0 + dy * t)]
+
+
 def _route(src: dict[str, Any], dst: dict[str, Any],
            canvas_w: float) -> tuple[str, list[tuple[float, float]]]:
     """Path data and sample points for one edge."""
@@ -275,13 +334,16 @@ def _label_svg(label: str, rect: tuple[float, float, float, float]) -> str:
             f'text-anchor="middle">{_esc(label)}</text></g>')
 
 
-def render(spec: dict[str, Any], block_id: str) -> str:
-    """Render a validated flowchart spec to an SVG string with hit-target IDs."""
-    validate(spec)
+def _draw(spec: dict[str, Any], block_id: str, positions: dict[str, Any],
+          canvas_w: float, canvas_h: float,
+          routes: dict[int, list[tuple[float, float]]]) -> str:
+    """Turn one laid-out graph into SVG.
+
+    Split out of `render` so `render_variants` can lay out each variant once
+    and draw from the result, instead of laying out twice per variant.
+    """
     nodes = spec["nodes"]
     edges = spec.get("edges") or []
-    positions, canvas_w, canvas_h = layout(nodes, edges)
-
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" '
         f'viewBox="0 0 {canvas_w:.0f} {canvas_h:.0f}" class="annotate-flow">',
@@ -290,9 +352,15 @@ def render(spec: dict[str, Any], block_id: str) -> str:
     # edges first (under nodes); labels last (over everything)
     obstacles = [_bbox(p) for p in positions.values()]
     labels: list[str] = []
-    for e in edges:
-        src, dst = positions[e["from"]], positions[e["to"]]
-        d, samples = _route(src, dst, canvas_w)
+    for i, e in enumerate(edges):
+        pts = routes.get(i)
+        if pts:
+            pts = _trim_end(pts, ARROW_GAP)
+            d = _rounded_polyline(pts, CORNER_R)
+            samples = _sample_polyline(pts)
+        else:
+            src, dst = positions[e["from"]], positions[e["to"]]
+            d, samples = _route(src, dst, canvas_w)
         parts.append(f'<path class="flow-edge" d="{d}" marker-end="url(#fc-arrow)"/>')
         label = e.get("label", "")
         if label:
@@ -304,3 +372,46 @@ def render(spec: dict[str, Any], block_id: str) -> str:
     parts.extend(labels)
     parts.append("</svg>")
     return "".join(parts)
+
+
+def render(spec: dict[str, Any], block_id: str,
+           variant: str = flavours.DEFAULT) -> str:
+    """Render a validated flowchart spec to an SVG string with hit-target IDs."""
+    validate(spec)
+    nodes = spec["nodes"]
+    edges = spec.get("edges") or []
+    positions, canvas_w, canvas_h, routes = layout(nodes, edges, variant)
+    return _draw(spec, block_id, positions, canvas_w, canvas_h, routes)
+
+
+def render_variants(spec: dict[str, Any],
+                    block_id: str) -> tuple[dict[str, str], list[str]]:
+    """Render every house-set variant that is fit to ship.
+
+    Returns ``(svgs, names)`` with names in house-set order; ``names[0]`` is
+    always the default, so the caller can use it for ``base["svg"]``.
+    """
+    validate(spec)
+    nodes = spec["nodes"]
+    edges = spec.get("edges") or []
+
+    laid: dict[str, tuple] = {}
+    results: list[tuple[str, dict, float, float, dict]] = []
+    for name, _ in flavours.HOUSE_SET:
+        try:
+            positions, w, h, routes = layout(nodes, edges, name)
+        except Exception:
+            # Swallow a variant that fails to lay out — that is what the
+            # viability gate below is for. The default is the one exception:
+            # flavours.select can only keep "layered" out of what it is
+            # given, so a failure there must propagate instead of silently
+            # letting a non-default variant become the block's default.
+            if name == flavours.DEFAULT:
+                raise
+            continue
+        laid[name] = (positions, w, h, routes)
+        results.append((name, positions, w, h, routes))
+
+    names = flavours.select(results, len(edges))
+    svgs = {name: _draw(spec, block_id, *laid[name]) for name in names}
+    return svgs, names

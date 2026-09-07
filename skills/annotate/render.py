@@ -15,7 +15,7 @@ from __future__ import annotations
 from skills._shared.web_companion.templates import html_escape
 from skills.annotate.diagrams.sequence import render
 from skills.annotate.diagrams.mermaid import render as render_mermaid
-from skills.annotate.diagrams.flowchart import render as render_flowchart
+from skills.annotate.diagrams.flowchart import render_variants as render_flowchart_variants
 from skills.annotate.pflow import PflowError, compile_source as compile_pflow
 
 
@@ -86,11 +86,15 @@ def render_block(blk: dict) -> dict:
                 source_error = None
         else:
             source_error = None
+        svgs: dict[str, str] = {}
+        names: list[str] = []
         try:
             if source_error:
                 raise ValueError(source_error)
-            svg = render_flowchart(spec, block_id=blk["id"])
+            svgs, names = render_flowchart_variants(spec, block_id=blk["id"])
+            svg = svgs[names[0]]
         except Exception as e:
+            svgs, names = {}, []
             # Compact inline error pill — one malformed block must never
             # crash /raw and blank the page (same pattern as sequence/diagram).
             svg = (
@@ -108,6 +112,11 @@ def render_block(blk: dict) -> dict:
             )
         base["spec"] = spec
         base["svg"] = svg
+        # Additive: an un-updated client reads `svg` and is none the wiser.
+        # A block whose variants all failed ships the error pill and no control.
+        if len(names) > 1:
+            base["svgs"] = svgs
+            base["flavours"] = names
         if warnings:
             base["warnings"] = warnings
     elif kind == "diagram":

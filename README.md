@@ -12,6 +12,9 @@ block* — not the whole answer, not a fresh reply appended below it.
   there is nothing to `pip install`.
 - **`bash` and `curl`** (both ship with macOS and every mainstream Linux).
 - **macOS or Linux.** Windows is not supported.
+- **`node`** — runs the ELK layout engine behind the flowchart layout
+  switcher. Without it, `kind: "flowchart"` blocks still render, but fall
+  back to the simpler grid layout and ship no layout control.
 - `claude-ide-review` additionally needs the IntelliJ plugin — see below.
 
 On a fresh Mac without the Xcode Command Line Tools there is no `python3` at

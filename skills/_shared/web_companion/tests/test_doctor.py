@@ -173,6 +173,21 @@ class DoctorTests(unittest.TestCase):
             f"python3 should pass on this host: {python_lines}",
         )
 
+    def test_missing_node_is_informational_not_a_failure(self):
+        # node only backs the ELK layout switcher for flowchart blocks, which
+        # still render — with the older grid layout and no layout control —
+        # without it, so this must not fail the doctor by itself.
+        bin_dir = sanitized_path_dir(self.tmp, with_python=True)
+        (bin_dir / "node").unlink()
+        self._webcompanion_stub(bin_dir, contract="1", status_ok=True)
+        result = self._run(bin_dir)
+        node_lines = [l for l in result.stdout.splitlines() if l.strip().startswith(("ok", "FAIL", "info")) and "node" in l.split()[1]]
+        self.assertTrue(node_lines, result.stdout)
+        self.assertTrue(node_lines[0].startswith("info"), node_lines)
+        self.assertIn("layout control", node_lines[0])
+        self.assertEqual(result.returncode, 0,
+                         "a missing SOFT dependency must not fail the doctor")
+
     def test_webcompanion_not_installed_is_a_failure(self):
         # This assertion was inverted when annotate moved onto the daemon. It
         # used to say "info, never a failure", because webcompanion was

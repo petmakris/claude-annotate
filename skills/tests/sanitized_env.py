@@ -30,6 +30,15 @@ _NEEDED = (
     "dirname", "basename", "head", "cut", "nohup",
 )
 
+# Tools the fixture STUBS rather than symlinks, so a "healthy machine"
+# doctor.sh fixture is healthy on every machine instead of inheriting whether
+# the host happens to have them. doctor.sh reports node as a soft requirement
+# and prints `node --version`, so the stub has to answer that; nothing else
+# about it is exercised. Symlinking the host's binary here made doctor tests
+# fail on a machine without it — including one that unlinks the entry to
+# simulate its absence, and one testing something else entirely.
+_STUBBED = {"node": "v20.0.0"}
+
 
 def sanitized_path_dir(tmp: Path, *, with_python: bool = False,
                        spy: bool = False) -> Path:
@@ -49,6 +58,11 @@ def sanitized_path_dir(tmp: Path, *, with_python: bool = False,
             link = bin_dir / name
             if not link.exists():
                 link.symlink_to(real)
+    for name, version in _STUBBED.items():
+        stub = bin_dir / name
+        if not stub.exists():
+            stub.write_text(f'#!/bin/sh\necho "{version}"\n')
+            stub.chmod(0o755)
     if with_python:
         target = bin_dir / "python3"
         if spy:

@@ -32,6 +32,7 @@
     ".cp-widen",            // code-pane promote/narrow toggle: no JS in the export to run it
     ".cp-jump",             // jetbrains:// IDE link: an absolute author path,
                              // and dead on anyone else's machine besides
+    ".flow-flavours",       // flowchart layout-flavour buttons: no JS in the export to run them
   ].join(", ");
 
   // Review state painted onto the document as attributes. Left in place, a
