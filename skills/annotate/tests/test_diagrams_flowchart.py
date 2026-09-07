@@ -175,7 +175,10 @@ def test_render_unknown_role_defaults_neutral():
     assert "node-code" in svg  # neutral fallback class
 
 
-def test_render_accepts_a_variant_and_still_produces_svg():
+def test_render_falls_back_to_python_layout_for_an_unregistered_variant():
+    # "wide" is no longer in HOUSE_SET, so flavours.options("wide") raises,
+    # which layout() catches and turns into the pure-Python fallback layout
+    # rather than propagating — render() must still produce a usable SVG.
     svg = render(_spec(), "section-1", variant="wide")
     assert svg.startswith("<svg")
     assert 'class="annotate-flow"' in svg
@@ -184,16 +187,19 @@ def test_render_accepts_a_variant_and_still_produces_svg():
 def test_render_variants_returns_layered_first():
     svgs, names = render_variants(_spec(), "section-1")
     assert names[0] == "layered"
-    assert set(names) <= {"layered", "compact", "wide", "tree"}
+    assert names == ["layered"]
     assert set(svgs) == set(names)
     for svg in svgs.values():
         assert svg.startswith("<svg")
 
 
-def test_render_variants_are_actually_different_pictures():
+def test_render_variants_ships_exactly_one_variant():
+    # HOUSE_SET holds one entry, so render_variants can never offer a reader
+    # a choice — this pins that down, in place of the old multi-variant
+    # "different pictures" check, which is moot with a single name.
     svgs, names = render_variants(_spec(), "section-1")
-    if len(names) > 1:
-        assert len(set(svgs.values())) == len(names)
+    assert names == ["layered"]
+    assert set(svgs) == {"layered"}
 
 
 def test_edge_labels_survive_the_elk_path():
@@ -216,19 +222,12 @@ def test_render_variants_propagates_when_the_default_variant_fails(monkeypatch):
         render_variants(_spec(), "section-1")
 
 
-def test_render_variants_still_works_when_only_a_non_default_variant_fails(monkeypatch):
-    real_layout = flowchart_module.layout
-
-    def _boom(nodes, edges, variant):
-        if variant == "tree":
-            raise RuntimeError("tree exploded")
-        return real_layout(nodes, edges, variant)
-
-    monkeypatch.setattr(flowchart_module, "layout", _boom)
-    svgs, names = render_variants(_spec(), "section-1")
-    assert names[0] == "layered"
-    assert "tree" not in names
-    assert set(svgs) == set(names)
+# The former "still works when only a non-default variant fails" test relied
+# on "tree" being a second HOUSE_SET entry that could fail independently of
+# "layered". With HOUSE_SET holding only "layered", every variant is the
+# default variant, so that scenario can no longer occur — the case is now
+# fully covered by test_render_variants_propagates_when_the_default_variant_fails
+# above.
 
 
 # ---------------------------------------------------------------------------

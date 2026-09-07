@@ -3,7 +3,7 @@ from unittest import mock
 
 import pytest
 
-from skills.annotate.diagrams import elk_layout
+from skills.annotate.diagrams import elk_layout, flavours
 
 
 def _graph():
@@ -51,7 +51,13 @@ def test_layout_puts_every_edge_route_point_inside_the_canvas():
             assert 0 <= y <= h
 
 
-def test_wide_variant_is_wider_than_it_is_tall_relative_to_layered():
+def test_a_registered_variant_can_still_change_direction(monkeypatch):
+    # HOUSE_SET now ships "layered" only, but elk_layout itself is agnostic
+    # to what the house set contains — it just asks flavours for whatever
+    # variant name it is given. This registers a throwaway "wide" entry to
+    # prove that plumbing still works, independent of the house set's
+    # current single flavour.
+    monkeypatch.setitem(flavours._BY_NAME, "wide", {"elk.direction": "RIGHT"})
     nodes, edges = _graph()
     _, dw, dh, _ = elk_layout.layout(nodes, edges, variant="layered")
     _, ww, wh, _ = elk_layout.layout(nodes, edges, variant="wide")

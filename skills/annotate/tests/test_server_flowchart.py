@@ -48,12 +48,15 @@ def _blk_multi():
     }}
 
 
-def test_flowchart_block_ships_variants_and_a_default():
+def test_flowchart_block_ships_one_rendering_and_no_variant_keys():
+    # HOUSE_SET holds one entry, so render_flowchart_variants can only ever
+    # return a single name — render.py's `len(names) > 1` guard means a block
+    # never carries `svgs`/`flavours` any more, only the plain `svg` every
+    # client already reads.
     out = render_block(_blk_multi())
-    assert out["flavours"][0] == "layered"
-    assert set(out["svgs"]) == set(out["flavours"])
-    # the default rendering is exactly what an un-updated client reads
-    assert out["svg"] == out["svgs"]["layered"]
+    assert out["svg"].startswith("<svg")
+    assert "svgs" not in out
+    assert "flavours" not in out
 
 
 def test_flowchart_error_pill_carries_no_variants():

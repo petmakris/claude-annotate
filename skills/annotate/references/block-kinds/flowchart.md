@@ -119,26 +119,24 @@ layer**, and keep a `decision` node's text short — a diamond needs roughly
 twice the width of the text it holds, so `{"role":"decision","label":"toggle
 ON?"}` reads far better than a decision node carrying a long `ref` line.
 
-### Layout flavours
+### Layout
 
-Every flowchart block is laid out four ways at push time and ships whichever
-came out fit to read. The reader gets a row of buttons above the diagram and
-picks; their choice is remembered in their own browser and reaches nobody else.
+Every flowchart block is laid out one way: `layered`, top-down with
+orthogonal edges and entry nodes pinned to the top rank. There is no
+reader-facing control to switch it — a real 13-node diagram was compared
+across four candidate layouts live, and `layered` was the only one kept.
+`compact` overlapped edges and labels; `wide` (left-to-right) and `tree`
+were not wanted either. `base.svg` always holds the `layered` rendering.
 
-| name | what it is | when a reader wants it |
-|---|---|---|
-| `layered` | top-down, orthogonal edges, entry nodes pinned to the top rank | the default, and the one `base.svg` holds |
-| `compact` | the same, tightened | a long diagram on a short screen |
-| `wide` | left-to-right | a strip that sits above prose |
-| `tree` | a tree layout | a graph that really is a tree |
+The machinery for several layouts is still in place underneath — the
+viability gate, `render_variants()`, the `svgs`/`flavours` keys a block can
+carry, and the control in `static/script.js` — so a future flavour is a
+one-line addition to `HOUSE_SET` in `flavours.py`, not a rebuild. With one
+entry in `HOUSE_SET`, the control simply has nothing to switch between and
+stays off the page.
 
-You author nothing for this — there is no `flavours` key in the spec. A variant
-is dropped automatically when it leaves an edge unrouted, overlaps two nodes,
-or lands within 5% of a variant already kept, so a simple graph may offer two
-buttons and a dense one four. `layered` is never dropped.
-
-**The one thing you do author** is `role: "entry"`. Beyond its colour, it now
-pins the node to the first layer, which is what stops several entry points
+**The one thing you author** is `role: "entry"`. Beyond its colour, it pins
+the node to the first layer, which is what stops several entry points
 scattering across three ranks and reading as noise. Give every genuine starting
 point that role.
 

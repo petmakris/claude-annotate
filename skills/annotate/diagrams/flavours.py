@@ -1,9 +1,15 @@
 """The house set of layout variants, and the gate that decides which ship.
 
-A reader learns one control, so every flowchart offers the same four names in
-the same order — minus any that comes out unusable for that particular graph.
-`layered` is never dropped: it is the default rendering and the thing
-`base["svg"]` holds.
+The house set holds a single entry, `layered`, tuned by eye against a real
+13-node diagram: `compact` was rejected for edge and label overlap, and
+`wide`/`tree` were not wanted either. `layered` is never dropped: it is the
+default rendering and the thing `base["svg"]` holds.
+
+The variant machinery — `select()`, `viable()`, `render_variants()`, the
+`svgs`/`flavours` keys in render.py, and the control in static/script.js —
+stays in place. With one surviving variant, render.py's `len(names) > 1`
+guard simply stops emitting the control, so adding a second flavour back is a
+one-line change to `HOUSE_SET`.
 
 This module is a leaf. It knows ELK option strings and geometry, and nothing
 about rendering, so `elk_layout` and `flowchart` can both import it.
@@ -13,25 +19,29 @@ from __future__ import annotations
 from typing import Any
 
 # Shared by every layered variant. Values are strings because that is what ELK
-# reads them as.
+# reads them as. The spacing entries below are the values the user tuned live
+# in the option explorer against a real 13-node graph: narrower and taller
+# than the previous defaults (1011 x 844 vs 1099 x 714) at the same 4 edge
+# crossings. elk.spacing.edgeNode (80, up from 22) — edge-to-node clearance —
+# does most of that work.
 BASE: dict[str, str] = {
     "elk.algorithm": "layered",
     "elk.direction": "DOWN",
     "elk.edgeRouting": "ORTHOGONAL",
-    "elk.layered.spacing.nodeNodeBetweenLayers": "62",
-    "elk.spacing.nodeNode": "34",
-    "elk.spacing.edgeNode": "22",
-    "elk.spacing.edgeEdge": "14",
+    "elk.spacing.edgeNode": "80",
+    "elk.spacing.nodeNode": "12",
+    "elk.spacing.edgeEdge": "11",
+    "elk.spacing.edgeLabel": "0",
+    "elk.layered.spacing.nodeNodeBetweenLayers": "65",
+    "elk.layered.spacing.edgeNodeBetweenLayers": "26",
+    "elk.layered.spacing.edgeEdgeBetweenLayers": "36",
+    "elk.layered.spacing.baseValue": "12",
     "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
     "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
 }
 
 HOUSE_SET: tuple[tuple[str, dict[str, str]], ...] = (
     ("layered", {}),
-    ("compact", {"elk.layered.spacing.nodeNodeBetweenLayers": "38",
-                 "elk.spacing.nodeNode": "22"}),
-    ("wide", {"elk.direction": "RIGHT"}),
-    ("tree", {"elk.algorithm": "mrtree"}),
 )
 
 _BY_NAME = dict(HOUSE_SET)
