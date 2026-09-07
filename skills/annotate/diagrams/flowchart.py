@@ -406,6 +406,13 @@ def render_variants(spec: dict[str, Any],
             # flavours.select can only keep "layered" out of what it is
             # given, so a failure there must propagate instead of silently
             # letting a non-default variant become the block's default.
+            #
+            # This stays `except Exception`, not `except ElkUnavailable`:
+            # layout() already catches ElkUnavailable itself and never
+            # re-raises it, so the only thing that reaches here is something
+            # layout() didn't expect — e.g. an AttributeError thrown out of
+            # _build_graph by node_size. Narrowing this clause would let that
+            # escape instead of being treated as one failed variant.
             if name == flavours.DEFAULT:
                 raise
             continue

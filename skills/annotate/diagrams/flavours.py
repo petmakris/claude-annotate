@@ -44,7 +44,10 @@ DEFAULT = "layered"
 
 def options(variant: str) -> dict[str, str]:
     """Full ELK option map for one house-set variant."""
-    return {**BASE, **_BY_NAME.get(variant, {})}
+    if variant not in _BY_NAME:
+        valid = ", ".join(name for name, _ in HOUSE_SET)
+        raise ValueError(f"unknown flavour variant {variant!r}; valid: {valid}")
+    return {**BASE, **_BY_NAME[variant]}
 
 
 def pins_entries(variant: str) -> bool:

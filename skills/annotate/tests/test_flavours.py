@@ -1,4 +1,6 @@
 """House-set presets and the viability gate."""
+import pytest
+
 from skills.annotate.diagrams import flavours
 
 
@@ -18,6 +20,16 @@ def test_options_merge_base_with_the_variant():
     assert flavours.options("compact")["elk.spacing.nodeNode"] == "22"
     assert flavours.options("wide")["elk.direction"] == "RIGHT"
     assert flavours.options("tree")["elk.algorithm"] == "mrtree"
+
+
+def test_options_raises_for_an_unknown_variant():
+    with pytest.raises(ValueError, match="nonsense"):
+        flavours.options("nonsense")
+
+
+def test_options_resolves_every_house_set_name():
+    for name, _ in flavours.HOUSE_SET:
+        assert flavours.options(name)["elk.algorithm"] in ("layered", "mrtree")
 
 
 def test_pins_entries_only_for_the_layered_algorithm():

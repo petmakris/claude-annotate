@@ -1,6 +1,8 @@
 """ELK geometry, and the fallback that makes it optional."""
 from unittest import mock
 
+import pytest
+
 from skills.annotate.diagrams import elk_layout
 
 
@@ -39,6 +41,16 @@ def test_layout_puts_every_node_inside_the_canvas():
         assert p["cy"] + p["h"] / 2 <= h
 
 
+def test_layout_puts_every_edge_route_point_inside_the_canvas():
+    nodes, edges = _graph()
+    _, w, h, routes = elk_layout.layout(nodes, edges)
+    assert routes  # otherwise this test asserts nothing
+    for pts in routes.values():
+        for x, y in pts:
+            assert 0 <= x <= w
+            assert 0 <= y <= h
+
+
 def test_wide_variant_is_wider_than_it_is_tall_relative_to_layered():
     nodes, edges = _graph()
     _, dw, dh, _ = elk_layout.layout(nodes, edges, variant="layered")
@@ -62,6 +74,46 @@ def test_layout_falls_back_when_elk_returns_nonsense():
         positions, w, h, routes = elk_layout.layout(nodes, edges)
     assert set(positions) == {"a", "b", "c"}
     assert routes == {}
+
+
+def test_run_elk_raises_elk_unavailable_for_non_serializable_graph():
+    graph = {"id": "root", "children": [{"id": "a", "bad": object()}]}
+    with pytest.raises(elk_layout.ElkUnavailable):
+        elk_layout.run_elk(graph)
+
+
+def test_a_malformed_edge_is_skipped_without_discarding_elk_positions():
+    nodes, edges = _graph()
+    out = {
+        "width": 200.0,
+        "height": 200.0,
+        "children": [
+            {"id": "a", "x": 0.0, "y": 0.0, "width": 40.0, "height": 20.0},
+            {"id": "b", "x": 0.0, "y": 80.0, "width": 40.0, "height": 20.0},
+            {"id": "c", "x": 0.0, "y": 160.0, "width": 40.0, "height": 20.0},
+        ],
+        "edges": [
+            {
+                "id": "e0",
+                "sections": [{
+                    "startPoint": {"x": 20.0, "y": 20.0},
+                    "endPoint": {"x": 20.0, "y": 80.0},
+                }],
+            },
+            # Malformed: a section that is not a dict at all. This must be
+            # skipped on its own, not discard the ELK positions above.
+            {"id": "e1", "sections": ["not-a-section"]},
+        ],
+    }
+    with mock.patch.object(elk_layout, "run_elk", return_value=out):
+        positions, w, h, routes = elk_layout.layout(nodes, edges)
+
+    # Positions came from ELK's reply (out["children"]), not the Python
+    # fallback: the fallback would not reproduce these exact coordinates.
+    assert positions["a"]["cx"] == 20.0 + elk_layout.MARGIN
+    assert positions["b"]["cy"] == 90.0 + elk_layout.MARGIN
+    assert set(routes) == {0}
+    assert routes[0][0] == (20.0 + elk_layout.MARGIN, 20.0 + elk_layout.MARGIN)
 
 
 def test_layout_falls_back_when_elk_returns_a_non_dict():

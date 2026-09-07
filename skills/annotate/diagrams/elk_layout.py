@@ -37,9 +37,13 @@ def run_elk(graph: dict[str, Any]) -> dict[str, Any]:
     if not node:
         raise ElkUnavailable("node not found on PATH")
     try:
+        payload = json.dumps(graph).encode("utf-8")
+    except TypeError as e:
+        raise ElkUnavailable(f"elk graph is not JSON-serializable: {e}") from e
+    try:
         proc = subprocess.run(
             [node, str(DRIVER)],
-            input=json.dumps(graph).encode("utf-8"),
+            input=payload,
             capture_output=True,
             timeout=LAYOUT_TIMEOUT_S,
         )
@@ -111,18 +115,22 @@ def _positions_from(out: dict[str, Any],
 def _routes_from(out: dict[str, Any]) -> dict[int, list[tuple[float, float]]]:
     routes: dict[int, list[tuple[float, float]]] = {}
     for e in out.get("edges") or []:
+        # Each edge is handled independently: a malformed section or point in
+        # one edge's reply must not discard the node positions ELK already
+        # computed for the whole graph, so the error is caught per-edge here
+        # rather than bubbling up to layout()'s outer handler.
         try:
             idx = int(str(e["id"])[1:])
-        except (KeyError, ValueError):
+            pts: list[tuple[float, float]] = []
+            for sec in e.get("sections") or []:
+                pts.append((float(sec["startPoint"]["x"]) + MARGIN,
+                            float(sec["startPoint"]["y"]) + MARGIN))
+                for b in sec.get("bendPoints") or []:
+                    pts.append((float(b["x"]) + MARGIN, float(b["y"]) + MARGIN))
+                pts.append((float(sec["endPoint"]["x"]) + MARGIN,
+                            float(sec["endPoint"]["y"]) + MARGIN))
+        except (KeyError, ValueError, TypeError):
             continue
-        pts: list[tuple[float, float]] = []
-        for sec in e.get("sections") or []:
-            pts.append((float(sec["startPoint"]["x"]) + MARGIN,
-                        float(sec["startPoint"]["y"]) + MARGIN))
-            for b in sec.get("bendPoints") or []:
-                pts.append((float(b["x"]) + MARGIN, float(b["y"]) + MARGIN))
-            pts.append((float(sec["endPoint"]["x"]) + MARGIN,
-                        float(sec["endPoint"]["y"]) + MARGIN))
         if len(pts) >= 2:
             routes[idx] = pts
     return routes
