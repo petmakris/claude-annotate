@@ -238,3 +238,11 @@ section.block[data-kind="sequence"] .block-content {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
+
+/* View control — same mechanism as the layout flavours, different axis: a view
+   changes which edges are drawn, so it is a question the reader picked, not a
+   rendering preference. Marked with the accent to say so. */
+.flow-views button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}

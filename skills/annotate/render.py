@@ -15,7 +15,9 @@ from __future__ import annotations
 from skills._shared.web_companion.templates import html_escape
 from skills.annotate.diagrams.sequence import render
 from skills.annotate.diagrams.mermaid import render as render_mermaid
+from skills.annotate.diagrams.flowchart import render as render_flowchart
 from skills.annotate.diagrams.flowchart import render_variants as render_flowchart_variants
+from skills.annotate.diagrams import views as views_mod
 from skills.annotate.pflow import PflowError, compile_source as compile_pflow
 
 
@@ -117,6 +119,30 @@ def render_block(blk: dict) -> dict:
         if len(names) > 1:
             base["svgs"] = svgs
             base["flavours"] = names
+        # Views are a different axis from layout flavours: same renderer, a
+        # different edge set per drawing. They ride the same `svgs` map so the
+        # client needs one swap mechanism, keyed by name.
+        try:
+            vnames = views_mod.declared(spec)
+        except Exception:
+            vnames = []
+        if vnames:
+            per_view = dict(svgs)
+            per_view[views_mod.ALL_VIEW] = svg
+            emitted = []
+            for v in vnames:
+                try:
+                    sub = views_mod.subspec(spec, v)
+                    if not sub.get("edges"):
+                        continue
+                    per_view[v] = render_flowchart(sub, f'{blk["id"]}-{v}')
+                    emitted.append(v)
+                except Exception:
+                    # One unrenderable view must not cost the block its others.
+                    continue
+            if emitted:
+                base["svgs"] = per_view
+                base["views"] = [views_mod.ALL_VIEW] + emitted
         if warnings:
             base["warnings"] = warnings
     elif kind == "diagram":

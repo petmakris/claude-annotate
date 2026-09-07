@@ -61,8 +61,13 @@ print(report.summary())
    the grouping, not the layout.
 6. **Read the per-view measurements.** A view that still has crossings is
    answering more than one question — split it again.
-7. **Render** with `flowchart.render_views(spec, block_id)`, which returns the
-   union under `views.ALL_VIEW` plus one SVG per view.
+7. **Push the block.** A flowchart whose spec declares views ships one SVG per
+   view plus the union, and the page paints a control above the diagram —
+   **All**, then one button per view, in declared order. The reader picks the
+   question; the choice is remembered per block in their own browser. Nothing
+   else in the block changes, and a spec with no views shows no control.
+   (`flowchart.render_views(spec, block_id)` returns the same map directly, for
+   a caller that wants the SVGs outside a block.)
 
 ## Naming a view
 
@@ -80,7 +85,12 @@ The bad column names parts of the system; the good column names things someone
 wants to know. Category names look tidier and are the reason multi-view models
 go stale — nobody opens "persistence layer", so nobody notices when it is wrong.
 
-Two to four views. More than four means the diagram is really several diagrams.
+Two to four views. More than four means the diagram is really several diagrams,
+and it also makes the control a row of buttons nobody reads.
+
+Put the views in one block with the switcher rather than one block per view.
+Three sections of prose separated by three drawings reads as three topics; one
+drawing the reader re-asks reads as one.
 
 ## `views` is a set
 

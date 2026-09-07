@@ -1202,24 +1202,26 @@
   // blocked, so every access is guarded and an unreadable store simply means
   // the block opens on its default.
   const FLAVOUR_KEY = "annotate.flavour.";
+  const VIEW_KEY = "annotate.view.";
 
-  function readFlavour(blockId) {
+  function readChoice(prefix, blockId) {
     try {
-      return window.localStorage.getItem(FLAVOUR_KEY + blockId);
+      return window.localStorage.getItem(prefix + blockId);
     } catch (e) {
       return null;
     }
   }
 
-  function writeFlavour(blockId, name) {
+  function writeChoice(prefix, blockId, name) {
     try {
-      window.localStorage.setItem(FLAVOUR_KEY + blockId, name);
+      window.localStorage.setItem(prefix + blockId, name);
     } catch (e) {
       /* per-viewer convenience only — losing it costs nothing */
     }
   }
 
   function flavourLabel(name) {
+    if (name === "all") return "All";
     return name.charAt(0).toUpperCase() + name.slice(1);
   }
 
@@ -1228,23 +1230,31 @@
   // than one rendering. Shared by create and update so an in-place refresh
   // cannot leave one without the others.
   function paintFlowchart(content, blk) {
-    const names = blk.flavours || [];
     const svgs = blk.svgs || {};
+    // Views win over layout flavours when a block ships both: a view changes
+    // which edges are drawn, which is a question the reader asked, while a
+    // flavour only changes how the same edges are arranged.
+    const viewNames = blk.views || [];
+    const isViews = viewNames.length > 1;
+    const names = isViews ? viewNames : blk.flavours || [];
+    const key = isViews ? VIEW_KEY : FLAVOUR_KEY;
+    const label = isViews ? "Diagram view" : "Diagram layout";
 
-    function buildFlavourControl(current) {
+    function buildControl(current) {
       const wrap = document.createElement("div");
-      wrap.className = "flow-flavours";
+      wrap.className = isViews ? "flow-flavours flow-views" : "flow-flavours";
       wrap.setAttribute("role", "group");
-      wrap.setAttribute("aria-label", "Diagram layout");
+      wrap.setAttribute("aria-label", label);
       names.forEach((name) => {
         const b = document.createElement("button");
         b.type = "button";
         b.textContent = flavourLabel(name);
-        b.dataset.flavour = name;
+        if (isViews) b.dataset.view = name;
+        else b.dataset.flavour = name;
         if (name === current) b.setAttribute("aria-pressed", "true");
         else b.setAttribute("aria-pressed", "false");
         b.addEventListener("click", () => {
-          writeFlavour(blk.id, name);
+          writeChoice(key, blk.id, name);
           paint(name);
         });
         wrap.appendChild(b);
@@ -1256,12 +1266,12 @@
       // Trusted server output — deliberately bypasses sanitizeFreeHtml so the
       // class/data-* hit targets survive.
       content.innerHTML = (name && svgs[name]) || blk.svg || "";
-      if (names.length > 1) content.prepend(buildFlavourControl(name));
+      if (names.length > 1) content.prepend(buildControl(name));
       const source = renderPflowSource(blk);
       if (source) content.appendChild(source);
     };
 
-    let chosen = names.length > 1 ? readFlavour(blk.id) : null;
+    let chosen = names.length > 1 ? readChoice(key, blk.id) : null;
     if (names.indexOf(chosen) === -1) chosen = names[0] || null;
     paint(chosen);
   }

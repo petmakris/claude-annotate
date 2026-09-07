@@ -107,6 +107,12 @@ def validate(spec: dict[str, Any]) -> None:
             if views.ALL_VIEW in vs:
                 raise ValidationError(
                     f"{views.ALL_VIEW!r} is reserved for the union view")
+            # Views and layout flavours share one map on the wire, so a name
+            # used by both would make the control swap the wrong drawing.
+            clash = set(vs) & {n for n, _ in flavours.HOUSE_SET}
+            if clash:
+                raise ValidationError(
+                    f"view name {sorted(clash)[0]!r} collides with a layout flavour")
         # An untagged edge would vanish from every view while still shaping the
         # union — the drift that makes multi-view models go quietly stale.
         if len(tagged) != len(edges):
