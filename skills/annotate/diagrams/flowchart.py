@@ -21,7 +21,7 @@ from collections import deque
 from html import escape as _esc
 from typing import Any
 
-from . import flavours
+from . import flavours, views
 from .elk_layout import layout
 from .flowchart_layout import SIDE_GUTTER
 from .text_metrics import line_h, text_px
@@ -56,6 +56,10 @@ def _safe_href(href: Any) -> str | None:
     return None
 
 
+def e_name(e: dict[str, Any]) -> str:
+    return f'{e.get("from")}->{e.get("to")}'
+
+
 class ValidationError(ValueError):
     """Raised when a flowchart spec violates a structural rule."""
 
@@ -87,6 +91,29 @@ def validate(spec: dict[str, Any]) -> None:
             raise ValidationError(f"edge to unknown node {dst!r}")
         children[src].append(dst)
         indeg[dst] += 1
+
+    banded = [n for n in nodes if n.get("band") is not None]
+    if banded and not all(isinstance(n["band"], str) and n["band"] for n in banded):
+        raise ValidationError("node band must be a non-empty string")
+
+    tagged = [e for e in edges if e.get("views") is not None]
+    if tagged:
+        for e in tagged:
+            vs = e["views"]
+            if not isinstance(vs, list) or not vs:
+                raise ValidationError("edge views must be a non-empty list")
+            if not all(isinstance(v, str) and v for v in vs):
+                raise ValidationError("edge view names must be non-empty strings")
+            if views.ALL_VIEW in vs:
+                raise ValidationError(
+                    f"{views.ALL_VIEW!r} is reserved for the union view")
+        # An untagged edge would vanish from every view while still shaping the
+        # union — the drift that makes multi-view models go quietly stale.
+        if len(tagged) != len(edges):
+            missing = next(e for e in edges if e.get("views") is None)
+            raise ValidationError(
+                f'edge {e_name(missing)} has no views; every edge needs at '
+                f'least one once any edge declares them')
 
     # cycle check via Kahn's algorithm
     q = deque([nid for nid in ids if indeg[nid] == 0])
@@ -517,3 +544,20 @@ def render_variants(spec: dict[str, Any],
     names = flavours.select(results, len(edges))
     svgs = {name: _draw(spec, block_id, *laid[name]) for name in names}
     return svgs, names
+
+
+def render_views(spec: dict[str, Any], block_id: str,
+                 variant: str = flavours.DEFAULT) -> dict[str, str]:
+    """Render the union plus one SVG per declared view.
+
+    The union is always present under ``views.ALL_VIEW`` so the whole graph
+    stays reachable; a spec that declares no views renders only that, which is
+    the correct outcome for a diagram that has nothing to separate.
+    """
+    validate(spec)
+    out = {views.ALL_VIEW: render(spec, f"{block_id}-all", variant)}
+    for name in views.declared(spec):
+        sub = views.subspec(spec, name)
+        if sub["edges"]:
+            out[name] = render(sub, f"{block_id}-{name}", variant)
+    return out

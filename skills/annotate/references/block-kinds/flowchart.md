@@ -285,3 +285,13 @@ the compiled nodes:
 
 This is the whole reason `source` exists: a comment on a box becomes an edit to
 a line.
+
+
+## More than one question in one diagram
+
+If the flowchart answers several questions at once, its crossings are usually
+collisions between them rather than a layout problem, and tuning will not fix
+it. Run `views.check(spec)` and read
+[`flowchart-views.md`](flowchart-views.md) — it carries the measure-propose-verify
+loop and the `views` / `band` fields. A diagram the checker reports as clean
+needs none of it.

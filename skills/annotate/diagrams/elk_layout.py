@@ -16,7 +16,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from . import flavours
+from . import flavours, views
 from .flowchart_layout import layout as _python_layout
 from .flowchart_layout import node_lines, node_size
 
@@ -67,20 +67,30 @@ MARGIN = 24.0
 def _build_graph(nodes: list[dict[str, Any]], edges: list[dict[str, Any]],
                  variant: str) -> dict[str, Any]:
     pin = flavours.pins_entries(variant)
+    # Bands are the authored role axis. ELK's own layering is derived from the
+    # edges, so it carries whatever distortion the edge set has; a band does
+    # not, which is what lets two views of one graph be compared side by side.
+    band = views.bands({"nodes": nodes})
     children = []
     for n in nodes:
         w, h = node_size(n)
         child: dict[str, Any] = {"id": n["id"], "width": w, "height": h}
-        if pin and n.get("role") == "entry":
+        if n["id"] in band:
+            child["layoutOptions"] = {
+                "elk.partitioning.partition": str(band[n["id"]])}
+        elif pin and n.get("role") == "entry":
             # The single most valuable option in the set: without it a layered
             # algorithm puts each entry point wherever crossings are cheapest,
             # and five starts read as noise.
             child["layoutOptions"] = {
                 "elk.layered.layering.layerConstraint": "FIRST"}
         children.append(child)
+    root = dict(flavours.options(variant))
+    if band:
+        root["elk.partitioning.activate"] = "true"
     return {
         "id": "root",
-        "layoutOptions": flavours.options(variant),
+        "layoutOptions": root,
         "children": children,
         # Labels are NOT sent. flowchart.py places them itself, better than ELK
         # would, and only the layered algorithm places them at all.
