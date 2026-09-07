@@ -109,6 +109,7 @@ CORNER_R = 14         # rounded corner on gutter routes
 LABEL_H = 20
 LABEL_PAD_X = 9
 LABEL_CLEAR = 4       # min gap between a label chip and any node or other chip
+LABEL_OFFSET_GAP = 4  # extra clearance between a label chip and the line beside it
 
 
 def _role_class(node: dict[str, Any]) -> str:
@@ -292,37 +293,114 @@ def _label_rect(label: str, at: tuple[float, float]) -> tuple[float, float, floa
 
 
 def _clamp(rect: tuple[float, float, float, float],
-           canvas_w: float) -> tuple[float, float, float, float]:
+           canvas_w: float, canvas_h: float) -> tuple[float, float, float, float]:
     x0, y0, x1, y1 = rect
     dx = 0.0
     if x0 < LABEL_CLEAR:
         dx = LABEL_CLEAR - x0
     elif x1 > canvas_w - LABEL_CLEAR:
         dx = canvas_w - LABEL_CLEAR - x1
-    return (x0 + dx, y0, x1 + dx, y1)
+    dy = 0.0
+    if y0 < LABEL_CLEAR:
+        dy = LABEL_CLEAR - y0
+    elif y1 > canvas_h - LABEL_CLEAR:
+        dy = canvas_h - LABEL_CLEAR - y1
+    return (x0 + dx, y0 + dy, x1 + dx, y1 + dy)
+
+
+def _segments_intersect(p1: tuple[float, float], p2: tuple[float, float],
+                        p3: tuple[float, float], p4: tuple[float, float]) -> bool:
+    def ccw(a, b, c):
+        return (c[1] - a[1]) * (b[0] - a[0]) - (b[1] - a[1]) * (c[0] - a[0])
+    d1, d2 = ccw(p3, p4, p1), ccw(p3, p4, p2)
+    d3, d4 = ccw(p1, p2, p3), ccw(p1, p2, p4)
+    return (((d1 > 0 and d2 < 0) or (d1 < 0 and d2 > 0)) and
+            ((d3 > 0 and d4 < 0) or (d3 < 0 and d4 > 0)))
+
+
+def _segment_hits_rect(p0: tuple[float, float], p1: tuple[float, float],
+                       rect: tuple[float, float, float, float]) -> bool:
+    x0, y0, x1, y1 = rect
+    if (x0 <= p0[0] <= x1 and y0 <= p0[1] <= y1) or (x0 <= p1[0] <= x1 and y0 <= p1[1] <= y1):
+        return True
+    corners = ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
+    return any(_segments_intersect(p0, p1, corners[i], corners[(i + 1) % 4])
+               for i in range(4))
+
+
+def _rect_hits_segments(rect: tuple[float, float, float, float],
+                        segments: list[tuple[tuple[float, float], tuple[float, float]]]) -> int:
+    return sum(1 for p0, p1 in segments if _segment_hits_rect(p0, p1, rect))
 
 
 def _place_label(label: str, samples: list[tuple[float, float]],
                  obstacles: list[tuple[float, float, float, float]],
-                 canvas_w: float) -> tuple[float, float, float, float]:
+                 canvas_w: float, canvas_h: float,
+                 other_segments: list[tuple[tuple[float, float], tuple[float, float]]]
+                 ) -> tuple[float, float, float, float]:
     """Pick the point along the edge whose label chip collides least.
 
     Candidates walk outwards from the middle of the edge, so an uncrowded edge
     keeps the natural mid-edge placement and only a contested one drifts. Chips
     are kept inside the canvas — a gutter route runs close enough to the edge
     that an unclamped chip would hang off the side of the diagram.
+
+    ``other_segments`` is every other edge's routed path, sampled once up
+    front by the caller and reused across every label — a candidate whose
+    rectangle crosses one of them is penalised exactly like a candidate that
+    overlaps a node or an already-placed label, though never as heavily: the
+    score is the pair (obstacle clashes, segment clashes), compared
+    lexicographically, so a candidate is never chosen over one with fewer
+    node/label overlaps just because it happens to cross fewer edges — a
+    node overlap is a hard geometry bug, a crossed edge is the defect this
+    function exists to reduce. The edge this label belongs to is deliberately
+    excluded from the segment check: a label is meant to sit near its own
+    line, not avoid it.
+
+    Once the least-contested sample point is chosen, the chip is shifted
+    perpendicular to the local direction of the line by half its height plus
+    a small gap, so it sits beside its own edge instead of on top of it. Both
+    sides are tried and the less-contested one wins; if neither improves on
+    sitting on the line, the on-the-line placement is kept.
     """
     n = len(samples) - 1
     order = sorted(range(len(samples)), key=lambda i: abs(i - n / 2))
+
+    def score(rect: tuple[float, float, float, float]) -> tuple[int, int]:
+        obstacle_clashes = sum(1 for o in obstacles if _overlaps(rect, o, LABEL_CLEAR))
+        return (obstacle_clashes, _rect_hits_segments(rect, other_segments))
+
     best = None
+    best_i = order[0]
     for i in order:
-        rect = _clamp(_label_rect(label, samples[i]), canvas_w)
-        clashes = sum(1 for o in obstacles if _overlaps(rect, o, LABEL_CLEAR))
-        if clashes == 0:
-            return rect
+        rect = _clamp(_label_rect(label, samples[i]), canvas_w, canvas_h)
+        clashes = score(rect)
         if best is None or clashes < best[0]:
-            best = (clashes, rect)
-    return best[1]
+            best_i, best = i, (clashes, rect)
+        if clashes == (0, 0):
+            break
+    base_clashes, base_rect = best
+
+    p_prev = samples[max(best_i - 1, 0)]
+    p_next = samples[min(best_i + 1, len(samples) - 1)]
+    dx, dy = p_next[0] - p_prev[0], p_next[1] - p_prev[1]
+    dist = (dx * dx + dy * dy) ** 0.5
+    if dist < 1e-6:
+        return base_rect
+
+    ux, uy = dx / dist, dy / dist
+    perp = (-uy, ux)
+    offset = LABEL_H / 2 + LABEL_OFFSET_GAP
+    center = samples[best_i]
+    sides = []
+    for sign in (1, -1):
+        at = (center[0] + perp[0] * offset * sign, center[1] + perp[1] * offset * sign)
+        rect = _clamp(_label_rect(label, at), canvas_w, canvas_h)
+        sides.append((score(rect), rect))
+    sides.sort(key=lambda s: s[0])
+    if sides[0][0] <= base_clashes:
+        return sides[0][1]
+    return base_rect
 
 
 def _label_svg(label: str, rect: tuple[float, float, float, float]) -> str:
@@ -352,6 +430,12 @@ def _draw(spec: dict[str, Any], block_id: str, positions: dict[str, Any],
     # edges first (under nodes); labels last (over everything)
     obstacles = [_bbox(p) for p in positions.values()]
     labels: list[str] = []
+
+    # Route every edge up front, drawing its path immediately, but hold onto
+    # its sample points — the label pass below needs every edge's route
+    # before it can place the first label, since a label must avoid *any*
+    # edge, not just the ones drawn so far.
+    edge_samples: list[list[tuple[float, float]]] = []
     for i, e in enumerate(edges):
         pts = routes.get(i)
         if pts:
@@ -362,11 +446,22 @@ def _draw(spec: dict[str, Any], block_id: str, positions: dict[str, Any],
             src, dst = positions[e["from"]], positions[e["to"]]
             d, samples = _route(src, dst, canvas_w)
         parts.append(f'<path class="flow-edge" d="{d}" marker-end="url(#fc-arrow)"/>')
+        edge_samples.append(samples)
+
+    # Each edge's samples decomposed into segments once, up front, and reused
+    # for every label placement below instead of re-sampling per label.
+    edge_segments = [
+        [(s[j], s[j + 1]) for j in range(len(s) - 1)] for s in edge_samples
+    ]
+
+    for i, e in enumerate(edges):
         label = e.get("label", "")
-        if label:
-            rect = _place_label(label, samples, obstacles, canvas_w)
-            obstacles.append(rect)  # later labels avoid the ones already placed
-            labels.append(_label_svg(label, rect))
+        if not label:
+            continue
+        other_segments = [seg for j, segs in enumerate(edge_segments) if j != i for seg in segs]
+        rect = _place_label(label, edge_samples[i], obstacles, canvas_w, canvas_h, other_segments)
+        obstacles.append(rect)  # later labels avoid the ones already placed
+        labels.append(_label_svg(label, rect))
     for n in nodes:
         parts.append(_node_svg(positions[n["id"]], block_id))
     parts.extend(labels)

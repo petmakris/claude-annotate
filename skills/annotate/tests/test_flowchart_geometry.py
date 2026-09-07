@@ -15,6 +15,8 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
+from skills.annotate.diagrams import flowchart as fc
+from skills.annotate.diagrams.elk_layout import layout as elk_layout
 from skills.annotate.diagrams.flowchart import render
 from skills.annotate.diagrams.text_metrics import line_h, text_px
 
@@ -227,3 +229,96 @@ def test_everything_inside_the_viewbox(name, spec):
     for s in nodes + labels:
         assert s.x0 >= -0.5 and s.x1 <= vw + 0.5, f"{name}: {s.box} outside width {vw}"
         assert s.y0 >= -0.5 and s.y1 <= vh + 0.5, f"{name}: {s.box} outside height {vh}"
+
+
+# ── routed edges as label obstacles ─────────────────────────────────────────
+#
+# A trim of the diagram that motivated this fix (a real 13-node pre-trade-
+# checks graph): three edges converge on `sync`, one of them carrying the
+# label "bulkhead, 4 in flight". Before edges became obstacles, the placer
+# only checked node boxes and other labels, so that label — free of any node
+# or label to avoid — sat at the natural midpoint of its own edge, which put
+# it squarely on top of the unrelated `sendord -> sync` line running right
+# behind it. This is the case the fix is for: a label landing on an edge that
+# is not its own.
+_CONVERGE_ON_SYNC = {
+    "nodes": [
+        {"id": "agreed", "role": "entry", "label": "Proposal agreed", "sub": "@EventListener"},
+        {"id": "sendord", "role": "entry", "label": "SEND_ORDERS", "sub": "workflow task"},
+        {"id": "runptc", "role": "entry", "label": "RUN_PRE_TRADE_CHECKS", "sub": "workflow task"},
+        {"id": "batchstep", "role": "entry", "label": "nightly batch step", "sub": "refresh_pre_trade_checks"},
+        {"id": "readers", "role": "entry", "label": "opening or listing a proposal", "sub": "3 callers"},
+        {"id": "sync", "role": "code", "label": "OrdersSyncService", "ref": "OrdersSyncService:35",
+         "method": "runPreTradeChecks() . prepare()", "sub": "the write path"},
+        {"id": "refresh", "role": "code", "label": "OrdersSyncRefreshService", "ref": "OrdersSyncRefreshService:26",
+         "method": "refreshSyncDetails()", "sub": "the read path"},
+        {"id": "batch", "role": "code", "label": "PreTradeChecksRefreshService", "ref": "PreTradeChecksRefreshService:22",
+         "method": "refresh()", "sub": "two transactions, bank call in neither"},
+    ],
+    "edges": [
+        {"from": "agreed", "to": "sync"},
+        {"from": "sendord", "to": "sync"},
+        {"from": "runptc", "to": "sync", "label": "bulkhead, 4 in flight"},
+        {"from": "readers", "to": "refresh"},
+        {"from": "batchstep", "to": "batch"},
+        {"from": "batch", "to": "sync", "label": "prepare() only"},
+    ],
+}
+
+
+def _edge_route_points(e, positions, canvas_w, routes, edge_index):
+    """The same route points `_draw` would hand to `_place_label` for one edge."""
+    pts = routes.get(edge_index)
+    if pts:
+        return fc._trim_end(pts, fc.ARROW_GAP)
+    src, dst = positions[e["from"]], positions[e["to"]]
+    _, pts = fc._route(src, dst, canvas_w)
+    return pts
+
+
+def _segments_intersect(p1, p2, p3, p4):
+    def ccw(a, b, c):
+        return (c[1] - a[1]) * (b[0] - a[0]) - (b[1] - a[1]) * (c[0] - a[0])
+    d1, d2 = ccw(p3, p4, p1), ccw(p3, p4, p2)
+    d3, d4 = ccw(p1, p2, p3), ccw(p1, p2, p4)
+    return (((d1 > 0 and d2 < 0) or (d1 < 0 and d2 > 0)) and
+            ((d3 > 0 and d4 < 0) or (d3 < 0 and d4 > 0)))
+
+
+def _segment_hits_rect(p0, p1, rect):
+    """Independent of `flowchart`'s own collision helper, so this test still
+    catches a regression even if that helper's implementation changes."""
+    x0, y0, x1, y1 = rect
+    if (x0 <= p0[0] <= x1 and y0 <= p0[1] <= y1) or (x0 <= p1[0] <= x1 and y0 <= p1[1] <= y1):
+        return True
+    corners = ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
+    return any(_segments_intersect(p0, p1, corners[i], corners[(i + 1) % 4]) for i in range(4))
+
+
+def test_label_no_longer_lands_on_an_unrelated_edge():
+    """Pins the fix: a label's box may still touch its own edge, but must
+    never be crossed by a *different* edge — the defect from the bug report.
+    """
+    spec = _CONVERGE_ON_SYNC
+    nodes, edges = spec["nodes"], spec["edges"]
+    positions, canvas_w, canvas_h, routes = elk_layout(nodes, edges, "layered")
+
+    all_pts = [_edge_route_points(e, positions, canvas_w, routes, i)
+               for i, e in enumerate(edges)]
+
+    svg = fc._draw(spec, "pin-test", positions, canvas_w, canvas_h, routes)
+    _, _, labels = parse(svg)
+    labeled_edge_idxs = [i for i, e in enumerate(edges) if e.get("label")]
+    assert len(labels) == len(labeled_edge_idxs)
+
+    for li, lb in enumerate(labels):
+        owner = labeled_edge_idxs[li]
+        rect = lb.box
+        for ei, pts in enumerate(all_pts):
+            if ei == owner:
+                continue
+            for j in range(len(pts) - 1):
+                assert not _segment_hits_rect(pts[j], pts[j + 1], rect), (
+                    f"label {edges[owner].get('label')!r} (owned by edge {owner}) "
+                    f"is crossed by unrelated edge {edges[ei]['from']!r} -> {edges[ei]['to']!r}"
+                )
