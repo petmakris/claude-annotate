@@ -445,7 +445,7 @@
   function blockTitle(blk) {
     if (blk.title && String(blk.title).trim()) return String(blk.title).trim();
     const k = blk.kind || "markdown";
-    if (k === "sequence" || k === "diagram") {
+    if (k === "sequence") {
       const t = blk.spec && blk.spec.title;
       return (t && String(t).trim()) || "Diagram";
     }
@@ -1331,13 +1331,6 @@
       // The `data-step-id` hit targets stay on the rows — they still anchor
       // comments made before this rule, and applyEngagedStyling still paints
       // the row those comments target.
-    } else if (kind === "diagram") {
-      // Server pre-rendered the Mermaid SVG; inject as-is. This is trusted
-      // server output and deliberately bypasses sanitizeFreeHtml so Mermaid's
-      // inline <style> survives. v1 has no per-node hit targets, so there is
-      // no step-click listener — whole-diagram comments come from the
-      // hover-actions strip (renderHoverActions does not skip "diagram").
-      content.innerHTML = blk.svg || "";
     } else if (kind === "flowchart") {
       // Server pre-rendered the hand-built SVG, plus the pflow source pane when
       // the block carries one. Both views hang their hit targets off
@@ -2867,7 +2860,7 @@
     }
     const content = section.querySelector(".block-content");
     if (content) {
-      if (newKind === "sequence" || newKind === "diagram") {
+      if (newKind === "sequence") {
         content.innerHTML = blk.svg || "";
       } else if (newKind === "flowchart") {
         // Without this a flowchart fell through to the markdown branch below and

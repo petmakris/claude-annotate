@@ -124,3 +124,7 @@ enough evidence.
   everything else.
 - **`node` as a documented requirement**, in the README and in
   `/annotate-doctor`, since the ELK layout driver needs it.
+
+
+**Update 2026-09-08:** `kind: "diagram"` was removed altogether, with `mermaid.py` and the
+`mmdc` dependency. `flowchart` covers branching shapes; static structure goes to prose or a table.

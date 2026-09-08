@@ -14,7 +14,7 @@ SKILL_DIR = Path(__file__).resolve().parents[1]
 SKILL_MD = SKILL_DIR / "SKILL.md"
 
 # Matches in-skill relative links like references/pushing.md,
-# references/block-kinds/diagram.md, docs/token-budget.md.
+# references/block-kinds/flowchart.md, docs/token-budget.md.
 LINK_RE = re.compile(r"(?:references|docs)/[A-Za-z0-9_./-]+\.md")
 
 

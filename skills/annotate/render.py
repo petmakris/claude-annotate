@@ -2,7 +2,7 @@
 
 The daemon stores items as opaque JSON and never inspects them, so
 everything that used to happen per-request in annotate's own server —
-compiling a flowchart's source, rasterising a sequence or mermaid spec to
+compiling a flowchart's source, rasterising a sequence spec to
 SVG — happens once here, at push time, and the rendered body is what gets
 stored.
 
@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from skills._shared.web_companion.templates import html_escape
 from skills.annotate.diagrams.sequence import render
-from skills.annotate.diagrams.mermaid import render as render_mermaid
 from skills.annotate.diagrams.flowchart import render as render_flowchart
 from skills.annotate.diagrams.flowchart import render_variants as render_flowchart_variants
 from skills.annotate.diagrams import views as views_mod
@@ -29,7 +28,8 @@ def render_block(blk: dict) -> dict:
     second, disagreeing source of truth.
 
     - markdown blocks → pass markdown through
-    - sequence / flowchart / diagram → rendered svg + spec
+    - sequence / flowchart → rendered svg + spec
+    - choice / mockup → spec forwarded verbatim
     """
     kind = blk.get("kind") or "markdown"
     base = {"id": blk["id"], "kind": kind}
@@ -145,28 +145,6 @@ def render_block(blk: dict) -> dict:
                 base["views"] = [views_mod.ALL_VIEW] + emitted
         if warnings:
             base["warnings"] = warnings
-    elif kind == "diagram":
-        spec = blk.get("spec") or {}
-        try:
-            svg = render_mermaid(spec, block_id=blk["id"])
-        except Exception as e:
-            # Same compact error pill as the sequence branch: one malformed
-            # block must never crash /raw and blank the page.
-            svg = (
-                f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 36" '
-                f'class="annotate-diagram annotate-diagram-error" '
-                f'data-block-id="{html_escape(blk["id"])}" '
-                f'role="img" aria-label="mermaid diagram failed to render">'
-                f'<rect x="0" y="0" width="360" height="36" rx="6" '
-                f'fill="#fde7e2" stroke="#e5b8af"/>'
-                f'<text x="14" y="22" font-size="12" font-weight="600" '
-                f'fill="#c1432f" font-family="ui-monospace, monospace">'
-                f'⚠ diagram render failed</text>'
-                f'<title>{html_escape(str(e))}</title>'
-                f'</svg>'
-            )
-        base["spec"] = spec
-        base["svg"] = svg
     elif kind == "choice":
         base["spec"] = blk.get("spec") or {}
     elif kind == "mockup":
@@ -174,6 +152,8 @@ def render_block(blk: dict) -> dict:
         # Server forwards the spec verbatim; it never parses or renders the HTML.
         base["spec"] = blk.get("spec") or {}
     else:
+        # markdown, and only markdown: blocks.load() refuses any other kind
+        # before a push reaches here, so this branch can never swallow one.
         base["markdown"] = blk.get("markdown", "")
 
     # Code anchors travel UNRESOLVED. The daemon resolves them on every

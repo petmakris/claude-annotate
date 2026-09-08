@@ -350,13 +350,6 @@ Persist updates via `blocks.update_spec_block(doc, block_id, new_spec)` — retu
 
 **Off-topic comments** (user comments on `s4` about something that really belongs in `s2`) follow the same "use judgment" rule as the markdown contract: rewrite the targeted step to be clearer about its actual topic, or rewrite the neighboring step, or both.
 
-**`kind: "diagram"` (Mermaid) blocks** have no per-step targeting at all: a
-comment always arrives with `step_id: null` and applies to the whole diagram.
-Rewrite `spec.source` (and `spec.title` if warranted) to fold in the answer,
-then persist with `blocks.update_spec_block(doc, block_id, new_spec)` — the same
-content-hash-safe helper used for sequence specs — then `save_atomic` and re-push. To convert
-a diagram to/from prose, treat it as a kind change (drop `kind`/`spec`, set
-`markdown`) exactly as for other spec blocks.
 
 ### Flowchart block-rewrite contract
 

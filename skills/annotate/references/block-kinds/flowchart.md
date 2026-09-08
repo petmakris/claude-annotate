@@ -19,11 +19,9 @@ flows with an error branch.
 Sequence diagrams are for temporal actor↔actor exchanges; flowcharts are for
 the shape of a decision, regardless of how many actors are involved.
 
-**Use `kind: "diagram"` instead when** the content is static structure or
-non-branching shape: system/service architecture, state machines, ER models,
-class hierarchies. Those four families still go through Mermaid — see
-`references/block-kinds/diagram.md`. (Mermaid `type:"flowchart"` is
-deprecated in favor of this kind — see that file.)
+There is no separate block kind for static structure (system architecture, state
+machines, ER models, class hierarchies): draw it as a flowchart when it has a
+shape worth boxing, otherwise say it in prose or a table.
 
 **Do NOT use a flowchart block for:**
 

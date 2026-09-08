@@ -39,7 +39,7 @@ Long responses (multi-step plans, analyses, lists of findings) get pushed to a b
 - `blocks.py` — Block document model and update logic.
 - `static/` — HTML/JS/CSS for the browser page.
 - `ensure_server.sh` — Idempotent startup script (delegates to shared library).
-- `diagrams/` — Server-side SVG renderers for the `flowchart` and `sequence` block kinds (`mermaid.py` is the one renderer that shells out, to `mmdc`; `elk_layout.py` shells out to `node` for geometry).
+- `diagrams/` — Server-side SVG renderers for the `flowchart` and `sequence` block kinds (`elk_layout.py` is the one renderer that shells out, to `node`, for geometry).
 - `tests/` — Unit and integration tests.
 
 ## Diagram sizing

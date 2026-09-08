@@ -11,7 +11,7 @@ interactive interface communicates better than prose or a static diagram.
 ## When NOT to use
 - Anything an inline-`style="…"` markdown block already does (a colored
   callout, a small table). Don't escalate to a sandbox for static styling.
-- Static structure / architecture → use `kind: "diagram"`.
+- Static structure / architecture → a `flowchart` block when it has a shape, otherwise prose.
 - More than ~one screen of UI. Keep a mock focused.
 
 ## Block shape

@@ -17,7 +17,7 @@ Typical fits: code flows, request/response protocols, event lifecycles, deployme
 
 - Single-actor flows (a numbered list does the job).
 - Branching/decision logic where time isn't the dominant axis — use a `kind: "flowchart"` block.
-- Static structure: class hierarchies, data shapes, dependency graphs, system architecture — use a `kind: "diagram"` block.
+- Static structure: class hierarchies, data shapes, dependency graphs, system architecture — a `flowchart` block when it has a shape, otherwise prose.
 - Anything that fits in 1–2 sentences.
 
 **One diagram per flow.** Diagrams are heavier than prose blocks — visually and token-wise. A response that explains one flow gets one diagram block; longer explanations get prose blocks framing it. Don't emit two diagrams unless they're genuinely two separate flows.

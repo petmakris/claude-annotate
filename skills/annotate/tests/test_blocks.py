@@ -1,4 +1,5 @@
 import json
+import pytest
 from pathlib import Path
 
 import pytest
@@ -403,3 +404,76 @@ def test_remove_block_removes_non_markdown_block():
     ])
     assert remove_block(doc, "section-2") is True
     assert [b["id"] for b in doc.blocks] == ["section-1"]
+
+
+def test_a_block_with_content_under_the_wrong_key_is_refused(tmp_path):
+    """Prose in `text` instead of `markdown` rendered as nothing and the push
+    reported success — two pages shipped with every paragraph missing."""
+    import json
+
+    from skills.annotate.blocks import BlockContentError, load
+
+    p = tmp_path / "blocks.json"
+    p.write_text(json.dumps({"blocks": [
+        {"id": "section-1", "text": "prose that would vanish"},
+        {"id": "section-2", "kind": "flowchart", "spec": {"nodes": [], "edges": []}},
+    ]}))
+    with pytest.raises(BlockContentError) as e:
+        load(p)
+    assert "section-1" in str(e.value)
+    assert "markdown" in str(e.value)
+
+
+def test_a_genuinely_empty_block_is_still_dropped_quietly(tmp_path):
+    import json
+
+    from skills.annotate.blocks import load
+
+    p = tmp_path / "blocks.json"
+    p.write_text(json.dumps({"blocks": [
+        {"id": "section-1", "markdown": "   "},
+        {"id": "section-2", "markdown": "real"},
+    ]}))
+    doc = load(p)
+    assert [b["id"] for b in doc.blocks] == ["section-2"]
+
+
+def test_a_retired_kind_is_refused_with_a_pointer(tmp_path):
+    """`diagram` fell through to the markdown branch once mermaid.py was
+    removed, so a Mermaid block rendered as an empty card and the push said
+    nothing."""
+    import json
+
+    from skills.annotate.blocks import UnknownBlockKindError, load
+
+    p = tmp_path / "blocks.json"
+    p.write_text(json.dumps({"blocks": [
+        {"id": "section-1", "kind": "diagram",
+         "spec": {"type": "state", "source": "stateDiagram-v2"}}]}))
+    with pytest.raises(UnknownBlockKindError) as e:
+        load(p)
+    assert "diagram" in str(e.value) and "flowchart" in str(e.value)
+
+
+def test_an_unknown_kind_is_refused(tmp_path):
+    import json
+
+    from skills.annotate.blocks import UnknownBlockKindError, load
+
+    p = tmp_path / "blocks.json"
+    p.write_text(json.dumps({"blocks": [
+        {"id": "section-1", "kind": "flowchrat", "spec": {}}]}))
+    with pytest.raises(UnknownBlockKindError, match="flowchrat"):
+        load(p)
+
+
+def test_every_known_kind_loads(tmp_path):
+    import json
+
+    from skills.annotate.blocks import BLOCK_KINDS, load
+
+    p = tmp_path / "blocks.json"
+    p.write_text(json.dumps({"blocks": [
+        {"id": f"section-{i}", "kind": k, "spec": {}, "markdown": "x"}
+        for i, k in enumerate(sorted(BLOCK_KINDS))]}))
+    assert len(load(p).blocks) == len(BLOCK_KINDS)

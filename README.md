@@ -128,13 +128,6 @@ changed.
 
 ![Flowchart block](docs/img/block-flowchart.png)
 
-### Mermaid diagrams
-
-Architecture, state machines, ER, class diagrams — raw Mermaid source,
-rendered to SVG on the server and themed to the page.
-
-![Mermaid diagram block](docs/img/block-mermaid.png)
-
 ### Choice cards
 
 When Claude reaches a genuine fork it asks with cards instead of prose: pick

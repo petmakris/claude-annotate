@@ -5,8 +5,8 @@ this module hands ELK the sizes that module measured and turns what comes back
 into the same `positions` shape the renderer already reads, plus edge routes it
 did not have before.
 
-The subprocess and JSON I/O are isolated here, the way `mermaid.py` isolates
-its own. Everything above this module stays pure.
+The subprocess and JSON I/O are isolated here; everything above this module
+stays pure.
 """
 from __future__ import annotations
 

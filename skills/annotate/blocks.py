@@ -27,6 +27,32 @@ from typing import Any
 from skills._shared.web_companion.atomic import write_text_atomic
 
 
+# Every key the document format reads. A block with none of the content keys
+# but an unknown one is an authoring mistake, not an empty block.
+BLOCK_KEYS = frozenset({
+    "id", "kind", "spec", "markdown", "title", "code", "anchor",
+    "version", "warnings", "svg", "svgs", "flavours", "views",
+})
+
+
+# Every kind the renderer knows. `diagram` (Mermaid) was removed once the
+# flowchart kind covered its cases with a renderer the page understands; it is
+# named below so a spec written against the old menu fails loudly instead of
+# rendering as an empty card.
+BLOCK_KINDS = frozenset({"markdown", "sequence", "flowchart", "choice", "mockup"})
+RETIRED_KINDS = {"diagram": "removed — use `flowchart`, or a fenced code block "
+                            "in `markdown` for anything it cannot draw"}
+
+
+class UnknownBlockKindError(ValueError):
+    """A block names a kind the renderer does not have."""
+
+
+class BlockContentError(ValueError):
+    """A block would render as nothing because its content is under a key the
+    document format does not read."""
+
+
 @dataclass
 class BlocksDoc:
     response_id: str = ""
@@ -46,10 +72,36 @@ def load(path: Path) -> BlocksDoc:
     # Drop markdown blocks with no content — a blank card is pure noise (one
     # real push shipped a 0-char untitled block). Spec blocks (kind set) carry
     # their content in `spec`, so they pass regardless of markdown.
-    blocks = [
-        b for b in (raw.get("blocks") or [])
-        if b.get("kind") or (b.get("markdown") or "").strip()
-    ]
+    #
+    # A block carrying content under some OTHER key is an authoring mistake,
+    # not an empty block, and dropping it silently loses work: a push that put
+    # its prose in `text` instead of `markdown` shipped two pages with every
+    # paragraph missing and reported success. Those are named and refused.
+    unknown = [b for b in (raw.get("blocks") or [])
+               if b.get("kind") and b["kind"] not in BLOCK_KINDS]
+    if unknown:
+        detail = "; ".join(
+            f'{b.get("id", "?")}: {b["kind"]!r}'
+            + (f' ({RETIRED_KINDS[b["kind"]]})' if b["kind"] in RETIRED_KINDS else "")
+            for b in unknown[:4])
+        raise UnknownBlockKindError(
+            f"{len(unknown)} block(s) name a kind the renderer does not have, "
+            f"and an unknown kind renders as an empty card — {detail}. "
+            f"Known kinds: {', '.join(sorted(BLOCK_KINDS))}.")
+    blocks, mistaken = [], []
+    for b in list(raw.get("blocks") or []):
+        if b.get("kind") or (b.get("markdown") or "").strip():
+            blocks.append(b)
+        elif set(b) - BLOCK_KEYS:
+            mistaken.append(b)
+    if mistaken:
+        detail = "; ".join(
+            f'{b.get("id", "?")} has {sorted(set(b) - BLOCK_KEYS)}'
+            for b in mistaken[:4])
+        raise BlockContentError(
+            f"{len(mistaken)} block(s) would render as nothing: no `kind`, no "
+            f"`markdown`, and an unknown key holding the content — {detail}. "
+            f"Prose goes in `markdown`.")
     return BlocksDoc(
         response_id=raw.get("response_id", ""),
         title=raw.get("title", ""),
@@ -116,7 +168,7 @@ def _canonical_spec(spec: dict[str, Any]) -> str:
 
 
 def update_spec_block(doc: BlocksDoc, block_id: str, new_spec: dict[str, Any]) -> bool:
-    """Update a spec-bearing block's spec (sequence/diagram/choice). Returns True if changed.
+    """Update a spec-bearing block's spec (sequence/choice). Returns True if changed.
 
     No version field is mutated — versions are derived in versions.py.
     Canonical-JSON compare so reordered keys are a no-op.

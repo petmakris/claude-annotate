@@ -33,7 +33,7 @@
   // Kinds where more width buys something. Prose is deliberately excluded: it
   // is set to a max measure, so a wider column only makes the lines harder to
   // track back to the left edge.
-  const MAXIMIZABLE = new Set(["sequence", "flowchart", "diagram", "mockup"]);
+  const MAXIMIZABLE = new Set(["sequence", "flowchart", "mockup"]);
 
   const ICON_MAX =
     '<svg viewBox="0 0 24 24" aria-hidden="true">' +

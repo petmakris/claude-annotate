@@ -77,7 +77,6 @@ Composing a push is a two-pass job: split the response into blocks, then run thi
 | `sequence` | ≥2 named entities interacting **in temporal order**, where who-talks-to-whom matters (code flows, request/response, event lifecycles). | `references/block-kinds/sequence.md` |
 | `flowchart` | Branching/decision/process-flow logic — guard clauses, validation pipelines, fan-in from multiple callers, success/error outcomes. Structured nodes/edges, role color, jump-to-source links. Give every `ref` an `href` — a ref is painted as a link whether or not it is one. Write `spec.source` (restricted Python, compiled) instead of nodes when the reader will want to change the flow — the source pane shows them which line draws which box, so they can name it. | `references/block-kinds/flowchart.md` |
 | `flowchart` + views | The flowchart answers more than one reader's question and its edges cross. Measure with `views.check`, group the edges by question, verify. | `references/block-kinds/flowchart-views.md` |
-| `diagram` | Better seen than read AND non-temporal, non-branching: architecture, state machine, ER, class. Mermaid source → server renders SVG. | `references/block-kinds/diagram.md` |
 | `choice` | A decision point with 2–4 discrete options where the pick drives the next step. | `references/block-kinds/choice.md` |
 | `mockup` | A high-fidelity, interactive UI mock is clearer than prose or a static diagram — real `<style>`/`<script>`/Tailwind, hover, interaction. Renders in a sandboxed iframe. | `references/block-kinds/mockup.md` |
 
