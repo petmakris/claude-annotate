@@ -204,6 +204,17 @@
     });
   }
 
+  // A draft the user never wrote anything into. It carries no information —
+  // `selected_text` is scope, not content — so it must never outlive the click
+  // that made it: it paints the engaged bar on a block nobody is commenting on,
+  // and because only one draft may exist at a time it also silently blocks
+  // every other block from opening a comment.
+  function isEmptyDraft(a) {
+    return a && !(a.comment || "").trim()
+        && !(a.images || []).length
+        && !a.disagree;
+  }
+
   function applyEngagedStyling() {
     document.querySelectorAll("[data-block-id][data-engaged-type]").forEach(b => {
       delete b.dataset.engagedType;
@@ -305,7 +316,14 @@
     // comment into the local round via AnnotateSubunits.pinComment(), which
     // never touches the network, so an in-flight round is not a reason to
     // refuse opening it.
-    if (!existingId && Object.keys(annotations).length > 0) return;
+    if (!existingId) {
+      // Drop any empty draft first — otherwise a stray click on one block
+      // makes every other block unclickable until its × is found and pressed.
+      for (const [k, v] of Object.entries(annotations)) {
+        if (isEmptyDraft(v)) delete annotations[k];
+      }
+      if (Object.keys(annotations).length > 0) return;
+    }
 
     const id = existingId || `a-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const annot = annotations[id] || { block_id: blockId, step_id: stepId, comment: "" };
@@ -1811,7 +1829,8 @@
     let pruned = false;
     for (const [id, a] of Object.entries(annotations)) {
       if (!a.block_id ||
-          !document.querySelector(`section.block[data-block-id="${cssEsc(a.block_id)}"]`)) {
+          !document.querySelector(`section.block[data-block-id="${cssEsc(a.block_id)}"]`) ||
+          isEmptyDraft(a)) {
         delete annotations[id];
         pruned = true;
       }
