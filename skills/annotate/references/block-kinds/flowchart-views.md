@@ -49,7 +49,10 @@ print(report.summary())
 ```
 
 1. **Model the graph** — nodes, edges, roles. No views yet.
-2. **Check it.** If `report.needs_views` is False, **stop**. A diagram with no
+2. **Check it.** If `report.measurable` is False the drawing could not be
+   measured at all — ELK is unavailable, so no edge was routed and no claim
+   about views can be made. Fix that first; do not read the other numbers.
+   If `report.needs_views` is False, **stop**. A diagram with no
    crossings does not need views, and adding them makes it worse. Most diagrams
    land here.
 3. **Read `report.conflicts`** — the edge pairs that must be separated. This is

@@ -69,12 +69,18 @@ def _pairs(edges: list[dict[str, Any]],
 
 
 def measure(spec: dict[str, Any], variant: str | None = None
-            ) -> tuple[list[tuple[int, int]], float, float]:
+            ) -> tuple[list[tuple[int, int]] | None, float, float]:
     """Lay the spec out for real and return (crossing pairs, width, height).
 
     Nothing here reasons about what a layout will look like. Every claim this
     module makes comes from a rendered layout, because predictions about
     layered drawings are wrong often enough to be worthless.
+
+    The pairs are ``None`` when the layout produced no edge routes to measure —
+    the pure-Python fallback, which runs whenever ELK is unavailable, places
+    nodes but does not route edges. Counting zero crossings there would report
+    every diagram as clean and would be a lie, so the absence is returned as
+    absence and the caller must say so.
     """
     from . import flavours
     from .elk_layout import layout
@@ -82,6 +88,8 @@ def measure(spec: dict[str, Any], variant: str | None = None
     nodes = spec.get("nodes") or []
     edges = spec.get("edges") or []
     _, w, h, routes = layout(nodes, edges, variant or flavours.DEFAULT)
+    if edges and len(routes) < len(edges):
+        return None, w, h
     return _pairs(edges, routes), w, h
 
 
@@ -98,9 +106,14 @@ class ViewReport:
 
 @dataclass
 class Report:
-    """The verdict on a spec's grouping. ``ok`` means it is fit to ship."""
+    """The verdict on a spec's grouping. ``ok`` means it is fit to ship.
+
+    ``measurable`` is False when no crossing count could be taken at all. Every
+    other number is then meaningless and no claim may be made from this report.
+    """
     union_crossings: int
     union_size: tuple[float, float]
+    measurable: bool = True
     conflicts: list[tuple[str, str]] = field(default_factory=list)
     violations: list[tuple[str, str, list[str]]] = field(default_factory=list)
     unassigned: list[str] = field(default_factory=list)
@@ -108,14 +121,21 @@ class Report:
 
     @property
     def ok(self) -> bool:
-        return not self.violations and not self.unassigned
+        return self.measurable and not self.violations and not self.unassigned
 
     @property
-    def needs_views(self) -> bool:
-        """A clean diagram needs nothing. Saying so is the point."""
+    def needs_views(self) -> bool | None:
+        """A clean diagram needs nothing, and saying so is the point — but only
+        when the drawing was actually measured. ``None`` means unknown."""
+        if not self.measurable:
+            return None
         return self.union_crossings > 0
 
     def summary(self) -> str:
+        if not self.measurable:
+            return ("cannot measure crossings: the layout produced no edge "
+                    "routes (ELK unavailable — is node on PATH?). No claim "
+                    "about views can be made from this drawing.")
         lines = [f"union: {self.union_crossings} crossing"
                  f"{'' if self.union_crossings == 1 else 's'}, "
                  f"{self.union_size[0]:.0f}x{self.union_size[1]:.0f}"]
@@ -156,6 +176,8 @@ def check(spec: dict[str, Any], variant: str | None = None) -> Report:
     """Measure the union, then every declared view, and report what is wrong."""
     edges = spec.get("edges") or []
     pairs, w, h = measure(spec, variant)
+    if pairs is None:
+        return Report(union_crossings=0, union_size=(w, h), measurable=False)
     rep = Report(union_crossings=len(pairs), union_size=(w, h),
                  conflicts=[(_name(edges[a]), _name(edges[b])) for a, b in pairs])
 
@@ -176,6 +198,9 @@ def check(spec: dict[str, Any], variant: str | None = None) -> Report:
         if not sub["edges"]:
             continue
         vp, vw, vh = measure(sub, variant)
+        if vp is None:
+            rep.measurable = False
+            return rep
         rep.views.append(ViewReport(v, len(sub["nodes"]), len(sub["edges"]),
                                     len(vp), vw, vh))
     return rep

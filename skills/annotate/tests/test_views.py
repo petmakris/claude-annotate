@@ -163,3 +163,30 @@ def test_bands_do_not_change_the_shipped_default_for_unbanded_specs():
     a = flowchart.render(plain, "x")
     b = flowchart.render(plain, "x")
     assert a == b
+
+
+def test_an_unmeasurable_layout_reports_unknown_not_clean(monkeypatch):
+    """Without ELK the fallback places nodes but routes no edges. Counting zero
+    crossings there would call every diagram clean, which is a lie."""
+    from skills.annotate.diagrams import elk_layout
+
+    def boom(_graph):
+        raise elk_layout.ElkUnavailable("no node on PATH")
+
+    monkeypatch.setattr(elk_layout, "run_elk", boom)
+    rep = views.check(orders_sync())
+    assert rep.measurable is False
+    assert rep.needs_views is None
+    assert rep.ok is False
+    assert "cannot measure" in rep.summary()
+    assert rep.conflicts == []
+
+
+def test_measure_returns_none_when_routes_are_missing(monkeypatch):
+    from skills.annotate.diagrams import elk_layout
+
+    monkeypatch.setattr(elk_layout, "run_elk",
+                        lambda _g: (_ for _ in ()).throw(
+                            elk_layout.ElkUnavailable("x")))
+    pairs, w, h = views.measure(orders_sync())
+    assert pairs is None and w > 0 and h > 0
