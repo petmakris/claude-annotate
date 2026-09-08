@@ -445,6 +445,34 @@ def _label_svg(label: str, rect: tuple[float, float, float, float]) -> str:
             f'text-anchor="middle">{_esc(label)}</text></g>')
 
 
+def edge_geometry(positions: dict[str, Any], edges: list[dict[str, Any]],
+                  canvas_w: float,
+                  routes: dict[int, list[tuple[float, float]]]
+                  ) -> list[tuple[str, list[tuple[float, float]]]]:
+    """Path data and sample points for every edge, as the renderer will draw it.
+
+    ELK's orthogonal route when there is one, the fallback bezier when there is
+    not — the same choice `_draw` makes, made once here so anything measuring
+    the drawing measures the lines a reader will actually see. Without this,
+    a caller reading ELK's routes alone sees nothing at all on the fallback
+    path and mistakes an unrouted graph for a graph with no crossings.
+
+    The points are the path's own vertices, NOT a resampling of them:
+    `_sample_polyline` redistributes points by arc length and so cuts the
+    corners off an orthogonal route, which loses crossings that happen near a
+    corner. Callers that want evenly spaced points ask for them.
+    """
+    geo = []
+    for i, e in enumerate(edges):
+        pts = routes.get(i)
+        if pts:
+            pts = _trim_end(pts, ARROW_GAP)
+            geo.append((_rounded_polyline(pts, CORNER_R), pts))
+        else:
+            geo.append(_route(positions[e["from"]], positions[e["to"]], canvas_w))
+    return geo
+
+
 def _draw(spec: dict[str, Any], block_id: str, positions: dict[str, Any],
           canvas_w: float, canvas_h: float,
           routes: dict[int, list[tuple[float, float]]]) -> str:
@@ -469,17 +497,14 @@ def _draw(spec: dict[str, Any], block_id: str, positions: dict[str, Any],
     # before it can place the first label, since a label must avoid *any*
     # edge, not just the ones drawn so far.
     edge_samples: list[list[tuple[float, float]]] = []
-    for i, e in enumerate(edges):
-        pts = routes.get(i)
-        if pts:
-            pts = _trim_end(pts, ARROW_GAP)
-            d = _rounded_polyline(pts, CORNER_R)
-            samples = _sample_polyline(pts)
-        else:
-            src, dst = positions[e["from"]], positions[e["to"]]
-            d, samples = _route(src, dst, canvas_w)
+    for i, (d, pts) in enumerate(edge_geometry(positions, edges, canvas_w, routes)):
         parts.append(f'<path class="flow-edge" d="{d}" marker-end="url(#fc-arrow)"/>')
-        edge_samples.append(samples)
+        # Label placement walks evenly spaced points along a routed edge; the
+        # fallback bezier already returns its own. Crossing measurement wants
+        # neither, which is why the resampling lives here and not in the
+        # geometry — arc-length resampling cuts corners off an orthogonal
+        # route and would hide a crossing that happens at one.
+        edge_samples.append(_sample_polyline(pts) if i in routes else pts)
 
     # Each edge's samples decomposed into segments once, up front, and reused
     # for every label placement below instead of re-sampling per label.

@@ -165,9 +165,9 @@ def test_bands_do_not_change_the_shipped_default_for_unbanded_specs():
     assert a == b
 
 
-def test_an_unmeasurable_layout_reports_unknown_not_clean(monkeypatch):
-    """Without ELK the fallback places nodes but routes no edges. Counting zero
-    crossings there would call every diagram clean, which is a lie."""
+def test_the_fallback_layout_is_still_measured(monkeypatch):
+    """Without ELK the nodes are placed in Python and the edges are beziers.
+    That is a real drawing, so it gets a real count — of that drawing."""
     from skills.annotate.diagrams import elk_layout
 
     def boom(_graph):
@@ -175,18 +175,34 @@ def test_an_unmeasurable_layout_reports_unknown_not_clean(monkeypatch):
 
     monkeypatch.setattr(elk_layout, "run_elk", boom)
     rep = views.check(orders_sync())
-    assert rep.measurable is False
-    assert rep.needs_views is None
-    assert rep.ok is False
-    assert "cannot measure" in rep.summary()
-    assert rep.conflicts == []
+    assert rep.measurable is True
+    assert rep.engine == "fallback"
+    assert "fallback layout" in rep.summary()
+    assert rep.needs_views is not None
 
 
-def test_measure_returns_none_when_routes_are_missing(monkeypatch):
-    from skills.annotate.diagrams import elk_layout
+def test_the_elk_drawing_reports_its_engine():
+    rep = views.check(orders_sync())
+    assert rep.engine == "elk"
+    assert "fallback" not in rep.summary()
 
-    monkeypatch.setattr(elk_layout, "run_elk",
-                        lambda _g: (_ for _ in ()).throw(
-                            elk_layout.ElkUnavailable("x")))
-    pairs, w, h = views.measure(orders_sync())
-    assert pairs is None and w > 0 and h > 0
+
+def test_crossings_are_counted_on_path_vertices_not_resampled_points():
+    """Resampling by arc length redistributes points evenly and so cuts the
+    corners off an orthogonal route. A crossing that happens near a corner then
+    vanishes — a false negative in the one measurement this module exists to
+    make. The drawing's own vertices are the only honest input."""
+    from skills.annotate.diagrams import elk_layout, flowchart
+
+    spec = orders_sync()
+    pos, w, h, routes = elk_layout.layout(spec["nodes"], spec["edges"], "layered")
+    true_pts = {i: p for i, (_, p) in
+                enumerate(flowchart.edge_geometry(pos, spec["edges"], w, routes))}
+    resampled = {i: flowchart._sample_polyline(p) if len(p) > 2 else p
+                 for i, p in true_pts.items()}
+    # Resampling loses a crossing this drawing really has.
+    assert len(views._pairs(spec["edges"], true_pts)) \
+        > len(views._pairs(spec["edges"], resampled))
+    # and the vertex count agrees with ELK's own routes, which is the drawing
+    assert len(views._pairs(spec["edges"], true_pts)) == len(
+        views._pairs(spec["edges"], routes))

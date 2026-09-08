@@ -51,7 +51,7 @@ def bands(spec: dict[str, Any]) -> dict[str, int]:
 
 def _pairs(edges: list[dict[str, Any]],
            routes: dict[int, list[tuple[float, float]]]) -> list[tuple[int, int]]:
-    """Indices of every edge pair whose routes cross. Edges sharing an endpoint
+    """Indices of every edge pair whose drawn paths cross. Edges sharing an endpoint
     are skipped: they meet at a node, which is not a crossing."""
     from .flowchart import _segments_intersect
 
@@ -76,21 +76,40 @@ def measure(spec: dict[str, Any], variant: str | None = None
     module makes comes from a rendered layout, because predictions about
     layered drawings are wrong often enough to be worthless.
 
-    The pairs are ``None`` when the layout produced no edge routes to measure —
-    the pure-Python fallback, which runs whenever ELK is unavailable, places
-    nodes but does not route edges. Counting zero crossings there would report
-    every diagram as clean and would be a lie, so the absence is returned as
-    absence and the caller must say so.
+    Crossings are counted on the lines the renderer will actually draw, which
+    is ELK's orthogonal route where there is one and the fallback bezier where
+    there is not — so a machine without ELK still gets a true count, of a
+    different drawing. The pairs are ``None`` only when a node went unplaced
+    and there is no drawing to measure at all.
+    """
+    from . import flavours
+    from .elk_layout import layout
+    from .flowchart import edge_geometry
+
+    nodes = spec.get("nodes") or []
+    edges = spec.get("edges") or []
+    positions, w, h, routes = layout(nodes, edges, variant or flavours.DEFAULT)
+    if any(n["id"] not in positions for n in nodes):
+        return None, w, h
+    drawn = {i: pts for i, (_, pts) in
+             enumerate(edge_geometry(positions, edges, w, routes))}
+    return _pairs(edges, drawn), w, h
+
+
+def engine(spec: dict[str, Any], variant: str | None = None) -> str:
+    """Which layout produced the drawing: ``"elk"`` or ``"fallback"``.
+
+    It matters to anything reading a crossing count. Without ELK the nodes are
+    placed by the pure-Python layout and the edges are beziers, so the count is
+    true of a different picture than the one a machine with ELK ships.
     """
     from . import flavours
     from .elk_layout import layout
 
-    nodes = spec.get("nodes") or []
     edges = spec.get("edges") or []
-    _, w, h, routes = layout(nodes, edges, variant or flavours.DEFAULT)
-    if edges and len(routes) < len(edges):
-        return None, w, h
-    return _pairs(edges, routes), w, h
+    _, _, _, routes = layout(spec.get("nodes") or [], edges,
+                             variant or flavours.DEFAULT)
+    return "elk" if edges and len(routes) == len(edges) else "fallback"
 
 
 @dataclass
@@ -114,6 +133,7 @@ class Report:
     union_crossings: int
     union_size: tuple[float, float]
     measurable: bool = True
+    engine: str = "elk"
     conflicts: list[tuple[str, str]] = field(default_factory=list)
     violations: list[tuple[str, str, list[str]]] = field(default_factory=list)
     unassigned: list[str] = field(default_factory=list)
@@ -136,9 +156,12 @@ class Report:
             return ("cannot measure crossings: the layout produced no edge "
                     "routes (ELK unavailable — is node on PATH?). No claim "
                     "about views can be made from this drawing.")
+        note = "" if self.engine == "elk" else "  [fallback layout — ELK "\
+                                                "unavailable, so this is a "\
+                                                "different drawing]"
         lines = [f"union: {self.union_crossings} crossing"
                  f"{'' if self.union_crossings == 1 else 's'}, "
-                 f"{self.union_size[0]:.0f}x{self.union_size[1]:.0f}"]
+                 f"{self.union_size[0]:.0f}x{self.union_size[1]:.0f}{note}"]
         if not self.needs_views:
             lines.append("no crossings — this diagram does not need views")
             return "\n".join(lines)
@@ -179,6 +202,7 @@ def check(spec: dict[str, Any], variant: str | None = None) -> Report:
     if pairs is None:
         return Report(union_crossings=0, union_size=(w, h), measurable=False)
     rep = Report(union_crossings=len(pairs), union_size=(w, h),
+                 engine=engine(spec, variant),
                  conflicts=[(_name(edges[a]), _name(edges[b])) for a, b in pairs])
 
     names = declared(spec)

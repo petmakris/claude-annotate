@@ -49,9 +49,10 @@ print(report.summary())
 ```
 
 1. **Model the graph** — nodes, edges, roles. No views yet.
-2. **Check it.** If `report.measurable` is False the drawing could not be
-   measured at all — ELK is unavailable, so no edge was routed and no claim
-   about views can be made. Fix that first; do not read the other numbers.
+2. **Check it.** `report.engine` says which layout was measured. `"fallback"`
+   means ELK was unavailable, so the nodes were placed in Python and the edges
+   are beziers — a real drawing, honestly counted, but not the one a machine
+   with ELK ships. Install `node` before trusting the number.
    If `report.needs_views` is False, **stop**. A diagram with no
    crossings does not need views, and adding them makes it worse. Most diagrams
    land here.
