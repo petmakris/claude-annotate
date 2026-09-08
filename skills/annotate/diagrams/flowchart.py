@@ -485,7 +485,12 @@ def _draw(spec: dict[str, Any], block_id: str, positions: dict[str, Any],
     edges = spec.get("edges") or []
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" '
-        f'viewBox="0 0 {canvas_w:.0f} {canvas_h:.0f}" class="annotate-flow">',
+        f'viewBox="0 0 {canvas_w:.0f} {canvas_h:.0f}" '
+        # Its own size, so the stylesheet can cap the drawing without also
+        # stretching it: a viewBox alone under `width:100%` scales a narrow
+        # diagram UP to the card, and a 555px-wide graph rendered 2x reads as
+        # a zoom nobody asked for.
+        f'width="{canvas_w:.0f}" height="{canvas_h:.0f}" class="annotate-flow">',
         _defs(),
     ]
     # edges first (under nodes); labels last (over everything)

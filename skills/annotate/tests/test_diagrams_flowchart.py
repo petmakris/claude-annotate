@@ -291,3 +291,27 @@ def test_render_drops_a_non_string_href():
     spec["nodes"][1]["href"] = {"url": "https://example.com"}
     svg = render(spec, block_id="s")
     assert "<a " not in svg
+
+
+def test_svg_carries_its_natural_size_so_it_is_never_upscaled():
+    """A viewBox alone under `width:100%` stretches a narrow diagram to fill
+    the card. The width/height attributes let the stylesheet cap it instead."""
+    import re
+
+    svg = render(_spec(), "blk")
+    m = re.match(r'<svg [^>]*viewBox="0 0 (\d+) (\d+)"[^>]*'
+                 r'width="(\d+)" height="(\d+)"', svg)
+    assert m, svg[:200]
+    assert (m.group(1), m.group(2)) == (m.group(3), m.group(4))
+
+
+def test_stylesheet_caps_the_flowchart_rather_than_stretching_it():
+    import pathlib
+    import re
+
+    css = (pathlib.Path(__file__).resolve().parents[1]
+           / "static" / "diagram.css").read_text()
+    rule = [l for l in css.splitlines() if l.startswith(".annotate-flow {")][0]
+    assert "max-width: 100%" in rule
+    # a bare `width: 100%` is the stretch this rule exists to avoid
+    assert not re.search(r"(?<!max-)width:\s*100%", rule)
