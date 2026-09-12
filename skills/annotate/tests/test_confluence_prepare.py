@@ -58,6 +58,19 @@ def test_a_clean_document_produces_a_bundle(tmp_path, repo):
     assert (out / "annotate-source.json").exists()
     assert "__MEDIA_ID__section-2__" in (out / "body.template.html").read_text()
     assert report["images"] == ["section-2.png"]
+    assert report["missing_blocks"] == []
+
+
+def test_a_missing_block_stops_the_publish_and_writes_no_body(tmp_path, repo):
+    items = _items(tmp_path, [
+        {"id": "section-1", "kind": "markdown", "title": "T", "markdown": "p"}],
+        order=["section-1", "section-2"])
+    out = tmp_path / "bundle"
+    report = prepare.prepare(items_dir=items, repo=str(repo), out_dir=out,
+                             slug="s", ref="master", with_images=False)
+    assert report["proceed"] is False
+    assert report["missing_blocks"] == ["section-2"]
+    assert not (out / "body.template.html").exists()
 
 
 def test_a_stale_anchor_stops_the_publish_and_writes_no_body(tmp_path, repo):

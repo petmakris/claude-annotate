@@ -8,9 +8,10 @@ Nothing here touches Confluence. It writes four things into a directory:
     report.json           every anchor's status, and whether to proceed
 
 `proceed: false` means the publish stops and NO body is written. That is the
-point of the split: a page that is missing a citation, or that quietly dropped
-a block the converter could not handle, is not the document the author
-approved, and the only safe moment to notice is before anything is uploaded.
+point of the split: a page that is missing a citation, that quietly dropped a
+block the converter could not handle, or that quietly dropped a block missing
+from disk entirely, is not the document the author approved, and the only
+safe moment to notice is before anything is uploaded.
 """
 from __future__ import annotations
 
@@ -29,30 +30,39 @@ REPORT_NAME = "report.json"
 BODY_TEMPLATE = "body.template.html"
 
 
-def load_items(items_dir: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """The stored document: (__doc__ body, blocks in `order`).
+def load_items(
+        items_dir: Path
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
+    """The stored document: (__doc__ body, blocks in `order`, missing ids).
 
     Read from disk rather than from the daemon's API — a refresh may run long
     after the session was last open, and a scheduled job has no daemon at all.
+
+    A block id named in `order` with no file on disk is not skipped silently:
+    it is returned separately so the caller can refuse the publish over it,
+    the same as any other way the stored document differs from the one the
+    author approved.
     """
     items_dir = Path(items_dir)
     doc = json.loads((items_dir / "__doc__.json").read_text())
     doc = doc.get("body", doc)
     blocks = []
+    missing = []
     for bid in doc.get("order") or []:
         path = items_dir / ("%s.json" % bid)
         if not path.exists():
+            missing.append(bid)
             continue
         raw = json.loads(path.read_text())
         blocks.append(raw.get("body", raw))
-    return doc, blocks
+    return doc, blocks, missing
 
 
 def prepare(*, items_dir: Path, repo: str, out_dir: Path, slug: str,
             ref: str = "origin/master", with_images: bool = True) -> dict:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    doc, blocks = load_items(Path(items_dir))
+    doc, blocks, missing_blocks = load_items(Path(items_dir))
 
     commit = gitref.commit_of(repo, ref)
     web = gitref.web_url(gitref.remote_of(repo))
@@ -93,8 +103,9 @@ def prepare(*, items_dir: Path, repo: str, out_dir: Path, slug: str,
         "anchors": rows,
         "blocking": blocked,
         "unconvertible": unconvertible,
+        "missing_blocks": missing_blocks,
         "images": ["%s.png" % b["id"] for b in blocks if b.get("svg")],
-        "proceed": not blocked and not unconvertible,
+        "proceed": not blocked and not unconvertible and not missing_blocks,
     }
     (out_dir / REPORT_NAME).write_text(json.dumps(report, indent=2))
     if not report["proceed"]:
@@ -124,7 +135,8 @@ def main(argv=None) -> int:
     report = prepare(items_dir=Path(a.items), repo=a.repo, out_dir=Path(a.out),
                      slug=a.slug, ref=a.ref, with_images=not a.no_images)
     print(json.dumps({k: report[k] for k in
-                      ("proceed", "blocking", "unconvertible", "images")},
+                      ("proceed", "blocking", "unconvertible",
+                       "missing_blocks", "images")},
                      indent=2))
     return 0 if report["proceed"] else 2
 
