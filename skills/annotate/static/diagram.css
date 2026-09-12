@@ -104,6 +104,109 @@ section.block[data-kind="sequence"] .block-content {
                                          text-decoration: line-through;
                                          text-decoration-color: var(--t-hot); }
 
+/* ── the numbered badge, and the key it points at ──────────────────
+   The grid carries arrows and numbers; every word lives in the key below it
+   (`render_key` in diagrams/sequence.py). The two halves pair on
+   `data-step-id` — the same handle a comment anchors to — so clicking either
+   side lights both.
+
+   A badge is the one thing inside a picture that takes a click. The rule two
+   sections down says a step row must not promise one, because nothing answered
+   it. A badge's click has an answer, which is the whole reason it is allowed:
+   ship a badge without a key and this is straight back to an affordance that
+   leads nowhere. */
+.annotate-seq .step-badge  { fill: #ffffff; stroke: var(--t-plain); stroke-width: 1.2; }
+.annotate-seq .step-badge.t-edge     { stroke: var(--t-edge); }
+.annotate-seq .step-badge.t-internal { stroke: var(--t-internal); }
+.annotate-seq .step-badge.t-service  { stroke: var(--t-service); }
+.annotate-seq .step-badge.t-cheap    { stroke: var(--t-cheap); }
+.annotate-seq .step-badge.t-good     { stroke: var(--t-good); fill: var(--t-good-bg); }
+.annotate-seq .step-badge.t-hot      { stroke: var(--t-hot);  fill: var(--t-hot-bg); }
+.annotate-seq .step-badge.t-dropped  { stroke: var(--t-dropped); }
+
+.annotate-seq .badge-num   { fill: var(--text-strong); font-size: 9.5px; font-weight: 700;
+                             font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace; }
+.annotate-seq .badge-num.t-hot  { fill: var(--t-hot); }
+.annotate-seq .badge-num.t-good { fill: var(--t-good); }
+
+/* The disc that actually takes the click is bigger than the circle you see:
+   an 8.5px target is a miss waiting to happen. */
+.annotate-seq .badge-target { fill: transparent; }
+.annotate-seq .badge-halo   { fill: transparent; transition: fill .12s; }
+.annotate-seq .badge-hit    { cursor: pointer; outline: none; }
+.annotate-seq .badge-hit:hover .step-badge,
+.annotate-seq .badge-hit:focus-visible .step-badge { stroke: var(--accent); stroke-width: 2; }
+.annotate-seq .badge-hit:focus-visible .badge-halo {
+  fill: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* Selected pair. The halo and the row wash carry the selection so a toned
+   badge keeps its own ink: `hot` stays red while it is the one being read. */
+.annotate-seq .step-row.is-linked .badge-halo {
+  fill: color-mix(in srgb, var(--accent) 26%, transparent);
+}
+.annotate-seq .step-row.is-linked .row-bg {
+  fill: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.annotate-seq .step-row.is-linked .arr { stroke-width: 2.4; }
+
+.seq-key { margin: 16px 0 2px; border-top: 1px solid var(--border); padding-top: 6px; }
+.seq-key-phase { display: flex; align-items: center; gap: 12px; margin: 18px 0 9px; }
+.seq-key-phase:first-child { margin-top: 10px; }
+.seq-key-phase span {
+  font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace;
+  font-size: 9.5px; letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--accent); font-weight: 700;
+}
+.seq-key-phase::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+/* No negative margin. `.block-content` is a scroll container for a sequence
+   block (see the overflow-x rule at the top of this file), so a row that bleeds
+   10px past it on each side does not bleed — it adds 10px of horizontal scroll
+   to every sequence card, measured at 1111px of row inside a 1091px card. The
+   wash is inset from the grid's edge instead, which is the cheaper loss. */
+.seq-key-row {
+  display: grid; grid-template-columns: 24px 1fr; gap: 12px;
+  padding: 5px 10px; border-radius: 7px;
+  cursor: pointer; outline: none; transition: background .12s;
+}
+.seq-key-row:hover { background: var(--hover-tint); }
+.seq-key-row.is-linked { background: color-mix(in srgb, var(--accent) 11%, transparent); }
+.seq-key-row:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+
+.seq-key-n {
+  width: 19px; height: 19px; border-radius: 50%;
+  border: 1px solid var(--border); background: #ffffff;
+  display: grid; place-items: center; margin-top: 1px;
+  font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace;
+  font-size: 9.5px; font-weight: 700; color: var(--text);
+}
+.seq-key-n.t-hot  { border-color: var(--t-hot);  color: var(--t-hot);  background: var(--t-hot-bg); }
+.seq-key-n.t-good { border-color: var(--t-good); color: var(--t-good); background: var(--t-good-bg); }
+.seq-key-row.is-linked .seq-key-n {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.seq-key-label { font-size: 13.5px; font-weight: 600; color: var(--text-strong); line-height: 1.4; }
+.seq-key-row.t-hot  .seq-key-label { color: var(--t-hot); }
+.seq-key-row.t-good .seq-key-label { color: var(--t-good); }
+/* `dropped` marks a call the proposal removes — same strike-through it had
+   when it was an arrow label. */
+.seq-key-row.t-dropped .seq-key-label {
+  color: var(--t-dropped); text-decoration: line-through; text-decoration-color: var(--t-hot);
+}
+.seq-key-sub {
+  font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace;
+  font-size: 11px; color: var(--text-dim); margin-top: 2px; line-height: 1.5;
+}
+.seq-key-flag {
+  margin-left: 10px; white-space: nowrap;
+  font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace;
+  font-size: 10px; font-weight: 400; color: var(--text-dim);
+}
+.seq-key-flag.t-hot  { color: var(--t-hot);  font-weight: 600; }
+.seq-key-flag.t-good { color: var(--t-good); font-weight: 600; }
+
 /* Bands: a narrated aside laid across the actors it concerns. */
 .annotate-seq .band        { fill: var(--surface-soft); stroke: var(--border); stroke-width: 1; }
 .annotate-seq .band.t-internal { fill: var(--t-internal-bg); stroke: var(--t-internal); }

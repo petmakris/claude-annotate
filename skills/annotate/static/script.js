@@ -1312,6 +1312,53 @@
     content.addEventListener("mouseleave", clear);
   }
 
+  // A sequence block is two halves: the grid (`blk.svg`) and the numbered key
+  // beneath it (`blk.key`). The grid carries arrows and badges and no words at
+  // all, so painting the svg alone leaves a picture of unexplained circles —
+  // both halves go in together, always.
+  function paintSequence(content, blk) {
+    content.innerHTML = (blk.svg || "") + (blk.key || "");
+  }
+
+  // Badge ⇄ key pairing. They pair on data-step-id, which is also what a
+  // comment anchors to, so lighting a step lights whatever a comment marked.
+  // Delegated from .block-content, which survives updateBlockContent's
+  // innerHTML swap — binding to the badges themselves would go stale on the
+  // first repaint.
+  function linkSequenceKey(content) {
+    const clear = () => {
+      content.querySelectorAll(".is-linked").forEach((el) => el.classList.remove("is-linked"));
+    };
+    const select = (stepId, scroll) => {
+      const row = content.querySelector(`.seq-key-row[data-step-id="${cssEsc(stepId)}"]`);
+      const grid = content.querySelector(`.step-row[data-step-id="${cssEsc(stepId)}"]`);
+      // A second click on the same step lets go, so a reader is never stuck
+      // with a highlight they cannot dismiss from the thing they clicked.
+      if (row && row.classList.contains("is-linked")) { clear(); return; }
+      clear();
+      if (row) row.classList.add("is-linked");
+      if (grid) grid.classList.add("is-linked");
+      if (scroll && row) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    };
+    const handle = (ev, el) => {
+      ev.stopPropagation();
+      select(el.dataset.stepId, el.classList.contains("badge-hit"));
+    };
+    content.addEventListener("click", (ev) => {
+      const el = ev.target.closest && ev.target.closest(".badge-hit, .seq-key-row");
+      if (el && content.contains(el)) handle(ev, el);
+      else clear();
+    });
+    content.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") { clear(); return; }
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      const el = ev.target.closest && ev.target.closest(".badge-hit, .seq-key-row");
+      if (!el || !content.contains(el)) return;
+      ev.preventDefault();
+      handle(ev, el);
+    });
+  }
+
   function createBlockSection(blk) {
     const section = document.createElement("section");
     section.className = "block card";
@@ -1342,13 +1389,15 @@
     const content = document.createElement("div");
     content.className = "block-content";
     if (kind === "sequence") {
-      // Server pre-rendered the SVG; inject as-is.
-      content.innerHTML = blk.svg || "";
-      // No step-click listener, for the same reason flowchart lost its node
-      // one below: a picture is commented as a whole, from the card header.
-      // The `data-step-id` hit targets stay on the rows — they still anchor
-      // comments made before this rule, and applyEngagedStyling still paints
-      // the row those comments target.
+      // Server pre-rendered both halves; inject as-is.
+      paintSequence(content, blk);
+      linkSequenceKey(content);
+      // Still no comment-on-click: a picture is commented as a whole, from the
+      // card header, for the same reason flowchart lost its node handler
+      // below. What linkSequenceKey binds is not a way into the composer — it
+      // pairs a badge with its key entry and nothing else. The `data-step-id`
+      // hit targets stay on the rows: they anchor comments made before that
+      // rule, and applyEngagedStyling still paints the row they target.
     } else if (kind === "flowchart") {
       // Server pre-rendered the hand-built SVG, plus the pflow source pane when
       // the block carries one. Both views hang their hit targets off
@@ -2880,7 +2929,9 @@
     const content = section.querySelector(".block-content");
     if (content) {
       if (newKind === "sequence") {
-        content.innerHTML = blk.svg || "";
+        // Both halves again. The pairing listeners live on .block-content,
+        // which survives this swap.
+        paintSequence(content, blk);
       } else if (newKind === "flowchart") {
         // Without this a flowchart fell through to the markdown branch below and
         // rendered blk.markdown — which a flowchart does not have — so updating

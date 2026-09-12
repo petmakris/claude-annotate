@@ -3,7 +3,9 @@ import re
 
 import pytest
 
-from skills.annotate.diagrams.sequence import ValidationError, validate, render
+from skills.annotate.diagrams.sequence import (
+    ValidationError, validate, render, render_key,
+)
 
 
 def _minimal_spec():
@@ -181,19 +183,26 @@ def test_render_self_loop_is_path_not_line():
 
 
 def test_render_tone_adds_class_and_plain_does_not():
+    """A toned step reads as one object across both halves: the arrow and its
+    badge on the grid, the row and its number in the key."""
     spec = _spec_one_of_each_arrow()
     spec["steps"][0]["tone"] = "hot"
     svg = render(spec, block_id="b-0")
     assert 'class="arr t-hot"' in svg
-    assert 'class="arrow-label t-hot"' in svg
+    assert 'class="step-badge t-hot"' in svg
+    assert 'class="badge-num t-hot"' in svg
     assert 'class="arr"' in svg  # the untoned ones stay plain
+    assert 'class="seq-key-row t-hot"' in render_key(spec, block_id="b-0")
 
 
-def test_render_emits_step_label_and_sub():
-    svg = render(_spec_one_of_each_arrow(), block_id="b-0")
-    assert ">req<" in svg
-    assert ">subreq<" in svg
-    assert ">evt<" in svg
+def test_the_key_emits_step_label_and_sub():
+    """These used to be painted on the arrow. They are the key's now — the grid
+    keeps only the numbered badge that points at them."""
+    spec = _spec_one_of_each_arrow()
+    key = render_key(spec, block_id="b-0")
+    assert ">req<" in key
+    assert ">subreq<" in key
+    assert ">evt<" in key
 
 
 def test_render_step_id_present_as_g_element():
@@ -203,11 +212,15 @@ def test_render_step_id_present_as_g_element():
 
 
 def test_render_escapes_step_label_html():
+    """The label reaches the grid only as a badge's accessible name, and the
+    key as text — both have to escape it."""
     spec = _spec_one_of_each_arrow()
     spec["steps"][0]["label"] = "<b>oops</b>"
     svg = render(spec, block_id="b-0")
-    assert "<b>oops</b>" not in svg
+    key = render_key(spec, block_id="b-0")
+    assert "<b>oops</b>" not in svg and "<b>oops</b>" not in key
     assert "&lt;b&gt;oops&lt;/b&gt;" in svg
+    assert "&lt;b&gt;oops&lt;/b&gt;" in key
 
 
 def _spec_with_phases():

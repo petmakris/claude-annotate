@@ -18,7 +18,7 @@ import xml.etree.ElementTree as ET
 import pytest
 
 from skills.annotate.diagrams.sequence import (
-    ACTOR_GAP, ACTOR_W_MIN, ROW_H, render,
+    ACTOR_GAP, ACTOR_W_MIN, BADGE_R, ROW_H, render,
 )
 from skills.annotate.diagrams.text_metrics import text_px
 
@@ -113,67 +113,76 @@ def test_svg_carries_pixel_size_so_it_never_scales_down(name, lbls):
     assert root.get("height") == str(int(vh))
 
 
-def test_phase_label_clears_the_text_on_both_neighbouring_rows():
-    """The old renderer put the phase name 7px above the first arrow label and
-    horizontally on top of it. A phase label now owns a whole row, so it has to
-    clear the sub-caption of the step above it AND the label of the step below —
-    the row above is the tight one, because a sub-caption hangs 13px below its
-    arrow while a label sits only 6px above one."""
+def test_phase_label_clears_the_badges_on_both_neighbouring_rows():
+    """A phase label owns a whole row, so it has to clear the badge above it
+    and the badge below it. The old renderer drew the phase name on the same
+    baseline band as the first arrow label and the two overlapped; the label
+    text is gone now, but a badge is 8.5px tall either side of its centreline
+    and the same collision is available if the row is not reserved."""
     spec = _spec(["A", "B"])
     spec["steps"] = [
-        {"id": "s1", "from": "a0", "to": "a1", "arrow": "request",
-         "label": "first", "sub": "a sub-caption hanging below the first arrow"},
-        {"id": "s2", "from": "a1", "to": "a0", "arrow": "request",
-         "label": "a long second label that reaches well to the left"},
+        {"id": "s1", "from": "a0", "to": "a1", "arrow": "request", "label": "first"},
+        {"id": "s2", "from": "a1", "to": "a0", "arrow": "request", "label": "second"},
     ]
     spec["phases"] = [{"id": "p1", "label": "SECOND PHASE", "start_at": "s2"}]
     root = ET.fromstring(render(spec, "section-1"))
-    phase_y = above_y = below_y = None
+    phase_y, badge_ys = None, []
     for el in root.iter():
         cls = (el.get("class") or "").split()
         if "phase-label" in cls:
             phase_y = float(el.get("y"))
-        elif "arrow-sub" in cls and above_y is None:
-            above_y = float(el.get("y"))          # s1's sub-caption
-        elif "arrow-label" in cls and el.text and el.text.startswith("a long"):
-            below_y = float(el.get("y"))          # s2's label
-    assert None not in (phase_y, above_y, below_y)
-    assert phase_y - above_y >= 14, \
-        f"phase label at y={phase_y} crowds the sub-caption above it at y={above_y}"
-    assert below_y - phase_y >= 14, \
-        f"phase label at y={phase_y} crowds the arrow label below it at y={below_y}"
+        elif "step-badge" in cls:
+            badge_ys.append(float(el.get("cy")))
+    assert phase_y is not None and len(badge_ys) == 2
+    above, below = sorted(badge_ys)
+    assert phase_y - (above + BADGE_R) >= 8, \
+        f"phase label at y={phase_y} crowds the badge above it at cy={above}"
+    assert (below - BADGE_R) - phase_y >= 8, \
+        f"phase label at y={phase_y} crowds the badge below it at cy={below}"
 
 
-def test_arrow_label_never_runs_into_the_note_gutter():
-    spec = _spec(["Alpha", "Beta"])
-    spec["steps"] = [{
-        "id": "s1", "from": "a0", "to": "a1", "arrow": "request",
-        "label": "an extremely long call label that would otherwise sail past the gutter",
-        "note": "1,409 ms",
-    }]
-    root = ET.fromstring(render(spec, "section-1"))
-    label_right = note_left = None
-    for el in root.iter():
-        cls = (el.get("class") or "").split()
-        if "arrow-label" in cls:
-            w = text_px(el.text or "", "seq-label")
-            label_right = float(el.get("x")) + w / 2
-        elif "row-note" in cls:
-            note_left = float(el.get("x"))
-    assert label_right is not None and note_left is not None
-    assert label_right <= note_left, \
-        f"arrow label reaches {label_right:.0f}, note column starts at {note_left:.0f}"
+def test_no_text_but_a_band_can_widen_the_canvas():
+    """The defect this replaces: an arrow label centred on a narrow span ran
+    into the note gutter, and the renderer slid it left to compensate. There is
+    no arrow label and no gutter now, so the canvas is a function of the actors
+    alone — a band is the one exception, because a band keeps its text.
+
+    Three specs, identical actors, wildly different text. Only the band moves
+    the number."""
+    def width(steps):
+        spec = _spec(["Alpha", "Beta"])
+        spec["steps"] = steps
+        return float(ET.fromstring(render(spec, "section-1")).get("viewBox").split()[2])
+
+    plain = width([{"id": "s1", "from": "a0", "to": "a1", "arrow": "request",
+                    "label": "x"}])
+    verbose = width([{"id": "s1", "from": "a0", "to": "a1", "arrow": "request",
+                      "label": "an extremely long call label that would otherwise "
+                               "sail past the gutter and scroll the card",
+                      "sub": "and a sub-caption just as long, for good measure",
+                      "note": "1,409 ms"}])
+    banded = width([{"id": "s1", "from": "a0", "to": "a0", "arrow": "band",
+                     "label": "a band whose narration is far wider than the two "
+                              "actors it is laid across"}])
+    assert plain == verbose, f"label and note still move the canvas: {plain} vs {verbose}"
+    assert banded > plain, "a band wider than its actors must still widen the canvas"
 
 
-def test_row_numbers_count_only_noted_steps():
+def test_every_message_step_is_numbered_and_a_band_is_not():
+    """Numbering used to count only the steps carrying a note, because a number
+    was a gutter annotation. A number is now the handle that pairs an arrow to
+    its key entry, so every step that has a key entry needs one — and a band,
+    which has none, must not take an ordinal from the steps that do."""
     spec = _spec(["A", "B"])
     spec["steps"] = [
         {"id": "s1", "from": "a0", "to": "a1", "arrow": "request", "label": "x"},
-        {"id": "s2", "from": "a1", "to": "a0", "arrow": "request", "label": "y", "note": "5 ms"},
-        {"id": "s3", "from": "a0", "to": "a1", "arrow": "request", "label": "z", "note": "9 ms"},
+        {"id": "s2", "from": "a0", "to": "a0", "arrow": "band", "label": "aside"},
+        {"id": "s3", "from": "a1", "to": "a0", "arrow": "request", "label": "y", "note": "5 ms"},
     ]
     svg = render(spec, "section-1")
-    assert ">#1<" in svg and ">#2<" in svg and ">#3<" not in svg
+    nums = [el.text for el in ET.fromstring(svg).iter()
+            if "badge-num" in (el.get("class") or "").split()]
+    assert nums == ["1", "2"], nums
 
 
 def test_actor_name_wrapping_is_lossless():

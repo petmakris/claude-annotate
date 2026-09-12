@@ -31,7 +31,7 @@ from skills._shared.web_companion.atomic import write_text_atomic
 # but an unknown one is an authoring mistake, not an empty block.
 BLOCK_KEYS = frozenset({
     "id", "kind", "spec", "markdown", "title", "code", "anchor",
-    "version", "warnings", "svg", "svgs", "flavours", "views",
+    "version", "warnings", "svg", "svgs", "key", "flavours", "views",
 })
 
 

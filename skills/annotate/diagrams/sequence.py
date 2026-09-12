@@ -105,42 +105,47 @@ def validate(spec: dict[str, Any]) -> None:
 
 
 # ── layout constants ──────────────────────────────────────────────
-# A fixed grid. Every number here was read off the reference diagram this
-# renderer reproduces, so changing one changes the density on purpose rather
-# than by accident. Keep in sync with the .annotate-seq rules in diagram.css
-# and the seq-* entries in text_metrics.STYLES.
+# A fixed grid, and a narrow one on purpose. The renderer this replaced painted
+# every label and sub-caption on its arrow, centred on a span far narrower than
+# the text: on a six-actor diagram the lane pitch was 122px while labels ran to
+# 347px, so captions sat under lifelines they had nothing to do with and the
+# outermost ones left the canvas entirely. Here the grid carries arrows and a
+# numbered badge and nothing else; every word lives in `render_key` below. The
+# canvas is therefore a function of the actors alone, which is what lets a
+# twelve-actor flow render at full type size inside a card that does not scroll.
 ACTOR_W_MIN = 112        # actor box width; grows only if a wrapped line needs it
 ACTOR_PAD_X = 12         # total horizontal padding inside an actor box
-ACTOR_GAP = 10           # gap between adjacent actor boxes
+ACTOR_GAP = 16           # gap between adjacent actor boxes
 ACTOR_H2 = 46            # box height, two-line name
 ACTOR_H1 = 33            # box height, one-line name
 ACTOR_LINE_1 = 17        # first name baseline, relative to box top
 ACTOR_LINE_2 = 30        # second name baseline, relative to box top
 NAME_MAX_LINES = 2
 
-PAD_LEFT = 52            # left margin: holds the row-number column
-ROWNUM_X = 40            # row numbers are right-anchored here
-GUTTER_GAP = 26          # last actor box edge → note column
-GUTTER_MIN = 0           # no notes → no gutter
-PAD_RIGHT = 16
+PAD_LEFT = 24            # no row-number column any more: the numbers are badges
+PAD_RIGHT = 24
 
-LEGEND_H = 26            # 0 when the spec carries no legend
+LEGEND_TOP = 13          # first legend line's centre
+LEGEND_LINE_H = 19       # a wrapped legend's line pitch
 LEGEND_SWATCH_W = 22
-LEGEND_ITEM_GAP = 24
+LEGEND_TEXT_GAP = 7
+LEGEND_ITEM_GAP = 26
 
-ROW_H = 34               # row pitch
-LABEL_DY = -6            # label baseline, relative to the arrow centreline
-SUB_DY = 13              # sub-caption baseline, relative to the arrow centreline
+ROW_H = 26               # row pitch — a badge row, not a two-line caption row
 ARROW_INSET = 6          # arrow endpoints stop this far short of the lifeline
 HEAD_LEN = 7             # arrowhead triangle length
-BAND_H = 22
-BAND_PAD = 46            # band overhang past the outermost lifeline it spans
+BAND_H = 21
+BAND_PAD = 30            # band overhang past the outermost lifeline it spans
 BAND_TEXT_X = 10
-SELF_W = 22              # self-call bracket width
-SELF_H = 14
-SELF_LABEL_GAP = 8
+SELF_W = 20              # self-call bracket width
+SELF_H = 13
+SELF_BADGE_GAP = 14      # bracket edge → badge centre
 
-PHASE_LABEL_H = ROW_H    # a phase label owns a whole row; nothing shares its y
+BADGE_R = 8.5            # the visible numbered circle
+BADGE_HIT_R = 13         # the transparent disc that actually takes the click
+BADGE_NUM_DY = 3.5       # number baseline, relative to the badge centre
+
+PHASE_LABEL_H = 30       # a phase label owns a whole row; nothing shares its y
 
 
 def _name_lines(label: str, max_px: float) -> list[str]:
@@ -216,8 +221,72 @@ def _cls(base: str, tone: str) -> str:
     return base if tone == "plain" else f"{base} t-{tone}"
 
 
+def _numbered(steps: list[dict[str, Any]]) -> list[tuple[dict[str, Any], int | None]]:
+    """Pair each step with its badge number, or None for a band.
+
+    A band narrates across the actors it spans rather than carrying a message,
+    so it has nothing for a key entry to say and no number to pair with. Every
+    other step is numbered from 1, and that ordinal is what the badge shows and
+    what the key repeats — but it is deliberately NOT what the two halves are
+    paired on. They pair on `data-step-id`, which is stable when a step is
+    inserted and is already what a comment anchors to.
+    """
+    out: list[tuple[dict[str, Any], int | None]] = []
+    n = 0
+    for step in steps:
+        if step["arrow"] == "band":
+            out.append((step, None))
+            continue
+        n += 1
+        out.append((step, n))
+    return out
+
+
+def _legend_lines(legend: list[dict[str, Any]], max_w: float) -> list[list[tuple[dict, float]]]:
+    """Greedily pack legend entries onto lines that fit `max_w`.
+
+    The old legend ran on one line whatever its width: on the reference diagram
+    its last entry reached x=1036 on an 890px canvas and was simply cut off.
+    """
+    lines: list[list[tuple[dict, float]]] = [[]]
+    x = float(PAD_LEFT)
+    for item in legend:
+        w = LEGEND_SWATCH_W + LEGEND_TEXT_GAP + text_px(str(item["label"]), "seq-legend")
+        if lines[-1] and x + w > max_w - PAD_RIGHT:
+            lines.append([])
+            x = float(PAD_LEFT)
+        lines[-1].append((item, x))
+        x += w + LEGEND_ITEM_GAP
+    return lines
+
+
+def _render_legend(lines: list[list[tuple[dict, float]]]) -> str:
+    """Tone key across the top. Only tones the author declared appear."""
+    parts = ['<g class="seq-legend">']
+    for row, entries in enumerate(lines):
+        y = LEGEND_TOP + row * LEGEND_LINE_H
+        for item, x in entries:
+            tone = _tone_of(item)
+            label = str(item["label"])
+            parts.append(
+                f'<line class="{_cls("legend-swatch", tone)}" x1="{x:.0f}" y1="{y}" '
+                f'x2="{x + LEGEND_SWATCH_W:.0f}" y2="{y}"/>'
+            )
+            parts.append(
+                f'<text class="legend-text" x="{x + LEGEND_SWATCH_W + LEGEND_TEXT_GAP:.0f}" '
+                f'y="{y + 4}">{_html_escape(label)}</text>'
+            )
+    parts.append("</g>")
+    return "".join(parts)
+
+
 def render(spec: dict[str, Any], block_id: str) -> str:
-    """Render a validated spec to an SVG string with hit-target IDs.
+    """Render a validated spec to the grid: arrows, bands and numbered badges.
+
+    The words that used to sit on these arrows are in `render_key(spec)`.
+    Rendering one without the other leaves a diagram of unexplained numbers, so
+    callers must paint both — see `render_block` in ../render.py, which puts
+    them on the wire as `svg` and `key`.
 
     Raises ValidationError if spec is malformed.
     """
@@ -233,37 +302,27 @@ def render(spec: dict[str, Any], block_id: str) -> str:
     xs = [PAD_LEFT + actor_w // 2 + i * pitch for i in range(len(actors))]
     actor_x = {a["id"]: x for a, x in zip(actors, xs)}
 
-    legend_h = LEGEND_H if legend else 0
+    # Width is a function of the actors, and of a band's text when it is wider
+    # than the actors it spans. Nothing else on this canvas is text, so nothing
+    # else can drag the canvas past the card and make it scroll.
+    grid_w = PAD_LEFT + actor_w + (len(actors) - 1) * pitch + PAD_RIGHT
+    total_w = int(max(grid_w, _widest_band_right(steps, actor_x) + PAD_RIGHT))
+
+    legend_lines = _legend_lines(legend, total_w) if legend else []
+    legend_h = (LEGEND_TOP + (len(legend_lines) - 1) * LEGEND_LINE_H + 10) if legend else 0
     actor_top = legend_h + 8
     box_h = ACTOR_H2 if any(len(g) > 1 for g in name_lines) else ACTOR_H1
     lifeline_top = actor_top + box_h + 6
 
     # Row grid. A phase label owns a whole row of its own, so its text can never
-    # land on the same baseline band as an arrow label — the collision the
-    # previous renderer shipped, where PRE-PROCESSING sat under the first arrow.
+    # land on the same baseline band as a badge.
     step_index = {s["id"]: i for i, s in enumerate(steps)}
     phase_offsets: dict[int, int] = {step_index[p["start_at"]]: PHASE_LABEL_H for p in phases}
 
     def row_y(i: int) -> int:
-        return lifeline_top + 16 + i * ROW_H + sum(phase_offsets.get(k, 0) for k in range(i + 1))
+        return lifeline_top + 13 + i * ROW_H + sum(phase_offsets.get(k, 0) for k in range(i + 1))
 
-    total_h = row_y(len(steps) - 1) + ROW_H // 2 + 14
-
-    # Note gutter sits a fixed distance right of the last actor box, so a long
-    # arrow label widening the canvas does not drag the notes with it.
-    notes = [s for s in steps if s.get("note")]
-    gutter_x = PAD_LEFT + actor_w + (len(actors) - 1) * pitch + GUTTER_GAP
-    gutter_w = (
-        max(text_px(str(s["note"]), "seq-note") for s in notes) if notes else GUTTER_MIN
-    )
-    total_w = int(gutter_x + gutter_w + PAD_RIGHT) if notes else int(
-        PAD_LEFT + actor_w + (len(actors) - 1) * pitch + PAD_RIGHT
-    )
-
-    # Arrow labels float over neighbouring lifelines by design; they only get to
-    # widen the canvas, never to spill outside it.
-    label_right = _widest_label_right(steps, actor_x, actor_w)
-    total_w = max(total_w, int(label_right) + PAD_RIGHT)
+    total_h = row_y(len(steps) - 1) + ROW_H // 2 + 12
 
     parts: list[str] = []
     # No data-block-id on the SVG root: the host <section> already carries it,
@@ -275,7 +334,7 @@ def render(spec: dict[str, Any], block_id: str) -> str:
     )
 
     if legend:
-        parts.append(_render_legend(legend))
+        parts.append(_render_legend(legend_lines))
 
     lifeline_bottom = total_h - 8
     for x in xs:
@@ -287,42 +346,71 @@ def render(spec: dict[str, Any], block_id: str) -> str:
         parts.append(_render_actor(actor, x, lines, actor_top, actor_w, box_h))
 
     if phases:
-        parts.append(_render_phases(phases, steps, step_index, row_y, total_w))
+        parts.append(_render_phases(phases, step_index, row_y, total_w))
 
-    note_n = 0
-    for i, step in enumerate(steps):
-        y = row_y(i)
-        num = None
-        if step.get("note"):
-            note_n += 1
-            num = step.get("index") or f"#{note_n}"
-        parts.append(_render_step(step, block_id, actor_x, actor_w, y, total_w, gutter_x, num))
+    for i, (step, num) in enumerate(_numbered(steps)):
+        parts.append(_render_step(step, block_id, actor_x, row_y(i), total_w, num))
 
     parts.append("</svg>")
     return "".join(parts)
 
 
-def _widest_label_right(steps: list[dict[str, Any]], actor_x: dict[str, int],
-                        actor_w: int) -> float:
-    """Right-most pixel any arrow or band label reaches."""
+def render_key(spec: dict[str, Any], block_id: str) -> str:
+    """The numbered key that reads alongside `render(spec)`'s grid.
+
+    HTML, not SVG, and deliberately so: it is the half that has to reflow when
+    the card narrows, and the half a reader selects text out of.
+
+    Returns "" when the spec has no message steps — a diagram of nothing but
+    bands has no numbers, and an empty key div would draw a rule under the grid
+    for no reason.
+    """
+    validate(spec)
+    steps = spec["steps"]
+    phase_at = {p["start_at"]: str(p["label"]) for p in (spec.get("phases") or [])}
+    bid = _html_escape(block_id, quote=True)
+
+    rows: list[str] = []
+    for step, num in _numbered(steps):
+        if step["id"] in phase_at:
+            rows.append(
+                f'<div class="seq-key-phase"><span>'
+                f'{_html_escape(phase_at[step["id"]])}</span></div>'
+            )
+        if num is None:
+            continue
+        tone = _tone_of(step)
+        note = step.get("note")
+        flag = (f'<span class="{_cls("seq-key-flag", tone)}">'
+                f'{_html_escape(str(note))}</span>') if note else ""
+        sub = step.get("sub")
+        sub_html = (f'<div class="seq-key-sub">{_html_escape(str(sub))}</div>') if sub else ""
+        rows.append(
+            f'<div class="{_cls("seq-key-row", tone)}" data-block-id="{bid}" '
+            f'data-step-id="{_html_escape(step["id"], quote=True)}" '
+            f'role="button" tabindex="0">'
+            f'<span class="{_cls("seq-key-n", tone)}">{num}</span>'
+            f'<div class="seq-key-text">'
+            f'<div class="seq-key-label">{_html_escape(step.get("label", ""))}{flag}</div>'
+            f'{sub_html}</div></div>'
+        )
+    if not any(num is not None for _, num in _numbered(steps)):
+        return ""
+    return f'<div class="seq-key" data-block-id="{bid}">' + "".join(rows) + "</div>"
+
+
+def _widest_band_right(steps: list[dict[str, Any]], actor_x: dict[str, int]) -> float:
+    """Right-most pixel any band reaches. Bands are the only text left on the
+    canvas, so they are the only thing that can still widen it."""
     right = 0.0
     for s in steps:
+        if s["arrow"] != "band":
+            continue
         fx, tx = actor_x[s["from"]], actor_x[s["to"]]
-        if s["arrow"] == "band":
-            lo, hi = min(fx, tx), max(fx, tx)
-            span = max(hi - lo + 2 * BAND_PAD,
-                       text_px(s.get("label", ""), "seq-band") + 2 * BAND_TEXT_X)
-            right = max(right, lo - BAND_PAD + span)
-        elif s["arrow"] == "self":
-            base = fx + SELF_W + SELF_LABEL_GAP
-            right = max(right,
-                        base + text_px(s.get("label", ""), "seq-label"),
-                        base + text_px(s.get("sub", "") or "", "seq-tag"))
-        else:
-            mid = (fx + tx) / 2
-            for txt, style in ((s.get("label", ""), "seq-label"),
-                               (s.get("sub", "") or "", "seq-tag")):
-                right = max(right, mid + text_px(txt, style) / 2)
+        lo, hi = min(fx, tx), max(fx, tx)
+        span = max(hi - lo + 2 * BAND_PAD,
+                   text_px(s.get("label", ""), "seq-band") + 2 * BAND_TEXT_X)
+        right = max(right, lo - BAND_PAD + span)
     return right
 
 
@@ -345,44 +433,51 @@ def _render_actor(actor: dict[str, Any], x: int, lines: list[str], top: int,
     return "".join(parts)
 
 
-def _render_legend(legend: list[dict[str, Any]]) -> str:
-    """Tone key across the top. Only tones the author declared appear."""
-    parts = ['<g class="seq-legend">']
-    cursor = float(PAD_LEFT)
-    for item in legend:
-        tone = _tone_of(item)
-        label = str(item["label"])
-        parts.append(
-            f'<line class="{_cls("legend-swatch", tone)}" x1="{cursor:.0f}" y1="11" '
-            f'x2="{cursor + LEGEND_SWATCH_W:.0f}" y2="11"/>'
-        )
-        tx = cursor + LEGEND_SWATCH_W + 7
-        parts.append(
-            f'<text class="legend-text" x="{tx:.0f}" y="15">{_html_escape(label)}</text>'
-        )
-        cursor = tx + text_px(label, "seq-legend") + LEGEND_ITEM_GAP
-    parts.append("</g>")
-    return "".join(parts)
-
-
 def _head(x: float, y: float, facing: int, cls: str) -> str:
     """Filled triangle arrowhead at (x, y). facing=1 points right, -1 left."""
     return (f'<path class="{cls}" d="M {x:.0f} {y:.0f} l {-HEAD_LEN * facing:.0f} -4 '
             f'v 8 z"/>')
 
 
+def _render_badge(step: dict[str, Any], block_id: str, cx: float, cy: float,
+                  num: int) -> str:
+    """The one clickable thing in a sequence diagram.
+
+    `.annotate-seq .step-row` deliberately has no pointer cursor: a picture is
+    commented as a whole, from the card header, and an affordance that promises
+    a click nothing answers is worse than none. A badge is the exception
+    because a badge's click HAS an answer — the key entry with the same
+    `data-step-id` lights up. Shipping the badge without the key would put this
+    straight back into the case that rule exists to prevent.
+    """
+    tone = _tone_of(step)
+    label = step.get("label", "")
+    return (
+        f'<g class="badge-hit" data-block-id="{_html_escape(block_id, quote=True)}" '
+        f'data-step-id="{_html_escape(step["id"], quote=True)}" role="button" '
+        f'tabindex="0" aria-label="Step {num}: {_html_escape(label, quote=True)}">'
+        f'<circle class="badge-halo" cx="{cx:.0f}" cy="{cy:.0f}" r="{BADGE_HIT_R}"/>'
+        f'<circle class="{_cls("step-badge", tone)}" cx="{cx:.0f}" cy="{cy:.0f}" '
+        f'r="{BADGE_R}"/>'
+        f'<text class="{_cls("badge-num", tone)}" x="{cx:.0f}" y="{cy + BADGE_NUM_DY:.0f}" '
+        f'text-anchor="middle">{num}</text>'
+        f'<circle class="badge-target" cx="{cx:.0f}" cy="{cy:.0f}" r="{BADGE_HIT_R}"/>'
+        f'</g>'
+    )
+
+
 def _render_step(step: dict[str, Any], block_id: str, actor_x: dict[str, int],
-                 actor_w: int, y: int, total_w: int, gutter_x: float,
-                 num: str | None) -> str:
-    """Emit one step row: the arrow (or band), its label, sub-caption, row
-    number and gutter note. y is the arrow centreline."""
+                 y: int, total_w: int, num: int | None) -> str:
+    """Emit one step row: the arrow (or band) and its numbered badge.
+
+    y is the arrow centreline. No label, no sub-caption and no note — those are
+    the key's, and putting any of them back here reopens the collisions the
+    split exists to close."""
     sid = step["id"]
     arrow = step["arrow"]
     tone = _tone_of(step)
     fx = actor_x[step["from"]]
     tx = actor_x[step["to"]]
-    label = _html_escape(step.get("label", ""))
-    sub = step.get("sub")
     dash = ' stroke-dasharray="5 4"' if arrow in ("event", "dropped") or tone == "dropped" else ""
 
     parts = [
@@ -391,21 +486,11 @@ def _render_step(step: dict[str, Any], block_id: str, actor_x: dict[str, int],
         f'<rect class="row-bg" x="0" y="{y - ROW_H // 2}" width="{total_w}" height="{ROW_H}"/>',
     ]
 
-    if num:
-        parts.append(
-            f'<text class="row-num" x="{ROWNUM_X}" y="{y}" text-anchor="end">'
-            f'{_html_escape(str(num))}</text>'
-        )
-    if step.get("note"):
-        parts.append(
-            f'<text class="{_cls("row-note", tone)}" x="{gutter_x:.0f}" y="{y}">'
-            f'{_html_escape(str(step["note"]))}</text>'
-        )
-
     if arrow == "band":
         # A narrated aside laid across the actors it concerns — the device that
         # carries "pre-processing — auth, tenant resolution, JPA task lookup"
-        # without spending an arrow on it.
+        # without spending an arrow on it. It keeps its text, because it is not
+        # a message and has no key entry to move the text into.
         lo, hi = min(fx, tx), max(fx, tx)
         text_w = text_px(step.get("label", ""), "seq-band")
         span = max(hi - lo + 2 * BAND_PAD, text_w + 2 * BAND_TEXT_X)
@@ -415,28 +500,24 @@ def _render_step(step: dict[str, Any], block_id: str, actor_x: dict[str, int],
             f'width="{span:.0f}" height="{BAND_H}" rx="3"/>'
         )
         parts.append(
-            f'<text class="{_cls("band-text", tone)}" x="{bx + BAND_TEXT_X}" '
-            f'y="{y + 4}">{label}</text>'
+            f'<text class="{_cls("band-text", tone)}" x="{bx + span / 2:.0f}" '
+            f'y="{y + 4}" text-anchor="middle">{_html_escape(step.get("label", ""))}</text>'
         )
-    elif arrow == "self":
+        parts.append("</g>")
+        return "".join(parts)
+
+    if arrow == "self":
         # Square bracket hanging off the lifeline with the head pointing back at
-        # it. Mirrored on the rightmost actor so the label stays on the canvas.
+        # it. Mirrored on the rightmost actor so the badge stays on the canvas.
         max_x = max(actor_x.values())
         side = -1 if fx == max_x else 1
-        anchor = ' text-anchor="end"' if side < 0 else ""
         far = fx + SELF_W * side
-        lx = fx + (SELF_W + SELF_LABEL_GAP) * side
         parts.append(
             f'<path class="{_cls("arr", tone)}" fill="none" '
             f'd="M {fx} {y - SELF_H} H {far} V {y} H {fx}"{dash}/>'
         )
         parts.append(_head(fx, y, -side, _cls("arr-head", tone)))
-        parts.append(f'<text class="{_cls("arrow-label", tone)}" x="{lx}" y="{y - 5}"{anchor}>{label}</text>')
-        if sub:
-            parts.append(
-                f'<text class="{_cls("arrow-sub", tone)}" x="{lx}" y="{y + SUB_DY}"{anchor}>'
-                f'{_html_escape(sub)}</text>'
-            )
+        badge_x = fx + (SELF_W + SELF_BADGE_GAP) * side
     else:
         sign = 1 if tx > fx else -1
         x1 = fx + ARROW_INSET * sign
@@ -445,45 +526,33 @@ def _render_step(step: dict[str, Any], block_id: str, actor_x: dict[str, int],
             f'<line class="{_cls("arr", tone)}" x1="{x1}" y1="{y}" x2="{x2}" y2="{y}"{dash}/>'
         )
         parts.append(_head(tx - ARROW_INSET * sign, y, sign, _cls("arr-head", tone)))
-        mid = (fx + tx) // 2
-        for txt, style, cls, dy in (
-            (step.get("label", ""), "seq-label", "arrow-label", LABEL_DY),
-            (sub or "", "seq-tag", "arrow-sub", SUB_DY),
-        ):
-            if not txt:
-                continue
-            # Centre on the arrow, but never let a long label run into the note
-            # gutter — slide it left instead.
-            cx = mid
-            half = text_px(txt, style) / 2
-            if cx + half > gutter_x - 10:
-                cx = gutter_x - 10 - half
-            parts.append(
-                f'<text class="{_cls(cls, tone)}" x="{cx:.0f}" y="{y + dy}" '
-                f'text-anchor="middle">{_html_escape(txt)}</text>'
-            )
+        badge_x = (fx + tx) / 2
 
+    parts.append(_render_badge(step, block_id, badge_x, y, num))
     parts.append("</g>")
     return "".join(parts)
 
 
 def _render_phases(
     phases: list[dict[str, Any]],
-    steps: list[dict[str, Any]],
     step_index: dict[str, int],
     row_y,
     total_w: int,
 ) -> str:
-    """Phase separators: a hairline across the canvas with the phase name in the
-    row above it. The label owns that row (PHASE_LABEL_H == ROW_H), so it cannot
-    collide with an arrow label the way the previous full-width wash did."""
+    """Phase separators: the phase name on its own row with a hairline running
+    off its right shoulder to the canvas edge."""
     parts: list[str] = []
     for phase in phases:
-        idx = step_index[phase["start_at"]]
-        y = row_y(idx) - ROW_H
-        parts.append(f'<line class="phase-rule" x1="0" y1="{y + 5}" x2="{total_w}" y2="{y + 5}"/>')
+        y = row_y(step_index[phase["start_at"]]) - ROW_H
+        label = str(phase["label"]).upper()
+        lx = PAD_LEFT - 20 if PAD_LEFT >= 20 else 0
         parts.append(
-            f'<text class="phase-label" x="{PAD_LEFT}" y="{y + 1}">'
-            f'{_html_escape(phase["label"])}</text>'
+            f'<text class="phase-label" x="{lx}" y="{y + 1}">'
+            f'{_html_escape(label)}</text>'
+        )
+        rule_x = lx + text_px(label, "seq-legend") + 14
+        parts.append(
+            f'<line class="phase-rule" x1="{rule_x:.0f}" y1="{y - 3}" '
+            f'x2="{total_w - 8}" y2="{y - 3}"/>'
         )
     return "".join(parts)

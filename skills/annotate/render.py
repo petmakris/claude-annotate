@@ -13,7 +13,7 @@ can change while a session is open) using this same plugin's anchor format.
 from __future__ import annotations
 
 from skills._shared.web_companion.templates import html_escape
-from skills.annotate.diagrams.sequence import render
+from skills.annotate.diagrams.sequence import render, render_key
 from skills.annotate.diagrams.flowchart import render as render_flowchart
 from skills.annotate.diagrams.flowchart import render_variants as render_flowchart_variants
 from skills.annotate.diagrams import views as views_mod
@@ -46,8 +46,14 @@ def render_block(blk: dict) -> dict:
         base["change_note"] = note
     if kind == "sequence":
         spec = blk.get("spec") or {}
+        key = ""
         try:
             svg = render(spec, block_id=blk["id"])
+            # The grid is numbered badges and nothing else, so a grid without
+            # its key is a picture of unexplained circles. Render both under
+            # the one try: if either half fails, the reader gets the error pill
+            # rather than half a diagram.
+            key = render_key(spec, block_id=blk["id"])
         except Exception as e:
             # Compact inline error pill instead of a full-width red banner.
             # Catch *any* render failure (ValidationError, or a KeyError from a
@@ -70,6 +76,10 @@ def render_block(blk: dict) -> dict:
             )
         base["spec"] = spec
         base["svg"] = svg
+        # Additive, like flowchart's `svgs` below: a client that has not been
+        # updated paints the grid alone and is no worse off than before.
+        if key:
+            base["key"] = key
     elif kind == "flowchart":
         spec = blk.get("spec") or {}
         warnings: list[str] = []

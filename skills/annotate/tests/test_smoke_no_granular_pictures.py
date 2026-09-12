@@ -94,3 +94,50 @@ def test_engaged_and_focus_state_survives():
     assert '.annotate-seq .step-row[data-engaged-type="comment"]' in css
 
 
+
+
+def test_the_badge_is_the_one_licensed_click_and_its_answer_ships_with_it():
+    """The rule this file guards is not "nothing in a picture is clickable" —
+    it is "nothing promises a click that leads nowhere". A badge points at its
+    key entry, so it earns a cursor; a step row still points at nothing, so it
+    must not have one. The licence is conditional: if the key ever stops being
+    painted alongside the grid, the badge becomes exactly the dead affordance
+    the rest of this file exists to prevent."""
+    css = DIAGRAM_CSS.read_text()
+    assert ".annotate-seq .badge-hit    { cursor: pointer; outline: none; }" in css, \
+        "the badge lost the pointer cursor for the click it does answer"
+    assert ".annotate-seq .step-row { cursor: pointer; }" not in css, \
+        "a step row promises a click nothing answers"
+    assert ".seq-key-row" in css, "the badge's cursor is unlicensed: no key is styled"
+
+    js = _strip_comments(SCRIPT_JS.read_text())
+    assert "blk.key" in js, "the key half never reaches the page"
+    # Both paint sites must go through the one function, or a repaint can drop
+    # the key and leave a grid of unexplained circles.
+    # The trailing `;` is what separates the two call sites from the one
+    # definition, which the same substring otherwise matches.
+    assert js.count("paintSequence(content, blk);") == 2, \
+        "a sequence paint site bypasses paintSequence"
+    assert 'content.innerHTML = blk.svg' not in js, \
+        "a paint site paints the grid without its key"
+
+
+def test_the_pairing_is_not_a_second_way_into_the_composer():
+    """linkSequenceKey exists to light a row, nothing more."""
+    src = SCRIPT_JS.read_text()
+    region = src.split("function linkSequenceKey(content) {", 1)[1]
+    region = _strip_comments(region.split("\n  }\n", 1)[0])
+    for forbidden in ("onHoverAction", "openComposer", "composer"):
+        assert forbidden not in region, \
+            f"the badge/key pairing reaches {forbidden} — it must only toggle a class"
+
+
+def test_the_key_cannot_widen_the_card_it_sits_in():
+    """`.block-content` is a horizontal scroll container for a sequence block.
+    A key row that bleeds past it does not bleed, it scrolls: the first cut
+    carried `margin: 0 -10px` and put a 1111px row inside a 1091px card, giving
+    every sequence card 10px of horizontal scroll for nothing."""
+    css = DIAGRAM_CSS.read_text()
+    block = css.split(".seq-key-row {", 1)[1].split("}", 1)[0]
+    assert "margin" not in block, \
+        f"a margin on .seq-key-row can push it past the scroll container: {block.strip()!r}"
