@@ -25,6 +25,9 @@ const CSS = ["core.css", "style.css", "diagram.css", "popover.css", "code-theme.
 // it mounts into DOM script.js creates.
 const JS = [
   "popover.js",
+  // Before script.js: it calls blockTitle at module scope the first time a
+  // card is painted, and the rule lives here.
+  "block-title.js",
   "highlight.min.js",
   "markdown-it.min.js",
   "diff.js",

@@ -460,25 +460,11 @@
 
   // Header title for a block's card. Claude may author a `title`; otherwise we
   // derive one from the content (first heading, else first sentence/line).
+  // The rule lives in block-title.js so it can be executed by a test; see the
+  // header there for why a source-string check could not catch the defect it
+  // fixes. entry.js loads that file before this one.
   function blockTitle(blk) {
-    if (blk.title && String(blk.title).trim()) return String(blk.title).trim();
-    const k = blk.kind || "markdown";
-    if (k === "sequence") {
-      const t = blk.spec && blk.spec.title;
-      return (t && String(t).trim()) || "Diagram";
-    }
-    if ((blk.kind || "markdown") === "choice") {
-      const q = blk.spec && blk.spec.question;
-      return (q && String(q).trim()) || "Decision";
-    }
-    const md = blk.markdown || "";
-    const heading = md.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/m);
-    let t = heading
-      ? heading[1]
-      : (md.split(/\n/).map(s => s.replace(/^[#>*\-\s`]+/, "").trim()).find(Boolean) || "");
-    t = t.replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();
-    if (t.length > 60) t = t.slice(0, 59).trimEnd() + "…";
-    return t || "Section";
+    return window.AnnotateBlockTitle.blockTitle(blk);
   }
 
   function setCardTitle(section, blk) {
