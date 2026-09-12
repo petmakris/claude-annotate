@@ -20,7 +20,8 @@ from html import escape
 # ADF. Raw HTML from a markdown block cannot be passed through: a <div> is
 # dropped, a style attribute is dropped, and the reader sees a differently
 # shaped page with no error anywhere.
-_HTML_TAG = re.compile(r"<\/?[a-zA-Z][a-zA-Z0-9-]*(\s|>|/)")
+_HTML_TAG = re.compile(
+    r"<\s*/?\s*[a-zA-Z][a-zA-Z0-9-]*(?:\s[^<>]*)?\s*/?\s*>")
 _IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 
 _FENCE = re.compile(r"^\s*```(\S*)\s*$")

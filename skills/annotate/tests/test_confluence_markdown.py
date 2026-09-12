@@ -96,3 +96,29 @@ def test_nothing_emits_storage_format():
     md = "# H\n\ntext\n\n| a |\n| --- |\n| 1 |\n\n```java\nx\n```"
     out = to_html(md)
     assert "<ac:" not in out and "<ri:" not in out
+
+
+def test_a_tag_with_a_space_after_the_bracket_still_raises():
+    # `_HTML_TAG` must not decide on the opening bracket alone — a tag
+    # written with whitespace after `<` is still a tag and must not slip
+    # past the guard as if it were prose.
+    with pytest.raises(UnsupportedMarkdown):
+        to_html('< div class="x">')
+
+
+def test_a_closing_tag_with_a_space_after_the_bracket_raises():
+    with pytest.raises(UnsupportedMarkdown):
+        to_html("</ div>")
+
+
+def test_a_lone_angle_bracket_is_not_html():
+    assert to_html("a < b & c") == "<p>a &lt; b &amp; c</p>"
+
+
+def test_comparison_operators_on_both_sides_are_not_html():
+    # A naive "line has both < and >" check would wrongly flag this.
+    assert to_html("1 < 2 and 3 > 2") == "<p>1 &lt; 2 and 3 &gt; 2</p>"
+
+
+def test_code_span_with_angle_brackets_is_still_not_html():
+    assert to_html("`<T>`") == "<p><code>&lt;T&gt;</code></p>"
