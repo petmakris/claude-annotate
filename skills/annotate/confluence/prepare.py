@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,7 +25,8 @@ from typing import Any
 
 from skills.annotate.confluence import body as body_mod
 from skills.annotate.confluence import gitref, images, manifest, resolve
-from skills.annotate.confluence.constants import BODY_TEMPLATE, REPORT_NAME
+from skills.annotate.confluence.constants import (
+    BODY_FINAL, BODY_TEMPLATE, REPORT_NAME)
 from skills.annotate.confluence.markdown_html import UnsupportedMarkdown
 
 
@@ -56,10 +58,26 @@ def load_items(
     return doc, blocks, missing
 
 
+def clear(out_dir: Path) -> None:
+    """Remove the previous run's bundle from `out_dir`.
+
+    Nothing cleared it, so running successfully, editing the document and
+    re-running into the same `--out` left `"proceed": false` in report.json
+    beside the PREVIOUS run's body and this run's manifest — a complete,
+    publishable, wrong bundle. The "no bundle at all" guarantee held only for
+    a fresh directory, which is not how a second publish is run.
+    """
+    for name in (BODY_TEMPLATE, BODY_FINAL, REPORT_NAME,
+                 manifest.MANIFEST_NAME):
+        (Path(out_dir) / name).unlink(missing_ok=True)
+    shutil.rmtree(Path(out_dir) / "images", ignore_errors=True)
+
+
 def prepare(*, items_dir: Path, repo: str, out_dir: Path, slug: str,
             ref: str = "origin/master", with_images: bool = True) -> dict:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    clear(out_dir)
     doc, blocks, missing_blocks = load_items(Path(items_dir))
 
     commit = gitref.commit_of(repo, ref)
@@ -86,8 +104,19 @@ def prepare(*, items_dir: Path, repo: str, out_dir: Path, slug: str,
     # cannot handle is reported alongside the anchor problems rather than
     # raising halfway through writing a page.
     unconvertible = []
+    unsupported_views = []
     for blk in blocks:
-        if (blk.get("kind") or "markdown") != "markdown":
+        if body_mod.has_picture(blk):
+            views = body_mod.extra_views(blk)
+            if views:
+                unsupported_views.append(
+                    {"block_id": blk["id"], "views": views})
+            if not blk.get("svg"):
+                unconvertible.append({
+                    "block_id": blk["id"],
+                    "problem": "a %s block with no stored drawing would "
+                               "publish a picture placeholder that no upload "
+                               "can fill" % blk.get("kind")})
             continue
         try:
             body_mod.render_block(blk, [])
@@ -100,9 +129,12 @@ def prepare(*, items_dir: Path, repo: str, out_dir: Path, slug: str,
         "anchors": rows,
         "blocking": blocked,
         "unconvertible": unconvertible,
+        "unsupported_views": unsupported_views,
         "missing_blocks": missing_blocks,
-        "images": ["%s.png" % b["id"] for b in blocks if b.get("svg")],
-        "proceed": not blocked and not unconvertible and not missing_blocks,
+        "images": ["%s.png" % b["id"] for b in blocks
+                   if body_mod.has_picture(b)],
+        "proceed": not (blocked or unconvertible or unsupported_views
+                        or missing_blocks),
     }
     (out_dir / REPORT_NAME).write_text(json.dumps(report, indent=2))
     if not report["proceed"]:
@@ -114,7 +146,7 @@ def prepare(*, items_dir: Path, repo: str, out_dir: Path, slug: str,
     if with_images:
         img_dir = out_dir / "images"
         for blk in blocks:
-            if blk.get("svg"):
+            if body_mod.has_picture(blk):
                 images.render_png(blk["svg"], img_dir / ("%s.png" % blk["id"]))
     return report
 
@@ -132,7 +164,7 @@ def main(argv=None) -> int:
                      slug=a.slug, ref=a.ref, with_images=not a.no_images)
     print(json.dumps({k: report[k] for k in
                       ("proceed", "blocking", "unconvertible",
-                       "missing_blocks", "images")},
+                       "unsupported_views", "missing_blocks", "images")},
                      indent=2))
     return 0 if report["proceed"] else 2
 

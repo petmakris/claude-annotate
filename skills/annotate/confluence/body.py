@@ -19,6 +19,32 @@ from typing import Any
 from skills.annotate.confluence.constants import media_token
 from skills.annotate.confluence.markdown_html import to_html
 from skills.annotate.diagrams.sequence import _numbered
+from skills.annotate.diagrams.views import ALL_VIEW
+
+# The kinds that publish a picture. `prepare` lists the PNGs to render from
+# this and `render_block` emits the figures from it, because the two used to
+# disagree -- prepare went by `svg`, body by `kind` -- and a block they
+# disagreed about produced a placeholder no upload would ever fill. That
+# failure surfaced in `finalize`, AFTER the page and its attachments existed,
+# which is the worst moment available.
+DIAGRAM_KINDS = ("sequence", "flowchart")
+
+
+def has_picture(blk: dict[str, Any]) -> bool:
+    """Whether this block publishes a picture."""
+    return (blk.get("kind") or "markdown") in DIAGRAM_KINDS
+
+
+def extra_views(blk: dict[str, Any]) -> list[str]:
+    """The views this block declares beyond the union drawing.
+
+    A flowchart can carry a drawing per view. This module publishes only the
+    union, so a block with extra views must REFUSE the publish rather than
+    drop them: views-as-expands needs a PNG per view plumbed through prepare
+    and images, no current document uses them, and dropping them silently is
+    exactly the failure this path exists to prevent.
+    """
+    return [v for v in (blk.get("views") or []) if v != ALL_VIEW]
 
 
 def figure(block_id: str, alt: str, caption: str = "") -> str:

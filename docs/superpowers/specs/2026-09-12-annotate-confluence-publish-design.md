@@ -152,9 +152,12 @@ screenshot the `<svg>` element's bounding box at 2× scale; write
 The filename is derived from the block id and is therefore stable, so a
 re-publish replaces an attachment rather than accumulating a second one.
 
-A flowchart with multiple `views` publishes its default view as the block's
-picture and each additional view inside a `<details>` expand, one image each,
-titled by the view name.
+A flowchart with multiple `views` **refuses the publish**, named in
+`report.json`'s `unsupported_views`. Rendering a PNG per view needs new
+plumbing through `prepare` and `images`, and no document published so far uses
+views — so until that exists, refusing is honest where publishing the union
+drawing alone and saying nothing is not. Views as `<details>` expands, one
+image each titled by the view name, is the follow-up.
 
 ### `body.py` — the document as Confluence HTML
 
@@ -164,7 +167,7 @@ Per block kind:
 |---|---|
 | `markdown` | `<h2>` from the block title, then the markdown converted to the ADF-mapped subset: paragraphs, `<ul>`/`<ol>`, `<table>`, `<pre><code class="language-…">`, `<strong>`, `<em>`, `<code>`, links. |
 | `sequence` | `<h2>`, the grid as `<figure data-type="media-single" data-width="80">`, then the numbered key as a native `<table>` (number, label, detail). |
-| `flowchart` | `<h2>` from `spec.title`, the picture as a figure; extra views in `<details>`. |
+| `flowchart` | `<h2>` from `spec.title`, the picture as a figure. A block declaring extra `views` refuses the publish rather than publishing the union drawing alone — see `images.py` above. |
 | `choice` | Rendered as the decision it records, not as an open question. A choice block still unanswered at publish time is a marker, not a silent omission. |
 | `mockup` | Not published. A sandboxed interactive iframe has no Confluence equivalent; the block becomes a note panel naming what is missing and linking the annotate page. |
 

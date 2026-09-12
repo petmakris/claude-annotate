@@ -72,18 +72,27 @@ cd "$PLUGIN_ROOT" && PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.conflu
 Exit 0 means `report.json`'s `proceed` field is true and the bundle is
 complete. **Exit 2 means stop** — `proceed` is false. Read
 `<bundle dir>/report.json` and tell the user exactly what refused — a publish
-stops when **any** of these three are non-empty:
+stops when **any** of these four are non-empty:
 
 - `blocking` — citations that do not resolve on master. Each names the block,
   the file, the snippet, and why (`stale`, `missing`, `ambiguous`, `refused`).
-- `unconvertible` — markdown blocks using raw HTML or an image, neither of
-  which has a Confluence equivalent.
+- `unconvertible` — a block that cannot be rendered as approved: markdown
+  using raw HTML, a markdown image, a setext heading, or a diagram block with
+  no stored drawing to attach.
+- `unsupported_views` — a flowchart carrying more than the union view. Only
+  the union is published today, so a block with extra views refuses rather
+  than dropping them silently.
 - `missing_blocks` — a block id named in the session's `order` with no file on
   disk for it. The stored document has drifted from what the author actually
   approved, so this is refused the same as a bad citation, not skipped.
 
-Do not work around any of the three. The user's options are to reword the
-block, drop it, or wait for the merge; all three are theirs to choose.
+Do not work around any of the four. The user's options are to reword the
+block, drop it, or wait for the merge; all of them are theirs to choose.
+
+A refused run leaves no publishable bundle behind, including from an earlier
+successful run into the same `--out`: `prepare` clears the directory before it
+writes. If `body.template.html` is absent, that is the refusal, not a
+half-written bundle.
 
 ## Step 2 — find or create the page
 
