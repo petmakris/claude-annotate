@@ -1,10 +1,9 @@
 ---
 name: annotate
 description: Render Claude responses as an interactive web page with span-based annotation. The skill never self-triggers, and plain prose never triggers it — the word "annotate" inside a sentence (e.g. "annotate that") is not an invocation. Trigger paths — (1) explicit command: the user types `/annotate` (or `/annotate resume [slug]`); the skill pushes the most recent prior assistant message through the pipeline, arms the session if there is nothing to push, or reattaches a past workspace; (2) live session: a prior `/annotate` in this conversation armed it — every substantive response (plans, analyses, multi-paragraph answers, lists of findings) routes through the browser until the user disarms; (3) watcher event: a task-notification arrives whose first stdout line starts with `WEBCOMPANION_EVENT`, `WEBCOMPANION_FINISHED`, or `WEBCOMPANION_CANCELLED` — that's a previously-pushed response's watcher reporting in, and the skill must be re-invoked to parse the payload and respond. In all cases the user reads in the browser, clicks any block to comment, and Claude updates that block in place when it responds.
-allowed-tools:
-  - Bash
-  - Read
-  - Write
+allowed-tools: [Bash, Read, Write, mcp__claude_ai_Atlassian_Rovo__createConfluencePage,
+  mcp__claude_ai_Atlassian_Rovo__updateConfluencePage, mcp__claude_ai_Atlassian_Rovo__getConfluenceSpaces,
+  mcp__plugin_atlassian_atlassian__executeRead, mcp__plugin_atlassian_atlassian__executeWrite]
 ---
 
 # /annotate — interactive annotation view
@@ -24,6 +23,7 @@ Decide which situation you're in and **`Read` the named file before doing the wo
 | An annotate session is live (a prior `/annotate` this conversation) and you're composing a response that meets a routing trigger below | **Push** | `references/pushing.md` |
 | The user typed `/annotate` — the explicit command is the only user trigger; the word "annotate" in prose is not | **Push** (postmortem/arm) | `references/pushing.md` |
 | The user typed `/annotate resume` / `/annotate resume <slug>` | **Resume** a past workspace | `references/resuming.md` |
+| The user typed `/annotate publish` (or `/annotate publish --refresh <page>`) | **Publish** the document to Confluence | `references/publishing.md` |
 | A task-notification's first stdout line is `WEBCOMPANION_EVENT` / `WEBCOMPANION_FINISHED` / `WEBCOMPANION_CANCELLED` | **Handle event** | `references/handling-events.md` |
 | The user says "scrap it" / "stop annotating" / "respond in terminal" while a watcher is armed | **Cancel** | `references/handling-events.md` (§ Terminal cancellation) |
 | A block asserts something about specific code (a file, function, branch, line) | **Anchor it** | `references/code-anchors.md` |
