@@ -69,12 +69,20 @@ def standalone_html(svg: str) -> str:
     css = _FONT_FACE_RE.sub("", css)
     width, height = _intrinsic_size(svg)
     wrapped = "<div style='width:%spx;height:%spx'>%s</div>" % (width, height, svg)
+    # The diagram's SVG paints no background of its own on the live page —
+    # what shows through is its card (section.block), --surface (#f8f9fb),
+    # not the page body's --bg (#e4e7ed). core.css carries its own
+    # `body { background: var(--bg) }` at the same specificity as a plain
+    # `body` rule of ours, so whichever comes LAST in source order wins the
+    # cascade. This override is therefore placed AFTER core.css/diagram.css
+    # on purpose — move it earlier and core.css's rule silently wins again.
     return (
         "<!doctype html><meta charset='utf-8'>"
         "<style>:root{color-scheme:light;}"
-        "html,body{margin:0;padding:0;background:#fff;"
+        "html,body{margin:0;padding:0;"
         "font-family:'Bricolage Grotesque',ui-sans-serif,system-ui,sans-serif;}"
-        "%s\n%s</style><body>%s</body>" % (_font_faces(), css, wrapped))
+        "%s\n%s\nbody{background:#f8f9fb;}"
+        "</style><body>%s</body>" % (_font_faces(), css, wrapped))
 
 
 _SCRIPT = """
