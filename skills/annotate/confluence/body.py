@@ -16,12 +16,9 @@ from __future__ import annotations
 from html import escape
 from typing import Any
 
+from skills.annotate.confluence.constants import media_token
 from skills.annotate.confluence.markdown_html import to_html
 from skills.annotate.diagrams.sequence import _numbered
-
-
-def media_token(block_id: str) -> tuple[str, str]:
-    return ("__MEDIA_ID__%s__" % block_id, "__MEDIA_COLLECTION__%s__" % block_id)
 
 
 def figure(block_id: str, alt: str, caption: str = "") -> str:
@@ -68,8 +65,21 @@ def sequence_key_table(spec: dict[str, Any]) -> str:
 
 
 def _excerpt(row: dict[str, Any]) -> str:
-    """One anchor: the cited source, then a link pinned to the commit."""
-    text = "\n".join(l["text"] for l in row.get("lines") or [])
+    """One anchor: the cited source, then a link pinned to the commit.
+
+    Every line is numbered and the cited window carries a bar in the gutter.
+    Without that the caption lies by omission: it names `File:21-22` under a
+    block showing lines 20-23, because `anchors._build` frames each anchor
+    with context lines, and nothing in the rendered text says which two of
+    the four the caption is about.
+    """
+    rows = row.get("lines") or []
+    width = max([len(str(l.get("n", ""))) for l in rows] or [1])
+    text = "\n".join(
+        "%*s %s %s" % (width, l.get("n", ""),
+                       "|" if l.get("role") in ("anchor", "window") else " ",
+                       l["text"])
+        for l in rows)
     start = row.get("actual_line", row.get("line"))
     label = "%s:%s" % (row.get("file"), start)
     if row.get("end_line") and row["end_line"] != row.get("line"):
@@ -148,9 +158,12 @@ def _provenance(repo: dict[str, Any], slug: str) -> str:
                escape(str(repo.get("resolved_at", "")))))
 
 
-def render_page(*, title: str, glossary: list[dict[str, Any]],
+def render_page(*, glossary: list[dict[str, Any]],
                 blocks: list[dict[str, Any]], anchor_rows: list[dict[str, Any]],
                 repo: dict[str, Any], slug: str) -> str:
+    """The whole page. The document's title is NOT rendered into the body —
+    Confluence carries it as the page's own title, and a second copy at the
+    top of the content reads as a duplicate heading."""
     by_block: dict[str, list[dict[str, Any]]] = {}
     for row in anchor_rows:
         by_block.setdefault(row["block_id"], []).append(row)

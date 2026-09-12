@@ -82,7 +82,6 @@ def test_a_mockup_says_what_is_missing_rather_than_vanishing():
 
 def test_the_page_opens_with_the_glossary_and_closes_with_provenance():
     out = body.render_page(
-        title="The pre-trade id chain",
         glossary=[{"term": "proposalSyncId", "definition": "the bank's id"}],
         blocks=[{"id": "section-1", "kind": "markdown", "title": "T",
                  "markdown": "p"}],
@@ -99,7 +98,7 @@ def test_the_page_opens_with_the_glossary_and_closes_with_provenance():
 
 def test_no_storage_format_anywhere():
     out = body.render_page(
-        title="T", glossary=[{"term": "x", "definition": "y"}],
+        glossary=[{"term": "x", "definition": "y"}],
         blocks=[
             {"id": "section-1", "kind": "markdown", "title": "A",
              "markdown": "p\n\n| a |\n| --- |\n| 1 |"},
@@ -152,7 +151,7 @@ def test_model_authored_text_is_escaped_everywhere():
 
     # Glossary term and definition reach the table escaped.
     out = body.render_page(
-        title="T", glossary=[{"term": "A < B", "definition": "x < y"}],
+        glossary=[{"term": "A < B", "definition": "x < y"}],
         blocks=[], anchor_rows=[],
         repo={"ref": "r", "commit": "c", "web": "w", "resolved_at": "t"},
         slug="s")
@@ -177,3 +176,17 @@ def test_markdown_html_is_not_double_escaped():
          "markdown": "**bold**"}, [])
     assert "<strong>bold</strong>" in out
     assert "&lt;strong&gt;" not in out
+
+
+def test_the_excerpt_marks_the_cited_window_apart_from_its_context():
+    # The caption says `a/B.java:21-22` while the <pre> shows lines 20-23,
+    # because `_build` frames every anchor with context lines. Unmarked, the
+    # caption is a claim about four lines that only two of them support.
+    out = body.render_block(
+        {"id": "section-1", "kind": "markdown", "title": "T", "markdown": "p"},
+        [ANCHOR_OK])
+    assert "21 |   @Transient" in out
+    assert "22 |   String id;" in out
+    assert "20   class B {" in out
+    assert "23   }" in out
+    assert "a/B.java:21-22" in out

@@ -24,10 +24,8 @@ from typing import Any
 
 from skills.annotate.confluence import body as body_mod
 from skills.annotate.confluence import gitref, images, manifest, resolve
+from skills.annotate.confluence.constants import BODY_TEMPLATE, REPORT_NAME
 from skills.annotate.confluence.markdown_html import UnsupportedMarkdown
-
-REPORT_NAME = "report.json"
-BODY_TEMPLATE = "body.template.html"
 
 
 def load_items(
@@ -97,7 +95,6 @@ def prepare(*, items_dir: Path, repo: str, out_dir: Path, slug: str,
             unconvertible.append({"block_id": blk["id"], "problem": str(e)})
 
     report: dict[str, Any] = {
-        "slug": slug,
         "title": doc.get("title", ""),
         "repo": repo_info,
         "anchors": rows,
@@ -112,8 +109,7 @@ def prepare(*, items_dir: Path, repo: str, out_dir: Path, slug: str,
         return report
 
     (out_dir / BODY_TEMPLATE).write_text(body_mod.render_page(
-        title=doc.get("title", ""), glossary=doc.get("glossary") or [],
-        blocks=blocks, anchor_rows=rows, repo=repo_info, slug=slug))
+        glossary=doc.get("glossary") or [], blocks=blocks, anchor_rows=rows, repo=repo_info, slug=slug))
 
     if with_images:
         img_dir = out_dir / "images"

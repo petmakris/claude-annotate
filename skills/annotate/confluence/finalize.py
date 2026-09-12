@@ -10,13 +10,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 
-BODY_TEMPLATE = "body.template.html"
-BODY_FINAL = "body.html"
-_LEFTOVER = re.compile(r"__MEDIA_(?:ID|COLLECTION)__([A-Za-z0-9_-]+)__")
+from skills.annotate.confluence.constants import (
+    BODY_FINAL, BODY_TEMPLATE, LEFTOVER, media_token)
 
 
 class UnfilledPlaceholder(ValueError):
@@ -32,11 +30,10 @@ def finalize(bundle: Path, media: dict[str, dict]) -> Path:
         # image from a previous run). Only attempt substitution if both keys exist.
         if "id" not in ids or "collection" not in ids:
             continue
-        block_id = Path(filename).stem
-        text = text.replace("__MEDIA_ID__%s__" % block_id, str(ids["id"]))
-        text = text.replace("__MEDIA_COLLECTION__%s__" % block_id,
-                            str(ids["collection"]))
-    left = sorted(set(_LEFTOVER.findall(text)))
+        mid, coll = media_token(Path(filename).stem)
+        text = text.replace(mid, str(ids["id"]))
+        text = text.replace(coll, str(ids["collection"]))
+    left = sorted(set(LEFTOVER.findall(text)))
     if left:
         raise UnfilledPlaceholder(
             "no upload was recorded for %s — publishing this body would put a "

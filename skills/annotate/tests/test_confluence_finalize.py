@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from skills.annotate.confluence import finalize, state
+from skills.annotate.confluence import body, constants, finalize, state
 
 
 def _bundle(tmp_path, html):
@@ -81,3 +81,27 @@ def test_malformed_extra_upload_is_tolerated(tmp_path):
         "stale.png": {"id": "m-2"}  # Missing 'collection' key
     })
     assert 'data-id="m-1"' in out.read_text()
+
+
+def test_body_and_finalize_agree_on_one_placeholder_spelling(tmp_path):
+    # Three spellings of the same token (body.media_token, finalize's string
+    # literals, finalize's leftover regex) is how a placeholder reaches a
+    # published page. One definition, used by both sides.
+    b = _bundle(tmp_path, body.figure("section-2", "alt"))
+    out = finalize.finalize(b, {"section-2.png": {"id": "m-1",
+                                                  "collection": "c-1"}})
+    assert 'data-id="m-1"' in out.read_text()
+    assert not constants.LEFTOVER.search(out.read_text())
+
+
+def test_an_unusual_block_id_cannot_slip_past_the_guard(tmp_path):
+    # Nothing validates a block id's characters. `figure()` writes it into an
+    # attribute, so it must arrive escaped -- and the leftover scan must still
+    # recognise the escaped form, or the refusal that prevents a broken tile
+    # never fires.
+    b = _bundle(tmp_path, body.figure("a&b<c", "alt"))
+    with pytest.raises(finalize.UnfilledPlaceholder):
+        finalize.finalize(b, {})
+    out = finalize.finalize(b, {"a&b<c.png": {"id": "m-1", "collection": "c"}})
+    assert 'data-id="m-1"' in out.read_text()
+    assert "a&b<c" not in out.read_text()
