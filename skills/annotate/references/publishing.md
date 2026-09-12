@@ -59,6 +59,22 @@ sys.exit(f"could not locate the {NAME} plugin root")
 [ -n "$PLUGIN_ROOT" ] || { echo "claude-annotate: plugin root not found" >&2; exit 1; }
 ```
 
+## Resolve the site and the space
+
+Every Confluence call below needs a `cloudId`, and creating a page needs a
+`spaceId`. Both are per-organisation, so this plugin ships neither — resolve
+them once per publish and substitute them wherever `<cloudId>` and
+`<spaceId>` appear:
+
+- `getAccessibleAtlassianResources()` lists the Atlassian sites this user can
+  reach. Each entry's `id` **is** the `cloudId`. One entry is the ordinary
+  case; if there are several, ask the user which site the page belongs on.
+- `getConfluenceSpaces(cloudId: <cloudId>)` lists that site's spaces. Ask the
+  user which space (by name or key), take its `id`, and that is `<spaceId>`.
+
+A document that has been published before needs neither question:
+`<workspace>/confluence.json` already records its `space_id` and `page_id`.
+
 ## Step 1 — build the bundle
 
 ```bash
@@ -102,14 +118,11 @@ been published before: skip to step 3.
 Otherwise ask the user which page to nest under, once, then:
 
 ```
-createConfluencePage(cloudId: "0cdfea0c-5f20-412f-bec3-236bc454b30b",
-                     spaceId: "2672492578", title: <report.title>,
+createConfluencePage(cloudId: <cloudId>,
+                     spaceId: <spaceId>, title: <report.title>,
                      parentId: <the page they named>, status: "draft",
                      contentFormat: "html", body: "<p>Publishing…</p>")
 ```
-
-(`spaceId: "2672492578"` is the PMP space, key `PIMP`. `getConfluenceSpaces`
-finds a different one's id if the user names a different space.)
 
 Created as a **draft**: the first publish of a document is never live until its
 author has read it. Record the result:
@@ -117,8 +130,8 @@ author has read it. Record the result:
 ```bash
 PYTHONPATH="$PLUGIN_ROOT" python3 -c "
 from pathlib import Path; from skills.annotate.confluence import state
-state.save(Path('<workspace>'), page_id='<id>', space_id='2672492578',
-           parent_id='<id>')"
+state.save(Path('<workspace>'), page_id='<page id>',
+           space_id='<spaceId>', parent_id='<parent page id>')"
 ```
 
 ## Step 3 — upload the attachments
@@ -127,7 +140,7 @@ For every file in `<bundle dir>/images/` and for `annotate-source.json`:
 
 ```
 executeWrite(name: "createConfluenceAttachment",
-            cloudId: "0cdfea0c-5f20-412f-bec3-236bc454b30b",
+            cloudId: <cloudId>,
             inputs: {contentId: <page id>,
                      localFilePath: "<bundle dir>/images/section-4.png"})
 ```
@@ -138,7 +151,7 @@ back with:
 
 ```
 executeRead(name: "listConfluenceAttachments",
-           cloudId: "0cdfea0c-5f20-412f-bec3-236bc454b30b",
+           cloudId: <cloudId>,
            inputs: {contentId: <page id>})
 ```
 
@@ -160,7 +173,7 @@ to step 3, upload what is missing, and run finalize again. Never publish the
 template. Then:
 
 ```
-updateConfluencePage(cloudId: "0cdfea0c-5f20-412f-bec3-236bc454b30b",
+updateConfluencePage(cloudId: <cloudId>,
                      pageId: <page id>, title: <report.title>,
                      contentFormat: "html", body: <contents of bundle/body.html>)
 ```

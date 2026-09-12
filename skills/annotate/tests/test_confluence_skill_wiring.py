@@ -24,7 +24,8 @@ def test_the_command_is_named_in_the_phase_map():
 # is named in allowed-tools directly. An attachment operation is not a tool at
 # all -- it is a name handed to executeWrite/executeRead -- so what has to be
 # permitted is the carrier, not the operation.
-PRIMARY = ("createConfluencePage", "updateConfluencePage", "getConfluenceSpaces")
+PRIMARY = ("createConfluencePage", "updateConfluencePage",
+           "getConfluenceSpaces", "getAccessibleAtlassianResources")
 VIA_EXECUTE = {
     "createConfluenceAttachment": "executeWrite",
     "listConfluenceAttachments": "executeRead",
@@ -101,3 +102,36 @@ def test_allowed_tools_uses_an_attested_yaml_form():
             items.append(lines[i])
             i += 1
         assert items, "allowed-tools: with no items"
+
+
+# This repo ships as a plugin marketplace. One organisation's Atlassian site
+# and space ids in a reference every installer reads are that organisation's
+# identifiers shipped to everyone else.
+_CLOUD_ID = re.compile(
+    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
+_SPACE_ID = re.compile(r'spaceId: "\d+"')
+
+
+def test_no_customer_identifiers_are_shipped_in_the_reference():
+    text = PUBLISHING.read_text()
+    assert not _CLOUD_ID.search(text), (
+        "references/publishing.md hardcodes an Atlassian cloudId; use a "
+        "<cloudId> placeholder and say how to obtain it")
+    assert not _SPACE_ID.search(text), (
+        "references/publishing.md hardcodes a spaceId; use a <spaceId> "
+        "placeholder and say how to obtain it")
+
+
+def test_the_reference_says_how_to_obtain_them():
+    text = PUBLISHING.read_text()
+    assert "getAccessibleAtlassianResources" in text
+    assert "getConfluenceSpaces" in text
+    assert "<cloudId>" in text and "<spaceId>" in text
+
+
+def test_the_reference_says_finalize_exits_2_on_an_unfilled_placeholder():
+    # The model reads this file as its only contract for the publish, and
+    # exit 2 there means the body was NOT written.
+    text = PUBLISHING.read_text()
+    step = text[text.index("## Step 4"):]
+    assert "exits 2" in step or "exit 2" in step
