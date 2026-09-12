@@ -88,7 +88,8 @@ problem, and the design that treats them separately builds the renderer twice.
 ## Architecture
 
 A new package, `skills/annotate/confluence/`, and one new reference,
-`references/publishing.md`. Four units, each independently testable.
+`references/publishing.md`. Each unit is independently testable, and none of
+them talks to Confluence — see "Who talks to Confluence" below.
 
 ### `manifest.py` — what makes the page regenerable
 
@@ -117,20 +118,28 @@ than guessing at a future shape.
 
 ### `resolve.py` — anchors against a git ref
 
-`anchors.py` owns the drift search and keeps owning it. Today its `_read_lines`
-reads from the filesystem; this unit gives that step an injectable source so the
-same matcher can be fed by `git show <ref>:<path>`. No second copy of the drift
-logic exists.
+`anchors.py` owns the drift search and keeps owning it. It gains one public
+function, `resolve_anchor_in(anchor, lines)` — validation plus the existing
+`_build` — so a caller holding the bytes from `git show <ref>:<path>` runs the
+same matcher the page runs. No second copy of the drift logic exists, and the
+filesystem path (`resolve_anchor`) is untouched.
 
 Per anchor it returns `{status, file, line, end_line, snippet, url}` where
 status is `ok` / `moved` / `stale` / `ambiguous`, and `url` is the GitHub blob
 link at the resolved **commit** (not the ref), `…/blob/<sha>/<path>#L<a>-L<b>`.
 
-`ambiguous` is new and specific to this path: an anchor whose snippet matches
-more than one line in the file is a citation that *could* have silently landed
-on the wrong line. The real document contains one — `@Query("""` in
-`CustomJpaProposalRepository.java`, which occurs five times in that file — so
-this is not a hypothetical.
+`ambiguous` is new and specific to this path: when a snippet matches two or
+more lines inside the drift window and the authored line is not one of them,
+`_locate` picks the nearest — which is a guess, reported as `moved` with the
+same confidence as a real match. On a page nobody re-reads for months, a
+citation that quietly moved onto the wrong line is worse than one that says it
+is broken.
+
+All ten anchors in the first document to be published are unique within their
+window, so this guard has no live example today. It is cheap, and the shape of
+snippet that triggers it is already in the corpus: `section-1` anchors on
+`@Transient`, a bare annotation that is unique in *that* file and would not be
+in most others.
 
 ### `images.py` — one PNG per diagram
 
@@ -168,43 +177,73 @@ Page anatomy, in order: glossary `<table>` → sections in `order` → a provena
 `<div data-type="panel-info">` footer naming the ref, the short sha, the
 publication date, and the annotate session slug.
 
-### `publish.py` — the flow
+### Who talks to Confluence — and why it is not Python
 
-Because a media node needs an id that only exists after upload, and an upload
-needs a `contentId` that only exists after the page does, publishing is three
-phases and cannot be fewer:
+Confluence is reachable here only through **MCP tools**, which the model calls
+and a subprocess cannot. Python is therefore never the Confluence client: it
+renders a **publish bundle** on disk, and `references/publishing.md` carries the
+call sequence the model follows. This is the same division annotate already
+uses — `push.py` renders, the skill orchestrates — and it keeps every
+deterministic part under test while the non-deterministic part stays in a
+reference a reader can check.
 
-1. **Resolve.** Read items → build manifest → resolve every anchor against
-   `origin/master`. Any `stale` or `ambiguous` anchor: print block id, file,
-   snippet, and stop. Nothing is written to Confluence.
+The alternative, a Python REST client, needs an Atlassian API token stored
+somewhere. Inventing credential storage to avoid an MCP call the model can
+already make is a worse trade.
+
+### `prepare.py` and `finalize.py` — the bundle
+
+A media node needs an id that only exists after upload; an upload needs a
+`contentId` that only exists after the page does. So the body cannot be written
+in one pass, and the bundle is built in two:
+
+`prepare.py` writes a directory:
+
+```
+body.template.html      the page, with __MEDIA__<block-id>__ where each picture goes
+annotate-source.json    the manifest
+images/<block-id>.png   one per diagram
+report.json             every anchor's status, and whether publishing may proceed
+```
+
+`finalize.py` takes that directory plus a JSON map of
+`{"section-4.png": {"id": ..., "collection": ...}}` and writes `body.html` with
+the real ids substituted. It refuses if any placeholder is left unfilled — a
+body referencing a media id that was never uploaded renders as a broken node.
+
+The model's sequence, from `references/publishing.md`:
+
+1. **Resolve.** Run `prepare.py`. If `report.json` says `"proceed": false`,
+   print the offending anchors and stop. Nothing is written to Confluence.
 2. **Create or find the page.** `state/confluence.json` in the workspace holds
    `{page_id, space_id, parent_id, last_commit, last_published}`. Absent, the
    page is created under the parent the user names once, as a **draft** — the
    first publish of a document is never live until its author has looked at it.
    `--live` skips the draft step; a later publish updates whatever status the
    page already has.
-3. **Attach, then body.** Render PNGs and the manifest; upload each through
-   `createConfluenceAttachment` (which returns a curl command to run locally),
+3. **Attach, then body.** Upload each PNG and the manifest through
+   `createConfluenceAttachment`, running the curl command it returns and
    capturing the media id and collection from the response — falling back to
-   `listConfluenceAttachments` if the upload response does not carry them.
-   Then build the body with those ids and `updateConfluencePage`.
+   `listConfluenceAttachments` when the upload response does not carry them.
+   Run `finalize.py`, then `updateConfluencePage` with the finished body.
 
 ### Refresh — the living half
 
-`/annotate publish --refresh <page-url|page-id>` needs no local workspace:
+`/annotate publish --refresh <page-url|page-id>` needs no local annotate
+workspace, only a checkout of the repo the manifest names:
 
 1. `listConfluenceAttachments` → find `annotate-source.json` →
    `downloadConfluenceAttachment` → `manifest.parse`.
-2. Re-resolve every anchor against today's `origin/master` in a local checkout
-   of the manifest's repo.
-3. Re-render body and pictures; update the page; re-attach the manifest with the
-   new commit.
+2. Re-resolve every anchor against today's `origin/master`.
+3. Re-render bundle and pictures; upload changed images; update the page;
+   re-attach the manifest with the new commit.
 4. Report: anchors that moved, anchors that went stale, and whether any block's
    prose now contradicts its own excerpt — the last being something only a human
    or a model can judge, so it is reported, never auto-edited.
 
-A nightly job is this command on a schedule. Nothing further is built for it
-now, and nothing in this design forecloses it.
+A nightly job is a scheduled Claude run executing this command, which is what
+makes step 4 possible at all: re-resolving citations is mechanical, but noticing
+that a paragraph no longer describes the code beneath it is not.
 
 ## Command surface
 
@@ -241,7 +280,8 @@ and none of the Confluence calls are reachable under that list.
 | `manifest.py` | Round-trip: build → serialise → parse → identical. An unknown `manifest_version` raises. |
 | `body.py` | Golden Confluence HTML per block kind. Plus a guard that no output contains `<ac:` or `<ri:` — the format guide forbids them and they fail *silently*, by rendering as text. |
 | `images.py` | Produces a PNG whose dimensions are the SVG's viewBox at 2×; skips with a clear message when Chromium is absent. |
-| `publish.py` | Phase ordering with a faked Confluence client: asserts no body update is attempted before every upload reports success, and that a stale anchor produces zero writes. |
+| `prepare.py` | A stale anchor yields `report.json` with `"proceed": false` and no bundle. A clean document yields one placeholder per picture and one PNG per placeholder. |
+| `finalize.py` | Substitutes ids; refuses, naming the placeholder, when the id map is missing one. |
 
 Then one real publish of `the-pre-trade-id-chain` to a **draft** page in PMP,
 opened in a browser and read, before this is called done. Two defects in the
