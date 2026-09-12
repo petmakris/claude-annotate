@@ -101,3 +101,12 @@ def test_web_url_normalises_both_remote_forms():
         "https://github.com/evooq/montblanc"
     assert gitref.web_url("https://github.com/evooq/montblanc.git") == \
         "https://github.com/evooq/montblanc"
+
+
+def test_read_lines_raises_for_an_unresolvable_ref(repo):
+    with pytest.raises(gitref.GitError):
+        gitref.read_lines(str(repo), "not-a-real-ref", "A.java")
+
+
+def test_read_lines_returns_none_for_an_absent_path_at_a_real_ref(repo):
+    assert gitref.read_lines(str(repo), "master", "Nope.java") is None

@@ -36,9 +36,21 @@ def remote_of(repo: str, name: str = "origin") -> str:
 
 
 def read_lines(repo: str, ref: str, path: str) -> list[str] | None:
-    """The file's lines at `ref`, or None when it does not exist there."""
+    """The file's lines at `ref`, or None when it does not exist there.
+
+    `git show <ref>:<path>` fails identically whether `ref` itself does not
+    resolve or `ref` resolves but `path` is not in it — and reporting the
+    first case as "missing" tells a reader code was deleted from master when
+    really a ref name was mistyped. So a failure here checks which one it
+    was: only a `path` genuinely absent at a real ref returns None; a ref
+    that does not resolve raises, same as `commit_of`.
+    """
     r = _git(repo, "show", "%s:%s" % (ref, path))
     if r.returncode:
+        verify = _git(repo, "rev-parse", "--verify", "%s^{commit}" % ref)
+        if verify.returncode:
+            raise GitError("cannot resolve %r in %s: %s"
+                           % (ref, repo, verify.stderr.strip()))
         return None
     return r.stdout.split("\n")[:-1] if r.stdout.endswith("\n") \
         else r.stdout.split("\n")
