@@ -107,6 +107,10 @@ def test_no_storage_format_anywhere():
              "spec": SEQ_SPEC},
             {"id": "section-4", "kind": "flowchart", "svg": "<svg/>",
              "spec": {"title": "F"}},
+            {"id": "section-5", "kind": "choice",
+             "spec": {"question": "Which?",
+                      "options": [{"id": "a", "label": "A"}]}},
+            {"id": "section-6", "kind": "mockup", "spec": {"html": "<b>x</b>"}},
         ],
         anchor_rows=[ANCHOR_OK],
         repo={"ref": "origin/master", "commit": "abc123def456",
@@ -116,3 +120,60 @@ def test_no_storage_format_anywhere():
     assert "<ac:" not in out
     assert "<ri:" not in out
     assert "ac:structured-macro" not in out
+
+
+def test_model_authored_text_is_escaped_everywhere():
+    """Escaping is the invariant that decides whether a published page is
+    valid ADF or a publish failure. Every field a model can author — a
+    block title, a sequence step's label/sub, a glossary term/definition, a
+    choice question — must arrive escaped, not just the fields the earlier
+    happy-path tests happened to leave clean."""
+    # Block title reaches the <h2> escaped.
+    out = body.render_block(
+        {"id": "section-1", "kind": "markdown", "title": "A & B < C",
+         "markdown": "p"}, [])
+    assert "<h2>A &amp; B &lt; C</h2>" in out
+    assert "A & B < C" not in out
+
+    # Sequence step label and sub reach the key table escaped.
+    spec = {
+        "actors": [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}],
+        "steps": [
+            {"id": "s1", "from": "a", "to": "b", "arrow": "request",
+             "label": 'Save & "now"', "sub": 'x & y "z"'},
+        ],
+    }
+    out = body.render_block(
+        {"id": "section-2", "kind": "sequence", "svg": "<svg/>", "spec": spec},
+        [])
+    assert "&amp;" in out and "&quot;" in out
+    assert 'Save & "now"' not in out
+    assert 'x & y "z"' not in out
+
+    # Glossary term and definition reach the table escaped.
+    out = body.render_page(
+        title="T", glossary=[{"term": "A < B", "definition": "x < y"}],
+        blocks=[], anchor_rows=[],
+        repo={"ref": "r", "commit": "c", "web": "w", "resolved_at": "t"},
+        slug="s")
+    assert "A &lt; B" in out and "x &lt; y" in out
+    assert "A < B" not in out and "x < y" not in out
+
+    # Choice question reaches the warning panel escaped.
+    out = body.render_block(
+        {"id": "section-5", "kind": "choice",
+         "spec": {"question": "Which & why?",
+                  "options": [{"id": "a", "label": "A"}]}},
+        [])
+    assert "Which &amp; why?" in out
+    assert "Which & why?" not in out
+
+
+def test_markdown_html_is_not_double_escaped():
+    # to_html already escapes/produces real markup; body.py must not
+    # re-escape its output on top.
+    out = body.render_block(
+        {"id": "section-1", "kind": "markdown", "title": "T",
+         "markdown": "**bold**"}, [])
+    assert "<strong>bold</strong>" in out
+    assert "&lt;strong&gt;" not in out
