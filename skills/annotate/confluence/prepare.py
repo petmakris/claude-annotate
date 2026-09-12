@@ -58,6 +58,27 @@ def load_items(
     return doc, blocks, missing
 
 
+def load_manifest(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """The stored document, read from a published page's own manifest.
+
+    This is the refresh path, and it is the only path a refresh HAS: the
+    machine that published the page may be gone, and `annotate-source.json`
+    is the attachment that outlives it. `load_items` cannot serve it — it
+    requires a `__doc__.json` no manifest contains, and an `order` a manifest
+    expresses by the order of `blocks` itself. Every other field a refresh
+    needs (title, slug, response_id, glossary) is already in there, so this
+    reads them out rather than asking a caller to reconstruct a workspace.
+    """
+    man = manifest.parse(Path(path).read_text())
+    doc = {
+        "title": man.get("title", ""),
+        "slug": man.get("slug", ""),
+        "response_id": man.get("response_id", ""),
+        "glossary": man.get("glossary") or [],
+    }
+    return doc, list(man.get("blocks") or [])
+
+
 def clear(out_dir: Path) -> None:
     """Remove the previous run's bundle from `out_dir`.
 
@@ -73,12 +94,33 @@ def clear(out_dir: Path) -> None:
     shutil.rmtree(Path(out_dir) / "images", ignore_errors=True)
 
 
-def prepare(*, items_dir: Path, repo: str, out_dir: Path, slug: str,
-            ref: str = "origin/master", with_images: bool = True) -> dict:
+def prepare(*, repo: str, out_dir: Path, items_dir: Path = None,
+            manifest_path: Path = None, slug: str = "",
+            ref: str = "origin/master", with_images: bool = True,
+            resolved_at: str = None) -> dict:
+    """Build the bundle, from a session's items directory or from a manifest.
+
+    `resolved_at` exists so a caller can pin the clock; the round-trip test
+    rebuilds a bundle from its own manifest and compares the two bodies byte
+    for byte, which a live timestamp would make impossible to assert.
+    """
+    if (items_dir is None) == (manifest_path is None):
+        raise ValueError(
+            "prepare needs exactly one source: --items or --manifest")
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     clear(out_dir)
-    doc, blocks, missing_blocks = load_items(Path(items_dir))
+    if items_dir is not None:
+        doc, blocks, missing_blocks = load_items(Path(items_dir))
+    else:
+        doc, blocks = load_manifest(Path(manifest_path))
+        missing_blocks = []
+    slug = slug or doc.get("slug", "")
+    if not slug:
+        raise ValueError(
+            "no session slug: it names the annotate session in the page's "
+            "provenance line, so pass --slug or use a manifest that carries "
+            "one")
 
     commit = gitref.commit_of(repo, ref)
     web = gitref.web_url(gitref.remote_of(repo))
@@ -87,13 +129,14 @@ def prepare(*, items_dir: Path, repo: str, out_dir: Path, slug: str,
         "web": web,
         "ref": ref,
         "commit": commit,
-        "resolved_at": datetime.now(timezone.utc).strftime(
+        "resolved_at": resolved_at or datetime.now(timezone.utc).strftime(
             "%Y-%m-%dT%H:%M:%SZ"),
     }
 
     man = manifest.build(
         response_id=doc.get("response_id", ""), title=doc.get("title", ""),
-        glossary=doc.get("glossary") or [], blocks=blocks, repo=repo_info)
+        slug=slug, glossary=doc.get("glossary") or [], blocks=blocks,
+        repo=repo_info)
     (out_dir / manifest.MANIFEST_NAME).write_text(json.dumps(man, indent=2))
 
     rows = resolve.resolve_all(manifest.anchors_of(man), repo=repo, ref=ref,
@@ -153,15 +196,24 @@ def prepare(*, items_dir: Path, repo: str, out_dir: Path, slug: str,
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="skills.annotate.confluence.prepare")
-    ap.add_argument("--items", required=True, help="the session's items dir")
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--items", help="the session's items dir")
+    src.add_argument("--manifest",
+                     help="annotate-source.json off a published page, for a "
+                          "refresh with no workspace to read")
     ap.add_argument("--repo", required=True, help="checkout to resolve against")
     ap.add_argument("--out", required=True, help="bundle directory to write")
-    ap.add_argument("--slug", required=True)
+    ap.add_argument("--slug",
+                    help="required with --items; --manifest carries its own")
     ap.add_argument("--ref", default="origin/master")
     ap.add_argument("--no-images", action="store_true")
     a = ap.parse_args(argv)
-    report = prepare(items_dir=Path(a.items), repo=a.repo, out_dir=Path(a.out),
-                     slug=a.slug, ref=a.ref, with_images=not a.no_images)
+    if a.items and not a.slug:
+        ap.error("--slug is required with --items")
+    report = prepare(items_dir=Path(a.items) if a.items else None,
+                     manifest_path=Path(a.manifest) if a.manifest else None,
+                     repo=a.repo, out_dir=Path(a.out), slug=a.slug or "",
+                     ref=a.ref, with_images=not a.no_images)
     print(json.dumps({k: report[k] for k in
                       ("proceed", "blocking", "unconvertible",
                        "unsupported_views", "missing_blocks", "images")},

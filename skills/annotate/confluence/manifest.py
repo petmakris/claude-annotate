@@ -22,12 +22,17 @@ class ManifestError(ValueError):
     """A manifest this code cannot safely read."""
 
 
-def build(*, response_id: str, title: str, glossary: list[dict[str, Any]],
-          blocks: list[dict[str, Any]], repo: dict[str, Any]) -> dict[str, Any]:
+def build(*, response_id: str, title: str, slug: str,
+          glossary: list[dict[str, Any]], blocks: list[dict[str, Any]],
+          repo: dict[str, Any]) -> dict[str, Any]:
     return {
         "manifest_version": MANIFEST_VERSION,
         "response_id": response_id,
         "title": title,
+        # The slug names the annotate session in the page's provenance line.
+        # Without it a refresh republishes the page attributing it to no
+        # session at all -- and the manifest is the only thing a refresh has.
+        "slug": slug,
         "glossary": list(glossary),
         "repo": dict(repo),
         "blocks": list(blocks),
@@ -52,7 +57,7 @@ def parse(raw: str) -> dict[str, Any]:
         raise ManifestError(
             "manifest_version %r cannot be read by this version (expected %d)"
             % (version, MANIFEST_VERSION))
-    for key in ("title", "blocks", "repo"):
+    for key in ("title", "slug", "blocks", "repo"):
         if key not in out:
             raise ManifestError("manifest is missing %r" % key)
     return out

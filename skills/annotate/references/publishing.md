@@ -153,8 +153,11 @@ PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.confluence.finalize \
   --media '{"section-4.png": {"id": "<media id>", "collection": "<collection>"}}'
 ```
 
-It refuses if any picture is missing an id, because a media node pointing at
-nothing renders as a broken tile with no error anywhere. Then:
+It **exits 2 and writes no `body.html`** if any picture is missing an id,
+naming the block ids it could not fill. A media node pointing at nothing
+renders as a broken tile with no error anywhere, so on exit 2 stop: go back
+to step 3, upload what is missing, and run finalize again. Never publish the
+template. Then:
 
 ```
 updateConfluencePage(cloudId: "0cdfea0c-5f20-412f-bec3-236bc454b30b",
@@ -182,9 +185,20 @@ manifest names.
    → find `annotate-source.json` →
    `executeRead(name: "downloadConfluenceAttachment", cloudId, inputs: {...})`
    → run the curl it returns.
-2. Write the manifest's `blocks` into an items directory shaped like a
-   workspace's, then run the Step 1 — build the bundle section above against
-   it with the same `--repo`.
+2. Build the bundle from that file directly. There is no items directory to
+   reconstruct: the manifest already carries the title, the slug, the
+   response id, the glossary, and the blocks in order.
+
+   ```bash
+   cd "$PLUGIN_ROOT" && PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.confluence.prepare \
+     --manifest "<the downloaded annotate-source.json>" \
+     --repo "<a checkout of the repo the manifest's repo.remote names>" \
+     --out "<bundle dir>"
+   ```
+
+   No `--slug`: the manifest carries it. Exit 0 / exit 2 and the four refusal
+   lists mean exactly what they mean in step 1, and a refusal here stops the
+   refresh with the published page untouched.
 3. Continue from step 3. The page already exists, so nothing is created.
 4. Report what changed: anchors that moved, anchors that went stale, and any
    block whose prose no longer matches the source beneath it. The last one is

@@ -208,3 +208,92 @@ def test_every_placeholder_in_the_body_has_an_image_listed_for_it(tmp_path, repo
     html = (out / "body.template.html").read_text()
     assert sorted(set(constants.LEFTOVER.findall(html))) == \
         sorted({Path(n).stem for n in report["images"]})
+
+
+# --- The regeneration promise -------------------------------------------
+# `annotate-source.json` is attached to the published page and is the ONLY
+# thing a refresh has: the machine that published it may be gone. Until this
+# test existed the feature's headline claim was untested, and `load_items`
+# could not in fact serve a refresh -- it requires a `__doc__.json` no
+# manifest contains.
+
+DOC_BLOCKS = [
+    {"id": "section-1", "kind": "markdown", "title": "Two identities",
+     "markdown": "prose with a [link](https://x.test/a?b=1&c=2)\n\n- one\n  - nested",
+     "code": [{"file": "A.java", "line": 2, "snippet": "@Transient"}]},
+    {"id": "section-2", "kind": "flowchart", "svg": "<svg/>",
+     "spec": {"title": "Outbound ids"}},
+    {"id": "section-3", "kind": "choice",
+     "spec": {"question": "Which?", "options": [{"id": "a", "label": "A"}]}},
+]
+FIXED_AT = "2026-09-12T11:40:00Z"
+
+
+def _with_glossary(tmp_path, blocks):
+    d = _items(tmp_path, blocks)
+    (d / "__doc__.json").write_text(json.dumps({"body": {
+        "title": "The pre-trade id chain", "response_id": "r1",
+        "glossary": [{"term": "proposalSyncId", "definition": "the bank's id"}],
+        "order": [b["id"] for b in blocks]}}))
+    return d
+
+
+def test_a_bundle_rebuilds_from_its_manifest_alone(tmp_path, repo):
+    items = _with_glossary(tmp_path, DOC_BLOCKS)
+    first = tmp_path / "b1"
+    r1 = prepare.prepare(items_dir=items, repo=str(repo), out_dir=first,
+                         slug="the-pre-trade-id-chain", ref="master",
+                         with_images=False, resolved_at=FIXED_AT)
+    assert r1["proceed"] is True
+
+    # Everything the machine that published the page had is now gone except
+    # the one attachment.
+    second = tmp_path / "b2"
+    r2 = prepare.prepare(manifest_path=first / "annotate-source.json",
+                         repo=str(repo), out_dir=second, ref="master",
+                         with_images=False, resolved_at=FIXED_AT)
+    assert r2["proceed"] is True
+    assert r2["title"] == r1["title"]
+    assert (second / "body.template.html").read_text() == \
+        (first / "body.template.html").read_text()
+
+
+def test_the_manifest_carries_the_slug_a_refresh_needs(tmp_path, repo):
+    # The slug is in the page's provenance line, so a refresh that could not
+    # recover it would republish the page attributing it to no session.
+    items = _with_glossary(tmp_path, DOC_BLOCKS)
+    out = tmp_path / "bundle"
+    prepare.prepare(items_dir=items, repo=str(repo), out_dir=out,
+                    slug="the-pre-trade-id-chain", ref="master",
+                    with_images=False)
+    man = json.loads((out / "annotate-source.json").read_text())
+    assert man["slug"] == "the-pre-trade-id-chain"
+
+
+def test_the_manifest_mode_is_reachable_from_the_command_line(tmp_path, repo):
+    # references/publishing.md's refresh section runs this exact form.
+    items = _with_glossary(tmp_path, DOC_BLOCKS)
+    first = tmp_path / "b1"
+    prepare.prepare(items_dir=items, repo=str(repo), out_dir=first,
+                    slug="s", ref="master", with_images=False)
+    second = tmp_path / "b2"
+    rc = prepare.main(["--manifest", str(first / "annotate-source.json"),
+                       "--repo", str(repo), "--out", str(second),
+                       "--ref", "master", "--no-images"])
+    assert rc == 0
+    assert (second / "body.template.html").exists()
+
+
+def test_a_refresh_needs_no_items_directory(tmp_path, repo):
+    items = _with_glossary(tmp_path, DOC_BLOCKS)
+    first = tmp_path / "b1"
+    prepare.prepare(items_dir=items, repo=str(repo), out_dir=first, slug="s",
+                    ref="master", with_images=False)
+    man = (tmp_path / "annotate-source.json")
+    man.write_text((first / "annotate-source.json").read_text())
+    import shutil
+    shutil.rmtree(items)
+    report = prepare.prepare(manifest_path=man, repo=str(repo),
+                             out_dir=tmp_path / "b2", ref="master",
+                             with_images=False)
+    assert report["proceed"] is True

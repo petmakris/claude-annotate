@@ -26,6 +26,7 @@ BLOCKS = [
 
 def _built():
     return m.build(response_id="resp-1", title="The pre-trade id chain",
+                   slug="the-pre-trade-id-chain",
                    glossary=[{"term": "proposalSyncId", "definition": "d"}],
                    blocks=BLOCKS, repo=REPO)
 
@@ -35,6 +36,9 @@ def test_round_trip_is_lossless():
     assert out["blocks"] == BLOCKS
     assert out["repo"] == REPO
     assert out["title"] == "The pre-trade id chain"
+    # The slug names the session in the page's provenance line, and the
+    # manifest is the only thing a refresh has to recover it from.
+    assert out["slug"] == "the-pre-trade-id-chain"
 
 
 def test_blocks_are_stored_verbatim_including_rendered_svg():
@@ -58,3 +62,10 @@ def test_a_manifest_without_a_version_is_refused():
 
 def test_anchors_are_listed_with_their_block():
     assert m.anchors_of(_built()) == [("section-1", BLOCKS[0]["code"][0])]
+
+
+def test_a_manifest_without_a_slug_is_refused():
+    raw = json.dumps({k: v for k, v in _built().items() if k != "slug"})
+    with pytest.raises(m.ManifestError) as e:
+        m.parse(raw)
+    assert "slug" in str(e.value)
