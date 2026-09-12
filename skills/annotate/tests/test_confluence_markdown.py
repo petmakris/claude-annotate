@@ -122,3 +122,66 @@ def test_comparison_operators_on_both_sides_are_not_html():
 
 def test_code_span_with_angle_brackets_is_still_not_html():
     assert to_html("`<T>`") == "<p><code>&lt;T&gt;</code></p>"
+
+
+# --- Ordinary CommonMark the live page renders and this converter must not
+# --- silently flatten. Each of these produced a differently-shaped page with
+# --- no error anywhere, which is exactly what the subset exists to prevent.
+
+def test_a_nested_bullet_list_keeps_its_nesting():
+    # Flattening three <li> into one level is a different document.
+    assert to_html("- a\n  - b\n- c") == (
+        "<ul><li><p>a</p><ul><li><p>b</p></li></ul></li>"
+        "<li><p>c</p></li></ul>")
+
+
+def test_a_nested_ordered_list_inside_a_bullet():
+    assert to_html("- a\n  1. one\n  2. two") == (
+        '<ul><li><p>a</p><ol start="1"><li><p>one</p></li>'
+        "<li><p>two</p></li></ol></li></ul>")
+
+
+def test_a_lazy_continuation_line_stays_in_its_list_item():
+    # Splitting the list in two around a stray <p> renumbers it for the reader.
+    assert to_html("1. a\n   continued\n2. b") == (
+        '<ol start="1"><li><p>a continued</p></li><li><p>b</p></li></ol>')
+
+
+def test_a_blank_line_does_not_split_one_list_into_two():
+    assert to_html("- a\n\n- b") == \
+        "<ul><li><p>a</p></li><li><p>b</p></li></ul>"
+
+
+def test_a_thematic_break_becomes_a_rule():
+    assert to_html("a\n\n---\n\nb") == "<p>a</p><hr /><p>b</p>"
+
+
+def test_a_setext_heading_is_refused_rather_than_read_as_prose():
+    # Rare, and ambiguous against `---`, so it stops the publish instead of
+    # arriving as a paragraph where the author wrote a heading.
+    for md in ("Title\n===", "Title\n---"):
+        with pytest.raises(UnsupportedMarkdown) as e:
+            to_html(md)
+        assert "setext" in str(e.value)
+
+
+def test_a_pipe_inside_a_code_span_does_not_split_a_table_row():
+    md = "| a | b |\n| --- | --- |\n| `x|y` | 2 |"
+    out = to_html(md)
+    assert "<td><p><code>x|y</code></p></td>" in out
+    assert "<td><p>2</p></td>" in out
+
+
+def test_an_escaped_pipe_is_a_literal_pipe_in_a_cell():
+    md = "| a |\n| --- |\n| x \\| y |"
+    assert "<td><p>x | y</p></td>" in to_html(md)
+
+
+def test_a_link_href_is_escaped_once_not_twice():
+    # Double-escaping turns every query string into a broken link.
+    assert to_html("[docs](https://x.test/a?b=1&c=2)") == \
+        '<p><a href="https://x.test/a?b=1&amp;c=2">docs</a></p>'
+
+
+def test_a_bare_pipe_row_without_a_divider_is_prose_not_a_hang():
+    assert to_html("| a | b |") == "<p>| a | b |</p>"
