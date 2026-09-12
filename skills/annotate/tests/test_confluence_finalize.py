@@ -61,3 +61,23 @@ def test_state_merges_rather_than_replaces(tmp_path):
     state.save(tmp_path, last_commit="def")
     got = state.load(tmp_path)
     assert got["page_id"] == "123" and got["last_commit"] == "def"
+
+
+def test_refusal_never_writes_body_html(tmp_path):
+    # The most important property: finalize writes NO body.html when it refuses.
+    # A broken page with no error is the failure this module prevents.
+    b = _bundle(tmp_path, '<div data-id="__MEDIA_ID__section-4__"/>')
+    with pytest.raises(finalize.UnfilledPlaceholder):
+        finalize.finalize(b, {})
+    assert not (b / "body.html").exists()
+
+
+def test_malformed_extra_upload_is_tolerated(tmp_path):
+    # An entry missing a required key must not block if the body never
+    # references that entry. Only pins if the referenced entry is well-formed.
+    b = _bundle(tmp_path, 'x <div data-id="__MEDIA_ID__pic1__"/>')
+    out = finalize.finalize(b, {
+        "pic1.png": {"id": "m-1", "collection": "c-1"},
+        "stale.png": {"id": "m-2"}  # Missing 'collection' key
+    })
+    assert 'data-id="m-1"' in out.read_text()

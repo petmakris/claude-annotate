@@ -28,6 +28,10 @@ def finalize(bundle: Path, media: dict[str, dict]) -> Path:
     bundle = Path(bundle)
     text = (bundle / BODY_TEMPLATE).read_text()
     for filename, ids in media.items():
+        # Skip entries missing required keys (e.g., re-uploaded manifest, stale
+        # image from a previous run). Only attempt substitution if both keys exist.
+        if "id" not in ids or "collection" not in ids:
+            continue
         block_id = Path(filename).stem
         text = text.replace("__MEDIA_ID__%s__" % block_id, str(ids["id"]))
         text = text.replace("__MEDIA_COLLECTION__%s__" % block_id,
