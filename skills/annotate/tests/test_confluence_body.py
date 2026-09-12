@@ -57,7 +57,7 @@ def test_an_anchor_renders_its_excerpt_and_links_the_commit():
     out = body.render_block(
         {"id": "section-1", "kind": "markdown", "title": "T", "markdown": "p"},
         [ANCHOR_OK])
-    assert "<pre><code" in out
+    assert "<pre data-hide-line-numbers=" in out
     assert "@Transient" in out
     assert ANCHOR_OK["url"] in out
     # Context lines frame the excerpt; the anchored window is what is cited.
@@ -178,18 +178,24 @@ def test_markdown_html_is_not_double_escaped():
     assert "&lt;strong&gt;" not in out
 
 
-def test_the_excerpt_marks_the_cited_window_apart_from_its_context():
+def test_the_caption_distinguishes_the_cited_lines_from_the_span_on_screen():
     # The caption says `a/B.java:21-22` while the <pre> shows lines 20-23,
-    # because `_build` frames every anchor with context lines. Unmarked, the
-    # caption is a claim about four lines that only two of them support.
+    # because `_build` frames every anchor with context lines. That gap has to
+    # be stated somewhere or the caption is a claim about four lines that only
+    # two of them support.
+    #
+    # It used to be stated with a numbered gutter and a bar on the cited rows.
+    # That was wrong for Confluence, which numbers the block itself: every line
+    # arrived with two numbers side by side, and the gutter — not being source
+    # — defeated the syntax highlighter. The caption carries it instead, and
+    # the code is left verbatim so it can be highlighted and copied.
     out = body.render_block(
         {"id": "section-1", "kind": "markdown", "title": "T", "markdown": "p"},
         [ANCHOR_OK])
-    assert "21 |   @Transient" in out
-    assert "22 |   String id;" in out
-    assert "20   class B {" in out
-    assert "23   }" in out
     assert "a/B.java:21-22" in out
+    assert "20-23" in out
+    assert "  @Transient" in out
+    assert "21 |" not in out
 
 
 def test_a_figure_declares_its_width_as_a_percentage():
@@ -202,5 +208,64 @@ def test_a_figure_declares_its_width_as_a_percentage():
     would never have.
     """
     out = body.figure("section-4", "F")
-    assert 'data-width="80"' in out
+    assert 'data-width-type="percentage"' in out
+    assert 'data-width-type="pixel"' not in out
+
+
+JAVA_ANCHOR = {
+    "block_id": "section-1", "file": "src/main/java/a/B.java", "line": 21,
+    "end_line": 22, "status": "ok", "actual_line": 21,
+    "url": "https://github.com/evooq/montblanc/blob/abc/src/main/java/a/B.java#L21-L22",
+    "lines": [{"n": 20, "text": "class B {", "role": "context"},
+              {"n": 21, "text": "  @Transient", "role": "anchor"},
+              {"n": 22, "text": "  String id;", "role": "window"},
+              {"n": 23, "text": "}", "role": "context"}],
+}
+
+
+def test_an_excerpt_declares_its_language_so_confluence_highlights_it():
+    """Confluence highlights a code block from `class="language-*"`. Without
+    it the block renders as undifferentiated grey text, which is what the
+    first published page did."""
+    out = body._excerpt(JAVA_ANCHOR)
+    assert '<code class="language-java">' in out
+
+
+def test_an_excerpt_does_not_print_its_own_line_numbers():
+    """Confluence numbers a code block itself, from 1. Printing the file's
+    real numbers inside the text too gives every line two different numbers
+    side by side — `9  27 |` — and breaks syntax highlighting, because the
+    gutter is not source."""
+    out = body._excerpt(JAVA_ANCHOR)
+    body_text = out.split("<code", 1)[1].split("</code>", 1)[0]
+    assert "21 |" not in body_text
+    assert "  @Transient" in body_text
+
+
+def test_an_excerpt_hides_confluence_numbering_because_it_would_start_at_one():
+    """A window over lines 20-23 numbered 1-4 invites the reader to believe
+    the file starts there. The caption carries the real range instead."""
+    assert 'data-hide-line-numbers="true"' in body._excerpt(JAVA_ANCHOR)
+
+
+def test_a_caption_says_which_lines_are_cited_and_which_are_shown():
+    out = body._excerpt(JAVA_ANCHOR)
+    assert "B.java:21-22" in out
+    assert "20-23" in out
+
+
+def test_an_unknown_extension_gets_no_language_class():
+    anchor = {**JAVA_ANCHOR, "file": "notes.weirdext",
+              "lines": [{"n": 1, "text": "x", "role": "anchor"}]}
+    out = body._excerpt(anchor)
+    assert "<code>" in out and "language-" not in out
+
+
+def test_a_diagram_is_laid_out_wide_enough_to_read():
+    """At the default centred width a 2292px diagram renders about 544px
+    across — legible only after clicking it. A diagram is the thing the
+    reader came for, so it gets the wide container."""
+    out = body.figure("section-4", "F")
+    assert 'data-layout="wide"' in out
+    assert 'data-width="100"' in out
     assert 'data-width-type="percentage"' in out

@@ -50,15 +50,20 @@ def extra_views(blk: dict[str, Any]) -> list[str]:
 def figure(block_id: str, alt: str, caption: str = "") -> str:
     """A picture, as a media node pointing at an attachment not yet uploaded.
 
-    `data-width` is a percentage on the <figure>, per the format guide; 80 is
-    its stated default for diagrams. The UNIT has to be stated too: the first
-    real publish stored a bare `data-width="80"` as `data-width-type="pixel"`,
-    which would have rendered a 2292px diagram as an 80px thumbnail.
+    Two sizing facts, both learned by publishing rather than from the guide.
+
+    The UNIT has to be stated: a bare `data-width="80"` is stored as
+    `data-width-type="pixel"`, rendering a 2292px diagram 80px across.
+
+    And the default centred container is about 680px, so even a correct 80%
+    put a dense sequence diagram at ~544px — legible only after clicking it.
+    A diagram is the thing the reader came for, so it takes the `wide`
+    container and fills it.
     """
     mid, coll = media_token(block_id)
     cap = "<figcaption>%s</figcaption>" % escape(caption) if caption else ""
-    return ('<figure data-type="media-single" data-layout="center" '
-            'data-width="80" data-width-type="percentage"><div data-type="media" '
+    return ('<figure data-type="media-single" data-layout="wide" '
+            'data-width="100" data-width-type="percentage"><div data-type="media" '
             'data-media-type="file" '
             'data-id="%s" data-collection="%s" data-alt="%s"></div>%s</figure>'
             % (mid, coll, escape(alt), cap))
@@ -93,29 +98,68 @@ def sequence_key_table(spec: dict[str, Any]) -> str:
             % "".join(rows))
 
 
+# Confluence highlights a code block from `class="language-*"`. Without one
+# the block is undifferentiated grey text — which is how the first published
+# page rendered every excerpt.
+_LANGUAGES = {
+    "java": "java", "kt": "kotlin", "py": "python", "js": "javascript",
+    "ts": "typescript", "tsx": "typescript", "jsx": "javascript",
+    "xml": "xml", "html": "html", "css": "css", "scss": "scss",
+    "sql": "sql", "sh": "bash", "bash": "bash", "zsh": "bash",
+    "yaml": "yaml", "yml": "yaml", "json": "json", "toml": "toml",
+    "go": "go", "rs": "rust", "rb": "ruby", "php": "php", "cs": "csharp",
+    "c": "c", "h": "c", "cpp": "cpp", "hpp": "cpp", "swift": "swift",
+    "md": "markdown", "properties": "properties", "gradle": "groovy",
+}
+
+
+def _language_of(path: str) -> str:
+    """The highlighter's name for this file's type, or "" if we don't know.
+
+    Guessing wrong is worse than not guessing: a mislabelled block is
+    highlighted as the wrong grammar, which reads as corrupted code.
+    """
+    ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+    return _LANGUAGES.get(ext, "")
+
+
 def _excerpt(row: dict[str, Any]) -> str:
     """One anchor: the cited source, then a link pinned to the commit.
 
-    Every line is numbered and the cited window carries a bar in the gutter.
-    Without that the caption lies by omission: it names `File:21-22` under a
-    block showing lines 20-23, because `anchors._build` frames each anchor
-    with context lines, and nothing in the rendered text says which two of
-    the four the caption is about.
+    The source is emitted verbatim, with no gutter of our own. An earlier cut
+    numbered every line and barred the cited window, which on the annotate
+    page is right — but Confluence numbers a code block itself, from 1, so
+    every line arrived carrying two different numbers side by side (`9  27 |`)
+    and the gutter text defeated the syntax highlighter, since it is not
+    source.
+
+    So: Confluence's numbering is switched off, because a window over lines
+    20-23 numbered 1-4 invites the reader to think the file starts there, and
+    the caption carries the truth instead — which lines are cited, and which
+    wider span is on screen.
     """
     rows = row.get("lines") or []
-    width = max([len(str(l.get("n", ""))) for l in rows] or [1])
-    text = "\n".join(
-        "%*s %s %s" % (width, l.get("n", ""),
-                       "|" if l.get("role") in ("anchor", "window") else " ",
-                       l["text"])
-        for l in rows)
+    text = "\n".join(l["text"] for l in rows)
+
     start = row.get("actual_line", row.get("line"))
     label = "%s:%s" % (row.get("file"), start)
     if row.get("end_line") and row["end_line"] != row.get("line"):
         label += "-%s" % (start + row["end_line"] - row["line"])
-    link = ('<p><a href="%s">%s</a></p>' % (escape(row["url"]), escape(label))
-            if row.get("url") else "<p>%s</p>" % escape(label))
-    return "<pre><code>%s</code></pre>%s" % (escape(text), link)
+
+    shown = ""
+    if rows:
+        first, last = rows[0].get("n"), rows[-1].get("n")
+        if (first, last) != (start, start) and str(first) not in label.rsplit(":", 1)[-1]:
+            shown = " (lines %s-%s shown)" % (first, last)
+
+    caption = escape(label) + escape(shown)
+    link = ('<p><a href="%s">%s</a></p>' % (escape(row["url"]), caption)
+            if row.get("url") else "<p>%s</p>" % caption)
+
+    lang = _language_of(str(row.get("file", "")))
+    open_tag = '<code class="language-%s">' % lang if lang else "<code>"
+    return ('<pre data-hide-line-numbers="true">%s%s</code></pre>%s'
+            % (open_tag, escape(text), link))
 
 
 def _title_of(blk: dict[str, Any]) -> str:
