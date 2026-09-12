@@ -269,3 +269,60 @@ def test_a_diagram_is_laid_out_wide_enough_to_read():
     assert 'data-layout="wide"' in out
     assert 'data-width="100"' in out
     assert 'data-width-type="percentage"' in out
+
+
+def test_a_landscape_diagram_goes_full_width():
+    """`wide` resolved to 680px on the real page — no wider than ordinary
+    prose, and unreadable for a 2292px sequence grid. A landscape diagram
+    takes the full page width instead."""
+    out = body.figure("section-4", "F", size=(2292, 1132))
+    assert 'data-layout="full-width"' in out
+
+
+def test_a_portrait_diagram_stays_in_the_wide_container():
+    """Full width on a tall narrow diagram upscales it past its own
+    resolution and makes the reader scroll past a soft, enormous picture."""
+    out = body.figure("section-6", "F", size=(1090, 1576))
+    assert 'data-layout="wide"' in out
+    assert 'data-layout="full-width"' not in out
+
+
+def test_a_diagram_of_unknown_size_stays_wide():
+    """No dimensions means no judgement to make; the safe container wins."""
+    assert 'data-layout="wide"' in body.figure("section-4", "F")
+
+
+def test_picture_sizes_reach_the_page_renderer():
+    out = body.render_page(
+        glossary=[],
+        blocks=[{"id": "section-4", "kind": "flowchart", "svg": "<svg/>",
+                 "spec": {"title": "F"}}],
+        anchor_rows=[],
+        repo={"ref": "origin/master", "commit": "abc123def456",
+              "web": "https://github.com/evooq/montblanc",
+              "resolved_at": "2026-09-12T11:40:00Z"},
+        slug="s", sizes={"section-4": (2292, 1132)})
+    assert 'data-layout="full-width"' in out
+
+
+def test_the_shape_comes_from_the_svg_when_no_size_is_supplied():
+    """Deriving it from the stored SVG rather than the rendered PNG keeps the
+    body byte-identical whether or not images were rendered this run — which
+    is what the manifest round-trip depends on."""
+    wide_svg = '<svg width="2292" height="1132" viewBox="0 0 2292 1132"></svg>'
+    tall_svg = '<svg width="1090" height="1576" viewBox="0 0 1090 1576"></svg>'
+    landscape = body.render_block(
+        {"id": "section-4", "kind": "flowchart", "svg": wide_svg,
+         "spec": {"title": "F"}}, [])
+    portrait = body.render_block(
+        {"id": "section-6", "kind": "flowchart", "svg": tall_svg,
+         "spec": {"title": "F"}}, [])
+    assert 'data-layout="full-width"' in landscape
+    assert 'data-layout="wide"' in portrait
+
+
+def test_an_svg_without_dimensions_falls_back_to_wide():
+    out = body.render_block(
+        {"id": "section-4", "kind": "flowchart", "svg": "<svg></svg>",
+         "spec": {"title": "F"}}, [])
+    assert 'data-layout="wide"' in out

@@ -13,6 +13,7 @@ and substituted by `finalize.py` once the uploads have happened.
 """
 from __future__ import annotations
 
+import re
 from html import escape
 from typing import Any
 
@@ -28,6 +29,24 @@ from skills.annotate.diagrams.views import ALL_VIEW
 # failure surfaced in `finalize`, AFTER the page and its attachments existed,
 # which is the worst moment available.
 DIAGRAM_KINDS = ("sequence", "flowchart")
+
+
+_SVG_W = re.compile(r'<svg[^>]*\bwidth="([\d.]+)"')
+_SVG_H = re.compile(r'<svg[^>]*\bheight="([\d.]+)"')
+
+
+def svg_size(svg: str):
+    """The stored SVG's own pixel size, or None if it does not declare one.
+
+    Taken from the SVG rather than the rendered PNG so the body is identical
+    whether or not images were rendered this run — the manifest round-trip
+    depends on that.
+    """
+    w, h = _SVG_W.search(svg or ""), _SVG_H.search(svg or "")
+    if not (w and h):
+        return None
+    return (int(float(w.group(1))), int(float(h.group(1))))
+
 
 
 def has_picture(blk: dict[str, Any]) -> bool:
@@ -47,7 +66,8 @@ def extra_views(blk: dict[str, Any]) -> list[str]:
     return [v for v in (blk.get("views") or []) if v != ALL_VIEW]
 
 
-def figure(block_id: str, alt: str, caption: str = "") -> str:
+def figure(block_id: str, alt: str, caption: str = "",
+           size: tuple[int, int] | None = None) -> str:
     """A picture, as a media node pointing at an attachment not yet uploaded.
 
     Two sizing facts, both learned by publishing rather than from the guide.
@@ -55,16 +75,23 @@ def figure(block_id: str, alt: str, caption: str = "") -> str:
     The UNIT has to be stated: a bare `data-width="80"` is stored as
     `data-width-type="pixel"`, rendering a 2292px diagram 80px across.
 
-    And the default centred container is about 680px, so even a correct 80%
-    put a dense sequence diagram at ~544px — legible only after clicking it.
-    A diagram is the thing the reader came for, so it takes the `wide`
-    container and fills it.
+    And the container matters more than the percentage: centred at 80% gave
+    ~544px, and `wide` at 100% resolved to 680px — no wider than ordinary
+    prose, for a 2292px sequence grid.
+
+    So the layout follows the picture's shape. A landscape diagram takes the
+    full page width, because it is the thing the reader came for. A portrait
+    one does not: stretched to full width it is upscaled past its own
+    resolution, and the reader scrolls through a soft, enormous picture. With
+    no dimensions there is no judgement to make, so the safe container wins.
     """
     mid, coll = media_token(block_id)
     cap = "<figcaption>%s</figcaption>" % escape(caption) if caption else ""
-    return ('<figure data-type="media-single" data-layout="wide" '
+    landscape = bool(size) and size[0] > size[1]
+    layout = "full-width" if landscape else "wide"
+    return ('<figure data-type="media-single" data-layout="%s" '
             'data-width="100" data-width-type="percentage"><div data-type="media" '
-            'data-media-type="file" '
+            'data-media-type="file" ' % layout +
             'data-id="%s" data-collection="%s" data-alt="%s"></div>%s</figure>'
             % (mid, coll, escape(alt), cap))
 
@@ -175,17 +202,20 @@ def _title_of(blk: dict[str, Any]) -> str:
 
 
 def render_block(blk: dict[str, Any],
-                 anchors_for_block: list[dict[str, Any]]) -> str:
+                 anchors_for_block: list[dict[str, Any]],
+                 size: tuple[int, int] | None = None) -> str:
     kind = blk.get("kind") or "markdown"
+    if size is None:
+        size = svg_size(blk.get("svg") or "")
     out = ["<h2>%s</h2>" % escape(_title_of(blk))]
 
     if kind == "markdown":
         out.append(to_html(blk.get("markdown", "")))
     elif kind == "sequence":
-        out.append(figure(blk["id"], _title_of(blk)))
+        out.append(figure(blk["id"], _title_of(blk), size=size))
         out.append(sequence_key_table(blk.get("spec") or {}))
     elif kind == "flowchart":
-        out.append(figure(blk["id"], _title_of(blk)))
+        out.append(figure(blk["id"], _title_of(blk), size=size))
     elif kind == "choice":
         spec = blk.get("spec") or {}
         options = "".join("<li><p>%s</p></li>"
@@ -233,7 +263,8 @@ def _provenance(repo: dict[str, Any], slug: str) -> str:
 
 def render_page(*, glossary: list[dict[str, Any]],
                 blocks: list[dict[str, Any]], anchor_rows: list[dict[str, Any]],
-                repo: dict[str, Any], slug: str) -> str:
+                repo: dict[str, Any], slug: str,
+                sizes: dict[str, tuple[int, int]] | None = None) -> str:
     """The whole page. The document's title is NOT rendered into the body —
     Confluence carries it as the page's own title, and a second copy at the
     top of the content reads as a duplicate heading."""
@@ -242,6 +273,7 @@ def render_page(*, glossary: list[dict[str, Any]],
         by_block.setdefault(row["block_id"], []).append(row)
     parts = [_glossary(glossary)]
     for blk in blocks:
-        parts.append(render_block(blk, by_block.get(blk["id"], [])))
+        parts.append(render_block(blk, by_block.get(blk["id"], []),
+                                  size=(sizes or {}).get(blk["id"])))
     parts.append(_provenance(repo, slug))
     return "".join(p for p in parts if p)
