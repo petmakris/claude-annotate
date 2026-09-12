@@ -62,3 +62,42 @@ def test_the_procedure_stops_on_a_refusal_before_touching_confluence():
 def test_the_procedure_finalizes_before_updating_the_body():
     text = PUBLISHING.read_text()
     assert text.index("finalize") < text.index("updateConfluencePage")
+
+
+def test_allowed_tools_uses_an_attested_yaml_form():
+    """The harness's frontmatter reader is not strict YAML -- this file's own
+    unquoted `description` fails `yaml.safe_load` and the skill still works
+    -- so a form counts as safe here only because it is already attested in
+    production, not because a strict parser happens to accept it. Only two
+    shapes are attested: a block list of `  - item` lines (used throughout
+    this repo), or a single-line comma-separated scalar (the form Anthropic's
+    own shipped `code-review` plugin uses). A bracketed flow sequence has no
+    precedent anywhere and is rejected here even though it is valid strict
+    YAML -- if the real parser is line-oriented rather than YAML-aware, that
+    form can silently read as an empty list.
+    """
+    lines = SKILL_MD.read_text().splitlines()
+    start = next(i for i, l in enumerate(lines) if l.startswith("allowed-tools:"))
+    rest = lines[start][len("allowed-tools:"):].strip()
+
+    if rest:
+        # Single-line scalar form: not a flow sequence, and no continuation
+        # line indented under it.
+        assert not rest.startswith("["), (
+            "allowed-tools is a bracketed flow sequence -- no precedent in "
+            "this repo or in ~/.claude/plugins/cache; use a block list or a "
+            "single-line comma-separated scalar instead")
+        nxt = lines[start + 1]
+        assert nxt.strip() == "---" or not nxt.startswith(" "), (
+            "allowed-tools scalar spans multiple lines: %r" % nxt)
+    else:
+        # Block list form: every following line up to the closing `---`
+        # must be `  - item`.
+        i = start + 1
+        items = []
+        while lines[i].strip() != "---":
+            assert re.match(r"^  - \S", lines[i]), (
+                "allowed-tools block list line %r is not `  - item`" % lines[i])
+            items.append(lines[i])
+            i += 1
+        assert items, "allowed-tools: with no items"

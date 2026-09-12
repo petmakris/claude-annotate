@@ -1,9 +1,7 @@
 ---
 name: annotate
 description: Render Claude responses as an interactive web page with span-based annotation. The skill never self-triggers, and plain prose never triggers it — the word "annotate" inside a sentence (e.g. "annotate that") is not an invocation. Trigger paths — (1) explicit command: the user types `/annotate` (or `/annotate resume [slug]`); the skill pushes the most recent prior assistant message through the pipeline, arms the session if there is nothing to push, or reattaches a past workspace; (2) live session: a prior `/annotate` in this conversation armed it — every substantive response (plans, analyses, multi-paragraph answers, lists of findings) routes through the browser until the user disarms; (3) watcher event: a task-notification arrives whose first stdout line starts with `WEBCOMPANION_EVENT`, `WEBCOMPANION_FINISHED`, or `WEBCOMPANION_CANCELLED` — that's a previously-pushed response's watcher reporting in, and the skill must be re-invoked to parse the payload and respond. In all cases the user reads in the browser, clicks any block to comment, and Claude updates that block in place when it responds.
-allowed-tools: [Bash, Read, Write, mcp__claude_ai_Atlassian_Rovo__createConfluencePage,
-  mcp__claude_ai_Atlassian_Rovo__updateConfluencePage, mcp__claude_ai_Atlassian_Rovo__getConfluenceSpaces,
-  mcp__plugin_atlassian_atlassian__executeRead, mcp__plugin_atlassian_atlassian__executeWrite]
+allowed-tools: Bash, Read, Write, mcp__claude_ai_Atlassian_Rovo__createConfluencePage, mcp__claude_ai_Atlassian_Rovo__updateConfluencePage, mcp__claude_ai_Atlassian_Rovo__getConfluenceSpaces, mcp__plugin_atlassian_atlassian__executeRead, mcp__plugin_atlassian_atlassian__executeWrite
 ---
 
 # /annotate — interactive annotation view
@@ -28,7 +26,7 @@ Decide which situation you're in and **`Read` the named file before doing the wo
 | The user says "scrap it" / "stop annotating" / "respond in terminal" while a watcher is armed | **Cancel** | `references/handling-events.md` (§ Terminal cancellation) |
 | A block asserts something about specific code (a file, function, branch, line) | **Anchor it** | `references/code-anchors.md` |
 
-The first five rows are independent lifecycles: pushing creates the page and arms a watcher; handling-events fires later, once per comment; resuming points an existing workspace at this conversation instead of creating one. The code-anchors row is not a sixth lifecycle — it's a per-block decision made inside whichever lifecycle you're already in, and `references/code-anchors.md` carries its own guard so it's also safe to read standalone (a rewrite reaches it with no push in the turn). Do not load a reference you don't need for the situation you're in.
+The first six rows are independent lifecycles: pushing creates the page and arms a watcher; handling-events fires later, once per comment; resuming points an existing workspace at this conversation instead of creating one. The code-anchors row is not a seventh lifecycle — it's a per-block decision made inside whichever lifecycle you're already in, and `references/code-anchors.md` carries its own guard so it's also safe to read standalone (a rewrite reaches it with no push in the turn). Do not load a reference you don't need for the situation you're in.
 
 ## Routing decision (only while a session is live)
 

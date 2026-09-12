@@ -174,7 +174,8 @@ manifest names.
    `executeRead(name: "downloadConfluenceAttachment", cloudId, inputs: {...})`
    → run the curl it returns.
 2. Write the manifest's `blocks` into an items directory shaped like a
-   workspace's, then run step 1 above against it with the same `--repo`.
+   workspace's, then run the Step 1 — build the bundle section above against
+   it with the same `--repo`.
 3. Continue from step 3. The page already exists, so nothing is created.
 4. Report what changed: anchors that moved, anchors that went stale, and any
    block whose prose no longer matches the source beneath it. The last one is
