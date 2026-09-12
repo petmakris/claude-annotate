@@ -1,0 +1,118 @@
+"""The document as a Confluence page body.
+
+The invariant that matters most is negative: no output may contain storage
+format. `<ac:structured-macro>` does not error on publish — it renders as raw
+text in the middle of the page — so only a test keeps it out."""
+from skills.annotate.confluence import body
+
+
+SEQ_SPEC = {
+    "actors": [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}],
+    "steps": [
+        {"id": "s1", "from": "a", "to": "b", "arrow": "request", "label": "save",
+         "tone": "edge", "sub": "with the id"},
+        {"id": "s2", "from": "a", "to": "a", "arrow": "band", "label": "later"},
+        {"id": "s3", "from": "b", "to": "a", "arrow": "event", "label": "ack"},
+    ],
+}
+ANCHOR_OK = {
+    "block_id": "section-1", "file": "a/B.java", "line": 21, "end_line": 22,
+    "status": "ok", "actual_line": 21,
+    "url": "https://github.com/evooq/montblanc/blob/abc/a/B.java#L21-L22",
+    "lines": [{"n": 20, "text": "class B {", "role": "context"},
+              {"n": 21, "text": "  @Transient", "role": "anchor"},
+              {"n": 22, "text": "  String id;", "role": "window"},
+              {"n": 23, "text": "}", "role": "context"}],
+}
+
+
+def test_a_markdown_block_becomes_a_heading_and_prose():
+    out = body.render_block(
+        {"id": "section-1", "kind": "markdown", "title": "Two identities",
+         "markdown": "one"}, [])
+    assert out == "<h2>Two identities</h2><p>one</p>"
+
+
+def test_a_flowchart_becomes_a_figure_titled_from_its_spec():
+    out = body.render_block(
+        {"id": "section-4", "kind": "flowchart", "svg": "<svg/>",
+         "spec": {"title": "Outbound ids"}}, [])
+    assert "<h2>Outbound ids</h2>" in out
+    assert 'data-type="media-single"' in out
+    assert "__MEDIA_ID__section-4__" in out
+
+
+def test_a_sequence_carries_its_key_as_a_real_table():
+    out = body.render_block(
+        {"id": "section-2", "kind": "sequence", "svg": "<svg/>",
+         "spec": {**SEQ_SPEC, "title": "One save"}}, [])
+    assert "<table>" in out
+    # Numbered steps only: a band is a heading row, not a numbered one.
+    assert "<td><p>1</p></td>" in out and "<td><p>2</p></td>" in out
+    assert "<td><p>3</p></td>" not in out
+    assert "save" in out and "with the id" in out
+
+
+def test_an_anchor_renders_its_excerpt_and_links_the_commit():
+    out = body.render_block(
+        {"id": "section-1", "kind": "markdown", "title": "T", "markdown": "p"},
+        [ANCHOR_OK])
+    assert "<pre><code" in out
+    assert "@Transient" in out
+    assert ANCHOR_OK["url"] in out
+    # Context lines frame the excerpt; the anchored window is what is cited.
+    assert "class B {" in out
+
+
+def test_an_unanswered_choice_is_marked_not_dropped():
+    out = body.render_block(
+        {"id": "section-5", "kind": "choice",
+         "spec": {"question": "Which?", "options": [{"id": "a", "label": "A"}]}},
+        [])
+    assert 'data-type="panel-warning"' in out
+    assert "Which?" in out
+
+
+def test_a_mockup_says_what_is_missing_rather_than_vanishing():
+    out = body.render_block({"id": "section-6", "kind": "mockup",
+                             "spec": {"html": "<b>x</b>"}}, [])
+    assert 'data-type="panel-note"' in out
+    assert "mockup" in out.lower()
+
+
+def test_the_page_opens_with_the_glossary_and_closes_with_provenance():
+    out = body.render_page(
+        title="The pre-trade id chain",
+        glossary=[{"term": "proposalSyncId", "definition": "the bank's id"}],
+        blocks=[{"id": "section-1", "kind": "markdown", "title": "T",
+                 "markdown": "p"}],
+        anchor_rows=[],
+        repo={"ref": "origin/master", "commit": "abc123def456",
+              "web": "https://github.com/evooq/montblanc",
+              "resolved_at": "2026-09-12T11:40:00Z"},
+        slug="the-pre-trade-id-chain")
+    assert out.index("proposalSyncId") < out.index("<h2>T</h2>")
+    assert 'data-type="panel-info"' in out
+    assert "abc123d" in out           # short sha
+    assert "origin/master" in out
+
+
+def test_no_storage_format_anywhere():
+    out = body.render_page(
+        title="T", glossary=[{"term": "x", "definition": "y"}],
+        blocks=[
+            {"id": "section-1", "kind": "markdown", "title": "A",
+             "markdown": "p\n\n| a |\n| --- |\n| 1 |"},
+            {"id": "section-2", "kind": "sequence", "svg": "<svg/>",
+             "spec": SEQ_SPEC},
+            {"id": "section-4", "kind": "flowchart", "svg": "<svg/>",
+             "spec": {"title": "F"}},
+        ],
+        anchor_rows=[ANCHOR_OK],
+        repo={"ref": "origin/master", "commit": "abc123def456",
+              "web": "https://github.com/evooq/montblanc",
+              "resolved_at": "2026-09-12T11:40:00Z"},
+        slug="s")
+    assert "<ac:" not in out
+    assert "<ri:" not in out
+    assert "ac:structured-macro" not in out
