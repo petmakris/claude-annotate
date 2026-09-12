@@ -368,7 +368,6 @@ def render_key(spec: dict[str, Any], block_id: str) -> str:
     validate(spec)
     steps = spec["steps"]
     phase_at = {p["start_at"]: str(p["label"]) for p in (spec.get("phases") or [])}
-    bid = _html_escape(block_id, quote=True)
 
     rows: list[str] = []
     for step, num in _numbered(steps):
@@ -386,7 +385,7 @@ def render_key(spec: dict[str, Any], block_id: str) -> str:
         sub = step.get("sub")
         sub_html = (f'<div class="seq-key-sub">{_html_escape(str(sub))}</div>') if sub else ""
         rows.append(
-            f'<div class="{_cls("seq-key-row", tone)}" data-block-id="{bid}" '
+            f'<div class="{_cls("seq-key-row", tone)}" '
             f'data-step-id="{_html_escape(step["id"], quote=True)}" '
             f'role="button" tabindex="0">'
             f'<span class="{_cls("seq-key-n", tone)}">{num}</span>'
@@ -396,7 +395,12 @@ def render_key(spec: dict[str, Any], block_id: str) -> str:
         )
     if not any(num is not None for _, num in _numbered(steps)):
         return ""
-    return f'<div class="seq-key" data-block-id="{bid}">' + "".join(rows) + "</div>"
+    # No data-block-id anywhere in the key, for the reason `render` gives for
+    # keeping it off the SVG root: `main.prose [data-block-id]:hover` in
+    # style.css is a catch-all, and it painted the whole key — and every row
+    # under the cursor — with the hover tint. The host <section> carries the
+    # block id already, which is where every reader of it looks.
+    return '<div class="seq-key">' + "".join(rows) + "</div>"
 
 
 def _widest_band_right(steps: list[dict[str, Any]], actor_x: dict[str, int]) -> float:

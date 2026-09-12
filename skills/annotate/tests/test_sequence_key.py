@@ -139,15 +139,25 @@ def test_the_key_escapes_its_text():
     assert "&amp;" in key
 
 
-def test_both_halves_carry_the_block_id_and_the_step_id():
+def test_both_halves_carry_the_step_id_they_pair_on():
     """The pairing is by step id, and `data-step-id` is what a comment already
     anchors to — so lighting a step also lights whatever a comment marked."""
     spec = _spec()
     svg = render(spec, "section-9")
     key = render_key(spec, "section-9")
-    assert 'data-block-id="section-9"' in svg
-    assert 'data-block-id="section-9"' in key
     assert 'data-step-id="s3"' in svg and 'data-step-id="s3"' in key
+    assert 'data-block-id="section-9"' in svg
+
+
+def test_the_key_carries_no_block_id():
+    """`main.prose [data-block-id]:hover` in style.css is a catch-all that
+    paints a hover tint. The renderer keeps the attribute off the SVG root for
+    that reason; the first cut of the key put it on the key wrapper and on every
+    row, and the whole key washed grey under the cursor — measured on the live
+    page as rgb(236,239,244) on `.seq-key` itself. The host <section> carries
+    the block id, which is where every reader of it looks."""
+    key = render_key(_spec(), "section-9")
+    assert "data-block-id" not in key
 
 
 def test_key_rows_are_reachable_by_keyboard():
