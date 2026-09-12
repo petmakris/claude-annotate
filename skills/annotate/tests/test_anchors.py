@@ -418,5 +418,39 @@ class TestReadFailureMessage(AnchorFixture):
         self.assertIn("OSError", out["message"])
 
 
+"""Resolving from lines the caller already holds.
+
+Publishing reads source at a git ref, not from the working tree, so it needs
+the drift matcher without the filesystem underneath it. One matcher, two byte
+sources — a second copy of _locate would drift from this one."""
+
+
+def test_resolve_anchor_in_finds_an_exact_line():
+    lines = ["package x;", "", "@Transient", "private String id;"]
+    a = {"file": "X.java", "line": 3, "snippet": "@Transient"}
+    out = anchors.resolve_anchor_in(a, lines)
+    assert out["status"] == "ok"
+    assert out["actual_line"] == 3
+
+
+def test_resolve_anchor_in_follows_a_line_that_moved():
+    lines = ["package x;", "", "", "", "@Transient", "private String id;"]
+    a = {"file": "X.java", "line": 3, "snippet": "@Transient"}
+    out = anchors.resolve_anchor_in(a, lines)
+    assert out["status"] == "moved"
+    assert out["actual_line"] == 5
+
+
+def test_resolve_anchor_in_reports_a_line_that_is_gone():
+    a = {"file": "X.java", "line": 3, "snippet": "@Transient"}
+    out = anchors.resolve_anchor_in(a, ["package x;", "", "class X {}"])
+    assert out["status"] == "stale"
+
+
+def test_resolve_anchor_in_still_validates_the_anchor():
+    out = anchors.resolve_anchor_in({"file": "X.java", "line": 0}, ["a"])
+    assert out["status"] == "refused"
+
+
 if __name__ == "__main__":
     unittest.main()

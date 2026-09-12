@@ -184,6 +184,22 @@ def resolve_anchor(a: dict, root) -> dict:
     return _build(a, lines)
 
 
+def resolve_anchor_in(a: dict, lines: list) -> dict:
+    """Resolve an anchor against lines the caller already holds.
+
+    Same validation and same drift search as `resolve_anchor`; only the byte
+    source differs. Publishing reads source at a git ref (`git show
+    origin/master:<path>`) rather than from the working tree, and copying
+    `_locate` into that path would give citations two matchers that are free
+    to disagree. There is no path check here because there is no path — the
+    caller decided which bytes these are.
+    """
+    problem = anchor_problem(a)
+    if problem:
+        return _fail(a if isinstance(a, dict) else {}, "refused", problem)
+    return _build(a, lines)
+
+
 def _build(a: dict, lines: list) -> dict:
     """Locate the anchor in `lines` and lay out the window around it."""
     authored = a["line"]
