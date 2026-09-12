@@ -51,12 +51,15 @@ def figure(block_id: str, alt: str, caption: str = "") -> str:
     """A picture, as a media node pointing at an attachment not yet uploaded.
 
     `data-width` is a percentage on the <figure>, per the format guide; 80 is
-    its stated default for diagrams and charts.
+    its stated default for diagrams. The UNIT has to be stated too: the first
+    real publish stored a bare `data-width="80"` as `data-width-type="pixel"`,
+    which would have rendered a 2292px diagram as an 80px thumbnail.
     """
     mid, coll = media_token(block_id)
     cap = "<figcaption>%s</figcaption>" % escape(caption) if caption else ""
     return ('<figure data-type="media-single" data-layout="center" '
-            'data-width="80"><div data-type="media" data-media-type="file" '
+            'data-width="80" data-width-type="percentage"><div data-type="media" '
+            'data-media-type="file" '
             'data-id="%s" data-collection="%s" data-alt="%s"></div>%s</figure>'
             % (mid, coll, escape(alt), cap))
 

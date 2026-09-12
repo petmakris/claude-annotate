@@ -190,3 +190,17 @@ def test_the_excerpt_marks_the_cited_window_apart_from_its_context():
     assert "20   class B {" in out
     assert "23   }" in out
     assert "a/B.java:21-22" in out
+
+
+def test_a_figure_declares_its_width_as_a_percentage():
+    """Confluence reads a bare `data-width` on a media-single as PIXELS.
+
+    The format guide calls the attribute a percentage, and the first real
+    publish came back stored as `data-width="80" data-width-type="pixel"` —
+    which renders a 2292px diagram as an 80px thumbnail. The unit has to be
+    stated, not assumed. Only a real publish showed this; the guide alone
+    would never have.
+    """
+    out = body.figure("section-4", "F")
+    assert 'data-width="80"' in out
+    assert 'data-width-type="percentage"' in out
