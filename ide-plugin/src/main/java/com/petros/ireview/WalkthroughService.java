@@ -52,8 +52,15 @@ public final class WalkthroughService implements Disposable {
         });
         this.client.addListener(new WalkthroughSessionClient.Listener() {
             @Override public void onStepsChanged(WalkthroughDoc doc) {
-                com.intellij.openapi.application.ApplicationManager.getApplication()
-                    .invokeLater(() -> controller.setDoc(doc));
+                // setDoc activates step 1, which opens an editor. A poll that lands
+                // while the platform is still in restoreEditors puts a tab in the main
+                // splitter before it expects one, and the frame allocator throws
+                // "Tab count expected to be zero". runAfterOpened defers the first doc
+                // past editor restore; once the project is open it runs inline, so
+                // later polls are unaffected.
+                com.intellij.openapi.startup.StartupManager.getInstance(project)
+                    .runAfterOpened(() -> com.intellij.openapi.application.ApplicationManager.getApplication()
+                        .invokeLater(() -> controller.setDoc(doc), project.getDisposed()));
             }
         });
         this.client.start();
