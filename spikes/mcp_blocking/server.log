@@ -1,0 +1,311 @@
+    0.00  listening on http://127.0.0.1:8899/mcp
+    3.12  --> initialize (id=1)
+    3.12      client protocolVersion=2025-06-18
+    3.14  --> tools/list (id=2)
+   12.42  --> server/discover (id=server-discover-probe-1)
+   12.44  --> initialize (id=0)
+   12.44      client protocolVersion=2025-11-25
+   12.44  --> notifications/initialized (id=None)
+   12.44  GET /mcp (server->client stream opened)
+   12.44  --> tools/list (id=1)
+   17.12  --> tools/call (id=2)
+   17.12      wait_json: blocking 10s, no keepalive
+   27.12      wait_json: WROTE RESPONSE after 10.0s
+   32.46  GET /mcp stream closed
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 55824)
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [Errno 54] Connection reset by peer
+----------------------------------------
+   37.26  --> server/discover (id=server-discover-probe-1)
+   37.26  --> initialize (id=0)
+   37.26      client protocolVersion=2025-11-25
+   37.27  --> notifications/initialized (id=None)
+   37.28  GET /mcp (server->client stream opened)
+   37.28  --> tools/list (id=1)
+   39.31  --> server/discover (id=server-discover-probe-1)
+   39.33  --> initialize (id=0)
+   39.33      client protocolVersion=2025-11-25
+   39.34  --> notifications/initialized (id=None)
+   39.34  GET /mcp (server->client stream opened)
+   39.34  --> tools/list (id=1)
+   41.97  --> tools/call (id=2)
+   41.97      wait_json: blocking 900s, no keepalive
+   44.34  --> tools/call (id=2)
+   44.34      wait_sse: blocking 900s with 5s pings
+   49.34      wait_sse: ping at 5s
+   54.34      wait_sse: ping at 10s
+   59.35      wait_sse: ping at 15s
+   64.35      wait_sse: ping at 20s
+   69.36      wait_sse: ping at 25s
+   74.36      wait_sse: ping at 30s
+   79.36      wait_sse: ping at 35s
+   84.37      wait_sse: ping at 40s
+   89.37      wait_sse: ping at 45s
+   94.37      wait_sse: ping at 50s
+   99.37      wait_sse: ping at 55s
+  104.38      wait_sse: ping at 60s
+  107.33  GET /mcp stream closed
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 55853)
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [Errno 54] Connection reset by peer
+----------------------------------------
+  109.38      wait_sse: ping at 65s
+  114.39      wait_sse: ping at 70s
+  119.39      wait_sse: ping at 75s
+  124.40      wait_sse: ping at 80s
+  128.96  --> server/discover (id=server-discover-probe-1)
+  128.97  --> initialize (id=0)
+  128.97      client protocolVersion=2025-11-25
+  128.99  --> notifications/initialized (id=None)
+  128.99  GET /mcp (server->client stream opened)
+  128.99  --> tools/list (id=1)
+  129.40      wait_sse: ping at 85s
+  133.81  --> tools/call (id=2)
+  133.81      wait_json: blocking 300s, no keepalive
+  134.40      wait_sse: ping at 90s
+  139.41      wait_sse: ping at 95s
+  144.41      wait_sse: ping at 100s
+  149.37  --> server/discover (id=server-discover-probe-1)
+  149.37  --> initialize (id=0)
+  149.37      client protocolVersion=2025-11-25
+  149.39  --> notifications/initialized (id=None)
+  149.39  GET /mcp (server->client stream opened)
+  149.39  --> tools/list (id=1)
+  149.41      wait_sse: ping at 105s
+  154.42      wait_sse: ping at 110s
+  154.52  --> tools/call (id=2)
+  154.52      wait_for_event: waiting up to 600s for POST /fire
+  159.42      wait_sse: ping at 115s
+  159.52      wait_for_event: ping at 5s
+  164.42      wait_sse: ping at 120s
+  164.53      wait_for_event: ping at 10s
+  169.43      wait_sse: ping at 125s
+  169.53      wait_for_event: ping at 15s
+  174.43      wait_sse: ping at 130s
+  174.53      wait_for_event: ping at 20s
+  179.43      wait_sse: ping at 135s
+  179.53      wait_for_event: ping at 25s
+  184.44      wait_sse: ping at 140s
+  184.54      wait_for_event: ping at 30s
+  189.44      wait_sse: ping at 145s
+  189.54      wait_for_event: ping at 35s
+  194.44      wait_sse: ping at 150s
+  194.54      wait_for_event: ping at 40s
+  199.45      wait_sse: ping at 155s
+  199.54      wait_for_event: ping at 45s
+  204.45      wait_sse: ping at 160s
+  204.55      wait_for_event: ping at 50s
+  209.46      wait_sse: ping at 165s
+  209.55      wait_for_event: ping at 55s
+  214.46      wait_sse: ping at 170s
+  214.55      wait_for_event: ping at 60s
+  219.46      wait_sse: ping at 175s
+  219.56      wait_for_event: ping at 65s
+  224.47      wait_sse: ping at 180s
+  224.56      wait_for_event: ping at 70s
+  229.47      wait_sse: ping at 185s
+  229.56      wait_for_event: ping at 75s
+  234.47      wait_sse: ping at 190s
+  234.57      wait_for_event: ping at 80s
+  239.48      wait_sse: ping at 195s
+  239.57      wait_for_event: ping at 85s
+  244.48      wait_sse: ping at 200s
+  244.58      wait_for_event: ping at 90s
+  249.48      wait_sse: ping at 205s
+  249.58      wait_for_event: ping at 95s
+  254.49      wait_sse: ping at 210s
+  254.58      wait_for_event: ping at 100s
+  259.49      wait_sse: ping at 215s
+  259.59      wait_for_event: ping at 105s
+  264.50      wait_sse: ping at 220s
+  264.59      wait_for_event: ping at 110s
+  269.50      wait_sse: ping at 225s
+  269.60      wait_for_event: ping at 115s
+  274.50      wait_sse: ping at 230s
+  274.60      wait_for_event: ping at 120s
+  279.51      wait_sse: ping at 235s
+  279.61      wait_for_event: ping at 125s
+  284.51      wait_sse: ping at 240s
+  284.61      wait_for_event: ping at 130s
+  289.51      wait_sse: ping at 245s
+  289.61      wait_for_event: ping at 135s
+  294.52      wait_sse: ping at 250s
+  294.61      wait_for_event: ping at 140s
+  299.52      wait_sse: ping at 255s
+  299.62      wait_for_event: ping at 145s
+  304.53      wait_sse: ping at 260s
+  304.63      wait_for_event: ping at 150s
+  309.53      wait_sse: ping at 265s
+  309.63      wait_for_event: ping at 155s
+  314.54      wait_sse: ping at 270s
+  314.63      wait_for_event: ping at 160s
+  319.54      wait_sse: ping at 275s
+  319.63      wait_for_event: ping at 165s
+  324.54      wait_sse: ping at 280s
+  324.63      wait_for_event: ping at 170s
+  326.96  POST /fire -> released wait_for_event
+  326.96      wait_for_event: DELIVERED EVENT after 172.4s
+  329.53  GET /mcp stream closed
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 55982)
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [Errno 54] Connection reset by peer
+----------------------------------------
+  329.54      wait_sse: ping at 285s
+  334.55      wait_sse: ping at 290s
+  339.55      wait_sse: ping at 295s
+  344.55      wait_sse: ping at 300s
+  349.53  GET /mcp stream closed
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 55865)
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [Errno 54] Connection reset by peer
+----------------------------------------
+  349.56      wait_sse: ping at 305s
+  354.56      wait_sse: CLIENT GONE after 310.2s ([Errno 32] Broken pipe)
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 55870)
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [Errno 54] Connection reset by peer
+----------------------------------------
+  433.81      wait_json: WROTE RESPONSE after 300.0s
+  439.21  GET /mcp stream closed
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 55951)
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [Errno 54] Connection reset by peer
+----------------------------------------
+  942.04      wait_json: CLIENT GONE after 900.1s ([Errno 32] Broken pipe)
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 55858)
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [Errno 54] Connection reset by peer
+----------------------------------------

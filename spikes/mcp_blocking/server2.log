@@ -1,0 +1,154 @@
+    0.00  listening on http://127.0.0.1:8900/mcp
+    3.96  --> server/discover (id=server-discover-probe-1)
+    3.98  --> initialize (id=0)
+    3.98      client protocolVersion=2025-11-25
+    3.98  --> notifications/initialized (id=None)
+    3.99  GET /mcp (server->client stream opened)
+    3.99  --> tools/list (id=1)
+    8.25  --> tools/call (id=2)
+    8.25      _meta={"claudecode/toolUseId": "toolu_01VsDSeCZ6jQZcQ1y5VpXASy", "progressToken": 2}
+    8.25      wait_progress: blocking 600s, progressToken=2
+   13.26      wait_progress: progress 1 at 5s
+   18.26      wait_progress: progress 2 at 10s
+   23.26      wait_progress: progress 3 at 15s
+   28.27      wait_progress: progress 4 at 20s
+   33.27      wait_progress: progress 5 at 25s
+   38.27      wait_progress: progress 6 at 30s
+   43.27      wait_progress: progress 7 at 35s
+   48.28      wait_progress: progress 8 at 40s
+   53.28      wait_progress: progress 9 at 45s
+   58.29      wait_progress: progress 10 at 50s
+   63.29      wait_progress: progress 11 at 55s
+   68.30      wait_progress: progress 12 at 60s
+   73.30      wait_progress: progress 13 at 65s
+   78.30      wait_progress: progress 14 at 70s
+   83.30      wait_progress: progress 15 at 75s
+   88.31      wait_progress: progress 16 at 80s
+   93.31      wait_progress: progress 17 at 85s
+   98.31      wait_progress: progress 18 at 90s
+  103.32      wait_progress: progress 19 at 95s
+  108.32      wait_progress: progress 20 at 100s
+  113.32      wait_progress: progress 21 at 105s
+  118.32      wait_progress: progress 22 at 110s
+  123.33      wait_progress: progress 23 at 115s
+  128.33      wait_progress: progress 24 at 120s
+  133.33      wait_progress: progress 25 at 125s
+  138.34      wait_progress: progress 26 at 130s
+  143.34      wait_progress: progress 27 at 135s
+  148.34      wait_progress: progress 28 at 140s
+  153.34      wait_progress: progress 29 at 145s
+  158.35      wait_progress: progress 30 at 150s
+  163.35      wait_progress: progress 31 at 155s
+  168.35      wait_progress: progress 32 at 160s
+  173.35      wait_progress: progress 33 at 165s
+  178.35      wait_progress: progress 34 at 170s
+  183.36      wait_progress: progress 35 at 175s
+  188.36      wait_progress: progress 36 at 180s
+  193.43      wait_progress: progress 37 at 185s
+  198.43      wait_progress: progress 38 at 190s
+  203.44      wait_progress: progress 39 at 195s
+  208.44      wait_progress: progress 40 at 200s
+  213.45      wait_progress: progress 41 at 205s
+  218.45      wait_progress: progress 42 at 210s
+  223.46      wait_progress: progress 43 at 215s
+  228.46      wait_progress: progress 44 at 220s
+  233.46      wait_progress: progress 45 at 225s
+  238.46      wait_progress: progress 46 at 230s
+  243.46      wait_progress: progress 47 at 235s
+  248.46      wait_progress: progress 48 at 240s
+  253.47      wait_progress: progress 49 at 245s
+  258.47      wait_progress: progress 50 at 250s
+  263.48      wait_progress: progress 51 at 255s
+  268.48      wait_progress: progress 52 at 260s
+  273.48      wait_progress: progress 53 at 265s
+  278.48      wait_progress: progress 54 at 270s
+  283.49      wait_progress: progress 55 at 275s
+  288.50      wait_progress: progress 56 at 280s
+  293.50      wait_progress: progress 57 at 285s
+  298.50      wait_progress: progress 58 at 290s
+  303.50      wait_progress: progress 59 at 295s
+  308.51      wait_progress: progress 60 at 300s
+  313.51      wait_progress: progress 61 at 305s
+  318.51      wait_progress: progress 62 at 310s
+  323.51      wait_progress: progress 63 at 315s
+  328.51      wait_progress: progress 64 at 320s
+  333.52      wait_progress: progress 65 at 325s
+  338.52      wait_progress: progress 66 at 330s
+  343.53      wait_progress: progress 67 at 335s
+  348.53      wait_progress: progress 68 at 340s
+  353.53      wait_progress: progress 69 at 345s
+  358.53      wait_progress: progress 70 at 350s
+  363.54      wait_progress: progress 71 at 355s
+  368.54      wait_progress: progress 72 at 360s
+  373.54      wait_progress: progress 73 at 365s
+  378.55      wait_progress: progress 74 at 370s
+  383.55      wait_progress: progress 75 at 375s
+  388.55      wait_progress: progress 76 at 380s
+  393.55      wait_progress: progress 77 at 385s
+  398.55      wait_progress: progress 78 at 390s
+  403.56      wait_progress: progress 79 at 395s
+  408.56      wait_progress: progress 80 at 400s
+  413.56      wait_progress: progress 81 at 405s
+  418.57      wait_progress: progress 82 at 410s
+  423.57      wait_progress: progress 83 at 415s
+  428.57      wait_progress: progress 84 at 420s
+  433.57      wait_progress: progress 85 at 425s
+  438.58      wait_progress: progress 86 at 430s
+  443.58      wait_progress: progress 87 at 435s
+  448.58      wait_progress: progress 88 at 440s
+  453.59      wait_progress: progress 89 at 445s
+  458.59      wait_progress: progress 90 at 450s
+  463.60      wait_progress: progress 91 at 455s
+  468.60      wait_progress: progress 92 at 460s
+  473.60      wait_progress: progress 93 at 465s
+  478.61      wait_progress: progress 94 at 470s
+  483.61      wait_progress: progress 95 at 475s
+  488.62      wait_progress: progress 96 at 480s
+  493.62      wait_progress: progress 97 at 485s
+  498.63      wait_progress: progress 98 at 490s
+  503.63      wait_progress: progress 99 at 495s
+  508.63      wait_progress: progress 100 at 500s
+  513.63      wait_progress: progress 101 at 505s
+  518.64      wait_progress: progress 102 at 510s
+  523.64      wait_progress: progress 103 at 515s
+  528.64      wait_progress: progress 104 at 520s
+  533.64      wait_progress: progress 105 at 525s
+  538.65      wait_progress: progress 106 at 530s
+  543.65      wait_progress: progress 107 at 535s
+  548.65      wait_progress: progress 108 at 540s
+  553.66      wait_progress: progress 109 at 545s
+  558.66      wait_progress: progress 110 at 550s
+  563.66      wait_progress: progress 111 at 555s
+  568.67      wait_progress: progress 112 at 560s
+  573.67      wait_progress: progress 113 at 565s
+  578.67      wait_progress: progress 114 at 570s
+  583.68      wait_progress: progress 115 at 575s
+  588.68      wait_progress: progress 116 at 580s
+  593.68      wait_progress: progress 117 at 585s
+  598.69      wait_progress: progress 118 at 590s
+  603.69      wait_progress: progress 119 at 595s
+  608.26      wait_progress: WROTE RESPONSE after 600.0s
+  614.45  GET /mcp stream closed
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 56210)
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [Errno 54] Connection reset by peer
+----------------------------------------
