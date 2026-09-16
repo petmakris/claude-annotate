@@ -1,7 +1,7 @@
 package com.petros.ireview;
 
 import com.intellij.diff.DiffContentFactory;
-import com.intellij.diff.DiffManager;
+import com.intellij.diff.DiffVcsDataKeys;
 import com.intellij.diff.contents.DiffContent;
 import com.intellij.diff.requests.SimpleDiffRequest;
 import com.intellij.notification.NotificationGroupManager;
@@ -12,6 +12,7 @@ import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.changes.ChangeListManager;
@@ -28,6 +29,7 @@ import git4idea.repo.GitRepository;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -55,12 +57,32 @@ public final class SmartDiffService {
 
     private static final String NOTIFY_GROUP = "Claude IDE Review";
 
+    /**
+     * One side of the diff: the bytes to show, the label above them, and the
+     * git revision they came from.
+     *
+     * The revision is what makes IntelliJ's own "Annotate with Git Blame" work
+     * inside the viewer — see {@link #content}. Null bytes mean the live working
+     * copy rather than a commit, and a null revision means there is nothing to
+     * blame against.
+     */
+    private record Side(byte @Nullable [] bytes, String title, @Nullable String revision) {
+
+        /** The file on disk, editable in the viewer and blamed by the IDE on its own. */
+        static Side workingCopy() {
+            return new Side(null, "Working copy", null);
+        }
+    }
+
     private final Project project;
     /** Where each file's walk stands. The rule for reading it is {@link DiffWalk}. */
     private final Map<String, DiffWalk.Stop> walks = new ConcurrentHashMap<>();
+    /** The one diff on screen. Replaced per press rather than added to. */
+    private final DiffSurface surface;
 
     public SmartDiffService(@NotNull Project project) {
         this.project = project;
+        this.surface = new DiffSurface(project);
     }
 
     public static SmartDiffService get(@NotNull Project project) {
@@ -89,10 +111,11 @@ public final class SmartDiffService {
             walks.put(file.getPath(), new DiffWalk.Stop(depth, dirty, now));
 
             DiffHistory.Step step = history.at(depth);
-            show(file, DiffHistory.describe(depth),
-                 contentAt(path, step.left()), shortRef(step.left()),
-                 step.right() == null ? null : contentAt(path, step.right()),
-                 step.right() == null ? "Working copy" : shortRef(step.right()));
+            show(file, path, DiffHistory.describe(depth),
+                 new Side(contentAt(path, step.left()), shortRef(step.left()), step.left()),
+                 step.right() == null
+                     ? Side.workingCopy()
+                     : new Side(contentAt(path, step.right()), shortRef(step.right()), step.right()));
         });
     }
 
@@ -113,7 +136,11 @@ public final class SmartDiffService {
                     + " Settings → Tools → Claude IDE Review.");
                 return;
             }
-            show(file, "base branch", contentAt(path, base.get()), base.get(), null, "Working copy");
+            // Blame needs a commit, not a branch name: a ref that moves cannot
+            // identify the lines it moved past.
+            show(file, path, "base branch",
+                 new Side(contentAt(path, base.get()), base.get(), resolve(repo, base.get())),
+                 Side.workingCopy());
         });
     }
 
@@ -141,7 +168,9 @@ public final class SmartDiffService {
                 info(file.getName() + " has no uncommitted changes — it already matches HEAD.");
                 return;
             }
-            show(file, "uncommitted", contentAt(path, revisions.get(0)), "HEAD", null, "Working copy");
+            show(file, path, "uncommitted",
+                 new Side(contentAt(path, revisions.get(0)), "HEAD", revisions.get(0)),
+                 Side.workingCopy());
         });
     }
 
@@ -166,6 +195,21 @@ public final class SmartDiffService {
             throw new VcsException(result.getErrorOutputAsJoinedString());
         }
         return result.getOutput().stream().map(String::trim).filter(s -> !s.isEmpty()).toList();
+    }
+
+    /**
+     * The commit a ref names, or null when git cannot resolve it.
+     *
+     * Blame is taken against a commit. Handing it a branch name would work today
+     * and mean something different tomorrow, once somebody pushes.
+     */
+    private @Nullable String resolve(GitRepository repo, String ref) {
+        GitLineHandler handler = new GitLineHandler(project, repo.getRoot(), GitCommand.REV_PARSE);
+        handler.addParameters(ref + "^{commit}");
+        GitCommandResult result = Git.getInstance().runCommand(handler);
+        if (!result.success()) return null;
+        String sha = result.getOutputAsJoinedString().trim();
+        return sha.isEmpty() ? null : sha;
     }
 
     /** What origin/HEAD points at, or empty — a clone made with --single-branch has none. */
@@ -202,30 +246,48 @@ public final class SmartDiffService {
     // ---- showing it ---------------------------------------------------------
 
     /**
-     * A null {@code rightBytes} means the live working copy, which stays editable in the viewer.
-     *
      * {@code where} names the position the walk is at — "uncommitted", "last
      * commit", "3 commits back", "base branch". Two commit hashes alone never
      * told anyone whether they were looking at their own change or somewhere the
      * walk had drifted to, which is the whole reason this parameter exists.
      */
-    private void show(VirtualFile file, String where,
-                      byte[] leftBytes, String leftTitle,
-                      @Nullable byte[] rightBytes, String rightTitle) {
+    private void show(VirtualFile file, FilePath path, String where, Side left, Side right) {
         ApplicationManager.getApplication().invokeLater(() -> {
             try {
-                DiffContentFactory factory = DiffContentFactory.getInstance();
-                DiffContent left = factory.createFromBytes(project, leftBytes, file);
-                DiffContent right = rightBytes == null
-                    ? factory.create(project, file)
-                    : factory.createFromBytes(project, rightBytes, file);
-                DiffManager.getInstance().showDiff(project, new SimpleDiffRequest(
-                    file.getName() + " — " + where + " — " + leftTitle + " → " + rightTitle,
-                    left, right, leftTitle, rightTitle));
+                surface.replaceWith(new SimpleDiffRequest(
+                    file.getName() + " — " + where + " — " + left.title() + " → " + right.title(),
+                    content(file, path, left), content(file, path, right),
+                    left.title(), right.title()));
             } catch (Exception e) {
                 warn(message(e));
             }
         }, project.getDisposed());
+    }
+
+    /**
+     * One side's content, tagged with the revision it came from.
+     *
+     * That tag is the whole of "Annotate with Git Blame" in this viewer.
+     * {@code AnnotateDiffViewerAction} reads exactly one thing —
+     * {@link DiffVcsDataKeys#REVISION_INFO} on the content — and offers the
+     * gutter blame when it finds it. Bytes handed over without it are just
+     * bytes: the IDE has no file and no revision to blame against, so the action
+     * stays hidden, which is why it was missing rather than broken.
+     *
+     * The working copy needs no tag. It is the real file, and the IDE already
+     * knows how to annotate that.
+     */
+    private DiffContent content(VirtualFile file, FilePath path, Side side) throws IOException {
+        DiffContentFactory factory = DiffContentFactory.getInstance();
+        if (side.bytes() == null) {
+            return factory.create(project, file);
+        }
+        DiffContent content = factory.createFromBytes(project, side.bytes(), file);
+        if (side.revision() != null) {
+            content.putUserData(DiffVcsDataKeys.REVISION_INFO,
+                Pair.create(path, new GitRevisionNumber(side.revision())));
+        }
+        return content;
     }
 
     // ---- plumbing ------------------------------------------------------------

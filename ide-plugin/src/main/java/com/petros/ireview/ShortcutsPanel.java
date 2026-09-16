@@ -183,7 +183,7 @@ public final class ShortcutsPanel {
 
     private static JComponent note(String text) {
         JBLabel label = new JBLabel(text);
-        label.setFont(JBUI.Fonts.label(12f));
+        label.setFont(JBUI.Fonts.label(14f));
         label.setForeground(UIUtil.getContextHelpForeground());
         label.setAlignmentX(0f);
         return label;
@@ -211,10 +211,15 @@ public final class ShortcutsPanel {
         stack.setBorder(JBUI.Borders.empty(6, 8));
         stack.add(line);
         if (!row.detail().isBlank()) {
+            // Only two points below the label, not the usual caption size. This
+            // line is the one that says what a key actually compares, which is
+            // the thing nobody could tell from the labels — it has to be read,
+            // not skimmed past. It stays subordinate by colour, not by size.
             JBLabel detail = new JBLabel(row.detail());
-            detail.setFont(JBUI.Fonts.label(13f));
+            detail.setFont(JBUI.Fonts.label(15f));
             detail.setForeground(UIUtil.getContextHelpForeground());
             detail.setAlignmentX(0f);
+            detail.setBorder(JBUI.Borders.emptyTop(3));
             stack.add(detail);
         }
         stack.setMaximumSize(new Dimension(Integer.MAX_VALUE, stack.getPreferredSize().height));
