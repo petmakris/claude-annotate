@@ -39,15 +39,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * Drives the Smart Diff keys: works out which two versions of a file to show,
  * loads them, and hands them to the platform's diff viewer.
  *
- * The walk itself is {@link DiffHistory}; this class is the part that talks to
- * git and the IDE. Each file's position in its walk is remembered for the life
- * of the project, so repeated presses step further back through history rather
- * than re-showing the same diff.
+ * Three parts, kept apart on purpose. {@link DiffHistory} decides what a given
+ * depth shows. {@link DiffWalk} decides which depth the next press lands on, and
+ * when a walk is stale enough to restart. This class is the only one that talks
+ * to git and to the IDE.
  *
- * One deliberate exception to remembering: when a file's modified state has
- * flipped since we last showed it — you edited it, or you committed it — the
- * walk restarts. After changing something, the thing you want to see is that
- * change, not the next commit down from wherever you left off.
+ * Splitting the second part out is not tidiness. The rule for resuming a walk is
+ * where the reported bug lived, and it could not be tested while it sat inside a
+ * class that needs a running IDE to instantiate.
  */
 public final class SmartDiffService {
 
@@ -56,11 +55,9 @@ public final class SmartDiffService {
 
     private static final String NOTIFY_GROUP = "Claude IDE Review";
 
-    /** Where a file's walk stood, and the modified state it stood in. */
-    private record Walk(int depth, boolean dirty) {}
-
     private final Project project;
-    private final Map<String, Walk> walks = new ConcurrentHashMap<>();
+    /** Where each file's walk stands. The rule for reading it is {@link DiffWalk}. */
+    private final Map<String, DiffWalk.Stop> walks = new ConcurrentHashMap<>();
 
     public SmartDiffService(@NotNull Project project) {
         this.project = project;
@@ -87,11 +84,12 @@ public final class SmartDiffService {
                 return;
             }
 
-            int depth = nextDepth(file, history, dirty, forward);
-            walks.put(file.getPath(), new Walk(depth, dirty));
+            long now = System.currentTimeMillis();
+            int depth = DiffWalk.nextDepth(walks.get(file.getPath()), history, dirty, forward, now);
+            walks.put(file.getPath(), new DiffWalk.Stop(depth, dirty, now));
 
             DiffHistory.Step step = history.at(depth);
-            show(file,
+            show(file, DiffHistory.describe(depth),
                  contentAt(path, step.left()), shortRef(step.left()),
                  step.right() == null ? null : contentAt(path, step.right()),
                  step.right() == null ? "Working copy" : shortRef(step.right()));
@@ -115,19 +113,39 @@ public final class SmartDiffService {
                     + " Settings → Tools → Claude IDE Review.");
                 return;
             }
-            show(file, contentAt(path, base.get()), base.get(), null, "Working copy");
+            show(file, "base branch", contentAt(path, base.get()), base.get(), null, "Working copy");
         });
     }
 
-    // ---- deciding where the walk goes next --------------------------------
+    /**
+     * One press of Compare with HEAD: the committed version of this file against
+     * the working copy, with no walk and no memory.
+     *
+     * Deliberately does not touch {@link #walks}. Its whole value is being the
+     * one diff key whose answer does not depend on which keys were pressed
+     * before it. A clean file is reported rather than shown: two identical sides
+     * in a diff viewer look like a broken tool, and "no uncommitted changes" is
+     * the answer the person was actually after.
+     */
+    public void diffAgainstHead(@NotNull VirtualFile file) {
+        background("Diffing " + file.getName() + " against HEAD", () -> {
+            GitRepository repo = GitUtil.getRepositoryForFile(project, file);
+            FilePath path = VcsUtil.getFilePath(file);
+            List<String> revisions = revisions(repo, path);
 
-    private int nextDepth(VirtualFile file, DiffHistory history, boolean dirty, boolean forward) {
-        Walk previous = walks.get(file.getPath());
-        if (previous == null || previous.dirty() != dirty) {
-            return history.firstDepth();
-        }
-        return forward ? history.advance(previous.depth()) : history.back(previous.depth());
+            if (revisions.isEmpty()) {
+                info(file.getName() + " has never been committed — there is no HEAD version to compare against.");
+                return;
+            }
+            if (!isDirty(file)) {
+                info(file.getName() + " has no uncommitted changes — it already matches HEAD.");
+                return;
+            }
+            show(file, "uncommitted", contentAt(path, revisions.get(0)), "HEAD", null, "Working copy");
+        });
     }
+
+    // ---- reading the file's state -----------------------------------------
 
     /**
      * Modified relative to HEAD. Unsaved editor content counts: the diff should
@@ -183,8 +201,15 @@ public final class SmartDiffService {
 
     // ---- showing it ---------------------------------------------------------
 
-    /** A null {@code rightBytes} means the live working copy, which stays editable in the viewer. */
-    private void show(VirtualFile file,
+    /**
+     * A null {@code rightBytes} means the live working copy, which stays editable in the viewer.
+     *
+     * {@code where} names the position the walk is at — "uncommitted", "last
+     * commit", "3 commits back", "base branch". Two commit hashes alone never
+     * told anyone whether they were looking at their own change or somewhere the
+     * walk had drifted to, which is the whole reason this parameter exists.
+     */
+    private void show(VirtualFile file, String where,
                       byte[] leftBytes, String leftTitle,
                       @Nullable byte[] rightBytes, String rightTitle) {
         ApplicationManager.getApplication().invokeLater(() -> {
@@ -195,7 +220,7 @@ public final class SmartDiffService {
                     ? factory.create(project, file)
                     : factory.createFromBytes(project, rightBytes, file);
                 DiffManager.getInstance().showDiff(project, new SimpleDiffRequest(
-                    file.getName() + " — " + leftTitle + " → " + rightTitle,
+                    file.getName() + " — " + where + " — " + leftTitle + " → " + rightTitle,
                     left, right, leftTitle, rightTitle));
             } catch (Exception e) {
                 warn(message(e));

@@ -71,6 +71,23 @@ public final class DiffHistory {
         return prev < firstDepth() ? levels() - 1 : prev;
     }
 
+    /**
+     * How far back a depth is, in words, for the diff tab's title.
+     *
+     * The walk used to be invisible: the title named two commit hashes, and
+     * nothing said whether you were looking at your own change or at something
+     * from two years ago that the walk had drifted onto. Saying where you are is
+     * what turns a wrong position from a mystery into something you can see and
+     * step out of.
+     */
+    public static String describe(int depth) {
+        return switch (depth) {
+            case 0 -> "uncommitted";
+            case 1 -> "last commit";
+            default -> depth + " commits back";
+        };
+    }
+
     /** The two sides to show at {@code depth}. */
     public Step at(int depth) {
         if (isEmpty() || depth < firstDepth() || depth > levels() - 1) {

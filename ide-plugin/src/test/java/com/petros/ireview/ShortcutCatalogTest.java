@@ -62,21 +62,102 @@ class ShortcutCatalogTest {
     void theStockGitActionsThatMatterAreListed() {
         // These are the actions a user loses silently by rebinding their key to
         // something else — the panel exists largely to make that visible.
+        //
+        // Compare.SameVersion used to be here and deliberately is not any more.
+        // It did the same job as this plugin's own Compare with HEAD, so the
+        // card carried two rows with almost the same name, one of them reading
+        // "unassigned". That looked like a fault in the plugin rather than like
+        // a key stripped from IntelliJ, which is the confusion the whole group
+        // split exists to remove.
         List<String> ids = ShortcutCatalog.rows().stream().map(ShortcutCatalog.Row::actionId).toList();
         assertTrue(ids.containsAll(List.of(
-            "Compare.SameVersion", "Git.CompareWithBranch",
+            "Git.CompareWithBranch",
             "Vcs.ShowTabbedFileHistory", "Annotate",
             "Diff.NextChange", "Diff.PrevChange")), ids.toString());
+        assertFalse(ids.contains("Compare.SameVersion"),
+            "Compare.SameVersion duplicates this plugin's Compare with HEAD row");
     }
 
     @Test
     void everyActionThisPluginRegistersIsListed() {
         List<String> ids = ShortcutCatalog.rows().stream().map(ShortcutCatalog.Row::actionId).toList();
         assertTrue(ids.containsAll(List.of(
-            SmartDiffActions.FORWARD_ID, SmartDiffActions.BACK_ID, SmartDiffActions.BASE_ID,
+            SmartDiffActions.FORWARD_ID, SmartDiffActions.BACK_ID,
+            SmartDiffActions.BASE_ID, SmartDiffActions.HEAD_ID,
             WalkthroughActions.NEXT_ID, WalkthroughActions.PREV_ID,
             WalkthroughActions.ASK_ID, WalkthroughActions.TOGGLE_ID,
             ShortcutCatalog.PANEL_ID)), ids.toString());
+    }
+
+    // ---- telling one diff key from another --------------------------------
+    // The reported bug was not a wrong diff. It was four rows whose labels did
+    // not say what any of them compared, so the one that had drifted could not
+    // be told from the ones that had not.
+
+    @Test
+    void everyDiffKeySaysWhatItCompares() {
+        for (String id : List.of(SmartDiffActions.FORWARD_ID, SmartDiffActions.BACK_ID,
+                                 SmartDiffActions.BASE_ID, SmartDiffActions.HEAD_ID)) {
+            ShortcutCatalog.Row row = ShortcutCatalog.rows().stream()
+                .filter(r -> r.actionId().equals(id)).findFirst().orElseThrow();
+            assertFalse(row.detail().isBlank(),
+                "'" + row.label() + "' is one of four diff keys and its label alone "
+                    + "does not say which two sides it puts on screen");
+        }
+    }
+
+    @Test
+    void theFourDiffKeysAreInOneGroupWithNothingElse() {
+        // Grouping is the other half of it: a stock IntelliJ row sitting among
+        // them reads as ours, and its missing key reads as our fault.
+        String group = ShortcutCatalog.rows().stream()
+            .filter(r -> r.actionId().equals(SmartDiffActions.FORWARD_ID))
+            .findFirst().orElseThrow().group();
+        for (ShortcutCatalog.Row row : ShortcutCatalog.rowsIn(group)) {
+            assertTrue(row.actionId().startsWith("com.petros.ireview."),
+                "row '" + row.label() + "' is a stock IntelliJ action sitting in this plugin's own group");
+        }
+    }
+
+    @Test
+    void theStockGroupSaysWhyItIsThere() {
+        String group = ShortcutCatalog.rows().stream()
+            .filter(r -> r.actionId().equals("Annotate"))
+            .findFirst().orElseThrow().group();
+        assertFalse(ShortcutCatalog.note(group).isBlank(),
+            "the stock group needs a note; without one its rows read as this plugin's");
+    }
+
+    // ---- what a click may run ---------------------------------------------
+
+    @Test
+    void theDiffNavigationRowsAreNotClickable() {
+        // They act on a focused diff viewer, which does not exist while this
+        // card is open. Offering them as buttons would be a control that looks
+        // live and does nothing.
+        for (String id : List.of("Diff.NextChange", "Diff.PrevChange")) {
+            ShortcutCatalog.Row row = ShortcutCatalog.rows().stream()
+                .filter(r -> r.actionId().equals(id)).findFirst().orElseThrow();
+            assertFalse(row.clickable(), id + " cannot work from the card and must not look clickable");
+            assertFalse(row.detail().isBlank(), id + " must say why it is not clickable");
+        }
+    }
+
+    @Test
+    void theRowThatOpensThisCardIsNotClickable() {
+        ShortcutCatalog.Row row = ShortcutCatalog.rows().stream()
+            .filter(r -> r.actionId().equals(ShortcutCatalog.PANEL_ID)).findFirst().orElseThrow();
+        assertFalse(row.clickable(), "clicking it would close the card and reopen it");
+    }
+
+    @Test
+    void everyActionThisPluginAddsCanBeRunByClickingIt() {
+        for (ShortcutCatalog.Row row : ShortcutCatalog.rows()) {
+            if (!row.actionId().startsWith("com.petros.ireview.")) continue;
+            if (row.actionId().equals(ShortcutCatalog.PANEL_ID)) continue;
+            assertTrue(row.clickable(),
+                "'" + row.label() + "' is ours and works on the current file, so the card should run it");
+        }
     }
 
     // ---- splitting a shortcut into key caps -------------------------------

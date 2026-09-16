@@ -21,6 +21,7 @@ public final class SmartDiffActions {
     public static final String FORWARD_ID = "com.petros.ireview.SmartDiff";
     public static final String BACK_ID = "com.petros.ireview.SmartDiffBack";
     public static final String BASE_ID = "com.petros.ireview.DiffAgainstBase";
+    public static final String HEAD_ID = "com.petros.ireview.CompareWithHead";
 
     private abstract static class Base extends AnAction {
 
@@ -67,6 +68,20 @@ public final class SmartDiffActions {
     public static final class AgainstBase extends Base {
         @Override void run(SmartDiffService service, VirtualFile file) {
             service.diffAgainstBase(file);
+        }
+    }
+
+    /**
+     * Working copy against HEAD, and nothing else ever.
+     *
+     * {@link Forward} shows this too, but only on its first press of a modified
+     * file — it remembers where each file's walk stood and carries on from
+     * there. This one keeps no state, so it is the answer to "just show me what
+     * I have changed" when the walk has drifted somewhere you did not intend.
+     */
+    public static final class AgainstHead extends Base {
+        @Override void run(SmartDiffService service, VirtualFile file) {
+            service.diffAgainstHead(file);
         }
     }
 }

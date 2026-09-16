@@ -71,8 +71,8 @@
                 class="com.petros.ireview.SmartDiffActions$Back"
                 text="Smart Diff: Step Back"
                 description="Step one level back toward the working copy.">
-            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt COMMA"/>
-            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt COMMA"/>
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="meta alt D"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="meta alt D"/>
         </action>
         <action id="com.petros.ireview.DiffAgainstBase"
                 class="com.petros.ireview.SmartDiffActions$AgainstBase"
@@ -80,6 +80,13 @@
                 description="Compare this file with the base branch, with no branch picker.">
             <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt B"/>
             <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt B"/>
+        </action>
+        <action id="com.petros.ireview.CompareWithHead"
+                class="com.petros.ireview.SmartDiffActions$AgainstHead"
+                text="Compare With HEAD"
+                description="Show this file's uncommitted changes against HEAD, with no walk and no memory.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt H"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt H"/>
         </action>
         <action id="com.petros.ireview.ShortcutsPanel"
                 class="com.petros.ireview.ShortcutsPanel$Show"
@@ -92,15 +99,15 @@
                 class="com.petros.ireview.WalkthroughActions$Next"
                 text="Walkthrough: Next Step"
                 description="Move to the next step of the active walkthrough.">
-            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt CLOSE_BRACKET"/>
-            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt CLOSE_BRACKET"/>
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt N"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt N"/>
         </action>
         <action id="com.petros.ireview.WalkthroughPrev"
                 class="com.petros.ireview.WalkthroughActions$Prev"
                 text="Walkthrough: Previous Step"
                 description="Move to the previous step of the active walkthrough.">
-            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt OPEN_BRACKET"/>
-            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt OPEN_BRACKET"/>
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt P"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt P"/>
         </action>
         <action id="com.petros.ireview.WalkthroughAsk"
                 class="com.petros.ireview.WalkthroughActions$Ask"
