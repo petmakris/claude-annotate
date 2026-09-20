@@ -31,13 +31,9 @@ JS = (STATIC / "script.js").read_text()
 CSS = (STATIC / "style.css").read_text()
 
 
-def _shell_html():
-    src = (STATIC / "shell.js").read_text()
-    m = re.search(r'export const SHELL_HTML = ("(?:[^"\\]|\\.)*");', src, re.S)
-    return json.loads(m.group(1)) if m else src
+from .shell_source import shell_html
 
-
-SHELL = _shell_html()
+SHELL = shell_html()
 
 
 def _fn(name, src=JS):
