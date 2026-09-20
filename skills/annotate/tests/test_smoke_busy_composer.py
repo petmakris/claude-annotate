@@ -35,11 +35,10 @@ class _PageSource:
         self._entry = static / "entry.js"
 
     def read_text(self, *a, **k):
-        import json
-        src = self._shell.read_text(*a, **k)
-        m = re.search(r"export const SHELL_HTML = (\".*\");", src, re.S)
-        html = json.loads(m.group(1)) if m else src
-        return html + "\n" + self._entry.read_text(*a, **k)
+        # Decoded by one shared helper: the encoding of SHELL_HTML is shell.js's
+        # business, and it has already changed once.
+        from .shell_source import shell_html
+        return shell_html(self._shell) + "\n" + self._entry.read_text(*a, **k)
 
 
 SERVER_PY = _PageSource(REPO)

@@ -27,17 +27,9 @@ STATIC = Path(__file__).resolve().parents[1] / "static"
 JS = (STATIC / "script.js").read_text()
 
 
-def _shell_html():
-    """shell.js holds the markup as a JSON-encoded JS string literal, so a raw
-    read hands these tests `id=\\"settings-pop\\"` and every markup assertion
-    fails on the escaping rather than on the thing it is checking. Decoded
-    here, the same way test_smoke_read_only.py's _PageSource does it."""
-    src = (STATIC / "shell.js").read_text()
-    m = re.search(r'export const SHELL_HTML = ("(?:[^"\\]|\\.)*");', src, re.S)
-    return json.loads(m.group(1)) if m else src
+from .shell_source import shell_html
 
-
-SHELL = _shell_html()
+SHELL = shell_html()
 CSS = (STATIC / "style.css").read_text()
 CORE_CSS = (STATIC / "core.css").read_text()
 HIGHLIGHTER = (STATIC / "highlighter.js").read_text()
