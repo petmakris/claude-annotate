@@ -60,17 +60,24 @@ class TestTheSettingsSpec(unittest.TestCase):
 
     def test_every_setting_declares_a_scope(self):
         spec = self._spec()
-        keys = re.findall(r'\{ key: "([a-z]+)"', spec)
+        # The width row names its key through a const (WIDTH_KEY), because the
+        # stop names were reused and the storage key had to move with them.
+        # The pattern accepts a bare identifier for that reason: a row that
+        # silently stops matching is a row this no longer guards.
+        keys = re.findall(r'\{ key: "?([A-Za-z_]+)"?', spec)
         scopes = re.findall(r'scope: "(doc|global)"', spec)
         self.assertEqual(len(keys), len(scopes),
                          "a setting was added without a scope — it would be "
                          "stored per document by accident or not at all")
-        self.assertEqual(keys, ["width", "codelayout", "panetheme",
+        self.assertEqual(keys, ["WIDTH_KEY", "codelayout", "panetheme",
                                 "prosefont", "codefont", "textsize"])
 
     def test_reader_preferences_are_global_and_document_ones_are_not(self):
         spec = self._spec()
-        for key, scope in re.findall(r'\{ key: "([a-z]+)".*?scope: "(doc|global)"', spec, re.S):
+        rows = re.findall(r'\{ key: "?([A-Za-z_]+)"?.*?scope: "(doc|global)"',
+                          spec, re.S)
+        self.assertEqual(len(rows), spec.count("scope:"))
+        for key, scope in rows:
             expected = "global" if key in ("prosefont", "codefont", "textsize") else "doc"
             self.assertEqual(scope, expected,
                              f"{key} changed scope: a typeface is the reader's "
@@ -86,7 +93,7 @@ class TestTheSettingsSpec(unittest.TestCase):
 class TestThePanelPaintsTheDocument(unittest.TestCase):
     def test_every_setting_has_a_stylesheet_rule_to_land_on(self):
         for attr, values in (
-            ("data-width", ("narrow", "wide", "extra")),
+            ("data-width", ("normal", "wide")),
             ("data-prose-font", ("inter", "serif", "system")),
             ("data-code-font", ("jetbrains", "system")),
             ("data-text-size", ("small", "large")),

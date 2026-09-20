@@ -220,6 +220,48 @@ def test_code_panes_scroll_rather_than_wrap(page):
     assert wraps == "pre", f".cp-line is {wraps!r}, so long lines fold again"
 
 
+def test_the_width_stops_measure_what_they_claim(page):
+    """The stop NAMES were reused, so only a measurement can tell them apart.
+
+    "normal" is the column that used to be called "wide" (1180px) and "wide"
+    is the one that used to be "extra" (1600px). Every source-level check
+    here would pass just as happily with the two rules swapped.
+    """
+    measure = ("() => [document.body.dataset.width, getComputedStyle(document.body)"
+               ".getPropertyValue('--content-max').trim()]")
+    assert page.evaluate(measure) == ["normal", "1180px"]
+
+    page.click("#settings-toggle")
+    rows = page.eval_on_selector_all('[data-setting="pagewidth"] [data-value]',
+                                     "els => els.map(e => e.dataset.value)")
+    assert rows == ["normal", "wide"], f"the panel offers {rows}"
+    page.click('[data-setting="pagewidth"] [data-value="wide"]')
+    assert page.evaluate(measure) == ["wide", "1600px"]
+
+
+def test_a_width_chosen_before_the_rename_still_means_its_own_column(page):
+    """A stored "wide" meant 1180px before the rename and 1600px after it.
+
+    Read under the new key it would move a reader who chose the narrower
+    column to the widest one — which is why the choice moved keys. Reset has
+    to clear the old key too, or it falls straight back through it.
+    """
+    rid = "resp-browser-suite"
+    for legacy, expected in (("extra", "wide"), ("wide", "normal"),
+                             ("narrow", "normal"), ("normal", "normal")):
+        page.evaluate(
+            "([rid, v]) => { localStorage.removeItem(`annotate.view:${rid}:pagewidth`);"
+            " localStorage.setItem(`annotate.view:${rid}:width`, v); }", [rid, legacy])
+        page.reload()
+        page.wait_for_selector("section.block")
+        assert page.evaluate("() => document.body.dataset.width") == expected, \
+            f"a stored {legacy!r} no longer opens on {expected!r}"
+
+    page.click("#settings-toggle")
+    page.click("#settings-reset")
+    page.wait_for_function("() => document.body.dataset.width === 'normal'", timeout=3000)
+
+
 def test_the_page_raises_nothing(page):
     page.wait_for_timeout(2500)          # a few poll ticks
     assert page.__dict__["js_errors"] == [], page.__dict__["js_errors"]

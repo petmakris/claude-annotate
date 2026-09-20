@@ -782,17 +782,13 @@
   // sit beside the prose or beneath it. Both are stored per response, like
   // the per-block promotion above, because a preference you must re-set on
   // every reload is worse than not having one.
-  // "Narrow", not "Normal". Wide is the default now (see DEFAULT_WIDTH), and
-  // a control whose first stop is labelled "Normal" tells the reader the
-  // thing they are NOT looking at is the normal one. The name says what the
-  // column is — 1040px, the narrowest of the three — instead of implying a
-  // default it no longer carries.
-  const VIEW_WIDTHS = ["narrow", "wide", "extra"];
-  const VIEW_LABELS = { narrow: "Narrow", wide: "Wide", extra: "Extra" };
-  // Readers who chose the narrow column before it was renamed have "normal"
-  // in localStorage. Without this it fails the VIEW_WIDTHS check and silently
-  // becomes Wide — their one explicit choice, dropped by a rename.
-  const LEGACY_WIDTHS = { normal: "narrow" };
+  // Two stops, not three. The 1040px column was the narrowest of three and
+  // the one nobody stayed on: every stop below 1180px puts a code pane and
+  // the prose it annotates in a fight for the same measure. What is left is
+  // the reading column and the one for documents that cite a lot of code,
+  // and the reading column is called Normal because it is the default again.
+  const VIEW_WIDTHS = ["normal", "wide"];
+  const VIEW_LABELS = { normal: "Normal", wide: "Wide" };
 
   function viewKey(name) {
     const rid = (document.body.dataset.responseId || "default");
@@ -801,18 +797,28 @@
   function readStored(name) {
     try { return localStorage.getItem(viewKey(name)); } catch (_) { return null; }
   }
-  // Every new session opens WIDE, code or not. This used to be derived from
-  // data-has-code — 1180px with anchors, 1040px without — which made the
+  // Every new session opens at 1180px, code or not. This used to be derived
+  // from data-has-code — 1180px with anchors, 1040px without — which made the
   // opening measure depend on something the reader never chose, and left a
   // prose-only document narrower than it needed to be. One default, chosen
   // once; anything else is the reader's own click, and that is what `stored`
   // is for.
-  const DEFAULT_WIDTH = "wide";
+  const DEFAULT_WIDTH = "normal";
+  // The stops were renamed IN PLACE: the 1180px column used to be called
+  // "wide" and is now "normal", and 1600px used to be "extra" and is now
+  // "wide". So a stored "wide" means 1180px or 1600px depending on when it
+  // was written, and no mapping can tell the two apart. Hence a new key: the
+  // old one is read once, through LEGACY_WIDTHS, and never written again.
+  const WIDTH_KEY = "pagewidth";
+  const LEGACY_WIDTH_KEY = "width";
+  const LEGACY_WIDTHS =
+    { narrow: "normal", normal: "normal", wide: "normal", extra: "wide" };
   function effectiveWidth() {
-    const stored = readStored("width");
+    const stored = readStored(WIDTH_KEY);
     if (VIEW_WIDTHS.indexOf(stored) >= 0) return stored;
-    if (Object.prototype.hasOwnProperty.call(LEGACY_WIDTHS, stored)) {
-      return LEGACY_WIDTHS[stored];
+    const legacy = readStored(LEGACY_WIDTH_KEY);
+    if (Object.prototype.hasOwnProperty.call(LEGACY_WIDTHS, legacy)) {
+      return LEGACY_WIDTHS[legacy];
     }
     return DEFAULT_WIDTH;
   }
@@ -853,7 +859,7 @@
   // paints data-prose-font. The stylesheet keys off those attributes and
   // nothing else; see the view-controls and typography blocks in style.css.
   const SETTINGS = [
-    { key: "width", attr: "width", label: "Page width", scope: "doc",
+    { key: WIDTH_KEY, attr: "width", label: "Page width", scope: "doc",
       read: effectiveWidth,
       options: VIEW_WIDTHS.map((v) => [v, VIEW_LABELS[v]]) },
     { key: "codelayout", attr: "codeLayout", label: "Code panes", scope: "doc",
@@ -916,6 +922,9 @@
     for (const s of SETTINGS) {
       try { localStorage.removeItem(settingKey(s)); } catch (_) {}
     }
+    // The pre-rename width key too: leave it and a reset falls straight back
+    // through LEGACY_WIDTHS into the choice it was supposed to clear.
+    try { localStorage.removeItem(viewKey(LEGACY_WIDTH_KEY)); } catch (_) {}
     try { localStorage.removeItem(viewKey("highlightcolor")); } catch (_) {}
     applyViewControls();
     // The colour lives on <body> and the swatches' pressed state is painted

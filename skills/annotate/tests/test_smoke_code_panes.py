@@ -203,46 +203,58 @@ class TestCodePaneReading(unittest.TestCase):
                          "the default is being read off the popover's order again")
 
 
-class TestPageWidthNaming(unittest.TestCase):
-    """Wide is the default column, so the narrow one is called Narrow.
+class TestPageWidthStops(unittest.TestCase):
+    """Two stops, Normal (1180px) and Wide (1600px), Normal by default.
 
-    Verified in the browser across all three settings: the labels cycle
-    Wide -> Extra -> Narrow, --content-max reads 1180 / 1600 / 1040, a stored
-    legacy "normal" resolves to Narrow, and an unrecognised value falls back
-    to Wide.
+    Verified in the browser: the panel shows two rows, --content-max reads
+    1180 then 1600, a stored pre-rename "extra" opens on Wide, a stored
+    "wide" or "narrow" opens on Normal, and Reset returns to Normal instead
+    of falling back through the old key.
     """
 
-    def test_the_narrow_column_is_not_called_normal(self):
-        self.assertIn('const VIEW_WIDTHS = ["narrow", "wide", "extra"]', JS)
-        self.assertIn('narrow: "Narrow"', JS)
-        self.assertNotIn('normal: "Normal"', JS,
-                         'the first stop is labelled "Normal" again, which '
-                         'names the non-default column as the normal one')
-        self.assertIn('body[data-width="narrow"]', CSS)
-        self.assertNotIn('body[data-width="normal"]', CSS,
-                         "the stylesheet still keys the narrow column on the "
-                         "old name — the control renames, the column does not")
+    def test_there_are_two_stops_and_the_1040_column_is_gone(self):
+        self.assertIn('const VIEW_WIDTHS = ["normal", "wide"]', JS)
+        self.assertIn('normal: "Normal", wide: "Wide"', JS)
+        self.assertNotIn('"Extra"', JS,
+                         "a third stop is back in the panel")
+        self.assertIn('body[data-width="normal"] { --content-max: 1180px; }', CSS)
+        self.assertIn('body[data-width="wide"]   { --content-max: 1600px; }', CSS)
+        self.assertNotIn("1040px", CSS.split("=== Page-wide view controls")[1],
+                         "the dropped narrow column still has a rule")
 
-    def test_wide_stays_the_default(self):
-        self.assertIn('const DEFAULT_WIDTH = "wide"', JS)
+    def test_normal_is_the_default(self):
+        self.assertIn('const DEFAULT_WIDTH = "normal"', JS)
 
-    def test_a_width_stored_before_the_rename_survives_it(self):
-        # Renaming a stored value silently discards the reader's one explicit
-        # choice: "normal" stops matching VIEW_WIDTHS and falls through to the
-        # default, which is the WIDEST column -- the opposite of what they set.
-        self.assertIn('const LEGACY_WIDTHS = { normal: "narrow" }', JS)
+    def test_a_width_stored_before_the_rename_is_read_from_its_own_key(self):
+        # The stop NAMES were reused: "wide" meant 1180px before this change
+        # and means 1600px after it. Read the old key as if it were the new
+        # one and a reader who chose 1180px is moved to the widest column --
+        # so the new choice lives under its own key, and the old one is only
+        # ever read through the map.
+        self.assertIn('const WIDTH_KEY = "pagewidth"', JS)
+        self.assertIn('const LEGACY_WIDTH_KEY = "width"', JS)
+        self.assertIn('{ narrow: "normal", normal: "normal", '
+                      'wide: "normal", extra: "wide" }', JS)
         i = JS.index("function effectiveWidth()")
         fn = JS[i:JS.index("\n  }", i)]
+        self.assertIn("readStored(WIDTH_KEY)", fn)
         self.assertIn("LEGACY_WIDTHS", fn,
                       "effectiveWidth no longer maps the pre-rename value")
 
+    def test_reset_clears_the_pre_rename_key_too(self):
+        # SETTINGS only knows the new key, so a reset that stops there leaves
+        # the old one in place and effectiveWidth falls right back through it.
+        i = JS.index("function resetSettings()")
+        fn = JS[i:JS.index("\n  }", i)]
+        self.assertIn("removeItem(viewKey(LEGACY_WIDTH_KEY))", fn)
+
     def test_the_width_choice_lives_in_the_settings_panel(self):
-        # There is no width button in the bar any more — the three stops are
-        # rows in the settings popover, built from VIEW_WIDTHS above. What this
+        # There is no width button in the bar any more — the stops are rows
+        # in the settings popover, built from VIEW_WIDTHS above. What this
         # used to assert (the cycling button's tooltip) no longer exists.
         shell = (Path(__file__).resolve().parents[1] / "static" / "shell.js").read_text()
         self.assertNotIn("width-toggle", shell,
                          "the width button is back in the bar")
         self.assertIn("settings-toggle", shell)
-        self.assertIn('{ key: "width", attr: "width", label: "Page width"', JS,
+        self.assertIn('{ key: WIDTH_KEY, attr: "width", label: "Page width"', JS,
                       "the settings panel no longer offers a width")

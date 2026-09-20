@@ -14,11 +14,11 @@
      content: narrowing the reading column used to drag the search box and
      every control inwards with it, so the controls moved under the pointer
      and the bar gave up room it had no reason to give up. Measured before
-     the split: the width toggle sat at x=980 / 1051 / 1261 for normal /
-     wide / extra, a 281px swing from a setting that is about prose.
-     1600px is the widest content stop, so at "extra" the bar and the column
-     share one left edge, and at every narrower setting the bar simply keeps
-     that edge. view-controls.e2e.cjs item 10 pins all of it. */
+     the split: the width toggle sat at x=980 / 1051 / 1261 across the stops,
+     a 281px swing from a setting that is about prose.
+     1600px is the widest content stop, so at "wide" the bar and the column
+     share one left edge, and at Normal the bar simply keeps that edge.
+     view-controls.e2e.cjs item 10 pins all of it. */
   --chrome-max: 1600px;
 }
 
@@ -1645,24 +1645,25 @@ body[data-has-code="1"] { --content-max: 1180px; }
 
 /* === Page-wide view controls =========================================
    ORDER-DEPENDENT — this block sits immediately AFTER the rule above on
-   purpose. `body[data-has-code="1"]` and `body[data-width="narrow"]` are
-   both specificity (0,1,1), so nothing but source order decides which one
-   paints. Move these rules above it and choosing "Narrow" silently stops
+   purpose. `body[data-has-code="1"]` and `body[data-width="…"]` are both
+   specificity (0,1,1), so nothing but source order decides which one
+   paints. Move these rules above it and the width setting silently stops
    working on every document that cites code, while every source-level
    check still passes. view-controls.e2e.cjs item 3 measures the computed
    value for exactly this reason.
 
    script.js writes this attribute on every render, chosen or not — the
-   default is Wide (DEFAULT_WIDTH) rather than something derived from
+   default is Normal (DEFAULT_WIDTH) rather than something derived from
    data-has-code, so there is no longer a state where the attribute is
    absent. The rule above it still matters for an EXPORT, which bakes
    data-has-code onto <body> and may carry no data-width at all.
 
-   "narrow" was called "normal" until Wide became the default; a stored
-   "normal" is mapped forward in script.js, not matched here. */
-body[data-width="narrow"] { --content-max: 1040px; }
-body[data-width="wide"]   { --content-max: 1180px; }
-body[data-width="extra"]  { --content-max: 1600px; }
+   Two stops. These names are REUSED: "normal" is the column that was
+   called "wide" and "wide" is the one that was called "extra", so the
+   stored value moved to its own key rather than being matched here —
+   see WIDTH_KEY / LEGACY_WIDTHS in script.js. */
+body[data-width="normal"] { --content-max: 1180px; }
+body[data-width="wide"]   { --content-max: 1600px; }
 
 /* === Typography, chosen in the settings popover ======================
    Each rule redefines a token declared in core.css's :root. Nothing here
