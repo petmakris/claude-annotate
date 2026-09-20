@@ -27,8 +27,10 @@ MAX_WINDOW = 40        # a pane you must scroll has stopped being a glance
 CONTEXT_LINES = 2      # dimmed lines either side, so a line has a home
 DRIFT_RADIUS = 40      # how far to hunt for a snippet that moved
 
-# The client refetches /raw once a second, per open tab, and the read-only
-# share link makes that reachable by anyone holding it. MAX_WINDOW bounds how
+# The client refetches the whole document once a second, per open tab (as one
+# GET per block, synthesised into the old single payload by compat.js), and the
+# read-only share link makes that reachable by anyone holding it. MAX_WINDOW
+# bounds how
 # many lines an anchor's payload carries, but nothing bounded how long any one
 # line could BE -- a 40-line window over a minified or generated file could
 # still be a multi-megabyte JSON body every tick. A source file an anchor
