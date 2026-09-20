@@ -257,7 +257,15 @@ body.read-only section.block .hover-actions { border: none; }
    workaround for the strip sitting at the far right of the band; now that
    the buttons mount beside the title, a band-wide trigger reveals controls
    the user is already looking at. */
+/* Four ways in, and only the first is the pointer. `:focus-within` matters as
+   much as the hover: these are real <button>s, so Tab has always been able to
+   land on them — it just landed on something with opacity 0 and pointer-events
+   none, which is a control you can focus, cannot see, and cannot press. The
+   keyboard cursor (data-kb-focus, set by j/k) reveals the strip for the block
+   you are on, which is what makes the whole page reachable without a mouse. */
 .card-head:hover .hover-actions,
+.card-head:focus-within .hover-actions,
+section.block[data-kb-focus] .hover-actions,
 .hover-actions:hover,
 .hover-actions[data-visible="1"] { opacity: 1; pointer-events: auto; }
 .hover-actions button {
@@ -348,10 +356,110 @@ section.block[data-block-mark="compact"] .card-title { color: var(--text-dim); }
 
 @media (hover: none) {
   .hover-actions { opacity: 0.4; pointer-events: auto; }
-  .card-head:focus-within .hover-actions { opacity: 1; }
   /* No hover on touch, so the title-scoped rule above can never fire —
      keep the strip reachable. */
 }
+
+/* === The legend's keyboard section ==================================
+   The keys existed before this panel documented them — `/` and `g` and the
+   ⌘K chords have been bound for a long time — and nobody could have known.
+   A shortcut nobody can discover is a shortcut nobody has. The legend is
+   already the page's answer to "what does this do", so it answers this too. */
+.legend-keys { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 11px; }
+.legend-keys-head {
+  margin: 0 0 7px;
+  font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-dim);
+}
+.legend-keytable { border-collapse: collapse; font-size: 12px; }
+.legend-keytable td { padding: 3px 12px 3px 0; vertical-align: baseline; }
+.legend-keytable td:first-child { white-space: nowrap; }
+.legend-keys kbd {
+  display: inline-block;
+  min-width: 17px; padding: 1px 5px;
+  border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px;
+  background: var(--surface-soft);
+  font-family: var(--font-code); font-size: 10.5px;
+  color: var(--text); text-align: center;
+}
+
+/* === Review progress ================================================
+   How much of this document you have actually dealt with, and a way to the
+   next block you have not. Sized and coloured like the section pills rather
+   than like a control: it is a readout that happens to be clickable, and a
+   button-shaped thing here would compete with Share and Done for the eye.
+   Turns accent when every block is marked — the one moment it is worth
+   noticing, because it means the round is ready to submit. */
+.review-progress {
+  flex: none;
+  padding: 3px 9px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: var(--font-code);
+  font-size: 10.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+.review-progress[hidden] { display: none; }
+.review-progress:hover { color: var(--accent); border-color: var(--accent); }
+.review-progress[data-complete="1"] {
+  color: var(--accent-fg); background: var(--accent); border-color: var(--accent);
+}
+/* A guest can read the counter — it says how far the author got — but there
+   is nothing for them to jump to and nothing they could mark, so it stops
+   being a control. */
+body.read-only .review-progress { pointer-events: none; }
+
+/* The per-block half of the same idea. Deliberately quiet: an untouched block
+   is the NORMAL state of a document you have just opened, so marking every
+   one of them would paint the whole page. Only the dealt-with ones carry a
+   tick.
+
+   Inline after the title, NOT absolutely positioned in the gutter: the card
+   sets overflow:hidden and .card-head is position:static, so an absolute tick
+   resolved against a further ancestor and was clipped by the card edge —
+   measured at x=1219 against a card ending at 1206. Inline cannot be clipped
+   and needs no positioning context. */
+section.block[data-review-state="touched"] .card-title::after {
+  content: "✓";
+  margin-left: 7px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  opacity: .8;
+}
+
+/* === The keyboard cursor ============================================
+   j and k move it, c comments on it, f folds it. Drawn as a rail down the
+   left edge rather than a ring around the card: a ring on a card that is
+   already bordered reads as a second border, and at this width the eye
+   stops seeing it. The rail is in the gutter where nothing else paints, so
+   it says "you are here" without competing with the block's own state —
+   a block can be marked, engaged AND focused at once.
+
+   The strip it reveals is the point: see the four-way reveal above.
+
+   Drawn as a ::before and not as the inset box-shadow this repo uses for the
+   code pane's anchor row: on a card that shadow loses. `section.block.card`
+   and `section.block[data-kb-focus]` are both (0,2,1), so the card's own
+   three-layer shadow wins on source order and the rail never paints —
+   measured, not guessed. Out-specifying it would mean restating all three
+   layers here to avoid flattening the card. The section is already
+   position:relative with no ::before of its own, so this costs no layout. */
+section.block[data-kb-focus]::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--accent);
+  z-index: 1;
+}
+section.block[data-kb-focus] .card-title { color: var(--text-strong); }
+/* Focus is a cursor, not a selection: it must survive the page being busy,
+   so unlike the marks it is never dimmed by body.is-busy. */
 
 /* === General composer (page-level comment) =========================== */
 /* Opened by #composer-toggle, and painted as a third band of the top bar
@@ -1376,6 +1484,13 @@ section.block[data-diff="open"] .diff-pane { display: block; }
   top: calc(100% + 9px);
   right: 0;
   z-index: 60;
+  /* The keyboard section took this panel from ~430px to 621px, measured — far
+     enough that a laptop viewport can no longer hold it under the header.
+     Clamped and scrolled rather than shortened: the table is reference
+     material you read once, and losing a row off the bottom edge is worse
+     than a scrollbar. Same treatment as the settings panel. */
+  max-height: 78vh;
+  overflow-y: auto;
   /* The panel grows LEFTWARDS from a button that is itself inset from the
      right edge, so the viewport is the wrong thing to clamp against: measured
      at a 760px viewport, `max-width: calc(100vw - 2 * gutter)` never engaged

@@ -2076,9 +2076,25 @@
 
   // ── Done button ────────────────────────────────────────────────────────────
 
+  // Done, and its way back. Finishing a session was a one-way door in the
+  // page: the daemon has had POST /s/<sid>/api/unfinish all along and the CLI
+  // exposes it as `webcompanion unfinish`, but nothing in the document did —
+  // so a Done pressed a moment too early meant dropping to a terminal to
+  // recover a session you were looking at.
+  //
+  // Deliberately NOT a confirm on the way back. Finishing tells Claude to
+  // resume and so asks first; reopening only puts the controls back, and the
+  // round that was already submitted stays submitted either way.
   const doneBtn = document.getElementById("done-btn");
   if (doneBtn) {
     doneBtn.addEventListener("click", async () => {
+      if (document.body.classList.contains("session-finished")) {
+        doneBtn.disabled = true;
+        const r = await fetch("api/unfinish", { method: "POST" }).catch(() => null);
+        if (r && r.ok) window.location.reload();
+        else doneBtn.disabled = false;
+        return;
+      }
       if (!window.confirm("Mark this annotation round as done? Claude will resume.")) return;
       doneBtn.disabled = true;
       const ok = await WebCompanion.api.finish();
@@ -2089,6 +2105,24 @@
       }
     });
   }
+
+  // The button is server-rendered as "Done"; only the page knows the session
+  // has since ended, so the label follows the state rather than the markup.
+  (function trackFinishedState() {
+    const btn = document.getElementById("done-btn");
+    if (!btn) return;
+    const sync = () => {
+      const finished = document.body.classList.contains("session-finished");
+      btn.textContent = finished ? "Reopen" : "Done";
+      btn.title = finished
+        ? "This round is closed. Reopen it to mark or comment on more blocks."
+        : "Mark this round as done — Claude resumes";
+      btn.disabled = false;
+    };
+    new MutationObserver(sync).observe(document.body,
+      { attributes: true, attributeFilter: ["class"] });
+    sync();
+  })();
 
   // ── General composer (page-level, non-block comment) ────────────────────────
   // A persistent textarea that sends a block_id-null comment straight to Claude
@@ -2255,6 +2289,173 @@
       e.preventDefault();
       open(composer);
     });
+  })();
+
+  // ── Review progress ──────────────────────────────────────────────────────
+  // The round dock says what is PENDING. Nothing said what was left: on a
+  // twelve-block plan the only way to find the block you had not dealt with
+  // yet was to scroll and remember. This counts it, and — the part that
+  // actually saves the scrolling — jumps to the next one.
+  //
+  // "Dealt with" is read off the DOM rather than kept as state of its own,
+  // because the DOM already knows: data-block-mark carries every pending mark
+  // AND a pinned comment (subunits.js sets it from blockMark), data-engaged-
+  // type carries a draft still being written. Anything else is untouched.
+  // A MutationObserver watches those two attributes, so nothing has to
+  // remember to call this after a mark, a pin, an undo or a poll.
+  (function initReviewProgress() {
+    const pill = document.getElementById("review-progress");
+    if (!pill) return;
+
+    function sections() {
+      return [...document.querySelectorAll("section.block[data-block-id]")];
+    }
+    function touched(s) {
+      return !!(s.dataset.blockMark || s.dataset.engagedType);
+    }
+
+    function refresh() {
+      const all = sections();
+      const done = all.filter(touched).length;
+      all.forEach((s) => { s.dataset.reviewState = touched(s) ? "touched" : "untouched"; });
+      // Hidden rather than showing 0/0 on a document that has not rendered
+      // its blocks yet — a counter that flashes nonsense on every load is
+      // worse than one that arrives a moment late.
+      pill.hidden = all.length === 0;
+      pill.textContent = `${done}/${all.length}`;
+      pill.dataset.complete = all.length && done === all.length ? "1" : "0";
+      pill.title = done === all.length && all.length
+        ? "Every block has been marked or commented on"
+        : `${all.length - done} block${all.length - done === 1 ? "" : "s"} not yet marked — click to jump to the next one`;
+    }
+
+    pill.addEventListener("click", () => {
+      const next = sections().find((s) => !touched(s));
+      if (!next) return;
+      window.AnnotateKeyboard?.focusBlock?.(next.dataset.blockId);
+      next.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    const main = document.querySelector("main.prose") || document.body;
+    new MutationObserver(refresh).observe(main, {
+      subtree: true, childList: true,
+      attributes: true, attributeFilter: ["data-block-mark", "data-engaged-type"],
+    });
+    refresh();
+  })();
+
+  // ── Keyboard review (j / k / c / f) ──────────────────────────────────────
+  // Everything that decides anything in this page started with the mouse: the
+  // controls live in a strip that only exists while the pointer is over a
+  // 26px band, so working down a twelve-block plan meant twelve hover-and-aim
+  // cycles. The page already spoke some keyboard — `/` searches, `g` opens the
+  // composer, ⌘K⌘J folds — so what was missing was the middle of the
+  // vocabulary: move to the next block, and act on the one you are looking at.
+  //
+  // The cursor is one attribute, data-kb-focus on the section. Everything else
+  // follows from it in CSS, including revealing that block's control strip —
+  // which is how a keyboard user reaches controls that are otherwise painted
+  // in only by :hover.
+  (function initKeyboardReview() {
+    let focusId = null;
+
+    // Blocks in document order, minus anything a search has hidden: k and j
+    // should walk what is on screen, not what the DOM still holds.
+    function blocks() {
+      return [...document.querySelectorAll("section.block[data-block-id]")]
+        .filter((b) => b.offsetParent !== null);
+    }
+
+    function paint() {
+      document.querySelectorAll("[data-kb-focus]").forEach((b) => {
+        delete b.dataset.kbFocus;
+      });
+      if (!focusId) return null;
+      const el = document.querySelector(
+        `section.block[data-block-id="${cssEsc(focusId)}"]`);
+      if (!el) { focusId = null; return null; }
+      el.dataset.kbFocus = "1";
+      return el;
+    }
+
+    function move(delta) {
+      const list = blocks();
+      if (!list.length) return;
+      let i = list.findIndex((b) => b.dataset.blockId === focusId);
+      // No cursor yet: j starts at the top of what you can see rather than at
+      // the top of the document, because the first j after scrolling should
+      // not throw you back to block one.
+      if (i === -1) {
+        const firstVisible = list.findIndex(
+          (b) => b.getBoundingClientRect().bottom > 0);
+        i = firstVisible === -1 ? 0 : firstVisible;
+      } else {
+        i = Math.min(list.length - 1, Math.max(0, i + delta));
+      }
+      focusId = list[i].dataset.blockId;
+      const el = paint();
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function focused() {
+      return focusId
+        ? document.querySelector(`section.block[data-block-id="${cssEsc(focusId)}"]`)
+        : null;
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const active = document.activeElement;
+      const typing = active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        (active && active.isContentEditable);
+      if (typing) return;
+
+      if (e.key === "j" || e.key === "k") {
+        e.preventDefault();
+        move(e.key === "j" ? 1 : -1);
+        return;
+      }
+      if (e.key === "c") {
+        const el = focused();
+        if (!el) return;
+        e.preventDefault();
+        // Same entry point the strip's Comment button uses, so the two paths
+        // cannot drift: sub-unit scoping, selection capture, the one-editor
+        // rule and its refusal all behave identically.
+        openAnnotation(el, "comment", {});
+        return;
+      }
+      if (e.key === "f") {
+        const el = focused();
+        if (!el) return;
+        e.preventDefault();
+        const chev = el.querySelector(".card-chevron");
+        const next = !el.classList.contains("collapsed");
+        applyCollapsed(el, chev, next);
+        try { localStorage.setItem(collapseKey(el.dataset.blockId), next ? "1" : "0"); }
+        catch (_) {}
+        return;
+      }
+      if (e.key === "Escape" && focusId) {
+        // Last in the chain on purpose: the panel machinery binds Escape in
+        // the capture phase and stops the event when a panel is open, so this
+        // only ever runs when Escape had nothing else to close.
+        focusId = null;
+        paint();
+      }
+    });
+
+    // A block Claude rewrites is replaced, not mutated, so the cursor has to
+    // be repainted onto the new element or it silently disappears mid-round.
+    window.AnnotateKeyboard = {
+      repaint: paint,
+      focusedId: () => focusId,
+      // Used by the progress pill's "jump to the next untouched block": the
+      // cursor and the jump must be the same cursor, or the page would have
+      // two ideas of where you are.
+      focusBlock: (id) => { focusId = id; paint(); },
+    };
   })();
 
   // ── Fold-all / unfold-all chords (⌘K ⌘0 / ⌘K ⌘J) ─────────────────────────
