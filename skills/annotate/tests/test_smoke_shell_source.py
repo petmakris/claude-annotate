@@ -60,6 +60,7 @@ class TestShellSourceIsReadable(unittest.TestCase):
         for control in ("block-search", "settings-toggle", "settings-pop",
                         "settings-groups", "settings-reset", "palette-pop",
                         "review-progress", "highlighter-toggle", "highlighter-clear",
+                        "fullscreen-toggle",
                         "composer-toggle", "legend-toggle", "legend-pop",
                         "general-composer", "general-input", "general-send",
                         "export-btn", "done-btn", "hdr-title", "hdr-respid"):

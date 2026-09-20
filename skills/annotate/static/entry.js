@@ -21,8 +21,10 @@ const CSS = ["core.css", "style.css", "diagram.css", "popover.css", "code-theme.
 
 // Same order the old server's <head> had, and for the same reasons: the
 // highlighter and the markdown renderer before script.js builds its instance;
-// diff.js before the first acked round can read it; maximize.js last, because
-// it mounts into DOM script.js creates.
+// diff.js before the first acked round can read it; maximize.js near the end,
+// because it mounts into DOM script.js creates. fullscreen.js only needs the
+// button shell.js already rendered, so its position after that is not load
+// bearing — it sits last because nothing else depends on it.
 const JS = [
   "popover.js",
   // Before script.js: it calls blockTitle at module scope the first time a
@@ -39,6 +41,7 @@ const JS = [
   "search.js",
   "voice.js",
   "maximize.js",
+  "fullscreen.js",
 ];
 
 function addStylesheet(href) {

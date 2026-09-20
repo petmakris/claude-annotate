@@ -48,6 +48,10 @@ export const SHELL_HTML = `\
 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5l7-7 6.5 6.5-4 4H7z"/>\
 <line x1="12.5" y1="8" x2="19" y2="14.5"/><line x1="4" y1="21" x2="20" y2="21"/></svg></button>\
 <span class="header-sep" aria-hidden="true"></span>\
+<button id="fullscreen-toggle" type="button" class="icon-btn" aria-pressed="false" title="Full screen — hide the browser chrome" aria-label="Full screen">\
+<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>\
+<line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>\
+<span class="header-sep" aria-hidden="true"></span>\
 <button id="composer-toggle" type="button" class="icon-btn" aria-expanded="false" aria-controls="general-composer" title="Comment on the whole response (G)" aria-label="Comment on the whole response">\
 <svg viewBox="0 0 24 24" aria-hidden="true">\
 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>\

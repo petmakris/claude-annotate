@@ -263,6 +263,12 @@ body {
 }
 /* Anchor for a popover that hangs off one of these buttons. */
 .icon-btn-wrap { position: relative; display: inline-flex; }
+/* The same cascade trap .general-composer[hidden] works around in style.css:
+   the base rule above is an author `display: inline-flex` at (0,1,0), which
+   beats the UA `[hidden] { display: none }` at equal specificity regardless
+   of source order. Without this, fullscreen.js setting `.hidden = true` on
+   an unsupported browser would leave the button fully visible and inert. */
+.icon-btn[hidden] { display: none; }
 
 .header-sep {
   width: 1px;
