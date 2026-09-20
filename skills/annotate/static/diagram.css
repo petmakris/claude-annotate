@@ -3,6 +3,14 @@
    so a twelve-actor diagram renders at the same type size as a two-actor one.
    Sizes here must stay in sync with the seq-* entries in text_metrics.STYLES. */
 
+/* Every font-family below names Monaspace Radon directly, and must keep doing
+   so. This is the one place that does not follow the reader's code font from
+   the settings panel: these SVGs are laid out on the SERVER, and
+   skills/annotate/diagrams/text_metrics.py measures every box, lane and label
+   with an advance width of 0.62em — Monaspace's. JetBrains Mono is 0.6em, so
+   swapping the family here renders diagram text at a width the surrounding
+   geometry was not drawn for. Changing the font means regenerating the
+   metrics (tools/gen_font_metrics.py), not editing these rules. */
 .annotate-seq { display: block; width: auto; max-width: none; height: auto; }
 
 /* The card is the scroll container. Without this the fixed-width SVG would be

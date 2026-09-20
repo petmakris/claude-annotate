@@ -1612,6 +1612,11 @@ body[data-prose-font="inter"]    { --font-prose: 'Inter', ui-sans-serif, system-
 body[data-prose-font="serif"]    { --font-prose: 'Source Serif 4', Georgia, 'Times New Roman', serif; }
 body[data-prose-font="system"]   { --font-prose: ui-sans-serif, system-ui, -apple-system, sans-serif; }
 body[data-code-font="jetbrains"] { --font-code: 'JetBrains Mono', ui-monospace, Menlo, monospace; }
+/* Monaspace needs a rule of its own now that it is no longer the default the
+   :root token carries. Choosing it was silently a no-op for exactly as long
+   as it took to notice: nothing painted it back, so the page stayed on
+   whatever :root said. */
+body[data-code-font="monaspace"] { --font-code: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace; }
 body[data-code-font="system"]    { --font-code: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
 /* Reading size scales the PROSE only, never the chrome. Scaling <body>

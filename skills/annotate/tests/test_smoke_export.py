@@ -175,3 +175,32 @@ def test_share_survives_a_read_only_link():
         "Share is hidden on a read-only link, where it would be most useful"
 
 
+
+
+def test_a_document_with_diagrams_keeps_the_font_its_geometry_was_measured_for():
+    """Diagram SVG is laid out on the server from Monaspace's 0.62em advance
+    (skills/annotate/diagrams/text_metrics.py), so diagram.css pins that family
+    directly and it does NOT follow the reader's code font.
+
+    Which made it the one family the reader's choice cannot speak for. When
+    JetBrains Mono became the default code font, the unused-font strip would
+    have dropped Monaspace from every export — and a shared file's diagrams
+    would have fallen back to a system mono inside boxes drawn for a different
+    one. The live page looked perfect; only the exported copy was wrong.
+    """
+    src = EXPORT_JS.read_text()
+    assert ".annotate-seq" in src and ".annotate-flow" in src, \
+        "the export no longer notices that the document contains diagrams"
+    assert '"Monaspace Radon"' in src.split("function stripUnusedFontFaces", 1)[1][:600], \
+        "a document with diagrams no longer keeps Monaspace"
+
+
+def test_diagram_css_still_names_its_font_directly():
+    """The counterpart to the test above: tokenising these rules to
+    var(--font-code) would make diagram text follow a setting the geometry
+    around it cannot follow."""
+    css = (Path(__file__).resolve().parents[1] / "static" / "diagram.css").read_text()
+    assert "'Monaspace Radon'" in css, \
+        "diagram text now follows the reader's code font, but its SVG is still " \
+        "measured for Monaspace — regenerate the metrics or revert this"
+    assert "var(--font-code)" not in css

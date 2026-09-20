@@ -148,11 +148,27 @@ body.exported .export-foot {
             system: null },
   };
 
+  // Diagram text is pinned to Monaspace Radon in diagram.css and does NOT
+  // follow the reader's code font, because the SVG around it was measured for
+  // that typeface: skills/annotate/diagrams/text_metrics.py sizes every box,
+  // lane and label from an advance width of 0.62em, which is Monaspace's.
+  // JetBrains Mono is 0.6em, so a diagram rendered in it sits wrong inside
+  // geometry computed for the other one.
+  //
+  // Which makes this the one family the reader's choice cannot speak for. It
+  // stopped being the default code font, so the rule below would have dropped
+  // its @font-face from every export — and a shared file's diagrams would
+  // have fallen back to a system mono, inside boxes drawn for Monaspace. The
+  // page looked perfect; only the exported copy was wrong.
+  const DIAGRAM_SELECTOR = ".annotate-seq, .annotate-flow";
+
   function stripUnusedFontFaces(css) {
     const d = document.body.dataset;
     const used = new Set(
       [FONT_FAMILIES.prose[d.proseFont || "bricolage"],
-       FONT_FAMILIES.code[d.codeFont || "monaspace"]].filter(Boolean));
+       FONT_FAMILIES.code[d.codeFont || "jetbrains"],
+       document.querySelector(DIAGRAM_SELECTOR) ? "Monaspace Radon" : null,
+      ].filter(Boolean));
     // Quotes optional: collectCss fetches the stylesheet's SOURCE, where these
     // are quoted today, but a one-word family is legal unquoted and a stricter
     // pattern would simply fail to match it — keeping the block, embedding the

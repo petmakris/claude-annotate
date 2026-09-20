@@ -256,3 +256,53 @@ class TestReset(unittest.TestCase):
     def test_reset_is_an_action_not_a_seventh_row(self):
         self.assertIn(".set-reset", CSS)
         self.assertNotIn('.set-row button, .set-reset', CSS)
+
+
+class TestTheDefaultFontsAgree(unittest.TestCase):
+    """Three files decide what an unset font renders as, and they must agree.
+
+    - script.js's SETTINGS spec paints data-code-font on <body>;
+    - core.css's :root token is what a page with no attribute falls back to;
+    - export.js decides which @font-face a shared file carries.
+
+    Two of the three agreeing is invisible: the page looks right and the
+    export arrives in a different typeface, or the font is embedded and never
+    used. The code font's default moved from Monaspace to JetBrains Mono,
+    which is exactly the change that can leave one of them behind.
+    """
+
+    EXPORT_JS = (STATIC / "export.js").read_text()
+
+    def _spec_default(self, key):
+        spec = JS[JS.index("const SETTINGS = ["):JS.index("// A global setting drops")]
+        entry = spec[spec.index(f'key: "{key}"'):]
+        entry = entry[:entry.index("options:")]
+        return re.search(r'def: "([a-z]+)"', entry).group(1)
+
+    def test_the_code_font_default_is_jetbrains_everywhere(self):
+        self.assertEqual(self._spec_default("codefont"), "jetbrains")
+        self.assertIn('d.codeFont || "jetbrains"', self.EXPORT_JS)
+        # Ends at the DECLARATION, not the first mention: the comment above
+        # these tokens names --text-scale, so slicing to that cut the block
+        # off before the declarations and matched an empty string.
+        root = CORE_CSS[CORE_CSS.index(":root {"):CORE_CSS.index("--text-scale: 1;")]
+        self.assertIn("--font-code: 'JetBrains Mono'", root)
+
+    def test_the_prose_font_default_is_bricolage_everywhere(self):
+        self.assertEqual(self._spec_default("prosefont"), "bricolage")
+        self.assertIn('d.proseFont || "bricolage"', self.EXPORT_JS)
+        # Ends at the DECLARATION, not the first mention: the comment above
+        # these tokens names --text-scale, so slicing to that cut the block
+        # off before the declarations and matched an empty string.
+        root = CORE_CSS[CORE_CSS.index(":root {"):CORE_CSS.index("--text-scale: 1;")]
+        self.assertIn("--font-prose: 'Bricolage Grotesque'", root)
+
+    def test_every_non_default_family_has_a_rule_to_paint_it_back(self):
+        # A family that is only the :root default needs no rule — until the
+        # default moves, and then choosing it silently does nothing.
+        for value in ("jetbrains", "monaspace", "system"):
+            self.assertIn(f'body[data-code-font="{value}"]', CSS,
+                          f"choosing {value} paints nothing")
+        for value in ("inter", "serif", "system"):
+            self.assertIn(f'body[data-prose-font="{value}"]', CSS,
+                          f"choosing {value} paints nothing")

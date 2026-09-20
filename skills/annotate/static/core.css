@@ -76,12 +76,18 @@
 
   /* Typography, as tokens rather than as ~20 repeated stacks. The settings
      popover switches a family by redefining these on <body>, which is why
-     nothing downstream names a font directly any more. Defaults are exactly
-     what every rule used to hardcode, so an untouched page is unchanged.
+     nothing downstream names a font directly any more.
+     --font-prose is the stack every rule used to hardcode. --font-code is
+     NOT: code is set in JetBrains Mono by default now, where the hardcoded
+     stacks all said Monaspace Radon. Three places have to agree on that
+     default — this token, script.js's SETTINGS spec, and export.js's
+     stripUnusedFontFaces, which decides which font a shared file carries —
+     and a test asserts they do, because two of the three disagreeing is
+     invisible until someone opens an export and finds the wrong typeface.
      --text-scale is applied to main.prose ONLY: a reading size that also
      grew the header would move the controls out from under the pointer. */
   --font-prose: 'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-code: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-code: 'JetBrains Mono', ui-monospace, Menlo, monospace;
   --text-scale: 1;
 
   /* Graphite — deeper cool-neutral page so off-white cards lift with shadow,
