@@ -840,5 +840,35 @@
   </div>
 </section>
 
+  <div class="gallery-divider">Implemented — explain block (spans marked in place)</div>
+  <p class="gallery-note">
+    A snapshot of the real renderer's output, lifted from a live page rather than
+    hand-written, so it cannot quietly disagree with script.js. Shown here in the
+    DEFAULT (Daylight) pane theme — the demo screenshots are Midnight — which is the
+    point: every colour in this kind comes from the pane's own --cp-* variables.
+    The live check is skills/annotate/tests/test_browser_explain.py, which measures
+    each underline against a DOM Range over the glyphs it marks; no static page can.
+  </p>
+
+  <section class="block" data-block-id="b-explain" data-version="1" data-kind="explain">
+    <div class="block-content">
+      <div class="codepane ex"><div class="cp-head"><span class="cp-path"><span class="cp-proj" style="--cp-pill-h: 65;">portfolios</span><span class="cp-loc">ValuedPosition.java:261</span></span></div><div class="cp-body hljs ex-body">
+        <div class="cp-row ex-row"><span class="cp-line"><span class="hljs-keyword">private</span> Amount <span class="hljs-title function_">adjustMarketValue</span><span class="hljs-params">(BigDecimal quantity, BigDecimal lotSize)</span> {</span></div>
+        <div class="cp-row ex-row"><span class="cp-line">    <span class="hljs-keyword">return</span> ofNullable(<span class="hljs-built_in">this</span>.priceInReferenceCurrency)</span><i class="ex-uline" style="left: calc(11ch + 12px); width: 10ch;"></i><i class="ex-uline" style="left: calc(27ch + 12px); width: 24ch;"></i></div>
+        <div class="ex-lad"><div class="ex-lad-row"><i class="ex-gap" style="width: 11ch;"></i><i class="ex-stem"></i><i class="ex-gap" style="width: 16ch;"></i><i class="ex-elbow"></i><div class="ex-lbl"><b>reference currency</b> — already FX-converted. CHF when one portfolio is evaluated alone; <code>ClientRelationship.referenceCurrency</code> across several.</div></div><div class="ex-lad-row"><i class="ex-gap" style="width: 11ch;"></i><i class="ex-elbow"></i><div class="ex-lbl"><b>empty ⇒ unpriced</b> — the position leaves the weight sum entirely, rather than entering it as zero.</div></div></div>
+        <div class="ex-range"><div class="ex-range-code">
+        <div class="cp-row ex-row"><span class="cp-line">        .map(p -&gt; p.multiply(quantity.multiply(lotSize)))</span></div>
+        <div class="cp-row ex-row"><span class="cp-line">        .orElse(<span class="hljs-literal">null</span>);</span></div></div><i class="ex-brk"></i><div class="ex-lbl ex-lbl--range"><b>one computation</b> — price × quantity × lot size. Byte-for-byte identical in both methods: the currency is carried by which field was read, never by this line.</div></div>
+        <div class="cp-row ex-row"><span class="cp-line">}</span></div><div class="cp-row ex-row is-blank"><span class="cp-line"></span></div>
+        <div class="cp-row ex-row"><span class="cp-line"><span class="hljs-keyword">private</span> Amount <span class="hljs-title function_">adjustMarketValueInPositionCurrency</span><span class="hljs-params">(BigDecimal quantity, BigDecimal lotSize)</span> {</span></div>
+        <div class="cp-row ex-row"><span class="cp-line">    <span class="hljs-keyword">return</span> ofNullable(<span class="hljs-built_in">this</span>.dirtyPriceInPositionCurrency)</span><i class="ex-uline" style="left: calc(27ch + 12px); width: 28ch;"></i></div>
+        <div class="ex-lad"><div class="ex-lad-row"><i class="ex-gap" style="width: 27ch;"></i><i class="ex-elbow"></i><div class="ex-lbl"><b>position currency</b> — the instrument's own quotation currency. EUR for Airbus, before any FX.</div></div></div>
+        <div class="cp-row ex-row"><span class="cp-line">        .map(p -&gt; p.multiply(quantity.multiply(lotSize)))</span></div>
+        <div class="cp-row ex-row"><span class="cp-line">        .orElse(<span class="hljs-literal">null</span>);</span></div>
+        <div class="cp-row ex-row"><span class="cp-line">}</span></div></div></div>
+    </div>
+  </section>
+
+
 </body>
 </html>

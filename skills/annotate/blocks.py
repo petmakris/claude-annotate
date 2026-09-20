@@ -32,6 +32,8 @@ from skills._shared.web_companion.atomic import write_text_atomic
 BLOCK_KEYS = frozenset({
     "id", "kind", "spec", "markdown", "title", "code", "anchor",
     "version", "warnings", "svg", "svgs", "key", "flavours", "views",
+    # `explain`'s compiled pane, the same way `svg` carries a diagram's.
+    "view",
 })
 
 
@@ -39,7 +41,9 @@ BLOCK_KEYS = frozenset({
 # flowchart kind covered its cases with a renderer the page understands; it is
 # named below so a spec written against the old menu fails loudly instead of
 # rendering as an empty card.
-BLOCK_KINDS = frozenset({"markdown", "sequence", "flowchart", "choice", "mockup"})
+BLOCK_KINDS = frozenset({
+    "markdown", "sequence", "flowchart", "choice", "mockup", "explain",
+})
 RETIRED_KINDS = {"diagram": "removed — use `flowchart`, or a fenced code block "
                             "in `markdown` for anything it cannot draw"}
 
@@ -168,7 +172,10 @@ def _canonical_spec(spec: dict[str, Any]) -> str:
 
 
 def update_spec_block(doc: BlocksDoc, block_id: str, new_spec: dict[str, Any]) -> bool:
-    """Update a spec-bearing block's spec (sequence/choice). Returns True if changed.
+    """Update a spec-bearing block's spec (sequence/choice/explain/mockup).
+
+    Returns True if changed. Kind-agnostic on purpose: it swaps `spec` and
+    nothing else, so a new spec-bearing kind needs no change here.
 
     No version field is mutated — versions are derived in versions.py.
     Canonical-JSON compare so reordered keys are a no-op.

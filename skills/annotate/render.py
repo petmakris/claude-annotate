@@ -18,6 +18,7 @@ from skills.annotate.diagrams.flowchart import render as render_flowchart
 from skills.annotate.diagrams.flowchart import render_variants as render_flowchart_variants
 from skills.annotate.diagrams import views as views_mod
 from skills.annotate.pflow import PflowError, compile_source as compile_pflow
+from skills.annotate.explain import compile_spec as compile_explain
 
 
 def render_block(blk: dict) -> dict:
@@ -161,6 +162,21 @@ def render_block(blk: dict) -> dict:
         # Trusted Claude HTML rendered client-side in a sandboxed iframe.
         # Server forwards the spec verbatim; it never parses or renders the HTML.
         base["spec"] = blk.get("spec") or {}
+    elif kind == "explain":
+        # Spans are resolved to columns HERE, at push time, for the same
+        # reason a flowchart's source is compiled here: it is the last moment
+        # a mistake can still be reported to the author. A quote that is not
+        # in the snippet becomes a visible error pill instead of an underline
+        # painted confidently under the wrong tokens.
+        spec = blk.get("spec") or {}
+        base["spec"] = spec
+        try:
+            base["view"] = compile_explain(spec)
+        except Exception as e:
+            # Any failure, not just ExplainError: a spec that passes the
+            # checks but trips a KeyError downstream must not blank the whole
+            # /raw response. Same containment as the sequence pill above.
+            base["view"] = {"error": str(e)}
     else:
         # markdown, and only markdown: blocks.load() refuses any other kind
         # before a push reaches here, so this branch can never swallow one.
@@ -172,6 +188,9 @@ def render_block(blk: dict) -> dict:
     # them here would freeze the excerpt at push time — which is exactly the
     # drift the snippet field exists to survive.
     code = blk.get("code")
-    if kind != "mockup" and isinstance(code, list) and code:
+    # `explain` joins `mockup` in refusing the side column: this kind's whole
+    # premise is that the code and its explanation are one object, so a second
+    # pane of the same file beside it would restate the split it deletes.
+    if kind not in ("mockup", "explain") and isinstance(code, list) and code:
         base["code"] = code
     return base

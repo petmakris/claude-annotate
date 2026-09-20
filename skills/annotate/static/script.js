@@ -1241,6 +1241,187 @@
     return wrap;
   }
 
+  // ── kind: explain ─────────────────────────────────────────────────────
+  // A pane where the explanation rides on the code. Everything positional is
+  // measured in `ch` against columns resolved server-side (explain.py), which
+  // is exact because the pane is monospace.
+  //
+  // The marks are ABSOLUTE OVERLAYS, not wrappers around the text. Wrapping a
+  // span would mean splitting hljs's output at a character offset — and worse,
+  // an inline element inserted into a `white-space: pre` row shifts every
+  // glyph after it, so the underline would stop lining up with the thing it is
+  // underlining. Overlaying leaves the highlighted line untouched and costs
+  // nothing in layout, which is also why a badge here does not nudge the code
+  // sideways the way an inline badge would.
+  function explainRow(row, n, group, lang) {
+    const div = document.createElement("div");
+    div.className = "cp-row ex-row";
+    if (row.blank) div.classList.add("is-blank");
+    const text = document.createElement("span");
+    text.className = "cp-line";
+    // highlightCodeLine picks its language off a file extension; the spec
+    // carries a bare language name, so hand it one it can parse.
+    const painted = highlightCodeLine(row.text, lang ? `x.${lang}` : "");
+    if (painted !== null) text.innerHTML = painted;
+    else text.textContent = row.text;
+    div.appendChild(text);
+
+    (group ? group.marks : []).forEach((m) => {
+      const u = document.createElement("i");
+      u.className = "ex-uline";
+      u.style.left = `calc(12px + ${m.col}ch)`;
+      u.style.width = `${m.len}ch`;
+      div.appendChild(u);
+      if (group.mode === "badge") {
+        const b = document.createElement("i");
+        b.className = "ex-badge ex-badge--onspan";
+        b.textContent = String(m.n);
+        b.style.left = `calc(12px + ${m.col + m.len}ch)`;
+        div.appendChild(b);
+      }
+    });
+    return div;
+  }
+
+  function explainLabel(html, extra) {
+    const el = document.createElement("div");
+    el.className = "ex-lbl" + (extra ? ` ${extra}` : "");
+    // Restricted inline markdown, already escaped and rendered by explain.py's
+    // label_html — bold and code and nothing else. Not model HTML.
+    el.innerHTML = html || "";
+    return el;
+  }
+
+  // One or two marks: a ladder. Labels are emitted rightmost-first, the way a
+  // compiler stacks them, and every mark to the LEFT of the one being labelled
+  // carries a stem down through the row so its own elbow below still reads as
+  // coming from its column. Stems are 1px wide with -1px margin, so they draw
+  // at exactly their column and consume no width — which is what keeps the
+  // gaps expressible as whole `ch` counts with no pixel bookkeeping.
+  function explainLadder(group) {
+    const lad = document.createElement("div");
+    lad.className = "ex-lad";
+    const marks = group.marks;
+    for (let j = marks.length - 1; j >= 0; j--) {
+      const row = document.createElement("div");
+      row.className = "ex-lad-row";
+      let prev = 0;
+      for (let i = 0; i < j; i++) {
+        row.appendChild(explainGap(marks[i].col - prev));
+        const stem = document.createElement("i");
+        stem.className = "ex-stem";
+        row.appendChild(stem);
+        prev = marks[i].col;
+      }
+      row.appendChild(explainGap(marks[j].col - prev));
+      const elbow = document.createElement("i");
+      elbow.className = "ex-elbow";
+      row.appendChild(elbow);
+      row.appendChild(explainLabel(marks[j].labelHtml));
+      lad.appendChild(row);
+    }
+    return lad;
+  }
+
+  function explainGap(ch) {
+    const gap = document.createElement("i");
+    gap.className = "ex-gap";
+    gap.style.width = `${Math.max(0, ch)}ch`;
+    return gap;
+  }
+
+  // Three or more marks: the ladder becomes a knot, so the labels leave the
+  // columns and become a numbered list. The underlines stay on the line, so
+  // position is still stated — only the attachment changes.
+  function explainNotes(group) {
+    const list = document.createElement("div");
+    list.className = "ex-notes";
+    group.marks.forEach((m) => {
+      const item = document.createElement("div");
+      item.className = "ex-note";
+      const b = document.createElement("i");
+      b.className = "ex-badge";
+      b.textContent = String(m.n);
+      item.appendChild(b);
+      item.appendChild(explainLabel(m.labelHtml));
+      list.appendChild(item);
+    });
+    return list;
+  }
+
+  function renderExplain(content, blk) {
+    const view = blk.view || {};
+    const wrap = document.createElement("div");
+    wrap.className = "codepane ex";
+
+    if (view.error) {
+      const err = document.createElement("div");
+      err.className = "cp-status";
+      err.dataset.status = "refused";
+      err.textContent = `explain block: ${view.error}`;
+      wrap.appendChild(err);
+      content.appendChild(wrap);
+      return;
+    }
+
+    const head = document.createElement("div");
+    head.className = "cp-head";
+    const path = document.createElement("span");
+    path.className = "cp-path";
+    if (view.project) {
+      const pill = document.createElement("span");
+      pill.className = "cp-proj";
+      pill.textContent = view.project;
+      pill.style.setProperty("--cp-pill-h", String(hueFromName(view.project)));
+      path.appendChild(pill);
+    }
+    if (view.loc) {
+      const loc = document.createElement("span");
+      loc.className = "cp-loc";
+      loc.textContent = view.loc;
+      path.appendChild(loc);
+    }
+    head.appendChild(path);
+    wrap.appendChild(head);
+
+    const body = document.createElement("div");
+    body.className = "cp-body hljs ex-body";
+
+    const rows = view.rows || [];
+    const groups = new Map((view.groups || []).map((g) => [g.line, g]));
+    const opens = new Map((view.ranges || []).map((r) => [r.from, r]));
+
+    let sink = body;      // where the next row goes
+    let open = null;      // the range being filled, if any
+
+    for (let n = 1; n <= rows.length; n++) {
+      if (!open && opens.has(n)) {
+        open = opens.get(n);
+        const range = document.createElement("div");
+        range.className = "ex-range";
+        const side = document.createElement("div");
+        side.className = "ex-range-code";
+        range.appendChild(side);
+        body.appendChild(range);
+        open.el = range;
+        sink = side;
+      }
+      sink.appendChild(explainRow(rows[n - 1], n, groups.get(n), view.lang));
+      const g = groups.get(n);
+      if (g) sink.appendChild(g.mode === "badge" ? explainNotes(g) : explainLadder(g));
+      if (open && n === open.to) {
+        const brk = document.createElement("i");
+        brk.className = "ex-brk";
+        open.el.appendChild(brk);
+        open.el.appendChild(explainLabel(open.labelHtml, "ex-lbl--range"));
+        open = null;
+        sink = body;
+      }
+    }
+    wrap.appendChild(body);
+    content.appendChild(wrap);
+  }
+
   // The whole right-hand column for one block, or null when the block cites
   // no code. An anchorless block renders exactly as annotate does today:
   // full-width prose, no second column, nothing else.
@@ -1574,6 +1755,8 @@
       // Trusted Claude HTML in a sandboxed iframe; deliberately bypasses
       // sanitizeFreeHtml (the sandbox is the isolation boundary instead).
       renderMockup(content, blk);
+    } else if (kind === "explain") {
+      renderExplain(content, blk);
     } else {
       // Markdown path — markdown-it now allows inline HTML (`html: true`);
       // sanitize the rendered tree before glossary decoration.

@@ -2033,6 +2033,31 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
   --cp-pill-bg-l: 86%;
   --cp-pill-fg-l: 26%;
 
+  /* The explain kind's ink. No card: a label is distinguished by COLOUR and
+     TYPEFACE on the code's own ground, not by a slab behind it.
+     A card was tried first, in every shade from a neutral +16 L* to an
+     inverted paper note, and the reason none of them is here is that a box
+     around two sentences, five times down a pane, is more furniture than the
+     pane can carry. What actually separates a label is that it is prose set
+     in a prose face — the colour only has to confirm it.
+     WHY THIS HUE. The pane already spends seven on syntax: red/tag 12°,
+     number 56°, string 126°, teal 182°, accent 249°, text 284°, keyword
+     306°. The widest arc it leaves free is 70° of warm gold centred on 91°,
+     and the next two (216° blue, 339° rose) are respectively lost in the
+     pane's own blue-violet and read as a diff deletion next to code. So the
+     whole annotation layer — ink, lead-in and every rail — lives at 86-92°,
+     which also keeps it ≥38° off each theme's number token, the nearest
+     thing to it in that arc. Contrast is matched across themes rather than
+     merely passing: body 7.5-10.7:1, lead-in 5.6-11.3:1, rails 3.2-4.1:1.
+     The light themes sit lower than the dark one on purpose: a very dark
+     yellow cannot hold its hue, because the sRGB gamut narrows to nothing
+     there and clipping drags it toward red — the first attempt asked for
+     11.4:1 and landed at 69 degrees, outside the arc it was chosen for.
+     The solver now maximises chroma subject to BOTH contrast and hue. */
+  --ex-ink:        #4d4841;
+  --ex-ink-strong: #705600;
+  --ex-rail:       #9a7b04;
+
   background: var(--cp-ground);
   border-radius: 0;
   height: 100%;
@@ -2251,6 +2276,163 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
 .cp-status[data-status="missing"],
 .cp-status[data-status="refused"] { color: var(--cp-bad-fg); }
 
+/* === kind: explain ===================================================
+   A pane whose explanation rides on the code instead of sitting in a prose
+   column beside it. Every colour below comes from the pane's own theme
+   variables, so this kind inherits Daylight/Midnight/Parchment/Contrast for
+   free and a new pane theme never has to know this kind exists.
+
+   TWO WEIGHTS, and the order matters. The first cut of this had 2px of full
+   accent on every rail and the label a step BELOW --cp-text, which put the
+   loudest thing in the pane on the connector and the quietest on the
+   explanation. Rails are structure and sit at 1px; the label is the content
+   and gets --cp-anchor-bg as a ground of its own. The ground is what does the
+   work — re-tinting label text on the code's background only adds one more
+   colour competing with syntax, whereas a different surface reads as
+   commentary immediately.
+
+   --cp-anchor-bg rather than a new token on purpose: it is already the
+   per-theme "lifted surface tied to the accent", it is already contrast-
+   checked in every theme, and using it means a label panel and an anchored
+   row are the same colour, which is true — both mean "this is the bit the
+   prose is about". */
+.codepane.ex .cp-loc { cursor: default; }
+
+/* Positioning context for the mark overlays. */
+.ex-row { position: relative; }
+
+/* EVERY offset in this kind assumes one character is exactly 1ch, and that is
+   only true with tracking off. `ch` is a font metric — the advance of "0" —
+   and knows nothing about letter-spacing, while core.css sets -0.003em on
+   `body` and these rows inherit it. Rendered text is then narrower than its
+   own `ch` count by 0.036px per character, which COMPOUNDS with the column
+   index: measured in Chromium at 12px, 1.2px of drift by column 27 and 2.3px
+   by column 51, so the longest lines — the ones this kind exists for — are
+   the worst affected. Zeroing it here restores the identity the overlays rest
+   on. Scoped to these rows, so ordinary code panes keep the page's tracking.
+   test_browser_explain.py measures the underline against a DOM Range over the
+   real glyphs, which is what caught this; no source-level check can. */
+.ex-row .cp-line { letter-spacing: 0; }
+
+/* The span, marked by an overlay rather than by wrapping the text. Wrapping
+   would mean splitting highlight.js's output at a character offset, and an
+   inline element inside a `white-space: pre` row shifts every glyph after it
+   — so the underline would drift off the very span it measures. An overlay
+   costs no layout, which is also why the badge below can sit on the line
+   without pushing the code sideways. */
+.ex-uline {
+  position: absolute;
+  bottom: 2.5px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--ex-rail);
+  pointer-events: none;
+}
+
+.ex-badge {
+  flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--ex-rail);
+  color: var(--cp-ground);
+  font-family: var(--font-prose);
+  font-size: 9px; font-weight: 800; font-style: normal;
+  line-height: 1;
+}
+.ex-badge--onspan {
+  position: absolute;
+  top: 50%;
+  margin-left: 4px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+/* The label: prose face, warm ink, nothing behind it.
+   A card was tried first — every shade from a neutral +16 L* to an inverted
+   paper note — and none of them is here because a box around two sentences,
+   five times down one pane, is more furniture than the pane can carry. The
+   thing that actually separates a label is that it is prose set in a prose
+   face; the ink only has to confirm it. See the note on --ex-ink above for
+   why the ink is where it is on the wheel.
+   The measure is wider than the card's was: without an edge to hold the eye,
+   a short line looks stranded rather than deliberate. */
+.ex-lbl {
+  padding: 2px 0 2px 2px;
+  max-width: 480px;
+  font-family: var(--font-prose);
+  font-size: 12px; line-height: 1.5; letter-spacing: -0.002em;
+  color: var(--ex-ink);
+}
+.ex-lbl b { color: var(--ex-ink-strong); font-weight: 700; }
+.ex-lbl em { font-style: italic; }
+/* An identifier inside a label. Deliberately NOT a filled chip: that would
+   put back a miniature of the card this kind just stopped drawing.
+   `main.prose` is load-bearing, and this is the third rule in this file to
+   need it. `main.prose :not(pre) > code` (0,2,2) paints every inline code
+   span with `background: var(--surface)`, and a bare `.ex-lbl code` is
+   (0,1,1) and loses — so the chips came back as pale boxes on the code
+   ground, which is exactly the furniture the card was removed to avoid.
+   Matching its specificity and sitting later in the file is what wins.
+   `background: none` is then doing real work, not tidying. */
+main.prose .ex-lbl code {
+  font-family: var(--font-code);
+  font-size: 10.5px;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  color: var(--ex-ink);
+  border-bottom: 1px dotted color-mix(in srgb, var(--ex-rail) 45%, transparent);
+}
+
+/* --- the ladder (1-2 marks on a line) --- */
+.ex-lad { padding: 3px 12px 9px; }
+.ex-lad-row { display: flex; align-items: flex-start; }
+.ex-lad-row + .ex-lad-row { margin-top: 5px; }
+/* Widths are whole `ch` counts and nothing subtracts pixels from them,
+   because the stem below contributes no width. */
+.ex-gap { flex: none; }
+/* 1px wide with -1px margin: draws AT its column and consumes nothing, so a
+   row with three stems still measures its gaps in plain `ch`. */
+.ex-stem {
+  flex: none;
+  width: 1px; margin-left: -1px;
+  align-self: stretch;
+  background: var(--ex-rail);
+}
+.ex-elbow {
+  flex: none;
+  width: 12px; height: 13px;
+  border-left: 1px solid var(--ex-rail);
+  border-bottom: 1px solid var(--ex-rail);
+  border-bottom-left-radius: 6px;
+}
+.ex-lad-row .ex-lbl { margin-left: 9px; }
+
+/* --- the numbered list (3+ marks on a line) --- */
+.ex-notes {
+  padding: 5px 12px 9px 24px;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.ex-note { display: flex; align-items: flex-start; gap: 9px; }
+.ex-note .ex-badge { margin-top: 6px; }
+
+/* --- the range bracket --- */
+/* The one form here with no column arithmetic at all: the bracket stretches
+   to whatever its rows add up to, so a range annotation never needs a span,
+   a column or a length. */
+.ex-range { display: flex; align-items: stretch; padding: 2px 12px 2px 0; }
+.ex-range-code { flex: 0 0 auto; }
+.ex-brk {
+  flex: none;
+  width: 10px; margin-left: 12px;
+  align-self: stretch;
+  border: 1px solid var(--ex-rail);
+  border-left: 0;
+  border-radius: 0 5px 5px 0;
+}
+.ex-lbl--range { align-self: center; margin-left: 12px; max-width: 280px; }
+
 /* --- Themes ---------------------------------------------------------
    A theme redeclares the variables and nothing else. Every one of these is
    scoped under `.codepane`, which is not decoration: code-theme.css paints
@@ -2272,6 +2454,8 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
    is 4.84:1, and the wash is still more visible against its ground (1.264:1)
    than Daylight's shipped one is against its own (1.148:1). */
 body[data-pane-theme="midnight"] .codepane {
+  /* The one dark pane: the label goes 16 L* LIGHTER, and keeps a trace of
+     the page's blue in its text so it still belongs to this pane. */
   /* The only dark theme: the pill inverts — dark ground, light ink. */
   --cp-pill-s:    42%;
   --cp-pill-bg-l: 26%;
@@ -2293,6 +2477,10 @@ body[data-pane-theme="midnight"] .codepane {
   --cp-moved-bg:  #3a2f1c;
   --cp-bad-fg:    #f7768e;
   --cp-bad-bg:    #3d2029;
+  /* The one dark pane: the ink lightens, the hue does not move. */
+  --ex-ink:        #ada89f;
+  --ex-ink-strong: #ffc978;
+  --ex-rail:       #967919;
 }
 
 /* Parchment — warm light, for when the blue-grey of Daylight reads cold. Its
@@ -2320,6 +2508,9 @@ body[data-pane-theme="parchment"] .codepane {
   --cp-moved-bg:  #f6e0b8;
   --cp-bad-fg:    #9c1c1c;
   --cp-bad-bg:    #f6cfcf;
+  --ex-ink:        #4f4b44;
+  --ex-ink-strong: #725900;
+  --ex-rail:       #9d7e08;
 }
 
 /* Contrast — near-black on pure white, nothing below 6.4:1 anywhere and most
@@ -2347,6 +2538,9 @@ body[data-pane-theme="contrast"] .codepane {
   --cp-moved-bg:  #ffe6c2;
   --cp-bad-fg:    #8a0f0f;
   --cp-bad-bg:    #ffd6d6;
+  --ex-ink:        #5b574f;
+  --ex-ink-strong: #806500;
+  --ex-rail:       #a88819;
 }
 
 /* highlight.js tokens, light equivalents of every class code-theme.css
