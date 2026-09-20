@@ -52,7 +52,7 @@ section.block[data-kind="sequence"] .block-content {
   --t-edge:     #6cb0e8;
   --t-internal: #e0a458;
   --t-service:  #4cc6b8;
-  --t-cheap:    #8d97a3;
+  --t-cheap:    #9a9a9a;
   --t-hot:      #f2848f;
   --t-good:     #63c98d;
   --t-dropped:  #767f8b;
@@ -61,7 +61,7 @@ section.block[data-kind="sequence"] .block-content {
   --t-good-bg:     #1f3a2a;
   --t-edge-bg:     #1e3347;
   --t-service-bg:  #17393a;
-  --t-cheap-bg:    #2a313b;
+  --t-cheap-bg:    #313131;
 }
 
 .annotate-seq .actor-box   { fill: var(--diagram-ground); stroke: color-mix(in srgb, var(--text-dim) 55%, transparent);

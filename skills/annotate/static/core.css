@@ -121,36 +121,39 @@
 }
 
 /* === Dark ============================================================
-   GitHub Primer's "dark dimmed" theme, @primer/primitives 11.10.0, mapped
-   onto the tokens above. Every value below is Primer's, not ours:
+   NEUTRALS from Radix's gray dark scale (@radix-ui/colors 3.0.0) — the
+   colourless one, not `slate` or `mauve`, which are the tinted variants of
+   the same ramp. The accent, danger and success stay exactly as they were.
 
-     bgColor-inset    #151b23  ->  --bg        the page behind the cards
-     bgColor-default  #212830  ->  --surface   a card
-     bgColor-muted    #262c36  ->  --surface-soft
-     borderColor-def  #3d444d  ->  --border
-     fgColor-default  #d1d7e0  ->  --text
-     fgColor-muted    #9198a1  ->  --text-dim
-     fgColor-accent   #478be6  ->  --accent
+     gray-2  #191919  ->  --bg             the page behind the cards
+     gray-4  #2a2a2a  ->  --surface        a card
+     gray-5  #313131  ->  --surface-soft   nested surfaces, hover
+     gray-7  #484848  ->  --border         hairlines
+     gray-11 #b4b4b4  ->  --text-dim
+     gray-12 #eeeeee  ->  --text
 
-   Primer rather than something of our own because this page is a code-review
-   tool and that is what Primer is FOR — prose, diffs and source side by side,
-   on a palette that has been through more eyes than anything we would invent.
-   "Dimmed" and not the darker default because Primer's dark ground is #0d1117
-   with a #161b22 card, and the code pane is #1a1b26: the pane would sit on top
-   of the card it lives in. Dimmed lifts the card to #212830 and the pane then
-   reads 5.6 L* below it.
+   This replaces GitHub Primer's "dark dimmed", which is a blue-grey: its card
+   is rgb(33, 40, 48), fifteen points bluer than it is red, and the cast was
+   visible across every surface on the page at once. Radix's gray is the same
+   idea with the hue taken out, and it is a published 12-step scale with the
+   same step semantics — 1-2 backgrounds, 3-5 component fills, 6-8 borders,
+   11-12 text — so the mapping is a choice of steps rather than a choice of
+   colours.
 
-   Measured against the same checks the light theme meets:
-     card lifts off the page   6.3 L*   (the light theme is also 6.3)
-     border on the card       12.8 L*
-     code pane clears card     5.6 L*
-     prose on the card        10.3:1
-     dim text on the card      5.1:1
-     accent on the card        4.3:1
+   gray-2/gray-4 rather than the more obvious gray-1/gray-3 because the code
+   pane is #1a1b26, L* 10.1: a gray-3 card sits 3.1 L* from it and the pane
+   dissolves into the card it lives in. Moving both up one step clears it.
 
-   --text-strong is the one value not from dimmed: Primer carries emphasis in
-   weight, not colour, so headings would flatten into body text. #f0f6fc is
-   Primer's own fgColor-default from the non-dimmed dark theme. */
+   Measured on the real page, against the light theme it sits beside:
+     card lifts off the page   8.3 L*   (light is 6.3, Primer dimmed was 6.3)
+     code pane clears the card 6.9 L*   (Primer dimmed was 5.6)
+     border on the card       13.5 L*
+     prose on the card        12.4:1
+     dim text on the card      6.9:1
+     accent on the card        4.2:1
+
+   --text-strong is the one value not from the scale: gray-12 IS Radix's
+   high-contrast text, so there is no step above it for a heading to take. */
 :root:has(body[data-page-theme="dark"]) {
   /* On :root, not on body, so the dark values live exactly where the light
      ones do. With them on <body> anything reading a token off the root
@@ -158,30 +161,29 @@
      silent wrong answer, and it caught this change's own browser test before
      it caught anything else. */
   color-scheme: dark;
-  --bg: #151b23;
-  --surface: #212830;
-  --surface-soft: #262c36;
-  --border: #3d444d;
-  --surface-hover: #2a313b;
-  --text: #d1d7e0;
-  --text-strong: #f0f6fc;
-  --text-dim: #9198a1;
+  --bg: #191919;
+  --surface: #2a2a2a;
+  --surface-soft: #313131;
+  --border: #484848;
+  --surface-hover: #313131;
+  --text: #eeeeee;
+  --text-strong: #ffffff;
+  --text-dim: #b4b4b4;
   --accent: #478be6;
   --accent-fg: #ffffff;
-  --comment-bg: #262c36;
+  --comment-bg: #313131;
   /* A mark has to sit UNDER --text and leave it readable, so this is an
-     overlay rather than the solid #fde68a light uses. Primer's own
-     bgColor-attention-muted, opened up enough to read as a highlight. */
+     overlay rather than the solid #fde68a light uses. */
   --highlight: rgba(174, 124, 20, 0.42);
   --selection: rgba(71, 139, 230, 0.26);
-  --hover-tint: #2a313b;
+  --hover-tint: #313131;
   --type-reject-fg: #e5534b;
   --type-reject-bg: rgba(229, 83, 75, 0.20);
   --type-reject-wash: rgba(229, 83, 75, 0.10);
   --type-comment-fg: #478be6;
   --type-comment-bg: rgba(65, 132, 228, 0.22);
   --type-comment-wash: rgba(65, 132, 228, 0.10);
-  --diagram-ground: #212830;
+  --diagram-ground: #2a2a2a;
 }
 
 * { box-sizing: border-box; }
