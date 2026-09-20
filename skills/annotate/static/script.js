@@ -898,6 +898,31 @@
     applyViewControls();
   }
 
+  // Everything the panel shows, back to its default — including the fonts and
+  // the reading size, which are the reader's and therefore shared with every
+  // other annotate document. That is a deliberate choice and the button's
+  // title says so, because nothing on screen otherwise reveals that this one
+  // click reaches outside the document you are looking at.
+  //
+  // Removing the keys rather than writing the defaults into them keeps one
+  // meaning for "unset": a stored value is a choice somebody made, and a
+  // default that changes later should reach a reader who never chose.
+  //
+  // What it does NOT touch, all of it deliberate: the highlight MARKS
+  // (annotate.read:*), which are reading work and belong to the eraser in the
+  // bar; the comment drafts; and the highlighter's own on/off, which is a
+  // control in the bar and not a row in this panel.
+  function resetSettings() {
+    for (const s of SETTINGS) {
+      try { localStorage.removeItem(settingKey(s)); } catch (_) {}
+    }
+    try { localStorage.removeItem(viewKey("highlightcolor")); } catch (_) {}
+    applyViewControls();
+    // The colour lives on <body> and the swatches' pressed state is painted
+    // from it, so clearing the key changes nothing on screen without this.
+    window.annotateHighlighter?.syncControls?.();
+  }
+
   // Paints every setting onto <body> and syncs the panel to it. Idempotent,
   // and safe to call on every render: it reads state, it never advances it.
   function applyViewControls() {
@@ -956,6 +981,14 @@
     const hlBtn = document.getElementById("highlighter-toggle");
     const hlGroup = document.getElementById("set-group-highlight");
     if (hlBtn && hlGroup && hlBtn.hidden) hlGroup.hidden = true;
+    const reset = document.getElementById("settings-reset");
+    // Bound once: wireViewControls is called at parse time and the button is
+    // server-rendered, but a second call must not stack a second listener and
+    // reset twice.
+    if (reset && !reset.dataset.wired) {
+      reset.dataset.wired = "1";
+      reset.addEventListener("click", resetSettings);
+    }
     applyViewControls();
   }
 

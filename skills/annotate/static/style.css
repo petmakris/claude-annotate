@@ -1703,6 +1703,32 @@ body .page-header {
   background: var(--accent); border-color: var(--accent); color: var(--accent-fg);
 }
 .set-row button[aria-pressed="true"] .pt-name { color: var(--accent-fg); }
+/* At the foot of the panel, under a hairline, and deliberately NOT styled as
+   a seventh row: the rows are choices that stay chosen, and this is an action
+   that fires once. Quiet by default — it undoes work, however cheaply, so it
+   must not be the most eye-catching thing in a panel full of preferences —
+   and it turns warning-red only under the pointer, where the tooltip
+   explaining that it reaches every document is already showing. */
+.set-reset {
+  margin-top: 2px;
+  padding: 5px 9px;
+  background: none;
+  border: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-dim);
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+.set-reset:hover {
+  color: #b91c1c;
+  border-color: color-mix(in srgb, #b91c1c 45%, var(--border));
+  background: color-mix(in srgb, #b91c1c 7%, transparent);
+}
+
 /* The highlighter's palette is the SAME element it always was, moved in
    here — highlighter.js finds it by id and keeps its handlers. Only the
    geometry it had as a free-floating popover is undone. */

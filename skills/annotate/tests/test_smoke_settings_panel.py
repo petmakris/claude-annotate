@@ -185,3 +185,74 @@ class TestNothingWasLeftBehind(unittest.TestCase):
         # rule had to MOVE to the panel's section, not be deleted with it.
         self.assertIn('body:not([data-has-code="1"]) .set-group[data-setting="codelayout"]', CSS)
         self.assertNotIn("#codelayout-toggle {", CSS)
+
+
+class TestReset(unittest.TestCase):
+    """One button, everything the panel shows — including the three settings
+    that are the reader's rather than the document's.
+
+    That reach is the point and the risk: fonts and reading size are stored
+    without a response id, so this one click re-styles every other annotate
+    document too. Nothing on screen reveals that, so the button's title says
+    it in words.
+
+    Verified in a browser: all seven rows revert, all seven localStorage keys
+    are gone, the colour swatch repaints to yellow, the panel stays open so
+    the change is watched rather than announced, the reading marks survive and
+    so does the highlighter's on/off.
+    """
+
+    def test_the_button_is_in_the_panel_and_says_what_it_reaches(self):
+        self.assertIn('id="settings-reset"', SHELL)
+        panel_at = SHELL.index('id="settings-pop"')
+        reset_at = SHELL.index('id="settings-reset"')
+        next_control = SHELL.index('id="highlighter-toggle"')
+        self.assertTrue(panel_at < reset_at < next_control,
+                        "Reset is not inside the settings panel")
+        self.assertIn("shared with every", SHELL,
+                      "the button no longer warns that it reaches other documents")
+
+    def test_it_clears_every_setting_the_panel_shows(self):
+        fn = JS[JS.index("function resetSettings()"):]
+        fn = fn[:fn.index("\n  }")]
+        self.assertIn("for (const s of SETTINGS)", fn,
+                      "reset enumerates settings by hand — a row added to "
+                      "SETTINGS would not be reset")
+        self.assertIn("removeItem(settingKey(s))", fn)
+        self.assertIn('viewKey("highlightcolor")', fn,
+                      "the highlight colour is a row of the panel and is not reset")
+
+    def test_it_removes_keys_rather_than_writing_defaults_into_them(self):
+        # A stored value means "somebody chose this". Writing the current
+        # default into the key makes a reader who never chose indistinguishable
+        # from one who chose today's default, and pins them to it if it changes.
+        fn = JS[JS.index("function resetSettings()"):]
+        fn = fn[:fn.index("\n  }")]
+        self.assertNotIn("setItem", fn)
+
+    def test_it_repaints_the_swatches_it_just_cleared(self):
+        # body[data-highlight-color] and the swatches' pressed state are both
+        # painted by highlighter.js, so clearing the key alone changes nothing.
+        fn = JS[JS.index("function resetSettings()"):]
+        fn = fn[:fn.index("\n  }")]
+        self.assertIn("annotateHighlighter", fn)
+        self.assertIn("syncControls", HIGHLIGHTER.split("window.annotateHighlighter =", 1)[1][:120],
+                      "syncControls is no longer exported for reset to call")
+
+    def test_it_leaves_the_reading_work_alone(self):
+        fn = JS[JS.index("function resetSettings()"):]
+        fn = fn[:fn.index("\n  }")]
+        # Marks live under annotate.read: and belong to the bar's eraser; the
+        # highlighter's on/off is a control in the bar, not a row in the panel.
+        self.assertNotIn("annotate.read", fn)
+        self.assertNotIn('viewKey("highlighter")', fn)
+
+    def test_the_listener_is_bound_once(self):
+        # wireViewControls is safe to call repeatedly; a stacked listener would
+        # reset twice, which is invisible here but is how double-fire bugs start.
+        fn = JS[JS.index("function wireViewControls()"):]
+        self.assertIn("dataset.wired", fn)
+
+    def test_reset_is_an_action_not_a_seventh_row(self):
+        self.assertIn(".set-reset", CSS)
+        self.assertNotIn('.set-row button, .set-reset', CSS)

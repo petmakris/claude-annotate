@@ -324,5 +324,8 @@
   // runs, so the paint has to be re-applied when the document changes.
   // Exposed rather than self-observing: script.js knows when a render is
   // finished, a MutationObserver would only know that it started.
-  window.annotateHighlighter = { repaint, clearAll };
+  // syncControls is exported for the settings panel's Reset: clearing the
+  // stored colour changes nothing on screen by itself, because the swatches'
+  // pressed state and body[data-highlight-color] are both painted from here.
+  window.annotateHighlighter = { repaint, clearAll, syncControls };
 })();
