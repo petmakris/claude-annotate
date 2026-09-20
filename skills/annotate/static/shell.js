@@ -13,7 +13,8 @@
 // the source is ~90 diffable lines. Break lines only between tags.
 export const SHELL_HTML = `\
 <header class="page-header"><div class="header-title"><span class="header-emoji">📝</span>\
-<span class="header-text" id="hdr-title"></span><span class="header-respid" id="hdr-respid"></span></div>\
+<span class="header-text" id="hdr-title"></span><span class="header-respid" id="hdr-respid"></span>\
+<span class="watcher-badge" id="watcher-badge" hidden></span></div>\
 <div class="header-actions"><div class="header-search">\
 <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">\
 <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>\
@@ -39,6 +40,17 @@ export const SHELL_HTML = `\
 <button type="button" data-color="pink" aria-pressed="false" title="Pink" aria-label="Pink highlight">\
 </button></div></div>\
 <button id="settings-reset" type="button" class="set-reset" title="Back to defaults. Fonts and reading size are shared with every annotate document.">Reset</button>\
+</div></span>\
+<span class="icon-btn-wrap">\
+<button id="resume-toggle" type="button" class="icon-btn" aria-expanded="false" aria-controls="resume-pop" title="Attach a Claude Code session to this page" aria-label="Attach a Claude Code session" hidden>\
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">\
+<rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M7 9l3 3-3 3"></path><line x1="12" y1="15" x2="17" y2="15"></line></svg>\
+</button>\
+<div id="resume-pop" class="resume-pop" role="dialog" aria-label="Attach a Claude Code session" hidden>\
+<p class="resume-hint">Paste this in any terminal to open <code id="resume-cwd"></code> and attach a live session here:</p>\
+<div class="resume-cmd-row"><code id="resume-cmd" class="resume-cmd"></code>\
+<button id="resume-copy" type="button" class="resume-copy-btn" title="Copy the command">Copy</button></div>\
+<p class="resume-status" id="resume-status" aria-live="polite"></p>\
 </div></span>\
 <button id="review-progress" type="button" class="review-progress" hidden aria-label="Review progress">0/0</button>\
 <button id="highlighter-toggle" type="button" class="icon-btn hl-btn" aria-pressed="false" title="Reading highlighter — drag over text to mark it read" aria-label="Reading highlighter">\

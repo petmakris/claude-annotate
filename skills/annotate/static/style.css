@@ -1820,6 +1820,50 @@ body .page-header {
 }
 .pt-name { font-weight: 600; }
 
+/* === Attach-a-session popover =========================================
+   Same .icon-btn-wrap anchoring and initTopPanels machinery as the legend
+   and settings panels, so Esc, click-outside and one-panel-at-a-time behave
+   identically. Populated by entry.js, which knows this session's slug and
+   cwd; the button itself stays hidden until that data (and ownership) is
+   confirmed, same reasoning as #resume-cwd never being wrong: showing a
+   command before it is known invites copying an empty one. */
+.resume-pop {
+  position: absolute; top: calc(100% + 9px); right: 0; z-index: 60;
+  display: flex; flex-direction: column; gap: 8px;
+  width: min(360px, calc(100vw - 240px));
+  padding: 13px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 34px rgba(20, 22, 28, .20), 0 2px 6px rgba(20, 22, 28, .08);
+  text-align: left;
+}
+.resume-pop[hidden] { display: none; }
+.resume-hint { margin: 0; font-size: 12.5px; color: var(--text-dim); }
+.resume-hint code { font-family: var(--font-code); color: var(--text); }
+.resume-cmd-row { display: flex; align-items: center; gap: 6px; }
+.resume-cmd {
+  flex: 1; min-width: 0;
+  padding: 6px 8px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font-code);
+  font-size: 12px;
+  color: var(--text-strong);
+  overflow-x: auto;
+  white-space: pre;
+}
+.resume-copy-btn {
+  flex: none;
+  padding: 6px 10px;
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600;
+  color: var(--text);
+}
+.resume-copy-btn:hover { background: var(--hover-tint); border-color: var(--text-dim); }
+.resume-status { margin: 0; font-size: 11.5px; color: var(--text-dim); min-height: 1.2em; }
+
 /* === Reading highlighter =============================================
    #fcd34d measured against every colour prose actually uses on it: body
    text #3a3d44 is 7.54:1 AAA, bold #1d1d1f is 11.67:1 AAA, a link #1e40af

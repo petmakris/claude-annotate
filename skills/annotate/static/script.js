@@ -2224,6 +2224,9 @@
       { btn: document.getElementById("settings-toggle"),
         el: document.getElementById("settings-pop"),
         focus: () => null, dismissOnOutsideClick: true },
+      { btn: document.getElementById("resume-toggle"),
+        el: document.getElementById("resume-pop"),
+        focus: () => null, dismissOnOutsideClick: true },
     ].filter((p) => p.btn && p.el);
     if (!panels.length) return;
 

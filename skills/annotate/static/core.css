@@ -114,6 +114,11 @@
   --type-comment-fg: #1e40af;
   --type-comment-bg: #dbeafe;
   --type-comment-wash: rgba(59, 130, 246, 0.06);
+  /* Same green webcompanion's own session list uses for "live" (see its
+     static/index.html), so a session reads the same colour for "watched"
+     everywhere it's shown. */
+  --status-live-fg: #0f7a50;
+  --status-live-bg: #e3f3ea;
   /* What a diagram's shapes fill with. Every node, actor box and badge used
      to say `white` outright, which is correct exactly until the card is not
      white. See diagram.css. */
@@ -183,6 +188,8 @@
   --type-comment-fg: #478be6;
   --type-comment-bg: rgba(65, 132, 228, 0.22);
   --type-comment-wash: rgba(65, 132, 228, 0.10);
+  --status-live-fg: #3ecf8e;
+  --status-live-bg: rgba(62, 207, 142, 0.18);
   --diagram-ground: #2a2a2a;
 }
 
@@ -789,3 +796,28 @@ body.read-only .read-only-badge {
   font-weight: 600;
   white-space: nowrap;
 }
+
+/* Whether a Claude Code session is actually watching this page, not just
+   whether the daemon considers the session "live" (unfinished/uncancelled) --
+   those are different questions, and the header used to answer neither. Shown
+   or hidden by entry.js polling /poll's watcher_seen_at against the same 180s
+   staleness convention the daemon and the IntelliJ plugin already use. */
+.watcher-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.watcher-badge.watcher-live { color: var(--status-live-fg); background: var(--status-live-bg); }
+.watcher-badge.watcher-stale { color: var(--type-reject-fg); background: var(--type-reject-bg); }
+/* Only added once entry.js has resolved the /annotate resume command for
+   this session -- see makeWatcherBadgeClickable. Border on hover/focus
+   rather than a colour change, since the badge's colour already carries the
+   watching/unwatched meaning and must not be overloaded with a second one. */
+.watcher-badge--clickable { cursor: pointer; border: 1px solid transparent; }
+.watcher-badge--clickable:hover,
+.watcher-badge--clickable:focus-visible { border-color: currentColor; }

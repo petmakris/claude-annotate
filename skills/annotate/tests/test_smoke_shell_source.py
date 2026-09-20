@@ -63,7 +63,9 @@ class TestShellSourceIsReadable(unittest.TestCase):
                         "fullscreen-toggle",
                         "composer-toggle", "legend-toggle", "legend-pop",
                         "general-composer", "general-input", "general-send",
-                        "export-btn", "done-btn", "hdr-title", "hdr-respid"):
+                        "export-btn", "done-btn", "hdr-title", "hdr-respid",
+                        "watcher-badge", "resume-toggle", "resume-pop",
+                        "resume-cwd", "resume-cmd", "resume-copy"):
             self.assertIn(f'id="{control}"', html, f"the shell lost #{control}")
         self.assertIn('<main class="prose">', html)
 
