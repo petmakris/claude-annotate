@@ -1,4 +1,25 @@
-/* web_companion shared core — skill-agnostic tokens, typography, shell UI */
+/* web_companion shared core — skill-agnostic tokens, typography, shell UI
+ *
+ * A checked-in copy of skills/_shared/web_companion/static/core.css, the same
+ * "canonical source, per-skill copy" pattern as wc-threads.js and
+ * markdown-it.min.js. skills/deck/static/core.css is a third copy.
+ *
+ * DO NOT re-sync this file from the canonical copy without reading this list.
+ * It has deliberately diverged, and a straight overwrite silently removes a
+ * feature:
+ *
+ *   1. The two @font-face URLs are relative (fonts/… rather than
+ *      /static/fonts/…, which no route under the daemon serves).
+ *   2. Three further @font-face blocks — Inter, Source Serif 4, JetBrains
+ *      Mono — offered by annotate's settings panel and by nothing else.
+ *   3. --font-prose / --font-code / --text-scale on :root, and `body`
+ *      using the first of them. The panel switches a family by redefining
+ *      these; ~20 rules across this file and style.css read them instead of
+ *      naming a font, so losing the tokens un-themes the whole page.
+ *
+ * (1) is shared with deck's copy; (2) and (3) are annotate's alone, because
+ * the settings panel is.
+ */
 
 @font-face {
   font-family: 'Monaspace Radon';
@@ -15,11 +36,53 @@
   font-style: normal;
   font-display: swap;
 }
+/* The three optional families, offered in the settings popover. They are
+   latin-subset variable builds (47 / 50 / 40 KB) — the two above are full
+   builds at 399 and 231 KB, so the whole menu costs a third of Bricolage
+   alone. A reader who never opens the popover downloads none of them: no
+   rule references these families until <body> carries the matching
+   data-prose-font / data-code-font, and a font nothing selects is never
+   fetched. export.js applies the same rule when it inlines fonts — see
+   embedFonts — so an untouched document's export is the size it always was. */
+@font-face {
+  font-family: 'Inter';
+  src: url('fonts/Inter-Variable.woff2') format('woff2-variations'),
+       url('fonts/Inter-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Source Serif 4';
+  src: url('fonts/SourceSerif4-Variable.woff2') format('woff2-variations'),
+       url('fonts/SourceSerif4-Variable.woff2') format('woff2');
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('fonts/JetBrainsMono-Variable.woff2') format('woff2-variations'),
+       url('fonts/JetBrainsMono-Variable.woff2') format('woff2');
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   color-scheme: light;
   --content-max: 1400px;
   --content-gutter: 22px;
+
+  /* Typography, as tokens rather than as ~20 repeated stacks. The settings
+     popover switches a family by redefining these on <body>, which is why
+     nothing downstream names a font directly any more. Defaults are exactly
+     what every rule used to hardcode, so an untouched page is unchanged.
+     --text-scale is applied to main.prose ONLY: a reading size that also
+     grew the header would move the controls out from under the pointer. */
+  --font-prose: 'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-code: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --text-scale: 1;
 
   /* Graphite — deeper cool-neutral page so off-white cards lift with shadow,
      darkened text for contrast, Apple-blue accent. Depth comes from the
@@ -52,7 +115,7 @@ body {
   margin: 0; padding: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: var(--font-prose);
   font-size: 15.5px;
   line-height: 1.6;
   letter-spacing: -0.003em;
@@ -78,7 +141,7 @@ body {
 }
 .header-emoji { font-size: 14px; }
 .header-respid {
-  font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 11px;
   font-weight: 400;
   color: var(--text-dim);
@@ -334,7 +397,7 @@ body {
   margin-bottom: 10px;
 }
 .card-step-chip {
-  font-family: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -472,7 +535,7 @@ body {
   position: relative;
   z-index: 1;
   width: 100%;
-  font-family: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 9.5px;
   line-height: 1;
   text-align: center;
@@ -586,7 +649,7 @@ body {
   max-width: 360px;
   text-align: center;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
-  font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-prose);
 }
 .locked-icon {
   font-size: 32px;

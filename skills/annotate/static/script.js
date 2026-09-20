@@ -94,8 +94,19 @@
   const cssEsc = (s) => (window.CSS && CSS.escape) ? CSS.escape(String(s)) : String(s).replace(/["\\\]]/g, "\\$&");
 
   function loadDrafts() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); }
-    catch { return {}; }
+    try {
+      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+      // An empty draft does not survive the session that opened it. It holds
+      // nothing the reader typed — `selected_text` is scope, not content — so
+      // restoring one only paints an engaged bar on a block nobody is
+      // commenting on. Dropped here rather than in renderComments, which
+      // cannot tell a draft that was abandoned last week from the one being
+      // opened right now.
+      for (const [id, a] of Object.entries(stored)) {
+        if (isEmptyDraft(a)) delete stored[id];
+      }
+      return stored;
+    } catch { return {}; }
   }
 
   function saveDrafts() {
@@ -322,7 +333,10 @@
       for (const [k, v] of Object.entries(annotations)) {
         if (isEmptyDraft(v)) delete annotations[k];
       }
-      if (Object.keys(annotations).length > 0) return;
+      if (Object.keys(annotations).length > 0) {
+        revealOpenDraft();
+        return;
+      }
     }
 
     const id = existingId || `a-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -768,8 +782,17 @@
   // sit beside the prose or beneath it. Both are stored per response, like
   // the per-block promotion above, because a preference you must re-set on
   // every reload is worse than not having one.
-  const VIEW_WIDTHS = ["normal", "wide", "extra"];
-  const VIEW_LABELS = { normal: "Normal", wide: "Wide", extra: "Extra" };
+  // "Narrow", not "Normal". Wide is the default now (see DEFAULT_WIDTH), and
+  // a control whose first stop is labelled "Normal" tells the reader the
+  // thing they are NOT looking at is the normal one. The name says what the
+  // column is — 1040px, the narrowest of the three — instead of implying a
+  // default it no longer carries.
+  const VIEW_WIDTHS = ["narrow", "wide", "extra"];
+  const VIEW_LABELS = { narrow: "Narrow", wide: "Wide", extra: "Extra" };
+  // Readers who chose the narrow column before it was renamed have "normal"
+  // in localStorage. Without this it fails the VIEW_WIDTHS check and silently
+  // becomes Wide — their one explicit choice, dropped by a rename.
+  const LEGACY_WIDTHS = { normal: "narrow" };
 
   function viewKey(name) {
     const rid = (document.body.dataset.responseId || "default");
@@ -788,6 +811,9 @@
   function effectiveWidth() {
     const stored = readStored("width");
     if (VIEW_WIDTHS.indexOf(stored) >= 0) return stored;
+    if (Object.prototype.hasOwnProperty.call(LEGACY_WIDTHS, stored)) {
+      return LEGACY_WIDTHS[stored];
+    }
     return DEFAULT_WIDTH;
   }
   function effectiveCodeLayout() {
@@ -796,62 +822,140 @@
   // Pane themes. Daylight is the measured light palette the pane shipped
   // with; the others redeclare its variables. An unknown stored value falls
   // back rather than painting an undefined theme.
+  //
+  // Midnight is the default, not Daylight: the pane is a quotation from a
+  // file, and a dark ground is what separates it at a glance from the prose
+  // it sits beside. The order of PANE_THEMES is the popover's order and says
+  // nothing about which one is default — hence the named constant.
   const PANE_THEMES = ["daylight", "midnight", "parchment", "contrast"];
+  const DEFAULT_PANE_THEME = "midnight";
   function effectivePaneTheme() {
     const stored = readStored("panetheme");
-    return PANE_THEMES.indexOf(stored) >= 0 ? stored : PANE_THEMES[0];
+    return PANE_THEMES.indexOf(stored) >= 0 ? stored : DEFAULT_PANE_THEME;
   }
 
-  // Paints both preferences onto <body> and syncs the two controls to them.
-  // Idempotent, and safe to call on every render: it reads state, it never
-  // advances it.
+  // ── Settings ───────────────────────────────────────────────────────────
+  // One spec drives the markup, the persistence and the painting, because
+  // these all used to live in the header as their own controls: a button that
+  // cycled the width, a toggle for the pane layout, a popover for the theme,
+  // another for the highlight colour. Four controls, none of them things a
+  // reader touches twice, in a bar that also carries search, the highlighter,
+  // the composer, the legend, Share and Done. They are one gear now, and the
+  // bar is down from twelve controls to nine.
+  //
+  // `scope` is the only interesting field. "doc" keeps the choice per
+  // response — a document that cites code wants a wider measure than a memo,
+  // and that is a property of the document, not of the reader. "global" keeps
+  // it for the reader across every document: nobody wants to choose their
+  // typeface again on each one.
+  //
+  // `attr` is the dataset key, so `width` paints data-width and `proseFont`
+  // paints data-prose-font. The stylesheet keys off those attributes and
+  // nothing else; see the view-controls and typography blocks in style.css.
+  const SETTINGS = [
+    { key: "width", attr: "width", label: "Page width", scope: "doc",
+      read: effectiveWidth,
+      options: VIEW_WIDTHS.map((v) => [v, VIEW_LABELS[v]]) },
+    { key: "codelayout", attr: "codeLayout", label: "Code panes", scope: "doc",
+      read: effectiveCodeLayout,
+      options: [["split", "Beside the prose"], ["wide", "Full width beneath"]] },
+    { key: "panetheme", attr: "paneTheme", label: "Code theme", scope: "doc",
+      read: effectivePaneTheme,
+      options: [["daylight", "Daylight", "#e3e7ee", "#1b1f26"],
+                ["midnight", "Midnight", "#1a1b26", "#c0caf5"],
+                ["parchment", "Parchment", "#f2ead9", "#2b2417"],
+                ["contrast", "Contrast", "#ffffff", "#000000"]] },
+    { key: "prosefont", attr: "proseFont", label: "Prose font", scope: "global",
+      def: "bricolage",
+      options: [["bricolage", "Bricolage"], ["inter", "Inter"],
+                ["serif", "Source Serif"], ["system", "System"]] },
+    { key: "codefont", attr: "codeFont", label: "Code font", scope: "global",
+      def: "monaspace",
+      options: [["monaspace", "Monaspace"], ["jetbrains", "JetBrains"],
+                ["system", "System"]] },
+    { key: "textsize", attr: "textSize", label: "Reading size", scope: "global",
+      def: "medium",
+      options: [["small", "Small"], ["medium", "Medium"], ["large", "Large"]] },
+  ];
+
+  // A global setting drops the response id from the key, which is the whole
+  // difference between "this document is wide" and "I read in this typeface".
+  function settingKey(s) {
+    return s.scope === "global" ? `annotate.view:${s.key}` : viewKey(s.key);
+  }
+
+  function settingValue(s) {
+    // The three settings that predate this panel keep their own readers, which
+    // carry their defaults and (for width) the pre-rename value mapping.
+    if (s.read) return s.read();
+    let stored = null;
+    try { stored = localStorage.getItem(settingKey(s)); } catch (_) {}
+    return s.options.some(([v]) => v === stored) ? stored : s.def;
+  }
+
+  function setSetting(s, value) {
+    try { localStorage.setItem(settingKey(s), value); } catch (_) {}
+    applyViewControls();
+  }
+
+  // Paints every setting onto <body> and syncs the panel to it. Idempotent,
+  // and safe to call on every render: it reads state, it never advances it.
   function applyViewControls() {
-    const width = effectiveWidth();
-    document.body.dataset.width = width;
-    const wb = document.getElementById("width-toggle");
-    if (wb) wb.textContent = VIEW_LABELS[width];
-
-    const layout = effectiveCodeLayout();
-    document.body.dataset.codeLayout = layout;
-    const lb = document.getElementById("codelayout-toggle");
-    if (lb) lb.setAttribute("aria-pressed", layout === "wide" ? "true" : "false");
-
-    const theme = effectivePaneTheme();
-    document.body.dataset.paneTheme = theme;
-    const pop = document.getElementById("panetheme-pop");
-    if (pop) {
-      pop.querySelectorAll("[data-theme]").forEach((b) => {
-        b.setAttribute("aria-pressed", b.dataset.theme === theme ? "true" : "false");
+    const groups = document.getElementById("settings-groups");
+    for (const s of SETTINGS) {
+      const value = settingValue(s);
+      document.body.dataset[s.attr] = value;
+      if (!groups) continue;
+      groups.querySelectorAll(`[data-setting="${s.key}"] [data-value]`).forEach((b) => {
+        b.setAttribute("aria-pressed", b.dataset.value === value ? "true" : "false");
       });
     }
   }
 
   function wireViewControls() {
-    const wb = document.getElementById("width-toggle");
-    if (wb) {
-      wb.addEventListener("click", () => {
-        const next = VIEW_WIDTHS[(VIEW_WIDTHS.indexOf(effectiveWidth()) + 1) % VIEW_WIDTHS.length];
-        try { localStorage.setItem(viewKey("width"), next); } catch (_) {}
-        applyViewControls();
-      });
+    const groups = document.getElementById("settings-groups");
+    if (groups && !groups.childElementCount) {
+      for (const s of SETTINGS) {
+        const group = document.createElement("div");
+        group.className = "set-group";
+        group.dataset.setting = s.key;
+        const label = document.createElement("span");
+        label.className = "set-label";
+        label.textContent = s.label;
+        const row = document.createElement("div");
+        row.className = "set-row";
+        for (const [value, text, chipBg, chipFg] of s.options) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.dataset.value = value;
+          b.setAttribute("aria-pressed", "false");
+          // The code themes keep the chip the old popover gave them: "Midnight"
+          // names the choice, and the chip shows the ground and ink it means.
+          if (chipBg) {
+            const chip = document.createElement("span");
+            chip.className = "pt-chip";
+            chip.style.background = chipBg;
+            chip.style.color = chipFg;
+            chip.textContent = "Aa";
+            b.appendChild(chip);
+          }
+          const name = document.createElement("span");
+          name.className = "pt-name";
+          name.textContent = text;
+          b.appendChild(name);
+          b.addEventListener("click", () => setSetting(s, value));
+          row.appendChild(b);
+        }
+        group.append(label, row);
+        groups.appendChild(group);
+      }
     }
-    const lb = document.getElementById("codelayout-toggle");
-    if (lb) {
-      lb.addEventListener("click", () => {
-        const next = effectiveCodeLayout() === "wide" ? "split" : "wide";
-        try { localStorage.setItem(viewKey("codelayout"), next); } catch (_) {}
-        applyViewControls();
-      });
-    }
-    const pop = document.getElementById("panetheme-pop");
-    if (pop) {
-      pop.querySelectorAll("[data-theme]").forEach((b) => {
-        b.addEventListener("click", () => {
-          try { localStorage.setItem(viewKey("panetheme"), b.dataset.theme); } catch (_) {}
-          applyViewControls();
-        });
-      });
-    }
+    // The highlighter's own controls are hidden when the browser has no
+    // Highlight API (see highlighter.js), and its colour row must go with
+    // them — a palette for a feature that cannot run is worse than no palette.
+    const hlBtn = document.getElementById("highlighter-toggle");
+    const hlGroup = document.getElementById("set-group-highlight");
+    if (hlBtn && hlGroup && hlBtn.hidden) hlGroup.hidden = true;
     applyViewControls();
   }
 
@@ -1861,11 +1965,20 @@
     // closed — so it would linger in localStorage forever. Also drop any
     // legacy block_id-null drafts from the retired general-comments UI; the
     // page-level composer no longer renders cards for them.
+    //
+    // isEmptyDraft was a third condition here and had to come out: it made
+    // opening a comment impossible. openAnnotation creates the draft, saves
+    // it, and calls this to draw its card — but a draft that has just been
+    // opened has no text in it yet, so it IS empty, and this pruned it before
+    // the card was ever built. Clicking the comment icon wrote the draft to
+    // localStorage and deleted it again in the same tick, and the page did
+    // not so much as flicker. Empty drafts are still dropped, in the two
+    // places that can tell an abandoned one from a live one: openAnnotation,
+    // before it opens a different target, and loadDrafts, on the way in.
     let pruned = false;
     for (const [id, a] of Object.entries(annotations)) {
       if (!a.block_id ||
-          !document.querySelector(`section.block[data-block-id="${cssEsc(a.block_id)}"]`) ||
-          isEmptyDraft(a)) {
+          !document.querySelector(`section.block[data-block-id="${cssEsc(a.block_id)}"]`)) {
         delete annotations[id];
         pruned = true;
       }
@@ -1901,6 +2014,29 @@
   function focusComment(id) {
     const card = document.querySelector(`.comment-card[data-id="${id}"]`);
     if (!card) return;
+    const ta = card.querySelector("textarea");
+    if (ta) ta.focus({ preventScroll: true });
+  }
+
+  // One editor at a time is the rule, and it stands. Refusing in SILENCE is
+  // what had to go: a comment icon that does nothing when clicked is
+  // indistinguishable from a broken one — which is exactly what it was
+  // mistaken for, and reported as, when renderComments was deleting these
+  // drafts at the moment they were created. The open card is usually the
+  // reason, and it is usually somewhere off screen.
+  function revealOpenDraft() {
+    const openId = Object.keys(annotations)[0];
+    if (!openId) return;
+    const card = document.querySelector(`.comment-card[data-id="${cssEsc(openId)}"]`);
+    if (!card) return;
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Restarted rather than merely added: a second refusal while the class is
+    // still on the element would re-add a class it already has and animate
+    // nothing, so the one signal the user gets would fire only the first time.
+    card.classList.remove("is-calling");
+    void card.offsetWidth;
+    card.classList.add("is-calling");
+    setTimeout(() => card.classList.remove("is-calling"), 1200);
     const ta = card.querySelector("textarea");
     if (ta) ta.focus({ preventScroll: true });
   }
@@ -1999,11 +2135,12 @@
       { btn: document.getElementById("legend-toggle"),
         el: document.getElementById("legend-pop"),
         focus: () => null, dismissOnOutsideClick: true },
-      { btn: document.getElementById("highlighter-palette"),
-        el: document.getElementById("palette-pop"),
-        focus: () => null, dismissOnOutsideClick: true },
-      { btn: document.getElementById("panetheme-toggle"),
-        el: document.getElementById("panetheme-pop"),
+      // One panel where there were three: the pane-theme popover and the
+      // highlighter's palette are sections inside this one now. #palette-pop
+      // still exists and still carries its own click handlers from
+      // highlighter.js — it was re-homed, not rebuilt.
+      { btn: document.getElementById("settings-toggle"),
+        el: document.getElementById("settings-pop"),
         focus: () => null, dismissOnOutsideClick: true },
     ].filter((p) => p.btn && p.el);
     if (!panels.length) return;

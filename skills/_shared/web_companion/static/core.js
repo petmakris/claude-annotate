@@ -88,15 +88,50 @@
   // Ask the server rather than inferring from the hostname: loopback grants
   // write access with no token at all, and only the server knows whether the
   // token we hold is the current one (it is reminted on every restart).
-  async function resolveWritable() {
+  //
+  // "Could not ask" is not "was refused". Every open page holds one long-lived
+  // connection and a browser allows six per origin, so the seventh request on
+  // that origin queues behind connections that never end; a restarting server
+  // or a waking laptop drops it a different way. None of that says anything
+  // about what this client may do, and answering it with `read-only` renders
+  // the document with every control silently removed — a page that looks fine
+  // and does nothing, with no way back but a reload. So only an answer counts
+  // as a verdict, and the rest is asked again.
+  //
+  // This is the same fix, and the same reasoning, as the daemon's own core.js
+  // (webcompanion, src/webcompanion/static/core.js). Nothing launches THIS
+  // engine any more — every skill pushes to the daemon — so it is carried
+  // here only so the two copies do not disagree if it is ever revived.
+  const PROBE_TIMEOUT_MS = 4000;
+  const PROBE_RETRY_MS = [1000, 2000, 5000, 10000];
+
+  async function probeWritable() {
+    const ctl = typeof AbortController === "function" ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), PROBE_TIMEOUT_MS) : null;
     try {
-      const r = await fetch("/api/whoami", { headers: writeHeaders() });
-      writable = r.ok ? !!(await r.json()).writable : false;
+      const opts = { headers: writeHeaders() };
+      if (ctl) opts.signal = ctl.signal;
+      const r = await fetch("/api/whoami", opts);
+      if (r.ok) return !!(await r.json()).writable;
+      return (r.status === 401 || r.status === 403 || r.status === 404) ? false : null;
     } catch (_) {
-      writable = false;
+      return null;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-    document.body.classList.toggle("read-only", !writable);
-    return writable;
+  }
+
+  async function resolveWritable() {
+    for (let attempt = 0; ; attempt++) {
+      const verdict = await probeWritable();
+      if (verdict !== null) {
+        writable = verdict;
+        document.body.classList.toggle("read-only", !writable);
+        return writable;
+      }
+      const wait = PROBE_RETRY_MS[Math.min(attempt, PROBE_RETRY_MS.length - 1)];
+      await new Promise((r) => setTimeout(r, wait));
+    }
   }
 
   async function pollOnce() {

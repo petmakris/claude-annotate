@@ -77,7 +77,7 @@ main.prose pre code.hljs {
   padding: 14px 16px;
   overflow-x: auto;
   /* No border-radius here — the parent <pre> clips to its own 8px radius. */
-  font-family: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 13px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -93,14 +93,14 @@ main.prose pre code:not(.hljs) {
   color: var(--text);
   white-space: pre;
   overflow-x: auto;
-  font-family: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 13.5px;
 }
 /* Inline code only — must not match <code> inside <pre>. */
 main.prose :not(pre) > code {
   background: var(--surface);
   padding: 1px 6px; border-radius: 3px;
-  font-family: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 0.92em;
 }
 main.prose blockquote {
@@ -385,7 +385,7 @@ section.block[data-block-mark="compact"] .card-title { color: var(--text-dim); }
   color: var(--text-dim);
 }
 .general-hint kbd {
-  font-family: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 10px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -431,7 +431,7 @@ footer.actions button:disabled { opacity: 0.5; cursor: not-allowed; }
   color: var(--text-dim);
 }
 .card-submit-hint kbd {
-  font-family: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 10px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -658,7 +658,7 @@ section.block.card.collapsed .card-head:hover { background: var(--surface-hover)
   display: inline-flex;
   align-items: stretch;
   height: 18px;
-  font-family: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -828,7 +828,7 @@ section.block.card.collapsed .card-head:hover { background: var(--surface-hover)
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 1px 6px;
-  font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 10px;
   color: var(--text-dim);
   pointer-events: none;
@@ -901,12 +901,12 @@ main.prose mark.search-hit {
 .statstrip .sl-val { font-weight: 700; font-variant-numeric: tabular-nums; }
 .statstrip .sl-sub {
   color: var(--text-dim);
-  font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 10.5px;
 }
 .statstrip .sl-model { color: #7c3aed; font-weight: 700; }
 .statstrip .sl-badge {
-  font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace;
+  font-family: var(--font-code);
   font-weight: 700;
   font-size: 9.5px;
   line-height: 1;
@@ -924,8 +924,8 @@ main.prose mark.search-hit {
   overflow: hidden;
 }
 .statstrip .sl-bar > i { display: block; height: 100%; border-radius: 3px; background: currentColor; }
-.statstrip .sl-add { color: #2e9e5b; font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace; }
-.statstrip .sl-del { color: #c1432f; font-family: 'Monaspace Radon', ui-monospace, Menlo, monospace; }
+.statstrip .sl-add { color: #2e9e5b; font-family: var(--font-code); }
+.statstrip .sl-del { color: #c1432f; font-family: var(--font-code); }
 /* Pressure tones, applied to the whole segment so dot/bar/value share a color. */
 .statstrip .tone-ok   { color: #2e9e5b; }
 .statstrip .tone-warn { color: #c98a14; }
@@ -1024,6 +1024,22 @@ body.is-editing .hover-actions {
 body.is-busy .comment-card {
   pointer-events: none;
   opacity: 0.5;
+}
+
+/* Clicking comment on a second block while one is unsaved is refused — one
+   editor at a time — and this is the refusal saying so. The card is scrolled
+   to and pulsed rather than an error being printed somewhere: the answer to
+   "why did nothing happen" is the open card itself, and the only useful thing
+   to do with it is look at it. Two beats, because one reads as a rendering
+   glitch. Respects prefers-reduced-motion — the scroll and the focus still
+   carry the message without the pulse. */
+@keyframes card-calling {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  25%, 75% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
+}
+.comment-card.is-calling { animation: card-calling 1.1s ease-in-out; }
+@media (prefers-reduced-motion: reduce) {
+  .comment-card.is-calling { animation: none; outline: 2px solid var(--accent); }
 }
 
 /* Mockup kind: full-fidelity HTML rendered in a sandboxed iframe. */
@@ -1566,19 +1582,47 @@ body[data-has-code="1"] { --content-max: 1180px; }
 
 /* === Page-wide view controls =========================================
    ORDER-DEPENDENT — this block sits immediately AFTER the rule above on
-   purpose. `body[data-has-code="1"]` and `body[data-width="normal"]` are
+   purpose. `body[data-has-code="1"]` and `body[data-width="narrow"]` are
    both specificity (0,1,1), so nothing but source order decides which one
-   paints. Move these rules above it and choosing "Normal" silently stops
+   paints. Move these rules above it and choosing "Narrow" silently stops
    working on every document that cites code, while every source-level
    check still passes. view-controls.e2e.cjs item 3 measures the computed
    value for exactly this reason.
 
-   The attribute is only written when the reader has chosen: with nothing
-   stored, script.js derives it from data-has-code each render, so a
-   document that gains its first anchor mid-poll still widens by itself. */
-body[data-width="normal"] { --content-max: 1040px; }
+   script.js writes this attribute on every render, chosen or not — the
+   default is Wide (DEFAULT_WIDTH) rather than something derived from
+   data-has-code, so there is no longer a state where the attribute is
+   absent. The rule above it still matters for an EXPORT, which bakes
+   data-has-code onto <body> and may carry no data-width at all.
+
+   "narrow" was called "normal" until Wide became the default; a stored
+   "normal" is mapped forward in script.js, not matched here. */
+body[data-width="narrow"] { --content-max: 1040px; }
 body[data-width="wide"]   { --content-max: 1180px; }
 body[data-width="extra"]  { --content-max: 1600px; }
+
+/* === Typography, chosen in the settings popover ======================
+   Each rule redefines a token declared in core.css's :root. Nothing here
+   names an element, so adding a family later is one line and no hunt
+   through the stylesheet — and a family nobody selects is never fetched,
+   because no rule references it until <body> carries the attribute.
+   The default of each token is the stack every rule used to hardcode, so
+   a page with none of these attributes renders exactly as it always did. */
+body[data-prose-font="inter"]    { --font-prose: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+body[data-prose-font="serif"]    { --font-prose: 'Source Serif 4', Georgia, 'Times New Roman', serif; }
+body[data-prose-font="system"]   { --font-prose: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+body[data-code-font="jetbrains"] { --font-code: 'JetBrains Mono', ui-monospace, Menlo, monospace; }
+body[data-code-font="system"]    { --font-code: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* Reading size scales the PROSE only, never the chrome. Scaling <body>
+   would grow the header with it and move the controls out from under the
+   pointer mid-click; code panes keep their own 12px, because a pane is a
+   quotation from a file and its line breaks are the file's, not the
+   reader's. 15.5px is body's own size, restated here as the base the
+   scale multiplies. */
+body[data-text-size="small"] { --text-scale: 0.94; }
+body[data-text-size="large"] { --text-scale: 1.12; }
+main.prose { font-size: calc(15.5px * var(--text-scale)); }
 
 /* Every pane promoted at once. Deliberately an OVERRIDE, not a rewrite of
    each block's stored data-code-wide: leaving wide mode has to give the
@@ -1596,42 +1640,11 @@ body[data-code-layout="wide"] section.block.card[data-has-code="1"] .code-col {
 }
 /* Nothing left for a per-pane promote button to promote. */
 body[data-code-layout="wide"] .cp-widen { display: none; }
-/* A pane-layout control on a document with no panes is a button that
-   provably does nothing. */
-body:not([data-has-code="1"]) #codelayout-toggle { display: none; }
-
-/* Same surface/border/radius vocabulary as .icon-btn (core.css), just wide
-   enough to carry a word. min-width holds the bar steady while script.js
-   fills in the label — the server cannot know it, since it depends on
-   whether the document cites code. */
-.width-btn {
-  flex: none;
-  /* A FIXED width, not a minimum. The three labels do not measure the same:
-     "NORMAL" renders 48.94px of text against "WIDE"'s 28.47px, so with a
-     66px minimum the button grew to 66.94px on one setting only — and since
-     .header-actions is right-aligned, that 0.94px pushed every control to
-     its left by 1px whenever the width was Normal. 72px clears the widest
-     label (48.94 + 18px padding = 66.94) with room to spare.
-     view-controls.e2e.cjs item 10 measures the toggle's x at all three. */
-  width: 72px; height: 26px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-dim);
-  cursor: pointer;
-  padding: 0 9px;
-  font-family: inherit;
-  font-size: 10px; font-weight: 700;
-  letter-spacing: 0.06em; text-transform: uppercase;
-  transition: color 140ms ease, border-color 140ms ease;
-}
-.width-btn:hover { color: var(--accent); border-color: var(--accent); }
-/* One button, two glyphs: it shows the layout you are IN, and aria-pressed
-   carries the same fact for anything not looking at pixels. */
-.layout-btn .icon-stack { display: none; }
-.layout-btn[aria-pressed="true"] .icon-split { display: none; }
-.layout-btn[aria-pressed="true"] .icon-stack { display: inline; }
-.layout-btn[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+/* A pane-layout choice on a document with no panes provably does nothing, so
+   its whole section goes. This used to hide #codelayout-toggle, a button in
+   the header; the choice is a row of the settings panel now, and the rule
+   moved with it rather than being deleted along with the button. */
+body:not([data-has-code="1"]) .set-group[data-setting="codelayout"] { display: none; }
 
 /* The top bar's own rule is in core.css, which is the shared engine and not
    ours to edit. Overridden here rather than there, and prefixed with `body`
@@ -1642,35 +1655,72 @@ body .page-header {
   padding: 10px max(var(--content-gutter), calc((100% - var(--chrome-max)) / 2 + var(--content-gutter)));
 }
 
-/* The theme popover: a named list, not a row of bare swatches. "Midnight"
-   says what you are choosing in a way a dark square next to a light one does
-   not, and the chip shows the actual ground and text colour of the theme it
-   names. Same .icon-btn-wrap anchoring and initTopPanels machinery as the
-   legend and the highlighter palette. */
-.panetheme-pop {
+/* === Settings popover ================================================
+   The four preferences that used to be their own header controls — width,
+   pane layout, code theme, highlight colour — plus the fonts, under one
+   gear. Same .icon-btn-wrap anchoring and initTopPanels machinery as the
+   legend, so Esc, click-outside and one-panel-at-a-time behave identically.
+
+   max-height + scroll because this panel grows: it holds seven sections
+   today and the next preference is a row in script.js's SETTINGS spec, not
+   a new control in the bar. 78vh keeps it clear of the viewport edge on a
+   laptop, which is where a panel this tall is actually opened. */
+.settings-pop {
   position: absolute; top: calc(100% + 9px); right: 0; z-index: 60;
-  display: flex; flex-direction: column; gap: 3px;
-  padding: 7px;
+  display: flex; flex-direction: column; gap: 12px;
+  width: 268px; max-height: 78vh; overflow-y: auto;
+  padding: 13px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 12px 34px rgba(20, 22, 28, .20), 0 2px 6px rgba(20, 22, 28, .08);
 }
-.panetheme-pop[hidden] { display: none; }
-.panetheme-pop button {
-  display: flex; align-items: center; gap: 9px;
-  padding: 4px 8px 4px 5px;
-  background: none; border: 1px solid transparent; border-radius: 7px;
+.settings-pop[hidden] { display: none; }
+#settings-groups { display: flex; flex-direction: column; gap: 12px; }
+.set-group { display: flex; flex-direction: column; gap: 5px; }
+.set-group[hidden] { display: none; }
+.set-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-dim);
+}
+/* Wrapping rows, not a fixed grid: the labels are words of different lengths
+   ("Beside the prose" beside "Narrow"), and a grid would either clip the long
+   ones or leave the short ones swimming. */
+.set-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.set-row button {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 9px;
+  background: none; border: 1px solid var(--border); border-radius: 7px;
   cursor: pointer; font-family: inherit; font-size: 12px;
   color: var(--text); white-space: nowrap;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
 }
-.panetheme-pop button:hover { border-color: var(--border); background: var(--hover-tint); }
-.panetheme-pop button[aria-pressed="true"] { border-color: var(--accent); color: var(--text-strong); }
+.set-row button:hover { background: var(--hover-tint); border-color: var(--text-dim); }
+/* The chosen one is filled, not merely outlined. An outline-only state is
+   what the old theme popover used, and inside a panel of six rows of
+   outlined buttons there was no way to see at a glance which was live. */
+.set-row button[aria-pressed="true"] {
+  background: var(--accent); border-color: var(--accent); color: var(--accent-fg);
+}
+.set-row button[aria-pressed="true"] .pt-name { color: var(--accent-fg); }
+/* The highlighter's palette is the SAME element it always was, moved in
+   here — highlighter.js finds it by id and keeps its handlers. Only the
+   geometry it had as a free-floating popover is undone. */
+.settings-pop .palette-pop {
+  position: static; padding: 0; gap: 6px;
+  background: none; border: 0; border-radius: 0; box-shadow: none;
+}
+
+/* The code theme is a named list, not a row of bare swatches: "Midnight" says
+   what you are choosing in a way a dark square next to a light one does not,
+   and the chip shows the actual ground and ink of the theme it names. It had
+   its own popover in the header once; it is a section of the settings panel
+   now, and script.js builds its buttons out of these two classes. */
 .pt-chip {
   flex: none; width: 30px; height: 22px; border-radius: 5px;
   border: 1px solid rgba(0, 0, 0, .18);
   display: inline-flex; align-items: center; justify-content: center;
-  font-family: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 11px;
 }
 .pt-name { font-weight: 600; }
@@ -1711,16 +1761,12 @@ body[data-highlight-color="pink"]   ::highlight(annotate-read) { background-colo
    inventing a colour, and stays legible as a selection on bare surface too. */
 body[data-highlighter="on"] ::selection { background: rgba(90, 96, 108, 0.30); }
 
-/* The swatch button shows the colour it will paint in, so the control is the
-   value rather than a label for it. */
-.hl-swatch .swatch-dot { width: 13px; height: 13px; border-radius: 3px;
-  border: 1px solid rgba(0, 0, 0, .22); background: #fcd34d; display: block; }
-body[data-highlight-color="green"]  .hl-swatch .swatch-dot { background: #6ee7b7; }
-body[data-highlight-color="orange"] .hl-swatch .swatch-dot { background: #fdba74; }
-body[data-highlight-color="blue"]   .hl-swatch .swatch-dot { background: #93c5fd; }
-body[data-highlight-color="pink"]   .hl-swatch .swatch-dot { background: #f9a8d4; }
-.hl-swatch { visibility: hidden; pointer-events: none; }
-body[data-highlighter="on"] .hl-swatch { visibility: visible; pointer-events: auto; }
+/* The colour swatch that used to sit in the header — a button whose own dot
+   showed the colour it would paint in — is gone. The colour is a section of
+   the settings panel now, where the five swatches ARE the control and there
+   is nothing left to mirror the choice onto. The pressed state on those
+   swatches is still painted by highlighter.js, from the same
+   body[data-highlight-color] it always used. */
 
 /* Anchored to its button by .icon-btn-wrap, same as the legend popover, and
    opened/closed by the same initTopPanels machinery so Esc, click-outside and
@@ -1841,7 +1887,7 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
   border-radius: 0;
   height: 100%;
   overflow: hidden;
-  font-family: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
 }
 /* Two panes stacked in one column (a block citing more than one file) were
    separated by a single hairline, which is not enough: three panes read as one
@@ -1965,34 +2011,47 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
    paragraph's padding. */
 .cp-body {
   padding: 5px 0 8px; font-size: 12px; line-height: 1.62;
-  /* Nothing overflows horizontally now that rows wrap, so the scroll container
-     is gone with it — `auto` would still paint a track on some platforms, and
-     a scrollbar under every pane was most of what made the rail look cluttered. */
-  overflow-x: hidden; color: var(--cp-text);
+  /* Code scrolls sideways; it does not wrap. A folded line stops looking like
+     the file it came from — indentation is most of how code is read, and a
+     continuation row that starts at column 0 reads as a statement of its own.
+     The cost is a scrollbar under the pane and a long line whose tail has to
+     be scrolled to, which is the trade this pane is meant to make.
+     The grid column is what makes the rows agree on a width, and the two
+     halves of the minmax are both load-bearing — measured on a real page,
+     across every pane on it:
+       `max-content` as the MINIMUM floors the track at the longest line, so
+       every row stretches to the full scrolled width. Without it each row
+       ends where its own text does, and an anchored row's band and inset bar
+       stop mid-pane the moment you scroll.
+       `1fr` as the maximum fills the pane when the code is SHORTER than the
+       column. `minmax(100%, max-content)` reads like the obvious spelling of
+       this and does not work: in a scroll container the track clamps to 100%
+       and never grows, which measures as rows stuck at the visible width. */
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr);
+  overflow-x: auto; color: var(--cp-text);
 }
 /* The inset lives on the ROW, not on .cp-line: it has to be real geometry
    between the anchor row's 3px inset bar and the first glyph, and padding
    inside the text span would leave that span's own left edge sitting on the
    bar. Every row carries it equally, so indentation is untouched. */
-/* `min-width: max-content` used to sit here, and it was the reason a pane
-   scrolled sideways: it forces the row as wide as its longest unbroken line,
-   which no wrap rule on .cp-line downstream can override. Measured on a real
-   page, one pane's content was 1240px inside a 608px column — so the claim the
-   prose was making sat off-screen behind a scrollbar. `min-width: 0` lets the
-   row take the column's width and the line below wrap inside it. */
+/* The row no longer sets its own width. It is a grid item now, so it stretches
+   to the column .cp-body sizes to the longest line — which is what keeps every
+   row's background running the full scrolled width instead of ending wherever
+   its own text does. `min-width: 0` stays to stop the flex line below from
+   forcing a floor of its own. */
 .cp-row { display: flex; min-width: 0; padding-left: 12px; }
 /* No line numbers. An anchored-row-only number was tried and reversed after
    seeing it rendered: it was still a number to read, and the header already
    states `file:134` — the pane is for glancing at what the code says, not for
    locating it. The inset the gutter used to provide now lives on .cp-row —
    see that rule; code-anchors.e2e.cjs item 15 measures it against the bar. */
-/* `pre-wrap`, not `pre`: a long line folds onto the next row rather than
-   running off the edge. Indentation is still honoured (that is what pre-wrap
-   preserves); only the overflow behaviour changes. `overflow-wrap: anywhere`
-   is the backstop for the case wrapping alone cannot solve — a single token
-   longer than the column, which is common in code (a long dotted call chain,
-   a minified string) and would otherwise reintroduce the scrollbar. */
-.cp-line { flex: 1 1 auto; white-space: pre-wrap; overflow-wrap: anywhere; padding-right: 8px; }
+/* `pre`, not `pre-wrap`: one source line is one row, however long it runs.
+   `flex: 0 0 auto` goes with it — a growing line would be shrunk back to the
+   column by flex, and a line that cannot wrap would then just spill out of a
+   row too narrow to hold it, leaving the grid above sizing to the wrong width.
+   The right padding is the gutter at the end of the scroll. */
+.cp-line { flex: 0 0 auto; white-space: pre; padding-right: 8px; }
 /* A blank context line renders nothing at all now, so at a full row height it
    reads as a hole in the pane rather than as the blank line it is. */
 .cp-row.is-blank { height: 9px; }
@@ -2031,7 +2090,7 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
    one surface rather than a bar stacked on another. */
 .cp-status {
   padding: 6px 12px 8px;
-  font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-prose);
   font-size: 11.5px; line-height: 1.5;
 }
 /* The dark-theme originals (#e0af68, #f7768e) measure 2.42:1 and 3.09:1 on

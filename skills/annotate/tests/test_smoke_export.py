@@ -105,8 +105,51 @@ def test_fonts_are_embedded_once():
     holds a comma-free path."""
     src = EXPORT_JS.read_text()
     assert "dedupeFontSrc" in src, "the duplicate-font-src guard is gone"
-    order = src.index("embedFonts(dedupeFontSrc(")
-    assert order > 0, "dedupe no longer runs before embedding"
+    # Asserted as an ORDER, not as one literal call: the pipeline grew a third
+    # stage (stripUnusedFontFaces) between these two, and a string match on
+    # `embedFonts(dedupeFontSrc(` failed on a change that kept the invariant
+    # it was guarding perfectly intact.
+    pipeline = src[src.index("const css = await embedFonts("):]
+    pipeline = pipeline[:pipeline.index("\n")]
+    assert pipeline.index("embedFonts") < pipeline.index("dedupeFontSrc"), \
+        "dedupe no longer runs before embedding"
+
+
+def test_only_the_fonts_the_document_uses_are_embedded():
+    """Five families ship; at most two are ever on screen. An export inlines
+    every font as base64, so embedding all five would put ~140 KB of unused
+    typeface in every shared file — including files nobody restyled.
+
+    Measured in a browser against the live stylesheet: an untouched document
+    keeps Bricolage + Monaspace, a restyled one keeps Source Serif + JetBrains,
+    and picking the system stack for both embeds nothing at all.
+    """
+    src = EXPORT_JS.read_text()
+    assert "stripUnusedFontFaces" in src, \
+        "every @font-face is embedded again, used or not"
+    pipeline = src[src.index("const css = await embedFonts("):]
+    pipeline = pipeline[:pipeline.index("\n")]
+    assert pipeline.index("stripUnusedFontFaces") < pipeline.index("dedupeFontSrc") or \
+        pipeline.index("embedFonts") < pipeline.index("stripUnusedFontFaces"), \
+        "the unused faces must be dropped before embedFonts fetches them"
+    # The map must cover every value the settings panel can store, or a reader's
+    # font is silently dropped from their own export.
+    for value in ("bricolage", "inter", "serif", "system", "monaspace", "jetbrains"):
+        assert value in src, f"FONT_FAMILIES has no entry for {value!r}"
+
+
+def test_the_exported_body_carries_every_view_preference():
+    """The export has no JS to re-derive these and no controls to change them,
+    so they are baked onto <body>. A camelCase dataset key becomes a kebab
+    attribute — `proseFont` is `data-prose-font`. That conversion used to name
+    its two exceptions by hand, which emitted `data-proseFont` the moment a
+    third key was added: an attribute no rule matches, so the reader's font
+    would have been dropped from the file while looking exported."""
+    src = EXPORT_JS.read_text()
+    for key in ("width", "codeLayout", "paneTheme", "proseFont", "codeFont", "textSize"):
+        assert key in src, f"the export no longer carries {key}"
+    assert 'k.replace(/[A-Z]/g' in src, \
+        "the camelCase-to-kebab conversion is hand-listed again"
 
 
 def test_the_search_state_is_undone():

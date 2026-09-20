@@ -152,3 +152,97 @@ class TestCodePaneJs(unittest.TestCase):
         self.assertNotEqual(guard_pos, -1, "renderCodeColumn lost its mockup guard")
         self.assertLess(guard_pos, panes_pos,
                          "the mockup guard must run before panes are read")
+
+
+class TestCodePaneReading(unittest.TestCase):
+    """How the pane presents code: scrolled, not folded, and dark by default.
+
+    Both decisions were measured in a browser across all nine panes of a real
+    document before being written down here — these are the source-side guards
+    on what that measurement settled.
+    """
+
+    def test_code_scrolls_sideways_and_never_wraps(self):
+        # A folded line stops looking like the file it came from, and a
+        # continuation starting at column 0 reads as a statement of its own.
+        i = CSS.index(".cp-line {")
+        rule = CSS[i:CSS.index("}", i)]
+        self.assertIn("white-space: pre;", rule,
+                      "code lines wrap again — they must scroll instead")
+        self.assertNotIn("pre-wrap", rule)
+        self.assertNotIn("overflow-wrap: anywhere", rule,
+                         "anywhere-breaking reintroduces wrapping by the back door")
+
+        j = CSS.index(".cp-body {")
+        body_rule = CSS[j:CSS.index("}", j)]
+        self.assertIn("overflow-x: auto", body_rule,
+                      "the pane no longer offers a horizontal scroll")
+
+    def test_rows_stretch_to_the_full_scrolled_width(self):
+        # Measured: with the track clamped to the visible width, every row
+        # ends at 582px inside a 708px scroll -- so an anchored row's band and
+        # inset bar stop mid-pane as soon as you scroll. minmax(max-content,
+        # 1fr) floors the track at the longest line AND still fills the column
+        # when the code is shorter than it; minmax(100%, max-content) reads
+        # like the same thing and measured as the broken case.
+        j = CSS.index(".cp-body {")
+        body_rule = CSS[j:CSS.index("}", j)]
+        self.assertIn("grid-template-columns: minmax(max-content, 1fr)", body_rule,
+                      "the pane's grid track changed — re-measure row widths "
+                      "against scrollWidth before accepting it")
+
+    def test_midnight_is_the_default_pane_theme(self):
+        self.assertIn('const DEFAULT_PANE_THEME = "midnight"', JS,
+                      "the default code theme is no longer Midnight")
+        # The array is the popover's ORDER and the validity list; reading a
+        # default off its first element is what tied the two together before.
+        i = JS.index("function effectivePaneTheme()")
+        fn = JS[i:JS.index("\n  }", i)]
+        self.assertIn("DEFAULT_PANE_THEME", fn)
+        self.assertNotIn("PANE_THEMES[0]", fn,
+                         "the default is being read off the popover's order again")
+
+
+class TestPageWidthNaming(unittest.TestCase):
+    """Wide is the default column, so the narrow one is called Narrow.
+
+    Verified in the browser across all three settings: the labels cycle
+    Wide -> Extra -> Narrow, --content-max reads 1180 / 1600 / 1040, a stored
+    legacy "normal" resolves to Narrow, and an unrecognised value falls back
+    to Wide.
+    """
+
+    def test_the_narrow_column_is_not_called_normal(self):
+        self.assertIn('const VIEW_WIDTHS = ["narrow", "wide", "extra"]', JS)
+        self.assertIn('narrow: "Narrow"', JS)
+        self.assertNotIn('normal: "Normal"', JS,
+                         'the first stop is labelled "Normal" again, which '
+                         'names the non-default column as the normal one')
+        self.assertIn('body[data-width="narrow"]', CSS)
+        self.assertNotIn('body[data-width="normal"]', CSS,
+                         "the stylesheet still keys the narrow column on the "
+                         "old name — the control renames, the column does not")
+
+    def test_wide_stays_the_default(self):
+        self.assertIn('const DEFAULT_WIDTH = "wide"', JS)
+
+    def test_a_width_stored_before_the_rename_survives_it(self):
+        # Renaming a stored value silently discards the reader's one explicit
+        # choice: "normal" stops matching VIEW_WIDTHS and falls through to the
+        # default, which is the WIDEST column -- the opposite of what they set.
+        self.assertIn('const LEGACY_WIDTHS = { normal: "narrow" }', JS)
+        i = JS.index("function effectiveWidth()")
+        fn = JS[i:JS.index("\n  }", i)]
+        self.assertIn("LEGACY_WIDTHS", fn,
+                      "effectiveWidth no longer maps the pre-rename value")
+
+    def test_the_width_choice_lives_in_the_settings_panel(self):
+        # There is no width button in the bar any more — the three stops are
+        # rows in the settings popover, built from VIEW_WIDTHS above. What this
+        # used to assert (the cycling button's tooltip) no longer exists.
+        shell = (Path(__file__).resolve().parents[1] / "static" / "shell.js").read_text()
+        self.assertNotIn("width-toggle", shell,
+                         "the width button is back in the bar")
+        self.assertIn("settings-toggle", shell)
+        self.assertIn('{ key: "width", attr: "width", label: "Page width"', JS,
+                      "the settings panel no longer offers a width")

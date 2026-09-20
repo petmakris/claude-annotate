@@ -133,6 +133,36 @@ body.exported .export-foot {
   // Inline every font the CSS references. Without this the file falls back to
   // system fonts the moment it is opened anywhere but here — which is the only
   // place it is ever going to be opened.
+  // Which families this document actually renders in. An export carries its
+  // fonts as base64 inside the file, so every @font-face that survives here is
+  // weight every reader downloads — including readers of a document nobody
+  // restyled. Five families ship in the stylesheet and at most two are ever
+  // on screen at once, so the rest are dropped before the CSS is inlined.
+  // Keep in step with the body[data-prose-font] / [data-code-font] rules in
+  // style.css and with script.js's SETTINGS spec; "system" maps to null
+  // because a system stack has no file to embed.
+  const FONT_FAMILIES = {
+    prose: { bricolage: "Bricolage Grotesque", inter: "Inter",
+             serif: "Source Serif 4", system: null },
+    code: { monaspace: "Monaspace Radon", jetbrains: "JetBrains Mono",
+            system: null },
+  };
+
+  function stripUnusedFontFaces(css) {
+    const d = document.body.dataset;
+    const used = new Set(
+      [FONT_FAMILIES.prose[d.proseFont || "bricolage"],
+       FONT_FAMILIES.code[d.codeFont || "monaspace"]].filter(Boolean));
+    // Quotes optional: collectCss fetches the stylesheet's SOURCE, where these
+    // are quoted today, but a one-word family is legal unquoted and a stricter
+    // pattern would simply fail to match it — keeping the block, embedding the
+    // font, and looking like it worked.
+    return css.replace(/@font-face\s*\{[^}]*\}/g, (block) => {
+      const m = /font-family:\s*['"]?([^'";]+?)['"]?\s*;/.exec(block);
+      return m && !used.has(m[1].trim()) ? "" : block;
+    });
+  }
+
   async function embedFonts(css) {
     const urls = new Set();
     const re = /url\(\s*['"]?([^'")]+\.woff2)['"]?\s*\)/g;
@@ -215,16 +245,20 @@ body.exported .export-foot {
     // so they travel with it. There is no JS in an export to re-derive them
     // and no control to change them, which is exactly why they have to be
     // baked onto <body> rather than left to the default.
-    const view = ["width", "codeLayout", "paneTheme"].map((k) => {
+    const view = ["width", "codeLayout", "paneTheme",
+                  "proseFont", "codeFont", "textSize"].map((k) => {
       const v = document.body.dataset[k];
       if (!v) return "";
-      const attr = k === "codeLayout" ? "data-code-layout"
-        : k === "paneTheme" ? "data-pane-theme"
-        : "data-" + k;
+      // dataset keys are camelCase and attributes are kebab: paneTheme is
+      // data-pane-theme. This was a ternary naming the two exceptions by
+      // hand, which silently emitted `data-proseFont` the moment a third
+      // key was added — an attribute no rule matches, so the export would
+      // have quietly ignored the reader's font.
+      const attr = "data-" + k.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase());
       return ` ${attr}="${esc(v)}"`;
     }).join("");
 
-    const css = await embedFonts(dedupeFontSrc(await collectCss()));
+    const css = await embedFonts(stripUnusedFontFaces(dedupeFontSrc(await collectCss())));
     return (
       "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n" +
       '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +

@@ -107,12 +107,22 @@ async function boot() {
   // gets it: the read-only share link is allowed to serve code excerpts, but
   // that decision never covered handing a stranger the server's own directory
   // layout — and the control it enables would be refused for them anyway.
-  try {
-    const who = await fetch("/api/whoami", { cache: "no-store" });
-    if (who.ok && (await who.json()).writable && doc.cwd) {
-      document.body.dataset.repoRoot = doc.cwd;
-    }
-  } catch (_) { /* no control, which is the safe direction */ }
+  //
+  // Deliberately NOT awaited. It used to be, and that put one optional
+  // control's permission check across the critical path of the whole page:
+  // every open document holds an SSE stream, a browser allows six
+  // connections per origin, and a request that cannot get one waits without
+  // ever failing. Boot stopped here — no compat.js, no script.js, so no
+  // hover controls and no way to comment on anything — while the document
+  // above it rendered perfectly and looked like it was simply ignoring the
+  // pointer. Nothing below this line needs the answer, so nothing waits for
+  // it; the control appears if and when it arrives.
+  fetch("/api/whoami", { cache: "no-store" })
+    .then((who) => (who.ok ? who.json() : null))
+    .then((me) => {
+      if (me && me.writable && doc.cwd) document.body.dataset.repoRoot = doc.cwd;
+    })
+    .catch(() => { /* no control, which is the safe direction */ });
 
   await addScript(asset("compat.js"));
   for (const f of JS) {
