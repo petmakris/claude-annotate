@@ -35,12 +35,11 @@ That registers the marketplace, which publishes two plugins. Install either or b
 grab the `.zip` from [Releases](https://github.com/petmakris/claude-annotate/releases)
 and install it via **Settings → Plugins → ⚙ → Install Plugin from Disk…**
 
-`annotate`, `deck`, `dataflow`, `walkthrough` and `ask_diff` drive the same
-local server engine, which lives once in this repository at `skills/_shared/web_companion/`.
-`show-diff`'s per-line diff comments instead depend on
-[webcompanion](https://github.com/petmakris/webcompanion), a standalone daemon
-installed separately (see [Related](#related)) — `show-diff` still opens diffs without it,
-only the comment feature is unavailable.
+All six skills push to the same **webcompanion daemon**, a standalone service
+installed separately from its own repository (see [Related](#related)) — not
+something this repository runs. `show-diff` degrades gracefully without it:
+diffs still open, only the per-line comment feature is unavailable. The other
+five have no server of their own to fall back to.
 
 ## Which diff tool, when
 
@@ -174,28 +173,37 @@ the sidebar or one settings row instead of the whole mock.
 
 ## How it works
 
-A local HTTP server renders the response as addressable blocks, and the page
-polls it for changes. Your comment becomes an event; Claude wakes, rewrites that
-block, and the next poll picks it up. Sessions persist on disk, so you can close
-the tab and come back to a document with its comment history intact.
+There is no per-response server. Every push renders the response as
+addressable items and PATCHes them onto the **webcompanion daemon** — a
+separately-installed, always-on service (a different repository,
+[webcompanion](https://github.com/petmakris/webcompanion)) shared by every
+migrated skill and the IDE plugin. Your comment becomes an event on that
+daemon; `webcompanion watch` wakes Claude, Claude rewrites the block and
+PATCHes it back, and the page picks up the change over its SSE connection.
+Sessions persist in the daemon's own storage, so you can close the tab and
+come back to a document with its comment history intact.
 
-The server binds to `127.0.0.1` on a port chosen at startup and records it in
-`~/.claude/annotate/server.json`.
+The daemon's address and write token live in `~/.claude/webcompanion/config.json`.
+Run `/annotate-doctor` to check whether the daemon is installed and running,
+or to have it install and start it for you.
 
 Voice dictation needs a secure browser context, so it works on `localhost` and
 not over a LAN hostname.
 
 ## Related
 
-Five of the six skills (`annotate`, `deck`, `dataflow`, `walkthrough`,
-`ask_diff`) drive the same local server engine, which lives here in
-`skills/_shared/web_companion/` and is edited in place.
+All six skills (`annotate`, `deck`, `dataflow`, `walkthrough`, `ask_diff`,
+`show-diff`) push to the same **webcompanion daemon** — one always-on process
+per machine, installed separately (`pipx install webcompanion`) from its own
+repository, not something this repository runs. Run `/annotate-doctor` to
+check whether it's installed and running, or to have it install and start it
+for you.
 
-`show-diff` is the exception: its per-line VS Code comments depend on
-[webcompanion](https://github.com/petmakris/webcompanion), a standalone daemon
-published from its own repository and installed separately
-(`pipx install webcompanion`). Run `/annotate-doctor` to check whether it's installed
-and running, or to have it install and start it for you.
+`skills/_shared/web_companion/` in this repository is not that daemon: it's a
+small set of ordinary shared helpers (`atomic.py`, `paths.py`, `templates.py`,
+`threads.py`, `anchor_migrate.py`) plus a retired HTTP server implementation
+that nothing launches any more, kept only as the one readable description of
+the protocol the daemon speaks — see that package's own README.
 
 The older, similarly-named repositories
 [web-companion](https://github.com/petmakris/web-companion) (hyphenated) and

@@ -1,6 +1,6 @@
 ---
 name: annotate-doctor
-description: Check that this machine can run claude-annotate and claude-ide-review — python3 and its version, curl, state directory permissions, server health, and the separately-installed webcompanion daemon that annotate and show-diff both depend on. Invoked only when the user types `/annotate-doctor`, or when a skill's preflight has just failed and the user asks why. Never self-triggers. Reports problems and prints the command the user should run; for webcompanion specifically, offers to run that command itself once the user confirms — every other remedy stays report-only.
+description: Check that this machine can run claude-annotate and claude-ide-review — python3 and its version, curl, state directory permissions, server health, and the separately-installed webcompanion daemon that every migrated skill (annotate, deck, dataflow, walkthrough, ask_diff, show-diff) depends on. Invoked only when the user types `/annotate-doctor`, or when a skill's preflight has just failed and the user asks why. Never self-triggers. Reports problems and prints the command the user should run; for webcompanion specifically, offers to run that command itself once the user confirms — every other remedy stays report-only.
 allowed-tools:
   - Bash
   - Read
@@ -95,10 +95,11 @@ running:
 
 **This line is not optional any more.** It used to be, and this section
 used to say a machine that never touched `show-diff` could ignore it.
-`annotate` now ships no server of its own and opens every page through the
-daemon, so a machine without it has a dead `/annotate` — which is why the
-line reports `FAIL` rather than `info`, and why it is worth offering to fix
-rather than merely noting.
+Every migrated skill (`annotate`, `deck`, `dataflow`, `walkthrough`,
+`ask_diff`, `show-diff`) now ships no server of its own and opens every page
+through the daemon, so a machine without it has a dead `/annotate` (or
+`/deck`, or any of the others) — which is why the line reports `FAIL` rather
+than `info`, and why it is worth offering to fix rather than merely noting.
 
 If every check passes but the user still sees a problem, the useful next
 questions are which skill they invoked, and what the terminal showed.

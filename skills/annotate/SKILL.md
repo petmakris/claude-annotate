@@ -104,11 +104,15 @@ and in `/annotate resume`; a conversation ending doesn't delete one. Slugs are
 unique **within a kind**, so pass `--kind annotate` wherever one is ambiguous.
 
 Because of this, don't mint a fresh workspace on every push within one
-conversation — `references/pushing.md` § "Create-or-attach a workspace for
-this conversation" creates once and attaches on every push after that. To
-reopen a workspace from a past conversation, the user can open the browser at
-`<server_url>/` (lists every live workspace, filterable by project), or you
-can run `/annotate resume <slug>` — see `references/resuming.md`.
+conversation — a local marker file (`~/.claude/annotate/pending-${CLAUDE_CODE_SESSION_ID}.json`,
+written the first time this conversation pushes or resumes) records which
+session this conversation already owns, so every push after the first attaches
+to it instead of creating a second one; see `references/pushing.md` for the
+push side and `references/resuming.md` (step 4 of `/annotate resume <slug>`)
+for how resume sets it directly. To reopen a workspace from a past
+conversation, the user can open the browser at `<server_url>/` (lists every
+live workspace, filterable by project), or you can run `/annotate resume
+<slug>` — see `references/resuming.md`.
 
 ## Maintainer notes
 

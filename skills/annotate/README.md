@@ -20,26 +20,45 @@ Long responses (multi-step plans, analyses, lists of findings) get pushed to a b
 5. Click "Done" to finish the session.
 
 **Technical flow:**
-- Response blocks are stored in `blocks.json` (the canonical document).
+- `blocks.json` is a local, author-time file Claude writes to compose a push
+  (the scratchpad is its natural home) — not a file the daemon reads or a
+  session's canonical document. `push.py` renders it into items and PATCHes
+  them onto the daemon, which owns storage from that point on.
 - User comments trigger a per-block submit, not a whole-document submit.
-- A persistent watcher polls for events and notifies Claude of each submission.
-- Claude reads the event, updates the affected block in `blocks.json`, and the page auto-refreshes via polling.
+- `webcompanion watch` (a daemon-shipped CLI, armed via the `Monitor` tool)
+  wakes Claude with an event per submission; there is no per-skill watcher
+  process or file-polling loop of annotate's own.
+- Claude reads the event, rewrites the affected block, PATCHes it back, acks
+  the event, and the page picks up the change over its SSE stream.
 
 ## Architecture
 
-- **Server:** Shared web_companion library at `skills/_shared/web_companion/` — single long-lived server serving all annotation sessions.
-- **Client:** Static HTML/JS page (per session) that polls for block updates and renders with annotation UI.
-- **Session data:** `meta.json` (session metadata), `blocks.json` (current blocks), and event/state directories for watcher coordination.
-- **Watcher:** Long-lived background process (one per session) that monitors the event directory and emits notifications on comment submit, Done, or cancellation.
+- **Server:** none of annotate's own. Every push and read goes to the
+  **webcompanion daemon** — a separately-installed, always-on service shared
+  by every migrated skill and the IDE plugin (`~/.claude/webcompanion/config.json`,
+  a different repository at `github.com/petmakris/webcompanion`). The in-repo
+  `skills/_shared/web_companion/` package still holds a server implementation,
+  but it is retired and nothing launches it — see its own README for why it's
+  kept anyway.
+- **Client:** Static HTML/JS page (`static/`), served live off disk by the
+  daemon's asset route and registered as the session's renderer at push time —
+  not copied per session.
+- **Session data:** owned entirely by the daemon (items, comment threads, the
+  event queue) in its own session directories, not under the project being
+  reviewed.
+- **Watcher:** `webcompanion watch`, the daemon's own CLI — armed per session
+  via the `Monitor` tool, not a process this skill starts or owns.
 
 ## Files
 
-- `SKILL.md` — Full skill definition and implementation guide (API contracts, event flow, all edge cases).
-- `server.py` — Handlers over `skills/_shared/web_companion`: the page, the block data, comment submission and the liveness poll. Session creation is the engine's route, not this file's.
-- `blocks.py` — Block document model and update logic.
+- `SKILL.md` — Full skill definition and implementation guide (API contracts, event flow, all edge cases), plus `references/` for the block-kind and lifecycle details kept out of the router file.
+- `push.py` — Renders `blocks.json` into daemon items, creates or attaches to a session, registers `static/` as its renderer. The only thing that talks to the daemon.
+- `blocks.py` — Block document model (the authoring/`blocks.json` shape) and validation.
+- `render.py` — Renders one block model into the daemon item body `compat.js` expects.
+- `anchors.py` / `check_anchors.py` — Code-anchor resolution and the pre-announce check that catches a wrong file/line before the URL goes out.
 - `static/` — HTML/JS/CSS for the browser page.
-- `ensure_server.sh` — Idempotent startup script (delegates to shared library).
 - `diagrams/` — Server-side SVG renderers for the `flowchart` and `sequence` block kinds (`elk_layout.py` is the one renderer that shells out, to `node`, for geometry).
+- `hooks/` — Claude Code hooks this plugin installs (progress publishing, etc.).
 - `tests/` — Unit and integration tests.
 
 ## Diagram sizing
