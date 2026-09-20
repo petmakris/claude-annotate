@@ -859,6 +859,12 @@
   // paints data-prose-font. The stylesheet keys off those attributes and
   // nothing else; see the view-controls and typography blocks in style.css.
   const SETTINGS = [
+    // First row, and "global": a reader who works in the dark does so in every
+    // document, the same way they read in one typeface. Light is the default
+    // because it is what shipped and what every existing reader already has.
+    { key: "pagetheme", attr: "pageTheme", label: "Page", scope: "global",
+      def: "light",
+      options: [["light", "Light"], ["dark", "Dark"]] },
     { key: WIDTH_KEY, attr: "width", label: "Page width", scope: "doc",
       read: effectiveWidth,
       options: VIEW_WIDTHS.map((v) => [v, VIEW_LABELS[v]]) },

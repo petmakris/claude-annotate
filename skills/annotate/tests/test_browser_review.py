@@ -262,6 +262,58 @@ def test_a_width_chosen_before_the_rename_still_means_its_own_column(page):
     page.wait_for_function("() => document.body.dataset.width === 'normal'", timeout=3000)
 
 
+def test_the_dark_theme_holds_its_distances(page):
+    """Source checks cannot see a colour. These are the numbers on screen.
+
+    The card has to lift off the page, the code pane has to stay visible
+    inside the card it sits in, and the prose has to be readable on it. Those
+    are the three things a dark theme gets wrong, and none of them is
+    detectable by reading CSS.
+    """
+    page.evaluate("() => localStorage.setItem('annotate.view:pagetheme', 'dark')")
+    page.reload()
+    page.wait_for_selector("section.block")
+    assert page.evaluate("() => document.body.dataset.pageTheme") == "dark"
+
+    got = page.evaluate("""() => {
+      const cv = document.createElement('canvas').getContext('2d');
+      const rgb = v => { cv.fillStyle = v; cv.fillRect(0, 0, 1, 1);
+        const d = cv.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2]]; };
+      const lum = c => { const [r,g,b] = rgb(c).map(v => { v /= 255;
+        return v <= 0.04045 ? v/12.92 : ((v+0.055)/1.055) ** 2.4; });
+        return 0.2126*r + 0.7152*g + 0.0722*b; };
+      const L = c => { const y = lum(c);
+        return y > 0.008856 ? 116 * Math.cbrt(y) - 16 : 903.3 * y; };
+      const ratio = (a, b) => { const x = lum(a), y = lum(b);
+        return (Math.max(x,y) + 0.05) / (Math.min(x,y) + 0.05); };
+      const g = (s, p) => getComputedStyle(document.querySelector(s))[p];
+      const card = g('section.block', 'backgroundColor');
+      return { lift: L(card) - L(g('body', 'backgroundColor')),
+               pane: Math.abs(L(card) - L('#1a1b26')),
+               prose: ratio(g('.block-content', 'color'), card),
+               dim: ratio(getComputedStyle(document.body)
+                 .getPropertyValue('--text-dim').trim(), card) }; }""")
+    assert got["lift"] >= 6.0, f"the card does not lift off the page: {got['lift']:.1f} L*"
+    assert got["pane"] >= 5, f"the code pane dissolves into the card: {got['pane']:.1f} L*"
+    assert got["prose"] >= 7, f"prose on the card is {got['prose']:.1f}:1"
+    assert got["dim"] >= 4.5, f"dim text on the card is {got['dim']:.1f}:1"
+
+
+def test_a_diagram_fills_with_the_card_not_with_white(page):
+    """Nine rules mixed their tint over a literal `white`. On a dark card each
+    one punched a white hole and then wrote light text on it."""
+    page.evaluate("() => localStorage.setItem('annotate.view:pagetheme', 'dark')")
+    page.reload()
+    page.wait_for_selector("section.block")
+    # This fixture is prose-only, so assert the rule the shapes resolve through
+    # rather than a shape that is not on the page.
+    ground = page.evaluate(
+        "() => getComputedStyle(document.body)"
+        ".getPropertyValue('--diagram-ground').trim()")
+    assert ground and ground.lower() not in ("#ffffff", "#fff", "white"), \
+        f"diagrams still fill with white on a dark page: {ground!r}"
+
+
 def test_the_page_raises_nothing(page):
     page.wait_for_timeout(2500)          # a few poll ticks
     assert page.__dict__["js_errors"] == [], page.__dict__["js_errors"]

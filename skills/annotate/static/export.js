@@ -261,7 +261,7 @@ body.exported .export-foot {
     // so they travel with it. There is no JS in an export to re-derive them
     // and no control to change them, which is exactly why they have to be
     // baked onto <body> rather than left to the default.
-    const view = ["width", "codeLayout", "paneTheme",
+    const view = ["pageTheme", "width", "codeLayout", "paneTheme",
                   "proseFont", "codeFont", "textSize"].map((k) => {
       const v = document.body.dataset[k];
       if (!v) return "";

@@ -114,6 +114,74 @@
   --type-comment-fg: #1e40af;
   --type-comment-bg: #dbeafe;
   --type-comment-wash: rgba(59, 130, 246, 0.06);
+  /* What a diagram's shapes fill with. Every node, actor box and badge used
+     to say `white` outright, which is correct exactly until the card is not
+     white. See diagram.css. */
+  --diagram-ground: #ffffff;
+}
+
+/* === Dark ============================================================
+   GitHub Primer's "dark dimmed" theme, @primer/primitives 11.10.0, mapped
+   onto the tokens above. Every value below is Primer's, not ours:
+
+     bgColor-inset    #151b23  ->  --bg        the page behind the cards
+     bgColor-default  #212830  ->  --surface   a card
+     bgColor-muted    #262c36  ->  --surface-soft
+     borderColor-def  #3d444d  ->  --border
+     fgColor-default  #d1d7e0  ->  --text
+     fgColor-muted    #9198a1  ->  --text-dim
+     fgColor-accent   #478be6  ->  --accent
+
+   Primer rather than something of our own because this page is a code-review
+   tool and that is what Primer is FOR — prose, diffs and source side by side,
+   on a palette that has been through more eyes than anything we would invent.
+   "Dimmed" and not the darker default because Primer's dark ground is #0d1117
+   with a #161b22 card, and the code pane is #1a1b26: the pane would sit on top
+   of the card it lives in. Dimmed lifts the card to #212830 and the pane then
+   reads 5.6 L* below it.
+
+   Measured against the same checks the light theme meets:
+     card lifts off the page   6.3 L*   (the light theme is also 6.3)
+     border on the card       12.8 L*
+     code pane clears card     5.6 L*
+     prose on the card        10.3:1
+     dim text on the card      5.1:1
+     accent on the card        4.3:1
+
+   --text-strong is the one value not from dimmed: Primer carries emphasis in
+   weight, not colour, so headings would flatten into body text. #f0f6fc is
+   Primer's own fgColor-default from the non-dimmed dark theme. */
+:root:has(body[data-page-theme="dark"]) {
+  /* On :root, not on body, so the dark values live exactly where the light
+     ones do. With them on <body> anything reading a token off the root
+     element gets the LIGHT value back while the page is dark — which is a
+     silent wrong answer, and it caught this change's own browser test before
+     it caught anything else. */
+  color-scheme: dark;
+  --bg: #151b23;
+  --surface: #212830;
+  --surface-soft: #262c36;
+  --border: #3d444d;
+  --surface-hover: #2a313b;
+  --text: #d1d7e0;
+  --text-strong: #f0f6fc;
+  --text-dim: #9198a1;
+  --accent: #478be6;
+  --accent-fg: #ffffff;
+  --comment-bg: #262c36;
+  /* A mark has to sit UNDER --text and leave it readable, so this is an
+     overlay rather than the solid #fde68a light uses. Primer's own
+     bgColor-attention-muted, opened up enough to read as a highlight. */
+  --highlight: rgba(174, 124, 20, 0.42);
+  --selection: rgba(71, 139, 230, 0.26);
+  --hover-tint: #2a313b;
+  --type-reject-fg: #e5534b;
+  --type-reject-bg: rgba(229, 83, 75, 0.20);
+  --type-reject-wash: rgba(229, 83, 75, 0.10);
+  --type-comment-fg: #478be6;
+  --type-comment-bg: rgba(65, 132, 228, 0.22);
+  --type-comment-wash: rgba(65, 132, 228, 0.10);
+  --diagram-ground: #212830;
 }
 
 * { box-sizing: border-box; }

@@ -69,7 +69,7 @@ class TestTheSettingsSpec(unittest.TestCase):
         self.assertEqual(len(keys), len(scopes),
                          "a setting was added without a scope — it would be "
                          "stored per document by accident or not at all")
-        self.assertEqual(keys, ["WIDTH_KEY", "codelayout", "panetheme",
+        self.assertEqual(keys, ["pagetheme", "WIDTH_KEY", "codelayout", "panetheme",
                                 "prosefont", "codefont", "textsize"])
 
     def test_reader_preferences_are_global_and_document_ones_are_not(self):
@@ -78,7 +78,8 @@ class TestTheSettingsSpec(unittest.TestCase):
                           spec, re.S)
         self.assertEqual(len(rows), spec.count("scope:"))
         for key, scope in rows:
-            expected = "global" if key in ("prosefont", "codefont", "textsize") else "doc"
+            expected = ("global" if key in ("pagetheme", "prosefont", "codefont", "textsize")
+                        else "doc")
             self.assertEqual(scope, expected,
                              f"{key} changed scope: a typeface is the reader's "
                              f"and a measure is the document's")
@@ -93,14 +94,18 @@ class TestTheSettingsSpec(unittest.TestCase):
 class TestThePanelPaintsTheDocument(unittest.TestCase):
     def test_every_setting_has_a_stylesheet_rule_to_land_on(self):
         for attr, values in (
+            ("data-page-theme", ("dark",)),
             ("data-width", ("normal", "wide")),
             ("data-prose-font", ("inter", "serif", "system")),
             ("data-code-font", ("jetbrains", "system")),
             ("data-text-size", ("small", "large")),
         ):
+            # Either sheet: the page theme redefines TOKENS, and the tokens
+            # live in core.css, while everything else keys off an attribute in
+            # style.css. What matters is that some rule answers the setting.
             for v in values:
-                self.assertIn(f'{attr}="{v}"', CSS,
-                              f"nothing in style.css responds to {attr}={v}")
+                self.assertIn(f'{attr}="{v}"', CSS + CORE_CSS,
+                              f"no rule in either stylesheet responds to {attr}={v}")
 
     def test_the_families_are_tokens_not_repeated_stacks(self):
         # ~20 rules hardcoded the two stacks before. A family switch that had

@@ -1062,8 +1062,8 @@ main.prose mark.search-hit {
   display: none;
   font-size: 11px; font-weight: 600;
   color: #b45309;
-  background: color-mix(in srgb, #b45309 12%, white);
-  border: 1px solid color-mix(in srgb, #b45309 35%, white);
+  background: color-mix(in srgb, #b45309 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, #b45309 35%, var(--surface));
   border-radius: 999px; padding: 2px 10px; margin-left: 10px;
 }
 .attached-pill.show { display: inline-block; }
@@ -1847,6 +1847,17 @@ body[data-highlight-color="green"]  ::highlight(annotate-read) { background-colo
 body[data-highlight-color="orange"] ::highlight(annotate-read) { background-color: #fdba74; }
 body[data-highlight-color="blue"]   ::highlight(annotate-read) { background-color: #93c5fd; }
 body[data-highlight-color="pink"]   ::highlight(annotate-read) { background-color: #f9a8d4; }
+
+/* On a dark page the five marker colours stay exactly as they are — they are
+   the reader's choice and they are what a highlighter looks like — but the
+   INK on them has to flip. --text is #d1d7e0 on dark, and light grey over
+   #fcd34d is 1.8:1: a mark would erase the words it is meant to pick out.
+   One rule rather than five, because the fix is about the ground the mark
+   sits on and not about which colour it is. Measured on all five: 12.8:1
+   over yellow, 12.1 green, 11.0 orange, 10.2 blue, 10.2 pink.
+   ::highlight() takes `color` as well as `background-color`, so this needs no
+   change to how the marks are applied. */
+body[data-page-theme="dark"] ::highlight(annotate-read) { color: #10141a; }
 
 /* While the highlighter is on, the selection goes neutral. The default
    ::selection is rgba(0,113,227,.18) -- the accent blue -- and blue over a
