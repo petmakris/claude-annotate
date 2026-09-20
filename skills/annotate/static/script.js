@@ -2434,83 +2434,18 @@
     }
   }
 
-  // ── Statusline strip ───────────────────────────────────────────────────
-  // Live mirror of the terminal statusline (context %, model, rate limits,
-  // diff, cost), polled alongside the document. Source is /statusline, which
-  // the server reads from a per-session snapshot statusline.sh writes each
-  // render. Rebuilds only when the payload actually changes.
-  let lastStatuslineJSON = null;
-
-  function slTone(p) { return p >= 75 ? "tone-hot" : p >= 50 ? "tone-warn" : "tone-ok"; }
-
-  function slFmtTok(n) {
-    if (n >= 1e6) { const m = n / 1e6; return (m % 1 === 0 ? m : m.toFixed(1)) + "M"; }
-    if (n >= 1000) { const k = n / 1000; return (n < 10000 ? k.toFixed(1) : Math.round(k)) + "k"; }
-    return String(n);
-  }
-
-  function buildStatstrip(data) {
-    const strip = document.getElementById("statstrip");
-    if (!strip) return;
-    if (!data || !data.ok) { strip.hidden = true; strip.replaceChildren(); return; }
-
-    const frag = document.createDocumentFragment();
-    const seg = (cls) => { const s = document.createElement("span"); s.className = "sl-seg" + (cls ? " " + cls : ""); return s; };
-    const lbl = (t) => { const e = document.createElement("span"); e.className = "sl-lbl"; e.textContent = t; return e; };
-    const val = (t) => { const e = document.createElement("span"); e.className = "sl-val"; e.textContent = t; return e; };
-
-    if (data.context) {
-      const c = data.context, s = seg(slTone(c.pct));
-      const dot = document.createElement("span"); dot.className = "sl-dot";
-      const bar = document.createElement("span"); bar.className = "sl-bar";
-      const fill = document.createElement("i"); fill.style.width = Math.min(100, Math.max(0, c.pct)) + "%"; bar.appendChild(fill);
-      const sub = document.createElement("span"); sub.className = "sl-sub"; sub.textContent = slFmtTok(c.used) + " / " + slFmtTok(c.total);
-      s.append(dot, lbl("context"), bar, val(c.pct + "%"), sub);
-      frag.appendChild(s);
-    }
-    if (data.model) {
-      const s = seg();
-      const m = document.createElement("span"); m.className = "sl-model"; m.textContent = data.model.label;
-      s.append(lbl("model"), m);
-      if (data.model.badge) { const b = document.createElement("span"); b.className = "sl-badge"; b.textContent = data.model.badge; s.appendChild(b); }
-      frag.appendChild(s);
-    }
-
-    const spacer = document.createElement("span"); spacer.className = "sl-spacer"; frag.appendChild(spacer);
-
-    if (data.rate_limits) {
-      for (const [key, short] of [["five_hour", "5h"], ["seven_day", "7d"]]) {
-        const p = data.rate_limits[key];
-        if (typeof p === "number") {
-          const s = seg(slTone(p));
-          const dot = document.createElement("span"); dot.className = "sl-dot";
-          s.append(dot, lbl(short), val(p + "%"));
-          frag.appendChild(s);
-        }
-      }
-    }
-    if (data.diff && (typeof data.diff.added === "number" || typeof data.diff.removed === "number")) {
-      const s = seg(); s.appendChild(lbl("diff"));
-      if (typeof data.diff.added === "number") { const a = document.createElement("span"); a.className = "sl-add"; a.textContent = "+" + slFmtTok(data.diff.added); s.appendChild(a); }
-      if (typeof data.diff.removed === "number") { const d = document.createElement("span"); d.className = "sl-del"; d.textContent = "−" + slFmtTok(data.diff.removed); s.appendChild(d); }
-      frag.appendChild(s);
-    }
-
-    strip.replaceChildren(frag);
-    strip.hidden = false;
-  }
-
-  function refreshStatusline() {
-    fetch(BASE + "statusline", { cache: "no-store" })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        const j = JSON.stringify(data);
-        if (j === lastStatuslineJSON) return;
-        lastStatuslineJSON = j;
-        buildStatstrip(data);
-      })
-      .catch(() => { /* swallow — next tick retries */ });
-  }
+  // The statusline strip was here: a live mirror of the terminal's context
+  // %, model, rate limits and diff, polled from GET <base>/statusline.
+  //
+  // It worked because annotate's own server read a snapshot file off the disk
+  // on request. The daemon that replaced it is deliberately not allowed to
+  // read arbitrary paths, and that restraint is worth more than the widget —
+  // so compat.js answered the route with {ok:false} and the strip hid itself
+  // for good. This removes ~70 lines of renderer, its CSS and its markup,
+  // which had been kept alive only by a shim hard-wired to say "no".
+  //
+  // Reviving it means giving the daemon a real route with a real source of
+  // truth, not restoring this code.
 
   // A heartbeat older than this means the watcher (and the Claude session
   // that owns it) is dead, not slow — the watcher writes every ~1s, including
@@ -2905,8 +2840,14 @@
 
 
   // The pre-round snapshot: the document as it stood when the round was
-  // queued, which is the only record of what a block used to say. Read-only
-  // route (GET <base>/prev), so it works on a shared read-only link too.
+  // queued, which is the only record of what a block used to say. Read-only,
+  // so it works on a shared read-only link too.
+  //
+  // `<base>/prev` is NOT a route on the daemon and 404s if you curl it. It is
+  // synthesised in the page by compat.js, which patches window.fetch and reads
+  // the __prev__ item push.py writes. That is by design, and testing it from
+  // outside the browser has already been mistaken once for three silently
+  // broken features — see test_smoke_route_shim.py.
   async function loadPrev() {
     try {
       const r = await fetch(BASE + "prev", { cache: "no-store" });
@@ -2975,7 +2916,6 @@
     wasBusy = busyNow;
     setBusy(busyNow);
     setAttachedPill(data.attached);
-    refreshStatusline();
     // 1. Clear spinners for comments Claude finished processing.
     handleConsumedEvents(data.consumed_events);
     // 1b. Caption any still-running spinner with the live progress label.

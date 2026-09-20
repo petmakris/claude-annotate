@@ -8,7 +8,6 @@
 //
 //   api.fetchJSON("raw")        -> assembled from __doc__ + one GET per block
 //   api.fetchJSON("prev")       -> the __prev__ item push.py wrote
-//   api.fetchJSON("statusline") -> gone; answers {ok:false} so the strip hides
 //   init({onPollDelta})         -> per-anchor deltas folded into a version map
 //
 // Everything else — submit, finish, cancel, pasteImage, the write token, the
@@ -93,12 +92,6 @@
     async fetchJSON(path, opts) {
       if (path === "raw") return await fetchRaw();
       if (path === "prev") return await fetchPrev();
-      // The live context readout is gone. It worked because annotate's own
-      // server read a file off the disk on request; the daemon is deliberately
-      // not allowed to read arbitrary paths, and that restraint is worth more
-      // than the widget. {ok:false} is the same answer the old route gave when
-      // no snapshot existed, so the strip stays hidden instead of erroring.
-      if (path === "statusline") return { ok: false };
       if (path.startsWith("raw?block=")) {
         const id = decodeURIComponent(path.split("raw?block=")[1].split("&")[0]);
         const one = await rawGet("items/" + encodeURIComponent(id));
@@ -229,7 +222,6 @@
   const routes = {
     raw: fetchRaw,
     prev: fetchPrev,
-    statusline: async () => ({ ok: false }),
   };
 
   const realFetch = window.fetch.bind(window);

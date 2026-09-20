@@ -356,8 +356,9 @@ section.block[data-block-mark="compact"] .card-title { color: var(--text-dim); }
 /* === General composer (page-level comment) =========================== */
 /* Opened by #composer-toggle, and painted as a third band of the top bar
    rather than as a box in the reading column: full-bleed surface, its own
-   bottom hairline, and the SAME gutter formula .page-header and .statstrip use
-   (core.css / .statstrip below), so all three bands share one left edge. Every
+   bottom hairline, and the SAME gutter formula .page-header uses (core.css),
+   so both bands share one left edge. A third band, the statusline strip, once
+   shared it too; it was removed with the route that fed it. Every
    part of core.css's centred-box geometry has to be undone for that — its base
    rule is `max-width: var(--content-max); margin: 0 auto 8px; padding: 16px
    56px 0`, and leaving any of it in place leaves the band inset from the bar
@@ -877,59 +878,6 @@ main.prose mark.search-hit {
   border-radius: 2px;
   padding: 0 1px;
 }
-
-/* ── Statusline strip ─────────────────────────────────────────────────────
-   A thin row under the header mirroring the terminal statusline: live context
-   usage, model, rate limits, diff, cost. Populated by script.js from
-   /statusline; stays [hidden] until there's data so the page degrades cleanly
-   when no snapshot exists. */
-.statstrip {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  padding: 7px max(var(--content-gutter), calc((100% - var(--chrome-max)) / 2 + var(--content-gutter)));
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  font-size: 11.5px;
-  color: var(--text);
-}
-.statstrip[hidden] { display: none; }
-.statstrip .sl-spacer { flex: 1 1 auto; }
-.statstrip .sl-seg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.statstrip .sl-lbl { color: var(--text-dim); font-weight: 500; }
-.statstrip .sl-val { font-weight: 700; font-variant-numeric: tabular-nums; }
-.statstrip .sl-sub {
-  color: var(--text-dim);
-  font-family: var(--font-code);
-  font-size: 10.5px;
-}
-.statstrip .sl-model { color: #7c3aed; font-weight: 700; }
-.statstrip .sl-badge {
-  font-family: var(--font-code);
-  font-weight: 700;
-  font-size: 9.5px;
-  line-height: 1;
-  padding: 2px 5px;
-  border-radius: 4px;
-  color: #7c3aed;
-  background: color-mix(in srgb, #7c3aed 12%, var(--surface));
-  border: 1px solid color-mix(in srgb, #7c3aed 35%, var(--border));
-}
-.statstrip .sl-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
-/* Context meter — a slim bar whose fill width is set inline by the client. */
-.statstrip .sl-bar {
-  width: 54px; height: 5px; border-radius: 3px;
-  background: color-mix(in srgb, var(--text-dim) 25%, transparent);
-  overflow: hidden;
-}
-.statstrip .sl-bar > i { display: block; height: 100%; border-radius: 3px; background: currentColor; }
-.statstrip .sl-add { color: #2e9e5b; font-family: var(--font-code); }
-.statstrip .sl-del { color: #c1432f; font-family: var(--font-code); }
-/* Pressure tones, applied to the whole segment so dot/bar/value share a color. */
-.statstrip .tone-ok   { color: #2e9e5b; }
-.statstrip .tone-warn { color: #c98a14; }
-.statstrip .tone-hot  { color: #c1432f; }
 
 /* ── Delete affordance ────────────────────────────────────────────────── */
 .hover-actions button[data-type="delete"] {
@@ -1461,8 +1409,8 @@ section.block[data-diff="open"] .diff-pane { display: block; }
   border-top: 1px solid var(--border);
   transform: rotate(45deg);
 }
-/* The same cascade trap `.general-composer[hidden]` and `.statstrip[hidden]`
-   already work around, now on the popover. `display: block` above is an
+/* The same cascade trap `.general-composer[hidden]` already works around, now
+   on the popover. `display: block` above is an
    AUTHOR rule; the UA's `[hidden] { display: none }` is a USER-AGENT rule, so
    the author rule wins at equal specificity regardless of source order and the
    bare attribute paints nothing away. Without this line the legend table hangs
