@@ -744,3 +744,59 @@ def test_full_screen_says_the_same_thing_twice(page):
     assert got["label"] == "Exit full screen", (
         "the row announces %r and still reads %r" % (got["aria"], got["label"]))
     assert got["icon"], "the label write ate the row's icon"
+
+
+def test_a_finished_trail_already_on_the_page_still_paints(document):
+    """The load-time race a source-level test cannot see.
+
+    progress.js's initial paint has to come from its own read at load time,
+    not only from the `annotate:progress` broadcast, because compat.js
+    returns early for `ev.initial` frames — a page loaded when a trail
+    already exists gets no event at all. But that load-time read runs
+    `writable()`, which reads `window.WebCompanion.writable`, and that flag
+    starts false and is only flipped once core.js's `resolveWritable()`
+    settles its `fetch("/api/whoami")` — kicked off fire-and-forget by
+    script.js a few lines earlier, and never synchronous. If progress.js's
+    own first read loses that race, `writable()` reads false for the
+    session's OWNER, the panel is removed/never drawn, and — because no
+    event is coming for an initial frame — it never appears at all.
+
+    The write below happens before the page is ever navigated to, the way
+    progress.py's `finish()` writes a closed trail, so the page loads onto a
+    trail that already exists. The `/api/whoami` route is throttled so the
+    race is exercised every run rather than only on a slow morning.
+    """
+    base, sid = document["base"], document["sid"]
+    now = int(time.time())
+    _call(base, "PUT", f"/s/{sid}/items/__progress__", {
+        "id": "__progress__", "kind": "progress", "state": "done",
+        "started_at": now - 12, "ended_at": now,
+        "event_id": "evt-browser-suite",
+        "steps": [
+            {"t": now - 12, "text": "Read the failing test"},
+            {"t": now - 5, "text": "Painted the panel from a load-time read"},
+        ],
+    })
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        pg = browser.new_page()
+        try:
+            # Deliberately slow, not just naturally raced: without this the
+            # bug is real but timing-dependent, and a fast enough machine
+            # would pass every run whether or not the fix is still there.
+            def _slow_whoami(route):
+                time.sleep(0.4)
+                route.continue_()
+            pg.route("**/api/whoami", _slow_whoami)
+
+            pg.goto(document["url"])
+            pg.wait_for_selector("#progress-panel", timeout=15000)
+            state = pg.get_attribute("#progress-panel", "data-state")
+            lines = pg.eval_on_selector_all(
+                "#progress-panel .pg-line",
+                "els => els.map(e => e.textContent)")
+        finally:
+            browser.close()
+
+    assert state == "done", "the panel did not know the trail was finished"
+    assert any("Painted the panel from a load-time read" in t for t in lines), lines

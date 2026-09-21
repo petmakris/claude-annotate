@@ -4,6 +4,7 @@ The behaviour that matters — lines arriving, the newest staying visible, the
 collapse on done, and nothing at all for a guest — is browser-tested in
 test_browser_review.py. These are the structural guarantees.
 """
+import re
 import unittest
 from pathlib import Path
 
@@ -12,6 +13,53 @@ JS = (STATIC / "progress.js").read_text() if (STATIC / "progress.js").exists() e
 CSS = (STATIC / "style.css").read_text()
 ENTRY = (STATIC / "entry.js").read_text()
 CORE = (STATIC / "core.css").read_text()
+
+
+def _brace_body(src, open_idx):
+    """The text strictly between the '{' at `open_idx` and its matching '}'."""
+    assert src[open_idx] == "{"
+    depth = 0
+    for i in range(open_idx, len(src)):
+        if src[i] == "{":
+            depth += 1
+        elif src[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return src[open_idx + 1:i]
+    raise AssertionError("unbalanced braces in " + src[open_idx:open_idx + 80])
+
+
+def _interval_bodies(js):
+    """The body of every function a `setInterval(...)` call in `js` runs.
+
+    The callback can be written two ways, and a caller regex that only
+    matches one of them proves nothing about the other:
+
+      setInterval(() => { ... }, 1000)   -- inline, the body is right there
+      setInterval(tick, 1000)            -- a bare reference to a function
+                                             declared elsewhere in the file
+
+    progress.js uses the second form (`ticking = setInterval(tick, 1000)`),
+    so a check that only reads the call site sees an identifier and nothing
+    of what it does -- exactly the gap that let a `fetchJSON` inside `tick`
+    stay invisible to the original version of this test.
+    """
+    bodies = []
+
+    # Bare identifier: resolve it to a `function <name>(...) { ... }`
+    # declaration elsewhere in the file and take that function's body.
+    for m in re.finditer(r"setInterval\(\s*([A-Za-z_$][\w$]*)\s*,\s*[^)]+\)", js):
+        name = m.group(1)
+        decl = re.search(r"function\s+" + re.escape(name) + r"\s*\([^)]*\)\s*\{", js)
+        if decl:
+            bodies.append(_brace_body(js, decl.end() - 1))
+
+    # Inline function expression or arrow function passed directly.
+    for m in re.finditer(
+            r"setInterval\(\s*(?:function\b[^{]*|\([^)]*\)\s*=>\s*)\{", js):
+        bodies.append(_brace_body(js, m.end() - 1))
+
+    return bodies
 
 
 class TestItIsLoaded(unittest.TestCase):
@@ -34,10 +82,15 @@ class TestItListensRatherThanPolls(unittest.TestCase):
     def test_it_never_polls_the_daemon(self):
         # A poll would work and would also be a second source of truth for
         # something the stream already pushes. The panel does own ONE timer —
-        # the elapsed clock — which is local and reads nothing.
-        import re as _re
-        for m in _re.finditer(r"setInterval\((.{0,400}?)\}, \d+\)", JS, _re.S):
-            self.assertNotIn("fetchJSON", m.group(1),
+        # the elapsed clock — which is local and reads nothing. Resolve every
+        # setInterval callback to its actual function body (named references
+        # included — see _interval_bodies) before checking it, rather than
+        # pattern-matching the call site, which for `setInterval(tick, 1000)`
+        # sees only the identifier and nothing of what `tick` does.
+        bodies = _interval_bodies(JS)
+        self.assertTrue(bodies, "no setInterval callback body could be resolved")
+        for body in bodies:
+            self.assertNotIn("fetchJSON", body,
                              "the panel polls the daemon on a timer")
 
 

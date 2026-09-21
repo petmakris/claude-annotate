@@ -168,7 +168,14 @@
     if (!writable()) { remove(); return; }
     let body = null;
     try {
-      body = await window.WebCompanion.fetchJSON(ROUTE);
+      // Not `window.WebCompanion.fetchJSON` — every other call site in this
+      // codebase (script.js's WebCompanion.api.submit/.finish/.pasteImage)
+      // reaches through `.api`, because that's the surface both core.js and
+      // compat.js actually expose; `fetchJSON` was never promoted to the top
+      // level. Calling it there is a TypeError that refresh()'s own catch
+      // swallows, so the panel silently never painted, in any browser, at
+      // any timing — caught by test_browser_review.py's load-time test.
+      body = await window.WebCompanion.api.fetchJSON(ROUTE);
     } catch (_) {
       // No trail yet is the common case on a fresh page, and a failed read
       // must never be louder than the document it sits above.
@@ -182,10 +189,44 @@
     }
   }
 
+  // The load-time boot path, not the live-event path: core.js's write
+  // capability probe (resolveWritable) is kicked off fire-and-forget by
+  // script.js's WebCompanion.init() call a few lines before this file even
+  // starts executing, but its fetch("/api/whoami") is never synchronous. If
+  // it has not settled by the time this file's own first refresh() would
+  // run, writable() reads false even for the session's OWNER, refresh()
+  // removes/no-ops the panel — and for a page loaded onto an already-finished
+  // trail, no annotate:progress event is ever coming to trigger a later
+  // repaint (compat.js returns early for initial frames). So boot() awaits
+  // the verdict once, before its first refresh(), rather than trusting
+  // whatever writable() already happens to read.
+  //
+  // compat.js forwards resolveWritable bare — `() => daemon.resolveWritable()`
+  // — with no de-duplication, so awaiting it here is a second, independent
+  // call into core.js's resolveWritable(), which re-probes /api/whoami rather
+  // than reusing script.js's already in-flight probe. The alternative
+  // considered was a MutationObserver on document.body's `class` attribute,
+  // which core.js's resolveWritable toggles `read-only` on the moment its
+  // verdict lands (event-free, no extra fetch) — but DOMTokenList's
+  // `toggle(token, force)` is a no-op that fires NO mutation at all when the
+  // token is already absent and force is falsy, which is exactly an owner's
+  // case: `read-only` starts absent, and toggling it with `!writable` false
+  // never touches the attribute. That observer would never fire for the one
+  // case this bug is about, only for guests, who never needed the signal. A
+  // second, bounded, one-time fetch at boot is the honest cost of a signal
+  // that actually reaches the owner.
+  async function boot() {
+    const wc = window.WebCompanion;
+    if (wc && typeof wc.resolveWritable === "function") {
+      try { await wc.resolveWritable(); } catch (_) { /* refresh() re-checks writable() itself */ }
+    }
+    refresh();
+  }
+
   document.addEventListener("annotate:progress", refresh);
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", refresh);
+    document.addEventListener("DOMContentLoaded", boot);
   } else {
-    refresh();
+    boot();
   }
 })();
