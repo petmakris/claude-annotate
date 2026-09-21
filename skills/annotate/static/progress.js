@@ -27,6 +27,16 @@
     // Absent means the shim has not installed yet; treat as not writable and
     // let the next broadcast re-decide, rather than flashing the trail at a
     // guest for one frame.
+    //
+    // This gate decides whether the trail is DRAWN. It does not decide
+    // whether the guest has it: the daemon's `GET /s/<sid>/items` is
+    // unauthenticated and hands back every item including `__`-prefixed
+    // anchors, and compat.js fetches that route on every page load, guest
+    // included — so `__progress__` is already in this browser, and one
+    // `curl` against the share link reads it. Withholding it would be a
+    // `webcompanion` change, out of scope by spec decision 2. The real
+    // containment is the contract rule that narration carries no output,
+    // secrets or tokens (references/handling-events.md).
     return !!(wc && wc.writable);
   }
 

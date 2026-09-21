@@ -94,15 +94,36 @@ class TestItListensRatherThanPolls(unittest.TestCase):
                              "the panel polls the daemon on a timer")
 
 
-class TestTheGuestSeesNothing(unittest.TestCase):
+class TestTheGuestIsNotSHOWNTheTrail(unittest.TestCase):
+    """Not shown, not protected.
+
+    The trail names file paths and repository structure, and the document is
+    what the author chose to share while how it was produced is not — but both
+    checks below are about RENDERING. The daemon's `GET /s/<sid>/items` is
+    unauthenticated and returns `__`-prefixed anchors to anyone holding the
+    link, and compat.js fetches it on every page load, so a guest's browser
+    already has the trail. Making the daemon withhold it is a `webcompanion`
+    change (spec decision 7, amended); what keeps a secret out of a guest's
+    hands here is the contract rule that narration never carries output,
+    secrets or tokens.
+    """
+
     def test_the_panel_is_gated_on_writability(self):
-        # The trail names file paths and repository structure. The document is
-        # what the author chose to share; how it was produced is not.
-        self.assertIn("writable", JS)
+        # progress.js must consult the write-capability verdict, not merely
+        # mention the word: `resolveWritable` alone satisfies a bare substring
+        # search while gating nothing.
+        self.assertRegex(JS, r"function writable\(\)")
+        self.assertRegex(JS, r"wc\.writable")
+        for fn in ("function paint(", "async function refresh("):
+            body = JS[JS.index(fn):]
+            body = body[:body.index("\n  }\n")]
+            self.assertIn("writable()", body,
+                          f"{fn.strip()} paints without asking whether this reader may see it")
 
     def test_the_stylesheet_hides_it_too(self):
-        # Belt and braces: a JS gate that regresses must not silently expose
-        # the trail on a shared link.
+        # Belt and braces for the RENDER, not a second line of defence for the
+        # data: a JS gate that regresses must not leave the panel drawn on a
+        # shared link.
         self.assertIn("body.read-only #progress-panel", CSS)
 
 

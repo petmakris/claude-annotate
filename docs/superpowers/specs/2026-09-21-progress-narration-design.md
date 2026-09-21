@@ -107,12 +107,29 @@ Claude is doing, and a panel that shows it.
    is happening does not answer it. When `state` flips to `done` it becomes one
    line — "Claude worked for 4 min 20 s across 9 steps" — that expands.
 
-7. **Hidden entirely from a read-only viewer.** Narration names file paths,
-   repository structure and what Claude looked at. The daemon binds `0.0.0.0`
-   and this machine has Tailscale sharing configured, so these pages do get
-   shared. The document is what the author chose to share; the trail of how it
-   was produced is not. `body.read-only` hides the panel completely — not
-   greyed, not collapsed: absent.
+7. **Hidden entirely from a read-only viewer — client-side, and that is the
+   whole of it.** Narration names file paths, repository structure and what
+   Claude looked at. The daemon binds `0.0.0.0` and this machine has Tailscale
+   sharing configured, so these pages do get shared. The document is what the
+   author chose to share; the trail of how it was produced is not, so
+   `body.read-only` hides the panel completely — not greyed, not collapsed:
+   absent, and `progress.js` refuses to render it at all unless
+   `/api/whoami` said `writable`.
+
+   **This is a presentation choice, not a confidentiality boundary.** Measured
+   against this machine's daemon from its LAN address with no owner token:
+   `/api/whoami` returns `{"writable": false}`, and `GET /s/<sid>/items` still
+   returns `200` with every item in it, `__`-prefixed anchors included —
+   `__progress__` body, steps and all. `compat.js` fetches that route on every
+   page load, guest included, so the trail **is delivered to a guest's browser**
+   and can be read with one `curl` by anyone holding the share link. Nothing
+   here withholds the data; the panel simply is not drawn.
+
+   Gating `__`-prefixed anchors server-side would be a change to
+   `webcompanion`, which decision 2 puts out of scope for this branch. Until
+   someone makes that change, the containment is decision 1's rule in
+   `handling-events.md` — narration must not carry output, secrets or tokens —
+   and that rule is load-bearing rather than belt-and-braces.
 
 8. **The feed pins to its newest line.** Observed in the mockup: with a
    `max-height` and no scroll management, the one line the reader most wants —
@@ -251,5 +268,8 @@ only by computed styles and rects:
   future "narrate every tool call" would make it one.
 - **The trust boundary moved.** The old hook could not leak anything because it
   could only emit allowlisted strings. Narration is Claude's prose and can name
-  paths. Decision 7 is the containment, and it is a weaker guarantee than an
-  allowlist — deliberately, in exchange for being useful.
+  paths. Decision 7 turns out **not** to be the containment it was drafted as:
+  the hide is client-side, and the daemon hands `__progress__` to any holder of
+  the link. The actual containment is the contract rule that narration carries
+  no output, secrets or tokens — a judgement call where there used to be an
+  allowlist, and now the only thing standing between the trail and a guest.

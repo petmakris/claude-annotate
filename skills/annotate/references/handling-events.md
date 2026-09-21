@@ -137,7 +137,16 @@ already happened. This is the single rule that makes the feature work.
 
 The line is prose the reader sees. Say what you are doing and, where it is not
 obvious, why — "Looking for where the currency conversion actually happens"
-beats "Searching". Never paste output, secrets, or tokens into it.
+beats "Searching".
+
+**A narration line must never carry command output, file contents, secrets or
+tokens.** This is a requirement, not tidiness, and it is the only thing
+protecting any of it. The panel is hidden from a read-only viewer, but that
+hide is client-side: the daemon's `GET /s/<sid>/items` is unauthenticated and
+returns `__`-prefixed anchors to anyone holding the share link, and the page
+fetches that route on every load, guest included. Anything you write here has
+already been handed to every holder of the link, whether or not their browser
+draws it. Name what you are doing; never quote what you found.
 
 These commands are cheap and must never fail the turn: if one errors, carry on.
 

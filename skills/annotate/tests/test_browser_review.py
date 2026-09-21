@@ -905,8 +905,18 @@ def test_the_trail_never_becomes_a_block(page, document):
 
 
 def test_a_read_only_reader_sees_no_trail_at_all(document):
-    """The document is what the author chose to share. How it was produced —
-    which files, which paths — is not.
+    """The panel is not DRAWN for a guest. That is all this proves.
+
+    The document is what the author chose to share and how it was produced is
+    not, but the hide is client-side only: the daemon's `GET /s/<sid>/items`
+    is unauthenticated and returns every item, `__`-prefixed anchors included,
+    and compat.js fetches exactly that route on every page load — guest
+    included. Measured from this machine's LAN address with no owner token,
+    that request returns 200 with the `__progress__` body, steps and all. So
+    the trail reaches a guest's browser and one `curl` reads it; what this
+    test establishes is that nothing renders it, not that it was withheld.
+    Gating `__`-prefixed anchors server-side would be a `webcompanion` change
+    (spec decision 7, amended).
 
     The brief's version of this test fakes read-only by adding `body.
     read-only` and hand-firing `annotate:progress` from inside the OWNER's
@@ -967,4 +977,4 @@ def test_a_read_only_reader_sees_no_trail_at_all(document):
                 " return el === null || el.offsetParent === null; }")
         finally:
             browser.close()
-    assert hidden, "a guest can read the trail"
+    assert hidden, "the trail is rendered on a guest's page"
