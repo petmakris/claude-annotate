@@ -30,6 +30,7 @@ from pathlib import Path
 
 from skills.annotate import blocks as blocks_model
 from skills.annotate.render import render_block
+from .progress import ANCHOR as PROGRESS_ANCHOR
 
 CONTRACT = 1
 KIND = "annotate"
@@ -146,9 +147,15 @@ def push(blocks_path: Path, cwd: str, slug: str | None = None,
     # by copying blocks.json on every mutating event, and losing it would
     # silently kill the "what changed since you commented" marks.
     prev = _existing_items(cfg, sid)
+    trail = prev.pop(PROGRESS_ANCHOR, None)
     prev.pop(PREV_ANCHOR, None)
     if prev:
         items[PREV_ANCHOR] = prev
+    # The narration trail survives the replace for the same reason __prev__
+    # does, and a sharper one: this push IS the answer landing, which is
+    # exactly when the reader looks at how it was reached.
+    if trail is not None:
+        items[PROGRESS_ANCHOR] = trail
 
     _request(cfg, "PATCH", "/s/%s/items?kind=%s" % (sid, KIND),
              {"items": items, "replace": True})

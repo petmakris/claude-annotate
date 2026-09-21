@@ -131,3 +131,45 @@ def test_the_trail_is_capped_so_a_long_session_cannot_grow_forever(sid):
     # now, and the newest line is the one the panel pins to.
     assert steps[-1]["text"] == "the newest line"
     assert steps[0]["text"] == "step 1", "the wrong end of the trail was dropped"
+
+
+def test_a_push_does_not_delete_the_trail(sid, tmp_path):
+    """The source test proves the code is there; this proves it works."""
+    from skills.annotate import push as push_mod
+
+    progress.note(sid, "found the divergence")
+    blocks = tmp_path / "blocks.json"
+    blocks.write_text(json.dumps({
+        "response_id": "resp-progress-suite",
+        "title": "progress suite",
+        "blocks": [{"id": "section-1", "kind": "markdown", "title": "One",
+                    "markdown": "Body."}],
+    }))
+    stray_sid = None
+    try:
+        res = push_mod.push(blocks, str(REPO), slug=None, title="progress suite")
+        stray_sid = res["sid"]
+
+        # The push above created its OWN session; re-push into ours by slug is
+        # what the skill actually does, so drive that path instead.
+        rows = _call(_daemon_url(), "GET", f"/api/sessions?cwd={REPO}&kind=annotate")
+        row = next(r for r in rows if r["sid"] == sid)
+        push_mod.push(blocks, str(REPO), slug=row["slug"], title="progress suite")
+
+        body = _stored(sid)
+        assert [s["text"] for s in body["steps"]] == ["found the divergence"], \
+            "the push wiped the narration it had just produced"
+    finally:
+        # push_mod.push's first call, with no slug, created its own session as
+        # a side effect. It is not the `sid` fixture's session, so the fixture
+        # teardown never sees it — delete it here or it leaks into the
+        # registry the way an earlier suite leaked 28 of them before anyone
+        # counted.
+        if stray_sid is not None:
+            base = _daemon_url()
+            _call(base, "POST", f"/s/{stray_sid}/api/finish")
+            try:
+                _call(base, "DELETE", f"/s/{stray_sid}/?force=1")
+            except Exception as e:                       # noqa: BLE001
+                import warnings
+                warnings.warn(f"progress writer suite leaked session {stray_sid}: {e}")
