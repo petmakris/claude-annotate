@@ -16,6 +16,20 @@ SKILL = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text()
 CMD = "skills.annotate.progress"
 
 
+def _event_sections():
+    """Every `### WEBCOMPANION_EVENT...` subsection, as (title, text).
+
+    Scoped rather than searched whole-file: a substring check over the whole
+    document passes on a contract that mandates narration twice per round and
+    says nothing in between, which is exactly the silence being fixed.
+    """
+    heads = [m.start() for m in re.finditer(r"^### `WEBCOMPANION_EVENT", EVENTS, re.M)]
+    assert len(heads) >= 3, "the event sections moved"
+    bounds = heads + [len(EVENTS)]
+    return [(EVENTS[start:bounds[i + 1]].splitlines()[0], EVENTS[start:bounds[i + 1]])
+            for i, start in enumerate(heads)]
+
+
 class TestEveryEventPathNarrates(unittest.TestCase):
     def test_the_command_is_documented_with_its_flags(self):
         self.assertIn(CMD, EVENTS)
@@ -45,16 +59,36 @@ class TestEveryEventPathNarrates(unittest.TestCase):
         for title, section in _event_sections():
             self.assertIn(CMD, section, f"{title} never narrates")
 
-    def test_each_event_subsection_carries_a_narration_step(self):
-        # One per handled event type. A path that does not narrate is a path
-        # that goes silent, which is the whole defect.
-        heads = [m.start() for m in re.finditer(r"^### `WEBCOMPANION_EVENT", EVENTS, re.M)]
-        self.assertGreaterEqual(len(heads), 3, "the event sections moved")
-        bounds = heads + [len(EVENTS)]
-        for i, start in enumerate(heads):
-            section = EVENTS[start:bounds[i + 1]]
-            title = section.splitlines()[0]
-            self.assertIn(CMD, section, f"{title} never narrates")
+    def test_each_event_subsection_makes_before_each_work_a_numbered_step(self):
+        # Decision 9: narration has the same standing as acknowledging the
+        # event or re-pushing the document, "not an aside in prose". Only the
+        # receipt line and the `--done` line shipped as numbered steps, which
+        # yields one line, then silence, then a summary — the spec's own
+        # stated failure mode. The obligation has to be IN the list.
+        for title, section in _event_sections():
+            numbered = [l for l in section.splitlines() if re.match(r"^\d+\. ", l)]
+            self.assertTrue(numbered, f"{title} has no numbered steps at all")
+            before = [l for l in numbered
+                      if re.search(r"(?i)narrate before each", l)]
+            self.assertTrue(
+                before,
+                f"{title} narrates on receipt and on done and nowhere between")
+
+    def test_the_before_each_work_step_governs_the_work_that_follows_it(self):
+        # A narration step placed after the rewrite governs nothing.
+        for title, section in _event_sections():
+            lines = section.splitlines()
+            numbered = [(i, l) for i, l in enumerate(lines) if re.match(r"^\d+\. ", l)]
+            at = next(i for i, l in numbered if re.search(r"(?i)narrate before each", l))
+            after = [l for i, l in numbered if i > at]
+            self.assertGreaterEqual(
+                len(after), 3,
+                f"{title} puts the narration step at the end, where it governs nothing")
+
+    def test_each_event_subsection_still_narrates_on_receipt_and_on_done(self):
+        for title, section in _event_sections():
+            self.assertIn("--done", section, f"{title} never closes the trail")
+            self.assertIn("--event-id", section, f"{title} never narrates the receipt")
 
     def test_narration_comes_before_the_work_not_after(self):
         # A line written after a ninety-second search arrives ninety seconds

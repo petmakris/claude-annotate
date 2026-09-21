@@ -157,11 +157,19 @@ These commands are cheap and must never fail the turn: if one errors, carry on.
    - For `type == "dismiss"`: `block_id` is the block to remove; `text` is empty and ignored. Jump to the `dismiss` subsection below.
    - `images` — array of `{token, path}` entries (or empty).  When non-empty, `Read` each `path` before composing your rewrite so you see the screenshots.
 3. Narrate that you have it: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --text "Read your comment on <block_id>" --event-id "<event_id>"`.
-4. **Apply the block-rewrite contract** (see "Block-rewrite contract" below).
-5. Save the updated `blocks.json` atomically (tmp → rename).
-6. Close the trail: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
-7. Acknowledge the event: `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"`.
-8. End your turn.  **No terminal output.**  The watcher remains armed.
+4. **Narrate before each distinct piece of work below** — a search, a pass
+   of reading, a command run, a rewrite — writing the line *before* you
+   start it, never after:
+   `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --text "<what you are about to do>"`.
+   This step governs every step below it, not just the next one. An event
+   that takes five minutes and produces one line is the silence this
+   contract exists to end. See "Narrating while you work" above for what
+   counts as one step and for the rule that the line comes first.
+5. **Apply the block-rewrite contract** (see "Block-rewrite contract" below).
+6. Save the updated `blocks.json` atomically (tmp → rename).
+7. Close the trail: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
+8. Acknowledge the event: `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"`.
+9. End your turn.  **No terminal output.**  The watcher remains armed.
 
 ### `WEBCOMPANION_EVENT` with `type: "choice"`
 
@@ -171,14 +179,22 @@ The user answered a choice block. `selected_options` holds the picked id(s) — 
 
 1. Read your working `blocks.json`, find the block by `block_id`.
 2. Narrate that you have it: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --text "Read your choice answer" --event-id "<event_id>"`.
-3. **Resolve the choice into a decision** — convert the block from `kind: "choice"` to a markdown block whose prose states the decision, folds in the reasoning, AND folds in the note when present (e.g. *"Decision: Koumbaras, lowercased per your note…"*). The options disappear; the answer is final. Use `blocks.convert_block_to_markdown(doc, block_id, markdown)` — it sets the markdown, drops `kind`/`spec`, and is content-hash-safe (a no-op rewrite doesn't bump the version).
-4. **Continue the task** — the pick drives the next step. Append follow-up blocks to `blocks.json` and/or take the implied action, as the decision warrants.
-5. Run the coherence sweep (see below — this path is the universal rule's highest-risk case, since it both resolves the block and appends new ones).
-6. Re-push the document (`references/pushing.md` § Push the document, with `--slug "$WC_SLUG"`).
-7. Close the trail: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
-8. Run `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"`. End your turn. No terminal output; the watcher stays armed.
+3. **Narrate before each distinct piece of work below** — a search, a pass
+   of reading, a command run, a rewrite — writing the line *before* you
+   start it, never after:
+   `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --text "<what you are about to do>"`.
+   This step governs every step below it, not just the next one. An event
+   that takes five minutes and produces one line is the silence this
+   contract exists to end. See "Narrating while you work" above for what
+   counts as one step and for the rule that the line comes first.
+4. **Resolve the choice into a decision** — convert the block from `kind: "choice"` to a markdown block whose prose states the decision, folds in the reasoning, AND folds in the note when present (e.g. *"Decision: Koumbaras, lowercased per your note…"*). The options disappear; the answer is final. Use `blocks.convert_block_to_markdown(doc, block_id, markdown)` — it sets the markdown, drops `kind`/`spec`, and is content-hash-safe (a no-op rewrite doesn't bump the version).
+5. **Continue the task** — the pick drives the next step. Append follow-up blocks to `blocks.json` and/or take the implied action, as the decision warrants.
+6. Run the coherence sweep (see below — this path is the universal rule's highest-risk case, since it both resolves the block and appends new ones).
+7. Re-push the document (`references/pushing.md` § Push the document, with `--slug "$WC_SLUG"`).
+8. Close the trail: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
+9. Run `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"`. End your turn. No terminal output; the watcher stays armed.
 
-**Note-only (`selected_options` is `[]`, `text` non-empty):** the user rejected the slate and gave a direction instead. Do NOT resolve. Either rewrite the block's spec with re-proposed options that follow the direction (`blocks.update_spec_block` — the version bumps), or, when the note itself settles the question, resolve to a decision paragraph built from the note. Then continue as in steps 4–8 above.
+**Note-only (`selected_options` is `[]`, `text` non-empty):** the user rejected the slate and gave a direction instead. Do NOT resolve. Either rewrite the block's spec with re-proposed options that follow the direction (`blocks.update_spec_block` — the version bumps), or, when the note itself settles the question, resolve to a decision paragraph built from the note. Then continue as in steps 5–9 above.
 
 Multi-select: the decision prose names all picked options. There is no `reject` on a choice — an empty pick always carries a note.
 
@@ -190,14 +206,22 @@ Only reachable from a browser tab opened before the round rework — the current
 
 1. Read your working `blocks.json`.
 2. Narrate that you have it: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --text "Read the dismiss request for <block_id>" --event-id "<event_id>"`.
-3. `blocks.remove_block(doc, block_id)` — deletes the block. It is a no-op if the block is already gone (watcher re-apply safety).
-4. **Smart-drop:** scan the surviving blocks. Re-thread any that referenced the removed one — renumber steps, cut or rewrite dangling references — so the document still reads coherently without it. Use `blocks.update_block` / `blocks.update_spec_block` per touched block; touch only blocks that actually referenced the removed one.
-5. `blocks.drop_unused_terms(doc)` — drop any glossary entry whose term was last used by the removed block.
-6. Treat the removed content as **out of scope** for the rest of this turn and going forward: do not reintroduce it, and exclude it when acting on the plan.
-7. Run the coherence sweep (see below — the same pre-ack rule as every other path; dismiss is legacy, not exempt).
-8. Re-push the document with `--slug "$WC_SLUG"`.
-9. Close the trail: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
-10. Run `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"`. End the turn. No terminal output; the watcher stays armed.
+3. **Narrate before each distinct piece of work below** — a search, a pass
+   of reading, a command run, a rewrite — writing the line *before* you
+   start it, never after:
+   `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --text "<what you are about to do>"`.
+   This step governs every step below it, not just the next one. An event
+   that takes five minutes and produces one line is the silence this
+   contract exists to end. See "Narrating while you work" above for what
+   counts as one step and for the rule that the line comes first.
+4. `blocks.remove_block(doc, block_id)` — deletes the block. It is a no-op if the block is already gone (watcher re-apply safety).
+5. **Smart-drop:** scan the surviving blocks. Re-thread any that referenced the removed one — renumber steps, cut or rewrite dangling references — so the document still reads coherently without it. Use `blocks.update_block` / `blocks.update_spec_block` per touched block; touch only blocks that actually referenced the removed one.
+6. `blocks.drop_unused_terms(doc)` — drop any glossary entry whose term was last used by the removed block.
+7. Treat the removed content as **out of scope** for the rest of this turn and going forward: do not reintroduce it, and exclude it when acting on the plan.
+8. Run the coherence sweep (see below — the same pre-ack rule as every other path; dismiss is legacy, not exempt).
+9. Re-push the document with `--slug "$WC_SLUG"`.
+10. Close the trail: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
+11. Run `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"`. End the turn. No terminal output; the watcher stays armed.
 
 A dismissed `choice` or `sequence` block is removed whole-block the same way — there is no step-level dismiss.
 
@@ -229,7 +253,15 @@ Apply the WHOLE round in one pass — this is the entire point of batching:
 
 1. Read your working `blocks.json`. Group reactions by `block_id`.
 2. Narrate that you have it: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --text "Read your round of feedback" --event-id "<event_id>"`.
-3. **Apply `scope: "block"` reactions first**, since a block-level `delete`
+3. **Narrate before each distinct piece of work below** — a search, a pass
+   of reading, a command run, a rewrite — writing the line *before* you
+   start it, never after:
+   `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --text "<what you are about to do>"`.
+   This step governs every step below it, not just the next one. An event
+   that takes five minutes and produces one line is the silence this
+   contract exists to end. See "Narrating while you work" above for what
+   counts as one step and for the rule that the line comes first.
+4. **Apply `scope: "block"` reactions first**, since a block-level `delete`
    makes that block's unit reactions moot:
    - **`delete`** — `blocks.remove_block(doc, block_id)`, then smart-drop:
      re-thread surviving blocks that referenced it (renumber steps, cut or
@@ -255,7 +287,7 @@ Apply the WHOLE round in one pass — this is the entire point of batching:
      the card unresolved re-asks a question they consider closed. The reverse
      also holds: acting on the decision without resolving the card is the
      failure, not a missing extra step.
-4. For each remaining touched block, compose ONE new markdown that applies all
+5. For each remaining touched block, compose ONE new markdown that applies all
    of its unit reactions together:
    - **`delete`** — cut that sub-unit (the bullet / paragraph / row / fence
      matching `selected_text`, or the node matching `step_id`) from the
@@ -291,14 +323,14 @@ Three rules govern compact, and all three matter:
 - **Compact is lossy, and that is accepted.** Do not compensate by writing
   longer surviving sentences than the material warrants, and do not refuse to
   compact because detail would be lost.
-5. Persist each changed block via `blocks.update_block(doc, block_id,
+6. Persist each changed block via `blocks.update_block(doc, block_id,
    new_markdown)` (content-hash-safe), then `blocks.drop_unused_terms(doc)`.
-6. **Run the coherence sweep** — see "The coherence sweep" below (it's the
+7. **Run the coherence sweep** — see "The coherence sweep" below (it's the
    universal pre-ack rule, not a round-only step). This is not optional and it
    is not conditional on the round having deleted anything.
-7. ONE `blocks.save_atomic`, then ONE re-push (`--slug "$WC_SLUG"`) — the daemon holds the document now, so a save that is not pushed changes nothing the user can see.
-8. Close the trail: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
-9. Run `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"` ONCE. End your turn. No terminal
+8. ONE `blocks.save_atomic`, then ONE re-push (`--slug "$WC_SLUG"`) — the daemon holds the document now, so a save that is not pushed changes nothing the user can see.
+9. Close the trail: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
+10. Run `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"` ONCE. End your turn. No terminal
    output; the watcher stays armed.
 
 Cross-item coherence is required: if a round deletes two bullets and
@@ -315,15 +347,15 @@ no-op.
 
 The user clicked Done.
 
-1. Ack briefly in terminal: *"Annotate session for `<title>` closed."*
-2. Remove this session's entry from `~/.claude/annotate/pending-${CLAUDE_CODE_SESSION_ID}.json`.
+2. Ack briefly in terminal: *"Annotate session for `<title>` closed."*
+3. Remove this session's entry from `~/.claude/annotate/pending-${CLAUDE_CODE_SESSION_ID}.json`.
 
 ### `WEBCOMPANION_CANCELLED`
 
 The user cancelled (clicked tab close, or wrote `scrap it` in terminal).
 
-1. Ack briefly in terminal: *"Annotate session for `<title>` cancelled."*
-2. Remove this session's entry from the pending registry.
+2. Ack briefly in terminal: *"Annotate session for `<title>` cancelled."*
+3. Remove this session's entry from the pending registry.
 
 ## The coherence sweep
 
@@ -349,13 +381,13 @@ a block saying something false.
 
 **Fix exactly three things:**
 
-1. **References that no longer resolve** — a pointer to a removed block, a
+2. **References that no longer resolve** — a pointer to a removed block, a
    step number that shifted, a count or total that stopped adding up, a
    glossary term whose referent is gone.
-2. **Claims the change made false** — including claims that never name the
+3. **Claims the change made false** — including claims that never name the
    block you changed. This is the case the smart-drop step cannot catch,
    because it looks for references rather than for meaning.
-3. **Spec blocks the change made false** — a `choice` still offering an option
+4. **Spec blocks the change made false** — a `choice` still offering an option
    you just carried out, a `flowchart` or `sequence` drawing a path the change
    removed. Read every `spec` on the page, not just every `markdown`.
 
@@ -412,31 +444,31 @@ without it — never withhold a rewrite because you cannot phrase the note.
 
 When you receive a `WEBCOMPANION_EVENT` with a non-null `block_id`:
 
-1. Read your working `blocks.json`.  Find the block by `id`.
-2. **Generate rewritten markdown for the block that folds the answer or clarification into the prose.**  The document itself is the answer — do not echo the user's question back as Q-and-A.  No "Claude says:" panels, no chat threads.  After your rewrite, a reader who didn't see the user's comment should be able to read the new block and have no remaining question on the topic the comment raised.
-3. **Edge cases:**
+2. Read your working `blocks.json`.  Find the block by `id`.
+3. **Generate rewritten markdown for the block that folds the answer or clarification into the prose.**  The document itself is the answer — do not echo the user's question back as Q-and-A.  No "Claude says:" panels, no chat threads.  After your rewrite, a reader who didn't see the user's comment should be able to read the new block and have no remaining question on the topic the comment raised.
+4. **Edge cases:**
    - The comment is *off-topic* for the targeted block (the user's question references content that lives elsewhere): update the block to be clearer about its actual topic, or rewrite a *neighboring* block to address the question, or both.  Use judgement.
    - The `type` is `reject`: the user disagrees.  Either soften / withdraw the claim in the new prose, or hold the line with a reasoned explanation woven into the rewrite.  Don't pretend agreement; don't argue back in a side channel.  This mutates `blocks.json` and acks like any other path — the coherence sweep (see above) still applies before you write the `.ack`.
    - The user's `selected_text` no longer exists after a prior rewrite: treat it as historical context.  The current block content is what matters.
-4. **Touch only the blocks you actually need to change.** Do not re-emit unchanged blocks "for completeness" — the server derives `version` from a content-hash chain, so re-writing identical content is a true no-op, but re-emitting the same prose with cosmetic differences (a swapped synonym, a re-flowed sentence) inflates the version of a block the user didn't ask you to touch. Block ids stay the same; versions take care of themselves.
+5. **Touch only the blocks you actually need to change.** Do not re-emit unchanged blocks "for completeness" — the server derives `version` from a content-hash chain, so re-writing identical content is a true no-op, but re-emitting the same prose with cosmetic differences (a swapped synonym, a re-flowed sentence) inflates the version of a block the user didn't ask you to touch. Block ids stay the same; versions take care of themselves.
 
 Persist each changed markdown block via `blocks.update_block(doc, block_id, new_markdown)` (content-hash-safe — returns `False`, a true no-op, if identical), then `save_atomic` and re-push. (Use `blocks.update_spec_block` for `sequence`/`diagram` spec blocks instead — see "Diagram block-rewrite contract".)
 
 When `block_id` is `null` (general comment):
 
-1. Read the comment text.  It will be a directive that applies across blocks ("make this shorter", "more casual tone", "remove the second paragraph", etc.).
-2. Update *only the blocks that actually need updating* to apply the directive. Don't re-emit untouched blocks.
-3. Run the coherence sweep (see "The coherence sweep" above — a cross-document directive is exactly the kind of change that can orphan a reference elsewhere), then save and ack as above.
+2. Read the comment text.  It will be a directive that applies across blocks ("make this shorter", "more casual tone", "remove the second paragraph", etc.).
+3. Update *only the blocks that actually need updating* to apply the directive. Don't re-emit untouched blocks.
+4. Run the coherence sweep (see "The coherence sweep" above — a cross-document directive is exactly the kind of change that can orphan a reference elsewhere), then save and ack as above.
 
 ## Diagram block-rewrite contract
 
 For `WEBCOMPANION_EVENT` payloads that target a `kind: "sequence"` block, the rewrite contract has three deltas from the markdown contract above:
 
-1. **Whole-diagram by default (`step_id: null`)** — the usual case, and now the only one the UI produces. A picture is commented as a whole from the card header, so read the comment against the whole spec and apply it across steps as needed: restructure phases, reorder steps, add/remove actors, retitle. Analogous to general comments with `block_id: null` in the markdown contract. The user is pointing at the diagram; work out from the words which part they mean.
+2. **Whole-diagram by default (`step_id: null`)** — the usual case, and now the only one the UI produces. A picture is commented as a whole from the card header, so read the comment against the whole spec and apply it across steps as needed: restructure phases, reorder steps, add/remove actors, retitle. Analogous to general comments with `block_id: null` in the markdown contract. The user is pointing at the diagram; work out from the words which part they mean.
 
-2. **Targeted when `step_id` IS present.** Comments made before the header-only rule still carry one, and a re-emitted event can bring one back. A comment on step `s4` ("does this fire once per click, or can it batch?") rewrites just that step's `label` and/or `sub`. Other steps untouched. Step ids stay stable across rewrites; new steps mint fresh ids via `next_step_id`.
+3. **Targeted when `step_id` IS present.** Comments made before the header-only rule still carry one, and a re-emitted event can bring one back. A comment on step `s4` ("does this fire once per click, or can it batch?") rewrites just that step's `label` and/or `sub`. Other steps untouched. Step ids stay stable across rewrites; new steps mint fresh ids via `next_step_id`.
 
-3. **Reject on a step** — either soften/withdraw the claim by rewriting the step, or hold the line by rewriting the sub-caption with reasoning. Don't drop the step silently. Same "fold the answer into the prose" spirit; here the "prose" is the spec.
+4. **Reject on a step** — either soften/withdraw the claim by rewriting the step, or hold the line by rewriting the sub-caption with reasoning. Don't drop the step silently. Same "fold the answer into the prose" spirit; here the "prose" is the spec.
 
 Persist updates via `blocks.update_spec_block(doc, block_id, new_spec)` — returns `True` only on real change (canonical-JSON content hash). Then `save_atomic` and re-push. Watcher re-emit safety is preserved: `webcompanion ack` is idempotent.
 
@@ -449,14 +481,14 @@ Persist updates via `blocks.update_spec_block(doc, block_id, new_spec)` — retu
 where it says step ids. Neither the chart nor the pflow source pane is a click
 target, so comments arrive whole-block.
 
-1. **Whole-flowchart by default (`step_id: null`)** — the usual case, and now
+2. **Whole-flowchart by default (`step_id: null`)** — the usual case, and now
    the only one the UI produces. Apply across the spec as needed: add/remove
    nodes, rewire edges, retitle, fix a `ref`. Analogous to general comments
    with `block_id: null` in the markdown contract. When the block was authored
    as `spec.source`, edit the source line the comment is about and let it
    recompile — the reader can see which line drew which shape, so they will
    often name it in words.
-2. **Targeted when `step_id` IS present** (a pre-existing mark, or one a
+3. **Targeted when `step_id` IS present** (a pre-existing mark, or one a
    re-emitted event brought back). A comment on node `f` ("does this decision
    also fire on a partial save?") rewrites just that node's
    `label`/`sub`/`method`/`ref`/`href`, or the edges touching it if the branch
@@ -465,7 +497,7 @@ target, so comments arrive whole-block.
    just because you touched it. (The DOM carries the id as `data-node-id`, but
    it arrives on the wire in the `step_id` field — there is no separate
    `node_id` field.)
-3. **Reject on a node** — either soften/withdraw the claim by rewriting the
+4. **Reject on a node** — either soften/withdraw the claim by rewriting the
    node, or hold the line by rewriting its `sub` with reasoning. Don't drop
    the node silently.
 
@@ -478,8 +510,8 @@ change (drop `kind`/`spec`, set `markdown`) exactly as for other spec blocks.
 
 When you handle a `WEBCOMPANION_EVENT` that targets a markdown block:
 
-1. After composing the rewritten block markdown, apply the **drop rule**: any glossary entry whose `term` no longer appears (case-sensitive whole-word) in any block is dropped. Use `blocks.drop_unused_terms(doc)` — it does this in one call.
-2. Apply the **add rule**: if the rewrite introduces a new project-specific identifier that wasn't already in the glossary and that meets the comprehension-blocker test (see `references/pushing.md` § "When to emit a glossary entry"), append a new entry.
+2. After composing the rewritten block markdown, apply the **drop rule**: any glossary entry whose `term` no longer appears (case-sensitive whole-word) in any block is dropped. Use `blocks.drop_unused_terms(doc)` — it does this in one call.
+3. Apply the **add rule**: if the rewrite introduces a new project-specific identifier that wasn't already in the glossary and that meets the comprehension-blocker test (see `references/pushing.md` § "When to emit a glossary entry"), append a new entry.
 
 Do not re-extract the whole glossary on every rewrite. The common case — a rewrite that doesn't touch the term set — produces no glossary mutation.
 
@@ -496,15 +528,15 @@ Just process the event normally each time; the system handles dupe detection at 
 
 If the user says "scrap it" / "respond in terminal" / "stop annotating" / equivalent *while a watcher is armed* (the pending registry has entries):
 
-1. Read `~/.claude/annotate/pending-${CLAUDE_CODE_SESSION_ID}.json`.
-2. For each entry, cancel the session: `webcompanion end --sid <sid> --cancel`
+2. Read `~/.claude/annotate/pending-${CLAUDE_CODE_SESSION_ID}.json`.
+3. For each entry, cancel the session: `webcompanion end --sid <sid> --cancel`
    ```bash
    printf '{"reason":"user-cancelled-terminal"}' > "$STATE_DIR/cancelled"
    ```
    The server's existing `_terminal_state` check only tests existence, so the body is optional but useful for debugging.
-3. The watcher detects the marker on its next tick and emits `WEBCOMPANION_CANCELLED`. You'll get a task-notification for each.
-4. Handle each cancellation per Mode D and clean up the registry as that step instructs.
-5. Continue with whatever the user actually wanted.
+4. The watcher detects the marker on its next tick and emits `WEBCOMPANION_CANCELLED`. You'll get a task-notification for each.
+5. Handle each cancellation per Mode D and clean up the registry as that step instructs.
+6. Continue with whatever the user actually wanted.
 
 ## Edge cases
 
