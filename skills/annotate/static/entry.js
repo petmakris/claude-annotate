@@ -34,6 +34,9 @@ const JS = [
   "markdown-it.min.js",
   "diff.js",
   "script.js",
+  // After script.js: it mounts relative to .page-header and reads
+  // window.WebCompanion, which compat.js installs before this list runs.
+  "progress.js",
   "export.js",
   "subunits.js",
   "highlighter.js",

@@ -2942,3 +2942,68 @@ body.read-only .menu-readonly { display: inline-flex; }
    highlighter.js already maintains aria-pressed here, so this rule is the
    entire feature — no JavaScript knows about it. */
 #highlighter-toggle:not([aria-pressed="true"]) { display: none; }
+
+/* === The narration panel ===============================================
+   What Claude is doing, while the page waits. Same anchor and sticky
+   behaviour as .busy-banner (it sits directly under the header and pins to
+   the top of the screen), but deliberately NOT the accent ribbon: this is
+   information to read, not an alarm. The accent survives as a left edge,
+   because the ribbon's colour was the only thing saying "you cannot submit
+   another round" and that meaning must not be lost with its background. */
+#progress-panel {
+  position: sticky;
+  top: 0;
+  z-index: 19;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 0 10px 10px;
+  color: var(--text);
+  font-size: 13px;
+}
+#progress-panel[data-state="done"] { border-left-color: var(--status-live-fg); }
+body.read-only #progress-panel { display: none; }
+
+.pg-head { display: flex; align-items: center; gap: 9px; padding: 10px 13px; }
+.pg-now { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+          white-space: nowrap; }
+.pg-count, .pg-timer {
+  font-family: var(--font-code); font-size: 11px; color: var(--text-dim);
+  flex: none;
+}
+.pg-mark { width: 14px; height: 14px; flex: none; display: inline-flex;
+           align-items: center; justify-content: center; }
+.pg-spin {
+  border: 2px solid var(--accent); border-top-color: transparent;
+  border-radius: 50%; animation: busy-spin 0.8s linear infinite;
+}
+.pg-tick { color: var(--status-live-fg); font-size: 14px; }
+.pg-caret {
+  background: none; border: 0; padding: 2px 4px; cursor: pointer;
+  color: var(--text-dim); display: inline-flex; align-items: center; flex: none;
+}
+.pg-caret svg { width: 14px; height: 14px; fill: none; stroke: currentColor;
+                stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#progress-panel[data-open="0"] .pg-caret svg { transform: rotate(180deg); }
+
+#progress-feed {
+  border-top: 1px solid var(--border);
+  padding: 7px 13px 10px;
+  max-height: 190px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+#progress-panel[data-open="0"] #progress-feed { display: none; }
+.pg-line {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 3px 0; color: var(--text-dim); line-height: 1.5;
+}
+.pg-line .t {
+  font-family: var(--font-code); font-size: 10.5px; color: var(--text-dim);
+  flex: none; width: 38px; font-variant-numeric: tabular-nums; opacity: .75;
+}
+.pg-line.now { color: var(--text); font-weight: 500; }
