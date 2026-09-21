@@ -31,6 +31,7 @@
 
   const DOC = "__doc__";
   const PREV = "__prev__";
+  const PROGRESS = "__progress__";
 
   // ── Assembling the old /raw payload ──────────────────────────────────
   //
@@ -207,6 +208,15 @@
         else if (!k.startsWith("__")) blocks[k] = v;
       }
       if (ev.kind === "event-acked") { if (busyLocal) setBusyLocal(false); return; }
+      // The narration trail is written WHILE the page is locked, so it must
+      // not be mistaken for the work finishing. Every other item change still
+      // unlocks — that fallback exists for a daemon too old to send
+      // `event-acked` and is not being weakened, only made specific.
+      if (ev.anchor === PROGRESS) {
+        document.dispatchEvent(new CustomEvent("annotate:progress",
+                                               { detail: { version: ev.version } }));
+        return;
+      }
       if (ev.kind === "item" && busyLocal) setBusyLocal(false);
       handler({ finished: false, busy: busyLocal, consumed: [], blocks, threads }, before);
     };
