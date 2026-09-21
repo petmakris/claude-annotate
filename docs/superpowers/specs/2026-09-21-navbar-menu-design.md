@@ -109,7 +109,10 @@ All four `.header-sep` spans go. There is nothing left to separate.
    with an empty query.** An outside click while a query is live does not
    close it: the document underneath is filtered, and collapsing the field
    would hide the reason. `search.js:170` already handles Esc against the
-   input.
+   input. The takeover adds **no** counter of its own: `search.js:121` already
+   renders `Showing N of M blocks` into `main.prose`, and a second count in the
+   bar would be two answers to one question. (Corrected 2026-09-21 while
+   writing the plan; the first draft of this decision said otherwise.)
 
 10. **The menu gets no keyboard shortcut, and Share is now two clicks.** Every
     letter worth having is taken (`j` `k` `c` `f` `g` `/`), and the menu holds
