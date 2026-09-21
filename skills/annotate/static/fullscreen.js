@@ -28,9 +28,14 @@
     '<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/>' +
     '<line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
 
+  // Same reason as export.js's label slot: this element used to be an icon and
+  // nothing else, so innerHTML was its icon. In a menu row it is an icon and a
+  // label, and the label must survive the swap.
+  const iconSlot = btn.querySelector("[data-icon]") || btn;
+
   function sync() {
     const on = !!document.fullscreenElement;
-    btn.innerHTML = on ? ICON_EXIT : ICON_ENTER;
+    iconSlot.innerHTML = on ? ICON_EXIT : ICON_ENTER;
     btn.title = on ? "Exit full screen" : "Full screen — hide the browser chrome";
     btn.setAttribute("aria-label", btn.title);
     btn.setAttribute("aria-pressed", on ? "true" : "false");

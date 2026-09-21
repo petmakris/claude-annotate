@@ -316,19 +316,24 @@ body.exported .export-foot {
   function wire() {
     const btn = document.getElementById("export-btn");
     if (!btn) return;
+    // As a bar button this element's whole content was the word "Share", so
+    // writing its textContent was the same as writing its label. As a menu row
+    // it is an icon AND a label, and textContent would eat the icon. The slot
+    // is optional so a caller that never adds one keeps today's behaviour.
+    const label = btn.querySelector("[data-label]") || btn;
     btn.addEventListener("click", async () => {
       if (btn.disabled) return;
-      const label = btn.textContent;
+      const original = label.textContent;
       btn.disabled = true;
-      btn.textContent = "Preparing…";
+      label.textContent = "Preparing…";
       try {
         save(await buildDocument());
-        btn.textContent = "Saved ✓";
+        label.textContent = "Saved ✓";
       } catch (e) {
-        btn.textContent = "Failed";
+        label.textContent = "Failed";
         if (window.console) console.error("export failed", e);
       }
-      setTimeout(() => { btn.textContent = label; btn.disabled = false; }, 1600);
+      setTimeout(() => { label.textContent = original; btn.disabled = false; }, 1600);
     });
   }
 
