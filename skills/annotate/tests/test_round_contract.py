@@ -217,7 +217,7 @@ def test_a_comment_that_answers_a_choice_resolves_it():
     assert marker in doc, \
         "the comment path does not say a prose answer resolves the choice"
     section = doc[doc.index(marker):]
-    section = section[:section.index("\n3. For each remaining touched block")]
+    section = section[:section.index("\n4. For each remaining touched block")]
     assert "resolve it in this same pass" in section, \
         "the rule does not require resolving in the same pass"
 

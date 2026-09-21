@@ -96,7 +96,7 @@ other skill and IDE plugin that talks to it, and kept alive by launchd (macOS)
 or systemd (Linux). annotate ships no server of its own: it renders its blocks,
 pushes them as items, and registers its own front end as the session's
 renderer. There is nothing to start per session, no port to negotiate, and the
-daemon outlives every conversation using it.
+daemon outlives every conversation using it. While handling an event, narrate what you are doing with `python3 -m skills.annotate.progress` — the page shows it live, and the reader has nothing else to go on; see `references/handling-events.md` § Narrating while you work.
 
 Sessions persist **until explicitly deleted**, at
 `~/.claude/webcompanion/workspaces/annotate/<sid>/`, addressed by `slug` in URLs

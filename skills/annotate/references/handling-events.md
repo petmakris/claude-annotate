@@ -59,6 +59,37 @@ Two event types are **not** content feedback and still arrive on their own:
 rework; handle them as a `comment` with `disagree` and a `delete`
 respectively.
 
+## Narrating while you work
+
+The reader is looking at a page with a spinner on it. Between the moment they
+comment and the moment you re-push, the only thing they can learn about what is
+happening is what you tell them. Before the daemon cutover the page captioned
+its spinner from a tool-name hook; that hook is gone and the caption was dead
+for months. This is its replacement, and it is deliberately not automatic —
+you write the lines, so they say something a tool name cannot.
+
+Write a line with:
+
+    python3 -m skills.annotate.progress --sid "$WC_SID" --text "Reading how anchors resolve"
+
+and close the trail when the answer is pushed:
+
+    python3 -m skills.annotate.progress --sid "$WC_SID" --done
+
+A *step* is a distinct piece of work — a search, a pass of reading, a command
+run, a rewrite — **not an individual tool call**. Three greps answering one
+question are one step and get one line.
+
+Narrate **before each step, not after it.** A line written after a ninety-second
+search arrives ninety seconds too late: the silence it was supposed to fill has
+already happened. This is the single rule that makes the feature work.
+
+The line is prose the reader sees. Say what you are doing and, where it is not
+obvious, why — "Looking for where the currency conversion actually happens"
+beats "Searching". Never paste output, secrets, or tokens into it.
+
+These commands are cheap and must never fail the turn: if one errors, carry on.
+
 ### `WEBCOMPANION_EVENT` (per-comment submission)
 
 1. Parse the banner: `skill`, `sid`, `event_id`.
@@ -74,10 +105,12 @@ respectively.
    - `prefix` / `suffix` — optional: surrounding context that pins down *which* occurrence of `selected_text` was highlighted when it appears more than once in the block.
    - For `type == "dismiss"`: `block_id` is the block to remove; `text` is empty and ignored. Jump to the `dismiss` subsection below.
    - `images` — array of `{token, path}` entries (or empty).  When non-empty, `Read` each `path` before composing your rewrite so you see the screenshots.
-3. **Apply the block-rewrite contract** (see "Block-rewrite contract" below).
-4. Save the updated `blocks.json` atomically (tmp → rename).
-5. Acknowledge the event: `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"`.
-6. End your turn.  **No terminal output.**  The watcher remains armed.
+3. Narrate that you have it: `python3 -m skills.annotate.progress --sid "$WC_SID" --text "Read your comment on <block_id>" --event-id "<event_id>"`.
+4. **Apply the block-rewrite contract** (see "Block-rewrite contract" below).
+5. Save the updated `blocks.json` atomically (tmp → rename).
+6. Close the trail: `python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
+7. Acknowledge the event: `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"`.
+8. End your turn.  **No terminal output.**  The watcher remains armed.
 
 ### `WEBCOMPANION_EVENT` with `type: "choice"`
 
@@ -86,12 +119,14 @@ The user answered a choice block. `selected_options` holds the picked id(s) — 
 **Pick (with or without a note):**
 
 1. Read your working `blocks.json`, find the block by `block_id`.
-2. **Resolve the choice into a decision** — convert the block from `kind: "choice"` to a markdown block whose prose states the decision, folds in the reasoning, AND folds in the note when present (e.g. *"Decision: Koumbaras, lowercased per your note…"*). The options disappear; the answer is final. Use `blocks.convert_block_to_markdown(doc, block_id, markdown)` — it sets the markdown, drops `kind`/`spec`, and is content-hash-safe (a no-op rewrite doesn't bump the version).
-3. **Continue the task** — the pick drives the next step. Append follow-up blocks to `blocks.json` and/or take the implied action, as the decision warrants.
-4. Run the coherence sweep (see below — this path is the universal rule's highest-risk case, since it both resolves the block and appends new ones).
-5. Re-push the document (`references/pushing.md` § Push the document, with `--slug "$WC_SLUG"`), then run `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"`. End your turn. No terminal output; the watcher stays armed.
+2. Narrate that you have it: `python3 -m skills.annotate.progress --sid "$WC_SID" --text "Read your choice answer" --event-id "<event_id>"`.
+3. **Resolve the choice into a decision** — convert the block from `kind: "choice"` to a markdown block whose prose states the decision, folds in the reasoning, AND folds in the note when present (e.g. *"Decision: Koumbaras, lowercased per your note…"*). The options disappear; the answer is final. Use `blocks.convert_block_to_markdown(doc, block_id, markdown)` — it sets the markdown, drops `kind`/`spec`, and is content-hash-safe (a no-op rewrite doesn't bump the version).
+4. **Continue the task** — the pick drives the next step. Append follow-up blocks to `blocks.json` and/or take the implied action, as the decision warrants.
+5. Run the coherence sweep (see below — this path is the universal rule's highest-risk case, since it both resolves the block and appends new ones).
+6. Close the trail: `python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
+7. Re-push the document (`references/pushing.md` § Push the document, with `--slug "$WC_SLUG"`), then run `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"`. End your turn. No terminal output; the watcher stays armed.
 
-**Note-only (`selected_options` is `[]`, `text` non-empty):** the user rejected the slate and gave a direction instead. Do NOT resolve. Either rewrite the block's spec with re-proposed options that follow the direction (`blocks.update_spec_block` — the version bumps), or, when the note itself settles the question, resolve to a decision paragraph built from the note. Then continue as in steps 3–5 above.
+**Note-only (`selected_options` is `[]`, `text` non-empty):** the user rejected the slate and gave a direction instead. Do NOT resolve. Either rewrite the block's spec with re-proposed options that follow the direction (`blocks.update_spec_block` — the version bumps), or, when the note itself settles the question, resolve to a decision paragraph built from the note. Then continue as in steps 4–7 above.
 
 Multi-select: the decision prose names all picked options. There is no `reject` on a choice — an empty pick always carries a note.
 
@@ -102,12 +137,14 @@ Only reachable from a browser tab opened before the round rework — the current
 **Delete is not disagreement.** A disagreement means "I think this is wrong" — you soften, withdraw, or defend the claim, and the content stays. A delete means "this is *irrelevant*" — you remove it and stop carrying it forward; do not argue, defend, or re-add it.
 
 1. Read your working `blocks.json`.
-2. `blocks.remove_block(doc, block_id)` — deletes the block. It is a no-op if the block is already gone (watcher re-apply safety).
-3. **Smart-drop:** scan the surviving blocks. Re-thread any that referenced the removed one — renumber steps, cut or rewrite dangling references — so the document still reads coherently without it. Use `blocks.update_block` / `blocks.update_spec_block` per touched block; touch only blocks that actually referenced the removed one.
-4. `blocks.drop_unused_terms(doc)` — drop any glossary entry whose term was last used by the removed block.
-5. Treat the removed content as **out of scope** for the rest of this turn and going forward: do not reintroduce it, and exclude it when acting on the plan.
-6. Run the coherence sweep (see below — the same pre-ack rule as every other path; dismiss is legacy, not exempt).
-7. Re-push the document with `--slug "$WC_SLUG"`, then run `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"`. End the turn. No terminal output; the watcher stays armed.
+2. Narrate that you have it: `python3 -m skills.annotate.progress --sid "$WC_SID" --text "Read the dismiss request for <block_id>" --event-id "<event_id>"`.
+3. `blocks.remove_block(doc, block_id)` — deletes the block. It is a no-op if the block is already gone (watcher re-apply safety).
+4. **Smart-drop:** scan the surviving blocks. Re-thread any that referenced the removed one — renumber steps, cut or rewrite dangling references — so the document still reads coherently without it. Use `blocks.update_block` / `blocks.update_spec_block` per touched block; touch only blocks that actually referenced the removed one.
+5. `blocks.drop_unused_terms(doc)` — drop any glossary entry whose term was last used by the removed block.
+6. Treat the removed content as **out of scope** for the rest of this turn and going forward: do not reintroduce it, and exclude it when acting on the plan.
+7. Run the coherence sweep (see below — the same pre-ack rule as every other path; dismiss is legacy, not exempt).
+8. Close the trail: `python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
+9. Re-push the document with `--slug "$WC_SLUG"`, then run `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"`. End the turn. No terminal output; the watcher stays armed.
 
 A dismissed `choice` or `sequence` block is removed whole-block the same way — there is no step-level dismiss.
 
@@ -138,7 +175,8 @@ block-scope one from the card header. The payload carries the whole batch:
 Apply the WHOLE round in one pass — this is the entire point of batching:
 
 1. Read your working `blocks.json`. Group reactions by `block_id`.
-2. **Apply `scope: "block"` reactions first**, since a block-level `delete`
+2. Narrate that you have it: `python3 -m skills.annotate.progress --sid "$WC_SID" --text "Read your round of feedback" --event-id "<event_id>"`.
+3. **Apply `scope: "block"` reactions first**, since a block-level `delete`
    makes that block's unit reactions moot:
    - **`delete`** — `blocks.remove_block(doc, block_id)`, then smart-drop:
      re-thread surviving blocks that referenced it (renumber steps, cut or
@@ -164,7 +202,7 @@ Apply the WHOLE round in one pass — this is the entire point of batching:
      the card unresolved re-asks a question they consider closed. The reverse
      also holds: acting on the decision without resolving the card is the
      failure, not a missing extra step.
-3. For each remaining touched block, compose ONE new markdown that applies all
+4. For each remaining touched block, compose ONE new markdown that applies all
    of its unit reactions together:
    - **`delete`** — cut that sub-unit (the bullet / paragraph / row / fence
      matching `selected_text`, or the node matching `step_id`) from the
@@ -200,13 +238,14 @@ Three rules govern compact, and all three matter:
 - **Compact is lossy, and that is accepted.** Do not compensate by writing
   longer surviving sentences than the material warrants, and do not refuse to
   compact because detail would be lost.
-4. Persist each changed block via `blocks.update_block(doc, block_id,
+5. Persist each changed block via `blocks.update_block(doc, block_id,
    new_markdown)` (content-hash-safe), then `blocks.drop_unused_terms(doc)`.
-5. **Run the coherence sweep** — see "The coherence sweep" below (it's the
+6. **Run the coherence sweep** — see "The coherence sweep" below (it's the
    universal pre-ack rule, not a round-only step). This is not optional and it
    is not conditional on the round having deleted anything.
-6. ONE `blocks.save_atomic`, then ONE re-push (`--slug "$WC_SLUG"`) — the daemon holds the document now, so a save that is not pushed changes nothing the user can see.
-7. Run `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"` ONCE. End your turn. No terminal
+7. Close the trail: `python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
+8. ONE `blocks.save_atomic`, then ONE re-push (`--slug "$WC_SLUG"`) — the daemon holds the document now, so a save that is not pushed changes nothing the user can see.
+9. Run `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"` ONCE. End your turn. No terminal
    output; the watcher stays armed.
 
 Cross-item coherence is required: if a round deletes two bullets and
