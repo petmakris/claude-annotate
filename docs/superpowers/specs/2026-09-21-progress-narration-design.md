@@ -52,7 +52,7 @@ Claude is doing, and a panel that shows it.
 |---|---|---|
 | Per-item SSE delivery | the daemon's `/stream`, shimmed by `compat.js:192` (`toOldShape`) | Progress needs no new transport. An item write already reaches the page as a delta frame within milliseconds. |
 | Single-item write route | `PUT /s/<sid>/items/<anchor>`, exercised by `tests/test_browser_review.py:86` | A progress write is one ordinary item write. No daemon change, no new route, works against the installed v1.0.0. |
-| `__doc__.order` drives rendering | `skills/annotate/push.py:12` | An anchor absent from `order` is never rendered as a block. The progress item is invisible to the document **by construction**, not by a filter someone has to remember. |
+| The `__`-prefix rule | `compat.js:51` and `:206` | **Corrected during planning:** an anchor absent from `order` still renders (`compat.js:48-52` deliberately appends unordered items so a stored block cannot go invisible). The real guarantee is the prefix — `compat.js:51` skips `__`-prefixed ids when building the block list, and `:206` excludes them from the version map handed to `script.js`. `__progress__` is invisible to the document because of its name, which is a stronger and already-enforced rule. |
 | Reserved double-underscore anchors | `__doc__`, `__prev__` (`push.py:36`, `:14`) | The convention for "an item that is not a block" already exists and is already understood by the code that reads items. |
 | Preserving an item across a replace | `push.py:148-151` re-inserts `__prev__` after reading existing items | The exact mechanism `__progress__` needs, already written and already tested. |
 | The busy ribbon's geometry | `.busy-banner` (`style.css:1038`) — sticky, `top: 0`, under the header, `max-width: var(--content-max)` | The panel is this object with a body. Its position was already argued out; that argument is not reopened. |
@@ -186,6 +186,15 @@ other page modules, from `entry.js`'s `JS` list.
 
 `event_id` is carried so a stale panel from a previous round is recognisable
 rather than silently shown against new work.
+
+**How the page learns a line arrived.** `compat.js:207` strips `__`-prefixed
+anchors out of the version map before `script.js` sees it, so `script.js` never
+hears about a progress write — which is correct, and means the panel needs its
+own signal. `compat.js` gains a `annotate:progress` DOM event, mirroring the
+`annotate:busy` event it already dispatches at `:189` and that `subunits.js:836`
+already consumes. `progress.js` listens for it and re-reads the item through
+`window.WebCompanion.fetchJSON("raw?block=__progress__")`, a route `compat.js`
+already serves.
 
 ## Deletions
 
