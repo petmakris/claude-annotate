@@ -160,13 +160,23 @@ def test_the_event_id_is_carried_when_given(sid):
 
 
 def test_the_trail_is_capped_so_a_long_session_cannot_grow_forever(sid):
-    for i in range(progress.MAX_STEPS + 10):
-        progress.note(sid, f"step {i}")
+    # Seeded in one write rather than looped: each note() is a GET plus a PUT,
+    # and 210 of them is 420 round trips to prove one bound — the kind of slow
+    # test that gets deleted rather than fixed.
+    import time as _t
+    now = int(_t.time())
+    _call(_daemon_url(), "PUT", f"/s/{sid}/items/{progress.ANCHOR}", {
+        "id": progress.ANCHOR, "kind": "progress", "state": "working",
+        "started_at": now, "ended_at": None, "event_id": None,
+        "steps": [{"t": now, "text": f"step {i}"} for i in range(progress.MAX_STEPS)],
+    })
+    progress.note(sid, "the newest line")
     steps = _stored(sid)["steps"]
-    assert len(steps) == progress.MAX_STEPS
+    assert len(steps) == progress.MAX_STEPS, "the trail grows without bound"
     # Oldest dropped, newest kept — the reader cares about what is happening
     # now, and the newest line is the one the panel pins to.
-    assert steps[-1]["text"] == f"step {progress.MAX_STEPS + 9}"
+    assert steps[-1]["text"] == "the newest line"
+    assert steps[0]["text"] == "step 1", "the wrong end of the trail was dropped"
 ```
 
 - [ ] **Step 2: Run it to make sure it fails**
@@ -534,16 +544,25 @@ ANCHOR = "__progress__"
 
 
 class TestTheUnlockRuleExemptsTheTrail(unittest.TestCase):
-    def test_the_anchor_is_named_in_the_unlock_guard(self):
-        # The rule lives on one line; the exemption must be on it, not in a
-        # comment nearby.
-        m = re.search(r'if \(ev\.kind === "item".*?\n', COMPAT)
-        self.assertIsNotNone(m, "the item-unlock rule is gone or reshaped")
-        self.assertIn(ANCHOR, m.group(0),
-                      "a progress write still clears the page lock")
+    def test_the_anchor_has_one_spelling(self):
+        self.assertIn('const PROGRESS = "%s"' % ANCHOR, COMPAT,
+                      "the anchor is retyped instead of named once")
+
+    def test_the_guard_exists(self):
+        self.assertIn("ev.anchor === PROGRESS", COMPAT,
+                      "nothing distinguishes a progress write from a block write")
+
+    def test_the_guard_comes_BEFORE_the_unlock(self):
+        # Ordering is the whole property. A guard placed after the unlock line
+        # would not prevent the unlock; it would just run afterwards.
+        guard = COMPAT.index("ev.anchor === PROGRESS")
+        unlock = COMPAT.index('ev.kind === "item" && busyLocal')
+        self.assertLess(guard, unlock,
+                        "a progress write still clears the page lock")
 
     def test_the_lock_is_still_cleared_by_an_ordinary_item(self):
         # The fallback this rule exists for must survive the exemption.
+        self.assertIn('ev.kind === "item" && busyLocal', COMPAT)
         self.assertIn("setBusyLocal(false)", COMPAT)
 
 
@@ -557,9 +576,10 @@ class TestThePanelGetsItsOwnSignal(unittest.TestCase):
         self.assertIn('new CustomEvent("annotate:progress"', COMPAT)
 
     def test_the_signal_is_scoped_to_the_progress_anchor(self):
+        # Dispatched from inside the guard, not for every item change.
         idx = COMPAT.index("annotate:progress")
         window = COMPAT[max(0, idx - 400):idx]
-        self.assertIn(ANCHOR, window,
+        self.assertIn("ev.anchor === PROGRESS", window,
                       "every item change dispatches a progress event")
 ```
 
