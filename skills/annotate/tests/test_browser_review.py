@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -552,3 +553,60 @@ def test_escape_lifts_the_filter_from_anywhere(page):
     assert page.evaluate(
         "() => document.querySelector('.page-header').dataset.searching") == "0", \
         "the bar did not go back to rest"
+
+
+def test_the_watcher_state_reaches_the_menu_buttons_name(page):
+    """The spec's own Risks section: "entry.js's watcher polling is the least
+    test-covered thing being rewired. It has no browser test today. Adding one
+    is in scope." This is that test, and it is also the only way to see the
+    accessible-name bug — `aria-label` WINS over `title`, so a static
+    aria-label="Menu" swallowed every state entry.js wrote, and a source check
+    that greps for `btn.title =` reads as if the state were announced.
+
+    The fixture's session has no watcher, so the stale path is simply the page
+    as it loads. The live path is driven by rewriting what /poll reports:
+    fetched for real and re-served with one field changed, so nothing else the
+    payload carries is invented here.
+    """
+    page.wait_for_function(
+        "() => document.getElementById('menu-toggle')"
+        ".classList.contains('watcher-stale')", timeout=10000)
+    stale = page.evaluate("""() => { const b = document.getElementById('menu-toggle');
+      return { aria: b.getAttribute('aria-label'), title: b.title,
+               live: b.classList.contains('watcher-live'),
+               announces: document.getElementById('menu-status-title')
+                 .getAttribute('aria-live') }; }""")
+    assert not stale["live"], "an unwatched page painted the live dot"
+    assert "nothing is watching" in stale["aria"], (
+        "the menu button announces %r while the dot says unwatched — the dot "
+        "is a colour, and its panel sibling is aria-hidden, so this name is "
+        "the only way a screen reader can learn the state" % stale["aria"])
+    assert stale["announces"] == "polite", (
+        "the status line does not announce a change while the panel is open")
+
+    def as_live(route):
+        resp = route.fetch()
+        try:
+            data = resp.json()
+        except Exception:                            # noqa: BLE001
+            route.fulfill(response=resp)
+            return
+        data["watcher_seen_at"] = time.time()
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps(data))
+
+    page.route("**/poll", as_live)
+    page.reload()
+    page.wait_for_selector("section.block")
+    page.wait_for_function(
+        "() => document.getElementById('menu-toggle')"
+        ".classList.contains('watcher-live')", timeout=10000)
+    live = page.evaluate("""() => { const b = document.getElementById('menu-toggle');
+      return { aria: b.getAttribute('aria-label'),
+               stale: b.classList.contains('watcher-stale'),
+               says: document.getElementById('menu-status-title').textContent }; }""")
+    assert not live["stale"], "both watcher classes are on the button at once"
+    assert "a session is watching" in live["aria"], (
+        "the class flipped to live and the accessible name did not follow: "
+        "%r" % live["aria"])
+    assert live["says"] == "Watching", live["says"]

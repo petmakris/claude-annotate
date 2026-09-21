@@ -294,9 +294,17 @@ async function boot() {
     // read-only viewer could not run the command anyway.
     if (resumeEl) resumeEl.hidden = live || !resumeCommand;
     // The button says what it is for at a glance, in a tooltip, without
-    // opening the menu.
+    // opening the menu — and says the same thing to a screen reader, which is
+    // why aria-label is written here too rather than left static in the shell.
+    // A static aria-label WINS the accessible-name computation over title, so
+    // a button labelled "Menu" announced exactly that however the dot was
+    // painted: the pill this replaced was the page's only worded
+    // Watching/Unwatched signal, and its replacement is a colour. Its panel
+    // sibling is aria-hidden, so without this the state is unreachable without
+    // opening the menu, and a change is never announced at all.
     btn.title = live ? "Menu — a session is watching this page"
                      : "Menu — nothing is watching this page";
+    btn.setAttribute("aria-label", btn.title);
   }
 
   async function checkWatcherHealth() {

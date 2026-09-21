@@ -31,7 +31,7 @@ export const SHELL_HTML = `\
 <div id="menu-pop" class="menu-pop" data-pane="root" role="dialog" aria-label="Menu" hidden>\
 <div class="menu-pane" data-pane-name="root">\
 <div class="menu-status" id="menu-status"><span class="menu-status-dot" aria-hidden="true"></span>\
-<div class="menu-status-text"><div class="menu-status-title" id="menu-status-title">Checking…</div>\
+<div class="menu-status-text"><div class="menu-status-title" id="menu-status-title" aria-live="polite">Checking…</div>\
 <div class="menu-status-sub" id="menu-status-sub"></div>\
 <div class="menu-resume" id="menu-resume" hidden>\
 <p class="resume-hint">Paste this in any terminal to open <code id="resume-cwd"></code> and attach a live session here:</p>\

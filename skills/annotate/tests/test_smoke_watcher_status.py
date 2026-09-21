@@ -9,9 +9,12 @@ resume popover, which was the same subject behind a second button.
 import unittest
 from pathlib import Path
 
+from .shell_source import shell_html
+
 STATIC = Path(__file__).resolve().parents[1] / "static"
 ENTRY = (STATIC / "entry.js").read_text()
 CSS = (STATIC / "style.css").read_text()
+SHELL = shell_html()
 
 
 class TestTheBadgeIsGone(unittest.TestCase):
@@ -29,6 +32,17 @@ class TestTheDotCarriesTheState(unittest.TestCase):
     def test_the_dot_has_a_rule_for_each_state(self):
         self.assertIn(".menu-btn.watcher-live::after", CSS)
         self.assertIn(".menu-btn.watcher-stale::after", CSS)
+
+    def test_the_state_reaches_the_buttons_accessible_name(self):
+        # A colour is not a signal for everyone, and the dot's only worded
+        # sibling is inside the panel and aria-hidden. aria-label BEATS title
+        # in the accessible-name computation, so writing only the title left
+        # the button announcing the static "Menu" in every state. Measured in
+        # test_browser_review.py; this is the deletion guard.
+        self.assertIn('btn.setAttribute("aria-label", btn.title)', ENTRY)
+
+    def test_a_change_of_state_is_announced(self):
+        self.assertIn('id="menu-status-title" aria-live="polite"', SHELL)
 
 
 class TestTheBlockCarriesTheSentence(unittest.TestCase):
