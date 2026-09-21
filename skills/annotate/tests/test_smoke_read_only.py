@@ -78,8 +78,11 @@ def test_the_page_says_it_is_read_only():
     # an owner-only edit, so nothing is left for the tooltip to promise beyond
     # "read, not write" — a resurrected promise of a private reading aid, in
     # any wording, is the bug this guards against.
+    # The badge moved into the menu's status block and picked up a second
+    # class for the placement, so the class list is matched loosely and the
+    # tooltip — the thing this test is actually pinning — exactly.
     badge = re.search(
-        r'class="read-only-badge"\s+title="([^"]*)"', server)
+        r'class="[^"]*read-only-badge[^"]*"\s+title="([^"]*)"', server)
     assert badge, "could not find the read-only badge's tooltip text"
     # The source wraps the title attribute across two adjacent f-string
     # literals for line length, so the raw match still carries the closing

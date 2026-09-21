@@ -42,16 +42,21 @@ class TestTheBarIsSmaller(unittest.TestCase):
             self.assertNotIn(gone, SHELL, f"{gone} is back in the header")
 
     def test_the_gear_and_its_panel_are_there(self):
-        self.assertIn('id="settings-toggle"', SHELL)
+        # The gear lost its own slot in the bar and became a row of the menu,
+        # so what identifies it is the pane it opens rather than an id.
+        self.assertIn('data-pane-to="settings"', SHELL)
         self.assertIn('id="settings-pop"', SHELL)
         self.assertIn('id="settings-groups"', SHELL)
 
     def test_the_panel_is_wired_into_the_one_panel_machinery(self):
         # Esc, click-outside and one-panel-at-a-time all come from initTopPanels.
+        # The panel it opens is the menu now; settings is a pane inside it, so
+        # the machinery reaches this panel through #menu-pop.
         panels = JS[JS.index("function initTopPanels()"):]
         panels = panels[:panels.index("const isOpen")]
-        self.assertIn('getElementById("settings-toggle")', panels)
-        self.assertIn('getElementById("settings-pop")', panels)
+        self.assertIn('getElementById("menu-toggle")', panels)
+        self.assertIn('getElementById("menu-pop")', panels)
+        self.assertIn('data-pane-name="settings"', SHELL)
 
 
 class TestTheSettingsSpec(unittest.TestCase):
@@ -147,10 +152,13 @@ class TestTheHighlighterPaletteMoved(unittest.TestCase):
         # Inside the panel, not merely present somewhere in the header. Located
         # by position: the panel's own markup nests spans and divs, so slicing
         # to the first closing tag stops at the section label, well short of it.
+        # Bounded by where the settings pane ends — the help pane's start —
+        # because the panel is a pane of the menu now and the controls that
+        # used to follow it in the bar sit before it in the document.
         panel_starts = SHELL.index('id="settings-pop"')
         palette_at = SHELL.index('id="palette-pop"')
-        next_control = SHELL.index('id="highlighter-toggle"')
-        self.assertTrue(panel_starts < palette_at < next_control,
+        pane_ends = SHELL.index('data-pane-name="help"')
+        self.assertTrue(panel_starts < palette_at < pane_ends,
                         "the palette is no longer inside the settings panel")
 
     def test_the_popover_geometry_is_undone_inside_the_panel(self):
@@ -210,8 +218,8 @@ class TestReset(unittest.TestCase):
         self.assertIn('id="settings-reset"', SHELL)
         panel_at = SHELL.index('id="settings-pop"')
         reset_at = SHELL.index('id="settings-reset"')
-        next_control = SHELL.index('id="highlighter-toggle"')
-        self.assertTrue(panel_at < reset_at < next_control,
+        pane_ends = SHELL.index('data-pane-name="help"')
+        self.assertTrue(panel_at < reset_at < pane_ends,
                         "Reset is not inside the settings panel")
         self.assertIn("shared with every", SHELL,
                       "the button no longer warns that it reaches other documents")

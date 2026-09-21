@@ -191,9 +191,9 @@ body.read-only section.block .hover-actions { border: none; }
 
 /* === Legend ==========================================================
    Reference material, not chrome the reader needs on every visit, so it lives
-   behind #legend-toggle in the page header and paints as .legend-pop — see
-   the popover rules further down. These inner rules are shared with the
-   exported standalone HTML, which has no popover and renders the table inline.
+   in the menu's help pane and paints as .legend-pop — see the pane rules
+   further down. These inner rules are shared with the exported standalone
+   HTML, which has no menu and renders the table inline.
    Open state persists nowhere on purpose: reopening is cheap. */
 .legend-body {
   margin-top: 10px;
@@ -1425,66 +1425,16 @@ section.block[data-diff="open"] .diff-pane { display: block; }
 .attr-chip.a-you   { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent); }
 .attr-chip.a-sweep { background: #fef3c7; color: #92400e; }
 
-/* ── Legend popover ─────────────────────────────────────────────────── */
-/* Opened by #legend-toggle, anchored to it by .icon-btn-wrap (core.css).
-   Absolutely positioned on purpose: the legend is a glance-and-dismiss
-   reference, so it floats OVER the document rather than displacing it — the
-   first sentence must not move because someone checked what a button does.
-   Right-anchored because the button sits near the right edge of the bar; a
-   left-anchored 640px panel would run off screen. */
+/* ── Legend pane ────────────────────────────────────────────────────── */
+/* A pane of the menu now, not a popover of its own. It keeps the clamp it
+   grew when the keyboard section took it from ~430px to 621px, measured —
+   the menu's own max-height would otherwise let it push the panel past the
+   viewport edge on a laptop. */
 .legend-pop {
-  position: absolute;
-  top: calc(100% + 9px);
-  right: 0;
-  z-index: 60;
-  /* The keyboard section took this panel from ~430px to 621px, measured — far
-     enough that a laptop viewport can no longer hold it under the header.
-     Clamped and scrolled rather than shortened: the table is reference
-     material you read once, and losing a row off the bottom edge is worse
-     than a scrollbar. Same treatment as the settings panel. */
-  max-height: 78vh;
+  padding: 10px;
+  max-height: 62vh;
   overflow-y: auto;
-  /* The panel grows LEFTWARDS from a button that is itself inset from the
-     right edge, so the viewport is the wrong thing to clamp against: measured
-     at a 760px viewport, `max-width: calc(100vw - 2 * gutter)` never engaged
-     (712px > the 640px width) and the panel's left edge still landed at -57px.
-     What actually bounds it is the space between the left gutter and this
-     button — i.e. the viewport minus everything to the button's right. 240px
-     is that run (Share + Done + separators, ~177px) plus the gutter and slack,
-     and it errs large: read-only mode hides Done, which only moves the button
-     right and leaves more room, never less. Adding another control to the
-     right of this one would invalidate it, so top-panels.e2e.cjs measures the
-     left edge at 760px to catch exactly that. */
-  width: min(700px, calc(100vw - 240px));
-  padding: 14px 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 12px 34px rgba(20, 22, 28, .20), 0 2px 6px rgba(20, 22, 28, .08);
-  text-align: left;
-  cursor: default;
 }
-/* The arrow that ties the panel to the button that opened it. */
-.legend-pop::before {
-  content: "";
-  position: absolute;
-  top: -6px;
-  right: 8px;
-  width: 11px;
-  height: 11px;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  border-top: 1px solid var(--border);
-  transform: rotate(45deg);
-}
-/* The same cascade trap `.general-composer[hidden]` already works around, now
-   on the popover. `display: block` above is an
-   AUTHOR rule; the UA's `[hidden] { display: none }` is a USER-AGENT rule, so
-   the author rule wins at equal specificity regardless of source order and the
-   bare attribute paints nothing away. Without this line the legend table hangs
-   over the first block from the moment the page loads. Reading back
-   `el.hidden === true` cannot see it; only getComputedStyle can. */
-.legend-pop[hidden] { display: none; }
 /* The popover IS the panel — it already has the surface, border and shadow, so
    the inner body must not draw a second card inside it. */
 .legend-pop .legend-body {
@@ -1677,27 +1627,14 @@ body .page-header {
   padding: 10px max(var(--content-gutter), calc((100% - var(--chrome-max)) / 2 + var(--content-gutter)));
 }
 
-/* === Settings popover ================================================
-   The four preferences that used to be their own header controls — width,
-   pane layout, code theme, highlight colour — plus the fonts, under one
-   gear. Same .icon-btn-wrap anchoring and initTopPanels machinery as the
-   legend, so Esc, click-outside and one-panel-at-a-time behave identically.
-
-   max-height + scroll because this panel grows: it holds seven sections
-   today and the next preference is a row in script.js's SETTINGS spec, not
-   a new control in the bar. 78vh keeps it clear of the viewport edge on a
-   laptop, which is where a panel this tall is actually opened. */
+/* === Settings pane ====================================================
+   Was a popover with its own toggle; it is the settings PANE's body now.
+   The panel around it owns the position, the shadow and the scroll, so this
+   keeps only what is about the settings themselves. */
 .settings-pop {
-  position: absolute; top: calc(100% + 9px); right: 0; z-index: 60;
   display: flex; flex-direction: column; gap: 12px;
-  width: 268px; max-height: 78vh; overflow-y: auto;
-  padding: 13px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 12px 34px rgba(20, 22, 28, .20), 0 2px 6px rgba(20, 22, 28, .08);
+  padding: 12px;
 }
-.settings-pop[hidden] { display: none; }
 #settings-groups { display: flex; flex-direction: column; gap: 12px; }
 .set-group { display: flex; flex-direction: column; gap: 5px; }
 .set-group[hidden] { display: none; }
@@ -1773,25 +1710,10 @@ body .page-header {
 }
 .pt-name { font-weight: 600; }
 
-/* === Attach-a-session popover =========================================
-   Same .icon-btn-wrap anchoring and initTopPanels machinery as the legend
-   and settings panels, so Esc, click-outside and one-panel-at-a-time behave
-   identically. Populated by entry.js, which knows this session's slug and
-   cwd; the button itself stays hidden until that data (and ownership) is
-   confirmed, same reasoning as #resume-cwd never being wrong: showing a
-   command before it is known invites copying an empty one. */
-.resume-pop {
-  position: absolute; top: calc(100% + 9px); right: 0; z-index: 60;
-  display: flex; flex-direction: column; gap: 8px;
-  width: min(360px, calc(100vw - 240px));
-  padding: 13px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 12px 34px rgba(20, 22, 28, .20), 0 2px 6px rgba(20, 22, 28, .08);
-  text-align: left;
-}
-.resume-pop[hidden] { display: none; }
+/* === The resume command ================================================
+   Populated by entry.js, which knows this session's slug and cwd. It lives in
+   the menu's status block now: the popover it used to have was a second button
+   about the same subject as the watcher pill. */
 .resume-hint { margin: 0; font-size: 12.5px; color: var(--text-dim); }
 .resume-hint code { font-family: var(--font-code); color: var(--text); }
 .resume-cmd-row { display: flex; align-items: center; gap: 6px; }
@@ -2746,3 +2668,119 @@ section.block.card.is-fit .block-content > svg {
    leave a tall band of empty card below it. maximize.js measures the scaled
    height and writes it here. */
 section.block.card.is-fit .block-content { height: var(--max-fit-h); }
+
+/* === The menu ==========================================================
+   Nine controls left the bar for this panel. It reuses .icon-btn-wrap for
+   anchoring and the initTopPanels machinery for opening and closing, so the
+   only genuinely new thing here is the pane switch.
+
+   288px because the help pane's widest line is a shortcut description, and
+   because a menu wider than that stops reading as a menu and starts reading
+   as a dialog. max-height + scroll for the same reason .settings-pop had
+   them: the settings pane holds seven sections and the next preference is a
+   row in script.js's SETTINGS spec. */
+.menu-pop {
+  position: absolute; top: calc(100% + 9px); right: 0; z-index: 60;
+  display: flex; flex-direction: column;
+  width: 288px; max-height: 78vh; overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 34px rgba(20, 22, 28, .20), 0 2px 6px rgba(20, 22, 28, .08);
+  font-size: 12.5px;
+}
+.menu-pop[hidden] { display: none; }
+
+/* Exactly one pane at a time, chosen by the attribute initMenuPanes writes.
+   Panes are siblings rather than a scroller so the panel's height is the
+   height of the pane you are on, not of the tallest one. */
+.menu-pane { display: none; flex-direction: column; gap: 2px; padding: 6px; }
+.menu-pop[data-pane="root"] [data-pane-name="root"],
+.menu-pop[data-pane="settings"] [data-pane-name="settings"],
+.menu-pop[data-pane="help"] [data-pane-name="help"] { display: flex; }
+
+.menu-sec {
+  padding: 9px 9px 4px;
+  font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-dim);
+}
+.menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 7px 9px; border: 0; border-radius: 7px; background: none;
+  font-family: inherit; font-size: 12.5px; color: var(--text); text-align: left;
+  cursor: pointer;
+}
+.menu-item:hover { background: var(--hover-tint); }
+.menu-item[hidden] { display: none; }
+.menu-item > svg, .menu-item-icon svg {
+  width: 15px; height: 15px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+  color: var(--text-dim);
+}
+.menu-item-icon { display: inline-flex; flex: none; }
+.menu-item-label { flex: 1; }
+.menu-item-hint {
+  font-family: var(--font-code); font-size: 10.5px; color: var(--text-dim);
+}
+.menu-chev { margin-left: auto; width: 13px; height: 13px; }
+/* A row whose thing is currently ON. The highlighter is the only one today. */
+.menu-item[aria-pressed="true"] { color: var(--accent); }
+.menu-item[aria-pressed="true"] > svg,
+.menu-item[aria-pressed="true"] .menu-item-hint { color: var(--accent); }
+
+.menu-back {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 8px 9px; border: 0; border-bottom: 1px solid var(--border);
+  background: none; cursor: pointer;
+  font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--text);
+}
+.menu-back svg {
+  width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; color: var(--text-dim);
+}
+
+/* === The status block ==================================================
+   What the Watching pill said, with room to say what it means. The dot on
+   #menu-toggle is the same fact at a glance; this is the same fact in
+   words, plus the resume command when nothing is attached. */
+.menu-status { display: flex; gap: 9px; align-items: flex-start; padding: 10px; }
+.menu-status-dot {
+  width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex: none;
+  background: var(--text-dim);
+}
+.menu-status.watcher-live .menu-status-dot { background: var(--status-live-fg); }
+.menu-status.watcher-stale .menu-status-dot { background: var(--type-reject-fg); }
+.menu-status-text { min-width: 0; }
+.menu-status-title { font-weight: 600; font-size: 12.5px; color: var(--text); }
+.menu-status-sub {
+  font-size: 11.5px; color: var(--text-dim); line-height: 1.5; margin-top: 2px;
+}
+.menu-resume { margin-top: 8px; }
+.menu-resume[hidden] { display: none; }
+/* The read-only badge is the only thing in the menu that is not a control:
+   it describes what the page IS. Hidden unless the body says so. */
+.menu-readonly { display: none; margin-top: 8px; }
+body.read-only .menu-readonly { display: inline-flex; }
+
+/* === The menu button ===================================================
+   The watcher's colour, absorbed. The button stays a menu button — a tinted
+   or filled button reads as "this control is active", which is a different
+   claim from "something is watching this page". */
+.menu-btn { position: relative; overflow: visible; }
+.menu-btn::after {
+  content: ""; position: absolute; top: -3px; right: -3px;
+  width: 8px; height: 8px; border-radius: 50%;
+  border: 2px solid var(--surface-soft);
+  background: var(--text-dim);
+}
+.menu-btn.watcher-live::after { background: var(--status-live-fg); }
+.menu-btn.watcher-stale::after { background: var(--type-reject-fg); }
+
+/* === The highlighter's escape ==========================================
+   The one control allowed back into the bar, and only while it is armed.
+   The highlighter is a MODE: it changes what dragging over text does, and a
+   mode whose only indicator is buried in a menu is a mode nobody can see.
+   highlighter.js already maintains aria-pressed here, so this rule is the
+   entire feature — no JavaScript knows about it. */
+#highlighter-toggle:not([aria-pressed="true"]) { display: none; }

@@ -2569,18 +2569,13 @@
       { btn: document.getElementById("composer-toggle"),
         el: document.getElementById("general-composer"),
         focus: () => document.getElementById("general-input") },
-      { btn: document.getElementById("legend-toggle"),
-        el: document.getElementById("legend-pop"),
-        focus: () => null, dismissOnOutsideClick: true },
-      // One panel where there were three: the pane-theme popover and the
-      // highlighter's palette are sections inside this one now. #palette-pop
-      // still exists and still carries its own click handlers from
-      // highlighter.js — it was re-homed, not rebuilt.
-      { btn: document.getElementById("settings-toggle"),
-        el: document.getElementById("settings-pop"),
-        focus: () => null, dismissOnOutsideClick: true },
-      { btn: document.getElementById("resume-toggle"),
-        el: document.getElementById("resume-pop"),
+      // One panel where there were four: settings, the legend and the resume
+      // command are panes of this one now, not popovers of their own. The
+      // pane machinery is initMenuPanes below; everything else about opening
+      // and closing — Esc, click-outside, one-at-a-time, aria-expanded — is
+      // this function's and is unchanged.
+      { btn: document.getElementById("menu-toggle"),
+        el: document.getElementById("menu-pop"),
         focus: () => null, dismissOnOutsideClick: true },
     ].filter((p) => p.btn && p.el);
     if (!panels.length) return;
@@ -2662,6 +2657,56 @@
       e.preventDefault();
       open(composer);
     });
+  })();
+
+  // ── Menu panes ───────────────────────────────────────────────────────────
+  // Settings and the legend used to be popovers with their own toggles in the
+  // bar. They are panes of the one menu now, pushed and popped by a data
+  // attribute; the stylesheet shows exactly one pane at a time.
+  //
+  // The reset-to-root hangs off the panel being HIDDEN rather than off the
+  // toggle being clicked, and deliberately: initTopPanels closes this panel
+  // from four different places (its own toggle, Esc, a click outside, another
+  // panel opening), and only one of them is a click on the button. Watching
+  // the attribute catches all four without knowing about any of them.
+  (function initMenuPanes() {
+    const pop = document.getElementById("menu-pop");
+    if (!pop) return;
+    pop.querySelectorAll("[data-pane-to]").forEach((b) => {
+      b.addEventListener("click", (e) => {
+        e.preventDefault();
+        pop.dataset.pane = b.dataset.paneTo;
+      });
+    });
+    new MutationObserver(() => {
+      if (pop.hidden) pop.dataset.pane = "root";
+    }).observe(pop, { attributes: true, attributeFilter: ["hidden"] });
+  })();
+
+  // ── The highlighter's menu row ───────────────────────────────────────────
+  // The one proxy in the menu, and a proxy precisely because its real element
+  // cannot come here: the highlighter is a MODE, so its button stays in the
+  // bar as the only indicator that dragging over text now marks it. This row
+  // clicks that button and mirrors it, which keeps highlighter.js the single
+  // owner of the state — a second copy of "is it on" would be one more thing
+  // to keep in step, and this page has been bitten by that before.
+  (function initHighlighterMenuRow() {
+    const row = document.getElementById("menu-highlighter");
+    const btn = document.getElementById("highlighter-toggle");
+    if (!row || !btn) return;
+    const state = row.querySelector("[data-state]");
+    row.addEventListener("click", (e) => { e.preventDefault(); btn.click(); });
+    function sync() {
+      const on = btn.getAttribute("aria-pressed") === "true";
+      row.setAttribute("aria-pressed", on ? "true" : "false");
+      if (state) state.textContent = on ? "on" : "off";
+      // highlighter.js hides the toggle when the browser has no Highlight
+      // API. A menu row for a feature that cannot run is worse than none.
+      row.hidden = btn.hidden;
+    }
+    new MutationObserver(sync).observe(
+      btn, { attributes: true, attributeFilter: ["aria-pressed", "hidden"] });
+    sync();
   })();
 
 

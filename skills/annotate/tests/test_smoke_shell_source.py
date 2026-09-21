@@ -57,14 +57,14 @@ class TestShellSourceIsReadable(unittest.TestCase):
         # A byte-for-byte snapshot would fail on every legitimate UI change, so
         # this asserts the inventory instead: the ids the page code reaches for.
         html = shell_html()
-        for control in ("block-search", "settings-toggle", "settings-pop",
+        for control in ("block-search", "settings-pop",
                         "settings-groups", "settings-reset", "palette-pop",
                         "highlighter-toggle", "highlighter-clear",
-                        "fullscreen-toggle",
-                        "composer-toggle", "legend-toggle", "legend-pop",
+                        "fullscreen-toggle", "menu-toggle", "menu-pop",
+                        "menu-status", "menu-highlighter",
+                        "composer-toggle", "legend-pop",
                         "general-composer", "general-input", "general-send",
                         "export-btn", "done-btn", "hdr-title", "hdr-respid",
-                        "watcher-badge", "resume-toggle", "resume-pop",
                         "resume-cwd", "resume-cmd", "resume-copy"):
             self.assertIn(f'id="{control}"', html, f"the shell lost #{control}")
         self.assertIn('<main class="prose">', html)

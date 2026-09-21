@@ -69,7 +69,7 @@ def test_both_panel_toggles_are_rendered():
     sliced the source that way and failed against correct code.
     """
     server = SERVER_PY.read_text()
-    for ident in ("composer-toggle", "legend-toggle"):
+    for ident in ("composer-toggle", "menu-toggle"):
         assert f'id="{ident}"' in server, (
             f"#{ident} is not rendered — the control it replaces was removed "
             "from the reading column, so nothing opens that panel at all"
@@ -96,16 +96,21 @@ def test_the_legend_is_a_popover_not_a_details_in_the_reading_column():
     assert "legend-pop" in server, "no legend popover is rendered"
 
 
-def test_the_legend_popover_hard_hides_when_hidden():
+def test_the_menu_panel_hard_hides_when_hidden():
     """The exact cascade bug that bit .general-composer and .composer-collapsed,
     now one element further on. A bare `hidden` attribute does NOTHING against
     an author `display: flex/block` rule — the author rule beats the UA's
     `[hidden] { display: none }` at equal specificity, whatever the source
-    order. Without a rule targeting `[hidden]` explicitly, the legend table
-    paints over the document from the moment the page loads."""
+    order. Without a rule targeting `[hidden]` explicitly, the panel paints
+    over the document from the moment the page loads.
+
+    Asserted on .menu-pop rather than .legend-pop: the legend is a pane of the
+    menu now and is never hidden by its own attribute — the panel around it is
+    the element that carries `hidden`, so it is the one that has to hard-hide.
+    """
     css = STYLE_CSS.read_text()
-    assert _hides_when_hidden(css, ".legend-pop"), (
-        "nothing makes .legend-pop display:none when hidden — the popover "
+    assert _hides_when_hidden(css, ".menu-pop"), (
+        "nothing makes .menu-pop display:none when hidden — the panel "
         "renders open on load, over the first block"
     )
 
