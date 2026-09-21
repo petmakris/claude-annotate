@@ -978,3 +978,73 @@ def test_a_read_only_reader_sees_no_trail_at_all(document):
         finally:
             browser.close()
     assert hidden, "the trail is rendered on a guest's page"
+
+
+def _mount_lock_ribbon(page):
+    """Build `.busy-banner` exactly as script.js's setBusy(true) does.
+
+    Same tag, id, class, children and insertion point (script.js:3048-3075).
+    The daemon-era client only reaches setBusy() from a poll-handler frame
+    carrying `busy: true`, which a live general-composer submission does not
+    produce on its own, and what is under test here is geometry — which does
+    not care which line of JS appended the node.
+    """
+    page.evaluate("""() => {
+      const banner = document.createElement('div');
+      banner.id = 'busy-banner';
+      banner.className = 'busy-banner';
+      banner.setAttribute('role', 'status');
+      banner.setAttribute('aria-live', 'polite');
+      const spin = document.createElement('span');
+      spin.className = 'busy-spinner';
+      const label = document.createElement('span');
+      label.className = 'bb-label';
+      label.textContent = 'Claude is applying your round…';
+      const timer = document.createElement('span');
+      timer.className = 'bb-timer';
+      timer.textContent = '0:42';
+      banner.append(spin, label, timer);
+      document.querySelector('.page-header').insertAdjacentElement('afterend', banner);
+    }""")
+
+
+def test_the_lock_ribbon_does_not_cover_the_panel_head(page, document):
+    """Both are `position: sticky; top: 0` siblings in the same containing
+    block, and the ribbon's `z-index: 20` beats the panel's 19 — so they do
+    not stack, they overlap, and they coexist by construction: the panel
+    exists only while Claude is working, which is exactly when the page is
+    locked. Measured before the fix, in Chromium at scrollY 600: the ribbon
+    occupied 0-45.4px and `.pg-head` 1-41.8px, and `elementFromPoint` at the
+    head's own centre returned `busy-banner` — the current line, the step
+    count, the elapsed timer and the caret were all behind it."""
+    _put_progress(document, ["Read your round of feedback",
+                             "Looking for where the conversion happens",
+                             "Rewriting the block with what I found"])
+    page.wait_for_selector("#progress-panel .pg-line", timeout=10000)
+    _mount_lock_ribbon(page)
+    page.evaluate("window.scrollTo(0, 600)")
+    page.wait_for_timeout(200)
+
+    hit = page.evaluate("""() => {
+      const head = document.querySelector('.pg-head');
+      const b = head.getBoundingClientRect();
+      const el = document.elementFromPoint(Math.round((b.left + b.right) / 2),
+                                          Math.round((b.top + b.bottom) / 2));
+      return {id: el ? el.id : null,
+              insidePanel: !!(el && el.closest('#progress-panel')),
+              headTop: +b.top.toFixed(1), headBottom: +b.bottom.toFixed(1)};
+    }""")
+    assert hit["insidePanel"], \
+        f"the panel head is occluded at its own centre by #{hit['id']}"
+
+    # And the ribbon comes back the moment the trail closes, for whatever is
+    # left of the lock — the panel is only a replacement while it is working.
+    _put_progress(document, ["Read your round of feedback"], state="done",
+                  started=int(time.time()) - 30, ended=int(time.time()))
+    page.wait_for_function(
+        "() => document.getElementById('progress-panel')"
+        " && document.getElementById('progress-panel').dataset.state === 'done'",
+        timeout=10000)
+    assert page.eval_on_selector(
+        ".busy-banner", "el => getComputedStyle(el).display !== 'none'"), \
+        "the lock ribbon stays suppressed after the trail closed"

@@ -2967,6 +2967,29 @@ body.read-only .menu-readonly { display: inline-flex; }
 #progress-panel[data-state="done"] { border-left-color: var(--status-live-fg); }
 body.read-only #progress-panel { display: none; }
 
+/* The panel replaces the lock ribbon while it is working, rather than sharing
+   the top of the screen with it. Both are `position: sticky; top: 0` siblings
+   in the same containing block and the ribbon's z-index 20 beats the panel's
+   19, so they do not stack — they overlap. Measured in Chromium at
+   scrollY 600 with both present: the ribbon occupied 0–45.4px and .pg-head
+   1–41.8px, and `elementFromPoint` at the head's own centre (701, 21)
+   returned `busy-banner` — the current line, the step count, the elapsed
+   timer and the caret were all behind it. They coexist by construction: the
+   panel exists only while Claude is working, which is exactly when the page
+   is locked.
+
+   The panel wins because it says everything the ribbon says and more. The
+   ribbon is a spinner, "Claude is applying your round…" and an elapsed timer;
+   the panel is a spinner, the line Claude is actually on, a step count, the
+   same elapsed timer, and the trail — with the accent left edge that carries
+   the ribbon's "you cannot submit another round" (decision 5). Offsetting one
+   below the other would pin two spinners and two timers to the top of the
+   screen to say one thing. The moment the trail closes, `data-state` flips to
+   `done`, this rule stops matching, and the ribbon comes back for whatever is
+   left of the lock — including the case where Claude never narrates at all
+   and no panel is ever built. */
+body:has(#progress-panel[data-state="working"]) .busy-banner { display: none; }
+
 .pg-head { display: flex; align-items: center; gap: 9px; padding: 10px 13px; }
 .pg-now { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
           white-space: nowrap; }
