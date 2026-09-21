@@ -356,15 +356,15 @@ no-op.
 
 The user clicked Done.
 
-2. Ack briefly in terminal: *"Annotate session for `<title>` closed."*
-3. Remove this session's entry from `~/.claude/annotate/pending-${CLAUDE_CODE_SESSION_ID}.json`.
+1. Ack briefly in terminal: *"Annotate session for `<title>` closed."*
+2. Remove this session's entry from `~/.claude/annotate/pending-${CLAUDE_CODE_SESSION_ID}.json`.
 
 ### `WEBCOMPANION_CANCELLED`
 
 The user cancelled (clicked tab close, or wrote `scrap it` in terminal).
 
-2. Ack briefly in terminal: *"Annotate session for `<title>` cancelled."*
-3. Remove this session's entry from the pending registry.
+1. Ack briefly in terminal: *"Annotate session for `<title>` cancelled."*
+2. Remove this session's entry from the pending registry.
 
 ## The coherence sweep
 
@@ -390,13 +390,13 @@ a block saying something false.
 
 **Fix exactly three things:**
 
-2. **References that no longer resolve** — a pointer to a removed block, a
+1. **References that no longer resolve** — a pointer to a removed block, a
    step number that shifted, a count or total that stopped adding up, a
    glossary term whose referent is gone.
-3. **Claims the change made false** — including claims that never name the
+2. **Claims the change made false** — including claims that never name the
    block you changed. This is the case the smart-drop step cannot catch,
    because it looks for references rather than for meaning.
-4. **Spec blocks the change made false** — a `choice` still offering an option
+3. **Spec blocks the change made false** — a `choice` still offering an option
    you just carried out, a `flowchart` or `sequence` drawing a path the change
    removed. Read every `spec` on the page, not just every `markdown`.
 
@@ -453,31 +453,31 @@ without it — never withhold a rewrite because you cannot phrase the note.
 
 When you receive a `WEBCOMPANION_EVENT` with a non-null `block_id`:
 
-2. Read your working `blocks.json`.  Find the block by `id`.
-3. **Generate rewritten markdown for the block that folds the answer or clarification into the prose.**  The document itself is the answer — do not echo the user's question back as Q-and-A.  No "Claude says:" panels, no chat threads.  After your rewrite, a reader who didn't see the user's comment should be able to read the new block and have no remaining question on the topic the comment raised.
-4. **Edge cases:**
+1. Read your working `blocks.json`.  Find the block by `id`.
+2. **Generate rewritten markdown for the block that folds the answer or clarification into the prose.**  The document itself is the answer — do not echo the user's question back as Q-and-A.  No "Claude says:" panels, no chat threads.  After your rewrite, a reader who didn't see the user's comment should be able to read the new block and have no remaining question on the topic the comment raised.
+3. **Edge cases:**
    - The comment is *off-topic* for the targeted block (the user's question references content that lives elsewhere): update the block to be clearer about its actual topic, or rewrite a *neighboring* block to address the question, or both.  Use judgement.
    - The `type` is `reject`: the user disagrees.  Either soften / withdraw the claim in the new prose, or hold the line with a reasoned explanation woven into the rewrite.  Don't pretend agreement; don't argue back in a side channel.  This mutates `blocks.json` and acks like any other path — the coherence sweep (see above) still applies before you write the `.ack`.
    - The user's `selected_text` no longer exists after a prior rewrite: treat it as historical context.  The current block content is what matters.
-5. **Touch only the blocks you actually need to change.** Do not re-emit unchanged blocks "for completeness" — the server derives `version` from a content-hash chain, so re-writing identical content is a true no-op, but re-emitting the same prose with cosmetic differences (a swapped synonym, a re-flowed sentence) inflates the version of a block the user didn't ask you to touch. Block ids stay the same; versions take care of themselves.
+4. **Touch only the blocks you actually need to change.** Do not re-emit unchanged blocks "for completeness" — the server derives `version` from a content-hash chain, so re-writing identical content is a true no-op, but re-emitting the same prose with cosmetic differences (a swapped synonym, a re-flowed sentence) inflates the version of a block the user didn't ask you to touch. Block ids stay the same; versions take care of themselves.
 
 Persist each changed markdown block via `blocks.update_block(doc, block_id, new_markdown)` (content-hash-safe — returns `False`, a true no-op, if identical), then `save_atomic` and re-push. (Use `blocks.update_spec_block` for `sequence`/`diagram` spec blocks instead — see "Diagram block-rewrite contract".)
 
 When `block_id` is `null` (general comment):
 
-2. Read the comment text.  It will be a directive that applies across blocks ("make this shorter", "more casual tone", "remove the second paragraph", etc.).
-3. Update *only the blocks that actually need updating* to apply the directive. Don't re-emit untouched blocks.
-4. Run the coherence sweep (see "The coherence sweep" above — a cross-document directive is exactly the kind of change that can orphan a reference elsewhere), then save and ack as above.
+1. Read the comment text.  It will be a directive that applies across blocks ("make this shorter", "more casual tone", "remove the second paragraph", etc.).
+2. Update *only the blocks that actually need updating* to apply the directive. Don't re-emit untouched blocks.
+3. Run the coherence sweep (see "The coherence sweep" above — a cross-document directive is exactly the kind of change that can orphan a reference elsewhere), then save and ack as above.
 
 ## Diagram block-rewrite contract
 
 For `WEBCOMPANION_EVENT` payloads that target a `kind: "sequence"` block, the rewrite contract has three deltas from the markdown contract above:
 
-2. **Whole-diagram by default (`step_id: null`)** — the usual case, and now the only one the UI produces. A picture is commented as a whole from the card header, so read the comment against the whole spec and apply it across steps as needed: restructure phases, reorder steps, add/remove actors, retitle. Analogous to general comments with `block_id: null` in the markdown contract. The user is pointing at the diagram; work out from the words which part they mean.
+1. **Whole-diagram by default (`step_id: null`)** — the usual case, and now the only one the UI produces. A picture is commented as a whole from the card header, so read the comment against the whole spec and apply it across steps as needed: restructure phases, reorder steps, add/remove actors, retitle. Analogous to general comments with `block_id: null` in the markdown contract. The user is pointing at the diagram; work out from the words which part they mean.
 
-3. **Targeted when `step_id` IS present.** Comments made before the header-only rule still carry one, and a re-emitted event can bring one back. A comment on step `s4` ("does this fire once per click, or can it batch?") rewrites just that step's `label` and/or `sub`. Other steps untouched. Step ids stay stable across rewrites; new steps mint fresh ids via `next_step_id`.
+2. **Targeted when `step_id` IS present.** Comments made before the header-only rule still carry one, and a re-emitted event can bring one back. A comment on step `s4` ("does this fire once per click, or can it batch?") rewrites just that step's `label` and/or `sub`. Other steps untouched. Step ids stay stable across rewrites; new steps mint fresh ids via `next_step_id`.
 
-4. **Reject on a step** — either soften/withdraw the claim by rewriting the step, or hold the line by rewriting the sub-caption with reasoning. Don't drop the step silently. Same "fold the answer into the prose" spirit; here the "prose" is the spec.
+3. **Reject on a step** — either soften/withdraw the claim by rewriting the step, or hold the line by rewriting the sub-caption with reasoning. Don't drop the step silently. Same "fold the answer into the prose" spirit; here the "prose" is the spec.
 
 Persist updates via `blocks.update_spec_block(doc, block_id, new_spec)` — returns `True` only on real change (canonical-JSON content hash). Then `save_atomic` and re-push. Watcher re-emit safety is preserved: `webcompanion ack` is idempotent.
 
@@ -490,14 +490,14 @@ Persist updates via `blocks.update_spec_block(doc, block_id, new_spec)` — retu
 where it says step ids. Neither the chart nor the pflow source pane is a click
 target, so comments arrive whole-block.
 
-2. **Whole-flowchart by default (`step_id: null`)** — the usual case, and now
+1. **Whole-flowchart by default (`step_id: null`)** — the usual case, and now
    the only one the UI produces. Apply across the spec as needed: add/remove
    nodes, rewire edges, retitle, fix a `ref`. Analogous to general comments
    with `block_id: null` in the markdown contract. When the block was authored
    as `spec.source`, edit the source line the comment is about and let it
    recompile — the reader can see which line drew which shape, so they will
    often name it in words.
-3. **Targeted when `step_id` IS present** (a pre-existing mark, or one a
+2. **Targeted when `step_id` IS present** (a pre-existing mark, or one a
    re-emitted event brought back). A comment on node `f` ("does this decision
    also fire on a partial save?") rewrites just that node's
    `label`/`sub`/`method`/`ref`/`href`, or the edges touching it if the branch
@@ -506,7 +506,7 @@ target, so comments arrive whole-block.
    just because you touched it. (The DOM carries the id as `data-node-id`, but
    it arrives on the wire in the `step_id` field — there is no separate
    `node_id` field.)
-4. **Reject on a node** — either soften/withdraw the claim by rewriting the
+3. **Reject on a node** — either soften/withdraw the claim by rewriting the
    node, or hold the line by rewriting its `sub` with reasoning. Don't drop
    the node silently.
 
@@ -519,8 +519,8 @@ change (drop `kind`/`spec`, set `markdown`) exactly as for other spec blocks.
 
 When you handle a `WEBCOMPANION_EVENT` that targets a markdown block:
 
-2. After composing the rewritten block markdown, apply the **drop rule**: any glossary entry whose `term` no longer appears (case-sensitive whole-word) in any block is dropped. Use `blocks.drop_unused_terms(doc)` — it does this in one call.
-3. Apply the **add rule**: if the rewrite introduces a new project-specific identifier that wasn't already in the glossary and that meets the comprehension-blocker test (see `references/pushing.md` § "When to emit a glossary entry"), append a new entry.
+1. After composing the rewritten block markdown, apply the **drop rule**: any glossary entry whose `term` no longer appears (case-sensitive whole-word) in any block is dropped. Use `blocks.drop_unused_terms(doc)` — it does this in one call.
+2. Apply the **add rule**: if the rewrite introduces a new project-specific identifier that wasn't already in the glossary and that meets the comprehension-blocker test (see `references/pushing.md` § "When to emit a glossary entry"), append a new entry.
 
 Do not re-extract the whole glossary on every rewrite. The common case — a rewrite that doesn't touch the term set — produces no glossary mutation.
 
@@ -537,15 +537,15 @@ Just process the event normally each time; the system handles dupe detection at 
 
 If the user says "scrap it" / "respond in terminal" / "stop annotating" / equivalent *while a watcher is armed* (the pending registry has entries):
 
-2. Read `~/.claude/annotate/pending-${CLAUDE_CODE_SESSION_ID}.json`.
-3. For each entry, cancel the session: `webcompanion end --sid <sid> --cancel`
+1. Read `~/.claude/annotate/pending-${CLAUDE_CODE_SESSION_ID}.json`.
+2. For each entry, cancel the session: `webcompanion end --sid <sid> --cancel`
    ```bash
    printf '{"reason":"user-cancelled-terminal"}' > "$STATE_DIR/cancelled"
    ```
    The server's existing `_terminal_state` check only tests existence, so the body is optional but useful for debugging.
-4. The watcher detects the marker on its next tick and emits `WEBCOMPANION_CANCELLED`. You'll get a task-notification for each.
-5. Handle each cancellation per Mode D and clean up the registry as that step instructs.
-6. Continue with whatever the user actually wanted.
+3. The watcher detects the marker on its next tick and emits `WEBCOMPANION_CANCELLED`. You'll get a task-notification for each.
+4. Handle each cancellation per Mode D and clean up the registry as that step instructs.
+5. Continue with whatever the user actually wanted.
 
 ## Edge cases
 

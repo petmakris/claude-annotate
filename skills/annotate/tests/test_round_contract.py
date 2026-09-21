@@ -6,6 +6,7 @@ contract describing compact as if it were delete, and the sweep drifting to
 after the ack — which is when the user sees the page, so a sweep after it is
 a sweep the user watches happen.
 """
+import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -221,3 +222,55 @@ def test_a_comment_that_answers_a_choice_resolves_it():
     assert "resolve it in this same pass" in section, \
         "the rule does not require resolving in the same pass"
 
+
+
+# --- the whole document's numbering, not just the event paths ----------
+#
+# The narration step was inserted into the four `WEBCOMPANION_EVENT` paths,
+# but the renumber ran over the whole file, so nine lists that never received
+# an inserted step were pushed up to start at `2.` with no step 1. Nothing
+# caught it because every narration test slices the event sections out first
+# — and those four were the only lists that were actually correct.
+
+
+def _ordered_lists(doc):
+    """Every ordered list in the document, as (first line number, numbers).
+
+    A list is a maximal run of `N. ` markers at one indent whose numbers run
+    consecutively, outside fenced code and never spanning a heading. Splitting
+    on a break in the sequence is what lets a list survive the paragraphs the
+    round path interleaves between its steps; the invariant left to assert is
+    that each run opens at 1.
+    """
+    runs, cur, fenced = [], None, False
+    for lineno, line in enumerate(doc.splitlines(), 1):
+        if re.match(r"^\s*```", line):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        if re.match(r"^\s*#{1,6} ", line):
+            cur = None
+            continue
+        m = re.match(r"^(\s*)(\d+)\. ", line)
+        if not m:
+            continue
+        indent, n = len(m.group(1)), int(m.group(2))
+        if cur is not None and cur[0] == indent and n == cur[2][-1] + 1:
+            cur[2].append(n)
+        else:
+            cur = (indent, lineno, [n])
+            runs.append(cur)
+    return [(lineno, nums) for _, lineno, nums in runs]
+
+
+def test_every_ordered_list_starts_at_one():
+    doc = CONTRACT.read_text(encoding="utf-8")
+    lists = _ordered_lists(doc)
+    assert len(lists) >= 10, \
+        "the list scanner stopped finding this document's lists — retarget it"
+    broken = [f"line {lineno}: starts at {nums[0]} (runs {nums[0]}-{nums[-1]})"
+              for lineno, nums in lists if nums[0] != 1]
+    assert broken == [], \
+        ("these lists have no step 1 — Claude reads this file on every event "
+         "and follows the numbers: " + "; ".join(broken))
