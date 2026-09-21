@@ -52,7 +52,6 @@ export const SHELL_HTML = `\
 <button id="resume-copy" type="button" class="resume-copy-btn" title="Copy the command">Copy</button></div>\
 <p class="resume-status" id="resume-status" aria-live="polite"></p>\
 </div></span>\
-<button id="review-progress" type="button" class="review-progress" hidden aria-label="Review progress">0/0</button>\
 <button id="highlighter-toggle" type="button" class="icon-btn hl-btn" aria-pressed="false" title="Reading highlighter — drag over text to mark it read" aria-label="Reading highlighter">\
 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 4.5l4 4L10 18H6v-4z"/>\
 <line x1="4" y1="21" x2="20" y2="21"/></svg></button>\

@@ -2664,58 +2664,6 @@
     });
   })();
 
-  // ── Review progress ──────────────────────────────────────────────────────
-  // The round dock says what is PENDING. Nothing said what was left: on a
-  // twelve-block plan the only way to find the block you had not dealt with
-  // yet was to scroll and remember. This counts it, and — the part that
-  // actually saves the scrolling — jumps to the next one.
-  //
-  // "Dealt with" is read off the DOM rather than kept as state of its own,
-  // because the DOM already knows: data-block-mark carries every pending mark
-  // AND a pinned comment (subunits.js sets it from blockMark), data-engaged-
-  // type carries a draft still being written. Anything else is untouched.
-  // A MutationObserver watches those two attributes, so nothing has to
-  // remember to call this after a mark, a pin, an undo or a poll.
-  (function initReviewProgress() {
-    const pill = document.getElementById("review-progress");
-    if (!pill) return;
-
-    function sections() {
-      return [...document.querySelectorAll("section.block[data-block-id]")];
-    }
-    function touched(s) {
-      return !!(s.dataset.blockMark || s.dataset.engagedType);
-    }
-
-    function refresh() {
-      const all = sections();
-      const done = all.filter(touched).length;
-      all.forEach((s) => { s.dataset.reviewState = touched(s) ? "touched" : "untouched"; });
-      // Hidden rather than showing 0/0 on a document that has not rendered
-      // its blocks yet — a counter that flashes nonsense on every load is
-      // worse than one that arrives a moment late.
-      pill.hidden = all.length === 0;
-      pill.textContent = `${done}/${all.length}`;
-      pill.dataset.complete = all.length && done === all.length ? "1" : "0";
-      pill.title = done === all.length && all.length
-        ? "Every block has been marked or commented on"
-        : `${all.length - done} block${all.length - done === 1 ? "" : "s"} not yet marked — click to jump to the next one`;
-    }
-
-    pill.addEventListener("click", () => {
-      const next = sections().find((s) => !touched(s));
-      if (!next) return;
-      window.AnnotateKeyboard?.focusBlock?.(next.dataset.blockId);
-      next.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
-
-    const main = document.querySelector("main.prose") || document.body;
-    new MutationObserver(refresh).observe(main, {
-      subtree: true, childList: true,
-      attributes: true, attributeFilter: ["data-block-mark", "data-engaged-type"],
-    });
-    refresh();
-  })();
 
   // ── Keyboard review (j / k / c / f) ──────────────────────────────────────
   // Everything that decides anything in this page started with the mouse: the

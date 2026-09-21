@@ -59,7 +59,7 @@ class TestShellSourceIsReadable(unittest.TestCase):
         html = shell_html()
         for control in ("block-search", "settings-toggle", "settings-pop",
                         "settings-groups", "settings-reset", "palette-pop",
-                        "review-progress", "highlighter-toggle", "highlighter-clear",
+                        "highlighter-toggle", "highlighter-clear",
                         "fullscreen-toggle",
                         "composer-toggle", "legend-toggle", "legend-pop",
                         "general-composer", "general-input", "general-send",

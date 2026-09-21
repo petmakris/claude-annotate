@@ -174,17 +174,6 @@ def test_the_keyboard_walks_the_document(page):
     assert owner == second, "c commented on the wrong block"
 
 
-def test_the_progress_counter_follows_the_marks(page):
-    assert page.text_content("#review-progress").strip() == f"0/{len(BLOCKS)}"
-    page.eval_on_selector(
-        "section.block:first-of-type",
-        "el => window.AnnotateSubunits.toggleBlockMark(el.dataset.blockId, 'keep')")
-    page.wait_for_function(
-        f"() => document.getElementById('review-progress').textContent.trim() === '1/{len(BLOCKS)}'",
-        timeout=5000)
-    assert page.get_attribute("section.block:first-of-type", "data-review-state") == "touched"
-
-
 def test_the_settings_panel_paints_and_persists(page):
     page.click("#settings-toggle")
     page.wait_for_selector("#settings-pop:not([hidden])")

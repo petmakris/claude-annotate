@@ -383,54 +383,7 @@ section.block[data-block-mark="compact"] .card-title { color: var(--text-dim); }
   color: var(--text); text-align: center;
 }
 
-/* === Review progress ================================================
-   How much of this document you have actually dealt with, and a way to the
-   next block you have not. Sized and coloured like the section pills rather
-   than like a control: it is a readout that happens to be clickable, and a
-   button-shaped thing here would compete with Share and Done for the eye.
-   Turns accent when every block is marked — the one moment it is worth
-   noticing, because it means the round is ready to submit. */
-.review-progress {
-  flex: none;
-  padding: 3px 9px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text-dim);
-  cursor: pointer;
-  font-family: var(--font-code);
-  font-size: 10.5px; font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
-}
-.review-progress[hidden] { display: none; }
-.review-progress:hover { color: var(--accent); border-color: var(--accent); }
-.review-progress[data-complete="1"] {
-  color: var(--accent-fg); background: var(--accent); border-color: var(--accent);
-}
-/* A guest can read the counter — it says how far the author got — but there
-   is nothing for them to jump to and nothing they could mark, so it stops
-   being a control. */
-body.read-only .review-progress { pointer-events: none; }
 
-/* The per-block half of the same idea. Deliberately quiet: an untouched block
-   is the NORMAL state of a document you have just opened, so marking every
-   one of them would paint the whole page. Only the dealt-with ones carry a
-   tick.
-
-   Inline after the title, NOT absolutely positioned in the gutter: the card
-   sets overflow:hidden and .card-head is position:static, so an absolute tick
-   resolved against a further ancestor and was clipped by the card edge —
-   measured at x=1219 against a card ending at 1206. Inline cannot be clipped
-   and needs no positioning context. */
-section.block[data-review-state="touched"] .card-title::after {
-  content: "✓";
-  margin-left: 7px;
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 700;
-  opacity: .8;
-}
 
 /* === The keyboard cursor ============================================
    j and k move it, c comments on it, f folds it. Drawn as a rail down the

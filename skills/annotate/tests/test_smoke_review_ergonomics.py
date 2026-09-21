@@ -7,7 +7,8 @@ Four things that were missing, and are related more closely than they look:
   * the controls that band reveals are real <button>s, so Tab could always
     land on them — on something with opacity 0 and pointer-events none, which
     is a control you can focus, cannot see and cannot press;
-  * the round dock said what was PENDING and nothing said what was LEFT;
+  * (the counter that answered this was removed on 2026-09-21 — see
+    TestReviewProgressIsGone below);
   * and finishing a round was a one-way door in the page, though the daemon
     has always had POST /api/unfinish and the CLI has always exposed it.
 
@@ -17,9 +18,7 @@ this checkout: j and k walk the blocks and scroll them into view, c opens a
 comment on the block under the cursor and focuses its textarea, f folds only
 that block, Escape drops the cursor, none of them fire while typing, the
 cursor and Tab both reveal the control strip (opacity 1, pointer-events auto),
-the counter went 0/8 → 1/8 → 2/8 as blocks were marked, its click moved the
-cursor to the first untouched block, and Reopen round-tripped a really
-finished session back to finished=false.
+and Reopen round-tripped a really finished session back to finished=false.
 """
 import json
 import re
@@ -101,36 +100,26 @@ class TestTheControlsHaveANonHoverPath(unittest.TestCase):
         self.assertIn("overflow-y: auto", pop)
 
 
-class TestReviewProgress(unittest.TestCase):
-    def test_it_reads_state_off_the_dom_rather_than_keeping_its_own(self):
-        # data-block-mark already carries every mark AND a pinned comment;
-        # data-engaged-type carries a draft in progress. A second copy of that
-        # truth would be one more thing to keep in step.
-        body = _fn("function initReviewProgress()")
-        self.assertIn("dataset.blockMark", body)
-        self.assertIn("dataset.engagedType", body)
+class TestReviewProgressIsGone(unittest.TestCase):
+    """Deleted on purpose, 2026-09-21. Annotate is not a progress tracker, and
+    a counter invites completion for its own sake. These are guards, not
+    coverage: each one fails if the feature is reintroduced by habit."""
 
-    def test_nothing_has_to_remember_to_refresh_it(self):
-        body = _fn("function initReviewProgress()")
-        self.assertIn("MutationObserver", body)
-        self.assertIn('attributeFilter: ["data-block-mark", "data-engaged-type"]', body)
+    def test_the_pill_is_not_in_the_shell(self):
+        self.assertNotIn("review-progress", SHELL)
 
-    def test_it_jumps_to_the_next_untouched_block(self):
-        body = _fn("function initReviewProgress()")
-        self.assertIn("focusBlock", body,
-                      "the counter no longer takes you anywhere")
-        self.assertIn("focusBlock:", JS,
-                      "AnnotateKeyboard does not expose focusBlock for it")
+    def test_the_pill_has_no_stylesheet_rule_left_behind(self):
+        self.assertNotIn(".review-progress", CSS)
 
-    def test_the_pill_and_the_tick_are_rendered_and_styled(self):
-        self.assertIn('id="review-progress"', SHELL)
-        self.assertIn(".review-progress", CSS)
-        # The tick is inline after the title, never absolute: the card sets
-        # overflow:hidden and .card-head is position:static, so an absolute
-        # one was clipped at the card edge — measured at x=1219 on a card
-        # ending at 1206.
-        self.assertIn('section.block[data-review-state="touched"] .card-title::after', CSS)
-        self.assertNotIn('[data-review-state="touched"] .card-head::after', CSS)
+    def test_the_counter_machinery_is_gone_from_the_page_code(self):
+        self.assertNotIn("initReviewProgress", JS)
+        self.assertNotIn("reviewState", JS)
+
+    def test_the_per_block_tick_is_gone(self):
+        # The other half of the same feature: a ✓ after the title of a block
+        # already dealt with. It read as a score on a page that is not scored.
+        self.assertNotIn("data-review-state", CSS)
+        self.assertNotIn("data-review-state", JS)
 
 
 class TestReopen(unittest.TestCase):
