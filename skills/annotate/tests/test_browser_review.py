@@ -175,8 +175,12 @@ def test_the_keyboard_walks_the_document(page):
 
 
 def test_the_settings_panel_paints_and_persists(page):
-    page.click("#settings-toggle")
-    page.wait_for_selector("#settings-pop:not([hidden])")
+    page.click("#menu-toggle")
+    page.wait_for_selector("#menu-pop:not([hidden])")
+    page.click('[data-pane-to="settings"]')
+    page.wait_for_function(
+        "() => document.getElementById('menu-pop').dataset.pane === 'settings'",
+        timeout=3000)
     page.click('[data-setting="prosefont"] [data-value="serif"]')
     page.click('[data-setting="textsize"] [data-value="large"]')
     page.wait_for_function(
@@ -192,7 +196,12 @@ def test_the_settings_panel_paints_and_persists(page):
     assert page.evaluate("() => document.body.dataset.proseFont") == "serif", \
         "a reader preference did not survive a reload"
 
-    page.click("#settings-toggle")
+    page.click("#menu-toggle")
+    page.wait_for_selector("#menu-pop:not([hidden])")
+    page.click('[data-pane-to="settings"]')
+    page.wait_for_function(
+        "() => document.getElementById('menu-pop').dataset.pane === 'settings'",
+        timeout=3000)
     page.click("#settings-reset")
     page.wait_for_function(
         "() => document.body.dataset.proseFont === 'bricolage' "
@@ -220,7 +229,12 @@ def test_the_width_stops_measure_what_they_claim(page):
                ".getPropertyValue('--content-max').trim()]")
     assert page.evaluate(measure) == ["normal", "1180px"]
 
-    page.click("#settings-toggle")
+    page.click("#menu-toggle")
+    page.wait_for_selector("#menu-pop:not([hidden])")
+    page.click('[data-pane-to="settings"]')
+    page.wait_for_function(
+        "() => document.getElementById('menu-pop').dataset.pane === 'settings'",
+        timeout=3000)
     rows = page.eval_on_selector_all('[data-setting="pagewidth"] [data-value]',
                                      "els => els.map(e => e.dataset.value)")
     assert rows == ["normal", "wide"], f"the panel offers {rows}"
@@ -246,7 +260,12 @@ def test_a_width_chosen_before_the_rename_still_means_its_own_column(page):
         assert page.evaluate("() => document.body.dataset.width") == expected, \
             f"a stored {legacy!r} no longer opens on {expected!r}"
 
-    page.click("#settings-toggle")
+    page.click("#menu-toggle")
+    page.wait_for_selector("#menu-pop:not([hidden])")
+    page.click('[data-pane-to="settings"]')
+    page.wait_for_function(
+        "() => document.getElementById('menu-pop').dataset.pane === 'settings'",
+        timeout=3000)
     page.click("#settings-reset")
     page.wait_for_function("() => document.body.dataset.width === 'normal'", timeout=3000)
 
@@ -306,3 +325,117 @@ def test_a_diagram_fills_with_the_card_not_with_white(page):
 def test_the_page_raises_nothing(page):
     page.wait_for_timeout(2500)          # a few poll ticks
     assert page.__dict__["js_errors"] == [], page.__dict__["js_errors"]
+
+
+def test_the_menu_pushes_a_pane_and_comes_back(page):
+    """The one genuinely new interaction. Everything else in the menu is an
+    element that moved, and the module that owns it never noticed."""
+    page.click("#menu-toggle")
+    page.wait_for_selector("#menu-pop:not([hidden])")
+    assert page.eval_on_selector(
+        "#menu-pop", "el => el.dataset.pane") == "root"
+
+    page.click('[data-pane-to="help"]')
+    page.wait_for_function(
+        "() => document.getElementById('menu-pop').dataset.pane === 'help'")
+    # Exactly one pane visible — the rule is a display swap, and a swap that
+    # shows two is a panel twice as tall as it should be.
+    assert page.eval_on_selector_all(
+        ".menu-pane", "els => els.filter(e => e.offsetParent !== null).length") == 1
+
+    page.click('.menu-pane[data-pane-name="help"] [data-pane-to="root"]')
+    page.wait_for_function(
+        "() => document.getElementById('menu-pop').dataset.pane === 'root'")
+
+    # Closing and reopening must land on root, however it was closed.
+    page.click('[data-pane-to="settings"]')
+    page.keyboard.press("Escape")
+    page.wait_for_selector("#menu-pop[hidden]")
+    page.click("#menu-toggle")
+    assert page.eval_on_selector("#menu-pop", "el => el.dataset.pane") == "root", \
+        "the menu remembered where you were last time"
+
+
+def test_the_bar_is_three_controls_wide(page):
+    """Measured, not asserted from source: a rule that does not match paints
+    nothing, and a source test cannot tell the difference."""
+    visible = page.eval_on_selector_all(
+        ".header-actions > *",
+        "els => els.filter(e => e.offsetParent !== null)"
+        ".map(e => e.id || e.className)")
+    # The search wrapper, the menu's icon-btn-wrap, and Done. The highlighter
+    # is not armed, so it must not be painting.
+    assert len(visible) == 3, f"the bar is painting {len(visible)} controls: {visible}"
+    assert page.eval_on_selector(
+        "#highlighter-toggle", "el => el.offsetParent === null"), \
+        "the highlighter is visible while disarmed"
+
+
+def test_arming_the_highlighter_brings_its_button_back(page):
+    """A mode with no indicator is a bug. This is the whole escape clause."""
+    page.click("#menu-toggle")
+    page.wait_for_selector("#menu-pop:not([hidden])")
+    page.click("#menu-highlighter")
+    page.wait_for_function(
+        "() => document.getElementById('highlighter-toggle')"
+        ".getAttribute('aria-pressed') === 'true'", timeout=3000)
+    assert page.eval_on_selector(
+        "#highlighter-toggle", "el => el.offsetParent !== null"), \
+        "the highlighter is armed and its button is still invisible"
+
+    # And the proxy mirrors it rather than keeping a second copy of the truth.
+    assert page.eval_on_selector(
+        "#menu-highlighter", "el => el.getAttribute('aria-pressed')") == "true"
+
+
+def test_the_two_slot_writers_land_in_their_slots(page):
+    """Task 2 taught export.js and fullscreen.js to write to a slot instead of
+    over the whole button, because a menu row is an icon AND a label. Nothing
+    proved that at runtime — both modules are covered only by source-string
+    assertions, and a wrong selector would silently eat one or the other.
+    fullscreen.js's sync() runs at init, so its slot is already exercised by
+    the time this page is ready."""
+    page.click("#menu-toggle")
+    page.wait_for_selector("#menu-pop:not([hidden])")
+
+    # Full screen: the icon went INTO the slot, and the label survived it.
+    assert page.eval_on_selector(
+        "#fullscreen-toggle", "el => !!el.querySelector('[data-icon] svg')"), \
+        "fullscreen.js wrote its icon somewhere other than the slot"
+    assert "Full screen" in page.text_content("#fullscreen-toggle"), \
+        "fullscreen.js's icon write ate the row's label"
+
+    # Share: click it and watch the LABEL change, not the whole row. The click
+    # really does build and download the document, so the download is accepted
+    # and discarded — expect_download also keeps the click from hanging.
+    with page.expect_download() as dl:
+        page.click("#export-btn")
+    dl.value
+    page.wait_for_function(
+        "() => document.querySelector('#export-btn [data-label]')"
+        ".textContent.trim() === 'Saved ✓'", timeout=10000)
+    assert page.eval_on_selector(
+        "#export-btn", "el => !!el.querySelector('svg')"), \
+        "export.js's status write ate the row's icon"
+
+
+def test_search_takes_the_bar_and_gives_it_back(page):
+    page.click("#block-search")
+    page.wait_for_function(
+        "() => document.querySelector('.page-header').dataset.searching === '1'")
+    title_hidden = page.eval_on_selector(
+        ".header-title", "el => el.offsetParent === null")
+    assert title_hidden, "the title did not step aside"
+
+    # The field must actually be wide — a takeover that leaves it at 26px is
+    # the defect this test exists for.
+    width = page.eval_on_selector(
+        ".header-search", "el => el.getBoundingClientRect().width")
+    assert width > 400, f"the field took the bar and stayed narrow: {width}px"
+
+    page.keyboard.press("Escape")
+    page.wait_for_function(
+        "() => document.querySelector('.page-header').dataset.searching !== '1'")
+    assert page.eval_on_selector(
+        ".header-title", "el => el.offsetParent !== null"), \
+        "the title did not come back"
