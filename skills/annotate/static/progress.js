@@ -154,10 +154,16 @@
     // mockup this design was chosen from.
     feed.scrollTop = feed.scrollHeight;
 
-    // A block being rewritten should still say so on the block.
-    document.querySelectorAll(".updating-label").forEach((n) => {
-      if (last && !done) n.textContent = last.text;
-    });
+    // Deliberately NOT writing the current line into `.updating-label`.
+    // There is one trail per event and it carries no block id, so the only
+    // thing this file could do is write the same sentence into every
+    // `.updating-label` on the page — a round touching five blocks then shows
+    // the identical line on all five, which reads as five separate claims and
+    // is wrong for at least four of them. The deleted `applyProgress` could
+    // caption a specific block because its map was keyed per event and
+    // resolved to one block; nothing in the progress item replaces that key.
+    // Each block keeps script.js's own "updating" pill and its own timer, and
+    // the panel above is the one place the current line belongs.
   }
 
   // The one local timer: the elapsed clock. It reads nothing from the daemon —

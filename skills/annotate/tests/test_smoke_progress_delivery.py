@@ -80,7 +80,16 @@ class TestTheDeadCaptionPathIsGone(unittest.TestCase):
         self.assertFalse((HOOKS / "progress_publish.py").exists(),
                          "a file documenting a feature nobody can reach")
 
-    def test_the_block_caption_still_has_an_owner(self):
-        # .updating-label is not being dropped — it moved to progress.js.
+    def test_the_block_caption_is_not_written_by_the_narration_panel(self):
+        # The trail is per EVENT and carries no block id, so progress.js can
+        # only write the same sentence into every `.updating-label` on the
+        # page: a round touching five blocks would show the identical line on
+        # all five. The per-block pill keeps script.js's own "updating" text
+        # and its own timer; the current line lives in the panel.
         progress_js = (STATIC / "progress.js").read_text()
-        self.assertIn("updating-label", progress_js)
+        code = "\n".join(l for l in progress_js.splitlines()
+                         if not l.lstrip().startswith("//"))
+        self.assertNotIn("updating-label", code,
+                         "progress.js writes the same line into every block caption")
+        self.assertIn('label.className = "updating-label"', SCRIPT)
+        self.assertIn('label.textContent = "updating"', SCRIPT)
