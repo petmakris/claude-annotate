@@ -350,7 +350,11 @@ def test_the_menu_pushes_a_pane_and_comes_back(page):
     # Closing and reopening must land on root, however it was closed.
     page.click('[data-pane-to="settings"]')
     page.keyboard.press("Escape")
-    page.wait_for_selector("#menu-pop[hidden]")
+    # state="hidden" rather than the selector "#menu-pop[hidden]": Playwright's
+    # default wait state is "visible", and an element the [hidden] attribute
+    # forces to display:none can never satisfy that — the selector-form wait
+    # timed out forever even though the attribute was already set correctly.
+    page.wait_for_selector("#menu-pop", state="hidden")
     page.click("#menu-toggle")
     assert page.eval_on_selector("#menu-pop", "el => el.dataset.pane") == "root", \
         "the menu remembered where you were last time"
@@ -428,7 +432,14 @@ def test_search_takes_the_bar_and_gives_it_back(page):
     assert title_hidden, "the title did not step aside"
 
     # The field must actually be wide — a takeover that leaves it at 26px is
-    # the defect this test exists for.
+    # the defect this test exists for. `.header-search` has a 160ms width
+    # transition, so sampled on the tick after data-searching flips it still
+    # reads 26px on a page behaving perfectly; wait for the transition to
+    # land rather than sampling mid-flight, exactly as the j/k cursor test
+    # waits out the hover-actions opacity transition above.
+    page.wait_for_function(
+        "() => document.querySelector('.header-search')"
+        ".getBoundingClientRect().width > 400", timeout=3000)
     width = page.eval_on_selector(
         ".header-search", "el => el.getBoundingClientRect().width")
     assert width > 400, f"the field took the bar and stayed narrow: {width}px"

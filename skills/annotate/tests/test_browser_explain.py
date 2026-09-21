@@ -492,6 +492,10 @@ def test_the_exported_file_carries_every_label_and_none_of_the_controls(page):
     in the document as ordinary labels.
     """
     _step(page, 2)          # export from mid-walk, the awkward case
+    # Share moved into the menu with the navbar redesign: it is a menu row
+    # now, invisible until the menu is opened.
+    page.click("#menu-toggle")
+    page.wait_for_selector("#menu-pop:not([hidden])")
     with page.expect_download(timeout=60000) as dl:
         page.click("#export-btn")
     html = Path(dl.value.path()).read_text(encoding="utf-8")
