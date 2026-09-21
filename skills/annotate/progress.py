@@ -2,9 +2,10 @@
 
 A reader comments on a block and Claude goes away for minutes. The page has a
 spinner and a ticking timer, and until now nothing else: `applyProgress` in
-script.js has been receiving `undefined` since the daemon cutover, and
-hooks/progress_publish.py — which used to produce its labels — went dormant in
-the same move.
+script.js had been receiving `undefined` since the daemon cutover, and the
+PostToolUse hook that used to produce its labels (`hooks/hooks.json` and
+`skills/annotate/hooks/progress_publish.py`) went dormant in the same move.
+Both files are gone; this module is what replaced them.
 
 This is the writing half of the replacement. Claude calls it between steps and
 the line appears on the page within milliseconds, because the daemon already

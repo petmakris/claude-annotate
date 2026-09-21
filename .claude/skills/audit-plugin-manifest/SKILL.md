@@ -1,6 +1,6 @@
 ---
 name: audit-plugin-manifest
-description: Audit `.claude-plugin/marketplace.json` — the registry of what ships — against the skills on disk and the root-shared hooks file. Finds a skill directory that never got its `SKILL.md`, thin install-time descriptions, a missing IntelliJ prerequisite note, and hooks that reach a plugin they were not written for. Reports in plain English. Use when the user says "/audit-plugin-manifest", "check what ships", or asks whether both plugins still install correctly.
+description: Audit `.claude-plugin/marketplace.json` — the registry of what ships — against the skills on disk and any root-shared surface (`hooks/`, `commands/`, `agents/`), of which there is none today. Finds a skill directory that never got its `SKILL.md`, thin install-time descriptions, a missing IntelliJ prerequisite note, and a root-shared hook that reaches a plugin it was not written for. Reports in plain English. Use when the user says "/audit-plugin-manifest", "check what ships", or asks whether both plugins still install correctly.
 user-invocable: true
 ---
 
@@ -28,14 +28,13 @@ These cover the mechanical checks thoroughly. Report only what they do not enfor
 
 1. `.claude-plugin/marketplace.json` — the two entries, their `description` and `skills` (their `source` and `strict` are context — see the intro — not a check this audit runs).
 2. Each `skills/*/SKILL.md` — the embedded plugin-root probe.
-3. `hooks/hooks.json` — the root-shared hook registration.
-4. `skills/annotate/hooks/progress_publish.py` — the hook the root file registers.
+3. Any root-shared surface Claude Code loads per-plugin: `hooks/`, `commands/` or `agents/` at the repository root. **There is none today** — `git ls-files | grep hooks` returns only `skills/ask_diff/install_hooks.sh` and its test, neither of which is root-shared. The `hooks/hooks.json` this step used to name, and the `skills/annotate/hooks/progress_publish.py` it registered, were both deleted when written narration replaced the dormant progress hook. Do not try to read either; if a root-shared surface has reappeared, read it and every script it registers.
 
 ## The rules
 
 - **Rule 1 — a skill directory with no `SKILL.md` ships nothing, and no test notices.** `skills/_shared/` and `skills/tests/` are the two legitimate no-`SKILL.md` directories under `skills/`, allowlisted below. `test_plugin_skill_lists_cover_the_skills_tree` builds its on-disk set only from directories that already contain a `SKILL.md` — a directory without one never enters that comparison at all, so it is invisible by construction, not merely unlisted. A *third* such directory — one that reads like an abandoned or half-authored skill — is **Critical**.
 - **Rule 2 — descriptions are the install-time prose.** An entry `description` that restates the plugin name and nothing more is **Medium**: it is what a user reads when choosing whether to install. The covering tests only require a description to be non-empty, not substantive.
-- **Rule 3 — a root-shared surface reaches both plugins.** Anything at the repository root that Claude Code loads per-plugin — `hooks/`, and `commands/` or `agents/` if they ever appear — is claimed by both entries, and no covering test reads `hooks/hooks.json` at all. A hook there that is not inert for the plugin it was not written for is **Critical**. Today `hooks/hooks.json` registers `progress_publish.py`, which keys off a per-session registry at `~/.claude/annotate/pending-<session_id>.json` written only by the annotate skill; on a session that never used annotate the file does not exist, the lookup raises `FileNotFoundError`, and the hook returns before writing anything — so under `claude-ide-review` (ask_diff, walkthrough) it does nothing and always exits 0. A newly added hook without that property is a Violation.
+- **Rule 3 — a root-shared surface reaches both plugins.** Anything at the repository root that Claude Code loads per-plugin — `hooks/`, `commands/`, `agents/` — is claimed by both entries, and no covering test reads a root `hooks/hooks.json`. A hook there that is not inert for the plugin it was not written for is **Critical**. **Today there is no such surface at all:** the only one this repository ever had was `hooks/hooks.json` registering `skills/annotate/hooks/progress_publish.py`, and both files were deleted when written narration (`skills/annotate/progress.py`) replaced that dormant hook. It was inert by the right property, and that property is the bar for anything that comes next: it keyed off a per-session registry at `~/.claude/annotate/pending-<session_id>.json` written only by the annotate skill, so on a session that never used annotate the lookup raised `FileNotFoundError` and the hook returned before writing anything — under `claude-ide-review` (ask_diff, walkthrough) it did nothing and always exited 0. A newly added hook without that property is a Violation. Nothing to report while the root stays clean.
 - **Rule 4 — the IDE half is named honestly.** `claude-ide-review`'s description must state that it requires the companion IntelliJ plugin. Without the IDE half its commands fail by doing nothing visible, which reads as a broken skill. A description that omits it is **Medium**; the covering tests do not read description content.
 - **Rule 5 — a skill that could belong to either plugin.** **Decision**, not a Violation. Ask which plugin should own it.
 
@@ -49,7 +48,7 @@ These cover the mechanical checks thoroughly. Report only what they do not enfor
 
 ## Step 2 — scan
 
-Parse `marketplace.json` for both entries' `description` and `skills`; list every directory under `skills/` that has no `SKILL.md`, and check each against the allowlist so only a genuine third case gets reported; extract each probe's `NAME` and `MARKER` and resolve both; read `hooks/hooks.json` and the script it registers, checking the early-return property; check for `commands/` or `agents/` at the root; build the file universe from `git ls-files`.
+Parse `marketplace.json` for both entries' `description` and `skills`; list every directory under `skills/` that has no `SKILL.md`, and check each against the allowlist so only a genuine third case gets reported; extract each probe's `NAME` and `MARKER` and resolve both; check whether `hooks/`, `commands/` or `agents/` exists at the root at all — none does today, and there is nothing to read unless one has reappeared, in which case read it and every script it registers and check the early-return property; build the file universe from `git ls-files`.
 
 ## Step 3 — severity
 

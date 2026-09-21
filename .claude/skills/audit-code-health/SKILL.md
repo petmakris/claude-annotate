@@ -78,11 +78,15 @@ function lacks a direct unit test.
   docstring, which is about being the server entrypoint and says nothing
   about this swallow. `BuildInfo.java:40` documents it a third way — a
   comment inside the `catch` body itself ("never throw into the UI").
-  `skills/annotate/hooks/progress_publish.py:134` documents it the same
-  third way — `except Exception:` followed by a comment inside the block
-  itself ("Never let a progress hook disrupt the user's tool flow"). All
-  three positions are allowlisted; a swallow with no comment and no
-  docstring statement in any of them is still Critical or Medium as above.
+  `skills/annotate/progress.py`'s `main()` documents it the same third way —
+  `except ProgressError:` followed by a comment inside the block itself
+  ("Narration must never take down the turn it is narrating"). All three
+  positions are allowlisted; a swallow with no comment and no docstring
+  statement in any of them is still Critical or Medium as above.
+
+  (This entry used to cite `skills/annotate/hooks/progress_publish.py:134`,
+  a hook deleted when written narration replaced it. The illustration moved
+  to its replacement; the rule did not change.)
   In Java, a `catch` block with an empty body is the same finding, exempted
   only under the same three-form rule.
 - **Rule 2 — network and subprocess calls carry a timeout.** An
@@ -131,9 +135,11 @@ function lacks a direct unit test.
    is covered by this same allowlist entry — for example
    `ide-plugin/src/main/java/com/petros/ireview/BuildInfo.java:40` (comment
    inside the `catch` body: "never throw into the UI") and
-   `skills/annotate/hooks/progress_publish.py:134` (comment inside the
-   `except Exception:` body: "Never let a progress hook disrupt the user's
-   tool flow") — not just the three named at the top of this entry. A
+   `skills/annotate/progress.py`'s `main()` (comment inside the
+   `except ProgressError:` body: "Narration must never take down the turn it
+   is narrating") — not just the three named at the top of this entry. The
+   deleted `skills/annotate/hooks/progress_publish.py` used to stand here;
+   its replacement documents the same swallow the same way. A
    justification that lives only in a module's docstring, with nothing
    anchored to the specific swallow, is not covered by this entry.
 2. Generated or vendored third-party assets:
