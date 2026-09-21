@@ -988,17 +988,30 @@ Replace `paintWatcherHealth` with:
 
 Leave `checkWatcherHealth` and its `setInterval` exactly as they are.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 5: Close the pending exception Task 3 left behind**
+
+Task 3's `test_every_id_the_modules_look_up_still_exists` carries a `pending`
+set holding `watcher-badge` and `resume-toggle`: `entry.js` still named them
+after Task 3 deleted them from the shell, and this task is what removes the
+last references. Delete that set from `skills/annotate/tests/test_smoke_menu.py`
+now, along with its comment, and fold it out of the `missing` comprehension so
+the assertion is back to `wanted - runtime`.
+
+Run: `python3 -m pytest skills/annotate/tests/test_smoke_menu.py -q`
+Expected: PASS. A failure here naming either id means `entry.js` still
+references it — fix `entry.js`, never the allowlist.
+
+- [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `python3 -m pytest skills/annotate/tests/test_smoke_watcher_status.py -q`
 Expected: PASS.
 
-- [ ] **Step 6: Run the whole source-level suite**
+- [ ] **Step 7: Run the whole source-level suite**
 
 Run: `python3 -m pytest skills/annotate/tests -q -k "not browser"`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add -A skills/annotate
