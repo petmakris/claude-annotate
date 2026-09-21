@@ -555,6 +555,49 @@ def test_escape_lifts_the_filter_from_anywhere(page):
         "the bar did not go back to rest"
 
 
+def test_the_filtered_bar_fits_a_narrow_viewport(page):
+    """`filtered` keeps the field at its query width AND brings Done and the
+    menu back (test_a_live_query_gives_the_bar_back, above) — but the title
+    stayed at its full min-content width while doing it, so on a phone the
+    three together ran past the right edge. Measured in Chromium: +73px of
+    document overflow at 320px wide, +40px at 375px, +16px at 414px, 0px at
+    768px, with `#done-btn` itself landing off-screen (x=337 w=56 -> 393
+    against a 375px viewport, i.e. 18px short of even starting on screen).
+
+    `page.click('#done-btn', trial=True)` in the test above this one does NOT
+    catch this: Playwright's actionability check scrolls the target into view
+    before judging it clickable, so a Done that is only reachable by scrolling
+    the whole page sideways still reads as passing. This test reads the
+    rect and the document's own scrollWidth instead, with nothing scrolled
+    for it first.
+    """
+    page.set_viewport_size({"width": 375, "height": 667})
+    page.click("#block-search")
+    page.fill("#block-search", "block 2")
+    page.wait_for_function(
+        "() => document.querySelector('.page-header').dataset.searching === '1'")
+    page.evaluate("() => document.getElementById('block-search').blur()")
+    page.wait_for_function(
+        "() => document.querySelector('.page-header').dataset.searching === 'filtered'",
+        timeout=3000)
+    # The field has a 160ms width transition; land before measuring, same as
+    # the takeover and live-query tests above.
+    page.wait_for_timeout(400)
+
+    state = page.evaluate("""() => {
+      const doc = document.documentElement;
+      const done = document.getElementById('done-btn').getBoundingClientRect();
+      return { overflow: doc.scrollWidth - doc.clientWidth,
+               doneRight: done.right,
+               viewportWidth: window.innerWidth }; }""")
+    assert state["overflow"] == 0, (
+        f"the filtered header overflows the document by {state['overflow']}px "
+        "at 375px wide")
+    assert state["doneRight"] <= state["viewportWidth"], (
+        f"Done's right edge ({state['doneRight']}px) is past the "
+        f"{state['viewportWidth']}px viewport — off-screen, not just tight")
+
+
 def test_the_watcher_state_reaches_the_menu_buttons_name(page):
     """The spec's own Risks section: "entry.js's watcher polling is the least
     test-covered thing being rewired. It has no browser test today. Adding one

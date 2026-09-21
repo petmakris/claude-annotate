@@ -979,12 +979,40 @@ main.prose mark.search-hit {
 }
 /* Filtered but not focused: a real field, not the whole bar. A fixed measure
    rather than flex:1, because the title stays and the field growing to fill
-   what is left would be the takeover again under another name. Capped against
-   the viewport so it cannot crowd the title off a phone. */
+   what is left would be the takeover again under another name. The `40vw`
+   half of this min() bounds the FIELD; it does nothing to keep the FIELD
+   from crowding the title off a phone, because the title is the thing that
+   was overflowing. Measured in Chromium with the field, Done and the menu
+   all on screen: document overflow was +73px at 320px wide, +40px at 375px,
+   +16px at 414px, 0px at 768px (where the title's natural width plus
+   everything else already fits). The real ceiling is viewport minus title
+   minus Done minus menu, not a fraction of the viewport spent on the field
+   alone — see the .header-title override below, which is what actually
+   fixes it. */
 .page-header[data-searching="filtered"] .header-search {
   width: min(190px, 40vw);
 }
 .page-header[data-searching="filtered"] .search-input { cursor: text; }
+/* core.css's `.header-title` is a flex item with no min-width override, so
+   per the flexbox default (min-width: auto) it refuses to shrink below its
+   own min-content width — about 151px — and pushes Done and the menu off
+   the right edge instead of giving up space to them. That is the actual
+   cause of the overflow measured above; the field's own 40vw cap never
+   touched it. Overridden here rather than in core.css, per this file's
+   header rules being the place that already undoes core.css's box geometry
+   (see .general-composer above). min-width: 0 lets `.header-title` shrink
+   under pressure, overflow: hidden clips what no longer fits, and the
+   ellipsis on #hdr-title turns that clipping into a legible "title
+   truncated" instead of a mid-character cut. At rest there's no pressure
+   (the field is 26px) and while typing `.header-title` is `display: none`
+   two rules up, so this is inert in both of those states and only bites in
+   `filtered`, which is where the overflow was measured. */
+.header-title { min-width: 0; overflow: hidden; }
+.header-title #hdr-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* The `/` hint has nowhere to live at rest: the field is 26px wide and the
    magnifier already occupies it. It was a hint about how to OPEN search, so
    it is useless once search is open — which is the only state with room for
