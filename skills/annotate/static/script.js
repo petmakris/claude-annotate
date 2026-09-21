@@ -1278,12 +1278,39 @@
       // An echo is a second place the same note is true of. It has no label
       // of its own, so a badge on it would number an entry that is not in the
       // list under the line — see explainNotes.
-      if (group.mode === "badge" && !m.echo) {
+      const onSpanBadge = group.mode === "badge" && !m.echo;
+      if (onSpanBadge) {
         const b = document.createElement("i");
         b.className = "ex-badge ex-badge--onspan";
         b.textContent = String(m.n);
         b.style.left = `calc(12px + ${m.col + m.len}ch)`;
         div.appendChild(b);
+      }
+      // The value chip: the concrete number this example carries at this
+      // exact span, so a reader tracks the trace without leaving the code to
+      // read a label. Independent of the walk and of echo status — two
+      // occurrences of one claim can carry two different numbers.
+      //
+      // Split the same way `.ex-at`/`.ex-pin` are: the OFFSET-carrying node
+      // (`ex-val`) inherits the row's code font untouched, because `ch` is a
+      // metric of an element's own font and the column arithmetic above was
+      // written in the code font's `ch`. A prose-sized chip styled directly
+      // on that node would resolve a narrower `ch` and land back over the
+      // span it is meant to follow. The pill's own look lives one level in,
+      // on `ex-val-chip`, which carries no position of its own.
+      //
+      // Badge mode only, NOT on-span: three marks already sit close enough on
+      // one line to need numbered badges instead of a ladder (see LADDER_MAX
+      // in explain.py), and a value chip wide enough to read overlaps the
+      // very next mark's span at that spacing. explainNotes prints it there
+      // instead, next to the badge it belongs to, where there is a full row
+      // of width to spend on it.
+      if (m.valueHtml && group.mode !== "badge") {
+        const v = document.createElement("i");
+        v.className = "ex-val";
+        v.style.left = `calc(12px + ${m.col + m.len}ch)`;
+        v.appendChild(explainValueChip(m.valueHtml));
+        div.appendChild(v);
       }
     });
     return div;
@@ -1294,6 +1321,16 @@
     el.className = "ex-lbl" + (extra ? ` ${extra}` : "");
     // Restricted inline markdown, already escaped and rendered by explain.py's
     // label_html — bold and code and nothing else. Not model HTML.
+    el.innerHTML = html || "";
+    return el;
+  }
+
+  // The value chip's look with no positioning node around it — for a context
+  // that is already laid out (the notes list), unlike the on-span form in
+  // explainRow, which needs one to carry a `ch` offset in the code's font.
+  function explainValueChip(html) {
+    const el = document.createElement("span");
+    el.className = "ex-val-chip";
     el.innerHTML = html || "";
     return el;
   }
@@ -1352,6 +1389,7 @@
       b.textContent = String(m.n);
       item.appendChild(b);
       item.appendChild(explainLabel(m.labelHtml));
+      if (m.valueHtml) item.appendChild(explainValueChip(m.valueHtml));
       list.appendChild(item);
     });
     return list;
@@ -1407,6 +1445,16 @@
     const steps = view.walk || [];
     if (!steps.length) return;
 
+    // `view.walk`'s own marks carry only position — `view.groups` is where a
+    // mark's `valueHtml` lives (see explain.py). Cross-referenced by
+    // `line:col`, the same key `ulines` already uses to find a mark again
+    // after it is painted.
+    const groupByLine = new Map((view.groups || []).map((g) => [g.line, g]));
+    const valueByPos = new Map();
+    (view.groups || []).forEach((g) => g.marks.forEach((m) => {
+      if (m.valueHtml) valueByPos.set(`${g.line}:${m.col}`, m.valueHtml);
+    }));
+
     const tray = document.createElement("div");
     tray.className = "ex-tray";
 
@@ -1451,7 +1499,20 @@
         if (u) u.classList.add("is-now");
       });
 
-      tray.replaceChildren(explainLabel(step.labelHtml));
+      const trayKids = [explainLabel(step.labelHtml)];
+      // Badge-mode values live in `.ex-notes`, which the walk hides (see
+      // .codepane.ex[data-walk] .ex-notes) — without this they would be the
+      // one thing on the pane a walking reader never sees. Ladder-mode values
+      // stay on the span throughout the walk already, so repeating them here
+      // would be the same number printed twice.
+      if (step.kind === "span") {
+        (step.marks || []).forEach((m) => {
+          if ((groupByLine.get(m.line) || {}).mode !== "badge") return;
+          const html = valueByPos.get(`${m.line}:${m.col}`);
+          if (html) trayKids.push(explainValueChip(html));
+        });
+      }
+      tray.replaceChildren(...trayKids);
       count.textContent = `step ${at + 1} of ${steps.length}` +
         (step.lead ? ` — ${step.lead}` : "");
       prev.disabled = at === 0;
@@ -1480,6 +1541,26 @@
       if (!byLine.has(line)) byLine.set(line, []);
       byLine.get(line).push(s);
     });
+    // A value chip is anchored to its span, which is sometimes the last thing
+    // on the line — `priceInReferenceCurrency)` leaves one character before
+    // the pin's own reservation. Widen that reservation by the chip's rough
+    // width (plain-text length, tags stripped: a `valueHtml` is the same
+    // restricted markdown as a label) rather than moving the chip, since the
+    // chip's whole point is sitting exactly where the span ends. Badge-mode
+    // lines never grow an on-span chip (see explainRow), so they need no
+    // overhang here.
+    function valueOverhang(line) {
+      const group = groupByLine.get(line);
+      const base = ((view.rows[line - 1] || {}).text || "").length;
+      if (!group || group.mode === "badge") return 0;
+      let end = base;
+      group.marks.forEach((m) => {
+        if (!m.valueHtml) return;
+        const plain = m.valueHtml.replace(/<[^>]+>/g, "");
+        end = Math.max(end, m.col + m.len + 2 + plain.length + 1);
+      });
+      return Math.max(0, end - base);
+    }
     byLine.forEach((list, line) => {
       const row = rowEls[line - 1];
       if (!row) return;
@@ -1489,7 +1570,7 @@
       // and this element inherits the CODE font, which is the only font whose
       // `ch` the column arithmetic is written in — a pin styled in the prose
       // face resolves a narrower `ch` and lands back among the glyphs.
-      at_.style.left = `calc(12px + ${(view.rows[line - 1] || {}).text.length + 2}ch)`;
+      at_.style.left = `calc(12px + ${(view.rows[line - 1] || {}).text.length + 2 + valueOverhang(line)}ch)`;
       list.forEach((s) => {
         const pin = explainPins(s, go);
         pins[s.n - 1] = pin;

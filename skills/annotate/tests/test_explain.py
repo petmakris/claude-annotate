@@ -243,6 +243,50 @@ def test_a_note_cannot_quote_both_ways_at_once():
     assert "either" in str(e.value)
 
 
+# --- tracking a real example's numbers -------------------------------------
+
+def test_a_value_reaches_its_own_mark():
+    view = compile_spec(spec(notes=[
+        {"line": 2, "span": "priceInReferenceCurrency", "value": "157.36", "label": "x"}]))
+    mark = view["groups"][0]["marks"][0]
+    assert mark["valueHtml"] == "157.36"
+
+
+def test_a_mark_with_no_value_has_no_value_html():
+    view = compile_spec(spec())
+    assert view["groups"][0]["marks"][0]["valueHtml"] == ""
+
+
+def test_each_place_in_spans_can_carry_its_own_value():
+    view = compile_spec(spec(code=TWICE, notes=[
+        {"spans": [{"line": 3, "span": CALC, "value": "100 (CHF)"},
+                   {"line": 9, "span": CALC, "value": "100 (EUR)"}],
+         "label": "x"}]))
+    by_line = {g["line"]: g for g in view["groups"]}
+    assert by_line[3]["marks"][0]["valueHtml"] == "100 (CHF)"
+    assert by_line[9]["marks"][0]["valueHtml"] == "100 (EUR)"
+
+
+def test_value_is_restricted_markdown_like_a_label():
+    view = compile_spec(spec(notes=[
+        {"line": 2, "span": "priceInReferenceCurrency", "value": "`157.36`", "label": "x"}]))
+    assert view["groups"][0]["marks"][0]["valueHtml"] == "<code>157.36</code>"
+
+
+def test_a_blank_value_is_refused_rather_than_rendering_an_empty_chip():
+    with pytest.raises(ExplainError) as e:
+        compile_spec(spec(notes=[
+            {"line": 2, "span": "priceInReferenceCurrency", "value": "  ", "label": "x"}]))
+    assert "`value` must be a non-empty string" in str(e.value)
+
+
+def test_a_non_string_value_is_refused():
+    with pytest.raises(ExplainError) as e:
+        compile_spec(spec(notes=[
+            {"line": 2, "span": "priceInReferenceCurrency", "value": 157.36, "label": "x"}]))
+    assert "`value` must be a non-empty string" in str(e.value)
+
+
 # --- the walk -------------------------------------------------------------
 
 def test_the_walk_follows_the_authored_order_not_the_file_order():

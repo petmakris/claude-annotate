@@ -63,6 +63,33 @@ confident underline under the wrong tokens and the page looks correct.
 - Tabs are expanded to 4 spaces before anything is measured, so a tab-indented
   snippet needs nothing special.
 
+## Showing the number, not just the claim
+
+A place — a `span`, or one entry inside `spans` — may carry a `"value"`: the
+concrete number this example produces at that exact point. It renders as a
+small chip immediately after the underline, escaped the same restricted
+markdown as `label`, and it stays visible in every mode, walked or static —
+unlike the step counter, it isn't restating something shown elsewhere.
+
+    {"line": 2, "span": "priceInReferenceCurrency", "value": "166.62 × 0.944573 = 157.36",
+     "label": "**reference currency** — already FX-converted"}
+
+This is for a reader **tracking one worked example through the code**, not
+for documenting the field in general — a `value` is the number *this* capture
+produced, the same way the rest of the block is grounded in one real run. Skip
+it on a note that is explaining shape rather than following a number.
+
+A `spans` note gives each place its own `value` — the same claim, ordinarily
+two different numbers (a loop, or the same computation in two currencies):
+
+    {"spans": [{"line": 3, "span": "p.multiply(qty)", "value": "100 × 1 = 100"},
+               {"line": 9, "span": "p.multiply(qty)", "value": "100 × 1 = 100 (EUR)"}],
+     "label": "**the same multiplication**, both times"}
+
+`value` never substitutes for `label` — a chip with no sentence behind it is a
+number with no claim, which is the ping-pong this kind exists to remove, just
+walked in the other direction.
+
 ## One note, several places
 
 A claim is often true in more than one place — the same call in two methods,

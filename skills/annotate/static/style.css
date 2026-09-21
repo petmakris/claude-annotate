@@ -2264,6 +2264,43 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
   pointer-events: none;
 }
 
+/* The value chip: the real number this example carries at this exact span.
+   Kept visible in every mode, walked or static — unlike the on-span badge, it
+   is not restating something the tray already says, so hiding it mid-walk
+   would remove the one thing this feature is for.
+
+   On-span only in "drop" (ladder) mode, ≤2 marks on the line — see
+   explainRow. In "badge" mode the marks already sit close enough to need
+   numbered footnotes instead of a ladder (LADDER_MAX, explain.py), and a
+   chip wide enough to read at that spacing overlaps the very next span; its
+   value prints in `.ex-notes` instead, inline with the entry it belongs to,
+   which is `.ex-val-chip` with no positioning node around it.
+
+   Same split as `.ex-at`/`.ex-pin` on THIS, the on-span form: it carries the
+   `ch` offset and stays in the code font so that metric agrees with the
+   column arithmetic that positions it; `.ex-val-chip` one level in carries
+   the look. Measured the wrong way round first, same as the pin — see the
+   note over `.ex-at`. */
+.ex-val {
+  position: absolute;
+  top: 50%;
+  margin-left: 4px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.ex-val-chip {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--cp-anchor-bg);
+  color: var(--ex-ink-strong);
+  font-family: var(--font-prose);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ex-note .ex-val-chip { margin-left: 7px; }
+
 /* The label: prose face, warm ink, nothing behind it.
    A card was tried first — every shade from a neutral +16 L* to an inverted
    paper note — and none of them is here because a box around two sentences,

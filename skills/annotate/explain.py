@@ -202,7 +202,9 @@ def compile_spec(spec: dict[str, Any]) -> dict[str, Any]:
         # One note, one claim — but a claim can be true of more than one place.
         # The first mark carries the prose; the rest are ECHOES, underlined and
         # silent, because the same sentence printed under every twin is the
-        # same sentence twice in one pane.
+        # same sentence twice in one pane. `value` is independent of that: each
+        # place may carry its own, since a loop or a two-currency pair is often
+        # the same claim at two DIFFERENT numbers.
         many = note.get("spans")
         if many is not None:
             if "span" in note or "line" in note:
@@ -221,9 +223,13 @@ def compile_spec(spec: dict[str, Any]) -> dict[str, Any]:
             if not isinstance(place, dict):
                 raise ExplainError(f"{where}: each entry in `spans` is an object.")
             col, length = _resolve_span(rows_text, place, where)
+            value = place.get("value")
+            if value is not None and (not isinstance(value, str) or not value.strip()):
+                raise ExplainError(f"{where}: `value` must be a non-empty string if given.")
             mark = {
                 "col": col, "len": length, "echo": k > 0,
                 "labelHtml": "" if k else label_html(label),
+                "valueHtml": label_html(value) if value else "",
             }
             by_line.setdefault(place["line"], []).append(mark)
             marks.append({"line": place["line"], "col": col, "len": length})
