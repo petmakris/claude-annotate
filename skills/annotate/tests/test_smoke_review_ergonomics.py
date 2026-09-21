@@ -92,8 +92,17 @@ class TestTheControlsHaveANonHoverPath(unittest.TestCase):
             self.assertIn(key, SHELL, f"the legend does not mention {key}")
         self.assertIn(".legend-keys kbd", CSS)
 
-    def test_the_taller_legend_is_clamped(self):
-        # The keyboard section took it from ~430px to 621px, measured.
+    def test_the_legend_fits_the_menu_measure(self):
+        # It was a 3-column table in a popover as wide as it liked. It is a
+        # pane of a 288px menu now, and three columns do not fit that.
+        self.assertNotIn("legend-table", SHELL,
+                         "the legend is still a table")
+        self.assertIn("legend-entry", SHELL)
+        for cls in ("legend-entry-name", "legend-entry-tells",
+                    "legend-entry-does"):
+            self.assertIn(cls, CSS, f".{cls} has no rule")
+
+    def test_the_legend_still_scrolls_rather_than_overflowing(self):
         pop = CSS[CSS.index(".legend-pop {"):]
         pop = pop[:pop.index("}")]
         self.assertIn("max-height", pop)

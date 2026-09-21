@@ -100,28 +100,30 @@ export const SHELL_HTML = `\
 <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>\
 <span>Buttons &amp; keyboard</span></button>\
 <div id="legend-pop" class="legend-pop">\
-<div class="legend-body"><table class="legend-table"><thead><tr><th>Button</th><th>What it tells Claude</th>\
-<th>What happens to the content</th></tr></thead><tbody><tr><td class="legend-btn">\
+<div class="legend-body"><div class="legend-entry"><div class="legend-entry-name">\
 <svg class="legend-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/>\
 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>\
-<line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg><span>Trash</span></td>\
-<td>&ldquo;This is irrelevant &mdash; cut it&rdquo;</td>\
-<td>Removed from the document for good, and Claude is told never to bring it back</td></tr><tr>\
-<td class="legend-btn"><svg class="legend-icon" viewBox="0 0 24 24" aria-hidden="true">\
-<polyline points="20 6 9 17 4 12"/></svg><span>Leave as written</span></td>\
-<td>&ldquo;This is fine &mdash; don&rsquo;t touch it&rdquo;</td>\
-<td>Stays exactly as written; Claude skips rewriting it</td></tr><tr><td class="legend-btn">\
+<line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg><span>Trash</span></div>\
+<p class="legend-entry-tells">&ldquo;This is irrelevant &mdash; cut it&rdquo;</p>\
+<p class="legend-entry-does">Removed from the document for good, and Claude is told never to bring it back</p></div>\
+<div class="legend-entry"><div class="legend-entry-name">\
+<svg class="legend-icon" viewBox="0 0 24 24" aria-hidden="true">\
+<polyline points="20 6 9 17 4 12"/></svg><span>Leave as written</span></div>\
+<p class="legend-entry-tells">&ldquo;This is fine &mdash; don&rsquo;t touch it&rdquo;</p>\
+<p class="legend-entry-does">Stays exactly as written; Claude skips rewriting it</p></div>\
+<div class="legend-entry"><div class="legend-entry-name">\
 <svg class="legend-icon" viewBox="0 0 24 24" aria-hidden="true">\
 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>\
-</svg><span>Comment</span></td><td>&ldquo;Respond to this&rdquo;</td>\
-<td>Stays, rewritten to fold Claude&rsquo;s answer into the prose</td></tr><tr><td class="legend-btn">\
+</svg><span>Comment</span></div>\
+<p class="legend-entry-tells">&ldquo;Respond to this&rdquo;</p>\
+<p class="legend-entry-does">Stays, rewritten to fold Claude&rsquo;s answer into the prose</p></div>\
+<div class="legend-entry"><div class="legend-entry-name">\
 <svg class="legend-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">\
 <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>\
 <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>\
-<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg><span>Compact</span>\
-</td><td>&ldquo;I&rsquo;m fine with this &mdash; it just doesn&rsquo;t need the space&rdquo;</td>\
-<td>Taken off the page. What it contributes is folded into the sentences that stay, so the plan gets shorter without losing the thread. Detail that nothing else can carry is lost &mdash; this cannot be undone once the round is submitted</td>\
-</tr></tbody></table><div class="legend-keys"><h4 class="legend-keys-head">Keyboard</h4>\
+<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg><span>Compact</span></div>\
+<p class="legend-entry-tells">&ldquo;I&rsquo;m fine with this &mdash; it just doesn&rsquo;t need the space&rdquo;</p>\
+<p class="legend-entry-does">Taken off the page. What it contributes is folded into the sentences that stay, so the plan gets shorter without losing the thread. Detail that nothing else can carry is lost &mdash; this cannot be undone once the round is submitted</p></div><div class="legend-keys"><h4 class="legend-keys-head">Keyboard</h4>\
 <table class="legend-keytable"><tbody><tr><td><kbd>j</kbd> <kbd>k</kbd></td>\
 <td>Move to the next / previous block</td></tr><tr><td><kbd>c</kbd></td>\
 <td>Comment on the block you are on</td></tr><tr><td><kbd>f</kbd></td><td>Fold or unfold that block</td></tr>\

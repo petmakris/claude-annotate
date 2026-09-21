@@ -203,31 +203,24 @@ body.read-only section.block .hover-actions { border: none; }
   border-radius: 10px;
   overflow-x: auto;
 }
-.legend-table {
-  border-collapse: collapse;
-  width: 100%;
-  font-size: 13px;
+.legend-entry { padding: 9px 0; border-bottom: 1px solid var(--border); }
+.legend-entry:last-of-type { border-bottom: 0; }
+.legend-entry-name {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; font-weight: 600; color: var(--text);
 }
-.legend-table th, .legend-table td {
-  text-align: left;
-  padding: 7px 12px 7px 0;
-  border-bottom: 1px solid var(--border);
-  vertical-align: top;
-}
-.legend-table th {
-  font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
-  color: var(--text-dim); font-weight: 700;
-}
-.legend-table tbody tr:last-child td { border-bottom: none; }
-.legend-btn {
-  white-space: nowrap; font-weight: 600; color: var(--text-strong);
-  padding-right: 20px;
-}
-.legend-btn .legend-icon {
-  width: 14px; height: 14px;
-  vertical-align: -2px; margin-right: 8px;
+.legend-entry-name .legend-icon {
+  width: 14px; height: 14px; flex: none;
   fill: none; stroke: currentColor; stroke-width: 2;
-  stroke-linecap: round; stroke-linejoin: round;
+  stroke-linecap: round; stroke-linejoin: round; color: var(--text-dim);
+}
+/* What it tells Claude, in Claude's voice — quoted in the copy, so it is set
+   as speech. What happens to the content is the consequence, set quieter. */
+.legend-entry-tells {
+  margin: 5px 0 0; font-size: 12px; color: var(--text); font-style: italic;
+}
+.legend-entry-does {
+  margin: 3px 0 0; font-size: 11.5px; color: var(--text-dim); line-height: 1.5;
 }
 .legend-note {
   margin: 12px 0 0;
