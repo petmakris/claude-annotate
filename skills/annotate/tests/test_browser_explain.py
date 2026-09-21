@@ -374,8 +374,13 @@ def test_only_the_current_note_is_inked_and_the_ladders_are_silent(page):
     assert got["inked"] == 1, "a note that is not current still has ink on the line"
     assert got["laddersShown"] == 0, (
         "the ladder is printing the same sentence the tray is showing")
-    assert got["quiet"] == len(TWICE.rstrip("\n").split("\n")) - 1, (
-        "every row but the lit one should have stepped back")
+    # A row used to be forced to `--cp-muted` for every note but the current
+    # one — right for a context row nobody asked about, wrong for an
+    # `explain` snippet, which IS what was asked about in full. Greying out
+    # four of five lines because the walk sits on one was the actual bug
+    # report ("no Java colours"), so every row now keeps its own syntax ink;
+    # only `.is-lit` gets a mark, and it is additive (see the CSS).
+    assert got["quiet"] == 0, "a row's syntax colour is being painted over again"
 
 
 def test_a_note_with_two_spans_lights_both_of_them(page):
@@ -432,16 +437,18 @@ def test_stepping_never_moves_the_code(page):
 
 
 @pytest.mark.parametrize("theme", ["daylight", "midnight", "parchment", "contrast"])
-def test_a_quietened_row_is_still_readable_in_every_pane_theme(page, theme):
-    """Stepping back is not the same as being erased.
+def test_a_context_row_keeps_its_own_syntax_colours_in_every_pane_theme(page, theme):
+    """A row not on the current step is still a row someone quoted on purpose.
 
-    The first cut dimmed with `opacity: .34` and measured 1.12:1 on Daylight,
-    1.14:1 on Parchment and 1.99:1 on Midnight — the code around the current
-    note was simply gone, which throws away the reason the snippet is kept
-    contiguous in the first place: you are supposed to still see the shape of
-    the method you are being walked through. The pane had already learned this
-    once for its context rows (see `.cp-row.is-context`), and this is the
-    check that stops it being unlearned on a theme nobody looked at.
+    An `explain` snippet is the thing the reader asked about in full, not
+    surrounding context pulled in for orientation — unlike an ordinary code
+    pane's `.cp-row.is-context`, nothing here should be painted over to one
+    flat ink. The bug this guards was exactly that: a walk on line 2 forced
+    every OTHER row to `--cp-muted`, so a five-line Java snippet read as
+    "no Java colours" even though hljs had tagged every token correctly the
+    whole time — the rule was just painting over its own output. Checked
+    across every theme because that rule was `.codepane.ex[data-walk]`-scoped
+    and could come back on any one of them without the others noticing.
     """
     page.evaluate("t => { if (t === 'daylight') delete document.body.dataset.paneTheme;"
                   "       else document.body.dataset.paneTheme = t; }", theme)
@@ -450,21 +457,53 @@ def test_a_quietened_row_is_still_readable_in_every_pane_theme(page, theme):
       const pane = document.querySelector('[data-block-id="section-4"] .codepane.ex');
       const row = [...pane.querySelectorAll('.cp-row')]
         .find((r) => !r.classList.contains('is-lit') && r.textContent.trim());
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--cp-muted)';
+      pane.appendChild(probe);
+      const muted = getComputedStyle(probe).color;
+      probe.remove();
       const inks = [...row.querySelectorAll('.cp-line, .cp-line *')]
         .filter((e) => e.textContent.trim())
         .map((e) => getComputedStyle(e).color);
-      return {ground: getComputedStyle(pane).backgroundColor,
-              inks: [...new Set(inks)],
+      return {muted, inks: [...new Set(inks)],
               opacity: parseFloat(getComputedStyle(row).opacity)};
     }""")
+    assert got["muted"] not in got["inks"], (
+        f"{theme}: a context row's token still resolves to --cp-muted: {got}")
+    assert len(got["inks"]) > 1, (
+        f"{theme}: every token on the row reads as one colour — "
+        f"syntax highlighting isn't surviving: {got}")
+    assert got["opacity"] == 1.0, f"{theme}: the row is being faded, not left alone"
+    page.evaluate("() => { delete document.body.dataset.paneTheme; }")
+
+
+@pytest.mark.parametrize("theme", ["daylight", "midnight", "parchment", "contrast"])
+def test_the_current_row_still_reads_on_its_own_background_in_every_theme(page, theme):
+    """The positive half of the same pattern an ordinary anchored line uses.
+
+    `.is-lit` gets the same wash-plus-rail as `.cp-row.is-anchor` so the
+    current step reads as the row under discussion by addition, not by
+    taking colour away from its neighbours (see the CSS). Its own syntax ink
+    still has to hold contrast sitting on that wash, in every theme.
+    """
+    page.evaluate("t => { if (t === 'daylight') delete document.body.dataset.paneTheme;"
+                  "       else document.body.dataset.paneTheme = t; }", theme)
+    _step(page, 1)
+    got = page.evaluate("""() => {
+      const pane = document.querySelector('[data-block-id="section-4"] .codepane.ex');
+      const row = pane.querySelector('.cp-row.is-lit');
+      const inks = [...row.querySelectorAll('.cp-line, .cp-line *')]
+        .filter((e) => e.textContent.trim())
+        .map((e) => getComputedStyle(e).color);
+      return {ground: getComputedStyle(row).backgroundColor,
+              shadow: getComputedStyle(row).boxShadow,
+              inks: [...new Set(inks)]};
+    }""")
+    assert got["shadow"] and got["shadow"] != "none", f"{theme}: no accent rail on the current row"
     ground = _rgb(got["ground"])
     worst = min(_contrast(_rgb(ink), ground) for ink in got["inks"])
     assert worst >= 4.5, (
-        f"{theme}: quietened code sits at {worst:.2f}:1 on its own ground — "
-        f"that is erased, not de-emphasised")
-    # And it is a flat ink rather than a blend toward the paper, which is what
-    # makes the number above hold whatever token the row happens to carry.
-    assert got["opacity"] == 1.0, f"{theme}: the row is being faded, not recoloured"
+        f"{theme}: the current row's own ink sits at {worst:.2f}:1 on its wash: {got}")
     page.evaluate("() => { delete document.body.dataset.paneTheme; }")
 
 

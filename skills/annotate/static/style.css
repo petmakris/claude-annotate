@@ -2341,22 +2341,43 @@ section.block.card[data-has-code="1"][data-code-wide="1"] .code-col {
 .ex-val {
   position: absolute;
   top: 50%;
-  margin-left: 4px;
+  margin-left: 10px;
   transform: translateY(-50%);
   pointer-events: none;
 }
+/* Green, not the label's gold: a value is a fact read off the run, not a
+   claim about the code, and sharing --ex-ink-strong made it look like one
+   more thing the label was saying. --cp-string is already this pane's green
+   — tuned for contrast in all four themes — so the chip is a tint of it
+   rather than a new colour to carry through every theme by hand. A solid
+   fill was tried first and read as a card; a soft tint plus unbolded text
+   is the "milder" version, same as the label's own ink-not-card choice. */
 .ex-val-chip {
   display: inline-block;
-  padding: 0 4px;
+  padding: 1px 6px;
   border-radius: 3px;
-  background: var(--cp-anchor-bg);
-  color: var(--ex-ink-strong);
+  background: color-mix(in srgb, var(--cp-string) 16%, transparent);
+  color: var(--cp-string);
   font-family: var(--font-prose);
   font-size: 10.5px;
-  font-weight: 600;
+  font-weight: 400;
+  font-style: normal;
   white-space: nowrap;
 }
-.ex-note .ex-val-chip { margin-left: 7px; }
+.ex-note .ex-val-chip { margin-left: 10px; }
+/* Same fix as `.ex-lbl code` just above, and for the same reason:
+   `main.prose :not(pre) > code` outweighs a bare `.ex-val-chip code` and
+   paints its own pale box over this one — see the comment there. A value is
+   often partly a code-formatted number (`` `157.38` ``), and that box was
+   exactly the "white background" this chip was just built to not have. */
+main.prose .ex-val-chip code {
+  font-family: inherit;
+  font-size: inherit;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
 
 /* The label: prose face, warm ink, nothing behind it.
    A card was tried first — every shade from a neutral +16 L* to an inverted
@@ -2466,26 +2487,23 @@ main.prose .ex-lbl code {
 .codepane.ex[data-walk] .ex-uline.is-now { opacity: 1; }
 .codepane.ex[data-walk] .ex-badge--onspan { display: none; }
 
-/* The rest of the snippet does not disappear — it STEPS BACK, and the
-   difference matters. Opacity was the first cut and is not here: measured on
-   the rendered pane at .34, the quietened code came out at 1.12:1 on Daylight
-   and 1.14:1 on Parchment (1.99:1 even on Midnight), which is erased rather
-   than de-emphasised — and erasing it throws away the one thing keeping the
-   code contiguous was for, which is that you can still see the shape of the
-   method you are being walked through.
-   So this follows the rule the pane already reached for its context rows: one
-   flat muted ink, not a blend toward the paper. `--cp-muted` is per-theme and
-   already contrast-checked on its own ground (4.6-6.1:1 across the four), so
-   a quietened row stays readable while plainly not being the one under
-   discussion. Specificity has to clear `.codepane .hljs-*` (0,2,0) the same
-   way the context rule does, hence `.codepane.ex[data-walk]` plus the token
-   selectors below. */
-.codepane.ex[data-walk] .cp-row { transition: color .14s ease; }
-.codepane.ex[data-walk] .cp-row:not(.is-lit),
-.codepane.ex[data-walk] .cp-row:not(.is-lit) .hljs,
-.codepane.ex[data-walk] .cp-row:not(.is-lit) [class^="hljs-"],
-.codepane.ex[data-walk] .cp-row:not(.is-lit) [class*=" hljs-"] {
-  color: var(--cp-muted);
+/* The rest of the snippet does not disappear, and — unlike an ordinary code
+   pane's context rows — it does not lose its syntax colour either. That was
+   the previous cut here: every non-current row forced to one flat
+   `--cp-muted` ink, which is right for a context row nobody asked about, but
+   an `explain` block is ALL rows the reader asked about — the snippet was
+   quoted on purpose, not pulled in as surrounding context. Greying out most
+   of a five-line snippet because the walk is on line 2 read as "this pane
+   has no Java colours," which was the actual bug report: it wasn't that
+   highlighting had failed, hljs was tagging every token correctly the whole
+   time, it's that the rule painted over its own output. The CURRENT row still
+   needs to read as the one under discussion — that's `.is-lit` below, the
+   same background-plus-rail an ordinary pane already gives `.is-anchor` —
+   but it earns that by addition, not by taking colour away from its
+   neighbours. */
+.codepane.ex[data-walk] .cp-row.is-lit {
+  background: var(--cp-anchor-bg);
+  box-shadow: inset 3px 0 0 var(--cp-accent);
 }
 
 /* The pin: a step's number parked past the end of its line. `.ex-at` carries
