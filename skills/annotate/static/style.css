@@ -963,6 +963,12 @@ main.prose mark.search-hit {
 .page-header[data-searching="1"] .header-actions > *:not(.header-search) {
   display: none;
 }
+/* The `/` hint has nowhere to live at rest: the field is 26px wide and the
+   magnifier already occupies it. It was a hint about how to OPEN search, so
+   it is useless once search is open — which is the only state with room for
+   it. Hidden here rather than deleted from the shell; the keyboard pane in
+   the menu still teaches `/`, and that is now its only home. */
+.page-header:not([data-searching="1"]) .search-kbd { display: none; }
 
 /* ── Delete affordance ────────────────────────────────────────────────── */
 .hover-actions button[data-type="delete"] {

@@ -129,6 +129,17 @@ class TestThePanesAreOnePanel(unittest.TestCase):
         self.assertIn("288px", pop)
         self.assertIn("overflow-y: auto", pop)
 
+    def test_focus_reaching_search_dismisses_the_open_panel(self):
+        # The `/` shortcut in search.js calls input.focus() with no click, so
+        # the click-outside handler below never fires for it. Without a
+        # focus-based dismissal, an open menu would only be masked by the
+        # takeover's CSS and would resurface, still open, once the field
+        # loses its takeover.
+        body = JS[JS.index("function initTopPanels()"):]
+        body = body[:body.index("\n  })();")]
+        self.assertIn('"focusin"', body)
+        self.assertIn('"block-search"', body)
+
 
 class TestTheHighlighterRowIsAProxy(unittest.TestCase):
     """The one row in the menu that is not the real element, because the real

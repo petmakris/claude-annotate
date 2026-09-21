@@ -34,6 +34,12 @@ class TestTheFieldCollapses(unittest.TestCase):
         self.assertIn('.page-header[data-searching="1"] .header-search', CSS)
         self.assertIn('.page-header[data-searching="1"] .header-title', CSS)
 
+    def test_the_slash_hint_does_not_sit_on_the_magnifier(self):
+        # At 26px the hint and the icon occupy the same box, and the hint
+        # paints on top. It only ever meant "press / to open this", so it has
+        # no job in the one state that has no room for it.
+        self.assertIn('.page-header:not([data-searching="1"]) .search-kbd', CSS)
+
 
 class TestTheFilterWasNotTouched(unittest.TestCase):
     """Four lines were added to init(). Nothing else in this file moved."""

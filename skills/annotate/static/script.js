@@ -2642,6 +2642,19 @@
       });
     });
 
+    // The `/` shortcut in search.js reaches the search field with
+    // input.focus() and no click, so the click-outside handler above never
+    // fires for it. Left alone, an open panel would only be masked by the
+    // takeover's CSS (.header-actions > *:not(.header-search)) — still open
+    // underneath — and would resurface the moment the field gives up the
+    // takeover. `focusin` bubbles (plain `focus` does not), so one
+    // document-level listener catches focus landing on the field however it
+    // got there.
+    document.addEventListener("focusin", (e) => {
+      if (e.target.id !== "block-search") return;
+      panels.forEach((p) => { if (isOpen(p)) close(p); });
+    });
+
     // The `g` shortcut, unchanged in behaviour: it opens the composer from
     // anywhere you are not already typing.
     const composer = panels[0];
