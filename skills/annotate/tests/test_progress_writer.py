@@ -258,3 +258,82 @@ def test_the_read_still_treats_a_missing_trail_as_no_trail(sid):
     # is the ordinary case rather than an error.
     body = progress.note(sid, "first line of this round")
     assert [s["text"] for s in body["steps"]] == ["first line of this round"]
+
+
+# --- the commands exactly as the document ships them --------------------
+#
+# The three tests above hand the subprocess `PYTHONPATH=str(REPO)`
+# themselves. That proves the prefixed FORM imports, and says nothing about
+# whether the variable is populated when Claude runs the line — it is not.
+# Environment variables do not survive between Bash tool calls, so a
+# `PLUGIN_ROOT` a probe exported "once per turn, before the first of them"
+# is empty in every later call: the prefix expands to `PYTHONPATH=""` and
+# the command dies with the very ModuleNotFoundError the prefix was added to
+# prevent, silently, because narration may not fail the turn. These take the
+# line out of the document and run it with nothing inherited.
+
+CONTRACT = REPO / "skills" / "annotate" / "references" / "handling-events.md"
+
+
+def _documented_narration_commands():
+    """Every runnable narration invocation the contract prints, verbatim."""
+    import re
+    found = []
+    for line in CONTRACT.read_text(encoding="utf-8").splitlines():
+        if "skills.annotate.progress" not in line or "--sid" not in line:
+            continue
+        spans = [s for s in re.findall(r"`([^`]+)`", line)
+                 if "skills.annotate.progress" in s and "--sid" in s]
+        found.extend(spans or [line.strip()])
+    assert found, "the contract prints no runnable narration command any more"
+    return sorted(set(found))
+
+
+def _fresh_shell_env(sid, **extra):
+    """What a Bash tool call actually gets: no PYTHONPATH, no plugin root."""
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("PYTHONPATH", "CLAUDE_PLUGIN_ROOT")}
+    env["WC_SID"] = sid
+    env.update(extra)
+    return env
+
+
+def _run_documented(cmd, cwd, env):
+    import subprocess
+    return subprocess.run(["bash", "-c", cmd], cwd=str(cwd), env=env,
+                          capture_output=True, text=True, timeout=60)
+
+
+def test_every_documented_command_resolves_its_own_root_off_path(sid, tmp_path):
+    """Copied verbatim, run from a foreign cwd, inheriting nothing.
+
+    The only thing this hands the command is a plugin `bin` directory on
+    PATH — the first of the two places the documented probe looks, and how an
+    installed plugin is reachable at all. It is not told where to import
+    from; it has to work that out for itself, on every single call.
+    """
+    env = _fresh_shell_env(sid, PATH=f"{REPO / 'bin'}{os.pathsep}{os.environ['PATH']}")
+    for cmd in _documented_narration_commands():
+        r = _run_documented(cmd, tmp_path, env)
+        assert "No module named 'skills'" not in r.stderr, \
+            f"this line cannot import itself when copied out of the doc:\n{cmd}"
+        assert r.returncode == 0, \
+            f"{cmd}\nstdout={r.stdout!r} stderr={r.stderr!r}"
+    texts = [s["text"] for s in _stored(sid)["steps"]]
+    assert "Read your round of feedback" in texts, texts
+
+
+def test_a_documented_command_resolves_its_own_root_off_the_marketplace(sid, tmp_path):
+    """The probe's other branch, with nothing on PATH that could answer."""
+    import shutil
+    home = tmp_path / "home"
+    (home / ".claude" / "plugins").mkdir(parents=True)
+    (home / ".claude" / "webcompanion").mkdir(parents=True)
+    shutil.copy(CONFIG, home / ".claude" / "webcompanion" / "config.json")
+    (home / ".claude" / "plugins" / "known_marketplaces.json").write_text(
+        json.dumps({"claude-annotate": {"installLocation": str(REPO)}}))
+    cmd = next(c for c in _documented_narration_commands() if "--text" in c)
+    r = _run_documented(cmd, tmp_path, _fresh_shell_env(sid, HOME=str(home)))
+    assert "No module named 'skills'" not in r.stderr, \
+        f"this line cannot import itself when copied out of the doc:\n{cmd}"
+    assert r.returncode == 0, f"{cmd}\nstdout={r.stdout!r} stderr={r.stderr!r}"

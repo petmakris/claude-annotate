@@ -36,22 +36,28 @@ class TestEveryEventPathNarrates(unittest.TestCase):
         self.assertIn("--text", EVENTS)
         self.assertIn("--done", EVENTS)
 
-    def test_every_documented_invocation_carries_its_pythonpath(self):
+    def test_every_documented_invocation_resolves_its_own_plugin_root(self):
         # The command runs from whatever cwd the turn is in. Bare, it raises
         # ModuleNotFoundError — and because narration is contractually allowed
         # to fail without failing the turn, it fails SILENTLY and the reader
-        # gets the spinner back. Every other `python3 -m skills.annotate.*`
-        # invocation in the reference files carries the prefix; these must too.
-        bare = [line for line in EVENTS.splitlines()
-                if CMD in line and "--sid" in line
-                and 'PYTHONPATH="$PLUGIN_ROOT"' not in line]
-        self.assertEqual([], bare, "these narration commands cannot import themselves")
+        # gets the spinner back. The prefix has to resolve the root IN the
+        # command: environment variables do not survive between Bash tool
+        # calls, so one exported by an earlier step is empty here and
+        # `PYTHONPATH=""` is the same ModuleNotFoundError again. That the
+        # prefix actually works is proved by running it, in
+        # test_progress_writer.py; this only keeps every invocation carrying
+        # it. Requires no state from a previous call.
+        bad = [line for line in EVENTS.splitlines()
+               if CMD in line and "--sid" in line
+               and 'PYTHONPATH="${CLAUDE_PLUGIN_ROOT:-$(' not in line]
+        self.assertEqual([], bad, "these narration commands cannot import themselves")
 
-    def test_the_file_says_where_plugin_root_comes_from(self):
-        # A reader of this file alone has to be able to run the command, the
-        # way pushing.md and publishing.md already let one.
-        self.assertIn("## Resolve the plugin root", EVENTS)
-        self.assertIn('PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-', EVENTS)
+    def test_no_narration_command_depends_on_a_variable_from_another_call(self):
+        # The regression this replaced: a `## Resolve the plugin root` probe
+        # that set $PLUGIN_ROOT "once per turn, before the first of them",
+        # and fourteen commands that read it in later, separate calls.
+        self.assertNotIn('PYTHONPATH="$PLUGIN_ROOT"', EVENTS)
+        self.assertNotIn("## Resolve the plugin root", EVENTS)
 
     def test_each_event_subsection_carries_a_narration_step(self):
         # One per handled event type. A path that does not narrate is a path
