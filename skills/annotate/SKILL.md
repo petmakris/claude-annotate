@@ -21,7 +21,7 @@ Decide which situation you're in and **`Read` the named file before doing the wo
 | The user typed `/annotate` — the explicit command is the only user trigger; the word "annotate" in prose is not | **Push** (postmortem/arm) | `references/pushing.md` |
 | The user typed `/annotate resume` / `/annotate resume <slug>` | **Resume** a past workspace | `references/resuming.md` |
 | The user typed `/annotate publish` (or `/annotate publish --refresh <page>`) | **Publish** the document to Confluence | `references/publishing.md` |
-| A task-notification's first stdout line is `WEBCOMPANION_EVENT` / `WEBCOMPANION_FINISHED` / `WEBCOMPANION_CANCELLED` | **Handle event** | `references/handling-events.md` |
+| A task-notification's first stdout line is `WEBCOMPANION_EVENT` / `WEBCOMPANION_FINISHED` / `WEBCOMPANION_CANCELLED` | **Handle event** — narrate what you're doing with `python3 -m skills.annotate.progress` as you go; the page shows it live and the reader has nothing else to go on | `references/handling-events.md` |
 | The user says "scrap it" / "stop annotating" / "respond in terminal" while a watcher is armed | **Cancel** | `references/handling-events.md` (§ Terminal cancellation) |
 | A block asserts something about specific code (a file, function, branch, line) | **Anchor it** | `references/code-anchors.md` |
 
@@ -96,7 +96,7 @@ other skill and IDE plugin that talks to it, and kept alive by launchd (macOS)
 or systemd (Linux). annotate ships no server of its own: it renders its blocks,
 pushes them as items, and registers its own front end as the session's
 renderer. There is nothing to start per session, no port to negotiate, and the
-daemon outlives every conversation using it. While handling an event, narrate what you are doing with `python3 -m skills.annotate.progress` — the page shows it live, and the reader has nothing else to go on; see `references/handling-events.md` § Narrating while you work.
+daemon outlives every conversation using it.
 
 Sessions persist **until explicitly deleted**, at
 `~/.claude/webcompanion/workspaces/annotate/<sid>/`, addressed by `slug` in URLs
