@@ -450,3 +450,33 @@ def test_search_takes_the_bar_and_gives_it_back(page):
     assert page.eval_on_selector(
         ".header-title", "el => el.offsetParent !== null"), \
         "the title did not come back"
+
+
+def test_the_status_block_does_not_overflow_the_menu(page):
+    """Decision 5 folds the resume popover into the status block, which is
+    the first thing in the menu — so a long project path breaking the panel's
+    own layout is the redesign's centrepiece failing, not a cosmetic overflow.
+    The fixture's cwd is this checkout's own path, which has no natural break
+    point and is long enough to expose it."""
+    page.click("#menu-toggle")
+    page.wait_for_selector("#menu-pop:not([hidden])")
+    page.wait_for_function(
+        "() => document.getElementById('menu-resume') "
+        "&& !document.getElementById('menu-resume').hidden "
+        "&& document.getElementById('resume-cwd').textContent.trim().length > 0",
+        timeout=5000)
+
+    overflow = page.evaluate("""() => {
+      const pop = document.getElementById('menu-pop');
+      const popRight = pop.getBoundingClientRect().right;
+      const offenders = [...pop.querySelectorAll('*')]
+        .map(el => ({ el, right: el.getBoundingClientRect().right }))
+        .filter(o => o.right > popRight + 0.5)
+        .map(o => (o.el.id || o.el.className || o.el.tagName) + ':' +
+          (o.right - popRight).toFixed(1));
+      return { scrollsX: pop.scrollWidth > pop.clientWidth + 1, offenders };
+    }""")
+    assert not overflow["scrollsX"], \
+        f"#menu-pop scrolls horizontally: {overflow}"
+    assert overflow["offenders"] == [], \
+        f"something hangs past the panel's right edge: {overflow['offenders']}"
