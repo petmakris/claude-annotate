@@ -646,3 +646,58 @@ def test_switching_a_pane_takes_the_caret_with_it(page):
         "() => document.activeElement.dataset.paneTo")
     assert back == "settings", \
         f"coming back did not land on the row that pushed the pane: {back!r}"
+
+
+def test_a_pressed_menu_row_lights_the_icon_it_actually_has(page):
+    """`.menu-item[aria-pressed="true"] > svg` is a child combinator, and the
+    Full screen row's icon is a grandchild — it sits inside the [data-icon]
+    slot fullscreen.js writes through. So the row lit its label and left its
+    icon grey, which reads as a half-pressed control. Only a computed colour
+    can see it: the selector is valid CSS that simply matches nothing.
+
+    aria-pressed is set here rather than entered by going full screen, because
+    the state under test is the stylesheet's, not the Fullscreen API's.
+    """
+    page.click("#menu-toggle")
+    page.wait_for_selector("#menu-pop:not([hidden])")
+    got = page.evaluate("""() => {
+      const b = document.getElementById('fullscreen-toggle');
+      b.setAttribute('aria-pressed', 'true');
+      const g = (el, p) => getComputedStyle(el)[p];
+      return { label: g(b.querySelector('.menu-item-label'), 'color'),
+               icon: g(b.querySelector('[data-icon] svg'), 'color'),
+               hl: (() => { const h = document.getElementById('menu-highlighter');
+                 h.setAttribute('aria-pressed', 'true');
+                 return g(h.querySelector('svg'), 'color'); })() }; }""")
+    assert got["icon"] == got["label"], (
+        "the pressed row's label is %s and its icon is %s" % (got["label"], got["icon"]))
+    # And the bare-child rows still work, so this is a widening and not a swap.
+    assert got["hl"] == got["label"], got
+
+
+def test_full_screen_says_the_same_thing_twice(page):
+    """The row announced "Exit full screen" while reading "Full screen". Two
+    states of one control, disagreeing about which one you are in."""
+    page.click("#menu-toggle")
+    page.wait_for_selector("#menu-pop:not([hidden])")
+    at_rest = page.evaluate("""() => { const b = document.getElementById('fullscreen-toggle');
+      return { label: b.querySelector('[data-label]').textContent.trim(),
+               aria: b.getAttribute('aria-label') }; }""")
+    assert at_rest["label"] == "Full screen", at_rest
+    assert at_rest["label"] in at_rest["aria"], (
+        "the visible label is not part of the accessible name: %s" % at_rest)
+
+    page.click("#fullscreen-toggle")
+    try:
+        page.wait_for_function(
+            "() => !!document.fullscreenElement", timeout=4000)
+    except Exception:                                # noqa: BLE001
+        pytest.skip("this browser refused fullscreen; the slot is covered by "
+                    "test_smoke_menu_slots.py")
+    got = page.evaluate("""() => { const b = document.getElementById('fullscreen-toggle');
+      return { label: b.querySelector('[data-label]').textContent.trim(),
+               aria: b.getAttribute('aria-label'),
+               icon: !!b.querySelector('[data-icon] svg') }; }""")
+    assert got["label"] == "Exit full screen", (
+        "the row announces %r and still reads %r" % (got["aria"], got["label"]))
+    assert got["icon"], "the label write ate the row's icon"

@@ -32,12 +32,21 @@
   // nothing else, so innerHTML was its icon. In a menu row it is an icon and a
   // label, and the label must survive the swap.
   const iconSlot = btn.querySelector("[data-icon]") || btn;
+  // And the label must FOLLOW it. As an icon-only button there was nothing to
+  // keep in step; as a row it said "Full screen" while announcing itself as
+  // "Exit full screen", so the two states of the same control disagreed about
+  // which one you were in. Null when there is no slot, exactly like the icon's
+  // fallback, so an icon-only caller is unchanged.
+  const labelSlot = btn.querySelector("[data-label]");
 
   function sync() {
     const on = !!document.fullscreenElement;
     iconSlot.innerHTML = on ? ICON_EXIT : ICON_ENTER;
     btn.title = on ? "Exit full screen" : "Full screen — hide the browser chrome";
     btn.setAttribute("aria-label", btn.title);
+    // The visible words, not the tooltip's sentence: a row's label is a label,
+    // and the accessible name above still contains it either way.
+    if (labelSlot) labelSlot.textContent = on ? "Exit full screen" : "Full screen";
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   }
 

@@ -2831,9 +2831,14 @@ section.block.card.is-fit .block-content { height: var(--max-fit-h); }
   font-family: var(--font-code); font-size: 10.5px; color: var(--text-dim);
 }
 .menu-chev { margin-left: auto; width: 13px; height: 13px; }
-/* A row whose thing is currently ON. The highlighter is the only one today. */
+/* A row whose thing is currently ON. Both icon shapes, matching the base rule
+   two blocks up: an icon is a bare child svg on most rows and an svg inside
+   the [data-icon] slot on the ones a module rewrites (Full screen). Naming
+   only `> svg` lit the label and left that row's icon grey — measured, at
+   rgb(131,134,143) beside a rgb(0,113,227) label. */
 .menu-item[aria-pressed="true"] { color: var(--accent); }
 .menu-item[aria-pressed="true"] > svg,
+.menu-item[aria-pressed="true"] .menu-item-icon svg,
 .menu-item[aria-pressed="true"] .menu-item-hint { color: var(--accent); }
 
 .menu-back {
