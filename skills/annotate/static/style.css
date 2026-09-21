@@ -1819,17 +1819,28 @@ body[data-highlighter="on"] ::selection { background: rgba(90, 96, 108, 0.30); }
 .palette-pop button[data-color="pink"]   { background: #f9a8d4; }
 
 .hl-btn[aria-pressed="true"] { color: #92400e; border-color: #fcd34d; background: #fef3c7; }
-/* Only offer the eraser when there is a highlighter running -- but keep its
-   SLOT at all times. `display: none` was tried and measured: .header-actions
-   is right-aligned, so revealing the eraser pushed everything to its left
-   over by 26px, sliding the eraser itself under a pointer that had not moved
-   since the click that revealed it. The next click would then land on
-   clear-all, which wipes the page. Reserving the space costs one transparent
-   26px gap and makes the bar geometrically fixed.
-   read-highlighter.e2e.cjs item 2 measures the toggle's x before and after. */
-.hl-clear { visibility: hidden; pointer-events: none; }
-body[data-highlighter="on"] .hl-clear { visibility: visible; pointer-events: auto; }
-.hl-clear:hover { color: #991b1b; border-color: #991b1b; }
+/* The eraser has no rule here any more: #highlighter-clear is a .menu-item in
+   the menu, and it is offered unconditionally. It is a command, not a mode --
+   "clear every highlight" is a sensible thing to ask whether or not the
+   highlighter is armed. Worth stating plainly, because nothing else records
+   it: the eraser used to be offered ONLY while highlighting was running, and
+   is now permanently present in the menu.
+
+   The rules this replaces reserved a transparent 26px slot rather than using
+   `display: none`, for a reason that was measured: .header-actions is
+   right-aligned, so revealing a control pushed everything to its left over by
+   26px, sliding the eraser itself under a pointer that had not moved since the
+   click that revealed it -- and the next click would land on clear-all, which
+   wipes the page.
+
+   That hazard is superseded, not forgotten. It needed the arming click to land
+   IN the bar, so the pointer was already sitting there when the layout moved.
+   Arming is #menu-highlighter now, inside the panel and below the bar, and
+   #highlighter-toggle sits to the LEFT of the menu button -- so the controls
+   near where the pointer actually is (the menu button, Done) do not move at
+   all, and only the search field shifts left. Which is what makes the
+   highlighter's own `display: none` escape safe here; see "The highlighter's
+   escape" at the end of this file. */
 
 section.block.card[data-has-code="1"]:not(.collapsed) .card-body {
   display: grid;

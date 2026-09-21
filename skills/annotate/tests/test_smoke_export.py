@@ -48,6 +48,29 @@ class _PageSource:
 
 SERVER_PY = _PageSource(REPO)
 CORE_CSS = REPO / "skills" / "_shared" / "web_companion" / "static" / "core.css"
+# Annotate's OWN stylesheets. CORE_CSS above is the shared web_companion copy,
+# which annotate's has deliberately diverged from -- asserting Share's styling
+# against the shared file is what let the read-only guard below go vacuous when
+# Share became a menu row and annotate dropped .export-btn.
+ANNOTATE_CORE_CSS = REPO / "skills" / "annotate" / "static" / "core.css"
+ANNOTATE_STYLE_CSS = REPO / "skills" / "annotate" / "static" / "style.css"
+
+
+def _read_only_selectors(css):
+    """Every selector in `css` that a read-only body switches on.
+
+    Extracted rather than substring-matched. The assertion this feeds is that
+    NO read-only rule reaches Share, and `"body.read-only .menu-item" not in
+    css` would pass just as happily against a stylesheet containing no
+    read-only rules whatsoever -- a guard that cannot fail, which is exactly
+    the failure mode being repaired here.
+    """
+    css = re.sub(r"/\*.*?\*/", " ", css, flags=re.S)   # or the selector carries
+    out = []                                           # the comment above it
+    for block in re.finditer(r"([^{}]+)\{[^{}]*\}", css):
+        out.extend(sel.strip() for sel in block.group(1).split(",")
+                   if "body.read-only" in sel)
+    return out
 
 
 def _strip_selectors():
@@ -167,11 +190,34 @@ def test_the_button_is_wired_into_the_page():
 
 def test_share_survives_a_read_only_link():
     """Someone holding a shared link is exactly who wants a copy, and the
-    export is built entirely from what their own page already shows."""
-    css = CORE_CSS.read_text()
-    assert ".export-btn" in css, "the Share button has no styling"
-    assert "body.read-only .export-btn" not in css, \
-        "Share is hidden on a read-only link, where it would be most useful"
+    export is built entirely from what their own page already shows.
+
+    Share is a row of the menu now rather than a button of its own, so the
+    property to guard is that no read-only rule reaches .menu-item -- the way
+    one deliberately reaches .done-btn, which a guest genuinely cannot use.
+    """
+    shell = SERVER_PY.read_text()
+    core = ANNOTATE_CORE_CSS.read_text()
+    style = ANNOTATE_STYLE_CSS.read_text()
+
+    # Check the element Share actually is. Naming a class it no longer carries
+    # is how the previous version of this test stopped guarding anything.
+    assert re.search(r'id="export-btn"[^>]*class="menu-item"', shell), \
+        "Share is not a menu row -- this test is asserting about the wrong element"
+    assert ".menu-item {" in style, "menu rows have no styling"
+
+    reached = _read_only_selectors(core) + _read_only_selectors(style)
+    # Control case: a read-only rule DOES reach Done. Without this, an
+    # extraction that silently returned nothing would read as "Share is safe".
+    assert any(".done-btn" in sel for sel in reached), \
+        "no read-only rule reaches .done-btn -- _read_only_selectors is broken, " \
+        "so the assertion below proves nothing"
+    hides_share = [sel for sel in reached
+                   if ".menu-item" in sel or "export-btn" in sel
+                   or ".menu-pop" in sel]
+    assert hides_share == [], \
+        f"Share is hidden on a read-only link, where it would be most " \
+        f"useful: {hides_share}"
 
 
 
