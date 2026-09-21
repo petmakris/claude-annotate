@@ -144,7 +144,25 @@
       applyFilter(input.value);
       const wrap = input.closest(".header-search");
       if (wrap) wrap.classList.toggle("has-query", input.value.trim().length > 0);
+      syncTakeover();
     }
+
+    // The bar's two states. The field is never removed from the DOM — the
+    // index, the `/` shortcut, the Esc handler and the mutation observer are
+    // all written against this element — so "collapsed" is a width in the
+    // stylesheet and this attribute is the only thing that changes.
+    //
+    // A live query keeps the bar taken over even after the field loses focus:
+    // the document underneath is filtered, and collapsing the field would hide
+    // the reason it looks short.
+    const hdr = input.closest(".page-header");
+    function syncTakeover() {
+      const on = document.activeElement === input
+        || input.value.trim().length > 0;
+      if (hdr) hdr.dataset.searching = on ? "1" : "0";
+    }
+    input.addEventListener("focus", syncTakeover);
+    input.addEventListener("blur", syncTakeover);
 
     function clearSearch() {
       input.value = "";

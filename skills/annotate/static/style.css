@@ -851,7 +851,11 @@ section.block.card.collapsed .card-head:hover { background: var(--surface-hover)
 /* === Block search ===================================================== */
 .header-search {
   position: relative;
-  width: 220px;
+  /* One icon wide at rest. The input is still here and still focusable —
+     clicking it is what opens the bar — but it shows nothing but its own
+     magnifier until it does. */
+  width: 26px;
+  transition: width 160ms ease;
 }
 .header-search .search-icon {
   position: absolute;
@@ -879,6 +883,13 @@ section.block.card.collapsed .card-head:hover { background: var(--surface-hover)
 .search-input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.15);
+}
+/* Collapsed, the field is a button: no placeholder to read at 26px, and a
+   pointer that says "this opens something". */
+.header-search .search-input { cursor: pointer; }
+.page-header[data-searching="1"] .search-input { cursor: text; }
+.page-header:not([data-searching="1"]) .search-input::placeholder {
+  color: transparent;
 }
 .search-input::placeholder { color: var(--text-dim); }
 .search-kbd {
@@ -938,6 +949,19 @@ main.prose mark.search-hit {
   color: var(--text-strong);
   border-radius: 2px;
   padding: 0 1px;
+}
+
+/* === The takeover ======================================================
+   Focused, the field is the bar. The title steps aside rather than shrinking
+   — a truncated title beside a search box is worse than no title, and the
+   title is still one Esc away. Everything else in the actions goes with it,
+   including Done: nothing in the bar is worth clicking while you are typing
+   a filter, and the row must not reflow as the field grows. */
+.page-header[data-searching="1"] .header-title { display: none; }
+.page-header[data-searching="1"] .header-actions { flex: 1; }
+.page-header[data-searching="1"] .header-search { width: 100%; }
+.page-header[data-searching="1"] .header-actions > *:not(.header-search) {
+  display: none;
 }
 
 /* ── Delete affordance ────────────────────────────────────────────────── */
