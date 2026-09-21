@@ -23,6 +23,22 @@ class TestTheBarKnowsItIsSearching(unittest.TestCase):
         self.assertIn('dataset.searching', JS)
         self.assertIn('.page-header[data-searching="1"]', CSS)
 
+    def test_a_live_query_and_the_field_having_focus_are_not_the_same_state(self):
+        # They were, and the bar disappeared for both. Only the focused one is
+        # a takeover; the other is a field holding a query beside a whole bar.
+        self.assertIn('"filtered"', JS)
+        self.assertIn('.page-header[data-searching="filtered"] .header-search', CSS)
+
+    def test_only_the_focused_state_hides_the_rest_of_the_bar(self):
+        # The rule that hid Done and the menu must be reachable from the
+        # typing state alone. Whatever else changes here, a selector that
+        # hides them without naming "1" is the defect coming back.
+        hide = [ln for ln in CSS.splitlines()
+                if '.header-actions > *:not(.header-search)' in ln]
+        self.assertTrue(hide, "nothing hides the rest of the bar any more")
+        for ln in hide:
+            self.assertIn('[data-searching="1"]', ln, ln)
+
 
 class TestTheFieldCollapses(unittest.TestCase):
     def test_the_resting_width_is_one_icon(self):
@@ -48,8 +64,15 @@ class TestTheFilterWasNotTouched(unittest.TestCase):
         self.assertIn('e.key === "/" && !inField', JS)
 
     def test_escape_still_clears_and_blurs(self):
-        self.assertIn('e.key === "Escape" && active === input', JS)
+        self.assertIn('e.key === "Escape"', JS)
+        self.assertIn("active === input", JS)
         self.assertIn("input.blur()", JS)
+
+    def test_escape_also_lifts_the_filter_from_outside_the_field(self):
+        # The safety net. Gated on the field having focus, Esc could not
+        # reach the one state where you most need it. Measured end to end in
+        # test_browser_review.py; this is the deletion guard.
+        self.assertIn("e.defaultPrevented", JS)
 
     def test_there_is_still_exactly_one_result_count(self):
         # search.js already renders "Showing N of M blocks" into main.prose.

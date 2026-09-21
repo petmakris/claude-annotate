@@ -147,19 +147,28 @@
       syncTakeover();
     }
 
-    // The bar's two states. The field is never removed from the DOM — the
+    // The bar's three states. The field is never removed from the DOM — the
     // index, the `/` shortcut, the Esc handler and the mutation observer are
     // all written against this element — so "collapsed" is a width in the
     // stylesheet and this attribute is the only thing that changes.
     //
-    // A live query keeps the bar taken over even after the field loses focus:
-    // the document underneath is filtered, and collapsing the field would hide
-    // the reason it looks short.
+    // A live query keeps the FIELD open even after it loses focus: the
+    // document underneath is filtered, and collapsing the field to a 26px
+    // magnifier would hide the reason it looks short.
+    //
+    // It does not keep the rest of the bar hidden, which is why there is a
+    // third value rather than two. "1" (focused) is the full takeover: nothing
+    // else in the bar is worth clicking while you are typing a filter.
+    // "filtered" is what comes after you stop — the field keeps its query and
+    // its width, and Done and the menu come back. With only two states, typing
+    // a filter and clicking away hid Done and the menu for good: Escape was
+    // gated on the field having focus, so submitting a round was reachable
+    // only through the mouse-only ×.
     const hdr = input.closest(".page-header");
     function syncTakeover() {
-      const on = document.activeElement === input
-        || input.value.trim().length > 0;
-      if (hdr) hdr.dataset.searching = on ? "1" : "0";
+      const focused = document.activeElement === input;
+      const query = input.value.trim().length > 0;
+      if (hdr) hdr.dataset.searching = focused ? "1" : (query ? "filtered" : "0");
     }
     input.addEventListener("focus", syncTakeover);
     input.addEventListener("blur", syncTakeover);
@@ -185,9 +194,20 @@
       if (e.key === "/" && !inField) {
         e.preventDefault();
         input.focus();
-      } else if (e.key === "Escape" && active === input) {
-        clearSearch();
-        input.blur();
+      } else if (e.key === "Escape") {
+        if (active === input) {
+          clearSearch();
+          input.blur();
+        } else if (input.value.trim() && !e.defaultPrevented) {
+          // The safety net. A live query filters the whole document, and
+          // until this existed the only way to lift it without the mouse was
+          // to find your way back into a field the bar had collapsed. Skipped
+          // when something nearer the keyboard already claimed this Escape
+          // (subunits.js's per-unit composer preventDefaults its own); the
+          // panel machinery in script.js stops the event in the capture phase
+          // while a panel is open, so this never fires under one.
+          clearSearch();
+        }
       }
     });
 

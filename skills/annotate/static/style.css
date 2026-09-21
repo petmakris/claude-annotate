@@ -949,13 +949,42 @@ main.prose mark.search-hit {
    — a truncated title beside a search box is worse than no title, and the
    title is still one Esc away. Everything else in the actions goes with it,
    including Done: nothing in the bar is worth clicking while you are typing
-   a filter, and the row must not reflow as the field grows. */
+   a filter, and the row must not reflow as the field grows.
+
+   Three states, not two, and `data-searching` carries all three because they
+   are mutually exclusive by construction (search.js writes exactly one):
+
+     "0"         at rest — no focus, no query. A 26px magnifier, whole bar.
+     "1"         typing — the field has focus. Full takeover, as above.
+     "filtered"  a query is live and focus has moved on.
+
+   The third state exists because the first two left the bar unreachable. The
+   takeover was keyed on "focused OR holds a query", so typing a filter and
+   then clicking away hid Done and the menu with no way back: Escape was gated
+   on the field having focus, and the only recovery was the mouse-only ×.
+   Submitting a round was unreachable from behind a filter.
+
+   What decision 9 actually required is narrower than what was built: the
+   FIELD must not collapse while a query is live, because the document
+   underneath is filtered and a 26px magnifier hides the reason. It never
+   required the rest of the bar to go with it. Hiding the bar is right while
+   you are typing; it is wrong once you have stopped. So "filtered" keeps the
+   field open at a width that shows its query and gives Done and the menu
+   straight back. */
 .page-header[data-searching="1"] .header-title { display: none; }
 .page-header[data-searching="1"] .header-actions { flex: 1; }
 .page-header[data-searching="1"] .header-search { width: 100%; }
 .page-header[data-searching="1"] .header-actions > *:not(.header-search) {
   display: none;
 }
+/* Filtered but not focused: a real field, not the whole bar. A fixed measure
+   rather than flex:1, because the title stays and the field growing to fill
+   what is left would be the takeover again under another name. Capped against
+   the viewport so it cannot crowd the title off a phone. */
+.page-header[data-searching="filtered"] .header-search {
+  width: min(190px, 40vw);
+}
+.page-header[data-searching="filtered"] .search-input { cursor: text; }
 /* The `/` hint has nowhere to live at rest: the field is 26px wide and the
    magnifier already occupies it. It was a hint about how to OPEN search, so
    it is useless once search is open — which is the only state with room for

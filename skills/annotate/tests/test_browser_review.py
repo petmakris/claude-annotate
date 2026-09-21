@@ -480,3 +480,75 @@ def test_the_status_block_does_not_overflow_the_menu(page):
         f"#menu-pop scrolls horizontally: {overflow}"
     assert overflow["offenders"] == [], \
         f"something hangs past the panel's right edge: {overflow['offenders']}"
+
+
+def test_a_live_query_gives_the_bar_back(page):
+    """The bar must not stay taken over once you stop typing.
+
+    Measured, because this is exactly the shape of bug a source check cannot
+    see: the rule that hid Done was correct CSS, matched, and painted. Typing
+    a filter and then clicking away left `doneVisible: False, menuVisible:
+    False, activeElement: BODY` — submitting a round unreachable from behind a
+    filter, recoverable only through the mouse-only ×.
+    """
+    page.click("#block-search")
+    page.fill("#block-search", "block 2")
+    page.wait_for_function(
+        "() => document.querySelector('.page-header').dataset.searching === '1'")
+
+    # Focus moves on, the query stays. blur() rather than a click on the
+    # document: it lands activeElement on <body>, which is the state the
+    # defect was measured in, without a stray click reaching a block.
+    page.evaluate("() => document.getElementById('block-search').blur()")
+    page.wait_for_function(
+        "() => document.activeElement === document.body", timeout=3000)
+    # The field has a 160ms width transition, so measure once it has landed
+    # rather than mid-flight — same reason the takeover test above waits.
+    page.wait_for_timeout(400)
+
+    state = page.evaluate("""() => {
+      const q = s => document.querySelector(s);
+      return { done: q('#done-btn').offsetParent !== null,
+               menu: q('#menu-toggle').offsetParent !== null,
+               title: q('.header-title').offsetParent !== null,
+               value: q('#block-search').value,
+               fieldWidth: q('.header-search').getBoundingClientRect().width,
+               filtered: !!q('.search-count') }; }""")
+    assert state["done"], "Done is still hidden while a query is live"
+    assert state["menu"], "the menu is still hidden while a query is live"
+    assert state["value"] == "block 2", "the query did not survive losing focus"
+    assert state["fieldWidth"] > 100, (
+        "the field collapsed back to a magnifier while its query is still "
+        f"filtering the document: {state['fieldWidth']}px")
+    # `.search-count` ("Showing N of M blocks") is search.js's own proof that
+    # a filter is running; it exists for a non-empty query and for nothing
+    # else. Asserted instead of a hidden block because every block in this
+    # fixture is the same sentence with one digit changed, so a fuzzy query
+    # that excludes one of them would be a query tuned to Fuse, not to the bar.
+    assert state["filtered"], "the filter stopped filtering"
+
+    # Visible is not the same as reachable: a control can paint and still sit
+    # under something. trial=True runs Playwright's full actionability check —
+    # visible, stable, receives pointer events, enabled — and clicks nothing.
+    page.click("#done-btn", trial=True)
+
+
+def test_escape_lifts_the_filter_from_anywhere(page):
+    """The keyboard way out, which did not exist. Esc was gated on the field
+    having focus, and the takeover had just taken the field away."""
+    page.click("#block-search")
+    page.fill("#block-search", "block 2")
+    page.wait_for_selector(".search-count", timeout=3000)
+    page.evaluate("() => document.getElementById('block-search').blur()")
+    page.wait_for_function(
+        "() => document.activeElement === document.body", timeout=3000)
+
+    page.keyboard.press("Escape")
+    page.wait_for_function(
+        "() => document.getElementById('block-search').value === ''", timeout=3000)
+    assert page.evaluate(
+        "() => !document.querySelector('.search-count')"), \
+        "the query cleared but the document is still filtered"
+    assert page.evaluate(
+        "() => document.querySelector('.page-header').dataset.searching") == "0", \
+        "the bar did not go back to rest"
