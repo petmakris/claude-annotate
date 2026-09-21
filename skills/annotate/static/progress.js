@@ -63,12 +63,17 @@
     el = document.createElement("section");
     el.id = PANEL_ID;
     el.className = "pg-panel";
-    el.setAttribute("role", "status");
-    el.setAttribute("aria-live", "polite");
+    // The live region is the CURRENT LINE, not the panel and not the feed.
+    // With `role="status"` on the section, every repaint rebuilds the whole
+    // feed inside a live region, so a screen reader re-announces the entire
+    // trail — nine lines read out again to deliver the tenth. Announcing only
+    // `.pg-now`, atomically, says the one thing that changed. The feed is
+    // explicitly `aria-live="off"` so it cannot inherit a live region later,
+    // and it stays reachable to read at leisure.
     el.innerHTML =
       '<div class="pg-head">' +
         '<span class="pg-mark"></span>' +
-        '<span class="pg-now"></span>' +
+        '<span class="pg-now" role="status" aria-live="polite" aria-atomic="true"></span>' +
         '<span class="pg-count"></span>' +
         '<span class="pg-timer"></span>' +
         '<button type="button" class="pg-caret" aria-expanded="true"' +
@@ -77,7 +82,7 @@
           '<polyline points="18 15 12 9 6 15"></polyline></svg>' +
         '</button>' +
       '</div>' +
-      '<div class="pg-feed" id="' + FEED_ID + '"></div>';
+      '<div class="pg-feed" id="' + FEED_ID + '" aria-live="off"></div>';
     el.querySelector(".pg-caret").addEventListener("click", () => {
       openPref = el.dataset.open !== "1";
       paintOpen(el);
@@ -88,6 +93,12 @@
     if (header) header.insertAdjacentElement("afterend", el);
     else document.body.insertBefore(el, document.body.firstChild);
     return el;
+  }
+
+  // Write only on change. `textContent = x` replaces the text node even when
+  // the string is identical, and a live region can announce that as new.
+  function say(el, text) {
+    if (el && el.textContent !== text) el.textContent = text;
   }
 
   function paintOpen(el) {
@@ -121,13 +132,13 @@
       steps.length + (steps.length === 1 ? " step" : " steps");
 
     if (done) {
-      el.querySelector(".pg-now").textContent =
-        "Claude worked for " + spoken(ended - started) + " across " +
-        steps.length + (steps.length === 1 ? " step" : " steps");
+      say(el.querySelector(".pg-now"),
+          "Claude worked for " + spoken(ended - started) + " across " +
+          steps.length + (steps.length === 1 ? " step" : " steps"));
       el.querySelector(".pg-count").textContent = "";
       el.querySelector(".pg-timer").textContent = "";
     } else {
-      el.querySelector(".pg-now").textContent = last ? last.text : "";
+      say(el.querySelector(".pg-now"), last ? last.text : "");
       el.querySelector(".pg-timer").textContent =
         clock((Date.now() / 1000) - started);
     }

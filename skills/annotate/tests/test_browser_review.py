@@ -1048,3 +1048,41 @@ def test_the_lock_ribbon_does_not_cover_the_panel_head(page, document):
     assert page.eval_on_selector(
         ".busy-banner", "el => getComputedStyle(el).display !== 'none'"), \
         "the lock ribbon stays suppressed after the trail closed"
+
+
+def test_only_the_current_line_is_a_live_region(page, document):
+    """The feed is rebuilt from scratch on every repaint. With the live region
+    on the panel (or on the feed), a screen reader re-announces the whole
+    trail to deliver one new line — nine lines read out again for the tenth.
+    The live region is the current line alone, announced atomically."""
+    _put_progress(document, ["Read your round of feedback", "Reading the importer"])
+    page.wait_for_selector("#progress-panel .pg-line", timeout=10000)
+
+    aria = page.evaluate("""() => {
+      const p = document.getElementById('progress-panel');
+      const now = p.querySelector('.pg-now');
+      const feed = document.getElementById('progress-feed');
+      return {panelLive: p.getAttribute('aria-live'), panelRole: p.getAttribute('role'),
+              nowLive: now.getAttribute('aria-live'), nowAtomic: now.getAttribute('aria-atomic'),
+              feedLive: feed.getAttribute('aria-live'), nowText: now.textContent};
+    }""")
+    assert aria["panelLive"] is None and aria["panelRole"] != "status", \
+        f"the whole panel is still a live region: {aria}"
+    assert aria["nowLive"] == "polite" and aria["nowAtomic"] == "true", aria
+    assert aria["feedLive"] == "off", aria
+    assert aria["nowText"] == "Reading the importer"
+
+    # A repaint that does not change the current line must not replace its
+    # text node either: an identical `textContent =` write is still a mutation
+    # a live region can announce.
+    page.evaluate("""() => {
+      const n = document.querySelector('#progress-panel .pg-now');
+      n.__node = n.firstChild;
+    }""")
+    _put_progress(document, ["Read your round of feedback", "Reading the importer"])
+    page.wait_for_timeout(500)
+    same = page.evaluate("""() => {
+      const n = document.querySelector('#progress-panel .pg-now');
+      return n.__node === n.firstChild;
+    }""")
+    assert same, "an unchanged current line was rewritten, which re-announces it"
