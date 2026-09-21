@@ -2766,10 +2766,38 @@
   (function initMenuPanes() {
     const pop = document.getElementById("menu-pop");
     if (!pop) return;
+    //
+    // The panel is a DISCLOSURE, not a dialog. It carried role="dialog" with
+    // no aria-modal and no focus move on open, which is a role claiming three
+    // things none of which were true. The honest options were to make it a
+    // real dialog or to stop saying it was one; it is a panel hung off a
+    // button that already carries aria-expanded and aria-controls, and that
+    // needs no role at all. So the role is gone rather than the behaviour
+    // being grown to match it.
+    //
+    // Focus does move between PANES, which is a different question: switching
+    // one used to write the attribute and nothing else, so the row you clicked
+    // went display:none under the caret and activeElement stayed on a hidden
+    // element. Tab recovered (it landed on .menu-back) so nothing was
+    // stranded, but nothing announced the pane either.
     pop.querySelectorAll("[data-pane-to]").forEach((b) => {
       b.addEventListener("click", (e) => {
         e.preventDefault();
-        pop.dataset.pane = b.dataset.paneTo;
+        const to = b.dataset.paneTo;
+        const from = pop.dataset.pane;
+        pop.dataset.pane = to;
+        if (to === "root") {
+          // Back where you came from: the root row that pushed the pane just
+          // left, found by the pane it points at rather than by remembering
+          // it, so the two can never drift.
+          pop.querySelector('.menu-pane[data-pane-name="root"] '
+            + '[data-pane-to="' + from + '"]')?.focus();
+        } else {
+          // The new pane's own header, which is both the first thing in it
+          // and the way out of it.
+          pop.querySelector('.menu-pane[data-pane-name="' + to + '"] '
+            + '.menu-back')?.focus();
+        }
       });
     });
     new MutationObserver(() => {

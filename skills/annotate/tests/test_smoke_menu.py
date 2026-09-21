@@ -123,6 +123,22 @@ class TestThePanesAreOnePanel(unittest.TestCase):
     def test_the_menu_reopens_at_the_root(self):
         self.assertIn("initMenuPanes", JS)
 
+    def test_the_panel_does_not_claim_to_be_a_dialog(self):
+        # It had role="dialog" with no aria-modal and no focus move on open —
+        # a role claiming three things none of which were true. It is a
+        # disclosure hung off a button that already carries aria-expanded and
+        # aria-controls, which needs no role at all.
+        self.assertNotIn('role="dialog"', SHELL)
+
+    def test_pushing_a_pane_moves_the_caret(self):
+        # Measured in test_browser_review.py; this is the deletion guard.
+        # Without it, switching a pane left activeElement on the row it had
+        # just made display:none.
+        body = JS[JS.index("function initMenuPanes()"):]
+        body = body[:body.index("\n  })();")]
+        self.assertIn(".menu-back", body)
+        self.assertIn("focus()", body)
+
     def test_the_panel_is_the_agreed_width(self):
         pop = CSS[CSS.index(".menu-pop {"):]
         pop = pop[:pop.index("}")]

@@ -28,7 +28,7 @@ export const SHELL_HTML = `\
 <button id="menu-toggle" type="button" class="icon-btn menu-btn" aria-expanded="false" aria-controls="menu-pop" title="Menu" aria-label="Menu">\
 <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/>\
 <line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>\
-<div id="menu-pop" class="menu-pop" data-pane="root" role="dialog" aria-label="Menu" hidden>\
+<div id="menu-pop" class="menu-pop" data-pane="root" hidden>\
 <div class="menu-pane" data-pane-name="root">\
 <div class="menu-status" id="menu-status"><span class="menu-status-dot" aria-hidden="true"></span>\
 <div class="menu-status-text"><div class="menu-status-title" id="menu-status-title" aria-live="polite">Checking…</div>\

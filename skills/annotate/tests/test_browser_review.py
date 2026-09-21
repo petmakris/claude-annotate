@@ -610,3 +610,39 @@ def test_the_watcher_state_reaches_the_menu_buttons_name(page):
         "the class flipped to live and the accessible name did not follow: "
         "%r" % live["aria"])
     assert live["says"] == "Watching", live["says"]
+
+
+def test_switching_a_pane_takes_the_caret_with_it(page):
+    """Pushing a pane used to write the attribute and nothing else, so the row
+    you clicked went display:none under the caret and activeElement stayed on
+    a hidden element — measured, and invisible to any source check.
+
+    The panel is also a disclosure now rather than a `role="dialog"` that
+    moved no focus and set no aria-modal, so the role it no longer claims is
+    asserted here beside the behaviour that replaced it.
+    """
+    page.click("#menu-toggle")
+    page.wait_for_selector("#menu-pop:not([hidden])")
+    assert page.eval_on_selector(
+        "#menu-pop", "el => el.getAttribute('role')") is None, \
+        "the panel still calls itself a dialog while behaving like a disclosure"
+
+    page.click('.menu-pane[data-pane-name="root"] [data-pane-to="settings"]')
+    page.wait_for_function(
+        "() => document.getElementById('menu-pop').dataset.pane === 'settings'")
+    landed = page.evaluate("""() => { const a = document.activeElement;
+      return { hidden: a.offsetParent === null,
+               where: a.closest('.menu-pane')
+                 ? a.closest('.menu-pane').dataset.paneName : null,
+               back: a.classList.contains('menu-back') }; }""")
+    assert not landed["hidden"], "the caret is on an element nobody can see"
+    assert landed["where"] == "settings" and landed["back"], \
+        f"the caret did not follow the pane: {landed}"
+
+    page.click('.menu-pane[data-pane-name="settings"] [data-pane-to="root"]')
+    page.wait_for_function(
+        "() => document.getElementById('menu-pop').dataset.pane === 'root'")
+    back = page.evaluate(
+        "() => document.activeElement.dataset.paneTo")
+    assert back == "settings", \
+        f"coming back did not land on the row that pushed the pane: {back!r}"
