@@ -47,11 +47,12 @@ class _PageSource:
 
 
 SERVER_PY = _PageSource(REPO)
-CORE_CSS = REPO / "skills" / "_shared" / "web_companion" / "static" / "core.css"
-# Annotate's OWN stylesheets. CORE_CSS above is the shared web_companion copy,
-# which annotate's has deliberately diverged from -- asserting Share's styling
-# against the shared file is what let the read-only guard below go vacuous when
-# Share became a menu row and annotate dropped .export-btn.
+# Annotate's OWN stylesheets, and only those. A constant pointing at the
+# SHARED skills/_shared/web_companion copy used to sit here; annotate's has
+# deliberately diverged from it, and asserting Share's styling against the
+# shared file is what let the read-only guard below go vacuous when Share
+# became a menu row and annotate dropped its export-btn rules. Nothing reads
+# the shared copy any more, so nothing names it.
 ANNOTATE_CORE_CSS = REPO / "skills" / "annotate" / "static" / "core.css"
 ANNOTATE_STYLE_CSS = REPO / "skills" / "annotate" / "static" / "style.css"
 

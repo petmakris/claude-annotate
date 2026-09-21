@@ -27,12 +27,23 @@ def header_html():
 
 
 def bar_html():
-    """The header MINUS the menu panel — what a reader actually sees."""
+    """The header MINUS the menu panel — what a reader actually sees.
+
+    The panel is cut out by balancing its own <div>s. It used to be cut by
+    jumping from the panel's opening tag straight to #done-btn, which drops
+    everything between the panel's close and Done as well — and that gap is
+    exactly where a new control would be written, in the one test the spec
+    calls the only real defence against the bar growing back.
+    """
     h = header_html()
     i = h.index('id="menu-pop"')
-    # back up to the opening tag of the panel, forward to its end
     start = h.rindex("<div", 0, i)
-    return h[:start] + h[h.index('<button id="done-btn"'):]
+    depth = 0
+    for m in re.finditer(r"<div\b|</div>", h[start:]):
+        depth += 1 if m.group(0) != "</div>" else -1
+        if depth == 0:
+            return h[:start] + h[start + m.end():]
+    raise AssertionError("the menu panel's <div> is never closed")
 
 
 class TestTheBarIsThreeControls(unittest.TestCase):
