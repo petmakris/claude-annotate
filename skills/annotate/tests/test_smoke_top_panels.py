@@ -7,7 +7,10 @@ were permanently on screen, and together they cost ~92px before the
 document started. They now hang off two icon buttons in the page header:
 
   #composer-toggle  💬  opens the general composer as a band of the top bar
-  #legend-toggle    ?   opens the button legend as a popover under the icon
+  #menu-toggle      ☰   opens the menu, whose help pane is the button legend
+
+(#legend-toggle was the legend's own header button for a while. The legend is
+a pane of the one menu now, so there is nothing left to toggle but the menu.)
 
 Source-string checks in the house style. Anything that can only be seen by
 rendering — computed display, box geometry, focus, whether a panel overlays
@@ -87,9 +90,10 @@ def test_the_collapsed_composer_trigger_row_is_gone():
         "dead .composer-collapsed styling is still in style.css"
 
 
-def test_the_legend_is_a_popover_not_a_details_in_the_reading_column():
-    """The legend pill sat centred above the document. It is now a popover
-    anchored to its header button; the <details> wrapper goes with it."""
+def test_the_legend_is_a_pane_of_the_menu_not_a_details_in_the_reading_column():
+    """The legend pill sat centred above the document. It became a popover
+    anchored to its own header button, and is now a pane of the menu; the
+    <details> wrapper went with the first of those moves and stays gone."""
     server = SERVER_PY.read_text()
     assert '<details class="legend"' not in server, \
         "the legend is still a <details> block sitting in the reading column"
@@ -140,8 +144,15 @@ def test_the_composer_band_spans_the_header_gutters():
 def test_the_composer_toggle_is_hidden_for_a_read_only_reader():
     """`body.read-only` already hides .general-composer, so a visible bubble
     icon would be a button that opens nothing at all."""
+    # annotate's OWN core.css, which is the file the page loads. This used to
+    # concatenate the SHARED web_companion copy, which annotate's has
+    # deliberately diverged from — so the rule was found in a stylesheet the
+    # page never links, and deleting it from annotate's copy left this test
+    # green. Watched: 6 passed with `body.read-only #composer-toggle` removed.
+    # It matters more now than it did, because #composer-toggle is a menu row:
+    # a regression hands a guest a row that opens a `display: none` band.
     css = (STYLE_CSS.read_text()
-           + (REPO / "skills" / "_shared" / "web_companion" / "static" / "core.css").read_text())
+           + (REPO / "skills" / "annotate" / "static" / "core.css").read_text())
     assert re.search(r"body\.read-only[^{]*#composer-toggle", css), (
         "the composer toggle survives read-only mode, where the panel it "
         "opens is display:none — it is a button that does nothing"
