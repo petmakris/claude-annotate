@@ -173,3 +173,71 @@ def test_a_push_does_not_delete_the_trail(sid, tmp_path):
             except Exception as e:                       # noqa: BLE001
                 import warnings
                 warnings.warn(f"progress writer suite leaked session {stray_sid}: {e}")
+
+
+# --- the CLI, exactly as the skill documents it -------------------------
+#
+# Every test above calls note()/finish() as Python functions, which is not how
+# narration ever actually runs: the skill tells Claude to run a shell command,
+# from whatever working directory the turn happens to be in. That gap let ten
+# documented invocations ship bare — no PYTHONPATH — which raises
+# ModuleNotFoundError from any cwd that is not the plugin root. Because
+# narration is contractually allowed to fail without failing the turn, it
+# failed silently, and the reader got the spinner this whole feature exists to
+# remove. These drive the module the way the documentation does.
+
+def _cli(cwd, *args, env=None):
+    import subprocess
+    return subprocess.run(
+        ["python3", "-m", "skills.annotate.progress", *args],
+        cwd=str(cwd), env=env, capture_output=True, text=True, timeout=30)
+
+
+def test_the_documented_command_runs_from_a_foreign_working_directory(sid, tmp_path):
+    # tmp_path is the point: a cwd with no `skills` package under it, which is
+    # every cwd Claude is ever in while handling an event.
+    env = dict(os.environ, PYTHONPATH=str(REPO))
+    r = _cli(tmp_path, "--sid", sid, "--text", "Reading how anchors resolve", env=env)
+    assert r.returncode == 0, f"stdout={r.stdout!r} stderr={r.stderr!r}"
+    assert r.stderr == "", r.stderr
+    assert [s["text"] for s in _stored(sid)["steps"]] == ["Reading how anchors resolve"]
+
+
+def test_the_documented_done_flag_closes_the_trail_from_a_foreign_cwd(sid, tmp_path):
+    env = dict(os.environ, PYTHONPATH=str(REPO))
+    assert _cli(tmp_path, "--sid", sid, "--text", "one", env=env).returncode == 0
+    r = _cli(tmp_path, "--sid", sid, "--done", env=env)
+    assert r.returncode == 0, f"stdout={r.stdout!r} stderr={r.stderr!r}"
+    body = _stored(sid)
+    assert body["state"] == "done"
+    assert [s["text"] for s in body["steps"]] == ["one"]
+
+
+def test_without_the_pythonpath_the_command_cannot_even_import_itself(sid, tmp_path):
+    # The shape of the bug, pinned so nobody "simplifies" the documented
+    # prefix away again: bare, from a foreign cwd, it does not run at all.
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    r = _cli(tmp_path, "--sid", sid, "--text", "never arrives", env=env)
+    assert r.returncode != 0
+    assert "No module named 'skills'" in r.stderr
+
+
+def test_a_missing_daemon_config_is_reported_not_raised(tmp_path):
+    # main()'s ProgressError catch. Narration must never take down the turn it
+    # is narrating, so this exits non-zero with a message rather than a
+    # traceback — and the documented commands ignore the exit code.
+    home = tmp_path / "home"
+    home.mkdir()
+    env = dict(os.environ, PYTHONPATH=str(REPO), HOME=str(home))
+    r = _cli(tmp_path, "--sid", "whatever", "--text", "x", env=env)
+    assert r.returncode == 1
+    assert "Traceback" not in r.stderr
+    assert "webcompanion is not configured" in r.stderr
+
+
+def test_neither_text_nor_done_is_a_usage_error(tmp_path):
+    env = dict(os.environ, PYTHONPATH=str(REPO))
+    r = _cli(tmp_path, "--sid", "whatever", env=env)
+    assert r.returncode == 2
+    assert "--text or --done" in r.stderr

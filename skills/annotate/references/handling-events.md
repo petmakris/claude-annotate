@@ -59,6 +59,47 @@ Two event types are **not** content feedback and still arrive on their own:
 rework; handle them as a `comment` with `disagree` and a `delete`
 respectively.
 
+## Resolve the plugin root
+
+The narration command below, and the push commands the event paths
+call out to, run out of the plugin's own tree, and
+`$CLAUDE_PLUGIN_ROOT` is **not** exported into the Bash tool's shell. Run this
+once per turn, before the first of them:
+
+```bash
+if ! command -v python3 >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+claude-annotate: python3 was not found on PATH.
+claude-annotate is the marketplace that ships this plugin and claude-ide-review.
+
+This plugin needs Python 3.9 or newer (standard library only — nothing to
+pip install).
+
+  macOS:  xcode-select --install     # or: brew install python
+  Linux:  install python3 with your distribution's package manager
+
+Run /annotate-doctor for a full check of this machine.
+EOF
+  exit 1
+fi
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(python3 -c '
+import json, os, sys
+NAME, MARKER = "claude-annotate", "skills/annotate/push.py"
+ok = lambda r: bool(r) and os.path.isfile(os.path.join(r, MARKER))
+for entry in os.environ.get("PATH", "").split(os.pathsep):
+    if os.path.basename(entry) == "bin" and ok(os.path.dirname(entry)):
+        print(os.path.dirname(entry)); sys.exit()
+try:
+    root = json.load(open(os.path.expanduser("~/.claude/plugins/known_marketplaces.json")))[NAME]["installLocation"]
+except Exception:
+    root = None
+if ok(root):
+    print(root); sys.exit()
+sys.exit(f"could not locate the {NAME} plugin root")
+')}"
+[ -n "$PLUGIN_ROOT" ] || { echo "claude-annotate: plugin root not found" >&2; exit 1; }
+```
+
 ## Narrating while you work
 
 The reader is looking at a page with a spinner on it. Between the moment they
@@ -70,11 +111,21 @@ you write the lines, so they say something a tool name cannot.
 
 Write a line with:
 
-    python3 -m skills.annotate.progress --sid "$WC_SID" --text "Reading how anchors resolve"
+    PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --text "Reading how anchors resolve"
 
 and close the trail when the answer is pushed:
 
-    python3 -m skills.annotate.progress --sid "$WC_SID" --done
+    PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --done
+
+`$PLUGIN_ROOT` is the one resolved in "Resolve the plugin root" above, and it
+is not optional: without it `python3 -m skills.annotate.progress` raises
+`ModuleNotFoundError: No module named 'skills'` from any working directory
+that is not the plugin root — which, since the rule three paragraphs down is
+that narration must never fail the turn, fails **silently** and leaves the
+reader with the bare spinner. Unlike the push and publish commands, narration
+sets `PYTHONPATH` without `cd`-ing: these lines are interleaved with your own
+work, and the Bash tool's working directory persists between calls, so a `cd`
+here would relocate every later command in the turn.
 
 A *step* is a distinct piece of work — a search, a pass of reading, a command
 run, a rewrite — **not an individual tool call**. Three greps answering one
@@ -105,10 +156,10 @@ These commands are cheap and must never fail the turn: if one errors, carry on.
    - `prefix` / `suffix` — optional: surrounding context that pins down *which* occurrence of `selected_text` was highlighted when it appears more than once in the block.
    - For `type == "dismiss"`: `block_id` is the block to remove; `text` is empty and ignored. Jump to the `dismiss` subsection below.
    - `images` — array of `{token, path}` entries (or empty).  When non-empty, `Read` each `path` before composing your rewrite so you see the screenshots.
-3. Narrate that you have it: `python3 -m skills.annotate.progress --sid "$WC_SID" --text "Read your comment on <block_id>" --event-id "<event_id>"`.
+3. Narrate that you have it: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --text "Read your comment on <block_id>" --event-id "<event_id>"`.
 4. **Apply the block-rewrite contract** (see "Block-rewrite contract" below).
 5. Save the updated `blocks.json` atomically (tmp → rename).
-6. Close the trail: `python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
+6. Close the trail: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
 7. Acknowledge the event: `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"`.
 8. End your turn.  **No terminal output.**  The watcher remains armed.
 
@@ -119,12 +170,12 @@ The user answered a choice block. `selected_options` holds the picked id(s) — 
 **Pick (with or without a note):**
 
 1. Read your working `blocks.json`, find the block by `block_id`.
-2. Narrate that you have it: `python3 -m skills.annotate.progress --sid "$WC_SID" --text "Read your choice answer" --event-id "<event_id>"`.
+2. Narrate that you have it: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --text "Read your choice answer" --event-id "<event_id>"`.
 3. **Resolve the choice into a decision** — convert the block from `kind: "choice"` to a markdown block whose prose states the decision, folds in the reasoning, AND folds in the note when present (e.g. *"Decision: Koumbaras, lowercased per your note…"*). The options disappear; the answer is final. Use `blocks.convert_block_to_markdown(doc, block_id, markdown)` — it sets the markdown, drops `kind`/`spec`, and is content-hash-safe (a no-op rewrite doesn't bump the version).
 4. **Continue the task** — the pick drives the next step. Append follow-up blocks to `blocks.json` and/or take the implied action, as the decision warrants.
 5. Run the coherence sweep (see below — this path is the universal rule's highest-risk case, since it both resolves the block and appends new ones).
 6. Re-push the document (`references/pushing.md` § Push the document, with `--slug "$WC_SLUG"`).
-7. Close the trail: `python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
+7. Close the trail: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
 8. Run `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"`. End your turn. No terminal output; the watcher stays armed.
 
 **Note-only (`selected_options` is `[]`, `text` non-empty):** the user rejected the slate and gave a direction instead. Do NOT resolve. Either rewrite the block's spec with re-proposed options that follow the direction (`blocks.update_spec_block` — the version bumps), or, when the note itself settles the question, resolve to a decision paragraph built from the note. Then continue as in steps 4–8 above.
@@ -138,14 +189,14 @@ Only reachable from a browser tab opened before the round rework — the current
 **Delete is not disagreement.** A disagreement means "I think this is wrong" — you soften, withdraw, or defend the claim, and the content stays. A delete means "this is *irrelevant*" — you remove it and stop carrying it forward; do not argue, defend, or re-add it.
 
 1. Read your working `blocks.json`.
-2. Narrate that you have it: `python3 -m skills.annotate.progress --sid "$WC_SID" --text "Read the dismiss request for <block_id>" --event-id "<event_id>"`.
+2. Narrate that you have it: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --text "Read the dismiss request for <block_id>" --event-id "<event_id>"`.
 3. `blocks.remove_block(doc, block_id)` — deletes the block. It is a no-op if the block is already gone (watcher re-apply safety).
 4. **Smart-drop:** scan the surviving blocks. Re-thread any that referenced the removed one — renumber steps, cut or rewrite dangling references — so the document still reads coherently without it. Use `blocks.update_block` / `blocks.update_spec_block` per touched block; touch only blocks that actually referenced the removed one.
 5. `blocks.drop_unused_terms(doc)` — drop any glossary entry whose term was last used by the removed block.
 6. Treat the removed content as **out of scope** for the rest of this turn and going forward: do not reintroduce it, and exclude it when acting on the plan.
 7. Run the coherence sweep (see below — the same pre-ack rule as every other path; dismiss is legacy, not exempt).
 8. Re-push the document with `--slug "$WC_SLUG"`.
-9. Close the trail: `python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
+9. Close the trail: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
 10. Run `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"`. End the turn. No terminal output; the watcher stays armed.
 
 A dismissed `choice` or `sequence` block is removed whole-block the same way — there is no step-level dismiss.
@@ -177,7 +228,7 @@ block-scope one from the card header. The payload carries the whole batch:
 Apply the WHOLE round in one pass — this is the entire point of batching:
 
 1. Read your working `blocks.json`. Group reactions by `block_id`.
-2. Narrate that you have it: `python3 -m skills.annotate.progress --sid "$WC_SID" --text "Read your round of feedback" --event-id "<event_id>"`.
+2. Narrate that you have it: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --text "Read your round of feedback" --event-id "<event_id>"`.
 3. **Apply `scope: "block"` reactions first**, since a block-level `delete`
    makes that block's unit reactions moot:
    - **`delete`** — `blocks.remove_block(doc, block_id)`, then smart-drop:
@@ -246,7 +297,7 @@ Three rules govern compact, and all three matter:
    universal pre-ack rule, not a round-only step). This is not optional and it
    is not conditional on the round having deleted anything.
 7. ONE `blocks.save_atomic`, then ONE re-push (`--slug "$WC_SLUG"`) — the daemon holds the document now, so a save that is not pushed changes nothing the user can see.
-8. Close the trail: `python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
+8. Close the trail: `PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.annotate.progress --sid "$WC_SID" --done`.
 9. Run `webcompanion ack --sid "$WC_SID" --event-id "<event_id>"` ONCE. End your turn. No terminal
    output; the watcher stays armed.
 
