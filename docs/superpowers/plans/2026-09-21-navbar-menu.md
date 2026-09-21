@@ -1380,6 +1380,37 @@ def test_arming_the_highlighter_brings_its_button_back(page):
         "#menu-highlighter", "el => el.getAttribute('aria-pressed')") == "true"
 
 
+def test_the_two_slot_writers_land_in_their_slots(page):
+    """Task 2 taught export.js and fullscreen.js to write to a slot instead of
+    over the whole button, because a menu row is an icon AND a label. Nothing
+    proved that at runtime — both modules are covered only by source-string
+    assertions, and a wrong selector would silently eat one or the other.
+    fullscreen.js's sync() runs at init, so its slot is already exercised by
+    the time this page is ready."""
+    page.click("#menu-toggle")
+    page.wait_for_selector("#menu-pop:not([hidden])")
+
+    # Full screen: the icon went INTO the slot, and the label survived it.
+    assert page.eval_on_selector(
+        "#fullscreen-toggle", "el => !!el.querySelector('[data-icon] svg')"), \
+        "fullscreen.js wrote its icon somewhere other than the slot"
+    assert "Full screen" in page.text_content("#fullscreen-toggle"), \
+        "fullscreen.js's icon write ate the row's label"
+
+    # Share: click it and watch the LABEL change, not the whole row. The click
+    # really does build and download the document, so the download is accepted
+    # and discarded — expect_download also keeps the click from hanging.
+    with page.expect_download() as dl:
+        page.click("#export-btn")
+    dl.value
+    page.wait_for_function(
+        "() => document.querySelector('#export-btn [data-label]')"
+        ".textContent.trim() === 'Saved ✓'", timeout=10000)
+    assert page.eval_on_selector(
+        "#export-btn", "el => !!el.querySelector('svg')"), \
+        "export.js's status write ate the row's icon"
+
+
 def test_search_takes_the_bar_and_gives_it_back(page):
     page.click("#block-search")
     page.wait_for_function(
