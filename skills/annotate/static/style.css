@@ -2433,6 +2433,106 @@ main.prose .ex-lbl code {
 }
 .ex-lbl--range { align-self: center; margin-left: 12px; max-width: 280px; }
 
+/* --- the walk -------------------------------------------------------
+   One note at a time, in the order they were written. Everything below is
+   scoped to `[data-walk]` ON PURPOSE, and it is the load-bearing decision in
+   this section: the pane is always built in full — every underline, every
+   ladder, every bracket — and walking only *suppresses* what is not current.
+   Deleting the attribute therefore restores the entire pane with no cleanup,
+   which is exactly what the export does (export.js strips the three control
+   nodes and the attribute; there is no second renderer for a static page).
+   Hiding those labels per element instead would leave the export to find and
+   unhide each one, and a label that stayed hidden would be content silently
+   missing from a file someone was sent. */
+
+/* While walking, the prose lives in the tray and nowhere else: the ladder and
+   the numbered list would otherwise print the same sentence twice in one pane.
+   The MARKS stay in the DOM and only lose their ink, because their position is
+   the one thing that cannot be recomputed later. */
+.codepane.ex[data-walk] .ex-lad,
+.codepane.ex[data-walk] .ex-notes,
+.codepane.ex[data-walk] .ex-lbl--range { display: none; }
+.codepane.ex[data-walk] .ex-uline { opacity: 0; transition: opacity .14s ease; }
+.codepane.ex[data-walk] .ex-uline.is-now { opacity: 1; }
+.codepane.ex[data-walk] .ex-badge--onspan { display: none; }
+
+/* The rest of the snippet does not disappear — it STEPS BACK, and the
+   difference matters. Opacity was the first cut and is not here: measured on
+   the rendered pane at .34, the quietened code came out at 1.12:1 on Daylight
+   and 1.14:1 on Parchment (1.99:1 even on Midnight), which is erased rather
+   than de-emphasised — and erasing it throws away the one thing keeping the
+   code contiguous was for, which is that you can still see the shape of the
+   method you are being walked through.
+   So this follows the rule the pane already reached for its context rows: one
+   flat muted ink, not a blend toward the paper. `--cp-muted` is per-theme and
+   already contrast-checked on its own ground (4.6-6.1:1 across the four), so
+   a quietened row stays readable while plainly not being the one under
+   discussion. Specificity has to clear `.codepane .hljs-*` (0,2,0) the same
+   way the context rule does, hence `.codepane.ex[data-walk]` plus the token
+   selectors below. */
+.codepane.ex[data-walk] .cp-row { transition: color .14s ease; }
+.codepane.ex[data-walk] .cp-row:not(.is-lit),
+.codepane.ex[data-walk] .cp-row:not(.is-lit) .hljs,
+.codepane.ex[data-walk] .cp-row:not(.is-lit) [class^="hljs-"],
+.codepane.ex[data-walk] .cp-row:not(.is-lit) [class*=" hljs-"] {
+  color: var(--cp-muted);
+}
+
+/* The pin: a step's number parked past the end of its line. `.ex-at` carries
+   the offset and NOT the styling, because `ch` is a metric of the element's
+   own font — a pin set in the prose face resolves a narrower `ch` than the
+   column arithmetic was written in and lands back among the glyphs. Measured
+   the wrong way round first: the dots sat on top of the code. */
+.ex-at {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  display: inline-flex; align-items: center; gap: 5px;
+  pointer-events: none;
+}
+.ex-at > * { pointer-events: auto; }
+.ex-pin {
+  margin-left: 10px; padding: 0;
+  width: 15px; height: 15px; border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--ex-rail) 60%, transparent);
+  background: transparent; color: var(--ex-ink);
+  font-family: var(--font-prose); font-size: 9.5px; font-weight: 800; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; opacity: .55;
+  transition: opacity .14s ease, background-color .14s ease;
+}
+.ex-pin:hover { opacity: 1; }
+.ex-pin.is-now {
+  opacity: 1; background: var(--ex-rail); color: var(--cp-ground);
+  border-color: var(--ex-rail);
+}
+
+/* The tray. Its height is reserved in script.js to the longest note, so the
+   page below it never moves as you step. */
+.ex-tray {
+  padding: 10px 14px 11px 24px;
+  border-top: 1px solid var(--cp-divider);
+  background: color-mix(in srgb, var(--cp-chrome) 55%, var(--cp-ground));
+}
+.ex-tray .ex-lbl { max-width: 760px; }
+
+.ex-bar {
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--cp-divider);
+  background: var(--cp-chrome);
+  font-family: var(--font-prose); font-size: 11.5px; color: var(--cp-dim);
+}
+.ex-step {
+  font: inherit; cursor: pointer;
+  border: 1px solid var(--cp-divider); border-radius: 5px;
+  background: var(--cp-ground); color: var(--cp-text);
+  padding: 1px 9px 2px; line-height: 1.6;
+}
+.ex-step:disabled { opacity: .4; cursor: default; }
+.ex-count { font-variant-numeric: tabular-nums; }
+.ex-pips { display: flex; gap: 5px; margin-left: auto; }
+.ex-pip { width: 6px; height: 6px; border-radius: 50%; background: var(--cp-divider); }
+.ex-pip.on { background: var(--ex-rail); }
+
 /* --- Themes ---------------------------------------------------------
    A theme redeclares the variables and nothing else. Every one of these is
    scoped under `.codepane`, which is not decoration: code-theme.css paints

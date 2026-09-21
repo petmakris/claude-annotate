@@ -24,6 +24,25 @@ def spec(**over):
     return base
 
 
+# The same computation written twice, in two currencies: the snippet that made
+# a note-with-several-spans necessary. A label saying "both times" while only
+# one of the two is underlined is a claim the pane does not back up.
+TWICE = (
+    "private Amount adjustMarketValue(BigDecimal quantity, BigDecimal lotSize) {\n"
+    "    return ofNullable(this.priceInReferenceCurrency)\n"
+    "        .map(p -> p.multiply(quantity.multiply(lotSize)))\n"
+    "        .orElse(null);\n"
+    "}\n"
+    "\n"
+    "private Amount adjustMarketValueInPositionCurrency(BigDecimal quantity, BigDecimal lotSize) {\n"
+    "    return ofNullable(this.dirtyPriceInPositionCurrency)\n"
+    "        .map(p -> p.multiply(quantity.multiply(lotSize)))\n"
+    "        .orElse(null);\n"
+    "}\n"
+)
+CALC = "p.multiply(quantity.multiply(lotSize))"
+
+
 # --- the span is quoted, and this module finds it ------------------------
 
 def test_span_resolves_to_its_column_and_length():
@@ -165,6 +184,107 @@ def test_trailing_blank_lines_are_dropped_not_rendered():
     view = compile_spec(spec(code="a\n\n\n", notes=[
         {"line": 1, "span": "a", "label": "x"}]))
     assert len(view["rows"]) == 1
+
+
+# --- a note may own several spans -----------------------------------------
+
+def test_a_note_may_mark_several_spans():
+    view = compile_spec(spec(code=TWICE, notes=[
+        {"spans": [{"line": 3, "span": CALC}, {"line": 9, "span": CALC}],
+         "label": "**the same multiplication**, both times"}]))
+    step = view["walk"][0]
+    assert [(m["line"], m["len"]) for m in step["marks"]] == [
+        (3, len(CALC)), (9, len(CALC))]
+
+
+def test_the_second_span_is_underlined_without_reprinting_the_label():
+    # Both occurrences are marked, but the prose is written once: a label
+    # repeated under every twin is the same sentence twice in one pane.
+    view = compile_spec(spec(code=TWICE, notes=[
+        {"spans": [{"line": 3, "span": CALC}, {"line": 9, "span": CALC}],
+         "label": "**the same multiplication**, both times"}]))
+    by_line = {g["line"]: g for g in view["groups"]}
+    assert "the same multiplication" in by_line[3]["marks"][0]["labelHtml"]
+    assert by_line[9]["marks"][0]["labelHtml"] == ""
+    assert by_line[9]["marks"][0]["echo"] is True
+
+
+def test_an_echo_does_not_push_its_line_into_badge_mode():
+    # Line 9 ends up carrying three marks, but two of them are echoes with
+    # nothing to say. Counting those would switch the line to numbered badges
+    # to unstack labels that were never going to be stacked.
+    view = compile_spec(spec(code=TWICE, notes=[
+        {"spans": [{"line": 3, "span": CALC}, {"line": 9, "span": CALC}],
+         "label": "**calc**"},
+        {"spans": [{"line": 2, "span": "priceInReferenceCurrency"},
+                   {"line": 9, "span": "quantity"}],
+         "label": "**the quantity**"},
+        {"line": 9, "span": "lotSize", "label": "**the lot**"},
+    ]))
+    by_line = {g["line"]: g for g in view["groups"]}
+    assert len(by_line[9]["marks"]) == LADDER_MAX + 1
+    assert by_line[9]["mode"] == "drop"
+    assert [m.get("n") for m in by_line[9]["marks"] if not m["echo"]] == [1]
+
+
+def test_a_bad_quote_inside_spans_is_refused_like_any_other():
+    with pytest.raises(ExplainError) as e:
+        compile_spec(spec(code=TWICE, notes=[
+            {"spans": [{"line": 3, "span": CALC}, {"line": 9, "span": "nope"}],
+             "label": "x"}]))
+    assert "does not occur on line 9" in str(e.value)
+
+
+def test_a_note_cannot_quote_both_ways_at_once():
+    with pytest.raises(ExplainError) as e:
+        compile_spec(spec(notes=[
+            {"line": 2, "span": "ofNullable",
+             "spans": [{"line": 2, "span": "return"}], "label": "x"}]))
+    assert "either" in str(e.value)
+
+
+# --- the walk -------------------------------------------------------------
+
+def test_the_walk_follows_the_authored_order_not_the_file_order():
+    # Reading order is the argument's order. Step 1 here is on line 8 because
+    # that is where the explanation starts, not where the file does.
+    view = compile_spec(spec(code=TWICE, notes=[
+        {"line": 8, "span": "dirtyPriceInPositionCurrency", "label": "**position currency**"},
+        {"line": 2, "span": "priceInReferenceCurrency", "label": "**reference currency**"},
+    ]))
+    assert [s["marks"][0]["line"] for s in view["walk"]] == [8, 2]
+    assert [s["n"] for s in view["walk"]] == [1, 2]
+
+
+def test_a_step_carries_its_lead_in_for_the_counter():
+    view = compile_spec(spec(notes=[
+        {"line": 2, "span": "priceInReferenceCurrency",
+         "label": "**reference currency.** Already FX-converted."}]))
+    assert view["walk"][0]["lead"] == "reference currency"
+
+
+def test_a_label_with_no_lead_in_walks_without_one():
+    view = compile_spec(spec(notes=[
+        {"line": 2, "span": "priceInReferenceCurrency", "label": "already converted"}]))
+    assert view["walk"][0]["lead"] == ""
+
+
+def test_a_range_is_a_step_too():
+    view = compile_spec(spec(notes=[
+        {"line": 2, "span": "ofNullable", "label": "**one**"},
+        {"lines": [2, 4], "label": "**together**"},
+    ]))
+    assert [s["kind"] for s in view["walk"]] == ["span", "range"]
+    assert view["walk"][1]["from"] == 2 and view["walk"][1]["to"] == 4
+
+
+def test_every_note_reaches_the_walk_in_one_step_each():
+    view = compile_spec(spec(code=TWICE, notes=[
+        {"line": 2, "span": "priceInReferenceCurrency", "label": "a"},
+        {"spans": [{"line": 3, "span": CALC}, {"line": 9, "span": CALC}], "label": "b"},
+        {"lines": [7, 11], "label": "c"},
+    ]))
+    assert len(view["walk"]) == 3
 
 
 # --- labels ---------------------------------------------------------------

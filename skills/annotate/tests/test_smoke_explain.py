@@ -80,6 +80,49 @@ class TestExplainInvariants(unittest.TestCase):
             "the explain section hardcodes a colour instead of using a --cp-* variable")
 
 
+class TestTheWalk(unittest.TestCase):
+    """The walk is a layer OVER the static pane, never a replacement for it."""
+
+    def test_walk_classes_exist_in_the_stylesheet(self):
+        for sel in [".ex-tray", ".ex-bar", ".ex-pin", ".ex-pip"]:
+            self.assertIn(sel, CSS, "%s missing from style.css" % sel)
+
+    def test_the_pane_opens_already_walking(self):
+        # Chosen over "all labels, with a walk button": a control nobody finds
+        # is a feature nobody has.
+        self.assertIn('wrap.dataset.walk = "1"', SCRIPT)
+
+    def test_walking_is_an_attribute_so_removing_it_restores_the_whole_pane(self):
+        # Everything the walk hides is hidden by a rule scoped to the attribute
+        # — labels, ladders and the marks that are not current. Drop the
+        # attribute and the pane is exactly what it was before anyone stepped,
+        # which is what the export relies on. Hiding them per element instead
+        # would leave the export to undo each one.
+        self.assertRegex(CSS, r"\[data-walk\][^{]*\.ex-lad[^{]*\{[^}]*display:\s*none")
+        self.assertRegex(CSS, r"\[data-walk\][^{]*\.ex-uline[^{]*\{[^}]*opacity:\s*0")
+
+    def test_the_export_takes_the_walk_apart(self):
+        # `.ex-at` is the pins' container; stripping it takes the buttons with
+        # it. That the exported file really carries no pin, and really shows
+        # every label, is measured on a rendered clone in test_browser_explain.
+        export = (STATIC / "export.js").read_text()
+        for sel in ['".ex-bar"', '".ex-tray"', '".ex-at"']:
+            self.assertIn(sel, export, "%s is not stripped from the export" % sel)
+        self.assertIn('"data-walk"', export)
+
+    def test_the_tray_is_measured_after_the_webfonts_land(self):
+        # Reserving the tray against the fallback face comes out one line short
+        # and the pane grows on the first long note, shoving the rest of the
+        # page down mid-read. Measured in Chromium: 326px then 344px.
+        self.assertIn("document.fonts", SCRIPT)
+        self.assertIn("reserveTray", SCRIPT)
+
+    def test_an_echo_is_underlined_but_never_numbered(self):
+        # An echo has no label, so a badge on it would number an entry that is
+        # not in the list beside it.
+        self.assertIn("m.echo", SCRIPT)
+
+
 class TestExplainLabelsAreNotModelHtml(unittest.TestCase):
     def test_the_label_subset_is_rendered_server_side(self):
         # innerHTML on a label is only safe because explain.py escaped the

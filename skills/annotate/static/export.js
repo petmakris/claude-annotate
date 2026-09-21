@@ -33,6 +33,14 @@
     ".cp-jump",             // jetbrains:// IDE link: an absolute author path,
                              // and dead on anyone else's machine besides
     ".flow-flavours",       // flowchart layout-flavour buttons: no JS in the export to run them
+    // The explain kind's walk. Its controls are dead without JS, and a file
+    // frozen on step 2 would carry one note out of five with the rest painted
+    // out — so the controls go and `data-walk` goes with them (see
+    // STATE_ATTRS), which restores the pane with every label showing. The
+    // static pane is always in the DOM; nothing here has to rebuild it.
+    ".ex-bar",              // step controls
+    ".ex-tray",             // the current note, restated by the ladder below it
+    ".ex-at",               // the numbered pins, and the buttons inside them
   ].join(", ");
 
   // Review state painted onto the document as attributes. Left in place, a
@@ -41,6 +49,9 @@
   const STATE_ATTRS = [
     "data-block-mark", "data-mark", "data-engaged-type", "data-card-focus",
     "data-visible", "data-engaged",
+    // Every rule the walk uses to suppress a label or dim a row is scoped to
+    // this attribute, so dropping it is the whole of undoing the walk.
+    "data-walk",
   ];
 
   // Neutralises affordances that survive as pure CSS once their JS is gone.

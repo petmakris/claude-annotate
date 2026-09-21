@@ -15,6 +15,7 @@ a daemon, makes its own session and deletes it.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -78,7 +79,46 @@ RANGE = {
     },
 }
 
-ORDER = [LADDER["id"], BADGES["id"], RANGE["id"]]
+# The walk, on the snippet that made it necessary: two methods doing the same
+# multiplication on two prices. Step 3 is the note that is true in two places
+# at once, which is the whole reason a note can own several spans.
+TWICE = (
+    "private Amount adjustMarketValue(BigDecimal quantity, BigDecimal lotSize) {\n"
+    "    return ofNullable(this.priceInReferenceCurrency)\n"
+    "        .map(p -> p.multiply(quantity.multiply(lotSize)))\n"
+    "        .orElse(null);\n"
+    "}\n"
+    "\n"
+    "private Amount adjustMarketValueInPositionCurrency(BigDecimal quantity, BigDecimal lotSize) {\n"
+    "    return ofNullable(this.dirtyPriceInPositionCurrency)\n"
+    "        .map(p -> p.multiply(quantity.multiply(lotSize)))\n"
+    "        .orElse(null);\n"
+    "}\n"
+)
+CALC = "p.multiply(quantity.multiply(lotSize))"
+
+WALK = {
+    "id": "section-4", "kind": "explain", "title": "Walk",
+    "spec": {
+        "project": "portfolios", "file": "ValuedPosition.java", "line": 261,
+        "lang": "java", "code": TWICE,
+        # Written in READING order, which is not the file's: the argument
+        # starts at the second method.
+        "notes": [
+            {"line": 8, "span": "dirtyPriceInPositionCurrency",
+             "label": "**position currency.** Airbus SE prices in EUR, so this and the "
+                      "value it produces are EUR."},
+            {"line": 2, "span": "priceInReferenceCurrency",
+             "label": "**reference currency.** Already FX-converted by `toReference`; "
+                      "CHF here. Only this row continues: you cannot divide a EUR amount "
+                      "by a CHF total, which is the whole reason both of these exist."},
+            {"spans": [{"line": 3, "span": CALC}, {"line": 9, "span": CALC}],
+             "label": "**the same multiplication**, both times."},
+        ],
+    },
+}
+
+ORDER = [LADDER["id"], BADGES["id"], RANGE["id"], WALK["id"]]
 
 
 def _daemon_url():
@@ -113,7 +153,7 @@ def page():
         _call(base, "PUT", f"/s/{sid}/items/__doc__",
               {"response_id": "resp-explain-suite", "title": "explain browser suite",
                "order": ORDER, "cwd": str(REPO), "glossary": []})
-        for blk in (LADDER, BADGES, RANGE):
+        for blk in (LADDER, BADGES, RANGE, WALK):
             # Through the real push renderer, so the test exercises the same
             # compile step a push does rather than a hand-built body.
             _call(base, "PUT", f"/s/{sid}/items/{blk['id']}", render_block(blk))
@@ -212,6 +252,29 @@ def test_two_marks_render_a_ladder_and_three_render_badges(page):
 def test_the_ladder_elbow_starts_at_its_own_span_column(page):
     # The stem's -1px margin is what keeps gaps expressible in whole `ch`.
     # If it ever starts consuming width, this drifts one pixel per stem.
+    # Measured with `data-walk` off — the ladder is hidden while walking, and
+    # a hidden element measures zero. Dropping the attribute is exactly what
+    # the export does, so this is the geometry a shared file carries.
+    with _not_walking(page, "section-1"):
+        _elbow_columns(page)
+
+
+@contextlib.contextmanager
+def _not_walking(page, block_id):
+    page.evaluate("""(id) => {
+      document.querySelector(`[data-block-id="${id}"] .codepane.ex`)
+              .removeAttribute('data-walk');
+    }""", block_id)
+    try:
+        yield
+    finally:
+        page.evaluate("""(id) => {
+          document.querySelector(`[data-block-id="${id}"] .codepane.ex`)
+                  .dataset.walk = '1';
+        }""", block_id)
+
+
+def _elbow_columns(page):
     view = compile_spec(LADDER["spec"])
     for i, mark in enumerate(view["groups"][0]["marks"]):
         # Labels are emitted rightmost-first, so row 0 is the LAST mark.
@@ -242,6 +305,203 @@ def test_a_range_bracket_spans_exactly_its_rows(page):
     assert got["n"] == 3, f"the range should hold lines 2-4, got {got['n']} rows"
     assert abs(got["bt"] - got["top"]) <= 3, got
     assert abs(got["bb"] - got["bottom"]) <= 3, got
+
+
+# --- the walk -------------------------------------------------------------
+# All of these drive the pane the way a reader does — click the control, read
+# the pixels back — because every claim the walk makes ("nothing moves", "only
+# this note is lit", "the export has all of it") is a claim about rendered
+# state that a source-level check cannot see.
+
+WALK_STATE = """
+() => {
+  const pane = document.querySelector('[data-block-id="section-4"] .codepane.ex');
+  const rows = [...pane.querySelectorAll('.ex-row')];
+  const vis = (el) => parseFloat(getComputedStyle(el).opacity);
+  return {
+    walking: pane.dataset.walk || null,
+    count: pane.querySelector('.ex-count').textContent,
+    tray: pane.querySelector('.ex-tray .ex-lbl').textContent.trim(),
+    lit: rows.map((r, i) => r.classList.contains('is-lit') ? i + 1 : 0).filter(Boolean),
+    quiet: (() => {
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--cp-muted)';
+      pane.appendChild(probe);
+      const muted = getComputedStyle(probe).color;
+      probe.remove();
+      return rows.filter((r) => getComputedStyle(r).color === muted).length;
+    })(),
+    inked: [...pane.querySelectorAll('.ex-uline')].filter((u) => vis(u) > 0.9).length,
+    laddersShown: [...pane.querySelectorAll('.ex-lad')]
+                    .filter((l) => getComputedStyle(l).display !== 'none').length,
+    height: pane.getBoundingClientRect().height,
+    pins: pane.querySelectorAll('.ex-pin').length,
+  };
+}
+"""
+
+
+def _step(page, n):
+    """Click ›/‹ until the pane is on step n (1-based)."""
+    page.evaluate("""(n) => {
+      const pane = document.querySelector('[data-block-id="section-4"] .codepane.ex');
+      const btns = pane.querySelectorAll('.ex-step');
+      const now = () => parseInt(pane.querySelector('.ex-count').textContent.match(/\\d+/)[0], 10);
+      let guard = 0;
+      while (now() !== n && guard++ < 20) btns[now() < n ? 1 : 0].click();
+    }""", n)
+    # The ink cross-fades over .14s; reading opacity straight after the click
+    # catches the outgoing mark still lit and the incoming one still dark.
+    page.wait_for_timeout(250)
+
+
+def test_the_pane_opens_already_walking_on_step_one(page):
+    got = page.evaluate(WALK_STATE)
+    assert got["walking"] == "1"
+    assert got["count"].startswith("step 1 of 3")
+    # The lead-in is lifted from the label, so the counter cannot drift from
+    # the sentence under it.
+    assert got["count"].endswith("position currency")
+    assert got["tray"].startswith("position currency.")
+    # Reading order, not file order: step 1 is on line 8.
+    assert got["lit"] == [8]
+    assert got["pins"] == 3
+
+
+def test_only_the_current_note_is_inked_and_the_ladders_are_silent(page):
+    _step(page, 1)
+    got = page.evaluate(WALK_STATE)
+    assert got["inked"] == 1, "a note that is not current still has ink on the line"
+    assert got["laddersShown"] == 0, (
+        "the ladder is printing the same sentence the tray is showing")
+    assert got["quiet"] == len(TWICE.rstrip("\n").split("\n")) - 1, (
+        "every row but the lit one should have stepped back")
+
+
+def test_a_note_with_two_spans_lights_both_of_them(page):
+    # The claim is "both times". Before this, only one of the two was marked
+    # and the reader had to take the sentence's word for it.
+    _step(page, 3)
+    got = page.evaluate(WALK_STATE)
+    assert got["lit"] == [3, 9]
+    assert got["inked"] == 2
+    assert got["tray"].startswith("the same multiplication")
+
+
+@pytest.mark.parametrize("mark_idx", [0, 1])
+def test_both_marks_of_a_two_span_note_sit_on_their_characters(page, mark_idx):
+    # Same measurement as the single-span case: the second mark is resolved by
+    # the same quoted-span path, and nothing about being an echo changes where
+    # it belongs.
+    _step(page, 3)
+    row = [3, 9][mark_idx]
+    view = compile_spec(WALK["spec"])
+    mark = [g for g in view["groups"] if g["line"] == row][0]["marks"][0]
+    m = page.evaluate(SPAN_VS_UNDERLINE,
+                      ["section-4", row - 1, 0, mark["col"], mark["len"]])
+    assert m["text"] == CALC, m
+    assert abs(m["sl"] - m["ul"]) <= 0.4, (
+        f"underline starts {m['ul'] - m['sl']:.2f}px off its span: {m}")
+    assert abs(m["sr"] - m["ur"]) <= 0.4, (
+        f"underline ends {m['ur'] - m['sr']:.2f}px off its span: {m}")
+
+
+def test_stepping_never_moves_the_code(page):
+    """The pane is a fixed height whichever note is showing.
+
+    The tray is reserved to the longest note for exactly this: measured
+    before it was, the pane went 326px → 344px on the first long note and
+    shoved the rest of the page down under the reader's eyes mid-sentence.
+    """
+    heights, tops = [], []
+    for n in (1, 2, 3, 1):
+        _step(page, n)
+        got = page.evaluate("""() => {
+          const pane = document.querySelector('[data-block-id="section-4"] .codepane.ex');
+          const rows = [...pane.querySelectorAll('.ex-row')];
+          const base = pane.getBoundingClientRect();
+          return {h: base.height,
+                  tops: rows.map((r) => r.getBoundingClientRect().top - base.top)};
+        }""")
+        heights.append(got["h"])
+        tops.append(got["tops"])
+    assert max(heights) - min(heights) <= 1, f"the pane resizes as you step: {heights}"
+    for later in tops[1:]:
+        assert max(abs(a - b) for a, b in zip(tops[0], later)) <= 1, (
+            "a line of code moved between steps")
+
+
+@pytest.mark.parametrize("theme", ["daylight", "midnight", "parchment", "contrast"])
+def test_a_quietened_row_is_still_readable_in_every_pane_theme(page, theme):
+    """Stepping back is not the same as being erased.
+
+    The first cut dimmed with `opacity: .34` and measured 1.12:1 on Daylight,
+    1.14:1 on Parchment and 1.99:1 on Midnight — the code around the current
+    note was simply gone, which throws away the reason the snippet is kept
+    contiguous in the first place: you are supposed to still see the shape of
+    the method you are being walked through. The pane had already learned this
+    once for its context rows (see `.cp-row.is-context`), and this is the
+    check that stops it being unlearned on a theme nobody looked at.
+    """
+    page.evaluate("t => { if (t === 'daylight') delete document.body.dataset.paneTheme;"
+                  "       else document.body.dataset.paneTheme = t; }", theme)
+    _step(page, 1)
+    got = page.evaluate("""() => {
+      const pane = document.querySelector('[data-block-id="section-4"] .codepane.ex');
+      const row = [...pane.querySelectorAll('.cp-row')]
+        .find((r) => !r.classList.contains('is-lit') && r.textContent.trim());
+      const inks = [...row.querySelectorAll('.cp-line, .cp-line *')]
+        .filter((e) => e.textContent.trim())
+        .map((e) => getComputedStyle(e).color);
+      return {ground: getComputedStyle(pane).backgroundColor,
+              inks: [...new Set(inks)],
+              opacity: parseFloat(getComputedStyle(row).opacity)};
+    }""")
+    ground = _rgb(got["ground"])
+    worst = min(_contrast(_rgb(ink), ground) for ink in got["inks"])
+    assert worst >= 4.5, (
+        f"{theme}: quietened code sits at {worst:.2f}:1 on its own ground — "
+        f"that is erased, not de-emphasised")
+    # And it is a flat ink rather than a blend toward the paper, which is what
+    # makes the number above hold whatever token the row happens to carry.
+    assert got["opacity"] == 1.0, f"{theme}: the row is being faded, not recoloured"
+    page.evaluate("() => { delete document.body.dataset.paneTheme; }")
+
+
+def test_a_pin_stands_clear_of_the_code_it_follows(page):
+    # The pin's offset is in `ch`, which is a metric of the element's OWN
+    # font — styled in the prose face it resolves a narrower `ch` and lands
+    # back among the glyphs. It did, the first time.
+    gaps = page.evaluate("""() => {
+      const pane = document.querySelector('[data-block-id="section-4"] .codepane.ex');
+      return [...pane.querySelectorAll('.ex-at')].map((at) => {
+        const line = at.closest('.ex-row').querySelector('.cp-line');
+        return at.getBoundingClientRect().left - line.getBoundingClientRect().right;
+      });
+    }""")
+    assert gaps, "no pins rendered"
+    for g in gaps:
+        assert g >= 0, f"a pin is sitting on top of the code, {g:.1f}px inside the line"
+
+
+def test_the_exported_file_carries_every_label_and_none_of_the_controls(page):
+    """A file someone is sent has no JS, so a walked pane would freeze.
+
+    This drives the real Share button and reads the file it produces: the
+    walk's controls are gone, `data-walk` with them, and all three notes are
+    in the document as ordinary labels.
+    """
+    _step(page, 2)          # export from mid-walk, the awkward case
+    with page.expect_download(timeout=60000) as dl:
+        page.click("#export-btn")
+    html = Path(dl.value.path()).read_text(encoding="utf-8")
+
+    # The stylesheet travels inlined, so `.ex-bar` is in the file either way;
+    # what must not be there is an element wearing the class.
+    for gone in ('class="ex-bar"', 'class="ex-pin"', 'class="ex-tray"', "data-walk="):
+        assert gone not in html, f"the export still carries {gone}"
+    for label in ("position currency", "reference currency", "the same multiplication"):
+        assert label in html, f"the export lost the note {label!r}"
 
 
 def _rel_lum(rgb):
@@ -308,7 +568,11 @@ def test_the_label_is_ink_on_the_code_in_every_pane_theme(page, theme):
               fg: getComputedStyle(lbl).color,
               strong: getComputedStyle(lbl.querySelector('b')).color,
               rail: getComputedStyle(pane.querySelector('.ex-uline')).backgroundColor,
-              codeText: getComputedStyle(pane.querySelector('.cp-line')).color,
+              // Off the THEME for the same reason as the number below, with a
+              // second one now: the pane opens walking, so a row picked out of
+              // the DOM may be one the walk has quietened to --cp-muted, and
+              // the comparison would be against code nobody is reading.
+              codeText: ps.getPropertyValue('--cp-text').trim(),
               number: ps.getPropertyValue('--cp-number').trim() || null};
     }""")
     ground = _rgb(got["ground"])
@@ -333,7 +597,7 @@ def test_the_label_is_ink_on_the_code_in_every_pane_theme(page, theme):
         f"token, warm enough to belong to the lead-in — got {got['fg']}")
     # "Recedes" is relative to the CODE TEXT it sits beside, which is the
     # only thing it competes with for attention.
-    assert _contrast(body, ground) < _contrast(_rgb(got["codeText"]), ground), (
+    assert _contrast(body, ground) < _contrast(_hex(got["codeText"]), ground), (
         f"{theme}: the body ink is not quieter than the code beside it — {got}")
 
     # And the lead-in still keeps its distance from the number token, which
@@ -371,12 +635,14 @@ def test_the_pane_never_grows_a_second_code_column(page):
 def test_labels_are_emitted_rightmost_first(page):
     # The compiler stacking order: the label for the RIGHTMOST span is closest
     # to the line, so the stems of the ones left of it have somewhere to run.
-    got = page.locator('[data-block-id="section-1"] .ex-lbl b').all_inner_texts()
+    # Scoped to the ladder: the walk's tray holds a copy of the current note,
+    # so a bare `.ex-lbl` here would also pick that up.
+    got = page.locator('[data-block-id="section-1"] .ex-lad .ex-lbl b').all_inner_texts()
     assert got == ["reference currency", "empty ⇒ unpriced"], got
 
 
 def test_label_markdown_is_rendered_and_nothing_else_is(page):
     # The restricted subset is rendered server-side; anything else is text.
-    assert page.locator('[data-block-id="section-1"] .ex-lbl b').count() == 2
+    assert page.locator('[data-block-id="section-1"] .ex-lad .ex-lbl b').count() == 2
     assert "empty ⇒ unpriced — it leaves the sum." in page.locator(
-        '[data-block-id="section-1"] .ex-lbl').nth(1).inner_text()
+        '[data-block-id="section-1"] .ex-lad .ex-lbl').nth(1).inner_text()

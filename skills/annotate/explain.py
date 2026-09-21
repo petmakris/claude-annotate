@@ -78,6 +78,21 @@ def _expand(line: str) -> str:
     return line.expandtabs(TAB_WIDTH)
 
 
+# The bold lead-in the authoring guide already asks every label to open with.
+# It is lifted here rather than authored a second time: a `lead` field would be
+# one more thing to keep in sync with the sentence beside it, and a step
+# counter that disagrees with the label under it is worse than no counter.
+_LEAD = re.compile(r"^\s*\*\*(.+?)\*\*", re.S)
+
+
+def lead_of(label: str) -> str:
+    """The step's short name — the label's bold opening, or nothing."""
+    m = _LEAD.match(str(label or ""))
+    if not m:
+        return ""
+    return m.group(1).strip().rstrip(".:;,").strip()
+
+
 def _resolve_span(rows: list[str], note: dict[str, Any], where: str) -> tuple[int, int]:
     """Find `span` on `line`, returning (col, len) in expanded characters."""
     lineno = note.get("line")
@@ -143,6 +158,10 @@ def compile_spec(spec: dict[str, Any]) -> dict[str, Any]:
 
     by_line: dict[int, list[dict[str, Any]]] = {}
     ranges: list[dict[str, Any]] = []
+    # One step per note, in the order they were WRITTEN. That order is the
+    # argument's, and it is routinely not the file's — an explanation often
+    # starts at the second method and works back.
+    walk: list[dict[str, Any]] = []
 
     for i, note in enumerate(notes):
         where = f"note {i + 1}"
@@ -151,6 +170,11 @@ def compile_spec(spec: dict[str, Any]) -> dict[str, Any]:
         label = note.get("label")
         if not isinstance(label, str) or not label.strip():
             raise ExplainError(f"{where}: needs a `label`.")
+        step = {
+            "n": len(walk) + 1,
+            "labelHtml": label_html(label),
+            "lead": lead_of(label),
+        }
 
         span_of = note.get("lines")
         if span_of is not None:
@@ -163,11 +187,41 @@ def compile_spec(spec: dict[str, Any]) -> dict[str, Any]:
                     f"{where}: lines {lo}–{hi} are outside the snippet, which "
                     f"has {len(rows_text)} line(s).")
             ranges.append({"from": lo, "to": hi, "labelHtml": label_html(label)})
+            step.update({"kind": "range", "from": lo, "to": hi, "marks": []})
+            walk.append(step)
             continue
 
-        col, length = _resolve_span(rows_text, note, where)
-        by_line.setdefault(note["line"], []).append(
-            {"col": col, "len": length, "labelHtml": label_html(label)})
+        # One note, one claim — but a claim can be true of more than one place.
+        # The first mark carries the prose; the rest are ECHOES, underlined and
+        # silent, because the same sentence printed under every twin is the
+        # same sentence twice in one pane.
+        many = note.get("spans")
+        if many is not None:
+            if "span" in note or "line" in note:
+                raise ExplainError(
+                    f"{where}: a note quotes either `span` (one place) or "
+                    f"`spans` (several), not both.")
+            if not isinstance(many, list) or not many:
+                raise ExplainError(
+                    f"{where}: `spans` is a list of {{line, span}} objects.")
+            places = list(many)
+        else:
+            places = [note]
+
+        marks = []
+        for k, place in enumerate(places):
+            if not isinstance(place, dict):
+                raise ExplainError(f"{where}: each entry in `spans` is an object.")
+            col, length = _resolve_span(rows_text, place, where)
+            mark = {
+                "col": col, "len": length, "echo": k > 0,
+                "labelHtml": "" if k else label_html(label),
+            }
+            by_line.setdefault(place["line"], []).append(mark)
+            marks.append({"line": place["line"], "col": col, "len": length})
+
+        step.update({"kind": "span", "marks": marks})
+        walk.append(step)
 
     # A range may not start or end inside another one: the renderer opens a
     # bracket at `from` and closes it at `to`, so overlapping ranges would
@@ -182,12 +236,16 @@ def compile_spec(spec: dict[str, Any]) -> dict[str, Any]:
     groups = []
     for lineno in sorted(by_line):
         marks = sorted(by_line[lineno], key=lambda m: m["col"])
-        for n, mark in enumerate(marks, start=1):
+        # Only a mark with a label of its own is one of the stacked labels the
+        # ladder limit counts, and only those are numbered: an echo has nothing
+        # to say, so a badge on it would point at an entry that is not there.
+        spoken = [m for m in marks if not m["echo"]]
+        for n, mark in enumerate(spoken, start=1):
             mark["n"] = n
         groups.append({
             "line": lineno,
             # See LADDER_MAX. Chosen here, never by the author.
-            "mode": "drop" if len(marks) <= LADDER_MAX else "badge",
+            "mode": "drop" if len(spoken) <= LADDER_MAX else "badge",
             "marks": marks,
         })
 
@@ -202,4 +260,5 @@ def compile_spec(spec: dict[str, Any]) -> dict[str, Any]:
         "rows": [{"text": t, "blank": not t.strip()} for t in rows_text],
         "groups": groups,
         "ranges": ranges,
+        "walk": walk,
     }

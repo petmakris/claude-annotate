@@ -1253,7 +1253,7 @@
   // underlining. Overlaying leaves the highlighted line untouched and costs
   // nothing in layout, which is also why a badge here does not nudge the code
   // sideways the way an inline badge would.
-  function explainRow(row, n, group, lang) {
+  function explainRow(row, n, group, lang, ulines) {
     const div = document.createElement("div");
     div.className = "cp-row ex-row";
     if (row.blank) div.classList.add("is-blank");
@@ -1272,7 +1272,13 @@
       u.style.left = `calc(12px + ${m.col}ch)`;
       u.style.width = `${m.len}ch`;
       div.appendChild(u);
-      if (group.mode === "badge") {
+      // The walk lights one note's marks at a time and finds them by where
+      // they are, which is the only thing a step and a mark both know.
+      if (ulines) ulines.set(`${n}:${m.col}`, u);
+      // An echo is a second place the same note is true of. It has no label
+      // of its own, so a badge on it would number an entry that is not in the
+      // list under the line — see explainNotes.
+      if (group.mode === "badge" && !m.echo) {
         const b = document.createElement("i");
         b.className = "ex-badge ex-badge--onspan";
         b.textContent = String(m.n);
@@ -1301,7 +1307,9 @@
   function explainLadder(group) {
     const lad = document.createElement("div");
     lad.className = "ex-lad";
-    const marks = group.marks;
+    // Echoes are underlined on the line and stop there: they carry no label,
+    // so a rung for one would be an elbow pointing at nothing.
+    const marks = group.marks.filter((m) => !m.echo);
     for (let j = marks.length - 1; j >= 0; j--) {
       const row = document.createElement("div");
       row.className = "ex-lad-row";
@@ -1336,7 +1344,7 @@
   function explainNotes(group) {
     const list = document.createElement("div");
     list.className = "ex-notes";
-    group.marks.forEach((m) => {
+    group.marks.filter((m) => !m.echo).forEach((m) => {
       const item = document.createElement("div");
       item.className = "ex-note";
       const b = document.createElement("i");
@@ -1347,6 +1355,162 @@
       list.appendChild(item);
     });
     return list;
+  }
+
+  // ── the walk ──────────────────────────────────────────────────────────
+  // One note at a time, in the order they were written, with the rest of the
+  // pane stepped back. The static pane is built FIRST and in full — every
+  // underline, every ladder, every bracket — and the walk is then a layer of
+  // state on top of it: `data-walk` on the pane, `.is-now` on the current
+  // note's marks, `.is-lit` on its rows. Nothing is built for one mode and
+  // missing from the other, which is what lets the export (no JS, no
+  // controls) recover the whole pane by deleting three nodes and one
+  // attribute rather than re-rendering anything.
+
+  // The pins: a step's number, parked past the end of its first line. They are
+  // the pane's table of contents — how many stops there are, where they are,
+  // and a way into any of them without walking the ones between.
+  function explainPins(step, onPick) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ex-pin";
+    b.textContent = String(step.n);
+    b.title = step.lead ? `step ${step.n} — ${step.lead}` : `step ${step.n}`;
+    b.addEventListener("click", () => onPick(step.n - 1));
+    return b;
+  }
+
+  // A tray that resizes as you step shoves the rest of the page down mid-read,
+  // so it is sized once to the longest note and never moves again. Measured
+  // AFTER the webfonts land: against the fallback face the reservation comes
+  // out a line short, and the pane grows on the first long note anyway —
+  // 326px then 344px, measured in Chromium. `border-box` is why the padding
+  // is added back in.
+  function reserveTray(tray, steps) {
+    const settle = () => requestAnimationFrame(() => {
+      const keep = [...tray.childNodes];
+      let tallest = 0;
+      steps.forEach((s) => {
+        tray.replaceChildren(explainLabel(s.labelHtml));
+        tallest = Math.max(tallest, tray.firstChild.getBoundingClientRect().height);
+      });
+      tray.replaceChildren(...keep);
+      const cs = getComputedStyle(tray);
+      tray.style.minHeight = Math.ceil(
+        tallest + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)) + "px";
+    });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(settle);
+    else settle();
+  }
+
+  function explainWalk(wrap, body, view, rowEls, ulines) {
+    const steps = view.walk || [];
+    if (!steps.length) return;
+
+    const tray = document.createElement("div");
+    tray.className = "ex-tray";
+
+    const bar = document.createElement("div");
+    bar.className = "ex-bar";
+    const prev = document.createElement("button");
+    prev.type = "button"; prev.className = "ex-step"; prev.textContent = "‹";
+    prev.setAttribute("aria-label", "previous step");
+    const next = document.createElement("button");
+    next.type = "button"; next.className = "ex-step"; next.textContent = "›";
+    next.setAttribute("aria-label", "next step");
+    const count = document.createElement("span");
+    count.className = "ex-count";
+    const pips = document.createElement("span");
+    pips.className = "ex-pips";
+    steps.forEach(() => {
+      const p = document.createElement("i");
+      p.className = "ex-pip";
+      pips.appendChild(p);
+    });
+    bar.append(prev, next, count, pips);
+
+    let at = 0;
+    const pins = [];
+
+    function go(i) {
+      at = Math.max(0, Math.min(steps.length - 1, i));
+      const step = steps[at];
+
+      rowEls.forEach((r) => r.classList.remove("is-lit"));
+      ulines.forEach((u) => u.classList.remove("is-now"));
+
+      const lines = step.kind === "range"
+        ? Array.from({ length: step.to - step.from + 1 }, (_, k) => step.from + k)
+        : (step.marks || []).map((m) => m.line);
+      lines.forEach((n) => {
+        const row = rowEls[n - 1];
+        if (row) row.classList.add("is-lit");
+      });
+      (step.marks || []).forEach((m) => {
+        const u = ulines.get(`${m.line}:${m.col}`);
+        if (u) u.classList.add("is-now");
+      });
+
+      tray.replaceChildren(explainLabel(step.labelHtml));
+      count.textContent = `step ${at + 1} of ${steps.length}` +
+        (step.lead ? ` — ${step.lead}` : "");
+      prev.disabled = at === 0;
+      next.disabled = at === steps.length - 1;
+      pins.forEach((p, k) => p.classList.toggle("is-now", k === at));
+      pips.querySelectorAll(".ex-pip").forEach((p, k) => p.classList.toggle("on", k === at));
+
+      // Only when the step is genuinely off screen: `block: "nearest"` would
+      // still be a no-op most of the time, but a snippet long enough to walk
+      // off the bottom is exactly the one this kind is for.
+      const first = rowEls[lines[0] - 1];
+      if (first) {
+        const r = first.getBoundingClientRect();
+        if (r.top < 0 || r.bottom > (window.innerHeight || 0)) {
+          first.scrollIntoView({ block: "center", behavior: "smooth" });
+        }
+      }
+    }
+
+    // A pin per step, grouped by the line it sits on so two steps starting on
+    // the same line stand side by side instead of on top of each other.
+    const byLine = new Map();
+    steps.forEach((s) => {
+      const line = s.kind === "range" ? s.from : (s.marks[0] && s.marks[0].line);
+      if (!line) return;
+      if (!byLine.has(line)) byLine.set(line, []);
+      byLine.get(line).push(s);
+    });
+    byLine.forEach((list, line) => {
+      const row = rowEls[line - 1];
+      if (!row) return;
+      const at_ = document.createElement("i");
+      at_.className = "ex-at";
+      // Past the end of the line, never on top of it. The offset is in `ch`
+      // and this element inherits the CODE font, which is the only font whose
+      // `ch` the column arithmetic is written in — a pin styled in the prose
+      // face resolves a narrower `ch` and lands back among the glyphs.
+      at_.style.left = `calc(12px + ${(view.rows[line - 1] || {}).text.length + 2}ch)`;
+      list.forEach((s) => {
+        const pin = explainPins(s, go);
+        pins[s.n - 1] = pin;
+        at_.appendChild(pin);
+      });
+      row.appendChild(at_);
+    });
+
+    prev.addEventListener("click", () => go(at - 1));
+    next.addEventListener("click", () => go(at + 1));
+    wrap.tabIndex = 0;
+    wrap.addEventListener("keydown", (ev) => {
+      if (ev.key === "ArrowRight" || ev.key === "ArrowDown") { go(at + 1); ev.preventDefault(); }
+      else if (ev.key === "ArrowLeft" || ev.key === "ArrowUp") { go(at - 1); ev.preventDefault(); }
+    });
+
+    wrap.append(tray, bar);
+    // Opens already walking: a control nobody finds is a feature nobody has.
+    wrap.dataset.walk = "1";
+    go(0);
+    reserveTray(tray, steps);
   }
 
   function renderExplain(content, blk) {
@@ -1393,6 +1557,11 @@
 
     let sink = body;      // where the next row goes
     let open = null;      // the range being filled, if any
+    // The walk needs to find a row and a mark again after they are painted;
+    // rebuilding either from the spec would be a second renderer to keep in
+    // step with this one.
+    const rowEls = [];
+    const ulines = new Map();
 
     for (let n = 1; n <= rows.length; n++) {
       if (!open && opens.has(n)) {
@@ -1406,7 +1575,9 @@
         open.el = range;
         sink = side;
       }
-      sink.appendChild(explainRow(rows[n - 1], n, groups.get(n), view.lang));
+      const rowEl = explainRow(rows[n - 1], n, groups.get(n), view.lang, ulines);
+      rowEls[n - 1] = rowEl;
+      sink.appendChild(rowEl);
       const g = groups.get(n);
       if (g) sink.appendChild(g.mode === "badge" ? explainNotes(g) : explainLadder(g));
       if (open && n === open.to) {
@@ -1419,6 +1590,7 @@
       }
     }
     wrap.appendChild(body);
+    explainWalk(wrap, body, view, rowEls, ulines);
     content.appendChild(wrap);
   }
 

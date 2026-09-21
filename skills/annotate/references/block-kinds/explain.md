@@ -6,6 +6,11 @@ lines gets a bracket. There is no prose column — this kind exists to delete
 the read-the-prose-then-find-the-code ping-pong that a `markdown` block plus a
 `code` anchor forces on the reader.
 
+The pane **walks**: it opens on note 1 with that note's spans marked and the
+rest of the snippet stepped back, and the reader moves with `‹ ›`, the arrow
+keys, or by clicking a note's numbered pin. So the order you write the notes
+in is the order they are read in — see "The notes are a sequence" below.
+
 ## When to use
 - You are explaining **how a specific piece of code works**, and the claims
   are about named spans: this field, that call, this branch.
@@ -33,6 +38,9 @@ the read-the-prose-then-find-the-code ping-pong that a `markdown` block plus a
       "code": "private Amount adjust(...) {\n    return ofNullable(this.price)\n}",
       "notes": [
         {"line": 2, "span": "this.price", "label": "**reference currency** — already FX-converted"},
+        {"spans": [{"line": 3, "span": "p.multiply(qty)"},
+                   {"line": 9, "span": "p.multiply(qty)"}],
+         "label": "**the same multiplication**, both times"},
         {"lines": [2, 4], "label": "**one computation** — the three lines only mean anything together"}
       ]
     }}
@@ -55,6 +63,47 @@ confident underline under the wrong tokens and the page looks correct.
 - Tabs are expanded to 4 spaces before anything is measured, so a tab-indented
   snippet needs nothing special.
 
+## One note, several places
+
+A claim is often true in more than one place — the same call in two methods,
+the same field read twice. Write it **once**, with `spans`:
+
+    {"spans": [{"line": 3, "span": "p.multiply(qty)"},
+               {"line": 9, "span": "p.multiply(qty)"}],
+     "label": "**the same multiplication**, both times"}
+
+Every entry is quoted and refused exactly as a single `span` is, and each one
+is marked on its own line. The label is printed once, under the first; the
+others are underlined and silent. Do not write "both times" while marking one
+of them — that is a claim the pane does not back up, and it is the reader who
+has to go looking for the second.
+
+A note quotes `span` **or** `spans`, never both. Use `nth` inside a `spans`
+entry the same way you would outside one.
+
+## The notes are a sequence
+
+The pane walks them in the order you write them, so `notes` is **reading
+order, not file order**. An explanation that starts at the second method and
+works back is written that way; do not re-sort by line number to look tidy.
+
+Each step is titled by its label's bold lead-in — `**reference currency.** …`
+gives *"step 2 of 3 — reference currency"*. That is lifted from the label, so
+there is nothing extra to write and nothing that can drift out of step with
+the sentence under it. A label with no bold lead-in still walks; it just has
+no name in the counter, which is one more reason to lead with one.
+
+Keep a block to the number of stops an argument actually has. Twelve notes is
+twelve clicks, and is usually two blocks.
+
+## What a reader without a browser sees
+
+An exported or printed page has no JavaScript, so it shows the pane the way it
+was before the walk existed: every label at once, in the ladder. Nothing is
+lost and nothing is frozen mid-walk. That is why the labels are still written
+to stand on their own — a step that only makes sense after the previous one
+reads as a non-sequitur in the exported file.
+
 ## Ranges
 
 A note with `"lines": [from, to]` and no `span` draws a bracket beside those
@@ -64,13 +113,20 @@ overlap — a line belongs to at most one.
 
 ## The presentation is chosen for you
 
-Do not ask for a style; there is no field for one.
+Do not ask for a style; there is no field for one — and there is no field for
+starting, skipping or disabling the walk either.
+
+Under the walk, the static layout is what the pane falls back to, and it still
+follows from the count:
 
 - **1–2 marks on a line** → each gets an underline and a label hanging from
   its own column, stacked rightmost-first the way a compiler stacks them.
 - **3+ marks on a line** → the underlines stay, but the labels become a
   numbered list under the line, because three stems threaded past each other
   is a knot rather than a ladder.
+
+A silent mark — the second and later places of a `spans` note — is underlined
+but counts toward neither, since it has no label to stack.
 
 This follows from the note count, so a line that grows a third annotation
 re-lays itself out instead of degrading. Write the notes; the pane decides.
