@@ -65,12 +65,14 @@ most important thing to fix, if anything failed.
 
 Do **not** run any remedy yourself, with exactly one exception: the
 `webcompanion` line, covered next. For every other FAIL — python3, bash,
-curl, the flowchart layout engine, state directories, a per-skill
-`server.json` — the commands it prints install software or change
-permissions on the user's machine; those are theirs to run. (There is no
-hook line any more: `doctor.sh` never checked one, and the PostToolUse hook
-that used to exist was deleted when written narration replaced it.) Offer to
-explain a line if they want, and stop there.
+curl, state directories, a per-skill `server.json` — the commands it prints
+install software or change permissions on the user's machine; those are
+theirs to run. (The flowchart layout engine is not on that list: a missing
+`node` degrades rather than breaks — the block still renders on the grid
+layout — so `doctor.sh` reports it as info and never fails on it. Nor is
+there a hook line any more: `doctor.sh` never checked one, and the PostToolUse
+hook that used to exist was deleted when written narration replaced it.)
+Offer to explain a line if they want, and stop there.
 
 ## Offering to fix webcompanion
 
