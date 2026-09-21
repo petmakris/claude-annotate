@@ -65,8 +65,11 @@ most important thing to fix, if anything failed.
 
 Do **not** run any remedy yourself, with exactly one exception: the
 `webcompanion` line, covered next. For every other FAIL — python3, bash,
-curl, state directories, hooks — the commands it prints install software or
-change permissions on the user's machine; those are theirs to run. Offer to
+curl, the flowchart layout engine, state directories, a per-skill
+`server.json` — the commands it prints install software or change
+permissions on the user's machine; those are theirs to run. (There is no
+hook line any more: `doctor.sh` never checked one, and the PostToolUse hook
+that used to exist was deleted when written narration replaced it.) Offer to
 explain a line if they want, and stop there.
 
 ## Offering to fix webcompanion
