@@ -7,18 +7,10 @@ scripts genuinely need and nothing else.
 """
 from __future__ import annotations
 
-import json
-import os
 import shutil
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-
-# Claude Code reports hook failures as coming from /usr/bin/bash, but that
-# path does not exist on macOS (bash is /bin/bash there). Resolve it instead
-# of hardcoding, or every test in this suite fails on a Mac for the wrong
-# reason.
-BASH = shutil.which("bash") or "/bin/bash"
 
 # Tools our shell scripts legitimately call. python3 is deliberately absent.
 # `dirname` matters: skills/ask_diff/install_hooks.sh calls it to resolve its
@@ -114,21 +106,3 @@ def spy_marker(tmp: Path) -> Path:
 def spy_stdin(tmp: Path) -> Path:
     """Path the spy python3 copies its stdin into."""
     return tmp / "python3-stdin"
-
-
-def hook_command() -> str:
-    """The PostToolUse command exactly as shipped in hooks/hooks.json."""
-    data = json.loads((REPO_ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
-    entries = data["hooks"]["PostToolUse"]
-    commands = [h["command"] for e in entries for h in e["hooks"]]
-    assert len(commands) == 1, f"expected exactly one PostToolUse command, got {commands}"
-    return commands[0]
-
-
-def hook_env(home: Path, bin_dir: Path) -> dict:
-    """Environment mimicking how Claude Code invokes a plugin hook."""
-    env = os.environ.copy()
-    env["HOME"] = str(home)
-    env["PATH"] = str(bin_dir)
-    env["CLAUDE_PLUGIN_ROOT"] = str(REPO_ROOT)
-    return env

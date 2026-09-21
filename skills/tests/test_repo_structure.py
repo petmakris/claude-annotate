@@ -131,3 +131,32 @@ def test_engine_is_not_marked_generated():
         if p.suffix in {".py", ".sh"} and BANNER in p.read_text(encoding="utf-8")
     ]
     assert not offenders, f"still marked generated: {offenders}"
+
+
+# progress_publish.py was deleted while hooks/hooks.json still exec'd it,
+# which turned a silent no-op into a PostToolUse error on every tool call
+# once the gate's own pending-round condition was met. Nothing checked the
+# registration against the tree. This scans every hooks.json in the repo —
+# not just the one that broke — so a hook added next month is covered too.
+_HOOK_COMMAND_SCRIPT_RE = re.compile(
+    r'"((?:\$\{CLAUDE_PLUGIN_ROOT\}|/)[^"]*\.(?:py|sh))"'
+)
+
+
+def _hooks_json_files() -> list[Path]:
+    return sorted(p for p in ROOT.rglob("hooks.json") if ".superpowers" not in p.parts)
+
+
+def test_every_hook_command_names_a_script_that_exists():
+    missing = []
+    for hooks_json in _hooks_json_files():
+        data = json.loads(hooks_json.read_text(encoding="utf-8"))
+        for entries in data.get("hooks", {}).values():
+            for entry in entries:
+                for h in entry.get("hooks", []):
+                    command = h.get("command", "")
+                    for script in _HOOK_COMMAND_SCRIPT_RE.findall(command):
+                        resolved = script.replace("${CLAUDE_PLUGIN_ROOT}", str(ROOT))
+                        if not Path(resolved).is_file():
+                            missing.append(f"{hooks_json.relative_to(ROOT)}: {resolved}")
+    assert not missing, f"hook command names a script that does not exist: {missing}"

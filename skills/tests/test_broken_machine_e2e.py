@@ -5,18 +5,14 @@ layer is legible without reading four other files.
 """
 from __future__ import annotations
 
-import json
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
 from skills.tests.sanitized_env import (
-    BASH, REPO_ROOT, hook_command, hook_env, pythonless_home,
-    sanitized_path_dir,
+    REPO_ROOT, pythonless_home, sanitized_path_dir,
 )
-
-PAYLOAD = json.dumps({"tool_name": "Bash", "session_id": "sess-1"})
 
 
 class BrokenMachineTests(unittest.TestCase):
@@ -25,17 +21,6 @@ class BrokenMachineTests(unittest.TestCase):
         self.home = self.tmp / "home"
         self.home.mkdir()
         self.bin = sanitized_path_dir(self.tmp, with_python=False)
-
-    def test_repeated_tool_calls_produce_no_output_at_all(self):
-        # The reported symptom: one red line per tool call, forever.
-        env = hook_env(self.home, self.bin)
-        for _ in range(5):
-            result = subprocess.run(
-                [BASH, "-c", hook_command()],
-                input=PAYLOAD, capture_output=True, text=True, timeout=10, env=env,
-            )
-            self.assertEqual(result.returncode, 0)
-            self.assertEqual(result.stdout + result.stderr, "")
 
     def test_the_doctor_still_runs_and_explains(self):
         # The reported machine had no python3 at all, so the login shell has

@@ -185,55 +185,6 @@ else
   fix "Install it: pipx install webcompanion && webcompanion install-service"
 fi
 
-# --- hook wiring -----------------------------------------------------------
-# The PostToolUse hook ships inside the plugin: hooks/hooks.json declares it,
-# and it execs skills/annotate/hooks/progress_publish.py. If either half is
-# missing the install is incomplete and reinstalling is the only remedy — no
-# amount of PATH or permission fixing helps.
-#
-# Scope, stated plainly: this verifies the FILES of the copy actually running
-# (resolved from this script's own path, not from PATH, so the answer is about
-# the install being diagnosed). It does not verify that Claude Code has the
-# plugin *enabled* — that lives in ~/.claude/plugins config, which is JSON and
-# this script may not use jq or python3 to parse. A wrong answer there would be
-# worse than none, so it is left to `/plugin` rather than half-implemented.
-#
-# Deliberately builtin-only (parameter expansion, cd/pwd, read, case): on a
-# broken install PATH may hold almost nothing, and this check must not be the
-# reason the doctor dies.
-case "$0" in
-  */*) doctor_dir="${0%/*}" ;;
-  *)   doctor_dir="." ;;
-esac
-plugin_root="$(cd "$doctor_dir/../../.." 2>/dev/null && pwd)"
-hooks_json="$plugin_root/hooks/hooks.json"
-hook_script="$plugin_root/skills/annotate/hooks/progress_publish.py"
-if [ -z "$plugin_root" ] || [ ! -f "$hooks_json" ]; then
-  fail "hook — hooks/hooks.json is missing from the plugin at ${plugin_root:-$doctor_dir/../../..}"
-  fix "The install is incomplete. Reinstall it:"
-  fix "  /plugin  → uninstall, then install again from the claude-annotate marketplace"
-  fix "  (or re-run your --plugin-dir install against a clean checkout)"
-else
-  hook_wired=0
-  while IFS= read -r line; do
-    case "$line" in
-      *progress_publish.py*) hook_wired=1 ;;
-    esac
-  done < "$hooks_json"
-  if [ "$hook_wired" -eq 0 ]; then
-    fail "hook — hooks/hooks.json does not wire progress_publish.py"
-    fix "This file has been edited or truncated. Reinstall the plugin:"
-    fix "  /plugin  → uninstall, then install again from the claude-annotate marketplace"
-  elif [ ! -f "$hook_script" ]; then
-    fail "hook — hooks.json runs progress_publish.py, which is not installed"
-    fix "Expected it at: $hook_script"
-    fix "The install is incomplete. Reinstall the plugin:"
-    fix "  /plugin  → uninstall, then install again from the claude-annotate marketplace"
-  else
-    ok "hook — PostToolUse wired in $plugin_root"
-  fi
-fi
-
 printf '\n'
 if [ "$failures" -eq 0 ]; then
   printf 'All checks passed.\n'

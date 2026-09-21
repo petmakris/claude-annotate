@@ -140,30 +140,6 @@ class DoctorTests(unittest.TestCase):
         self.assertFalse(witness.exists(),
                          "doctor sourced the login profile on a healthy machine")
 
-    def test_reports_the_hook_wiring(self):
-        bin_dir = sanitized_path_dir(self.tmp, with_python=True)
-        out = self._run(bin_dir).stdout
-        hook_lines = [l for l in out.splitlines() if " hook " in l]
-        self.assertTrue(hook_lines, "doctor must report on the hook wiring")
-        self.assertTrue(hook_lines[0].startswith("ok"),
-                        f"this checkout wires the hook: {hook_lines}")
-
-    def test_an_install_missing_its_hooks_file_says_reinstall(self):
-        # Copy just doctor.sh into a plugin-shaped tree with no hooks/.
-        fake = self.tmp / "fake-plugin"
-        dest = fake / "skills" / "_shared" / "web_companion" / "doctor.sh"
-        dest.parent.mkdir(parents=True)
-        shutil.copy2(DOCTOR, dest)
-        bin_dir = sanitized_path_dir(self.tmp, with_python=True)
-        result = subprocess.run(
-            [str(bin_dir / "sh"), str(dest)],
-            capture_output=True, text=True, timeout=30,
-            env={"HOME": str(self.home), "PATH": str(bin_dir)},
-        )
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("hooks/hooks.json is missing", result.stdout)
-        self.assertIn("Reinstall", result.stdout)
-
     def test_passes_python_check_on_a_healthy_machine(self):
         result = self._run(sanitized_path_dir(self.tmp, with_python=True))
         python_lines = [l for l in result.stdout.splitlines() if "python3" in l]
