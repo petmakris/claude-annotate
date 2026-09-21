@@ -86,11 +86,19 @@ _LEAD = re.compile(r"^\s*\*\*(.+?)\*\*", re.S)
 
 
 def lead_of(label: str) -> str:
-    """The step's short name — the label's bold opening, or nothing."""
+    """The step's short name — the label's bold opening, as PLAIN TEXT.
+
+    The markers are stripped rather than rendered: this lands in a step
+    counter, which prints text and no markup, so a lead-in carrying an
+    identifier arrived reading `step 1 of 3 — the same division `normalize`
+    does` on a real page.
+    """
     m = _LEAD.match(str(label or ""))
     if not m:
         return ""
-    return m.group(1).strip().rstrip(".:;,").strip()
+    lead = _CODE.sub(lambda c: c.group(1), m.group(1))
+    lead = _ITAL.sub(lambda c: c.group(1), lead)
+    return lead.strip().rstrip(".:;,").strip()
 
 
 def _resolve_span(rows: list[str], note: dict[str, Any], where: str) -> tuple[int, int]:

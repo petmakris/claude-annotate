@@ -263,6 +263,24 @@ def test_a_step_carries_its_lead_in_for_the_counter():
     assert view["walk"][0]["lead"] == "reference currency"
 
 
+def test_a_lead_in_reaches_the_counter_as_plain_text():
+    # The lead is lifted out of the label's markdown and printed in a step
+    # counter, which renders no markup — so an identifier in the lead-in
+    # arrived with its backticks showing: "step 1 of 3 — the same division
+    # `normalize` does". Caught on a real page, not in a test fixture.
+    view = compile_spec(spec(notes=[
+        {"line": 2, "span": "priceInReferenceCurrency",
+         "label": "**the same division `normalize` does** — one layer later."}]))
+    assert view["walk"][0]["lead"] == "the same division normalize does"
+
+
+def test_a_stressed_word_in_a_lead_in_loses_its_markers_too():
+    view = compile_spec(spec(notes=[
+        {"line": 2, "span": "priceInReferenceCurrency",
+         "label": "**the *whole* position** — every share of it."}]))
+    assert view["walk"][0]["lead"] == "the whole position"
+
+
 def test_a_label_with_no_lead_in_walks_without_one():
     view = compile_spec(spec(notes=[
         {"line": 2, "span": "priceInReferenceCurrency", "label": "already converted"}]))
