@@ -16,9 +16,21 @@
  *      using the first of them. The panel switches a family by redefining
  *      these; ~20 rules across this file and style.css read them instead of
  *      naming a font, so losing the tokens un-themes the whole page.
+ *   4. The header-sep rule is REMOVED. The bar is three controls, so it
+ *      has nothing left to separate.
+ *   5. The export-btn family (base, :hover, :disabled) is REMOVED. Share is
+ *      a menu-item row now and carries none of those classes.
+ *   6. The watcher-badge family (base, the two state rules, the clickable
+ *      variant) is REMOVED. The Watching pill became a dot on the menu
+ *      button and a worded status block in the panel, both in style.css.
+ *      Listed for the record rather than as a hazard: the canonical copy
+ *      never had these rules, so a re-sync cannot bring them back — but a
+ *      hand-merge reading this list can.
  *
  * (1) is shared with deck's copy; (2) and (3) are annotate's alone, because
- * the settings panel is.
+ * the settings panel is. (4) and (5) are annotate's alone too, because the
+ * menu is; a straight overwrite restores styling for a bar that no longer
+ * exists.
  */
 
 @font-face {
