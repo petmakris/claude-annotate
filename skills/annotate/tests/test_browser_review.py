@@ -1075,14 +1075,25 @@ def test_only_the_current_line_is_a_live_region(page, document):
     # A repaint that does not change the current line must not replace its
     # text node either: an identical `textContent =` write is still a mutation
     # a live region can announce.
+    #
+    # The second write has to differ from the first somewhere, or the daemon
+    # stores the same bytes, sends nothing, and no repaint happens at all —
+    # the assertion then passes on a page nothing ever touched. Moving
+    # `started_at` changes the item while leaving the current line's text
+    # alone, and the feed row tagged here is how we know the repaint landed:
+    # paint() empties the feed and rebuilds it, so that node goes away.
     page.evaluate("""() => {
       const n = document.querySelector('#progress-panel .pg-now');
       n.__node = n.firstChild;
+      window.__feedRow = document.querySelector('#progress-feed .pg-line');
     }""")
-    _put_progress(document, ["Read your round of feedback", "Reading the importer"])
-    page.wait_for_timeout(500)
-    same = page.evaluate("""() => {
+    _put_progress(document, ["Read your round of feedback", "Reading the importer"],
+                  started=int(time.time()) - 90)
+    page.wait_for_function(
+        "() => window.__feedRow && !window.__feedRow.isConnected", timeout=10000)
+    after = page.evaluate("""() => {
       const n = document.querySelector('#progress-panel .pg-now');
-      return n.__node === n.firstChild;
+      return {same: n.__node === n.firstChild, text: n.textContent};
     }""")
-    assert same, "an unchanged current line was rewritten, which re-announces it"
+    assert after["text"] == "Reading the importer", after
+    assert after["same"], "an unchanged current line was rewritten, which re-announces it"
