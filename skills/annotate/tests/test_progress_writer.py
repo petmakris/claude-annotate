@@ -241,3 +241,20 @@ def test_neither_text_nor_done_is_a_usage_error(tmp_path):
     r = _cli(tmp_path, "--sid", "whatever", env=env)
     assert r.returncode == 2
     assert "--text or --done" in r.stderr
+
+
+def test_a_write_to_an_unknown_session_is_reported_not_swallowed(tmp_path):
+    """`_request` returned None on ANY 404, so a PUT with a wrong `--sid`
+    narrated into the void and exited 0 — a typo looked exactly like a working
+    narration channel. Only the READ may treat 404 as "no trail yet"."""
+    env = dict(os.environ, PYTHONPATH=str(REPO))
+    r = _cli(tmp_path, "--sid", "no-such-session", "--text", "into the void", env=env)
+    assert r.returncode == 1, f"stdout={r.stdout!r} stderr={r.stderr!r}"
+    assert "404" in r.stderr, r.stderr
+
+
+def test_the_read_still_treats_a_missing_trail_as_no_trail(sid):
+    # The first line of a round: nothing is stored yet, the GET 404s, and that
+    # is the ordinary case rather than an error.
+    body = progress.note(sid, "first line of this round")
+    assert [s["text"] for s in body["steps"]] == ["first line of this round"]

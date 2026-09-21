@@ -53,7 +53,15 @@ def _config() -> dict:
     return json.loads(path.read_text())
 
 
-def _request(cfg: dict, method: str, path: str, body=None):
+def _request(cfg: dict, method: str, path: str, body=None, allow_missing: bool = False):
+    """One call to the daemon.
+
+    `allow_missing` is for the READ only: "there is no trail yet" is the
+    ordinary case on the first line of a round, and 404 is how the daemon says
+    so. A 404 on the WRITE means something else entirely — the session id is
+    wrong — and swallowing it narrated into the void and exited 0, so a typo
+    in `--sid` looked exactly like a working narration channel.
+    """
     url = "http://127.0.0.1:%d%s" % (int(cfg["port"]), path)
     data = None
     headers = {"X-WebCompanion-Contract": str(CONTRACT)}
@@ -67,7 +75,7 @@ def _request(cfg: dict, method: str, path: str, body=None):
         with urllib.request.urlopen(req, timeout=10) as r:
             raw = r.read().decode()
     except urllib.error.HTTPError as e:
-        if e.code == 404:
+        if e.code == 404 and allow_missing:
             return None
         detail = e.read().decode(errors="replace").strip()
         raise ProgressError("%s %s -> %d %s" % (method, path, e.code, detail)) from None
@@ -77,7 +85,7 @@ def _request(cfg: dict, method: str, path: str, body=None):
 
 
 def _load(cfg: dict, sid: str) -> dict | None:
-    one = _request(cfg, "GET", "/s/%s/items/%s" % (sid, ANCHOR))
+    one = _request(cfg, "GET", "/s/%s/items/%s" % (sid, ANCHOR), allow_missing=True)
     if not one:
         return None
     body = one.get("body")
