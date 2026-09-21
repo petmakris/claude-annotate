@@ -377,8 +377,15 @@ class TestTheMovedElementsSurvived(unittest.TestCase):
                 continue
             for m in re.finditer(r'getElementById\("([a-z0-9-]+)"\)', f.read_text()):
                 wanted.add(m.group(1))
-        # Elements the page builds at runtime rather than shipping in the shell.
-        runtime = {"settings-groups-placeholder"}
+        # Elements the page BUILDS at runtime rather than shipping in the
+        # shell, so they are looked up but never in shell.js. Derived by
+        # running this grep against the tree, not guessed: each of the first
+        # five is assigned with `el.id = ...` in script.js or subunits.js.
+        # `highlighter-palette` is a dead lookup left over from when the
+        # palette was re-homed as #palette-pop — guarded, inert, and out of
+        # this plan's scope (see ledger Ruling P3).
+        runtime = {"attached-pill", "busy-banner", "change-bar", "round-dock",
+                   "watcher-dead-banner", "highlighter-palette"}
         missing = sorted(i for i in wanted - runtime
                          if f'id="{i}"' not in SHELL)
         self.assertEqual(missing, [],
@@ -772,6 +779,22 @@ In `skills/annotate/static/core.css`, delete:
 Do not touch `.icon-btn`, `.icon-btn-wrap`, `.done-btn`, `.page-header`, `.header-title` or `.header-actions`. Add nothing.
 
 Also delete the now-dead `.resume-pop` family from `style.css` (the rule at `.resume-pop {` and its `[hidden]` companion), keeping `.resume-hint`, `.resume-cmd-row`, `.resume-cmd`, `.resume-copy-btn` and `.resume-status`, which the status block still uses.
+
+**And strip `.legend-pop`'s popover geometry now, not in Task 6.** It is a pane body from this task onward, and a pane body carrying `position: absolute` renders detached from the panel. Replace the `.legend-pop { … }` rule with:
+
+```css
+/* A pane of the menu now, not a popover of its own. It keeps the clamp it
+   grew when the keyboard section took it from ~430px to 621px, measured —
+   the menu's own max-height would otherwise let it push the panel past the
+   viewport edge on a laptop. */
+.legend-pop {
+  padding: 10px;
+  max-height: 62vh;
+  overflow-y: auto;
+}
+```
+
+Delete `.legend-pop::before` and `.legend-pop[hidden]` with it. Task 6 then only restacks the legend's contents.
 
 - [ ] **Step 7: Update the shell inventory test**
 
@@ -1210,21 +1233,7 @@ Leave `<div class="legend-keys">…</div>` and `<p class="legend-note">…</p>` 
 
 - [ ] **Step 4: Restyle the legend in `style.css`**
 
-Delete the `.legend-table` rules. Change `.legend-pop`'s positioning half the same way `.settings-pop`'s changed in Task 3 — it is a pane body now, so it keeps `max-height` and `overflow-y: auto` but loses `position: absolute`, its own `width`, its shadow and its `::before` arrow:
-
-```css
-/* A pane of the menu now, not a popover of its own. It keeps the clamp it
-   grew when the keyboard section took it from ~430px to 621px, measured —
-   the menu's own max-height would otherwise let it push the panel past the
-   viewport edge on a laptop. */
-.legend-pop {
-  padding: 10px;
-  max-height: 62vh;
-  overflow-y: auto;
-}
-```
-
-Delete `.legend-pop::before` and `.legend-pop[hidden]`. Then add:
+Delete the `.legend-table` rules. `.legend-pop` itself was already reduced to a pane body in Task 3 (padding, `max-height`, `overflow-y`) — leave that rule alone. Then add:
 
 ```css
 .legend-entry { padding: 9px 0; border-bottom: 1px solid var(--border); }
