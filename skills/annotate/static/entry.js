@@ -218,23 +218,19 @@ async function boot() {
       resumeCommand = cwd
         ? "cd " + shq(cwd) + " && claude " + shq("/annotate resume " + row.slug)
         : "claude " + shq("/annotate resume " + row.slug);
-      const toggle = document.getElementById("resume-toggle");
       const cwdEl = document.getElementById("resume-cwd");
       const cmdEl = document.getElementById("resume-cmd");
       const copyBtn = document.getElementById("resume-copy");
       const statusEl = document.getElementById("resume-status");
-      if (toggle && cwdEl && cmdEl) {
+      if (cwdEl && cmdEl) {
         cwdEl.textContent = row.cwd || "the session's project";
         cmdEl.textContent = resumeCommand;
-        toggle.hidden = false;
         if (copyBtn) copyBtn.addEventListener("click", () => copyResumeCommand(statusEl));
       }
-      // The badge is the thing that actually told you something's wrong --
-      // clicking the popover's button separately is one more step than
-      // clicking the thing you're already looking at. Re-paint immediately:
-      // resumeCommand just became available and the current paint (from
-      // whatever checkWatcherHealth tick already ran) does not know that yet.
-      makeWatcherBadgeClickable();
+      // The command just became available and the current paint (from whatever
+      // checkWatcherHealth tick already ran) does not know that yet -- it is
+      // what decides whether the resume row is shown at all.
+      paintWatcherHealth(lastSeenAt);
     } catch (_) {
       /* no control, which is the safe direction */
     }
@@ -256,68 +252,51 @@ async function boot() {
   const WATCHER_STALE_MS = 180_000;
   const WATCHER_POLL_MS = 15_000;
 
-  // Click-to-copy on the badge itself, not just the popover button: the
-  // badge is what told you something needs fixing, so it should be the
-  // thing you act on. Only wired up once resumeCommand is known (owner +
-  // slug resolved) -- clicking it before then would either do nothing or
-  // copy a stale value, and a read-only viewer could not use the command
-  // anyway. Attached once, not on every repaint, so a click mid-animation
-  // never double-fires.
-  let watcherBadgeClickable = false;
-  function makeWatcherBadgeClickable() {
-    if (watcherBadgeClickable || !resumeCommand) return;
-    const badge = document.getElementById("watcher-badge");
-    if (!badge) return;
-    watcherBadgeClickable = true;
-    badge.classList.add("watcher-badge--clickable");
-    badge.setAttribute("role", "button");
-    badge.setAttribute("tabindex", "0");
-    const activate = async () => {
-      const original = badge.textContent;
-      // Feedback on BOTH outcomes -- a click that silently does nothing on
-      // failure is indistinguishable from a click that was never wired up
-      // at all, which is exactly the bug this replaces (see script.js's
-      // file:line copy-on-click, which learned the same lesson first).
-      const copied = await copyResumeCommand(null);
-      const flash = copied ? "Copied!" : "Copy unavailable";
-      badge.textContent = flash;
-      setTimeout(() => { if (badge.textContent === flash) badge.textContent = original; }, 1200);
-    };
-    badge.addEventListener("click", activate);
-    badge.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
-    });
-  }
+  // The last value /poll reported, so setupResumeControl can re-paint when the
+  // command arrives without waiting up to 15s for the next tick.
+  let lastSeenAt = null;
 
   function paintWatcherHealth(seenAt) {
-    const badge = document.getElementById("watcher-badge");
-    if (!badge) return;
-    const clickableCls = watcherBadgeClickable ? " watcher-badge--clickable" : "";
-    const copyHint = resumeCommand
-      ? " Click to copy “" + resumeCommand + "”."
-      : "";
-    if (seenAt == null) {
-      badge.hidden = false;
-      badge.className = "watcher-badge watcher-stale" + clickableCls;
-      badge.textContent = "Unwatched";
-      badge.title = "No Claude Code session has watched this page yet -- "
-        + "a comment will queue, but nothing will answer it." + copyHint;
-      return;
+    lastSeenAt = seenAt;
+    const btn = document.getElementById("menu-toggle");
+    const block = document.getElementById("menu-status");
+    const title = document.getElementById("menu-status-title");
+    const sub = document.getElementById("menu-status-sub");
+    const resumeEl = document.getElementById("menu-resume");
+    if (!btn || !title || !sub) return;
+
+    const live = seenAt != null && (Date.now() - seenAt * 1000) <= WATCHER_STALE_MS;
+    const cls = live ? "watcher-live" : "watcher-stale";
+    btn.classList.remove("watcher-live", "watcher-stale");
+    btn.classList.add(cls);
+    if (block) {
+      block.classList.remove("watcher-live", "watcher-stale");
+      block.classList.add(cls);
     }
-    const ageMs = Date.now() - seenAt * 1000;
-    if (ageMs > WATCHER_STALE_MS) {
-      badge.hidden = false;
-      badge.className = "watcher-badge watcher-stale" + clickableCls;
-      badge.textContent = "Unwatched";
-      badge.title = "The session that answers comments here has been silent "
-        + "for " + Math.round(ageMs / 60000) + " min." + copyHint;
+
+    if (live) {
+      title.textContent = "Watching";
+      sub.textContent = "A live Claude Code session is watching this page and "
+        + "will answer comments here.";
+    } else if (seenAt == null) {
+      title.textContent = "Unwatched";
+      sub.textContent = "No Claude Code session has watched this page yet — "
+        + "a comment will queue, but nothing will answer it.";
     } else {
-      badge.hidden = false;
-      badge.className = "watcher-badge watcher-live" + clickableCls;
-      badge.textContent = "Watching";
-      badge.title = "A live Claude Code session is watching this page and "
-        + "will answer comments." + copyHint;
+      const mins = Math.round((Date.now() - seenAt * 1000) / 60000);
+      title.textContent = "Unwatched";
+      sub.textContent = "The session that answers comments here has been "
+        + "silent for " + mins + " min.";
     }
+
+    // Only when nothing is attached, and only once the command is known: an
+    // attached session needs no instructions for attaching one, and a
+    // read-only viewer could not run the command anyway.
+    if (resumeEl) resumeEl.hidden = live || !resumeCommand;
+    // The button says what it is for at a glance, in a tooltip, without
+    // opening the menu.
+    btn.title = live ? "Menu — a session is watching this page"
+                     : "Menu — nothing is watching this page";
   }
 
   async function checkWatcherHealth() {

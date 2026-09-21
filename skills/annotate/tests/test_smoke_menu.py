@@ -92,13 +92,7 @@ class TestTheMovedElementsSurvived(unittest.TestCase):
         # this plan's scope (see ledger Ruling P3).
         runtime = {"attached-pill", "busy-banner", "change-bar", "round-dock",
                    "watcher-dead-banner", "highlighter-palette"}
-        # Deleted from the shell by this task, but still named by entry.js
-        # until Task 4 rewrites the watcher paint onto #menu-toggle and the
-        # status block. Task 4's Step 5 deletes this set — it is not an
-        # allowlist, it is a dated exception, and it must not outlive the
-        # task that closes it.
-        pending = {"watcher-badge", "resume-toggle"}
-        missing = sorted(i for i in wanted - runtime - pending
+        missing = sorted(i for i in wanted - runtime
                          if f'id="{i}"' not in SHELL)
         self.assertEqual(missing, [],
                          f"the shell lost ids the page code still reaches for: {missing}")
