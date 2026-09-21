@@ -29,10 +29,12 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -64,6 +66,29 @@ def _call(base, method, path, body=None):
     with urllib.request.urlopen(req, timeout=10) as r:
         raw = r.read().decode()
         return json.loads(raw) if raw.strip().startswith(("{", "[")) else raw
+
+
+def _put_progress(document, steps, state="working", started=None, ended=None):
+    """Write the trail the way skills/annotate/progress.py does."""
+    started = started or int(time.time())
+    _call(document["base"], "PUT", f"/s/{document['sid']}/items/__progress__", {
+        "id": "__progress__", "kind": "progress", "state": state,
+        "started_at": started, "ended_at": ended, "event_id": "evt-browser",
+        "steps": [{"t": started + i, "text": s} for i, s in enumerate(steps)],
+    })
+
+
+def _outbound_host() -> str:
+    """This machine's real interface address — one `_is_owner` (server.py)
+    cannot mistake for loopback. UDP `connect()` sends no packet; it only
+    asks the kernel which local address would carry traffic to that
+    destination, so this needs no network access to succeed."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    finally:
+        s.close()
 
 
 BLOCKS = ["section-1", "section-2", "section-3", "section-4"]
@@ -766,17 +791,10 @@ def test_a_finished_trail_already_on_the_page_still_paints(document):
     trail that already exists. The `/api/whoami` route is throttled so the
     race is exercised every run rather than only on a slow morning.
     """
-    base, sid = document["base"], document["sid"]
     now = int(time.time())
-    _call(base, "PUT", f"/s/{sid}/items/__progress__", {
-        "id": "__progress__", "kind": "progress", "state": "done",
-        "started_at": now - 12, "ended_at": now,
-        "event_id": "evt-browser-suite",
-        "steps": [
-            {"t": now - 12, "text": "Read the failing test"},
-            {"t": now - 5, "text": "Painted the panel from a load-time read"},
-        ],
-    })
+    _put_progress(document, ["Read the failing test",
+                             "Painted the panel from a load-time read"],
+                  state="done", started=now - 12, ended=now)
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         pg = browser.new_page()
@@ -800,3 +818,153 @@ def test_a_finished_trail_already_on_the_page_still_paints(document):
 
     assert state == "done", "the panel did not know the trail was finished"
     assert any("Painted the panel from a load-time read" in t for t in lines), lines
+
+
+def test_narration_reaches_the_page_without_a_reload(page, document):
+    """The whole point: the reader learns something during the silence."""
+    _put_progress(document, ["Read your comment on section-1"])
+    page.wait_for_selector("#progress-panel .pg-line", timeout=10000)
+    assert "Read your comment on section-1" in page.text_content("#progress-panel")
+
+    _put_progress(document, ["Read your comment on section-1",
+                             "Looking for where the conversion happens"])
+    page.wait_for_function(
+        "() => document.querySelectorAll('#progress-panel .pg-line').length === 2",
+        timeout=10000)
+
+
+def test_the_newest_line_is_visible(page, document):
+    """Measured, not assumed: with a max-height and no scroll management the
+    current line is the one clipped off the bottom."""
+    _put_progress(document, [f"step number {i}" for i in range(30)])
+    page.wait_for_function(
+        "() => document.querySelectorAll('#progress-panel .pg-line').length === 30",
+        timeout=10000)
+    visible = page.eval_on_selector(
+        "#progress-feed",
+        "el => { const last = el.querySelector('.pg-line:last-child');"
+        " const f = el.getBoundingClientRect(), l = last.getBoundingClientRect();"
+        " return l.bottom <= f.bottom + 1 && l.top >= f.top - 1; }")
+    assert visible, "the newest narration line is scrolled out of sight"
+
+
+def test_it_collapses_to_a_summary_when_the_work_is_done(page, document):
+    started = 1700000000
+    _put_progress(document, ["one", "two"], state="done",
+                  started=started, ended=started + 260)
+    page.wait_for_function(
+        "() => document.querySelector('#progress-panel')?.dataset.state === 'done'",
+        timeout=10000)
+    head = page.text_content("#progress-panel .pg-now")
+    assert "4 min 20 s" in head, f"the summary does not say how long it took: {head}"
+    assert page.eval_on_selector(
+        "#progress-feed", "el => el.offsetParent === null"), \
+        "the feed is still open after the work finished"
+
+    page.click("#progress-panel .pg-caret")
+    assert page.eval_on_selector("#progress-feed", "el => el.offsetParent !== null"), \
+        "the summary does not expand"
+
+
+def test_a_progress_write_does_not_unlock_the_page(page, document):
+    """compat.js clears the busy lock on any item change. For this anchor that
+    rule is backwards — the first narration line would dismiss the ribbon the
+    narration captions.
+
+    The brief's version of this test hand-sets `body.is-busy`, which never
+    touches compat.js's own `busyLocal` variable — the lock is reconstructed
+    entirely client-side (compat.js:185), and a class written by the test
+    would be cleared by ANY subsequent item change whether or not the fix
+    under test exists, or left alone by a broken fix, either way proving
+    nothing. This drives the real lock instead: open the page's own general
+    composer and send through it, the same path `subunits.js`'s round submit
+    and every block comment use, so `daemon.api.submit(...)` resolves and
+    compat.js's `sending.then(() => setBusyLocal(true))` (compat.js:152) sets
+    `busyLocal` and the class together. Only once that lock is real does the
+    narration write below get to prove it survives."""
+    page.keyboard.press("g")
+    page.wait_for_selector("#general-composer:not([hidden])")
+    page.fill("#general-input", "locking this page")
+    page.click("#general-send")
+    page.wait_for_function(
+        "() => document.body.classList.contains('is-busy')", timeout=10000)
+
+    _put_progress(document, ["still working"])
+    page.wait_for_selector("#progress-panel .pg-line", timeout=10000)
+    assert page.eval_on_selector(
+        "body", "el => el.classList.contains('is-busy')"), \
+        "a narration line unlocked the page"
+
+
+def test_the_trail_never_becomes_a_block(page, document):
+    before = page.eval_on_selector_all("section.block", "els => els.length")
+    _put_progress(document, ["one"])
+    page.wait_for_selector("#progress-panel .pg-line", timeout=10000)
+    after = page.eval_on_selector_all("section.block", "els => els.length")
+    assert before == after, "the progress item rendered as a block"
+
+
+def test_a_read_only_reader_sees_no_trail_at_all(document):
+    """The document is what the author chose to share. How it was produced —
+    which files, which paths — is not.
+
+    The brief's version of this test fakes read-only by adding `body.
+    read-only` and hand-firing `annotate:progress` from inside the OWNER's
+    own page/context — that only proves the CSS rule `.read-only
+    #progress-panel { display: none }` (or whatever selector), never
+    progress.js's actual JS gate. That gate reads `window.WebCompanion.
+    writable`, which core.js sets from `/api/whoami`'s `_is_owner()`
+    (server.py) — and `_is_owner` treats ANY loopback connection as the
+    owner unconditionally, token or none. A same-machine Playwright page
+    talking to 127.0.0.1 is loopback, so nothing this test does to the DOM
+    changes what `_is_owner` sees, and `window.WebCompanion.__forceReadOnly`
+    is not a real flag progress.js or core.js reads at all.
+
+    So this drives a genuinely non-owner page instead: a FRESH browser
+    context (no cookies, no session/localStorage carried from the owner
+    page) navigated to this machine's real outbound network address rather
+    than 127.0.0.1 — a connection `_is_owner` cannot mistake for loopback —
+    with no `#k=` token in the URL. Verified against the live daemon before
+    trusting it: `curl http://<lan-ip>:<port>/api/whoami` on this machine
+    returns `{"writable": false}` for that address and `{"writable": true}`
+    for 127.0.0.1, so the two contexts really do differ in the one way that
+    matters. If this machine's daemon only binds loopback (no LAN route),
+    the guest connection cannot be made at all and the test skips rather
+    than silently falling back to the weaker, CSS-only proof."""
+    base, sid = document["base"], document["sid"]
+    port = urlsplit(base).port
+    try:
+        host = _outbound_host()
+    except OSError as e:
+        pytest.skip(f"could not determine an outbound address to prove a genuine "
+                    f"non-owner connection: {e}")
+    guest_base = f"http://{host}:{port}"
+    try:
+        raw = urllib.request.urlopen(guest_base + "/api/whoami", timeout=3).read()
+    except (urllib.error.URLError, OSError) as e:
+        pytest.skip(f"{guest_base} is not reachable ({e}); this machine's daemon "
+                    f"appears to bind loopback only, so a genuinely non-owner "
+                    f"connection cannot be made here")
+    if json.loads(raw).get("writable"):
+        pytest.skip(f"{guest_base} still reports writable=true; this machine cannot "
+                    f"produce a connection _is_owner treats as non-loopback")
+
+    _put_progress(document, ["Read montblanc/pricing/Normalizer.java"])
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            guest = browser.new_context()
+            gp = guest.new_page()
+            gp.goto(f"{guest_base}/s/{sid}/")
+            gp.wait_for_selector("section.block", timeout=15000)
+            gp.wait_for_function("() => !!window.AnnotateSubunits", timeout=15000)
+            gp.wait_for_function(
+                "() => window.WebCompanion && window.WebCompanion.writable === false",
+                timeout=10000)
+            hidden = gp.evaluate(
+                "() => { const el = document.getElementById('progress-panel');"
+                " return el === null || el.offsetParent === null; }")
+        finally:
+            browser.close()
+    assert hidden, "a guest can read the trail"
