@@ -59,3 +59,28 @@ class TestThePanelGetsItsOwnSignal(unittest.TestCase):
         window = COMPAT[max(0, idx - 400):idx]
         self.assertIn("ev.anchor === PROGRESS", window,
                       "every item change dispatches a progress event")
+
+
+SCRIPT = (STATIC / "script.js").read_text()
+HOOKS = Path(__file__).resolve().parents[1] / "hooks"
+
+
+class TestTheDeadCaptionPathIsGone(unittest.TestCase):
+    """applyProgress captioned the ribbon from a map keyed by event id, fed by
+    `data.progress`. compat.js has never carried that key, so it has been a
+    no-op since the cutover. progress.js replaces it."""
+
+    def test_the_function_is_deleted(self):
+        self.assertNotIn("applyProgress", SCRIPT)
+
+    def test_nothing_reads_the_key_that_never_existed(self):
+        self.assertNotIn("data.progress", SCRIPT)
+
+    def test_the_dormant_hook_is_gone(self):
+        self.assertFalse((HOOKS / "progress_publish.py").exists(),
+                         "a file documenting a feature nobody can reach")
+
+    def test_the_block_caption_still_has_an_owner(self):
+        # .updating-label is not being dropped — it moved to progress.js.
+        progress_js = (STATIC / "progress.js").read_text()
+        self.assertIn("updating-label", progress_js)

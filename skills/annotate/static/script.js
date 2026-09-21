@@ -3036,36 +3036,6 @@
     }
   }
 
-  // Caption the spinner with the live label the PostToolUse hook published
-  // for each in-flight event ("Reading files…", "Editing the response…").
-  // No entry → the label stays "updating". The label is one of a fixed
-  // server-side allowlist, so nothing sensitive can land here.
-  function applyProgress(progress) {
-    if (!progress || pendingEvents.size === 0) return;
-    for (const [eid, pend] of pendingEvents) {
-      const label = progress[eid];
-      if (!label) continue;
-      if (pend.blockId) {
-        const section = document.querySelector(
-          `section.block[data-block-id="${cssEsc(pend.blockId)}"]`);
-        const el = section && section.querySelector(".updating-label");
-        if (el) el.textContent = label;
-      }
-      if (pend.round) {
-        const b = document.getElementById("busy-banner");
-        if (b) {
-          const el = b.querySelector(".bb-label");
-          if (el && label) el.textContent = label;
-        }
-        continue;
-      }
-      if (pend.general) {
-        const statusEl = document.getElementById("general-status");
-        if (statusEl) statusEl.textContent = label;
-      }
-    }
-  }
-
   // Ticking timer for the busy banner's .bb-timer, started when the banner
   // is created and cleared when it's removed.
   let busyTimer = null;
@@ -3091,9 +3061,9 @@
         const timer = document.createElement("span");
         timer.className = "bb-timer";
         // No sub-label node. One was created here for a promised "3 of 5 marks
-        // applied" progress line, but nothing can write it: progress labels
-        // come from hooks/progress_publish.py, which maps tool names onto a
-        // fixed allowlist ("Editing the response…", "Working…") and knows
+        // applied" progress line, but nothing could write it: the old
+        // PostToolUse hook that once captioned it mapped tool names onto a
+        // fixed allowlist ("Editing the response…", "Working…") and knew
         // nothing about mark counts. An empty span still consumed a flex gap.
         banner.append(spin, label, timer);
         banner.dataset.startedAt = String(Date.now());
@@ -3607,8 +3577,6 @@
     setAttachedPill(data.attached);
     // 1. Clear spinners for comments Claude finished processing.
     handleConsumedEvents(data.consumed_events);
-    // 1b. Caption any still-running spinner with the live progress label.
-    applyProgress(data.progress);
     if (window.AnnotateSubunits) window.AnnotateSubunits.onPoll(data);
     // 2. Reconcile the DOM against the full document. /raw carries everything
     //    (per-block markdown/svg + version + glossary), so one fetch covers
@@ -3763,9 +3731,9 @@
 
   // ── Boot ───────────────────────────────────────────────────────────────────
 
-  // subunits.js owns the round; script.js owns the poll loop and the progress
-  // map. The round has to land in pendingEvents or applyProgress skips it —
-  // that omission is why round progress was computed and discarded.
+  // subunits.js owns the round; script.js owns the poll loop and pendingEvents.
+  // The round has to land in pendingEvents or hasPendingRound() (and
+  // handleConsumedEvents' clearing on ack) never see it.
   window.AnnotatePage = {
     registerRoundEvent(eventId, blockIds) {
       if (!eventId) return;
