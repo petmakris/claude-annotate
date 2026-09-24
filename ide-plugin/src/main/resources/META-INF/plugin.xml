@@ -123,5 +123,17 @@
             <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt W"/>
             <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt W"/>
         </action>
+        <!-- Moved in from env/apps/ide-toolbelt on 2026-09-24, when that plugin was retired. -->
+        <action id="com.petros.ireview.PrettifyJsonStringAction"
+                class="com.petros.ireview.PrettifyJsonStringAction"
+                text="Prettify JSON String"
+                description="Reformat the JSON inside the surrounding Java text block, preserving {{placeholders}}.">
+            <add-to-group group-id="EditMenu" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <!-- Bound on the Mac keymaps directly: a $default shortcut has its `control`
+                 auto-translated to Cmd on macOS, which lands on the taken ⌥⇧⌘L. -->
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="control alt shift L"/>
+            <keyboard-shortcut keymap="Mac OS X" first-keystroke="control alt shift L"/>
+        </action>
     </actions>
 </idea-plugin>

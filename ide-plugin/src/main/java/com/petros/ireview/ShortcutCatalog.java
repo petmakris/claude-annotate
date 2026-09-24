@@ -74,6 +74,8 @@ public final class ShortcutCatalog {
         new Row(STOCK, "Previous change in diff", "Diff.PrevChange",
             "only inside an open diff", false),
 
+        new Row(GENERAL, "Prettify JSON in a text block", "com.petros.ireview.PrettifyJsonStringAction",
+            "the Java text block under the caret — {{placeholders}} survive", true),
         new Row(GENERAL, "Keyboard shortcuts", PANEL_ID, "", false)
     );
 
