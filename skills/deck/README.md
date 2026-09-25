@@ -21,8 +21,7 @@ element into one queued instruction.
 - Client: `static/deck.js` + `static/deck.css`, loaded by the daemon's own shell page via
   `static/entry.js`. Each slide loads the whole deck in a same-origin iframe with the
   other slides hidden, then the harness's zoom-to-fit, page-number injection and floating
-  chrome are undone **in that frame's DOM only**. Speaker notes are `display:none` in most
-  decks, so they render in a column beside the slide instead.
+  chrome are undone **in that frame's DOM only**.
 - Per-session state (the model, the event queue) lives in the daemon's own session
   directories, not under the project being reviewed.
 

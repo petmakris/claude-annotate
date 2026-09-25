@@ -34,11 +34,7 @@
   .dkick{font-family:var(--mono);font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-top:200px}
   .dname{font-size:64px;margin-top:16px}
   .dtag{font-size:22px;color:#cfcec6;margin-top:24px;max-width:760px}
-  .snotes{display:none}
   .present-btn{position:fixed;right:18px;bottom:18px;padding:8px 14px;font-family:var(--mono);font-size:12px}
-  .notesdrawer{position:fixed;right:0;top:0;width:340px;height:100%;background:#fff;
-    box-shadow:-4px 0 18px rgba(0,0,0,.15);transform:translateX(100%);transition:transform .18s}
-  .notesdrawer.open{transform:none}
   body.present{overflow:hidden;background:#000;padding:0}
   body.present .slide{display:none}
   body.present .slide.current{display:block}
@@ -51,10 +47,6 @@
   <div class="kick">CLAUDE-DECK &middot; SAMPLE</div>
   <div class="title">A deck you can talk back to</div>
   <div class="lede">Click any line on any slide, say what should change, and the file on disk changes.</div>
-  <aside class="snotes"><ul>
-    <li>Open by saying what the tool is for, in one sentence.</li>
-    <li>Do not demo the plumbing yet &mdash; the room wants the promise first.</li>
-  </ul></aside>
 </section>
 
 <section class="slide divider" id="sec-loop"><span class="num">d</span>
@@ -62,9 +54,6 @@
   <div class="dkick">SECTION 01</div>
   <div class="dname">The editing loop</div>
   <div class="dtag">What happens between a click in the browser and a line changing in the file.</div>
-  <aside class="snotes"><ul>
-    <li>One breath here. The divider exists so the room registers a topic change.</li>
-  </ul></aside>
 </section>
 
 <section class="slide"><span class="num">2</span>
@@ -76,10 +65,6 @@
     <p>Your comment becomes one queued instruction; nothing else touches the file.</p>
   </div>
   <div class="conseq" style="top:520px">A comment is a request, not an edit. The tool never rewrites the document on your behalf &mdash; it hands Claude an address and waits.</div>
-  <aside class="snotes"><ul>
-    <li>Land the address point: line ranges survive entities, a text search does not.</li>
-    <li>If asked why one comment at a time &mdash; edits interact.</li>
-  </ul></aside>
 </section>
 
 <section class="slide"><span class="num">3</span>
@@ -89,11 +74,7 @@
     <li>Each direct child of a slide that carries a class becomes a target.</li>
     <li>Each paragraph and list item inside one of those becomes its own target.</li>
     <li>The gutter number is skipped, because the harness rewrites it at load.</li>
-    <li>Speaker notes are hidden in the slide, so they get a column of their own.</li>
   </ul></div>
-  <aside class="snotes"><ul>
-    <li>Four rules, no schema. Anything narrower needs markup nobody has written.</li>
-  </ul></aside>
 </section>
 
 <section class="slide divider" id="sec-limits"><span class="num">d</span>
@@ -101,9 +82,6 @@
   <div class="dkick">SECTION 02</div>
   <div class="dname">Where it stops</div>
   <div class="dtag">The things this phase deliberately does not do.</div>
-  <aside class="snotes"><ul>
-    <li>Say the limits out loud before anyone finds them.</li>
-  </ul></aside>
 </section>
 
 <section class="slide"><span class="num">4</span>
@@ -118,10 +96,6 @@
     </table>
   </div>
   <div class="conseq" style="top:560px">The right-hand column is not a promise of dates &mdash; it is the order the work is queued in.</div>
-  <aside class="snotes"><ul>
-    <li>Do not read the table aloud. Point at it and say the one line under it.</li>
-    <li>If asked about dates, the answer is the queue order, not a calendar.</li>
-  </ul></aside>
 </section>
 
 </div>
@@ -153,10 +127,6 @@
   }
   function enter() { on = true; document.body.classList.add('present'); deck.style.zoom = '1'; show(i); }
   function exit()  { on = false; document.body.classList.remove('present'); applyZoom(); }
-
-  const drawer = document.createElement('aside');
-  drawer.className = 'notesdrawer';
-  document.body.appendChild(drawer);
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'f' || e.key === 'F') { e.preventDefault(); on ? exit() : enter(); }

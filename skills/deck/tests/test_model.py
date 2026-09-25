@@ -22,6 +22,15 @@ def test_finds_every_slide_in_document_order():
     assert [s["index"] for s in slides] == [1, 2, 3]
 
 
+def test_every_slide_carries_the_line_range_of_its_whole_section():
+    html = FIXTURE.read_text(encoding="utf-8").splitlines()
+    for slide in _parsed()["slides"]:
+        assert html[slide["line_start"] - 1].lstrip().startswith("<section")
+        assert "</section>" in html[slide["line_end"] - 1]
+        for e in slide["elements"]:
+            assert slide["line_start"] <= e["line_start"] <= e["line_end"] <= slide["line_end"]
+
+
 def test_slide_kind_is_derived_from_the_section_class():
     slides = _parsed()["slides"]
     assert [s["kind"] for s in slides] == ["cover", "divider", "content"]
@@ -55,11 +64,14 @@ def test_paragraphs_inside_a_component_are_addressable_individually():
     assert ".pro > p:nth-of-type(2)" in paths
 
 
-def test_speaker_note_items_are_addressable():
-    els = _parsed()["slides"][2]["elements"]
-    paths = [e["path"] for e in els]
-    assert ".snotes > li:nth-of-type(1)" in paths
-    assert ".snotes > li:nth-of-type(2)" in paths
+def test_an_old_decks_snotes_block_is_never_addressable():
+    # Older decks still carry a hidden <aside class="snotes">. It counts as a
+    # slide child, so the .pro after it keeps its place, but neither it nor
+    # its items become targets.
+    els = _els(_wrap('<aside class="snotes"><ul><li>a</li><li>b</li></ul></aside>\n'
+                     '<div class="pro"><p>kept</p></div>'))
+    assert [(e["path"], e["text"]) for e in els] == [
+        (".pro > p:nth-of-type(1)", "kept")]
 
 
 def test_the_num_span_is_never_addressable():
@@ -156,8 +168,7 @@ def test_the_demo_deck_parses_into_every_shape_the_model_addresses():
         "cover", "divider", "content", "content", "divider", "content"]
     paths = {e["path"] for s in slides for e in s["elements"]}
     for expected in (".title", ".dname", ".conseq", ".tbl",
-                     ".pro > p:nth-of-type(1)", ".bullets > li:nth-of-type(1)",
-                     ".snotes > li:nth-of-type(1)"):
+                     ".pro > p:nth-of-type(1)", ".bullets > li:nth-of-type(1)"):
         assert expected in paths, expected
 
 

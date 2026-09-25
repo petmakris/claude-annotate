@@ -3,10 +3,20 @@
   --frame-w: 780px; }
 #deckhead { position: sticky; top: 0; z-index: 30; background: var(--surface);
   border-bottom: 1px solid var(--border); display: flex; align-items: center;
-  gap: 12px; padding: 10px 4px; }
-#deckhead .nm { font-weight: 620; color: var(--text-strong); }
-#deckhead .mt { font-family: monospace; font-size: 11px; color: var(--text-dim); }
+  gap: 8px; height: 32px; padding: 0 8px; box-sizing: border-box; }
+#deckhead .nm { font-weight: 620; font-size: 12.5px; color: var(--text-strong);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 32vw; }
+#deckhead .mt, #deckhead .ct { font-family: monospace; font-size: 10.5px; color: var(--text-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#deckhead .ct { display: none; }
+#app.single #deckhead .ct { display: inline; }
+#app.single #deckhead .mt { display: none; }
 #deckhead .sp { flex: 1; }
+#deckhead .hdbtn { display: inline-flex; align-items: center; gap: 5px; height: 24px;
+  padding: 0 8px; font: inherit; font-size: 12px; color: var(--text); background: none;
+  border: 0; border-radius: 6px; cursor: pointer; text-decoration: none; }
+#deckhead .hdbtn:hover { background: var(--surface-soft); color: var(--accent); }
+#deckhead .hdbtn.present { color: var(--accent); }
 
 .slidewrap { position: relative; margin: 0 auto 26px; }
 .slidelabel { width: var(--frame-w); display: flex; align-items: center; gap: 8px;
@@ -18,22 +28,6 @@
 .slideframe { position: relative; border-radius: 4px; overflow: hidden;
   box-shadow: 0 4px 12px rgba(18,22,28,.10); background: #fff; flex: 0 0 auto; }
 .slideframe > iframe { border: 0; display: block; }
-
-/* Speaker notes are display:none inside the deck by design — the harness only
-   shows them in its drawer. They are addressable content all the same, so the
-   chrome renders them from the model beside the slide. */
-.snotecol { flex: 1 1 auto; min-width: 0; border-left: 1px solid var(--border);
-  padding-left: 14px; }
-.snotecol .hd { font-family: monospace; font-size: 10px; letter-spacing: 1.2px;
-  text-transform: uppercase; color: var(--text-dim); margin-bottom: 7px; }
-.snoteitem { font-size: 12px; line-height: 1.55; color: var(--text);
-  padding: 5px 7px; border-radius: 6px; cursor: pointer;
-  border: 1px solid transparent; }
-.snoteitem:hover { background: var(--hover-tint); border-color: var(--border); }
-.snoteitem.deck-selected { border-color: var(--accent);
-  background: rgba(0,113,227,.07); }
-.snoteitem.deck-working { border-color: #B85C2E; background: rgba(184,92,46,.09); }
-.snotecol .none { font-size: 12px; color: var(--text-dim); font-style: italic; }
 
 #deckpop { position: absolute; width: 340px; background: var(--surface);
   border: 1px solid var(--border); border-radius: 10px; z-index: 40;
@@ -72,3 +66,63 @@
 
 .slideframe-pending { background: repeating-linear-gradient(
   135deg, var(--surface-soft) 0 12px, var(--surface) 12px 24px); }
+
+/* per-slide checks, reveal scrubber and actions, all in the slide label */
+.slidelabel .checks { display: inline-flex; gap: 5px; }
+.slidelabel .badge { font-family: monospace; font-size: 10px; letter-spacing: .4px;
+  text-transform: none; padding: 1px 7px; border-radius: 9px; cursor: default;
+  border: 1px solid transparent; }
+.slidelabel .badge.bad { background: #FBE9EC; color: #A3243B; border-color: #EFC3CB; }
+.slidelabel .badge.warn { background: #FBF0E0; color: #9A5A12; border-color: #EBD2AE; }
+.slidelabel .badge.ok { background: #E6F3EC; color: #1F7A5C; border-color: #C3E2D1; }
+.slidelabel .steps { display: inline-flex; align-items: center; gap: 3px; }
+.slidelabel .steps .lb { margin-right: 3px; }
+.slidelabel .steps button, .slidelabel .lbtn { font: inherit; font-size: 10px;
+  letter-spacing: .6px; text-transform: none; padding: 1px 7px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
+  cursor: pointer; text-decoration: none; }
+.slidelabel .steps button.on { background: #6A4FB3; border-color: #6A4FB3; color: #fff; }
+.slidelabel .steps button:hover, .slidelabel .lbtn:hover { border-color: var(--accent);
+  color: var(--accent); }
+.slidelabel .steps button.on:hover { color: #fff; }
+
+/* view toggle */
+#deckhead .viewtoggle { display: inline-flex; gap: 2px; padding-right: 6px;
+  border-right: 1px solid var(--border); }
+#deckhead .viewtoggle button { display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: none;
+  color: var(--text-dim); cursor: pointer; }
+#deckhead .viewtoggle button:hover { color: var(--accent); }
+#deckhead .viewtoggle button.on { background: var(--text-strong); color: var(--surface); }
+
+/* slide view: thin header, the slide, a thin strip — nothing else */
+#app.single { max-width: none; padding: 0 0 48px; }
+#deckbody.single { display: flex; justify-content: center; padding-top: 8px; }
+#deckbody.single .slidewrap { display: none; margin: 0; }
+#deckbody.single .slidewrap.cur { display: block; }
+#deckstrip { display: none; }
+#app.single #deckstrip { display: flex; align-items: center; gap: 6px; position: fixed;
+  left: 0; right: 0; bottom: 0; z-index: 30; height: 38px; padding: 0 8px;
+  box-sizing: border-box; background: var(--surface); border-top: 1px solid var(--border); }
+#deckstrip .sp { flex: 1; }
+#deckstrip .sbtn { display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: none;
+  color: var(--text); cursor: pointer; flex: none; }
+#deckstrip .sbtn:hover { background: var(--surface-soft); color: var(--accent); }
+#deckstrip .chips { display: flex; gap: 4px; overflow-x: auto; min-width: 0;
+  scrollbar-width: none; }
+#deckstrip .chip { display: inline-flex; align-items: center; gap: 5px; height: 24px;
+  padding: 0 8px; flex: none; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); color: var(--text); cursor: pointer;
+  font-family: monospace; font-size: 11px; }
+#deckstrip .chip:hover { border-color: var(--accent); }
+#deckstrip .chip.on { background: var(--text-strong); border-color: var(--text-strong);
+  color: var(--surface); }
+#deckstrip .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); }
+#deckstrip .chip .dot.ok { background: #2E9B6F; }
+#deckstrip .chip .dot.warn { background: #D8912B; }
+#deckstrip .chip .dot.bad { background: #C43550; }
+#deckstrip .here { display: flex; align-items: center; min-width: 0; }
+#deckstrip .slidelabel { width: auto; margin: 0; gap: 8px; }
+#deckstrip .slidelabel .nm, #deckstrip .slidelabel .ln, #deckstrip .slidelabel .tt { display: none; }
+.slidelabel .lbtn { display: inline-flex; align-items: center; gap: 4px; }

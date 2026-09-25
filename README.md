@@ -91,8 +91,8 @@ terminal". Nothing routes there on its own before you ask.
 
 `/deck <path to a deck .html>` opens a presentation the same way, except the
 document is a file you already own. Every slide renders as itself, in order, at
-the size it will be shown. Click any line — a title, a paragraph, a bullet, a
-speaker note — say what should change, and Claude edits that line in the file.
+the size it will be shown. Click any line — a title, a paragraph, a bullet —
+say what should change, and Claude edits that line in the file.
 
 The deck is never rewritten wholesale. A comment resolves to a line range, not
 to a search string, so an edit is one line in `git diff` and the entities,

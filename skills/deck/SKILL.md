@@ -1,7 +1,7 @@
 ---
 name: deck
-description: Use when the user wants to review or change a single-file HTML presentation deck in a browser — "open the deck", "let me comment on these slides", "show me the deck and let me steer it". Renders every slide, lets any element be commented on, and edits the .html in place. Not for building a deck from scratch and not for generic HTML editing. Triggered by /deck <path>. Watcher events are WEBCOMPANION_EVENT / WEBCOMPANION_FINISHED / WEBCOMPANION_CANCELLED.
-argument-hint: "<path to a deck .html, or a folder containing one>"
+description: Use when the user wants to review or change a single-file HTML presentation deck in a browser — "open the deck", "let me comment on these slides", "show me the deck and let me steer it". Renders every slide, lets any element be commented on, and edits the .html in place. When the deck does not exist yet — /deck with a new path, or with a topic instead of a path — it has the `slides` skill create it from the shared deck framework first, then opens it. Not for generic HTML editing. Triggered by /deck <path or topic>. Watcher events are WEBCOMPANION_EVENT / WEBCOMPANION_FINISHED / WEBCOMPANION_CANCELLED.
+argument-hint: "<path to a deck .html, a folder containing one, or a topic for a new deck>"
 allowed-tools:
   - Bash
   - Read
@@ -16,6 +16,21 @@ The deck's `.html` is the document. The browser renders it; the user clicks any 
 comments; **you** edit the file. Nothing else writes it.
 
 ## Opening a deck
+
+0. **If there is no deck yet, create it first — never refuse.** People type `/deck` expecting a
+   deck to appear, and a skill that answers "I only open existing decks" sends them away empty-
+   handed. The deck is missing when the argument is a path that does not exist, or when it is a
+   topic rather than a path (`/deck proposal for feedback tracking`).
+
+   Creating is not this skill's job to do by hand: a deck must carry the shared framework
+   (canvas, present mode, theme tokens), follow the decks folder's naming and house style, and
+   pass a layout audit — all of which the **`slides` skill** (`dashboard:slides`, Job 1) owns.
+   Invoke it with the topic, or with the missing path's folder name as the slug, let it write and
+   audit the deck, then come back here with the `.html` it created as the argument and carry on
+   from step 1. Its house-style read counts as step 2's — say so rather than reading twice.
+
+   If no `slides` skill is available in this session, say that in one line and stop. Do not
+   hand-write a deck without the framework: it renders unstyled and cannot be exported.
 
 1. Resolve the deck file from the argument, and set `DECK_PATH`/`DECK_NAME` — every later step in
    this skill uses both. A folder means the `.html` inside it with the same name as the folder.
@@ -119,16 +134,23 @@ sys.exit("could not locate the claude-annotate plugin root")
 [ -n "$PLUGIN_ROOT" ] || { echo "claude-annotate: plugin root not found" >&2; exit 1; }
 ```
 
-   Then push the deck — this both mints the session and installs the parsed model as the
-   `__model__` item in one call:
+   Then push the deck and keep it pushed. `--watch` does the first push, prints its JSON, and
+   then stays running, re-pushing every time the file changes on disk — whoever changed it, you
+   with the Edit tool, a script, or the user in their editor — until the session ends. Run it
+   with the Bash tool's `run_in_background: true`:
 
 ```bash
 PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.deck.push \
-  --deck "$DECK_PATH" --cwd "$PWD" --title "$DECK_NAME"
+  --deck "$DECK_PATH" --cwd "$PWD" --title "$DECK_NAME" --watch
 ```
 
-   The output is JSON: `sid`, `slug`, `kind`, `url`, `token`. Save `sid` and `slug` — you need
-   `sid` to arm the watcher, and `slug` to re-push onto the same workspace after an edit.
+   Read the JSON from the background task's output: `sid`, `slug`, `kind`, `url`. Save `sid` —
+   you need it to arm the event watcher and to ack.
+
+   **One deck, one URL.** A push without `--slug` attaches to the live session already showing
+   this deck file, so running it again (a new conversation, a restarted watcher) keeps the URL
+   the user has open. Never pass the id out of the URL as a way to "stay on the same session" —
+   there is no need, and before this was fixed it created a new session on every push.
 
 4. Announce the `url`.
 5. Arm the watcher with `Monitor` (`persistent: true`), using the `sid` from the push response:
@@ -145,16 +167,28 @@ webcompanion watch --kind deck --sid "<sid>"
 
 You wake on a `WEBCOMPANION_EVENT skill=deck sid=<sid> event_id=<id>` banner, followed by
 `---payload---`, the event JSON, and `---end---`. The daemon stores exactly
-`{"anchor": "...", "text": "...", "images": [...]}` — `anchor` is the clicked element's
-address (`slide:<n>:<path>:<ord>`), and `text` is not the comment itself but a
-**JSON-encoded envelope** you must `json.loads()` before reading anything out of it:
+`{"anchor": "...", "text": "...", "images": [...]}`, and `text` is not the comment itself but a
+**JSON-encoded envelope** you must `json.loads()` before reading anything out of it. Its
+`scope` says what the user commented on:
+
+- `"element"` — one element they clicked. `anchor` is `slide:<n>:<path>:<ord>`.
 
 ```json
-{"type":"deck_comment","deck":"/abs/path/deck.html","slide":6,
+{"type":"deck_comment","scope":"element","deck":"/abs/path/deck.html","slide":6,
  "path":".pro > p:nth-of-type(1)","ord":0,"component":"pro",
  "line_start":404,"line_end":405,
  "text":"Every proposal has to satisfy…","comment":"Open on the constraint."}
 ```
+
+- `"slide"` — the whole slide, from the *comment* button on its label. `anchor` is
+  `slide:<n>`; `line_start`/`line_end` span the slide's whole `<section>`, and `title` is its
+  title. Read the whole range before editing.
+- `"deck"` — the whole deck, from *Comment on the deck* in the header. `anchor` is `deck`; there
+  is no line range, because the request spans slides — reordering, cutting, a rule to apply to
+  every slide. Read the deck's slide list (the model, or the `<section class="slide">` lines)
+  before acting, and say which slides you touched.
+
+An envelope with no `scope` comes from an older page and is an element comment.
 
 `deck` is the absolute path to the file you edit — `push.py` stashes it onto the pushed
 model specifically so this envelope can carry it back to you; the browser itself never
@@ -225,27 +259,25 @@ measured against, and the comment that arrived is usually narrower than the rule
 
 - **Never reserialise the file.** Change only the substring you mean. A parse-and-rewrite changes
   144 of 705 lines on a real deck and destroys `git diff` as a review surface.
-- **Never touch the shared harness.** In a deck migrated to the `deck-framework` CDN,
-  that's the `<link rel="stylesheet" href=".../deck-framework@...">` and matching
-  `<script src=".../deck-framework@...">` tags — don't edit them or bump the pinned
-  version as a side effect of a comment edit. In an older, not-yet-migrated deck, it's
-  the first `<style>` block and the `<script>` block, inline. Either way, new CSS goes
-  in a new `<style>` block before `</head>` — never inside the harness's own block or
-  by editing `deck-framework` itself. Also never hand-edit the `/* pdf-export print
+- **Never touch the shared harness.** In a current deck that is everything between
+  `<!-- framework:css -->` and `<!-- /framework:css -->`, and between the matching
+  `framework:js` markers — a snapshot of the `slides` skill's framework, refreshed only by its
+  `inline.py`, never as a side effect of a comment edit. In an older deck without markers, it's
+  the first `<style>` block and the `<script>` block. Either way, new CSS goes in a new
+  `<style>` block before `</head>` — never inside the harness's own block. Also never hand-edit the `/* pdf-export print
   rules */` `<style>` block if one is present — it's regenerated by `export-pdf.py`.
 - **Never write `.pg` or renumber `.num`.** The harness does both at runtime.
 - **Do not regenerate the PDF.** A stale `.pdf` beside an edited `.html` is not a defect.
 
-After editing, **re-run `push.py` against the same slug** — this is the load-bearing step, not
-a courtesy check. It both re-copies the edited file into the workspace's asset directory (so
-the browser's iframe actually reloads the new content) and re-pushes `__model__` (so the daemon
-notifies the browser that something changed at all). Unlike the old server, nothing polls the
-file on disk any more: the browser learns of an edit only because Claude's own edit workflow
-re-runs this command.
+After editing, the `--watch` process from step 3 re-pushes on its own: it re-copies the file
+into the workspace's asset directory and re-pushes `__model__`, which is what makes the browser
+reload. Check its background output shows a `pushed HH:MM:SS` line after your edit. If the
+watcher is not running (it ends with the session, or it died), push once by hand — it attaches
+to the same session by deck file:
 
 ```bash
 PYTHONPATH="$PLUGIN_ROOT" python3 -m skills.deck.push \
-  --deck "$DECK_PATH" --cwd "$PWD" --slug "<slug>" --title "$DECK_NAME"
+  --deck "$DECK_PATH" --cwd "$PWD" --title "$DECK_NAME"
 ```
 
 To confirm the deck still parses and the element you touched is still addressable, read the
@@ -256,9 +288,12 @@ PYTHONPATH="$PLUGIN_ROOT" python3 -c 'from skills._shared import webcompanion_cl
 ```
 
 Report what you changed, the word count before and
-after, and the house rule you applied. Whether the new text still **fits** its slide is not
-checked in this phase — so an edit that made a block longer must be called out, not left for
-the user to discover when it overflows.
+after, and the house rule you applied. The page itself now checks every slide it shows and
+puts badges on the slide label: **overflow** and **speaker notes** in red; **overlap**,
+**off-centre**, **N words** (over the ~90-word house ceiling) and **ticket keys** in amber; a
+green ✓ when clean. Hovering a badge lists the offending elements. Those checks run in the
+user's browser, so you do not see them — an edit that made a block longer must still be
+called out, and if the user reports a badge, fix what it names.
 
 Finally ack the event and end the turn with no terminal output:
 
@@ -275,7 +310,20 @@ bound beyond loopback, do not open a deck you would not hand over.
 
 ## What this skill does not do
 
-- It does not create decks.
+- It does not create decks itself. A missing deck is created by the `slides` skill (step 0), then opened here.
 - It does not edit in the browser; the user comments, you write.
 - It does not publish anywhere.
-- It does not audit slide fit — that arrives with Phase 2.
+- It does not fix what its badges report on its own; the user comments, you fix.
+
+## What the page offers the user
+
+- Two views, switched by the two icons in the header: **Scroll** (every slide in one column,
+  each with its label row) and **Slide** (one slide at a time, filling everything between a 32px
+  header and a 38px bottom strip; the strip carries ‹ numbered slide chips whose dots mirror each
+  slide's check badges ›, and the current slide's badges, reveal steps, comment and ▶). ← → move;
+  the URL's `#slide-N` keeps the place.
+- A header with **Deck** (comment on the whole deck) and **Present** (the real deck, scripts
+  running, in a sandboxed tab).
+- On every slide label: the check badges, a **reveal** scrubber when the slide has `.frag`
+  steps (0 … n, or all — purple numbers on the slide show each element's step), a **comment**
+  button for the whole slide, and **▶** to present from that slide (decks on framework 2.1+).

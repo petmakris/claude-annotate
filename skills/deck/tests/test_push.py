@@ -13,7 +13,8 @@ def test_push_creates_session_copies_files_and_pushes_model(tmp_path):
     deck_file = tmp_path / "MyDeck.html"
     deck_file.write_text(MINIMAL_DECK_HTML)
 
-    with patch("skills.deck.push.wc.create_or_attach",
+    with patch("skills.deck.push.wc.list_sessions", return_value=[]), \
+         patch("skills.deck.push.wc.create_or_attach",
               return_value={"sid": "s1", "slug": "s1", "kind": "deck",
                             "url": "http://127.0.0.1:3080/s/s1/", "token": "tok"}) as mock_create, \
          patch("skills.deck.push.wc.put_items") as mock_put, \
@@ -46,6 +47,9 @@ def test_push_creates_session_copies_files_and_pushes_model(tmp_path):
     assert (copy_dir / "entry.js").is_file()
     assert (copy_dir / "deck.js").is_file()
     assert (copy_dir / "deck.css").is_file()
+    present = (copy_dir / "present.html").read_text()
+    assert 'sandbox="allow-scripts' in present
+    assert "allow-same-origin" not in present.split("<iframe", 1)[1].split(">", 1)[0]
 
 
 def test_push_rejects_a_non_html_file(tmp_path):
@@ -85,3 +89,73 @@ def test_push_re_copies_updated_content_on_a_second_push(tmp_path):
         push.push(deck_file, str(tmp_path), slug="myslug")
 
     assert "Point one, edited" in (copy_dir / "content.html").read_text()
+
+
+def _sessions(deck_file):
+    return [
+        {"sid": "260923-100000-old", "slug": "my-deck", "state": "live"},
+        {"sid": "260923-120000-new", "slug": "other", "state": "live"},
+        {"sid": "260923-130000-gone", "slug": "x", "state": "finished"},
+    ]
+
+
+def _items_for(deck_file):
+    def get_items(sid, kind):
+        deck = str(deck_file.resolve()) if sid != "260923-120000-new" else "/elsewhere.html"
+        return {"__model__": {"body": {"deck": deck}}}
+    return get_items
+
+
+def test_a_push_without_slug_reuses_the_session_already_showing_this_deck(tmp_path):
+    deck_file = tmp_path / "MyDeck.html"
+    deck_file.write_text(MINIMAL_DECK_HTML)
+    with patch("skills.deck.push.wc.list_sessions", return_value=_sessions(deck_file)), \
+         patch("skills.deck.push.wc.get_items", side_effect=_items_for(deck_file)), \
+         patch("skills.deck.push.wc.create_or_attach") as mock_create, \
+         patch("skills.deck.push.wc.put_items") as mock_put, \
+         patch("skills.deck.push.wc.register_assets"):
+        res = push.push(deck_file, str(tmp_path))
+    mock_create.assert_not_called()
+    assert res["sid"] == "260923-100000-old"
+    assert mock_put.call_args.args[0] == "260923-100000-old"
+
+
+def test_slug_accepts_the_sid_from_the_url(tmp_path):
+    deck_file = tmp_path / "MyDeck.html"
+    deck_file.write_text(MINIMAL_DECK_HTML)
+    with patch("skills.deck.push.wc.list_sessions", return_value=_sessions(deck_file)), \
+         patch("skills.deck.push.wc.create_or_attach") as mock_create, \
+         patch("skills.deck.push.wc.put_items"), \
+         patch("skills.deck.push.wc.register_assets"):
+        res = push.push(deck_file, str(tmp_path), slug="260923-120000-new")
+    mock_create.assert_not_called()
+    assert res["sid"] == "260923-120000-new"
+
+
+def test_watch_re_pushes_on_change_and_stops_when_the_session_ends(tmp_path):
+    deck_file = tmp_path / "MyDeck.html"
+    deck_file.write_text(MINIMAL_DECK_HTML)
+    ticks = iter(range(1000))
+    edits = {3: "edit one", 6: "edit two"}
+    step = {"n": 0}
+
+    def fake_sleep(_):
+        step["n"] += 1
+        if step["n"] in edits:
+            deck_file.write_text(MINIMAL_DECK_HTML.replace("Point one", edits[step["n"]]))
+            import os
+            os.utime(deck_file, ns=(step["n"] * 10**9, step["n"] * 10**9))
+
+    alive = {"n": 0}
+
+    def fake_rows(cwd):
+        alive["n"] += 1
+        return [{"sid": "s1", "slug": "s1", "state": "live"}] if alive["n"] < 3 else []
+
+    with patch("skills.deck.push.push") as mock_push, \
+         patch("skills.deck.push._rows", side_effect=fake_rows):
+        code = push.watch(deck_file, str(tmp_path), "s1", interval=0, alive_every=4,
+                          sleep=fake_sleep, clock=lambda: next(ticks))
+    assert code == 0
+    assert mock_push.call_count == 2
+    assert all(c.kwargs == {"slug": "s1"} for c in mock_push.call_args_list)
