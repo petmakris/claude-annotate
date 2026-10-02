@@ -240,6 +240,84 @@ const K = {
   SWEEP_BUDGET: 800000, ORDER_BUDGET: 1500000,
 };
 
+// ── wire and label geometry ──
+// Shared by the layout and by a drag: a wire re-routed after a move is built by the same
+// code from the same hop list, so it cannot look different from a laid-out one.
+
+// a point on one hop's cubic: flat at both ends, the bend weighted towards the target
+function cubicAt(x1, y1, x2, y2, t) {
+  const gw = x2 - x1, c1 = [x1 + gw * 0.55, y1], c2 = [x2 - gw * 0.35, y2], u = 1 - t;
+  return [u * u * u * x1 + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * x2, u * u * u * y1 + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * y2];
+}
+
+// hopGeo is [x1, y1, x2, y2] per gap crossed; between two hops the wire runs straight along
+// its lane. Returns the path, both ends, the samples the label scorer and the report walk,
+// and the straight runs a label may sit on.
+function wireRoute(hopGeo) {
+  let d = "", head = null, tail = null;
+  const samples = [], runs = [];
+  hopGeo.forEach(([x1, y1, x2, y2], i) => {
+    const gw = x2 - x1;
+    if (i === 0) { d = `M ${x1} ${y1}`; head = [x1, y1]; }
+    else {
+      const [px, py] = samples[samples.length - 1];
+      runs.push({ x0: px, x1, y: y1 });
+      for (let k = 1; k <= 12; k++) samples.push([lerp(px, x1, k / 12), lerp(py, y1, k / 12)]);
+      d += ` L ${x1} ${y1}`;
+    }
+    const c1 = [x1 + gw * 0.55, y1], c2 = [x2 - gw * 0.35, y2];
+    d += ` C ${c1[0]} ${c1[1]}, ${c2[0]} ${c2[1]}, ${x2} ${y2}`;
+    for (let k = 0; k <= 24; k++) samples.push(cubicAt(x1, y1, x2, y2, k / 24));
+    tail = [x2, y2];
+  });
+  return { d, head, tail, samples, runs, hopGeo };
+}
+
+// what a label must keep off: each card with the stage line above it
+const cardBoxes = (cs) => cs.map((c) => ({ x: c.x - 2, y: c.y - 24, w: c.w + 4, h: c.h + 24 }));
+
+// wireHits(box, own): how many samples of other wires fall inside box, on a 40-unit grid
+function wireGrid(routes) {
+  const CELL = 40, grid = new Map();
+  routes.forEach((R, ei) => R.samples.forEach(([sx, sy]) => {
+    const k = Math.floor(sx / CELL) + "," + Math.floor(sy / CELL);
+    (grid.get(k) || grid.set(k, []).get(k)).push([sx, sy, ei]);
+  }));
+  return (b, own) => {
+    let n = 0;
+    for (let gx = Math.floor(b.x / CELL); gx <= Math.floor((b.x + b.w) / CELL); gx++)
+      for (let gy = Math.floor(b.y / CELL); gy <= Math.floor((b.y + b.h) / CELL); gy++)
+        for (const [sx, sy, ei] of grid.get(gx + "," + gy) || []) if (ei !== own && sx >= b.x && sx <= b.x + b.w && sy >= b.y && sy <= b.y + b.h) n++;
+    return n;
+  };
+}
+
+// one label or note on wire R: beside its start, beside its arrowhead (oneHop only), on a
+// straight run, or on the curve of its first or last hop; least box overlap first, then
+// fewest other wires under it. score[0] > 0 is an overlap the report counts.
+function placeText(P, t, R, oneHop, boxes, wireHits) {
+  const w = t.text.length * P.LABEL_ADV + 4;
+  const area = (b) => boxes.reduce((a, o) => a + Math.max(0, Math.min(b.x + b.w, o.x + o.w) - Math.max(b.x, o.x)) *
+    Math.max(0, Math.min(b.y + b.h, o.y + o.h) - Math.max(b.y, o.y)), 0);
+  const cands = [{ x: R.head[0] + 10, y: R.head[1] - 6, anchor: "start" }, { x: R.head[0] + 10, y: R.head[1] + 13, anchor: "start" }];
+  if (oneHop)
+    cands.push({ x: R.tail[0] - 12, y: R.tail[1] - 6, anchor: "end" }, { x: R.tail[0] - 12, y: R.tail[1] + 13, anchor: "end" });
+  for (const run of R.runs) if (run.x1 - run.x0 >= w + 16)
+    cands.push({ x: (run.x0 + run.x1) / 2, y: run.y - 6, anchor: "middle" }, { x: (run.x0 + run.x1) / 2, y: run.y + 13, anchor: "middle" });
+  {
+    const f = R.hopGeo[0];
+    for (const tt of [0.5, 0.3, 0.7]) { const [bx, by] = cubicAt(...f, tt); cands.push({ x: bx, y: by - 6, anchor: "middle" }, { x: bx, y: by + 13, anchor: "middle" }); }
+    if (R.hopGeo.length > 1) { const l = R.hopGeo[R.hopGeo.length - 1], [bx, by] = cubicAt(...l, 0.5); cands.push({ x: bx, y: by - 6, anchor: "middle" }, { x: bx, y: by + 13, anchor: "middle" }); }
+  }
+  let pick = null, score = null;
+  for (const c of cands) {
+    c.box = { x: c.anchor === "end" ? c.x - w : c.anchor === "middle" ? c.x - w / 2 : c.x, y: c.y - 9, w, h: P.LABEL_H };
+    const sc = [area(c.box), wireHits(c.box, t.ei)];
+    if (!score || sc[0] < score[0] || (sc[0] === score[0] && sc[1] < score[1])) { pick = c; score = sc; }
+  }
+  return { pick, score };
+}
+
 // opt overrides any constant of K, and adds now (a clock for __layoutTiming) and CHECK_CUTS.
 function computeLayout(SPEC, opt = {}) {
   const P = Object.assign({}, K, opt);
@@ -252,7 +330,6 @@ function computeLayout(SPEC, opt = {}) {
     solves.push({ pivots: stats.pivots, capped: stats.capped });
     return y;
   };
-  const lerp = (a, b, t) => a + (b - a) * t;
 
   // ── 0 model ──
   validate(SPEC);
@@ -885,8 +962,6 @@ function computeLayout(SPEC, opt = {}) {
   for (const t of texts) { const g = edges[t.ei].hops[0].gap; need[g] = Math.max(need[g], textW(t.text) + 42); }
   const portY = (h, end) => (end === "a" ? h.a.y + h.pa : h.b.y + h.pb);
   let colX, gapW, routes, labelOverlaps, rounds = 0;
-  const bez = (x1, y1, x2, y2, t) => { const gw = x2 - x1, c1 = [x1 + gw * 0.55, y1], c2 = [x2 - gw * 0.35, y2], u = 1 - t;
-    return [u * u * u * x1 + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * x2, u * u * u * y1 + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * y2]; };
   for (;;) {
     gapW = gapHops.map((hs, g) => {
       let climb = 0;
@@ -896,63 +971,17 @@ function computeLayout(SPEC, opt = {}) {
     colX = [];
     for (let k = 0, x = P.MARGIN; k < nCol; k++) { colX[k] = x; x += colW[k] + (gapW[k] || 0); }
     for (const c of cards) { c.x = colX[c.col]; c.w = colW[c.col]; }
-    routes = edges.map((E) => {
-      let d = "", head = null, tail = null;
-      const samples = [], runs = [], hopGeo = [];
-      E.hops.forEach((h, i) => {
-        const g = h.gap, x1 = colX[g] + colW[g], x2 = colX[g + 1], y1 = portY(h, "a"), y2 = portY(h, "b"), gw = x2 - x1;
-        hopGeo.push([x1, y1, x2, y2]);
-        if (i === 0) { d = `M ${x1} ${y1}`; head = [x1, y1]; }
-        else {
-          const [px, py] = samples[samples.length - 1];
-          runs.push({ x0: px, x1, y: y1 });
-          for (let k = 1; k <= 12; k++) samples.push([lerp(px, x1, k / 12), lerp(py, y1, k / 12)]);
-          d += ` L ${x1} ${y1}`;
-        }
-        const c1 = [x1 + gw * 0.55, y1], c2 = [x2 - gw * 0.35, y2];
-        d += ` C ${c1[0]} ${c1[1]}, ${c2[0]} ${c2[1]}, ${x2} ${y2}`;
-        for (let k = 0; k <= 24; k++) samples.push(bez(x1, y1, x2, y2, k / 24));
-        tail = [x2, y2];
-      });
-      return { d, head, tail, samples, runs, hopGeo, texts: [] };
-    });
-    const boxes = cards.map((c) => ({ x: c.x - 2, y: c.y - 24, w: c.w + 4, h: c.h + 24 }));
-    const area = (b) => boxes.reduce((a, o) => a + Math.max(0, Math.min(b.x + b.w, o.x + o.w) - Math.max(b.x, o.x)) *
-      Math.max(0, Math.min(b.y + b.h, o.y + o.h) - Math.max(b.y, o.y)), 0);
-    const CELL = 40, grid = new Map();
-    routes.forEach((R, ei) => R.samples.forEach(([sx, sy]) => {
-      const k = Math.floor(sx / CELL) + "," + Math.floor(sy / CELL);
-      (grid.get(k) || grid.set(k, []).get(k)).push([sx, sy, ei]);
-    }));
-    const wireHits = (b, own) => {
-      let n = 0;
-      for (let gx = Math.floor(b.x / CELL); gx <= Math.floor((b.x + b.w) / CELL); gx++)
-        for (let gy = Math.floor(b.y / CELL); gy <= Math.floor((b.y + b.h) / CELL); gy++)
-          for (const [sx, sy, ei] of grid.get(gx + "," + gy) || []) if (ei !== own && sx >= b.x && sx <= b.x + b.w && sy >= b.y && sy <= b.y + b.h) n++;
-      return n;
-    };
+    routes = edges.map((E) => ({ ...wireRoute(E.hops.map((h) => {
+      const g = h.gap;
+      return [colX[g] + colW[g], portY(h, "a"), colX[g + 1], portY(h, "b")];
+    })), texts: [] }));
+    const boxes = cardBoxes(cards), wireHits = wireGrid(routes);
     labelOverlaps = 0;
     const failing = [];
     for (const t of texts) {
-      const R = routes[t.ei], w = textW(t.text);
-      const cands = [{ x: R.head[0] + 10, y: R.head[1] - 6, anchor: "start" }, { x: R.head[0] + 10, y: R.head[1] + 13, anchor: "start" }];
-      if (edges[t.ei].hops.length === 1)
-        cands.push({ x: R.tail[0] - 12, y: R.tail[1] - 6, anchor: "end" }, { x: R.tail[0] - 12, y: R.tail[1] + 13, anchor: "end" });
-      for (const run of R.runs) if (run.x1 - run.x0 >= w + 16)
-        cands.push({ x: (run.x0 + run.x1) / 2, y: run.y - 6, anchor: "middle" }, { x: (run.x0 + run.x1) / 2, y: run.y + 13, anchor: "middle" });
-      {
-        const f = R.hopGeo[0];
-        for (const tt of [0.5, 0.3, 0.7]) { const [bx, by] = bez(...f, tt); cands.push({ x: bx, y: by - 6, anchor: "middle" }, { x: bx, y: by + 13, anchor: "middle" }); }
-        if (R.hopGeo.length > 1) { const l = R.hopGeo[R.hopGeo.length - 1], [bx, by] = bez(...l, 0.5); cands.push({ x: bx, y: by - 6, anchor: "middle" }, { x: bx, y: by + 13, anchor: "middle" }); }
-      }
-      let pick = null, score = null;
-      for (const c of cands) {
-        c.box = { x: c.anchor === "end" ? c.x - w : c.anchor === "middle" ? c.x - w / 2 : c.x, y: c.y - 9, w, h: P.LABEL_H };
-        const sc = [area(c.box), wireHits(c.box, t.ei)];
-        if (!score || sc[0] < score[0] || (sc[0] === score[0] && sc[1] < score[1])) { pick = c; score = sc; }
-      }
+      const { pick, score } = placeText(P, t, routes[t.ei], edges[t.ei].hops.length === 1, boxes, wireHits);
       if (score[0] > 0) { labelOverlaps++; failing.push(t); }
-      R.texts.push({ ...t, x: pick.x, y: pick.y, anchor: pick.anchor, box: pick.box });
+      routes[t.ei].texts.push({ ...t, x: pick.x, y: pick.y, anchor: pick.anchor, box: pick.box });
       boxes.push(pick.box);
     }
     if (!failing.length || rounds >= P.LABEL_ROUNDS) break;
