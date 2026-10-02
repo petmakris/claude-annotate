@@ -3,7 +3,7 @@
   // routes are put back in the order of SPEC.edges before anything draws them.
   const split = (end) => { const dot = end.indexOf("."); return [byId[end.slice(0, dot)], end.slice(dot + 1)]; };   // field ids may hold dots
   const ends = edges.map((e) => [split(e.from), split(e.to)]);
-  let base = {}, computed = null;
+  let base = {}, baseRoutes = "", computed = null;
   function layout() {
     const L = computeLayout(SPEC, { now: () => performance.now() });
     L.cards.forEach((lc) => {
@@ -20,7 +20,8 @@
       const [[ca, fa], [cb, fb]] = ends[i];
       R.pa = R.head[1] - ca.rowY[fa]; R.pb = R.tail[1] - cb.rowY[fb];
     });
-    base = Object.fromEntries(cards.map((c) => [c.id, { y: c.y, h: c.h, order: c.fields.map((f) => f.id), tops: tops(c) }]));
+    base = Object.fromEntries(cards.map((c) => [c.id, { y: c.y, h: c.h, order: c.fields.map((f) => f.id), tops: tops(c), rowY: { ...c.rowY } }]));
+    baseRoutes = JSON.stringify(routes);
     computed = L.layout;
     window.__layout = L.layout;
     // the report is the layout's own verdict; a viewer's moves never recompute it
@@ -116,13 +117,23 @@
   }
   function save() {
     try { if (Object.keys(arr).length) localStorage.setItem(KEY, JSON.stringify(arr)); else localStorage.removeItem(KEY); } catch (e) { /* storage blocked */ }
-    $("#zreset").disabled = !Object.keys(arr).length;
+    chrome_();
   }
-  // a saved card that no longer fits this spec (other fields, rows over each other or out
-  // of the card, a height its rows do not fit in) is ignored whole, not half-applied
-  function restore() {
-    let saved = {};
-    try { saved = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { saved = {}; }
+  // the computed layout again, exactly: every card and wire as layout() left them
+  function toBase() {
+    for (const c of cards) {
+      const b = base[c.id];
+      c.y = b.y; c.h = b.h; c.fields = b.order.map((id) => fieldOf[c.id][id]); Object.assign(c.rowY, b.rowY);
+    }
+    routes = JSON.parse(baseRoutes);
+    window.__layout = computed;
+  }
+  // An arrangement, as saved, applied on top of the computed layout. A saved card that no
+  // longer fits this spec (other fields, rows over each other or out of the card, a height its
+  // rows do not fit in) is ignored whole, not half-applied.
+  function arrange(saved) {
+    toBase();
+    arr = {};
     const moved = [];
     const num = (v) => typeof v === "number" && Number.isFinite(v);
     for (const c of cards) {
@@ -143,14 +154,50 @@
       if (arr[c.id]) moved.push(c);
     }
     if (moved.length) { settle(moved); publish(); }
+  }
+  function restore() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { saved = {}; }
+    arrange(saved);
+    hist = [JSON.stringify(arr)]; here = 0;
     save();
   }
+
+  // ── undo, redo, reset ──
+  // Every finished gesture (a whole drag, a resize, a row move, a reset) is one step; the
+  // history lives in this page only, and what is stored follows the current step.
+  const HIST_MAX = 100;
+  let hist = ["{}"], here = 0;
+  function step() {
+    const now = JSON.stringify(arr);
+    if (now === hist[here]) return;
+    hist = hist.slice(0, here + 1);
+    hist.push(now);
+    if (hist.length > HIST_MAX) hist.shift();
+    here = hist.length - 1;
+  }
+  function goTo(i) {
+    if (i < 0 || i >= hist.length || i === here) return;
+    here = i;
+    arrange(JSON.parse(hist[here]));
+    save(); draw(); apply();
+  }
+  const undo = () => goTo(here - 1), redo = () => goTo(here + 1);
   function resetLayout() {
-    arr = {};
-    save();
-    layout();
-    draw();
-    apply();
+    if (!Object.keys(arr).length) return;
+    arrange({});
+    step();
+    save(); draw(); apply();
+  }
+  // the buttons say what there is to undo, redo or reset
+  function chrome_() {
+    const n = Object.keys(arr).length, rb = $("#zreset");
+    rb.disabled = !n;
+    rb.classList.toggle("dirty", !!n);
+    $("#zcount").textContent = n ? String(n) : "";
+    rb.title = n ? `Reset layout (R): put back the ${n} card${n > 1 ? "s" : ""} you changed` : "Reset layout (R): nothing moved yet";
+    $("#zundo").disabled = here <= 0;
+    $("#zredo").disabled = here >= hist.length - 1;
   }
   window.__measure = (layout) => measure(SPEC, layout);
   window.__fieldEngine = { networkSimplex, computeLayout };
@@ -447,6 +494,7 @@
     lift = null;
     settle([d.c]);
     remember(d.c);
+    step();
     save();
     draw();
     publish();
@@ -467,6 +515,15 @@
     applySel();
   }
   document.addEventListener("keydown", (ev) => {
+    const typing = ev.target.closest && ev.target.closest("input, textarea, select, [contenteditable]");
+    const key = ev.key.toLowerCase(), mod = ev.metaKey || ev.ctrlKey;
+    if (!typing && mod && !ev.altKey && (key === "z" || (key === "y" && ev.ctrlKey && !ev.metaKey))) {
+      ev.preventDefault();
+      if (drag && drag.c) return;
+      if (key === "y" || ev.shiftKey) redo(); else undo();
+      return;
+    }
+    if (!typing && !mod && !ev.altKey && key === "r") { if (!(drag && drag.c)) resetLayout(); return; }
     const W = stage.clientWidth / 2, H = stage.clientHeight / 2;
     const node = ev.target.closest && ev.target.closest(".node");
     if (node && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); sel = node.dataset.node; applySel(); return; }
@@ -483,6 +540,14 @@
   $("#zpct").onclick = () => animateZoomAt(1, ...centre());
   $("#zfit").onclick = () => (sel ? fitSel() : fit());
   $("#zreset").onclick = resetLayout;
+  $("#zundo").onclick = undo;
+  $("#zredo").onclick = redo;
+  {
+    const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+    $("#kundo").textContent = mac ? "⌘Z" : "Ctrl+Z";
+    $("#zundo").title = `Undo the last move (${mac ? "⌘Z" : "Ctrl+Z"})`;
+    $("#zredo").title = `Redo (${mac ? "⇧⌘Z" : "Ctrl+Y"})`;
+  }
   const mini = $("#mini");
   function miniMove(ev) {
     const pt = mini.createSVGPoint();

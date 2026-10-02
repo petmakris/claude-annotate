@@ -110,9 +110,17 @@
 
   #help { position:fixed; right:262px; bottom:14px; font-size:11.5px; color:var(--muted); background:rgba(236,239,243,.92);
           padding:4px 10px; border-radius:6px; pointer-events:none; }
-  /* the drag hint only where it clears the legend; the grab cursor says it everywhere */
+  /* the pan and zoom hints only where they clear the legend; undo and reset always show */
   @media (max-width:1700px) { #help .more { display:none; } }
-  @media (max-width:900px) { #help { display:none; } #legend { max-width:calc(100vw - 280px); } }
+  @media (max-width:900px) { #help { right:14px; bottom:150px; } #legend { max-width:calc(100vw - 280px); } }
+
+  /* undo, redo, reset: in the title bar, where they are found; Reset stands out once anything moved */
+  #arrange { display:flex; gap:4px; align-items:center; padding-left:12px; border-left:1px solid var(--line); }
+  #arrange .btn { padding:4px 9px; }
+  #zreset.dirty { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  #zreset.dirty:hover { filter:brightness(1.1); }
+  #zcount:not(:empty) { display:inline-block; margin-left:6px; min-width:16px; padding:0 4px; border-radius:8px;
+                        background:#fff; color:var(--accent); font-size:10.5px; line-height:16px; text-align:center; }
 
   /* render.py --check hides the chrome before its screenshot */
   body.shot #title, body.shot #about, body.shot #legend, body.shot #nav, body.shot #help { display:none; }
@@ -128,11 +136,16 @@
 <div id="title" class="float">
   <div><div class="eyebrow" id="eyebrow"></div><h1 id="h1"></h1></div>
   <button class="btn" id="aboutBtn" aria-pressed="false" aria-controls="about">About</button>
+  <div id="arrange" role="group" aria-label="Arrangement">
+    <button class="btn" id="zundo" aria-label="Undo" disabled>↶</button>
+    <button class="btn" id="zredo" aria-label="Redo" disabled>↷</button>
+    <button class="btn" id="zreset" aria-label="Reset layout" disabled>Reset layout<span id="zcount"></span></button>
+  </div>
 </div>
 <div id="about" class="float"></div>
 
 <div id="legend" class="float"></div>
-<div id="help">drag or scroll to pan · pinch or ⌘-scroll to zoom · F fits · hover a field to trace it<span class="more"> · drag a title or a field to move it, an edge to resize</span></div>
+<div id="help"><span class="more">drag or scroll to pan · pinch or ⌘-scroll to zoom · F fits · hover a field to trace it · </span>drag a title or a field to move it, an edge to resize · <span id="kundo">⌘Z</span> undoes · R resets</div>
 
 <div id="nav" class="float">
   <svg id="mini" aria-label="overview"><use href="#content"/><rect class="vp" id="vp"/></svg>
@@ -141,7 +154,6 @@
     <button class="btn" id="zpct" title="Reset to 100% (1)">100%</button>
     <button class="btn" id="zin" title="Zoom in (+)" aria-label="Zoom in">+</button>
     <button class="btn" id="zfit" title="Fit (F)">Fit</button>
-    <button class="btn" id="zreset" title="Reset layout: undo every card and row you moved" aria-label="Reset layout" disabled>Reset</button>
   </div>
 </div>
 

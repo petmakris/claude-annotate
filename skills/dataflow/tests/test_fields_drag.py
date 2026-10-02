@@ -439,3 +439,79 @@ def test_an_outdated_saved_card_is_ignored(opened, bad):
     pg.reload()
     pg.wait_for_function("() => window.__layoutReport")
     assert pg.evaluate(LAYOUT) == computed
+
+
+# ── undo, redo, reset ──
+
+UNDO, REDO = "Control+z", "Control+Shift+z"
+
+
+def test_undo_and_redo_step_through_every_kind_of_change(opened):
+    pg = opened(_spec("example-order.json"))
+    k = _zoom(pg)
+    states = [pg.evaluate(LAYOUT)]
+    assert pg.is_disabled("#zundo") and pg.is_disabled("#zredo")
+    _drag(pg, '.grip[data-card="dto"]', 0, 70)
+    states.append(pg.evaluate(LAYOUT))
+    _drag(pg, _edge("dto", "bottom"), 0, 120 * k)
+    states.append(pg.evaluate(LAYOUT))
+    _drag(pg, '[data-node="dto.total"] .hit', 0, 60 * k)
+    states.append(pg.evaluate(LAYOUT))
+    assert len({json.dumps(s, sort_keys=True) for s in states}) == 4
+    for i in (2, 1, 0):
+        pg.keyboard.press(UNDO)
+        assert pg.evaluate(LAYOUT) == states[i]
+    assert pg.is_disabled("#zundo") and pg.is_disabled("#zreset")
+    for i in (1, 2, 3):
+        pg.keyboard.press(REDO)
+        assert pg.evaluate(LAYOUT) == states[i]
+    assert pg.is_disabled("#zredo")
+    pg.click("#zundo")
+    assert pg.evaluate(LAYOUT) == states[2]
+    pg.keyboard.press("Control+y")
+    assert pg.evaluate(LAYOUT) == states[3]
+    # what is stored follows the current step
+    pg.keyboard.press(UNDO)
+    pg.reload()
+    pg.wait_for_function("() => window.__layoutReport")
+    assert pg.evaluate(LAYOUT) == states[2]
+
+
+def test_a_new_change_after_undo_drops_the_redo_branch(opened):
+    pg = opened(_spec("example-order.json"))
+    _drag(pg, '.grip[data-card="dto"]', 0, 70)
+    pg.keyboard.press(UNDO)
+    assert not pg.is_disabled("#zredo")
+    _drag(pg, '.grip[data-card="json"]', 0, -40)
+    assert pg.is_disabled("#zredo")
+
+
+def test_r_and_the_button_reset_to_the_computed_layout_and_reset_is_undoable(opened):
+    pg = opened(_spec("example-order.json"))
+    computed = pg.evaluate(LAYOUT)
+    assert pg.is_disabled("#zreset") and pg.get_attribute("#zreset", "class") == "btn"
+    _drag(pg, '.grip[data-card="dto"]', 0, 70)
+    _drag(pg, _edge("json", "bottom"), 0, 60)
+    moved = pg.evaluate(LAYOUT)
+    assert not pg.is_disabled("#zreset") and "dirty" in pg.get_attribute("#zreset", "class")
+    assert pg.text_content("#zcount") == "2"
+    pg.keyboard.press("r")
+    assert json.dumps(pg.evaluate(LAYOUT)) == json.dumps(computed)
+    assert pg.is_disabled("#zreset") and pg.text_content("#zcount") == ""
+    pg.keyboard.press(UNDO)
+    assert pg.evaluate(LAYOUT) == moved
+    pg.click("#zreset")
+    assert json.dumps(pg.evaluate(LAYOUT)) == json.dumps(computed)
+    pg.reload()
+    pg.wait_for_function("() => window.__layoutReport")
+    assert json.dumps(pg.evaluate(LAYOUT)) == json.dumps(computed)
+
+
+def test_reset_and_undo_are_findable(opened):
+    pg = opened(_spec("example-order.json"))
+    assert pg.is_visible("#title #zreset") and pg.text_content("#zreset").startswith("Reset layout")
+    assert pg.is_visible("#zundo") and pg.is_visible("#zredo")
+    help_ = pg.inner_text("#help")
+    assert "R resets" in help_ and "undoes" in help_
+    pg.set_viewport_size({"width": 800, "height": 700})
+    assert pg.is_visible("#help") and "R resets" in pg.inner_text("#help")
