@@ -244,3 +244,198 @@ def test_a_stale_stored_order_is_ignored(opened):
     pg.reload()
     pg.wait_for_function("() => window.__layoutReport")
     assert pg.evaluate(LAYOUT) == computed
+
+
+# ── resizing a card and spacing its rows ──
+
+def _edge(cid, side):
+    return f'.rsz[data-card="{cid}"][data-side="{side}"] .rszhit'
+
+
+def _tops(card):
+    """each row's top as an offset from the card's top, in rowOrder"""
+    return [card["rows"][f]["y"] - card["rows"][f]["h"] / 2 - card["y"] for f in card["rowOrder"]]
+
+
+def _assert_rows_fit(card):
+    top = card["y"] + 46
+    for fid in card["rowOrder"]:
+        r = card["rows"][fid]
+        assert r["y"] - r["h"] / 2 >= top - 0.02, "rows overlap or sit over the header"
+        top = r["y"] + r["h"] / 2
+    assert top <= card["y"] + card["h"] + 0.02, "a row hangs out of its card"
+
+
+def _assert_wires_on_rows(L):
+    for w in L["wires"]:
+        for end, at in (("from", "start"), ("to", "end")):
+            _, r = _row(L, w[end])
+            assert r["y"] - r["h"] / 2 <= w[at][1] <= r["y"] + r["h"] / 2
+
+
+def test_resizing_the_bottom_edge_grows_the_card_and_keeps_rows_and_wires(opened):
+    pg = opened(_spec("example-order.json"))
+    before, k = pg.evaluate(LAYOUT), _zoom(pg)
+    _drag(pg, _edge("dto", "bottom"), 0, 90)
+    after = pg.evaluate(LAYOUT)
+    c0, c1 = before["cards"]["dto"], after["cards"]["dto"]
+    assert c1["h"] == pytest.approx(c0["h"] + round(90 / k), abs=1)
+    assert (c1["y"], c1["rows"], c1["rowOrder"]) == (c0["y"], c0["rows"], c0["rowOrder"])
+    # nothing on a row moved, so no wire did
+    assert [(w["start"], w["end"]) for w in after["wires"]] == [(w["start"], w["end"]) for w in before["wires"]]
+    assert pg.evaluate("() => window.__layoutReport") is not None
+    # the opened space is drawn as a band
+    assert pg.locator('.cardg[data-card="dto"] .rowgap').count() == 1
+    assert not pg.is_disabled("#zreset")
+
+
+def test_a_card_cannot_shrink_below_its_rows(opened):
+    pg = opened(_spec("example-order.json"))
+    before = pg.evaluate(LAYOUT)
+    _drag(pg, _edge("dto", "bottom"), 0, -200)
+    assert pg.evaluate(LAYOUT) == before
+    _drag(pg, _edge("dto", "top"), 0, 200)
+    assert pg.evaluate(LAYOUT) == before
+
+
+def test_resizing_the_top_edge_keeps_the_bottom_and_the_rows(opened):
+    pg = opened(_spec("example-order.json"))
+    before = pg.evaluate(LAYOUT)
+    _drag(pg, _edge("dto", "top"), 0, -60)
+    c0, c1 = before["cards"]["dto"], pg.evaluate(LAYOUT)["cards"]["dto"]
+    assert c1["y"] < c0["y"]
+    assert c1["y"] + c1["h"] == pytest.approx(c0["y"] + c0["h"], abs=0.02)
+    assert c1["rows"] == c0["rows"]
+
+
+def test_shrinking_pushes_rows_only_as_far_as_needed(opened):
+    pg = opened(_spec("example-order.json"))
+    k = _zoom(pg)
+    _drag(pg, _edge("dto", "bottom"), 0, 120 * k)
+    last = pg.evaluate(LAYOUT)["cards"]["dto"]["rowOrder"][-1]
+    _drag(pg, f'[data-node="dto.{last}"] .hit', 0, 100 * k)
+    spread = pg.evaluate(LAYOUT)["cards"]["dto"]
+    _drag(pg, _edge("dto", "bottom"), 0, -60 * k)
+    c = pg.evaluate(LAYOUT)["cards"]["dto"]
+    _assert_rows_fit(c)
+    t0, t1 = _tops(spread), _tops(c)
+    assert t1[:-1] == pytest.approx(t0[:-1], abs=0.02)        # the rows the edge never reached stay
+    assert t1[-1] == pytest.approx(c["h"] - c["rows"][last]["h"], abs=0.02)   # the last one rides the edge
+
+
+def test_a_row_moves_freely_inside_a_tall_card_and_its_wires_follow(opened):
+    pg = opened(_spec("example-order.json"))
+    k = _zoom(pg)
+    _drag(pg, _edge("dto", "bottom"), 0, 120 * k)
+    before = pg.evaluate(LAYOUT)
+    c0 = before["cards"]["dto"]
+    last = c0["rowOrder"][-1]
+    _drag(pg, f'[data-node="dto.{last}"] .hit', 0, 50 * k)
+    after = pg.evaluate(LAYOUT)
+    c1 = after["cards"]["dto"]
+    assert c1["rowOrder"] == c0["rowOrder"] and (c1["y"], c1["h"]) == (c0["y"], c0["h"])
+    shift = c1["rows"][last]["y"] - c0["rows"][last]["y"]
+    assert shift == pytest.approx(50, abs=1)
+    assert float(_tops(c1)[-1]).is_integer()                   # snapped to whole pixels
+    for fid in c0["rowOrder"][:-1]:
+        assert c1["rows"][fid] == c0["rows"][fid]
+    n = 0
+    for w0, w1 in zip(before["wires"], after["wires"]):
+        for end, at in (("from", "start"), ("to", "end")):
+            if w0[end] == f"dto.{last}":
+                n += 1
+                assert w1[at][1] == pytest.approx(w0[at][1] + shift, abs=0.05)
+    assert n
+    _assert_wires_on_rows(after)
+
+
+def test_reordering_inside_a_resized_card_swaps_and_lands_where_released(opened):
+    pg = opened(_spec("example-order.json"))
+    k = _zoom(pg)
+    _drag(pg, _edge("dto", "bottom"), 0, 150 * k)
+    before = pg.evaluate(LAYOUT)
+    c0 = before["cards"]["dto"]
+    first, second = c0["rowOrder"][:2]
+    # past the second row's centre, into the free space below the last row
+    target = c0["rows"][c0["rowOrder"][-1]]["y"] + c0["rows"][c0["rowOrder"][-1]]["h"] / 2 + 40 + c0["rows"][first]["h"] / 2
+    _drag(pg, f'[data-node="dto.{first}"] .hit', 0, (target - c0["rows"][first]["y"]) * k)
+    c1 = pg.evaluate(LAYOUT)["cards"]["dto"]
+    assert c1["rowOrder"] == c0["rowOrder"][1:] + [first]
+    assert c1["rows"][first]["y"] == pytest.approx(target, abs=1)
+    _assert_rows_fit(c1)
+    # with space between two rows, dragging one just past its neighbour's centre swaps them,
+    # the dropped row lands where released, and the neighbour gives way only as it must
+    pg2 = opened(_spec("example-order.json"))
+    _drag(pg2, _edge("dto", "bottom"), 0, 150 * k)
+    third, last = c0["rowOrder"][2], c0["rowOrder"][3]
+    _drag(pg2, f'[data-node="dto.{last}"] .hit', 0, 100 * k)     # open space above the last row
+    c0 = pg2.evaluate(LAYOUT)["cards"]["dto"]
+    hop = c0["rows"][last]["y"] - c0["rows"][third]["y"] + 4
+    _drag(pg2, f'[data-node="dto.{third}"] .hit', 0, hop * k)
+    c1 = pg2.evaluate(LAYOUT)["cards"]["dto"]
+    assert c1["rowOrder"] == c0["rowOrder"][:2] + [last, third]
+    assert c1["rows"][third]["y"] == pytest.approx(c0["rows"][third]["y"] + hop, abs=1)
+    _assert_rows_fit(c1)
+    # and dragged back up past it, the two swap back
+    _drag(pg2, f'[data-node="dto.{third}"] .hit', 0, -hop * k)
+    assert pg2.evaluate(LAYOUT)["cards"]["dto"]["rowOrder"] == c0["rowOrder"]
+
+
+def test_rows_never_overlap_however_far_a_row_is_dragged(opened):
+    pg = opened(_spec("example-order.json"))
+    k = _zoom(pg)
+    _drag(pg, _edge("dto", "bottom"), 0, 40 * k)
+    for fid, dy in (("id", 400), ("total", -400), ("cname", 25), ("cid", -13)):
+        _drag(pg, f'[data-node="dto.{fid}"] .hit', 0, dy * k)
+        L = pg.evaluate(LAYOUT)
+        _assert_rows_fit(L["cards"]["dto"])
+        _assert_wires_on_rows(L)
+
+
+def test_a_packed_card_still_reorders_by_slot(opened):
+    pg = opened(_spec("example-order.json"))
+    before = pg.evaluate(LAYOUT)
+    c0 = before["cards"]["dto"]
+    _drag(pg, f'[data-node="dto.{c0["rowOrder"][0]}"] .hit', 0, 300)
+    c1 = pg.evaluate(LAYOUT)["cards"]["dto"]
+    assert c1["rowOrder"] == c0["rowOrder"][1:] + c0["rowOrder"][:1]
+    assert (c1["y"], c1["h"]) == (c0["y"], c0["h"])
+    assert _tops(c1) == pytest.approx([46 + sum(c1["rows"][f]["h"] for f in c1["rowOrder"][:i]) for i in range(4)], abs=0.02)
+
+
+def test_size_and_spacing_persist_and_reset(opened):
+    spec = _spec("example-order.json")
+    pg = opened(spec)
+    computed, report = pg.evaluate(LAYOUT), pg.evaluate("() => window.__layoutReport")
+    k = _zoom(pg)
+    _drag(pg, _edge("dto", "bottom"), 0, 100 * k)
+    _drag(pg, '[data-node="dto.total"] .hit', 0, 70 * k)
+    _drag(pg, _edge("json", "top"), 0, -50 * k)
+    moved = pg.evaluate(LAYOUT)
+    assert moved != computed
+    assert pg.evaluate("() => window.__layoutReport") == report
+    pg.reload()
+    pg.wait_for_function("() => window.__layoutReport")
+    assert pg.evaluate(LAYOUT) == moved
+    pg.click("#zreset")
+    assert pg.evaluate(LAYOUT) == computed
+    pg.reload()
+    pg.wait_for_function("() => window.__layoutReport")
+    assert pg.evaluate(LAYOUT) == computed
+
+
+@pytest.mark.parametrize("bad", [
+    {"dto": {"dy": 0, "order": ["id", "cid", "cname", "total"], "h": 50}},                      # rows do not fit
+    {"dto": {"dy": 0, "order": ["id", "cid", "cname", "total"], "h": 400, "tops": [46, 50, 120, 200]}},   # overlap
+    {"dto": {"dy": 0, "order": ["id", "cid", "cname", "total"], "h": 200, "tops": [46, 80, 120, 190]}},   # out of the card
+    {"dto": {"dy": 0, "order": ["id", "cid", "cname", "total"], "h": "tall"}},
+])
+def test_an_outdated_saved_card_is_ignored(opened, bad):
+    pg = opened(_spec("example-order.json"))
+    computed = pg.evaluate(LAYOUT)
+    _drag(pg, '.grip[data-card="dto"]', 0, 40)
+    key = pg.evaluate("() => Object.keys(localStorage)")[0]
+    pg.evaluate("([k, v]) => localStorage.setItem(k, JSON.stringify(v))", [key, bad])
+    pg.reload()
+    pg.wait_for_function("() => window.__layoutReport")
+    assert pg.evaluate(LAYOUT) == computed
