@@ -3,7 +3,7 @@ layout report the engine computed (window.__layoutReport).
 
 The screenshot is what Claude looks at before handing a diagram over; the report is
 what tells it, in numbers, whether a wire passes behind a card or a label sits on
-something. See SKILL.md, "Field mode".
+something, or that the engine broke one of its own guarantees. See SKILL.md, "Field mode".
 """
 
 from __future__ import annotations
@@ -19,8 +19,13 @@ class Unavailable(RuntimeError):
     """Playwright is installed but cannot start Chromium."""
 
 
-MEASURES = ("behind_card", "label_overlaps", "crossings", "max_steepness", "detour")
-TARGETS = ("behind_card", "label_overlaps")     # these must be 0; the rest are reported
+MEASURES = ("behind_card", "label_overlaps", "source_slack", "improvable_swaps", "loose_sources",
+            "crossings", "dock_inversions", "max_dock_climb", "copy_bend", "straight", "hops", "travel",
+            "max_steepness", "detour", "width", "height")
+# These must be 0; the rest are reported for judgment. label_overlaps comes from a greedy
+# placement, so a miss there is the author's to fix with a shorter label or note. The other
+# four are 0 by construction: a nonzero one is an engine regression, not a spec problem.
+TARGETS = ("behind_card", "label_overlaps", "source_slack", "improvable_swaps", "loose_sources")
 WIDTH = 1800
 
 

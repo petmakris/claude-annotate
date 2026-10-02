@@ -311,7 +311,7 @@ Field rules:
 - `members` are the body of the node — one row each, and the reader's index
   into the file:
   - `text` is the **real signature, copied from the source**, return type
-    included: `public ResponseEntity<ProposalConfigDto> saveConfigForOrganization(ProposalConfigDto dto)`,
+    included: `public ResponseEntity<ShippingConfigDto> saveConfigForOrganization(ShippingConfigDto dto)`,
     not `saveConfigForOrganization(dto)`. The reader is looking for the line
     they are about to open; a paraphrase is not what they will find there.
   - `line` opens that exact line. Omit it only for a row that describes the
@@ -521,8 +521,11 @@ deliverable is one self-contained HTML file.
    mapper; do not infer names from a payload alone — the JSON name is often not
    the source name, and that difference is usually the finding.
 2. **Write a spec** as JSON. `fields/example-order.json` is a complete worked
-   spec (a fan-out, a fan-in, dropped fields, a rename), and
-   `fields/example-bypass.json` adds wires that skip columns; copy one.
+   spec (a fan-out, a fan-in, dropped fields, a rename),
+   `fields/example-bypass.json` adds wires that skip columns, and
+   `fields/example-context.json` and `fields/example-sketch.json` add values that
+   come from the context rather than an argument; copy one. List cards and edges
+   in any order: nothing in the spec places a card.
 3. **Render it with the check**, to a file named after what it maps, somewhere
    the user will find it — not a temp directory:
    ```bash
@@ -532,21 +535,28 @@ deliverable is one self-contained HTML file.
    prints the layout report. It needs Playwright; without it, it says so and
    exits 2.
 4. **Look before you hand over.** Read the PNG and the report.
-   - `behind_card` and `label_overlaps` must be 0. The command exits 1 when
-     either is not.
-   - `crossings`, `max_steepness` and `detour` are for judgment. Compare them
-     with what you see.
-   - In the picture, look for a wire that takes the long way round, a fan you
-     cannot tell apart, a label sitting on the wrong wire.
+   - Five targets must be 0, and the command exits 1 when one is not:
+     `behind_card`, `label_overlaps`, `source_slack`, `improvable_swaps` and
+     `loose_sources`.
+   - A nonzero `behind_card`, `source_slack`, `improvable_swaps` or
+     `loose_sources` is an engine regression, not a spec problem: hand the file
+     over, say which target failed, and leave the spec alone.
+   - A nonzero `label_overlaps` is the one target you fix, with a shorter label
+     or note (step 5).
+   - The rest (`crossings`, `dock_inversions`, `max_dock_climb`, `copy_bend`,
+     `straight` of `hops`, `travel`, `max_steepness`, `detour`, `width`,
+     `height`) are for judgment. Compare them with what you see.
+   - In the picture, look for a fan you cannot tell apart, a label sitting on
+     the wrong wire, a figure too wide to read.
 5. **Fix through the spec, never the coordinates.** The tools, in the order to
    try them:
-   - `"lane": "above"` or `"below"` on an edge that skips columns, to send it
-     the short way round.
    - `"rows": "follow"` on a card whose field order means nothing (method
-     arguments, wire parameters), so its rows reorder to follow their wires.
-     Never on a record whose declaration order matters.
-   - Card order within a slot, and which slot a card sits in.
-   - `gaps`, to widen one gap.
+     arguments, wire parameters), so its wired rows reorder against their
+     wires. Never on a record whose declaration order matters.
+   - A shorter `label` or `note` where one still collides.
+   - Splitting the figure into two specs.
+   - `"lane": "above"` or `"below"` on an edge that skips columns, only for a
+     deliberate side channel: a long wire already runs between cards on its own.
    Re-render with `--check`. Stop after **three rounds**, whether or not every
    judgment measure improved.
 6. **Hand over the file.** Say what the shapes are in a sentence or two, give
@@ -569,20 +579,29 @@ emailed, opened on a plane or behind a proxy. Anything added to the renderer
 must keep that true; `tests/test_fields.py` enforces it.
 
 Nothing is hand-placed. `render.py` validates the spec and inlines it with the
-engine (`fields/engine.js`), which computes every coordinate from the spec
-alone, without measuring the page:
+engine (`fields/engine.js`), which computes every coordinate from the cards and
+wires alone, without measuring the page. The diagram is read from a field back
+to its origin, and the engine guarantees nine rules for that reader:
 
-- A row sits at the height of what feeds it, so a card may grow and show gaps.
-  Rows keep their declaration order unless the card says `"rows": "follow"`.
-- A wire that skips a column passes above or below that column's cards, never
-  behind them.
-- A row that carries several wires grows, and each wire gets its own port.
-- A gap widens with the steepest climb across it.
-- Labels and notes take the first spot beside their wire's start or arrowhead
-  that overlaps nothing.
-
-The same spec always draws the same picture. Edit the spec and re-render; never
-adjust coordinates.
+- **R1.** A wire spans as few columns as the stages allow; a source sits one
+  column before the nearest card it feeds.
+- **R2.** A column is ordered by crossings first, then by the rows its items
+  feed: no two neighbours can swap to remove a crossing.
+- **R3.** A 1:1 copy (one wire out of its row, one into its target) is drawn
+  straight unless the stacking forbids it.
+- **R4.** A source sits as level with the row it feeds as its column allows,
+  otherwise on that row's side of whatever holds the height.
+- **R5.** A long wire runs flat across the columns it skips, between cards if
+  that is where the order puts it, never behind one.
+- **R6.** Wires that share a row get their own ports, ordered by their other
+  ends, each at least 8 px inside the row.
+- **R7.** A card is one rigid record: its rows touch, in declared order unless
+  it says `"rows": "follow"`.
+- **R8.** Spec order and `slot` place nothing; only separate flows stack in the
+  order of their first cards, and a card without wires joins its spec
+  neighbour's column.
+- **R9.** The same spec always draws the same picture. Edit the spec and
+  re-render; never adjust coordinates.
 
 ### Spec format
 
@@ -593,11 +612,12 @@ adjust coordinates.
   "lede":    "…",                          // one paragraph, HTML allowed; in About
   "caption": "…",                          // name the shapes; in About
   "legend":  [ { "tone": "raw", "text": "minor units, never converted" } ],
-  "cards": [
-    { "id": "entity", "slot": 0,           // slot = column; a shared slot stacks
+  "cards": [                               // any order: columns come from the wires
+    { "id": "entity",
       "stage": "ENTITY", "name": "Order", "sub": "module · OuterClass",
       "tone": "accent",                    // optional frame colour
-      "rows": "follow",                    // optional; "real" (the default) keeps declaration order
+      "rows": "follow",                    // optional: wired rows follow their wires, the rest trail;
+                                           // "real" (the default) keeps declaration order
       "fields": [
         { "id": "total", "label": "totalCents", "tone": "raw" },
         { "id": "notes", "label": "internalNotes", "muted": true },
@@ -607,14 +627,16 @@ adjust coordinates.
   "edges": [
     { "from": "entity.total", "to": "dto.total",
       "tone": "raw", "label": "drawn beside the wire", "note": "a second, quieter line",
-      "lane": "below" }                    // optional, only for a wire that skips columns
-  ],
-  "sources": { "head": ["Stage","File","Detail"], "rows": [["…","…","…"]] },
-  "gaps":    { "1": 300 }                  // force a wider gap after slot 1, rarely needed
+      "lane": "below" }                    // optional, rare: a deliberate side channel for a wire
+  ],                                       // that skips columns, above or below its flow
+  "sources": { "head": ["Stage","File","Detail"], "rows": [["…","…","…"]] }
 }
 ```
 
-Every edge runs left to right: its target's slot is greater than its source's.
+Cards never feed each other in a loop, and a field never feeds its own card. If
+a value comes back, draw the object twice, before and after. An older spec may
+still carry `slot` on its cards or a `gaps` table: both are ignored, with a
+one-line note on stderr.
 
 **Tones** (`raw`, `group`, `accent`, `muted`) encode a property that repeats —
 which unit a number is in, which side of a boundary it sits on — never
@@ -643,11 +665,12 @@ renders faded with no arrow leaving it. Look for these deliberately.
 | Symptom | Cause |
 |---|---|
 | `KeyError: … has no field 'x'` | an edge names a field id no card declares |
-| `ValueError: … must run left to right` | an edge's target slot is not greater than its source's |
+| `ValueError: cards feed each other in a loop: …` | a value comes back to a card it left — draw the later stage of one of them as its own card |
+| `ValueError: edge … stays inside card …` | an edge joins two fields of one card |
+| `ValueError: edge … appears twice` | the same edge is listed twice |
 | `ValueError: … lane must be one of` | `lane` is not `"above"` or `"below"` |
-| `--check` exits 1 | `behind_card` or `label_overlaps` is nonzero — fix through the spec (step 5) |
+| `--check` exits 1 | a target is nonzero — `label_overlaps`: shorten a label or note (step 5); any other: an engine regression, hand over and say so |
 | `--check` exits 2 | Playwright or its Chromium is missing (the message names the install command) — hand over the unchecked file and say so |
 | `--check` exits 3 | the engine threw on this spec; the message is the browser's error — fix the spec, not the layout |
 | `ValueError: card … has no fields` | a card declares no fields |
-| A wire takes the long way round | set its `lane` |
-| Wires cross confusingly | `"rows": "follow"` on a card whose order means nothing, or reorder cards, or split the figure into two specs |
+| Wires cross confusingly | `"rows": "follow"` on a card whose order means nothing, or split the figure into two specs |

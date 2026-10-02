@@ -16,7 +16,6 @@
  "cards": [
   {
    "id": "form",
-   "slot": 0,
    "stage": "FORM",
    "name": "SignupForm",
    "sub": "web · SignupController:40",
@@ -42,7 +41,6 @@
   },
   {
    "id": "ctx",
-   "slot": 0,
    "stage": "CONTEXT",
    "name": "not arguments",
    "sub": "session beans",
@@ -59,7 +57,6 @@
   },
   {
    "id": "cmd",
-   "slot": 1,
    "stage": "COMMAND",
    "name": "CreateAccountCommand",
    "sub": "SignupMapper.toCommand",
@@ -80,7 +77,6 @@
   },
   {
    "id": "env",
-   "slot": 2,
    "stage": "ENVELOPE",
    "name": "MessageEnvelope",
    "sub": "EnvelopeFactory.wrap",
@@ -107,7 +103,6 @@
   },
   {
    "id": "req",
-   "slot": 3,
    "stage": "ON THE WIRE",
    "name": "POST /accounts",
    "sub": "multipart/form-data",
@@ -141,7 +136,6 @@
   },
   {
    "id": "audit",
-   "slot": 4,
    "stage": "SIDE EFFECT",
    "name": "AuditLog",
    "sub": "written later",

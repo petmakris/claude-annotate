@@ -15,7 +15,6 @@
   "cards": [
     {
       "id": "entity",
-      "slot": 0,
       "stage": "ENTITY",
       "name": "Order",
       "sub": "orders · OrderEntity",
@@ -57,7 +56,6 @@
     },
     {
       "id": "dto",
-      "slot": 1,
       "stage": "DTO",
       "name": "OrderDto",
       "sub": "checkout · OrderMapper",
@@ -84,7 +82,6 @@
     },
     {
       "id": "json",
-      "slot": 2,
       "stage": "RESPONSE",
       "name": "order.json",
       "sub": "GET /api/orders/{id}",

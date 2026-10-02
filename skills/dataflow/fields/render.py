@@ -33,15 +33,20 @@ ROW_MODES = ("real", "follow")
 
 
 def validate(spec: dict) -> None:
-    """Refuse a spec the layout cannot draw honestly, before anything is drawn."""
+    """Refuse a spec the layout cannot draw honestly, before anything is drawn.
+
+    Nothing here places a card: columns, order and heights come from the wires (see
+    engine.js). `slot` is still type-checked so that no spec that was refused before is
+    accepted now, but it is never compared with the edges. engine.js repeats every check
+    and throws, so a page that skipped this still fails loudly under --check."""
     if not spec.get("cards"):
         raise ValueError("the spec has no cards")
     cards = {c["id"]: c for c in spec["cards"]}
     if len(cards) != len(spec["cards"]):
         raise ValueError("two cards share an id")
-    slot = {c["id"]: c.get("slot", i) for i, c in enumerate(spec["cards"])}
     for c in spec["cards"]:
-        if not isinstance(slot[c["id"]], int) or isinstance(slot[c["id"]], bool):
+        slot = c.get("slot", 0)
+        if not isinstance(slot, int) or isinstance(slot, bool):
             raise ValueError(f"card {c['id']!r}: slot must be a whole number")
         if not c.get("fields"):
             raise ValueError(f"card {c['id']!r} has no fields")
@@ -50,6 +55,8 @@ def validate(spec: dict) -> None:
             raise ValueError(f"card {c['id']!r}: two fields share an id")
         if c.get("rows", "real") not in ROW_MODES:
             raise ValueError(f"card {c['id']!r}: rows must be one of {ROW_MODES}")
+    seen = set()
+    feeds = {cid: set() for cid in cards}
     for e in spec.get("edges", []):
         for end in (e["from"], e["to"]):
             cid, fid = end.split(".", 1)
@@ -58,14 +65,59 @@ def validate(spec: dict) -> None:
             if not any(f["id"] == fid for f in cards[cid]["fields"]):
                 raise KeyError(f"{cid} has no field {fid!r}")
         a, b = e["from"].split(".")[0], e["to"].split(".")[0]
-        if slot[b] <= slot[a]:
-            raise ValueError(f"edge {e['from']} → {e['to']} must run left to right")
+        if a == b:
+            raise ValueError(f"edge {e['from']} → {e['to']} stays inside card {a!r}; a field cannot feed its own card")
+        if (e["from"], e["to"]) in seen:
+            raise ValueError(f"edge {e['from']} → {e['to']} appears twice")
+        seen.add((e["from"], e["to"]))
         if "lane" in e and e["lane"] not in LANES:
             raise ValueError(f"edge {e['from']} → {e['to']}: lane must be one of {LANES}")
+        feeds[a].add(b)
+    loop = _find_loop(spec["cards"], feeds)
+    if loop:
+        raise ValueError(f"cards feed each other in a loop: {' → '.join(loop)}; "
+                         "draw the later stage of one of them as its own card")
+
+
+def _find_loop(cards: list, feeds: dict) -> list | None:
+    """The first loop a three-colour DFS meets, as card ids ending where they start.
+
+    It starts from each card in spec order and visits successors in id order, so the
+    same spec always reports the same loop (engine.js walks the same way)."""
+    colour = dict.fromkeys(feeds, 0)           # 0 unseen, 1 on the current path, 2 done
+    for c in cards:
+        if colour[c["id"]]:
+            continue
+        path, stack = [c["id"]], [iter(sorted(feeds[c["id"]]))]
+        colour[c["id"]] = 1
+        while stack:
+            nxt = next(stack[-1], None)
+            if nxt is None:
+                colour[path.pop()] = 2
+                stack.pop()
+            elif colour[nxt] == 1:
+                return path[path.index(nxt):] + [nxt]
+            elif colour[nxt] == 0:
+                colour[nxt] = 1
+                path.append(nxt)
+                stack.append(iter(sorted(feeds[nxt])))
+    return None
+
+
+LEGACY_NOTE = 'note: "slot" and "gaps" are no longer read; columns and gap widths come from the wires'
+
+
+def has_legacy_keys(spec: dict) -> bool:
+    return "gaps" in spec or any("slot" in c for c in spec.get("cards", []))
 
 
 def render(spec: dict) -> str:
     validate(spec)
+    # `slot` and `gaps` place nothing any more. Dropping them after validating means a
+    # spec that still carries them embeds, and so draws, byte for byte what it would
+    # without them.
+    spec = {k: v for k, v in spec.items() if k != "gaps"}
+    spec["cards"] = [{k: v for k, v in c.items() if k != "slot"} for c in spec["cards"]]
     page = (HERE / "canvas.html").read_text(encoding="utf-8")
     engine = (HERE / "engine.js").read_text(encoding="utf-8")
     # JSON inside a <script> element: "</script" would close it early and "<!--" can
@@ -83,7 +135,10 @@ def main() -> int:
                     help="write the page here, screenshot it to OUT.png and print the layout report")
     args = ap.parse_args()
     with open(args.spec, encoding="utf-8") as fh:
-        page = render(json.load(fh))
+        spec = json.load(fh)
+    page = render(spec)
+    if has_legacy_keys(spec):
+        print(LEGACY_NOTE, file=sys.stderr)
     if not args.check:
         sys.stdout.write(page)
         return 0

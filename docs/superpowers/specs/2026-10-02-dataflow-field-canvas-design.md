@@ -25,6 +25,8 @@ Success looks like this:
 
 ## 2. Decisions
 
+> Decision B (spaced rows) is reversed by `2026-10-02-dataflow-field-layout-design.md`: cards are rigid records, and the sources move to meet them.
+
 | # | Question | Decision |
 |---|----------|----------|
 | A | Arrow style | **Curves.** The right-angle "tidy" routing was tried and rejected as unhelpful. |
@@ -56,6 +58,8 @@ The page is a full-viewport canvas.
 - **First paint** fits the diagram to the window.
 
 ## 4. The layout engine
+
+> Replaced by `2026-10-02-dataflow-field-layout-design.md`, which derives columns, order and heights from the wires.
 
 All geometry is computed. Nothing measures the DOM, so a thumbnail, a print and a cold load draw the same picture. Text widths use the advance-width constants `render.py` uses today.
 
@@ -105,6 +109,8 @@ Every row and waypoint gets a height through alternating sweeps:
 
 ## 5. The spec's new knobs
 
+> `slot` and `gaps` no longer place anything: `2026-10-02-dataflow-field-layout-design.md` §3 makes them legacy keys that are validated, noted and dropped.
+
 These are the structural choices left to Claude. All are optional, and a spec without them renders as described above.
 
 ```jsonc
@@ -120,6 +126,8 @@ The existing knobs stay:
 - Splitting one diagram into two is done by writing two specs.
 
 ## 6. The checked render
+
+> The measures and targets are replaced by `2026-10-02-dataflow-field-layout-design.md` §6: five targets, and every measure recomputed from the published layout.
 
 `render.py` gains a check, and the skill makes it a required step before handover.
 
