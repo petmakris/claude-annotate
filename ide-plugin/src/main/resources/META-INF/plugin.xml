@@ -1,0 +1,139 @@
+<idea-plugin>
+    <id>com.petros.claude-ide-review</id>
+    <name>Claude IDE Review</name>
+    <vendor url="https://github.com/petmakris">Petros Makris</vendor>
+
+    <description><![CDATA[
+        IDE companion for the <a href="https://github.com/petmakris/claude-ide-review">claude-ide-review</a>
+        Claude Code plugin. Ask Claude a question on any line of a GitHub PR diff
+        (<code>/ask-diff</code>) and get a threaded answer in place, or walk a
+        codebase through anchored steps with Claude answering inline
+        (<code>/walkthrough</code>).
+        <br/><br/>
+        Requires the Claude Code plugin to be installed separately — this plugin is the
+        IDE surface, not the whole tool.
+    ]]></description>
+
+    <idea-version since-build="242" until-build="261.*"/>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+    <!-- Bundled GitHub plugin: lets us open the real PR diff view via
+         GHPRProjectViewModel.openPullRequestDiff (with inline PR comments). -->
+    <depends>org.jetbrains.plugins.github</depends>
+    <!-- git4idea. Reached us transitively through the GitHub plugin before the
+         diff actions existed; asked for by name now, because a transitive edge
+         is not a contract and losing it breaks SmartDiffService at runtime with
+         nothing failing at compile time. -->
+    <depends>Git4Idea</depends>
+    <!-- JCEF (the browser behind SynthesisBrowser). Part of the platform up to
+         build 261, a separate bundled plugin from 262 — so it has to be asked
+         for by name or its classes are invisible to this plugin's loader.
+         Optional: SynthesisPopup renders into a JEditorPane without it. -->
+    <depends optional="true" config-file="jcef.xml">com.intellij.modules.jcef</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <notificationGroup id="Claude IDE Review" displayType="BALLOON"/>
+        <projectService serviceImplementation="com.petros.ireview.SmartDiffService"/>
+        <projectService serviceImplementation="com.petros.ireview.DiffSettings"/>
+        <projectConfigurable parentId="tools"
+                             id="com.petros.ireview.settings"
+                             displayName="Claude IDE Review"
+                             instance="com.petros.ireview.DiffSettings$Ui"/>
+        <diff.DiffExtension implementation="com.petros.ireview.SpikeDiffExtension"/>
+        <editorFactoryListener implementation="com.petros.ireview.WorkingCopyAskGutter"/>
+        <editorFactoryListener implementation="com.petros.ireview.WalkthroughGutter"/>
+        <projectService serviceImplementation="com.petros.ireview.ReviewSessionService"/>
+        <statusBarWidgetFactory id="com.petros.ireview.statusbar"
+                                implementation="com.petros.ireview.ReviewStatusBarWidgetFactory"/>
+        <toolWindow id="Review Annotations"
+                    anchor="right"
+                    icon="/icons/annotation_yellow.svg"
+                    factoryClass="com.petros.ireview.AnnotationsToolWindowFactory"/>
+        <projectService serviceImplementation="com.petros.ireview.WalkthroughService"/>
+        <toolWindow id="Walkthrough"
+                    anchor="right"
+                    icon="/icons/comment.svg"
+                    factoryClass="com.petros.ireview.WalkthroughToolWindowFactory"/>
+        <statusBarWidgetFactory id="com.petros.ireview.walkthrough.mode"
+                                implementation="com.petros.ireview.WalkthroughModeWidgetFactory"/>
+    </extensions>
+
+    <actions>
+        <action id="com.petros.ireview.SmartDiff"
+                class="com.petros.ireview.SmartDiffActions$Forward"
+                text="Smart Diff: This File"
+                description="Show this file's uncommitted change, or the last commit if it has none; press again to walk further back.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt D"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt D"/>
+        </action>
+        <action id="com.petros.ireview.SmartDiffBack"
+                class="com.petros.ireview.SmartDiffActions$Back"
+                text="Smart Diff: Step Back"
+                description="Step one level back toward the working copy.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="meta alt D"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="meta alt D"/>
+        </action>
+        <action id="com.petros.ireview.DiffAgainstBase"
+                class="com.petros.ireview.SmartDiffActions$AgainstBase"
+                text="Diff Against Base Branch"
+                description="Compare this file with the base branch, with no branch picker.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt B"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt B"/>
+        </action>
+        <action id="com.petros.ireview.CompareWithHead"
+                class="com.petros.ireview.SmartDiffActions$AgainstHead"
+                text="Compare With HEAD"
+                description="Show this file's uncommitted changes against HEAD, with no walk and no memory.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt H"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt H"/>
+        </action>
+        <action id="com.petros.ireview.ShortcutsPanel"
+                class="com.petros.ireview.ShortcutsPanel$Show"
+                text="Keyboard Shortcuts"
+                description="Show every key this plugin adds, and the stock git keys beside them.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="meta K"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="meta K"/>
+        </action>
+        <action id="com.petros.ireview.WalkthroughNext"
+                class="com.petros.ireview.WalkthroughActions$Next"
+                text="Walkthrough: Next Step"
+                description="Move to the next step of the active walkthrough.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt N"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt N"/>
+        </action>
+        <action id="com.petros.ireview.WalkthroughPrev"
+                class="com.petros.ireview.WalkthroughActions$Prev"
+                text="Walkthrough: Previous Step"
+                description="Move to the previous step of the active walkthrough.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt P"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt P"/>
+        </action>
+        <action id="com.petros.ireview.WalkthroughAsk"
+                class="com.petros.ireview.WalkthroughActions$Ask"
+                text="Walkthrough: Ask About This Step"
+                description="Ask Claude a question about the active walkthrough step.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt A"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt A"/>
+        </action>
+        <action id="com.petros.ireview.WalkthroughToggleMode"
+                class="com.petros.ireview.WalkthroughActions$ToggleMode"
+                text="Walkthrough: Show/Hide Inline Card"
+                description="Show or hide the walkthrough's inline step card in the editor.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt W"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt W"/>
+        </action>
+        <!-- Moved in from env/apps/ide-toolbelt on 2026-09-24, when that plugin was retired. -->
+        <action id="com.petros.ireview.PrettifyJsonStringAction"
+                class="com.petros.ireview.PrettifyJsonStringAction"
+                text="Prettify JSON String"
+                description="Reformat the JSON inside the surrounding Java text block, preserving {{placeholders}}.">
+            <add-to-group group-id="EditMenu" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <!-- Bound on the Mac keymaps directly: a $default shortcut has its `control`
+                 auto-translated to Cmd on macOS, which lands on the taken ⌥⇧⌘L. -->
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="control alt shift L"/>
+            <keyboard-shortcut keymap="Mac OS X" first-keystroke="control alt shift L"/>
+        </action>
+    </actions>
+</idea-plugin>

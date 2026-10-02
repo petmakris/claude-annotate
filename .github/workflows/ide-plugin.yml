@@ -1,0 +1,19 @@
+name: ide-plugin
+on:
+  push:
+    branches: [main]
+    paths: ['ide-plugin/**', '.github/workflows/ide-plugin.yml']
+  pull_request:
+    paths: ['ide-plugin/**', '.github/workflows/ide-plugin.yml']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - run: ./gradlew buildPlugin test
+        working-directory: ide-plugin

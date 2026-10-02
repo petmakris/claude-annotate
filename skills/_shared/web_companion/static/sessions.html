@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Annotate sessions</title>
+<style>
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url(/static/fonts/BricolageGrotesque-Variable.woff2) format("woff2");
+  font-weight: 200 800;
+}
+@font-face {
+  font-family: "Monaspace Radon";
+  src: url(/static/fonts/MonaspaceRadon-Regular.woff2) format("woff2");
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 32px 20px 60px;
+  background: #f5f6f8;
+  font-family: "Bricolage Grotesque", system-ui, sans-serif;
+  color: #1d1d1f;
+}
+/* Wide enough that all ten columns fit without sideways scrolling on an
+   ordinary laptop — at 940px the Share and Open columns fell off the edge and
+   you had to discover them by scrolling. */
+.wrap { max-width: 1320px; margin: 0 auto; }
+.hd {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.hd h1 { margin: 0; font-size: 22px; font-weight: 700; }
+.sub { color: #83868f; font-size: 13px; margin-bottom: 18px; }
+.tools { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.search {
+  flex: 1;
+  min-width: 180px;
+  background: #fff;
+  border: 1px solid #d4d8e0;
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-size: 14px;
+  color: #3a3d44;
+  font-family: inherit;
+  outline: none;
+}
+.search:focus { border-color: #0071e3; }
+.seg {
+  display: flex;
+  border: 1px solid #d4d8e0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+.seg button {
+  border: 0;
+  background: transparent;
+  padding: 9px 14px;
+  font-size: 13px;
+  color: #83868f;
+  font-family: inherit;
+  cursor: pointer;
+}
+.seg button.on { background: #0071e3; color: #fff; }
+select.proj-select {
+  background: #fff;
+  border: 1px solid #d4d8e0;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 13px;
+  color: #3a3d44;
+  font-family: inherit;
+}
+/* One row is one line. Every cell holds exactly one element, nothing stacks
+   vertically, and nothing wraps — a row you can scan across beats a row you
+   have to read. Long values are clipped with an ellipsis and keep the full
+   text in a title attribute; when the columns no longer fit, the TABLE
+   scrolls sideways rather than the text reflowing. */
+.list {
+  background: #fff;
+  border: 1px solid #d4d8e0;
+  border-radius: 14px;
+  overflow-x: auto;
+}
+table.sessions {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+  min-width: 1080px;
+}
+table.sessions th,
+table.sessions td {
+  padding: 0 12px;
+  height: 44px;
+  border-bottom: 1px solid #eef0f4;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+table.sessions thead th {
+  height: 34px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: #9aa3b0;
+  background: #fbfcfd;
+  border-bottom: 1px solid #d4d8e0;
+  position: sticky;
+  top: 0;
+}
+table.sessions tbody tr:last-child td { border-bottom: 0; }
+table.sessions tbody tr { cursor: pointer; transition: background .1s; }
+table.sessions tbody tr:hover { background: #f8f9fb; }
+
+/* Fixed widths, so every row's columns line up down the page. */
+.w-status { width: 68px; }
+.w-slug   { width: 300px; }
+.w-title  { width: auto; }   /* the flexible one: it absorbs the leftover */
+.w-proj   { width: 150px; }
+.w-num    { width: 66px;  text-align: right !important; }
+.w-time   { width: 92px;  text-align: right !important; }
+.w-act    { width: 84px; }
+.w-open   { width: 84px;  text-align: right !important; }
+
+.stag { font-size: 9.5px; font-weight: 700; letter-spacing: .8px; }
+.slug {
+  font-family: "Monaspace Radon", monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0071e3;
+}
+.title { font-size: 12.5px; color: #3a3d44; }
+.proj {
+  font-size: 11.5px;
+  color: #3a3d44;
+  background: #eef0f4;
+  border: 1px solid #d4d8e0;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-family: "Monaspace Radon", monospace;
+}
+.cm, .last { font-size: 11.5px; color: #83868f; }
+.act {
+  border: 1px solid #d4d8e0;
+  background: #fff;
+  color: #83868f;
+  border-radius: 7px;
+  padding: 3px 0;
+  width: 100%;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  line-height: 1.5;
+  white-space: nowrap;
+  transition: color .12s, border-color .12s, background .12s;
+}
+.act:hover { color: #0071e3; border-color: #0071e3; }
+.act.ok { color: #047857; border-color: #047857; }
+.act.bad { color: #b91c1c; border-color: #b91c1c; }
+/* The resume command is the primary action on a row, so it reads as one. */
+.act-cmd { background: #eef0f4; border-color: #c9cdd6; color: #3a3d44; }
+.act-cmd:hover { background: #fff; }
+/* Deletion is the only way a workspace ever disappears, so the button reads
+   as dangerous — red on hover, never on rest, so the page stays calm. */
+.act-del:hover { color: #b91c1c; border-color: #b91c1c; }
+.act[disabled] { opacity: .3; cursor: default; border-style: dashed; }
+.act[disabled]:hover { color: #83868f; border-color: #d4d8e0; }
+.c-go { color: #0071e3; font-size: 12.5px; font-weight: 600; opacity: .5; }
+tbody tr:hover .c-go { opacity: 1; }
+.foot { color: #83868f; font-size: 11.5px; margin-top: 12px; text-align: center; }
+.empty {
+  padding: 48px 18px;
+  text-align: center;
+  color: #83868f;
+  font-size: 14px;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hd">
+    <h1 id="page-title">Annotate sessions</h1>
+  </div>
+  <div class="sub">Workspaces outlive the Claude session that made them, and survive a reboot. Open one to read it, or copy its resume command to pick it up in a fresh session.</div>
+  <div class="tools">
+    <input id="search" class="search" placeholder="Search name, title, project…">
+    <div class="seg" id="seg">
+      <button class="on" data-seg="all">All</button>
+      <button data-seg="open">Open</button>
+      <button data-seg="live">Live</button>
+    </div>
+    <select id="proj-select" class="proj-select">
+      <option value="">All projects</option>
+    </select>
+  </div>
+  <div class="list" id="list"></div>
+  <div class="foot" id="foot"></div>
+</div>
+<script>
+var ALL = [];
+var segment = "all";
+// Filled from /api/whoami before the first render — the page cannot derive
+// the shareable host from window.location, since the owner normally browses
+// on localhost.
+var HOSTS = { port: location.port, public_host: "", shareable: false };
+// The resume command is skill-specific ("/annotate resume <slug>"), and this
+// page is served by every web_companion skill. Derived from the /health
+// banner, same source as the page title.
+var SKILL_CMD = "/annotate";
+
+function statusColor(s) {
+  if (s === "live") return "#047857";
+  if (s === "done") return "#83868f";
+  return "#9aa3b0";
+}
+function statusLabel(s) {
+  if (s === "live") return "LIVE";
+  if (s === "done") return "DONE";
+  return "IDLE";
+}
+function relativeTime(unixSecs) {
+  if (!unixSecs) return "";
+  var deltaMs = Date.now() - (unixSecs * 1000);
+  var deltaS = Math.max(0, Math.floor(deltaMs / 1000));
+  if (deltaS < 60) return "just now";
+  var mins = Math.floor(deltaS / 60);
+  if (mins < 60) return mins + "m ago";
+  var hours = Math.floor(mins / 60);
+  if (hours < 24) return hours + "h ago";
+  var days = Math.floor(hours / 24);
+  if (days === 1) return "yesterday";
+  return days + "d ago";
+}
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
+}
+
+// One <tr>, one line, one element per <td>. Values that can be long (title,
+// slug, project) are clipped by CSS and carry the full text as a tooltip
+// rather than wrapping onto a second line.
+function rowHtml(row) {
+  var st = row.status || "idle";
+  var slug = escapeHtml(row.slug || row.sid || "");
+  var title = escapeHtml(row.title || "");
+  var project = escapeHtml(row.project || "");
+  var commentCount = row.comment_count || 0;
+  var last = relativeTime(row.last_active);
+  var cmd = SKILL_CMD + " resume " + (row.slug || row.sid || "");
+  return (
+    '<tr data-slug="' + slug + '">' +
+      '<td class="w-status"><span class="stag" style="color:' + statusColor(st) + '">' +
+        statusLabel(st) + '</span></td>' +
+      '<td class="w-slug" title="' + slug + '"><span class="slug">' + slug + '</span></td>' +
+      '<td class="w-title" title="' + title + '"><span class="title">' + title + '</span></td>' +
+      '<td class="w-proj" title="' + project + '">' +
+        (project ? '<span class="proj">' + project + '</span>' : '') + '</td>' +
+      '<td class="w-num"><span class="cm">' + commentCount + '</span></td>' +
+      '<td class="w-time"><span class="last">' + (last || "") + '</span></td>' +
+      // A closed workspace gets no resume command: attaching to one reopens
+      // the directory but the page still renders "this round is closed", so
+      // the command would be a dead end. Disabled rather than absent, so the
+      // column stays aligned down the page.
+      '<td class="w-act">' + (st === "done"
+        ? '<button class="act act-cmd" disabled title="This workspace is closed — it cannot be resumed">resume</button>'
+        : '<button class="act act-cmd" data-copy="' + escapeHtml(cmd) +
+          '" title="Copy: ' + escapeHtml(cmd) + '">resume</button>') + '</td>' +
+      '<td class="w-act"><button class="act" data-copy="' + escapeHtml(localUrl(slug)) +
+        '" title="Copy the local link (this machine only)">link</button></td>' +
+      '<td class="w-act">' + (HOSTS.shareable
+        ? '<button class="act" data-copy="' + escapeHtml(publicUrl(slug)) +
+          '" title="Copy the shareable link — read-only for anyone but you">share</button>'
+        : '') + '</td>' +
+      '<td class="w-act"><button class="act act-del" data-del="' + slug +
+        '" title="Delete this workspace permanently — page, comments and history">delete</button></td>' +
+      '<td class="w-open"><span class="c-go">Open →</span></td>' +
+    '</tr>'
+  );
+}
+
+// Whatever origin you are actually browsing on — NOT a rebuilt
+// "localhost:<port>". This page can be reached three ways: straight at the
+// server (http://localhost:3080), through a local reverse proxy that
+// terminates TLS on 443 (https://annotate.mac), or at a LAN/Tailscale address.
+// Reconstructing the origin got the proxy case wrong in a way that looked
+// right: it produced https://localhost:3080, and the raw server speaks plain
+// HTTP there, so the copied link simply failed to load.
+function localUrl(slug) {
+  return location.origin + "/s/" + slug + "/";
+}
+function publicUrl(slug) {
+  return "http://" + HOSTS.public_host + ":" + HOSTS.port + "/s/" + slug + "/";
+}
+
+// navigator.clipboard needs a secure context. localhost qualifies; a LAN or
+// Tailscale address over plain HTTP does not — and browsing this page from
+// another device is exactly when copying matters most. Hence the fallback.
+function copyText(text, btn) {
+  function done(ok) {
+    var original = btn.getAttribute("data-label") || btn.innerHTML;
+    btn.setAttribute("data-label", original);
+    // Kept short: the action columns are fixed-width and must not wrap.
+    btn.innerHTML = ok ? "copied ✓" : "failed";
+    btn.classList.add(ok ? "ok" : "bad");
+    setTimeout(function () {
+      btn.innerHTML = original;
+      btn.classList.remove("ok", "bad");
+    }, 1200);
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(function () { done(true); },
+                                             function () { done(false); });
+    return;
+  }
+  try {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    done(ok);
+  } catch (e) {
+    done(false);
+  }
+}
+
+function openRow(slug) {
+  location.href = "/s/" + encodeURIComponent(slug) + "/";
+}
+
+function populateProjects() {
+  var select = document.getElementById("proj-select");
+  var seen = {};
+  var projects = [];
+  ALL.forEach(function (row) {
+    var p = row.project || "";
+    if (p && !seen[p]) {
+      seen[p] = true;
+      projects.push(p);
+    }
+  });
+  projects.sort();
+  select.innerHTML = '<option value="">All projects</option>' +
+    projects.map(function (p) {
+      return '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>';
+    }).join("");
+}
+
+function render() {
+  var searchText = (document.getElementById("search").value || "").toLowerCase();
+  var selectedProject = document.getElementById("proj-select").value;
+  var listEl = document.getElementById("list");
+  var footEl = document.getElementById("foot");
+
+  var rows = ALL.filter(function (row) {
+    // "all" shows everything the server still holds — live, idle and closed.
+    // Deleted workspaces (and, when opt-in retention is set, expired ones)
+    // are already gone from the response, so there is nothing to filter here.
+    if (segment === "live" && row.status !== "live") return false;
+    if (segment === "open" && row.status === "done") return false;
+    if (selectedProject && row.project !== selectedProject) return false;
+    if (searchText) {
+      var haystack = (
+        (row.slug || "") + " " + (row.title || "") + " " + (row.project || "")
+      ).toLowerCase();
+      if (haystack.indexOf(searchText) === -1) return false;
+    }
+    return true;
+  });
+
+  rows.sort(function (a, b) {
+    return (b.last_active || 0) - (a.last_active || 0);
+  });
+
+  if (rows.length === 0) {
+    listEl.innerHTML = '<div class="empty">No workspaces yet</div>';
+    footEl.textContent = "";
+    return;
+  }
+
+  listEl.innerHTML =
+    '<table class="sessions"><thead><tr>' +
+      '<th class="w-status">Status</th>' +
+      '<th class="w-slug">Workspace</th>' +
+      '<th class="w-title">Title</th>' +
+      '<th class="w-proj">Project</th>' +
+      '<th class="w-num">Notes</th>' +
+      '<th class="w-time">Updated</th>' +
+      '<th class="w-act">Resume</th>' +
+      '<th class="w-act">Link</th>' +
+      '<th class="w-act">' + (HOSTS.shareable ? "Share" : "") + '</th>' +
+      '<th class="w-act">Delete</th>' +
+      '<th class="w-open"></th>' +
+    '</tr></thead><tbody>' + rows.map(rowHtml).join("") + '</tbody></table>';
+  footEl.textContent = rows.length + (rows.length === 1 ? " workspace" : " workspaces") + " · sorted by last activity";
+
+  Array.prototype.forEach.call(listEl.querySelectorAll("tbody tr"), function (el) {
+    el.addEventListener("click", function () {
+      openRow(el.getAttribute("data-slug"));
+    });
+  });
+  // Bound after the row handler and stopping propagation, so copying a link
+  // does not also navigate away from the page you wanted to copy it from.
+  Array.prototype.forEach.call(listEl.querySelectorAll(".act[data-copy]"), function (btn) {
+    btn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      ev.preventDefault();
+      copyText(btn.getAttribute("data-copy"), btn);
+    });
+  });
+  // Deletion is irreversible — nothing expires on its own, so this button is
+  // the workspace's one exit and always confirms before acting.
+  Array.prototype.forEach.call(listEl.querySelectorAll(".act-del"), function (btn) {
+    btn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      ev.preventDefault();
+      var key = btn.getAttribute("data-del");
+      if (!window.confirm("Delete workspace “" + key + "” permanently? This cannot be undone.")) return;
+      fetch("/api/sessions/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: key }),
+      }).then(function (r) {
+        if (!r.ok) throw new Error(String(r.status));
+        ALL = ALL.filter(function (row) { return (row.slug || row.sid) !== key; });
+        populateProjects();
+        render();
+      }).catch(function () {
+        btn.innerHTML = "failed";
+        btn.classList.add("bad");
+        setTimeout(function () {
+          btn.innerHTML = "delete";
+          btn.classList.remove("bad");
+        }, 1200);
+      });
+    });
+  });
+}
+
+document.getElementById("search").addEventListener("input", render);
+document.getElementById("proj-select").addEventListener("change", render);
+Array.prototype.forEach.call(document.querySelectorAll("#seg button"), function (btn) {
+  btn.addEventListener("click", function () {
+    segment = btn.getAttribute("data-seg");
+    Array.prototype.forEach.call(document.querySelectorAll("#seg button"), function (b) {
+      b.classList.toggle("on", b === btn);
+    });
+    render();
+  });
+});
+
+// Skill-aware page title: this browser is served by any web_companion skill
+// (annotate, interactive-review, …). Derive the label from the server banner
+// ("<skill>-server vN") so a non-annotate skill isn't mislabeled. Falls back
+// to the hardcoded "Annotate sessions" if /health is unreachable.
+// Both of these feed the rows (the skill name becomes the resume command, the
+// hosts become the copyable links), so the list waits for them rather than
+// rendering once with placeholders and re-rendering a frame later. Neither is
+// allowed to fail the page: a rejected probe degrades to a sensible default.
+var skillReady = fetch("/health")
+  .then(function (r) { return r.text(); })
+  .then(function (banner) {
+    var skill = (banner || "").trim().replace(/-server\b.*$/, "");
+    if (!skill) return;
+    SKILL_CMD = "/" + skill;
+    var words = skill.replace(/-/g, " ");
+    var label = words.charAt(0).toUpperCase() + words.slice(1) + " sessions";
+    document.title = label;
+    var h = document.getElementById("page-title");
+    if (h) h.textContent = label;
+  })
+  .catch(function () { /* keep the default title and command prefix */ });
+
+var hostsReady = fetch("/api/whoami")
+  .then(function (r) { return r.json(); })
+  .then(function (info) {
+    HOSTS = {
+      port: info.port || location.port,
+      public_host: info.public_host || "",
+      shareable: !!info.shareable,
+    };
+  })
+  .catch(function () { /* keep local-only links */ });
+
+Promise.all([skillReady, hostsReady])
+  .then(function () { return fetch("/api/sessions?scope=all"); })
+  .then(function (r) { return r.json(); })
+  .then(function (rows) {
+    ALL = rows || [];
+    populateProjects();
+    render();
+  })
+  .catch(function () {
+    ALL = [];
+    render();
+  });
+</script>
+</body>
+</html>

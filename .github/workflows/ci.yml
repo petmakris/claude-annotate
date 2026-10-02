@@ -1,0 +1,32 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 is the declared floor (Path.is_relative_to in uploads.py).
+        # It is in the matrix so the number in the README stays true.
+        python-version: ['3.9', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # test_diff_engine.py executes static/diff.js under node. Without node
+      # on the runner it SKIPS, so the diff engine's only real test would go
+      # quietly unrun and CI would still be green.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: pip install pytest pytest-xdist
+      # talk.py is a uv script with its own dependencies; its suite skips
+      # without aiohttp, so install it where talk can run (3.11+).
+      - if: matrix.python-version == '3.12'
+        run: pip install 'aiohttp>=3.10,<4'
+      - run: python3 -m pytest skills -q

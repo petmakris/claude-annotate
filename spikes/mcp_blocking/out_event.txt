@@ -1,0 +1,6 @@
+The tool returned:
+```
+EVENT {"comment": "the user clicked block 3", "at": 1789505138.7667232}
+```
+
+The event payload contains a comment field saying "the user clicked block 3" and a timestamp of 1789505138.7667232.

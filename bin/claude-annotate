@@ -1,0 +1,64 @@
+#!/bin/sh
+# claude-annotate <command> [args...] — run one of the annotate skill's helpers.
+#
+# Claude Code puts <plugin root>/bin on PATH for --plugin-dir and marketplace
+# installs alike, so this is callable by name from any directory, in a fresh
+# shell, with nothing exported beforehand. That matters: the Bash tool keeps
+# no shell variables between calls, and the one-liner this replaced found the
+# plugin root inline on every call, fourteen times over in one reference.
+#
+# It never changes directory. The helpers take the user's repo root from
+# --cwd "$PWD", and the old `cd "$PLUGIN_ROOT" && ... --cwd "$PWD"` handed
+# them the plugin's own directory instead.
+#
+#   claude-annotate push --blocks <file> --cwd "$PWD" [--slug <slug>] --eval
+#   claude-annotate pull --sid <sid|slug> --out <file>
+#   claude-annotate progress --sid <sid> --text "<line>" | --done
+#   claude-annotate session show | set ... | forget --sid <sid>
+#   claude-annotate check-anchors <blocks.json> "$PWD"
+#   claude-annotate confluence.prepare ...
+#
+# A dash in the command is an underscore in the module name, and a dot reaches
+# a subpackage: check-anchors -> skills.annotate.check_anchors.
+
+if ! command -v python3 >/dev/null 2>&1; then
+  # printf is a shell builtin; cat would itself be missing on a bare PATH.
+  printf '%s\n' \
+    'claude-annotate: python3 was not found on PATH.' \
+    'claude-annotate is the marketplace that ships this plugin and claude-ide-review.' \
+    '' \
+    'This plugin needs Python 3.9 or newer (standard library only — nothing to' \
+    'pip install).' \
+    '' \
+    '  macOS:  xcode-select --install     # or: brew install python' \
+    '  Linux:  install python3 with your distribution'"'"'s package manager' \
+    '' \
+    'Run /annotate-doctor for a full check of this machine.' >&2
+  exit 127
+fi
+
+# Parameter expansion, not dirname: this has to work before PATH is trusted.
+here=${0%/*}
+[ "$here" = "$0" ] && here=.
+root=$(CDPATH='' cd -- "$here/.." && pwd -P) || exit 1
+
+commands="push pull progress session check-anchors confluence.prepare confluence.finalize confluence.state"
+cmd=$1
+case $cmd in
+  ''|-h|--help)
+    echo "usage: claude-annotate <command> [args...]" >&2
+    echo "commands: $commands" >&2
+    [ -n "$cmd" ]; exit $? ;;
+  *[!a-z0-9._-]*)
+    echo "claude-annotate: not a command: $cmd (commands: $commands)" >&2
+    exit 2 ;;
+esac
+shift
+
+module=$(printf '%s' "$cmd" | tr '-' '_')
+if [ ! -f "$root/skills/annotate/$(printf '%s' "$module" | tr '.' '/').py" ]; then
+  echo "claude-annotate: not a command: $cmd (commands: $commands)" >&2
+  exit 2
+fi
+
+PYTHONPATH="$root${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m "skills.annotate.$module" "$@"

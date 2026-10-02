@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Presentation</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  iframe { border: 0; display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<!--
+  The real deck, scripts and all, for presenting. It runs in a sandboxed frame
+  WITHOUT allow-same-origin: the deck gets an opaque origin, so its script can
+  neither read this origin's sessionStorage (the write token) nor reach the
+  daemon as the owner — its requests arrive cross-site, which the owner gate
+  refuses. Loading content.html directly in a tab would give the deck's own
+  <script> both.
+-->
+<iframe id="deck" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" allowfullscreen
+        allow="fullscreen" title="Presentation"></iframe>
+<script>
+  (function () {
+    var f = document.getElementById("deck");
+    f.addEventListener("load", function () { f.contentWindow.focus(); });
+    f.src = "content.html" + location.search + location.hash;
+    var t = new URLSearchParams(location.search).get("title");
+    if (t) document.title = t;
+  })();
+</script>
+</body>
+</html>

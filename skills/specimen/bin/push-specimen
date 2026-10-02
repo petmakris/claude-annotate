@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+"""Push a specimen to the webcompanion daemon and print its URL.
+
+Usage: push-specimen --types <types.json> --specimen <specimen.json>
+                     --cwd <repo root> [--title <title>] [--leaves <leaves.json>]
+
+Exit codes: 0 ok, 4 the webcompanion CLI is not installed, 5 the push was refused.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import tempfile
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from lib.document import build_items  # noqa: E402
+from lib.leaves import load as load_leaves  # noqa: E402
+from lib.push import DaemonMissing, PushFailed, push  # noqa: E402
+
+SKILL_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+STATIC_ROOT = os.path.join(SKILL_ROOT, 'webcompanion', 'static')
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--types', required=True)
+    parser.add_argument('--specimen', required=True)
+    parser.add_argument('--cwd', required=True)
+    parser.add_argument('--title')
+    parser.add_argument('--leaves',
+                        help='the capture the page names as the source of its '
+                             'captured identifiers — normally the project '
+                             'profile\'s leaves.json (default: none)')
+    args = parser.parse_args()
+
+    with open(args.types, encoding='utf-8') as handle:
+        types_payload = json.load(handle)
+    with open(args.specimen, encoding='utf-8') as handle:
+        specimen = json.load(handle)
+    leaves = load_leaves(args.leaves) if args.leaves else {}
+
+    simple = types_payload['root'].rsplit('.', 1)[-1].rsplit('$', 1)[-1]
+    title = args.title or f'{simple} Specimen'
+
+    items = {'items': build_items(types_payload, specimen, leaves)}
+    with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False,
+                                     encoding='utf-8') as handle:
+        json.dump(items, handle)
+        items_path = handle.name
+
+    try:
+        session = push(items_path, args.cwd, title, STATIC_ROOT)
+    except DaemonMissing as problem:
+        print(problem, file=sys.stderr)
+        return 4
+    except PushFailed as problem:
+        print(f'push refused: {problem}', file=sys.stderr)
+        return 5
+    finally:
+        os.unlink(items_path)
+
+    print(session['url'])
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

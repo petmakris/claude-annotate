@@ -1,0 +1,18 @@
+#!/bin/sh
+# Run the suite the way CI does before anything leaves this machine: no
+# webcompanion daemon (an empty HOME has no ~/.claude/webcompanion/config.json)
+# and aiohttp installed so the talk suite runs instead of collecting nothing.
+# A test that quietly leans on the local daemon fails here, not on main.
+# Skip once with `git push --no-verify`.
+set -e
+cd "$(git rev-parse --show-toplevel)"
+home=$(mktemp -d)
+trap 'rm -rf "$home"' EXIT
+echo "pre-push: running the suite as CI would (no daemon)..." >&2
+uv run -q --python 3.12 --with pytest --with pytest-xdist --with 'aiohttp>=3.10,<4' \
+  env HOME="$home" python -m pytest skills -q -p no:cacheprovider >"$home/out" 2>&1 || {
+  tail -40 "$home/out" >&2
+  echo "pre-push: the suite fails without a daemon, as it would on CI. Push blocked." >&2
+  exit 1
+}
+tail -1 "$home/out" >&2

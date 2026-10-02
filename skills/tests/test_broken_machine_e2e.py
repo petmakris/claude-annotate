@@ -1,0 +1,69 @@
+"""What a machine with no python3 actually experiences, end to end.
+
+One test per thing the reporting user hit, so a regression in any single
+layer is legible without reading four other files.
+"""
+from __future__ import annotations
+
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+from skills.tests.sanitized_env import (
+    REPO_ROOT, pythonless_home, sanitized_path_dir,
+)
+
+
+class BrokenMachineTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="broken-"))
+        self.home = self.tmp / "home"
+        self.home.mkdir()
+        self.bin = sanitized_path_dir(self.tmp, with_python=False)
+
+    def test_the_doctor_still_runs_and_explains(self):
+        # The reported machine had no python3 at all, so the login shell has
+        # none either — otherwise this fixture is a shim machine, which the
+        # doctor deliberately diagnoses differently.
+        pythonless_home(self.home, self.bin)
+        doctor = REPO_ROOT / "skills" / "_shared" / "web_companion" / "doctor.sh"
+        result = subprocess.run(
+            [str(self.bin / "sh"), str(doctor)],
+            capture_output=True, text=True, timeout=30,
+            env={"HOME": str(self.home), "PATH": str(self.bin)},
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("python3", result.stdout)
+        self.assertIn("FAIL", result.stdout)
+        self.assertIn("xcode-select --install", result.stdout)
+
+    def test_launching_a_skill_names_the_plugin_once(self):
+        # Was annotate's launcher, then deck's, then walkthrough's, then
+        # ask_diff's, until each in turn moved onto the webcompanion daemon
+        # and stopped shipping a server of its own. ask_diff was the last
+        # one (see its Task 4 migration) -- no skill ships a thin wrapper
+        # around this script any more, so this now runs the shared launcher
+        # directly, standing in for whatever wrapper used to export these
+        # env vars before sourcing it. The behaviour under test always
+        # belonged to the shared script, never to any one skill.
+        script = REPO_ROOT / "skills" / "_shared" / "web_companion" / "ensure_server.sh"
+        result = subprocess.run(
+            [str(self.bin / "bash"), str(script)],
+            capture_output=True, text=True, timeout=20,
+            env={"HOME": str(self.home), "PATH": str(self.bin),
+                 "SKILL": "test", "MODULE": "skills.test.server",
+                 "BANNER": "test-server", "PLUGIN_ROOT": str(REPO_ROOT)},
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stderr.count("claude-annotate:"), 1,
+                         "say it once, not once per layer")
+        self.assertIn("/annotate-doctor", result.stderr)
+        # ...and say what "claude-annotate" is, since it is the marketplace
+        # name and half the userbase installed claude-ide-review instead.
+        self.assertIn("marketplace", result.stderr)
+        self.assertIn("claude-ide-review", result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

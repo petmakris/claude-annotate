@@ -1,0 +1,203 @@
+"""Block rendering for a webcompanion push.
+
+The daemon stores items as opaque JSON and never inspects them, so
+everything that used to happen per-request in annotate's own server —
+compiling a flowchart's source, rasterising a sequence spec to
+SVG — happens once here, at push time, and the rendered body is what gets
+stored.
+
+Code anchors are the deliberate exception: they are left unresolved in the
+body, because the daemon resolves them fresh on every read (the repository
+can change while a session is open) using this same plugin's anchor format.
+"""
+from __future__ import annotations
+
+from skills._shared.web_companion.templates import html_escape
+from skills.annotate.diagrams.sequence import render, render_key
+from skills.annotate.diagrams.flowchart import render as render_flowchart
+from skills.annotate.diagrams.flowchart import render_variants as render_flowchart_variants
+from skills.annotate.diagrams import views as views_mod
+from skills.annotate.pflow import PflowError, compile_source as compile_pflow
+from skills.annotate.explain import compile_spec as compile_explain
+
+
+def render_block(blk: dict) -> dict:
+    """Return the stored body for one block.
+
+    No `version`: the daemon derives that from the body's content hash and
+    hands it back in the item envelope, so carrying one here would be a
+    second, disagreeing source of truth.
+
+    - markdown blocks → pass markdown through
+    - sequence / flowchart → rendered svg + spec
+    - choice / mockup → spec forwarded verbatim
+    """
+    kind = blk.get("kind") or "markdown"
+    base = {"id": blk["id"], "kind": kind}
+    if blk.get("title"):
+        base["title"] = blk["title"]
+    # Optional per-rewrite explanation (references/handling-events.md
+    # § "Explaining a change"). The diff pane renders it above the marks, and
+    # its `Lost:` line is the only place a user can ever learn what a compact
+    # discarded — so it has to be on the wire. It was not, for the whole life
+    # of the feature: the pane read blk.change_note and this allowlist never
+    # put it there. blocks.json is model-authored, so guard the type.
+    note = blk.get("change_note")
+    if isinstance(note, str) and note.strip():
+        base["change_note"] = note
+    # The words the reader wrote in the editor (edit.js), as text anchors.
+    # Claude keeps them verbatim, so they ride every push untouched; a list
+    # of anchors or nothing, since blocks.json is model-authored.
+    mine = blk.get("mine")
+    if isinstance(mine, list) and mine and all(
+            isinstance(a, dict) and isinstance(a.get("selected_text"), str) for a in mine):
+        base["mine"] = mine
+    if kind == "sequence":
+        spec = blk.get("spec") or {}
+        key = ""
+        try:
+            svg = render(spec, block_id=blk["id"])
+            # The grid is numbered badges and nothing else, so a grid without
+            # its key is a picture of unexplained circles. Render both under
+            # the one try: if either half fails, the reader gets the error pill
+            # rather than half a diagram.
+            key = render_key(spec, block_id=blk["id"])
+        except Exception as e:
+            # Compact inline error pill instead of a full-width red banner.
+            # Catch *any* render failure (ValidationError, or a KeyError from a
+            # spec that passed validation but is missing a field the renderer
+            # reads) so one malformed block can never crash the whole /raw
+            # response and blank the page. The message lands in <title>.
+            svg = (
+                f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 36" '
+                f'width="360" height="36" '
+                f'class="annotate-seq annotate-seq-error" '
+                f'data-block-id="{html_escape(blk["id"])}" '
+                f'role="img" aria-label="sequence diagram failed to render">'
+                f'<rect x="0" y="0" width="360" height="36" rx="6" '
+                f'fill="#fde7e2" stroke="#e5b8af"/>'
+                f'<text x="14" y="22" font-size="12" font-weight="600" '
+                f'fill="#c1432f" font-family="ui-monospace, monospace">'
+                f'⚠ diagram render failed</text>'
+                f'<title>{html_escape(str(e))}</title>'
+                f'</svg>'
+            )
+        base["spec"] = spec
+        base["svg"] = svg
+        # Additive, like flowchart's `svgs` below: a client that has not been
+        # updated paints the grid alone and is no worse off than before.
+        if key:
+            base["key"] = key
+    elif kind == "flowchart":
+        spec = blk.get("spec") or {}
+        warnings: list[str] = []
+        source = spec.get("source")
+        if source:
+            # Authored as pflow: nodes/edges are derived, so any that were stored
+            # alongside the source are stale by definition and get replaced.
+            try:
+                compiled = compile_pflow(source, filename=blk["id"])
+                warnings = compiled.pop("warnings", [])
+                spec = {**spec, **compiled}
+            except PflowError as e:
+                spec = {**spec, "nodes": [], "edges": []}
+                source_error = str(e)
+            else:
+                source_error = None
+        else:
+            source_error = None
+        svgs: dict[str, str] = {}
+        names: list[str] = []
+        try:
+            if source_error:
+                raise ValueError(source_error)
+            svgs, names = render_flowchart_variants(spec, block_id=blk["id"])
+            svg = svgs[names[0]]
+        except Exception as e:
+            svgs, names = {}, []
+            # Compact inline error pill — one malformed block must never
+            # crash /raw and blank the page (same pattern as sequence/diagram).
+            svg = (
+                f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 36" '
+                f'class="annotate-flow annotate-flow-error" '
+                f'data-block-id="{html_escape(blk["id"])}" '
+                f'role="img" aria-label="flowchart failed to render">'
+                f'<rect x="0" y="0" width="360" height="36" rx="6" '
+                f'fill="#fde7e2" stroke="#e5b8af"/>'
+                f'<text x="14" y="22" font-size="12" font-weight="600" '
+                f'fill="#c1432f" font-family="ui-monospace, monospace">'
+                f'⚠ diagram render failed</text>'
+                f'<title>{html_escape(str(e))}</title>'
+                f'</svg>'
+            )
+        base["spec"] = spec
+        base["svg"] = svg
+        # Additive: an un-updated client reads `svg` and is none the wiser.
+        # A block whose variants all failed ships the error pill and no control.
+        if len(names) > 1:
+            base["svgs"] = svgs
+            base["flavours"] = names
+        # Views are a different axis from layout flavours: same renderer, a
+        # different edge set per drawing. They ride the same `svgs` map so the
+        # client needs one swap mechanism, keyed by name.
+        try:
+            vnames = views_mod.declared(spec)
+        except Exception:
+            vnames = []
+        if vnames:
+            per_view = dict(svgs)
+            per_view[views_mod.ALL_VIEW] = svg
+            emitted = []
+            for v in vnames:
+                try:
+                    sub = views_mod.subspec(spec, v)
+                    if not sub.get("edges"):
+                        continue
+                    per_view[v] = render_flowchart(sub, f'{blk["id"]}-{v}')
+                    emitted.append(v)
+                except Exception:
+                    # One unrenderable view must not cost the block its others.
+                    continue
+            if emitted:
+                base["svgs"] = per_view
+                base["views"] = [views_mod.ALL_VIEW] + emitted
+        if warnings:
+            base["warnings"] = warnings
+    elif kind == "choice":
+        base["spec"] = blk.get("spec") or {}
+    elif kind == "mockup":
+        # Trusted Claude HTML rendered client-side in a sandboxed iframe.
+        # Server forwards the spec verbatim; it never parses or renders the HTML.
+        base["spec"] = blk.get("spec") or {}
+    elif kind == "explain":
+        # Spans are resolved to columns HERE, at push time, for the same
+        # reason a flowchart's source is compiled here: it is the last moment
+        # a mistake can still be reported to the author. A quote that is not
+        # in the snippet becomes a visible error pill instead of an underline
+        # painted confidently under the wrong tokens.
+        spec = blk.get("spec") or {}
+        base["spec"] = spec
+        try:
+            base["view"] = compile_explain(spec)
+        except Exception as e:
+            # Any failure, not just ExplainError: a spec that passes the
+            # checks but trips a KeyError downstream must not blank the whole
+            # /raw response. Same containment as the sequence pill above.
+            base["view"] = {"error": str(e)}
+    else:
+        # markdown, and only markdown: blocks.load() refuses any other kind
+        # before a push reaches here, so this branch can never swallow one.
+        base["markdown"] = blk.get("markdown", "")
+
+    # Code anchors travel UNRESOLVED. The daemon resolves them on every
+    # read of the item, against the session's own cwd, so an anchor keeps
+    # tracking the file as it changes under a page that stays open. Resolving
+    # them here would freeze the excerpt at push time — which is exactly the
+    # drift the snippet field exists to survive.
+    code = blk.get("code")
+    # `explain` joins `mockup` in refusing the side column: this kind's whole
+    # premise is that the code and its explanation are one object, so a second
+    # pane of the same file beside it would restate the split it deletes.
+    if kind not in ("mockup", "explain") and isinstance(code, list) and code:
+        base["code"] = code
+    return base

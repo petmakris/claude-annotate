@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""Find the decks folder, or set up a new one.
+
+    decks where            print the decks folder and why it was chosen; exit 3 if none is set
+    decks init <dir>       create a decks folder at <dir>: README, house style, exporter
+    decks init <dir> --use also record it as the decks folder in ~/.config/slides/config.json
+
+The decks folder, first match wins:
+
+    1. $SLIDES_DECKS_DIR
+    2. $MB_DECKS_DIR           (the older name, still honoured)
+    3. "decks_dir" in ~/.config/slides/config.json   ($XDG_CONFIG_HOME is honoured)
+
+Nothing is guessed from the current directory: a folder inferred from wherever the
+terminal happens to be is right on one machine and silently wrong on the next.
+"""
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import sys
+from pathlib import Path
+
+SKILL = Path(__file__).resolve().parent.parent
+TEMPLATES = SKILL / "templates"
+
+
+def config_path() -> Path:
+    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(base) / "slides" / "config.json"
+
+
+def load_config() -> dict:
+    path = config_path()
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+    except ValueError as err:
+        raise SystemExit(f"{path}: not valid JSON ({err})")
+    return data if isinstance(data, dict) else {}
+
+
+def where() -> tuple[Path, str] | None:
+    for var in ("SLIDES_DECKS_DIR", "MB_DECKS_DIR"):
+        if os.environ.get(var):
+            return Path(os.path.expanduser(os.environ[var])), f"${var}"
+    configured = load_config().get("decks_dir")
+    if configured:
+        return Path(os.path.expanduser(str(configured))), str(config_path())
+    return None
+
+
+def init(target: Path, use: bool) -> int:
+    target.mkdir(parents=True, exist_ok=True)
+    wrote = []
+    for src, dst in (("README.md", "README.md"), ("PRESENTATION-STYLE.md", "PRESENTATION-STYLE.md"),
+                     ("export-pdf.py", "export-pdf.py"), ("gitignore", ".gitignore")):
+        out = target / dst
+        if out.exists():
+            continue
+        shutil.copyfile(TEMPLATES / src, out)
+        wrote.append(dst)
+    (target / "export-pdf.py").chmod(0o755)
+    print(f"{target}: " + (f"created {', '.join(wrote)}" if wrote else "already set up, nothing changed"))
+    if use:
+        path = config_path()
+        data = load_config()
+        data["decks_dir"] = str(target)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2) + "\n")
+        print(f"{path}: decks_dir = {target}")
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) >= 2 and argv[1] == "where":
+        found = where()
+        if not found:
+            print("no decks folder set: export SLIDES_DECKS_DIR, or run `decks init <dir> --use`",
+                  file=sys.stderr)
+            return 3
+        folder, why = found
+        state = "" if (folder / "export-pdf.py").is_file() else "  [not set up: no export-pdf.py]"
+        print(f"{folder}  ({why}){state}")
+        return 0
+    if len(argv) >= 3 and argv[1] == "init":
+        return init(Path(os.path.expanduser(argv[2])).resolve(), "--use" in argv[3:])
+    print(__doc__)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
