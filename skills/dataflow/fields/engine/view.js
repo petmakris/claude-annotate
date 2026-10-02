@@ -3,7 +3,17 @@
   // routes are put back in the order of SPEC.edges before anything draws them.
   const split = (end) => { const dot = end.indexOf("."); return [byId[end.slice(0, dot)], end.slice(dot + 1)]; };   // field ids may hold dots
   const ends = edges.map((e) => [split(e.from), split(e.to)]);
-  let base = {}, baseRoutes = "", computed = null;
+  let base = {}, baseRoutes = "", baseColX = [], computed = null;
+  // the wires of a layout, put back in spec order, each with where it meets its rows as an
+  // offset from the row's centre: a cheap update during a drag keeps that fan, not collapses it
+  function adopt(L) {
+    const at = new Map(L.edges.map((E) => [E.e, E.i]));
+    routes = edges.map((e) => L.routes[at.get(e)]);
+    routes.forEach((R, i) => {
+      const [[ca, fa], [cb, fb]] = ends[i];
+      R.pa = R.head[1] - ca.rowY[fa]; R.pb = R.tail[1] - cb.rowY[fb];
+    });
+  }
   function layout() {
     const L = computeLayout(SPEC, { now: () => performance.now() });
     L.cards.forEach((lc) => {
@@ -12,14 +22,8 @@
       c.fields = lc.item.ports.map((p) => p.f);          // drawn in the published row order
       lc.item.ports.forEach((p) => { c.rowY[p.f.id] = p.y; c.rowH[p.f.id] = p.h; });
     });
-    const at = new Map(L.edges.map((E) => [E.e, E.i]));
-    routes = edges.map((e) => L.routes[at.get(e)]);
-    // where each wire meets its rows, as an offset from the row's centre: a row carrying
-    // several wires fans them out, and a move must keep that fan, not collapse it
-    routes.forEach((R, i) => {
-      const [[ca, fa], [cb, fb]] = ends[i];
-      R.pa = R.head[1] - ca.rowY[fa]; R.pb = R.tail[1] - cb.rowY[fb];
-    });
+    adopt(L);
+    baseColX = L.colX.slice();
     base = Object.fromEntries(cards.map((c) => [c.id, { y: c.y, h: c.h, order: c.fields.map((f) => f.id), tops: tops(c), rowY: { ...c.rowY } }]));
     baseRoutes = JSON.stringify(routes);
     computed = L.layout;
@@ -28,26 +32,27 @@
     window.__layoutReport = L.report;
     window.__layoutTiming = L.T;
   }
-  // The geometry on screen now, after a move, for the tests: the computed layout with each
-  // card's y and rows, each wire's ends, hops and samples, and each label taken from what is
-  // drawn. Columns, col and order stay the layout's: a move is up or down within a column.
-  function publish() {
-    const L = JSON.parse(JSON.stringify(computed));
-    for (const c of cards) Object.assign(L.cards[c.id], { y: r2(c.y), h: r2(c.h),
-      rowOrder: c.fields.map((f) => f.id),
-      rows: Object.fromEntries(c.fields.map((f) => [f.id, { y: r2(c.rowY[f.id]), h: r2(c.rowH[f.id]) }])) });
-    L.wires = routes.map((R, ei) => ({ from: edges[ei].from, to: edges[ei].to, start: R.head.map(r2), end: R.tail.map(r2),
-      hops: R.hopGeo.map((g) => g.map(r2)), samples: R.samples.map((q) => q.map(r2)) }));
-    L.labels = routes.flatMap((R, ei) => R.texts.map((t) => ({ edge: ei, kind: t.kind,
-      ...Object.fromEntries(Object.entries(t.box).map(([k, v]) => [k, r2(v)])) })));
-    window.__layout = L;
+  // Every wire laid out again from scratch around the arrangement on screen: computeLayout
+  // with every card pinned where the viewer left it, so a re-routed diagram keeps the rules
+  // of a laid-out one. Its layout, report included, is what __layout then shows; the
+  // computed verdict stays on __layoutReport.
+  let rerouteMs = 0;
+  function rerouteAll() {
+    const t = performance.now();
+    const pin = { colX: baseColX, cards: Object.fromEntries(cards.map((c) => [c.id, { y: c.y, h: c.h,
+      order: c.fields.map((f) => f.id), tops: c.fields.map((f) => c.rowY[f.id] - c.rowH[f.id] / 2 - c.y) }])) };
+    const L = computeLayout(SPEC, { pin });
+    adopt(L);
+    window.__layout = L.layout;
+    window.__rerouteMs = rerouteMs = performance.now() - t;
   }
 
   // ── rearranging ──
-  // A viewer may move a card up or down and reorder the rows inside it. Nothing moves
-  // sideways, so the columns, the lanes and every wire's x stay the layout's: only the two
-  // ends of a wire touching a moved card change, and the wire is rebuilt from its hop list
-  // by wireRoute, the same code that drew it.
+  // A viewer may move a card up or down, resize it and place the rows inside it. Nothing
+  // moves sideways, so the columns keep their x. Once a gesture ends, every wire is laid out
+  // again by rerouteAll. During one, the wires follow live by the same full re-route when it
+  // is fast enough (under a frame); otherwise, and always for a row in hand, only the ends
+  // touching the card move and each wire is rebuilt from its old hop list by wireRoute.
   const touching = (c) => edges.map((_, i) => i).filter((i) => ends[i][0][0] === c || ends[i][1][0] === c);
   const fieldOf = Object.fromEntries(SPEC.cards.map((c) => [c.id, Object.fromEntries(c.fields.map((f) => [f.id, f]))]));
   // A card is its header and its rows in c.fields order, never overlapping. As laid out the
@@ -80,26 +85,6 @@
     g[g.length - 1][3] = rowAt(cb, fb) + R.pb;
     Object.assign(R, wireRoute(g));
   }
-  // labels of the wires in ids placed again, by the layout's own rule, around everything
-  // that did not move; the other labels stay where the layout put them
-  function relabel(ids) {
-    const mine = new Set(ids), boxes = cardBoxes(cards), hits = wireGrid(routes);
-    routes.forEach((R, i) => { if (!mine.has(i)) for (const t of R.texts) boxes.push(t.box); });
-    for (const i of ids) {
-      const R = routes[i];
-      R.texts = R.texts.map((t) => {
-        const { pick } = placeText(K, { ...t, ei: i }, R, R.hopGeo.length === 1, boxes, hits);
-        boxes.push(pick.box);
-        return { ...t, x: pick.x, y: pick.y, anchor: pick.anchor, box: pick.box };
-      });
-    }
-  }
-  function settle(cs) {
-    const ids = [...new Set(cs.flatMap(touching))].sort((a, b) => a - b);
-    ids.forEach(reroute);
-    relabel(ids);
-  }
-
   // The arrangement is the viewer's own: per card, how far it moved and its row order, kept
   // in this browser under a hash of the spec, so a changed spec starts from its new layout.
   // Storage can be blocked or absent (a private window, a file opened from a mail client);
@@ -109,6 +94,7 @@
     for (const ch of document.getElementById("spec").textContent) { h ^= ch.codePointAt(0); h = Math.imul(h, 0x01000193) >>> 0; }
     return "dataflow-fields:" + h.toString(16);
   })();
+  window.__arrangementKey = KEY;      // for the tests, which set an arrangement directly
   let arr = {};
   function remember(c) {
     const b = base[c.id], order = c.fields.map((f) => f.id), dy = r2(c.y - b.y), h = r2(c.h), offs = tops(c);
@@ -153,7 +139,7 @@
       remember(c);
       if (arr[c.id]) moved.push(c);
     }
-    if (moved.length) { settle(moved); publish(); }
+    if (moved.length) rerouteAll();
   }
   function restore() {
     let saved = {};
@@ -427,6 +413,9 @@
     d.y0 = c.y; d.h0 = c.h; d.rows0 = { ...c.rowY };
     d.dy = 0;
     d.ids = touching(c);
+    // the whole re-route live only when the last one fit in a frame; a row in hand is drawn at
+    // the pointer, off its slot, so its wires follow it cheaply
+    d.full = d.mode !== "row" && rerouteMs < 16;
     // where each wire's ends sat when the move began: a label rides along with its end
     d.ends0 = new Map(d.ids.map((i) => [i, [routes[i].head[1], routes[i].tail[1]]]));
   }
@@ -473,6 +462,15 @@
       place(c, best.offs);
       lift.y = c.y + at + h / 2;
     }
+    if (d.full) {
+      rerouteAll();
+      if (rerouteMs >= 16) {                  // too slow for this page: cheap updates from here on
+        d.full = false;
+        d.ends0 = new Map(d.ids.map((i) => [i, [routes[i].head[1], routes[i].tail[1]]]));
+      }
+      draw();
+      return;
+    }
     content.querySelector(`.cardg[data-card="${CSS.escape(c.id)}"]`).innerHTML = cardSVG(c);
     for (const i of d.ids) {
       reroute(i);
@@ -492,12 +490,12 @@
     stage.classList.remove("moving", "resizing");
     if (d.moved) follow(d);
     lift = null;
-    settle([d.c]);
     remember(d.c);
     step();
+    // what is drawn is exactly what a reload or an undo to this step draws
+    arrange(JSON.parse(hist[here]));
     save();
     draw();
-    publish();
     apply();
   }
   stage.addEventListener("pointerover", (ev) => {

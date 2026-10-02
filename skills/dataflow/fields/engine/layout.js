@@ -8,7 +8,9 @@
 //         subject to r[head(e)] - r[tail(e)] >= minlen(e)   for every edge
 // The graph must be acyclic and connected. Deterministic: every scan has a fixed order and
 // ties go to the first edge met. Returns ranks normalised so the minimum is 0.
-// opt: init (start ranks, raised to feasibility), stats (filled with pivots and capped),
+// opt: init (start ranks, raised to feasibility), feasible (init already satisfies every
+// edge: it is used as is, and the graph may then hold cycles, as pinned equalities do),
+// stats (filled with pivots and capped),
 // maxPivots, searchSize, and checkCuts, a debug flag that recomputes every cut value after
 // each pivot and throws if the incremental update drifted.
 
@@ -32,7 +34,8 @@ function networkSimplex(n, edgeList, opt = {}) {
 
   // 1. feasible ranks: longest path in topological order
   const rank = new Float64Array(n);
-  {
+  if (opt.feasible) rank.set(opt.init);
+  else {
     const indeg = new Int32Array(n), topo = new Int32Array(n), set = new Uint8Array(n);
     for (let i = 0; i < m; i++) indeg[hd[i]]++;
     let qh = 0, qt = 0;
@@ -318,9 +321,13 @@ function placeText(P, t, R, oneHop, boxes, wireHits) {
   return { pick, score };
 }
 
-// opt overrides any constant of K, and adds now (a clock for __layoutTiming) and CHECK_CUTS.
+// opt overrides any constant of K, and adds now (a clock for __layoutTiming), CHECK_CUTS, and
+// pin: a viewer's arrangement, { colX, cards: { id: { y, h, order, tops } } }. Pinned, every
+// card keeps that place, height and row order, and only the wires are laid out again, by the
+// same stages: lanes take the gaps the cards leave (stage 4 pinned), ports fan by the order of
+// their far ends (5), and the height solve straightens the lanes around fixed cards (6).
 function computeLayout(SPEC, opt = {}) {
-  const P = Object.assign({}, K, opt);
+  const P = Object.assign({}, K, opt), PIN = opt.pin || null;
   const clock = opt.now || (() => 0), T = {}, solves = [], tStart = clock();
   let t0 = tStart;
   const mark = (k) => { const t = clock(); T[k] = r2(t - t0); t0 = t; };   // milliseconds per stage
@@ -462,410 +469,483 @@ function computeLayout(SPEC, opt = {}) {
   const group = (u, v) => u.comp - v.comp || u.cls - v.cls;
 
   // ── 4 order ──
-  for (const c of cards) if (c.follow) {            // a follow card starts with its wired rows first
-    const wired = (r) => (r.L.length + r.R.length ? 0 : 1);
-    c.item.ports.sort((p, q) => wired(p) - wired(q) || p.j - q.j);
-  }
-  for (let k = 0; k < nCol; k++) { cols[k].sort((u, v) => group(u, v) || u.key - v.key); cols[k].forEach(shape); stack(k); rankCol(k); }
   const other = (h, p) => (h.a === p ? h.b : h.a);
   const on = (p, s) => (s === "L" ? p.L : p.R);
   const unwired = (p) => (p.L.length + p.R.length ? 0 : 1);
-  const rowBary = (p, s) => {
-    const hs = on(p, s);
-    if (!hs.length) return null;
-    let a = 0, w = 0;
-    for (const h of hs) { a += h.wo * other(h, p).y; w += h.wo; }
-    return a / w;
-  };
-  const itemBary = (it, s) => {         // where the item's centre would sit if each port met its wire level
-    let a = 0, w = 0;
-    for (const p of it.ports) for (const h of on(p, s)) { a += h.wo * (other(h, p).y - p.off); w += h.wo; }
-    return w ? a / w + it.span / 2 : null;
-  };
-  const reorder = (k, s) => {
-    const alt = s === "L" ? "R" : "L";
-    for (const it of cols[k]) {
-      if (it.kind === "card" && it.card.follow) {
-        // wired rows follow their wires; rows with no wire trail in declared order
-        const rb = new Map(it.ports.map((p) => [p, rowBary(p, s) ?? rowBary(p, alt) ?? 0]));
-        it.ports.sort((p, q) => unwired(p) - unwired(q) || (unwired(p) ? 0 : rb.get(p) - rb.get(q)) || p.j - q.j);
-        shape(it);
-      }
-      it.bc = itemBary(it, s) ?? itemBary(it, alt) ?? it.y + it.span / 2;
-    }
-    cols[k].sort((u, v) => group(u, v) || u.bc - v.bc || u.key - v.key);
-    stack(k); rankCol(k);
-  };
-  const inversions = (pairs) => {      // pairs [a, b]: count i<j with a_i < a_j and b_i > b_j; ties never count
-    if (pairs.length < 2) return 0;
-    pairs.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
-    const bs = [...new Set(pairs.map((x) => x[1]))].sort((x, y) => x - y), bi = new Map(bs.map((b, i) => [b, i + 1]));
-    const bit = new Int32Array(bs.length + 1);
-    let tot = 0, cnt = 0;
-    for (let i = 0; i < pairs.length;) {
-      let j = i;
-      while (j < pairs.length && pairs[j][0] === pairs[i][0]) j++;
-      for (let t = i; t < j; t++) { let s = 0; for (let x = bi.get(pairs[t][1]); x > 0; x -= x & -x) s += bit[x]; tot += cnt - s; }
-      for (let t = i; t < j; t++) { for (let x = bi.get(pairs[t][1]); x <= bs.length; x += x & -x) bit[x]++; cnt++; }
-      i = j;
-    }
-    return tot;
-  };
   let work = 0;
-  const totalCross = () => { let s = 0; for (const hs of gapHops) { s += inversions(hs.map((h) => [h.a.rank, h.b.rank])); work += hs.length; } return s; };
-  // each item's other-end ranks per side, sorted; refreshed whenever a neighbour column may have changed
-  const endRanks = (k) => {
-    for (const it of cols[k]) for (const s of ["L", "R"]) {
-      const a = [];
-      for (const p of it.ports) for (const h of on(p, s)) a.push(other(h, p).rank);
-      it[s] = a.sort((x, y) => x - y);
+  if (!PIN) {
+    for (const c of cards) if (c.follow) {            // a follow card starts with its wired rows first
+      const wired = (r) => (r.L.length + r.R.length ? 0 : 1);
+      c.item.ports.sort((p, q) => wired(p) - wired(q) || p.j - q.j);
     }
-  };
-  const merge = (A, B) => {            // [#(a > b), #(a < b)] over all pairs, by one merge pass
-    let gt = 0, lt = 0, j = 0, k = 0;
-    for (const a of A) {
-      while (j < B.length && B[j] < a) j++;
-      while (k < B.length && B[k] <= a) k++;
-      gt += j; lt += B.length - k;
-    }
-    return [gt, lt];
-  };
-  const pairCross = (u, v) => {        // crossings between two items' wires, [u above v, v above u], both gaps
-    work += u.L.length + v.L.length + u.R.length + v.R.length + 1;
-    const [c1, r1] = merge(u.L, v.L), [c2, r2] = merge(u.R, v.R);
-    return [c1 + c2, r1 + r2];
-  };
-  const sift = (k) => {
-    const its = cols[k];
-    endRanks(k);
-    let moved = false;
-    for (const u of its.slice()) {
-      const i0 = its.indexOf(u);
-      let lo = i0, hi = i0;
-      while (lo > 0 && !group(its[lo - 1], u)) lo--;
-      while (hi + 1 < its.length && !group(its[hi + 1], u)) hi++;
-      if (hi === lo) continue;
-      const rest = its.slice(lo, hi + 1).filter((x) => x !== u), pr = rest.map((v) => pairCross(u, v));
-      let cost = 0;
-      for (const [c] of pr) cost += c;
-      let best = cost, bestP = 0, cur = i0 === lo ? cost : null;
-      for (let p = 1; p <= rest.length; p++) {
-        cost += pr[p - 1][1] - pr[p - 1][0];
-        if (p === i0 - lo) cur = cost;
-        if (cost < best) { best = cost; bestP = p; }
-      }
-      if (best < cur) { rest.splice(bestP, 0, u); its.splice(lo, hi - lo + 1, ...rest); rankCol(k); moved = true; }
-    }
-    if (moved) stack(k);
-  };
-  // adjacent swaps that remove crossings; at equal crossings the order of what each item feeds
-  // wins, so (crossings, inversions of that order) falls strictly and the loop ends
-  const transpose = () => {
-    for (let round = 0, swapped = true; swapped && round < P.ROUNDS; round++) {   // wants refreshed per round
-    swapped = false;
-    for (const its of cols) for (const it of its) {
-      it.want = itemBary(it, "R") ?? itemBary(it, "L") ?? it.y + it.span / 2;
-      for (const p of it.ports) p.want = rowBary(p, "R") ?? rowBary(p, "L") ?? p.y;
-    }
-    for (let any = true; any;) {
-      any = false;
-      for (let k = 0; k < nCol; k++) {
-        const its = cols[k];
-        endRanks(k);
-        for (let i = 0; i + 1 < its.length; i++) {
-          const u = its[i], v = its[i + 1];
-          if (group(u, v)) continue;
-          const [c, r] = pairCross(u, v);
-          if (r < c || (r === c && u.want > v.want + 1e-6)) { its[i] = v; its[i + 1] = u; rankCol(k); any = true; }
+    for (let k = 0; k < nCol; k++) { cols[k].sort((u, v) => group(u, v) || u.key - v.key); cols[k].forEach(shape); stack(k); rankCol(k); }
+    const rowBary = (p, s) => {
+      const hs = on(p, s);
+      if (!hs.length) return null;
+      let a = 0, w = 0;
+      for (const h of hs) { a += h.wo * other(h, p).y; w += h.wo; }
+      return a / w;
+    };
+    const itemBary = (it, s) => {         // where the item's centre would sit if each port met its wire level
+      let a = 0, w = 0;
+      for (const p of it.ports) for (const h of on(p, s)) { a += h.wo * (other(h, p).y - p.off); w += h.wo; }
+      return w ? a / w + it.span / 2 : null;
+    };
+    const reorder = (k, s) => {
+      const alt = s === "L" ? "R" : "L";
+      for (const it of cols[k]) {
+        if (it.kind === "card" && it.card.follow) {
+          // wired rows follow their wires; rows with no wire trail in declared order
+          const rb = new Map(it.ports.map((p) => [p, rowBary(p, s) ?? rowBary(p, alt) ?? 0]));
+          it.ports.sort((p, q) => unwired(p) - unwired(q) || (unwired(p) ? 0 : rb.get(p) - rb.get(q)) || p.j - q.j);
+          shape(it);
         }
-        for (const it of its) {
-          if (it.kind !== "card" || !it.card.follow) continue;
-          for (let i = 0; i + 1 < it.ports.length; i++) {
-            const p = it.ports[i], q = it.ports[i + 1];
-            if (unwired(p) || unwired(q)) continue;
-            let c = 0, r = 0;
-            for (const s of ["L", "R"]) for (const h of on(p, s)) for (const g of on(q, s)) {
-              const a = other(h, p).rank, b = other(g, q).rank;
-              if (a > b) c++; else if (a < b) r++;
-            }
-            if (r < c || (r === c && p.want > q.want + 1e-6)) { it.ports[i] = q; it.ports[i + 1] = p; shape(it); rankCol(k); any = true; }
+        it.bc = itemBary(it, s) ?? itemBary(it, alt) ?? it.y + it.span / 2;
+      }
+      cols[k].sort((u, v) => group(u, v) || u.bc - v.bc || u.key - v.key);
+      stack(k); rankCol(k);
+    };
+    const inversions = (pairs) => {      // pairs [a, b]: count i<j with a_i < a_j and b_i > b_j; ties never count
+      if (pairs.length < 2) return 0;
+      pairs.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+      const bs = [...new Set(pairs.map((x) => x[1]))].sort((x, y) => x - y), bi = new Map(bs.map((b, i) => [b, i + 1]));
+      const bit = new Int32Array(bs.length + 1);
+      let tot = 0, cnt = 0;
+      for (let i = 0; i < pairs.length;) {
+        let j = i;
+        while (j < pairs.length && pairs[j][0] === pairs[i][0]) j++;
+        for (let t = i; t < j; t++) { let s = 0; for (let x = bi.get(pairs[t][1]); x > 0; x -= x & -x) s += bit[x]; tot += cnt - s; }
+        for (let t = i; t < j; t++) { for (let x = bi.get(pairs[t][1]); x <= bs.length; x += x & -x) bit[x]++; cnt++; }
+        i = j;
+      }
+      return tot;
+    };
+    const totalCross = () => { let s = 0; for (const hs of gapHops) { s += inversions(hs.map((h) => [h.a.rank, h.b.rank])); work += hs.length; } return s; };
+    // each item's other-end ranks per side, sorted; refreshed whenever a neighbour column may have changed
+    const endRanks = (k) => {
+      for (const it of cols[k]) for (const s of ["L", "R"]) {
+        const a = [];
+        for (const p of it.ports) for (const h of on(p, s)) a.push(other(h, p).rank);
+        it[s] = a.sort((x, y) => x - y);
+      }
+    };
+    const merge = (A, B) => {            // [#(a > b), #(a < b)] over all pairs, by one merge pass
+      let gt = 0, lt = 0, j = 0, k = 0;
+      for (const a of A) {
+        while (j < B.length && B[j] < a) j++;
+        while (k < B.length && B[k] <= a) k++;
+        gt += j; lt += B.length - k;
+      }
+      return [gt, lt];
+    };
+    const pairCross = (u, v) => {        // crossings between two items' wires, [u above v, v above u], both gaps
+      work += u.L.length + v.L.length + u.R.length + v.R.length + 1;
+      const [c1, r1] = merge(u.L, v.L), [c2, r2] = merge(u.R, v.R);
+      return [c1 + c2, r1 + r2];
+    };
+    const sift = (k) => {
+      const its = cols[k];
+      endRanks(k);
+      let moved = false;
+      for (const u of its.slice()) {
+        const i0 = its.indexOf(u);
+        let lo = i0, hi = i0;
+        while (lo > 0 && !group(its[lo - 1], u)) lo--;
+        while (hi + 1 < its.length && !group(its[hi + 1], u)) hi++;
+        if (hi === lo) continue;
+        const rest = its.slice(lo, hi + 1).filter((x) => x !== u), pr = rest.map((v) => pairCross(u, v));
+        let cost = 0;
+        for (const [c] of pr) cost += c;
+        let best = cost, bestP = 0, cur = i0 === lo ? cost : null;
+        for (let p = 1; p <= rest.length; p++) {
+          cost += pr[p - 1][1] - pr[p - 1][0];
+          if (p === i0 - lo) cur = cost;
+          if (cost < best) { best = cost; bestP = p; }
+        }
+        if (best < cur) { rest.splice(bestP, 0, u); its.splice(lo, hi - lo + 1, ...rest); rankCol(k); moved = true; }
+      }
+      if (moved) stack(k);
+    };
+    // adjacent swaps that remove crossings; at equal crossings the order of what each item feeds
+    // wins, so (crossings, inversions of that order) falls strictly and the loop ends
+    const transpose = () => {
+      for (let round = 0, swapped = true; swapped && round < P.ROUNDS; round++) {   // wants refreshed per round
+      swapped = false;
+      for (const its of cols) for (const it of its) {
+        it.want = itemBary(it, "R") ?? itemBary(it, "L") ?? it.y + it.span / 2;
+        for (const p of it.ports) p.want = rowBary(p, "R") ?? rowBary(p, "L") ?? p.y;
+      }
+      for (let any = true; any;) {
+        any = false;
+        for (let k = 0; k < nCol; k++) {
+          const its = cols[k];
+          endRanks(k);
+          for (let i = 0; i + 1 < its.length; i++) {
+            const u = its[i], v = its[i + 1];
+            if (group(u, v)) continue;
+            const [c, r] = pairCross(u, v);
+            if (r < c || (r === c && u.want > v.want + 1e-6)) { its[i] = v; its[i + 1] = u; rankCol(k); any = true; }
           }
+          for (const it of its) {
+            if (it.kind !== "card" || !it.card.follow) continue;
+            for (let i = 0; i + 1 < it.ports.length; i++) {
+              const p = it.ports[i], q = it.ports[i + 1];
+              if (unwired(p) || unwired(q)) continue;
+              let c = 0, r = 0;
+              for (const s of ["L", "R"]) for (const h of on(p, s)) for (const g of on(q, s)) {
+                const a = other(h, p).rank, b = other(g, q).rank;
+                if (a > b) c++; else if (a < b) r++;
+              }
+              if (r < c || (r === c && p.want > q.want + 1e-6)) { it.ports[i] = q; it.ports[i + 1] = p; shape(it); rankCol(k); any = true; }
+            }
+          }
+          stack(k);
         }
-        stack(k);
+        if (any) swapped = true;
       }
-      if (any) swapped = true;
-    }
-    }
-  };
-  const snap = () => cols.map((its) => its.map((it) => [it, it.kind === "card" && it.card.follow ? it.ports.slice() : null]));
-  const restore = (s) => s.forEach((its, k) => {
-    cols[k] = its.map(([it, ports]) => { if (ports) { it.ports = ports.slice(); shape(it); } return it; });
-    stack(k); rankCol(k);
-  });
-  const climb = () => { let s = 0; for (const h of hops) s += h.wo * Math.abs(h.a.y - h.b.y); return s; };   // compact-stack proxy of stage 6
-  transpose();                         // every kept order, the first included, is one transposition left converged
-  let best = snap(), bestC = totalCross(), bestK = climb(), stale = 0;
-  T.sweeps = 0;
-  for (let sw = 0; sw < P.SWEEPS && stale < P.PATIENCE && work < P.SWEEP_BUDGET; sw++) {
-    if (sw % 2 === 0) for (let k = nCol - 2; k >= 0; k--) reorder(k, "R");   // provenance first
-    else for (let k = 1; k < nCol; k++) reorder(k, "L");
-    for (let k = 0; k < nCol; k++) sift(k);
-    transpose();
-    const c = totalCross();
-    T.sweeps++;
-    const kk = climb();
-    stale = c < bestC ? 0 : stale + 1;                  // patience counts sweeps that remove no crossing
-    if (c < bestC || (c === bestC && kk < bestK)) { bestC = c; bestK = kk; best = snap(); }
-  }
-  restore(best);
-  // exact re-placement of one long wire's lane items across all the columns it crosses (a DP over
-  // the chain), kept only when it strictly removes crossings
-  const moveChain = (E) => {
-    const hs = E.hops;
-    if (hs.length < 2) return false;
-    const lanes = hs.slice(1).map((h) => h.a.item);
-    if (lanes[0].cls !== 1) return false;
-    const ks = hs.slice(1).map((h) => h.a.col);
-    const S = hs[0].a, T = hs[hs.length - 1].b, n = lanes.length;
-    const cur = lanes.map((it, t) => cols[ks[t]].indexOf(it));
-    lanes.forEach((it, t) => cols[ks[t]].splice(cur[t], 1));
-    const ranges = lanes.map((it, t) => {
-      const c = cols[ks[t]];
-      let lo = 0, hi = 0;
-      for (const o of c) { const g = group(o, it); if (g < 0) lo++; if (g <= 0) hi++; }
-      return [lo, hi];
+      }
+    };
+    const snap = () => cols.map((its) => its.map((it) => [it, it.kind === "card" && it.card.follow ? it.ports.slice() : null]));
+    const restore = (s) => s.forEach((its, k) => {
+      cols[k] = its.map(([it, ports]) => { if (ports) { it.ports = ports.slice(); shape(it); } return it; });
+      stack(k); rankCol(k);
     });
-    const ixOf = new Map();
-    for (const k of ks) cols[k].forEach((o, i) => ixOf.set(o, i));
-    const IX = (p) => ixOf.get(p.item);
-    const first = new Float64Array(cols[ks[0]].length + 1);
-    for (const h of gapHops[hs[0].gap]) {
-      if (h.E === E || h.a === S) continue;
-      const above = h.a.rank < S.rank, B = IX(h.b);
-      for (let j = 0; j < first.length; j++) if (above !== (B < j)) first[j]++;
-      work += first.length;
+    const climb = () => { let s = 0; for (const h of hops) s += h.wo * Math.abs(h.a.y - h.b.y); return s; };   // compact-stack proxy of stage 6
+    transpose();                         // every kept order, the first included, is one transposition left converged
+    let best = snap(), bestC = totalCross(), bestK = climb(), stale = 0;
+    T.sweeps = 0;
+    for (let sw = 0; sw < P.SWEEPS && stale < P.PATIENCE && work < P.SWEEP_BUDGET; sw++) {
+      if (sw % 2 === 0) for (let k = nCol - 2; k >= 0; k--) reorder(k, "R");   // provenance first
+      else for (let k = 1; k < nCol; k++) reorder(k, "L");
+      for (let k = 0; k < nCol; k++) sift(k);
+      transpose();
+      const c = totalCross();
+      T.sweeps++;
+      const kk = climb();
+      stale = c < bestC ? 0 : stale + 1;                  // patience counts sweeps that remove no crossing
+      if (c < bestC || (c === bestC && kk < bestK)) { bestC = c; bestK = kk; best = snap(); }
     }
-    const mids = [];
-    for (let t = 0; t + 1 < n; t++) {
-      const ni = cols[ks[t]].length + 1, nj = cols[ks[t + 1]].length + 1;
-      const D = Array.from({ length: ni + 1 }, () => new Float64Array(nj + 1));
-      const rect = (i0, i1, j0, j1) => { if (i0 > i1 || j0 > j1) return; D[i0][j0]++; D[i0][j1 + 1]--; D[i1 + 1][j0]--; D[i1 + 1][j1 + 1]++; };
-      for (const h of gapHops[ks[t]]) {
-        if (h.E === E) continue;
-        const A = IX(h.a), B = IX(h.b);
-        rect(A + 1, ni - 1, 0, B); rect(0, A, B + 1, nj - 1);
+    restore(best);
+    // exact re-placement of one long wire's lane items across all the columns it crosses (a DP over
+    // the chain), kept only when it strictly removes crossings
+    const moveChain = (E) => {
+      const hs = E.hops;
+      if (hs.length < 2) return false;
+      const lanes = hs.slice(1).map((h) => h.a.item);
+      if (lanes[0].cls !== 1) return false;
+      const ks = hs.slice(1).map((h) => h.a.col);
+      const S = hs[0].a, T = hs[hs.length - 1].b, n = lanes.length;
+      const cur = lanes.map((it, t) => cols[ks[t]].indexOf(it));
+      lanes.forEach((it, t) => cols[ks[t]].splice(cur[t], 1));
+      const ranges = lanes.map((it, t) => {
+        const c = cols[ks[t]];
+        let lo = 0, hi = 0;
+        for (const o of c) { const g = group(o, it); if (g < 0) lo++; if (g <= 0) hi++; }
+        return [lo, hi];
+      });
+      const ixOf = new Map();
+      for (const k of ks) cols[k].forEach((o, i) => ixOf.set(o, i));
+      const IX = (p) => ixOf.get(p.item);
+      const first = new Float64Array(cols[ks[0]].length + 1);
+      for (const h of gapHops[hs[0].gap]) {
+        if (h.E === E || h.a === S) continue;
+        const above = h.a.rank < S.rank, B = IX(h.b);
+        for (let j = 0; j < first.length; j++) if (above !== (B < j)) first[j]++;
+        work += first.length;
       }
-      for (let i = 0; i < ni; i++) for (let j = 0; j < nj; j++) D[i][j] += (i ? D[i - 1][j] : 0) + (j ? D[i][j - 1] : 0) - (i && j ? D[i - 1][j - 1] : 0);
-      work += ni * nj + gapHops[ks[t]].length;
-      mids.push(D);
-    }
-    const last = new Float64Array(cols[ks[n - 1]].length + 1);
-    for (const h of gapHops[ks[n - 1]]) {
-      if (h.E === E || h.b === T) continue;
-      const above = h.b.rank < T.rank, A = IX(h.a);
-      for (let i = 0; i < last.length; i++) if ((A < i) !== above) last[i]++;
-      work += last.length;
-    }
-    const costOf = (sl) => { let v = first[sl[0]] + last[sl[n - 1]]; for (let t = 0; t + 1 < n; t++) v += mids[t][sl[t]][sl[t + 1]]; return v; };
-    let bestV = new Float64Array(cols[ks[0]].length + 1).fill(Infinity);
-    for (let j = ranges[0][0]; j <= ranges[0][1]; j++) bestV[j] = first[j];
-    const arg = [];
-    for (let t = 1; t < n; t++) {
-      const nv = new Float64Array(cols[ks[t]].length + 1).fill(Infinity), na = new Int32Array(nv.length).fill(-1);
-      for (let j = ranges[t][0]; j <= ranges[t][1]; j++)
-        for (let i = ranges[t - 1][0]; i <= ranges[t - 1][1]; i++) { const v = bestV[i] + mids[t - 1][i][j]; if (v < nv[j]) { nv[j] = v; na[j] = i; } }
-      arg.push(na); bestV = nv;
-    }
-    let bv = Infinity, bj = -1;
-    for (let i = ranges[n - 1][0]; i <= ranges[n - 1][1]; i++) { const v = bestV[i] + last[i]; if (v < bv) { bv = v; bj = i; } }
-    const sl = new Array(n); sl[n - 1] = bj;
-    for (let t = n - 1; t > 0; t--) sl[t - 1] = arg[t - 1][sl[t]];
-    const better = bv < costOf(cur);
-    const put = better ? sl : cur;
-    lanes.forEach((it, t) => cols[ks[t]].splice(put[t], 0, it));
-    for (const k of ks) { stack(k); rankCol(k); }
-    return better;
-  };
-  // a chain whose end row sits in a follow card: try every slot of that row among the card's wired
-  // rows, re-place the chain by the DP for each, keep the strict best (crossings counted in the
-  // gaps that can change only)
-  const crossIn = (gs) => { let v = 0; for (const g of gs) { v += inversions(gapHops[g].map((h) => [h.a.rank, h.b.rank])); work += gapHops[g].length; } return v; };
-  const moveChainFree = (E) => {
-    let improved = false;
-    for (const end of [E.hops[0].a, E.hops[E.hops.length - 1].b]) {
-      const it = end.item;
-      if (!it.card.follow) continue;
-      const k = it.card.col;
-      const wired = it.ports.filter((p) => !unwired(p));
-      if (wired.length < 2) continue;
-      const ks = E.hops.slice(1).map((h) => h.a.col);
-      const G = [...new Set([k - 1, k, ...E.hops.map((h) => h.gap)])].filter((g) => g >= 0 && g < nCol - 1);
-      const base = crossIn(G), start = it.ports.slice(), saved = ks.map((kk) => cols[kk].slice());
-      let best = base, bestPorts = null, bestCols = null;
-      for (let pos = 0; pos < wired.length; pos++) {
-        const rest = wired.filter((p) => p !== end);
-        rest.splice(pos, 0, end);
-        it.ports = [...rest, ...it.ports.filter((p) => unwired(p))];
+      const mids = [];
+      for (let t = 0; t + 1 < n; t++) {
+        const ni = cols[ks[t]].length + 1, nj = cols[ks[t + 1]].length + 1;
+        const D = Array.from({ length: ni + 1 }, () => new Float64Array(nj + 1));
+        const rect = (i0, i1, j0, j1) => { if (i0 > i1 || j0 > j1) return; D[i0][j0]++; D[i0][j1 + 1]--; D[i1 + 1][j0]--; D[i1 + 1][j1 + 1]++; };
+        for (const h of gapHops[ks[t]]) {
+          if (h.E === E) continue;
+          const A = IX(h.a), B = IX(h.b);
+          rect(A + 1, ni - 1, 0, B); rect(0, A, B + 1, nj - 1);
+        }
+        for (let i = 0; i < ni; i++) for (let j = 0; j < nj; j++) D[i][j] += (i ? D[i - 1][j] : 0) + (j ? D[i][j - 1] : 0) - (i && j ? D[i - 1][j - 1] : 0);
+        work += ni * nj + gapHops[ks[t]].length;
+        mids.push(D);
+      }
+      const last = new Float64Array(cols[ks[n - 1]].length + 1);
+      for (const h of gapHops[ks[n - 1]]) {
+        if (h.E === E || h.b === T) continue;
+        const above = h.b.rank < T.rank, A = IX(h.a);
+        for (let i = 0; i < last.length; i++) if ((A < i) !== above) last[i]++;
+        work += last.length;
+      }
+      const costOf = (sl) => { let v = first[sl[0]] + last[sl[n - 1]]; for (let t = 0; t + 1 < n; t++) v += mids[t][sl[t]][sl[t + 1]]; return v; };
+      let bestV = new Float64Array(cols[ks[0]].length + 1).fill(Infinity);
+      for (let j = ranges[0][0]; j <= ranges[0][1]; j++) bestV[j] = first[j];
+      const arg = [];
+      for (let t = 1; t < n; t++) {
+        const nv = new Float64Array(cols[ks[t]].length + 1).fill(Infinity), na = new Int32Array(nv.length).fill(-1);
+        for (let j = ranges[t][0]; j <= ranges[t][1]; j++)
+          for (let i = ranges[t - 1][0]; i <= ranges[t - 1][1]; i++) { const v = bestV[i] + mids[t - 1][i][j]; if (v < nv[j]) { nv[j] = v; na[j] = i; } }
+        arg.push(na); bestV = nv;
+      }
+      let bv = Infinity, bj = -1;
+      for (let i = ranges[n - 1][0]; i <= ranges[n - 1][1]; i++) { const v = bestV[i] + last[i]; if (v < bv) { bv = v; bj = i; } }
+      const sl = new Array(n); sl[n - 1] = bj;
+      for (let t = n - 1; t > 0; t--) sl[t - 1] = arg[t - 1][sl[t]];
+      const better = bv < costOf(cur);
+      const put = better ? sl : cur;
+      lanes.forEach((it, t) => cols[ks[t]].splice(put[t], 0, it));
+      for (const k of ks) { stack(k); rankCol(k); }
+      return better;
+    };
+    // a chain whose end row sits in a follow card: try every slot of that row among the card's wired
+    // rows, re-place the chain by the DP for each, keep the strict best (crossings counted in the
+    // gaps that can change only)
+    const crossIn = (gs) => { let v = 0; for (const g of gs) { v += inversions(gapHops[g].map((h) => [h.a.rank, h.b.rank])); work += gapHops[g].length; } return v; };
+    const moveChainFree = (E) => {
+      let improved = false;
+      for (const end of [E.hops[0].a, E.hops[E.hops.length - 1].b]) {
+        const it = end.item;
+        if (!it.card.follow) continue;
+        const k = it.card.col;
+        const wired = it.ports.filter((p) => !unwired(p));
+        if (wired.length < 2) continue;
+        const ks = E.hops.slice(1).map((h) => h.a.col);
+        const G = [...new Set([k - 1, k, ...E.hops.map((h) => h.gap)])].filter((g) => g >= 0 && g < nCol - 1);
+        const base = crossIn(G), start = it.ports.slice(), saved = ks.map((kk) => cols[kk].slice());
+        let best = base, bestPorts = null, bestCols = null;
+        for (let pos = 0; pos < wired.length; pos++) {
+          const rest = wired.filter((p) => p !== end);
+          rest.splice(pos, 0, end);
+          it.ports = [...rest, ...it.ports.filter((p) => unwired(p))];
+          shape(it); stack(k); rankCol(k);
+          moveChain(E);
+          const v = crossIn(G);
+          if (v < best) { best = v; bestPorts = it.ports.slice(); bestCols = ks.map((kk) => cols[kk].slice()); }
+          ks.forEach((kk, t) => { cols[kk] = saved[t].slice(); stack(kk); rankCol(kk); });
+        }
+        if (bestPorts) { it.ports = bestPorts; ks.forEach((kk, t) => { cols[kk] = bestCols[t]; stack(kk); rankCol(kk); }); improved = true; }
+        else it.ports = start;
         shape(it); stack(k); rankCol(k);
-        moveChain(E);
-        const v = crossIn(G);
-        if (v < best) { best = v; bestPorts = it.ports.slice(); bestCols = ks.map((kk) => cols[kk].slice()); }
-        ks.forEach((kk, t) => { cols[kk] = saved[t].slice(); stack(kk); rankCol(kk); });
       }
-      if (bestPorts) { it.ports = bestPorts; ks.forEach((kk, t) => { cols[kk] = bestCols[t]; stack(kk); rankCol(kk); }); improved = true; }
-      else it.ports = start;
-      shape(it); stack(k); rankCol(k);
+      return improved;
+    };
+    // exact re-placement of a path of items, one per consecutive column, everything else fixed
+    const colOfItem = (it) => (it.kind === "card" ? it.card.col : it.ports[0].col);
+    const movePath = (path) => {
+      const n = path.length, k0 = colOfItem(path[0]);
+      if (path.some((it) => it.cls !== 1)) return false;
+      const cur = path.map((it, t) => cols[k0 + t].indexOf(it));
+      path.forEach((it, t) => cols[k0 + t].splice(cur[t], 1));
+      const ranges = path.map((it, t) => {
+        let lo = 0, hi = 0;
+        for (const o of cols[k0 + t]) { const g = group(o, it); if (g < 0) lo++; if (g <= 0) hi++; }
+        return [lo, hi];
+      });
+      const ixOf = new Map();
+      for (let k = Math.max(0, k0 - 1); k <= Math.min(nCol - 1, k0 + n); k++) cols[k].forEach((o, i) => ixOf.set(o, i));
+      const inP = new Map(path.map((it, t) => [it, t]));
+      const unary = path.map((_, t) => new Float64Array(cols[k0 + t].length + 1));
+      const pair = [];
+      for (let g = k0 - 1; g <= k0 + n - 1; g++) {
+        if (g < 0 || g >= nCol - 1) continue;
+        const tl = g - k0, tr = g + 1 - k0, hasL = tl >= 0 && tl < n, hasR = tr >= 0 && tr < n;
+        const ni = hasL ? cols[g].length + 1 : 1, nj = hasR ? cols[g + 1].length + 1 : 1;
+        const D = Array.from({ length: ni + 1 }, () => new Float64Array(nj + 1));
+        work += ni * nj;
+        const rect = (i0, i1, j0, j1) => { i0 = Math.max(0, i0); j0 = Math.max(0, j0); i1 = Math.min(ni - 1, i1); j1 = Math.min(nj - 1, j1); if (i0 > i1 || j0 > j1) return; D[i0][j0]++; D[i0][j1 + 1]--; D[i1 + 1][j0]--; D[i1 + 1][j1 + 1]++; };
+        const hs = gapHops[g], H = hs.length;
+        const Lv = hs.map((h) => inP.has(h.a.item)), Rv = hs.map((h) => inP.has(h.b.item));
+        const LB = hs.map((h, x) => (Lv[x] ? -1 : ixOf.get(h.a.item))), RB = hs.map((h, x) => (Rv[x] ? -1 : ixOf.get(h.b.item)));
+        for (let x = 0; x < H; x++) {
+          if (!Lv[x] && !Rv[x]) continue;
+          for (let z = 0; z < H; z++) {
+            if (z === x || ((Lv[z] || Rv[z]) && z < x)) continue;
+            const X = hs[x], Z = hs[z];
+            let lc = 0, lw = 0, lv = -1, rc = 0, rw = 0, rv = -1;
+            if (Lv[x] && Lv[z]) lc = X.a === Z.a ? 0 : X.a.rank < Z.a.rank ? 1 : -1;
+            else if (Lv[x]) { lw = 1; lv = LB[z]; } else if (Lv[z]) { lw = 2; lv = LB[x]; }
+            else lc = X.a === Z.a ? 0 : X.a.rank < Z.a.rank ? 1 : -1;
+            if (Rv[x] && Rv[z]) rc = X.b === Z.b ? 0 : X.b.rank < Z.b.rank ? 1 : -1;
+            else if (Rv[x]) { rw = 1; rv = RB[z]; } else if (Rv[z]) { rw = 2; rv = RB[x]; }
+            else rc = X.b === Z.b ? 0 : X.b.rank < Z.b.rank ? 1 : -1;
+            if ((!lw && lc === 0) || (!rw && rc === 0)) continue;
+            work += 4;
+            for (let a = 0; a < (lw ? 2 : 1); a++) {
+              const i0 = lw ? (a ? lv + 1 : 0) : 0, i1 = lw ? (a ? ni - 1 : lv) : ni - 1;
+              const va = lw ? ((a === 0) === (lw === 1) ? 1 : -1) : lc;
+              for (let b2 = 0; b2 < (rw ? 2 : 1); b2++) {
+                const j0 = rw ? (b2 ? rv + 1 : 0) : 0, j1 = rw ? (b2 ? nj - 1 : rv) : nj - 1;
+                const vb = rw ? ((b2 === 0) === (rw === 1) ? 1 : -1) : rc;
+                if (va !== vb) rect(i0, i1, j0, j1);
+              }
+            }
+          }
+        }
+        for (let i = 0; i < ni; i++) for (let j = 0; j < nj; j++) D[i][j] += (i ? D[i - 1][j] : 0) + (j ? D[i][j - 1] : 0) - (i && j ? D[i - 1][j - 1] : 0);
+        if (hasL && hasR) pair[tl] = D;
+        else if (hasL) for (let i = 0; i < ni; i++) unary[tl][i] += D[i][0];
+        else if (hasR) for (let j = 0; j < nj; j++) unary[tr][j] += D[0][j];
+      }
+      const costOf = (sl) => sl.reduce((a, s2, t) => a + unary[t][s2] + (t + 1 < n ? pair[t][s2][sl[t + 1]] : 0), 0);
+      let bestV = new Float64Array(cols[k0].length + 1).fill(Infinity);
+      for (let j = ranges[0][0]; j <= ranges[0][1]; j++) bestV[j] = unary[0][j];
+      const arg = [];
+      for (let t = 1; t < n; t++) {
+        const nv = new Float64Array(cols[k0 + t].length + 1).fill(Infinity), na = new Int32Array(nv.length).fill(-1);
+        for (let j = ranges[t][0]; j <= ranges[t][1]; j++) {
+          for (let i = ranges[t - 1][0]; i <= ranges[t - 1][1]; i++) { const v = bestV[i] + pair[t - 1][i][j]; if (v < nv[j]) { nv[j] = v; na[j] = i; } }
+          nv[j] += unary[t][j];
+        }
+        arg.push(na); bestV = nv;
+      }
+      let bv = Infinity, bj = -1;
+      for (let i = ranges[n - 1][0]; i <= ranges[n - 1][1]; i++) if (bestV[i] < bv) { bv = bestV[i]; bj = i; }
+      const sl = new Array(n); sl[n - 1] = bj;
+      for (let t = n - 1; t > 0; t--) sl[t - 1] = arg[t - 1][sl[t]];
+      const better = bv < costOf(cur) - 1e-9;
+      const put = better ? sl : cur;
+      path.forEach((it, t) => cols[k0 + t].splice(put[t], 0, it));
+      for (let t = 0; t < n; t++) { stack(k0 + t); rankCol(k0 + t); }
+      return better;
+    };
+    const heavyPath = (it0) => {
+      const out = [it0];
+      for (const dir of [1, -1]) {
+        let x = it0;
+        for (;;) {
+          const k = colOfItem(x), cnt = new Map();
+          for (const p of x.ports) for (const h of (dir > 0 ? p.R : p.L)) { const y = (dir > 0 ? h.b : h.a).item; cnt.set(y, (cnt.get(y) || 0) + 1); }
+          if (!cnt.size) break;
+          const y = [...cnt.entries()].sort((p, q) => q[1] - p[1])[0][0];
+          if (out.includes(y) || colOfItem(y) !== k + dir) break;
+          if (dir > 0) out.push(y); else out.unshift(y);
+          x = y;
+        }
+      }
+      return out;
+    };
+    // refinement: exact moves of a long wire's lanes, of a follow card's end row with them, and
+    // of whole paths; each starts only while work < ORDER_BUDGET and is kept only when it
+    // strictly removes crossings. The candidate paths are listed once per pass, before any moves.
+    T.refinePasses = 0;
+    for (let pass = 0; pass < P.REFINE_PASSES && work < P.ORDER_BUDGET; pass++) {
+      T.refinePasses++;
+      let improved = false;
+      for (const E of edges) { if (work >= P.ORDER_BUDGET) break; if (E.hops.length > 1 && moveChain(E)) improved = true; }
+      for (const E of edges) { if (work >= P.ORDER_BUDGET) break; if (E.hops.length > 1 && moveChainFree(E)) improved = true; }
+      const cands = [];
+      for (const E of edges) if (E.hops.length > 1) cands.push([E.hops[0].a.item, ...E.hops.slice(1).map((h) => h.a.item), E.hops[E.hops.length - 1].b.item]);
+      for (const its of cols) for (const it of its) if (it.kind === "card") { const hp = heavyPath(it); if (hp.length > 1) cands.push(hp); }
+      for (const pth of cands) { if (work >= P.ORDER_BUDGET) break; if (movePath(pth)) improved = true; }
+      if (!improved) break;
+      for (let k = 0; k < nCol; k++) sift(k);
+      transpose();
     }
-    return improved;
-  };
-  // exact re-placement of a path of items, one per consecutive column, everything else fixed
-  const colOfItem = (it) => (it.kind === "card" ? it.card.col : it.ports[0].col);
-  const movePath = (path) => {
-    const n = path.length, k0 = colOfItem(path[0]);
-    if (path.some((it) => it.cls !== 1)) return false;
-    const cur = path.map((it, t) => cols[k0 + t].indexOf(it));
-    path.forEach((it, t) => cols[k0 + t].splice(cur[t], 1));
-    const ranges = path.map((it, t) => {
-      let lo = 0, hi = 0;
-      for (const o of cols[k0 + t]) { const g = group(o, it); if (g < 0) lo++; if (g <= 0) hi++; }
-      return [lo, hi];
+    {
+      // closing pass, never budgeted: adjacent swaps while any strictly removes crossings, ties
+      // broken by frozen wants, so (crossings, inversions of the wants) falls and it ends with
+      // improvable_swaps = 0
+      for (const its of cols) for (const it of its) {
+        it.want = itemBary(it, "R") ?? itemBary(it, "L") ?? it.y + it.span / 2;
+        for (const p of it.ports) p.want = rowBary(p, "R") ?? rowBary(p, "L") ?? p.y;
+      }
+      T.closeSwaps = 0;
+      for (let any = true; any;) {
+        any = false;
+        for (let k = 0; k < nCol; k++) {
+          const its = cols[k];
+          endRanks(k);
+          for (let i = 0; i + 1 < its.length; i++) {
+            const u = its[i], v = its[i + 1];
+            if (group(u, v)) continue;
+            const [c, r] = pairCross(u, v);
+            if (r < c || (r === c && u.want > v.want + 1e-6)) { T.closeSwaps++; its[i] = v; its[i + 1] = u; rankCol(k); endRanks(k); any = true; }
+          }
+          for (const it of its) {
+            if (it.kind !== "card" || !it.card.follow) continue;
+            for (let i = 0; i + 1 < it.ports.length; i++) {
+              const p = it.ports[i], q = it.ports[i + 1];
+              if (unwired(p) || unwired(q)) continue;
+              let c = 0, r = 0;
+              for (const s of ["L", "R"]) for (const h of on(p, s)) for (const g of on(q, s)) {
+                const a = other(h, p).rank, b = other(g, q).rank;
+                if (a > b) c++; else if (a < b) r++;
+              }
+              if (r < c || (r === c && p.want > q.want + 1e-6)) { it.ports[i] = q; it.ports[i + 1] = p; shape(it); rankCol(k); any = true; }
+            }
+          }
+          stack(k); rankCol(k);
+        }
+      }
+    }
+  } else {
+    // pinned: each card is where the viewer put it, its rows in the viewer's order and place;
+    // a lane goes into a gap its column leaves between cards (13 under one, 42 over the next,
+    // 16 between lanes), at one level along its whole chain if any level inside the span of
+    // its two ends is free in every column it crosses, else as near its straight line as each
+    // column allows; lanes sharing a gap stack by that level
+    for (const c of cards) {
+      const a = PIN.cards[c.id], it = c.item, byF = new Map(c.rows.map((r) => [r.f.id, r]));
+      it.ports = a.order.map((id) => byF.get(id));
+      const t0 = a.tops[0] + it.ports[0].h / 2;
+      it.ports.forEach((p, i) => { p.off = a.tops[i] + p.h / 2 - t0; });
+      it.span = it.ports[it.ports.length - 1].off; it.top = t0; it.bot = a.h - t0;
+      it.y = a.y + t0;
+      for (const p of it.ports) p.y = it.y + p.off;
+    }
+    const slots = cols.map((its) => {
+      const cs = its.filter((it) => it.kind === "card").sort((u, v) => u.y - u.top - (v.y - v.top) || u.key - v.key), S = [];
+      let lo = -Infinity;                 // under every card above, the tallest included: cards may overlap
+      for (let j = 0; j <= cs.length; j++) {
+        if (j) lo = Math.max(lo, cs[j - 1].y + cs[j - 1].bot + P.CLEAR_CL);
+        const hi = j < cs.length ? cs[j].y - cs[j].top - P.CLEAR_LC : Infinity;
+        const cap = lo === -Infinity || hi === Infinity ? Infinity : hi >= lo ? Math.floor((hi - lo) / P.CLEAR_LL) + 1 : 0;
+        S.push({ j, lo, hi, cap, lanes: [], card: cs[j] });
+      }
+      return S;
     });
-    const ixOf = new Map();
-    for (let k = Math.max(0, k0 - 1); k <= Math.min(nCol - 1, k0 + n); k++) cols[k].forEach((o, i) => ixOf.set(o, i));
-    const inP = new Map(path.map((it, t) => [it, t]));
-    const unary = path.map((_, t) => new Float64Array(cols[k0 + t].length + 1));
-    const pair = [];
-    for (let g = k0 - 1; g <= k0 + n - 1; g++) {
-      if (g < 0 || g >= nCol - 1) continue;
-      const tl = g - k0, tr = g + 1 - k0, hasL = tl >= 0 && tl < n, hasR = tr >= 0 && tr < n;
-      const ni = hasL ? cols[g].length + 1 : 1, nj = hasR ? cols[g + 1].length + 1 : 1;
-      const D = Array.from({ length: ni + 1 }, () => new Float64Array(nj + 1));
-      work += ni * nj;
-      const rect = (i0, i1, j0, j1) => { i0 = Math.max(0, i0); j0 = Math.max(0, j0); i1 = Math.min(ni - 1, i1); j1 = Math.min(nj - 1, j1); if (i0 > i1 || j0 > j1) return; D[i0][j0]++; D[i0][j1 + 1]--; D[i1 + 1][j0]--; D[i1 + 1][j1 + 1]++; };
-      const hs = gapHops[g], H = hs.length;
-      const Lv = hs.map((h) => inP.has(h.a.item)), Rv = hs.map((h) => inP.has(h.b.item));
-      const LB = hs.map((h, x) => (Lv[x] ? -1 : ixOf.get(h.a.item))), RB = hs.map((h, x) => (Rv[x] ? -1 : ixOf.get(h.b.item)));
-      for (let x = 0; x < H; x++) {
-        if (!Lv[x] && !Rv[x]) continue;
-        for (let z = 0; z < H; z++) {
-          if (z === x || ((Lv[z] || Rv[z]) && z < x)) continue;
-          const X = hs[x], Z = hs[z];
-          let lc = 0, lw = 0, lv = -1, rc = 0, rw = 0, rv = -1;
-          if (Lv[x] && Lv[z]) lc = X.a === Z.a ? 0 : X.a.rank < Z.a.rank ? 1 : -1;
-          else if (Lv[x]) { lw = 1; lv = LB[z]; } else if (Lv[z]) { lw = 2; lv = LB[x]; }
-          else lc = X.a === Z.a ? 0 : X.a.rank < Z.a.rank ? 1 : -1;
-          if (Rv[x] && Rv[z]) rc = X.b === Z.b ? 0 : X.b.rank < Z.b.rank ? 1 : -1;
-          else if (Rv[x]) { rw = 1; rv = RB[z]; } else if (Rv[z]) { rw = 2; rv = RB[x]; }
-          else rc = X.b === Z.b ? 0 : X.b.rank < Z.b.rank ? 1 : -1;
-          if ((!lw && lc === 0) || (!rw && rc === 0)) continue;
-          work += 4;
-          for (let a = 0; a < (lw ? 2 : 1); a++) {
-            const i0 = lw ? (a ? lv + 1 : 0) : 0, i1 = lw ? (a ? ni - 1 : lv) : ni - 1;
-            const va = lw ? ((a === 0) === (lw === 1) ? 1 : -1) : lc;
-            for (let b2 = 0; b2 < (rw ? 2 : 1); b2++) {
-              const j0 = rw ? (b2 ? rv + 1 : 0) : 0, j1 = rw ? (b2 ? nj - 1 : rv) : nj - 1;
-              const vb = rw ? ((b2 === 0) === (rw === 1) ? 1 : -1) : rc;
-              if (va !== vb) rect(i0, i1, j0, j1);
-            }
-          }
-        }
+    const free = (k, cls) => slots[k].filter((sl, j) => sl.lanes.length < sl.cap && (cls === 1 || j === (cls === 0 ? 0 : slots[k].length - 1)));
+    const nearest = (S, y) => S.reduce((b, sl) => { const d = y < sl.lo ? sl.lo - y : y > sl.hi ? y - sl.hi : 0; return !b || d < b.d ? { sl, d } : b; }, null).sl;
+    for (const E of edges) {
+      if (E.hops.length < 2) continue;
+      const ya = E.hops[0].a.y, yb = E.hops[E.hops.length - 1].b.y, lanes = E.hops.slice(1).map((h) => h.a), n = lanes.length;
+      const cls = lanes[0].item.cls;
+      let I = [[Math.min(ya, yb), Math.max(ya, yb)]];
+      for (const p of lanes) {
+        const S = free(p.col, cls), J = [];
+        for (const [l, h] of I) for (const sl of S) { const lo = Math.max(l, sl.lo), hi = Math.min(h, sl.hi); if (lo <= hi) J.push([lo, hi]); }
+        I = J;
       }
-      for (let i = 0; i < ni; i++) for (let j = 0; j < nj; j++) D[i][j] += (i ? D[i - 1][j] : 0) + (j ? D[i][j - 1] : 0) - (i && j ? D[i - 1][j - 1] : 0);
-      if (hasL && hasR) pair[tl] = D;
-      else if (hasL) for (let i = 0; i < ni; i++) unary[tl][i] += D[i][0];
-      else if (hasR) for (let j = 0; j < nj; j++) unary[tr][j] += D[0][j];
-    }
-    const costOf = (sl) => sl.reduce((a, s2, t) => a + unary[t][s2] + (t + 1 < n ? pair[t][s2][sl[t + 1]] : 0), 0);
-    let bestV = new Float64Array(cols[k0].length + 1).fill(Infinity);
-    for (let j = ranges[0][0]; j <= ranges[0][1]; j++) bestV[j] = unary[0][j];
-    const arg = [];
-    for (let t = 1; t < n; t++) {
-      const nv = new Float64Array(cols[k0 + t].length + 1).fill(Infinity), na = new Int32Array(nv.length).fill(-1);
-      for (let j = ranges[t][0]; j <= ranges[t][1]; j++) {
-        for (let i = ranges[t - 1][0]; i <= ranges[t - 1][1]; i++) { const v = bestV[i] + pair[t - 1][i][j]; if (v < nv[j]) { nv[j] = v; na[j] = i; } }
-        nv[j] += unary[t][j];
+      let level = null;
+      for (const [l, h] of I) { const y = Math.min(Math.max(ya, l), h); if (level === null || Math.abs(y - ya) < Math.abs(level - ya)) level = y; }
+      let plan;
+      if (level !== null) plan = lanes.map((p) => [nearest(free(p.col, cls), level), level]);
+      else {
+        // no one level: walk the chain from either end, each column keeping the level of the one
+        // before as far as its gaps allow, and keep the walk the height solve would price lower
+        const walk = (ps, y) => ps.map((p) => { const sl = nearest(free(p.col, cls), y); y = Math.min(Math.max(y, sl.lo), sl.hi); return [sl, y]; });
+        const cost = (pl) => pl.reduce((a, [, y], t) => a + (t ? P.W_RUN * Math.abs(y - pl[t - 1][1]) : 0), P.W_MIX * (Math.abs(ya - pl[0][1]) + Math.abs(pl[n - 1][1] - yb)));
+        const fwd = walk(lanes, ya), bwd = walk(lanes.slice().reverse(), yb).reverse();
+        plan = cost(bwd) < cost(fwd) ? bwd : fwd;
       }
-      arg.push(na); bestV = nv;
+      lanes.forEach((p, t) => {
+        plan[t][0].lanes.push(p);
+        p.want = plan[t][1]; p.ya = ya; p.yb = yb;
+      });
     }
-    let bv = Infinity, bj = -1;
-    for (let i = ranges[n - 1][0]; i <= ranges[n - 1][1]; i++) if (bestV[i] < bv) { bv = bestV[i]; bj = i; }
-    const sl = new Array(n); sl[n - 1] = bj;
-    for (let t = n - 1; t > 0; t--) sl[t - 1] = arg[t - 1][sl[t]];
-    const better = bv < costOf(cur) - 1e-9;
-    const put = better ? sl : cur;
-    path.forEach((it, t) => cols[k0 + t].splice(put[t], 0, it));
-    for (let t = 0; t < n; t++) { stack(k0 + t); rankCol(k0 + t); }
-    return better;
-  };
-  const heavyPath = (it0) => {
-    const out = [it0];
-    for (const dir of [1, -1]) {
-      let x = it0;
-      for (;;) {
-        const k = colOfItem(x), cnt = new Map();
-        for (const p of x.ports) for (const h of (dir > 0 ? p.R : p.L)) { const y = (dir > 0 ? h.b : h.a).item; cnt.set(y, (cnt.get(y) || 0) + 1); }
-        if (!cnt.size) break;
-        const y = [...cnt.entries()].sort((p, q) => q[1] - p[1])[0][0];
-        if (out.includes(y) || colOfItem(y) !== k + dir) break;
-        if (dir > 0) out.push(y); else out.unshift(y);
-        x = y;
+    slots.forEach((S, k) => {
+      cols[k] = [];
+      for (const sl of S) {
+        sl.lanes.sort((p, q) => p.want - q.want || p.ya - q.ya || p.yb - q.yb || p.E.i - q.E.i);
+        const m = sl.lanes.length;
+        sl.lanes.forEach((p, i) => {
+          // a start that meets every constraint, which the pinned height solve requires
+          p.y = sl.lo === -Infinity ? sl.hi - (m - 1 - i) * P.CLEAR_LL : sl.lo + i * P.CLEAR_LL;
+          p.item.y = p.y;
+          shape(p.item);
+          cols[k].push(p.item);
+        });
+        if (sl.card) cols[k].push(sl.card);
       }
-    }
-    return out;
-  };
-  // refinement: exact moves of a long wire's lanes, of a follow card's end row with them, and
-  // of whole paths; each starts only while work < ORDER_BUDGET and is kept only when it
-  // strictly removes crossings. The candidate paths are listed once per pass, before any moves.
-  T.refinePasses = 0;
-  for (let pass = 0; pass < P.REFINE_PASSES && work < P.ORDER_BUDGET; pass++) {
-    T.refinePasses++;
-    let improved = false;
-    for (const E of edges) { if (work >= P.ORDER_BUDGET) break; if (E.hops.length > 1 && moveChain(E)) improved = true; }
-    for (const E of edges) { if (work >= P.ORDER_BUDGET) break; if (E.hops.length > 1 && moveChainFree(E)) improved = true; }
-    const cands = [];
-    for (const E of edges) if (E.hops.length > 1) cands.push([E.hops[0].a.item, ...E.hops.slice(1).map((h) => h.a.item), E.hops[E.hops.length - 1].b.item]);
-    for (const its of cols) for (const it of its) if (it.kind === "card") { const hp = heavyPath(it); if (hp.length > 1) cands.push(hp); }
-    for (const pth of cands) { if (work >= P.ORDER_BUDGET) break; if (movePath(pth)) improved = true; }
-    if (!improved) break;
-    for (let k = 0; k < nCol; k++) sift(k);
-    transpose();
-  }
-  {
-    // closing pass, never budgeted: adjacent swaps while any strictly removes crossings, ties
-    // broken by frozen wants, so (crossings, inversions of the wants) falls and it ends with
-    // improvable_swaps = 0
-    for (const its of cols) for (const it of its) {
-      it.want = itemBary(it, "R") ?? itemBary(it, "L") ?? it.y + it.span / 2;
-      for (const p of it.ports) p.want = rowBary(p, "R") ?? rowBary(p, "L") ?? p.y;
-    }
-    T.closeSwaps = 0;
-    for (let any = true; any;) {
-      any = false;
-      for (let k = 0; k < nCol; k++) {
-        const its = cols[k];
-        endRanks(k);
-        for (let i = 0; i + 1 < its.length; i++) {
-          const u = its[i], v = its[i + 1];
-          if (group(u, v)) continue;
-          const [c, r] = pairCross(u, v);
-          if (r < c || (r === c && u.want > v.want + 1e-6)) { T.closeSwaps++; its[i] = v; its[i + 1] = u; rankCol(k); endRanks(k); any = true; }
-        }
-        for (const it of its) {
-          if (it.kind !== "card" || !it.card.follow) continue;
-          for (let i = 0; i + 1 < it.ports.length; i++) {
-            const p = it.ports[i], q = it.ports[i + 1];
-            if (unwired(p) || unwired(q)) continue;
-            let c = 0, r = 0;
-            for (const s of ["L", "R"]) for (const h of on(p, s)) for (const g of on(q, s)) {
-              const a = other(h, p).rank, b = other(g, q).rank;
-              if (a > b) c++; else if (a < b) r++;
-            }
-            if (r < c || (r === c && p.want > q.want + 1e-6)) { it.ports[i] = q; it.ports[i + 1] = p; shape(it); rankCol(k); any = true; }
-          }
-        }
-        stack(k); rankCol(k);
-      }
-    }
+      rankCol(k);
+    });
   }
   T.work = work;
   mark("order");
@@ -885,26 +965,46 @@ function computeLayout(SPEC, opt = {}) {
   const NE = [];
   for (const its of cols) for (let i = 1; i < its.length; i++) {
     const u = its[i - 1], v = its[i];
+    if (PIN && u.kind === "card" && v.kind === "card") continue;   // both pinned: nothing to keep apart
     NE.push({ v: u.ports[0].v, w: v.ports[0].v, minlen: u.bot + clear(u, v) + v.top, weight: P.TIE });
+  }
+  if (PIN) for (const its of cols) {
+    // a pinned card can reach below the card under it; a lane keeps clear of the lowest bottom above it
+    let low = null;
+    its.forEach((it, i) => {
+      if (it.kind === "card") { if (!low || it.y + it.bot > low.y + low.bot) low = it; return; }
+      if (low && its[i - 1] !== low) NE.push({ v: low.ports[0].v, w: it.ports[0].v, minlen: low.bot + clear(low, it), weight: 0 });
+    });
   }
   // One root above the first item of every column, at no cost, keeps the graph connected
   // when a column holds no wire (a spec without edges). Never connect it with large negative
   // minlens instead: they bind, and draw a wireless spec millions of px tall.
   const root = nv + hops.length, init = new Float64Array(root + 1);
-  for (const its of cols) for (const it of its) init[it.ports[0].v] = Math.round(it.y);
-  init[root] = Infinity;
-  for (const its of cols) if (its.length) {
-    NE.push({ v: root, w: its[0].ports[0].v, minlen: 0, weight: 0 });
-    init[root] = Math.min(init[root], init[its[0].ports[0].v]);
+  if (!PIN) {
+    for (const its of cols) for (const it of its) init[it.ports[0].v] = Math.round(it.y);
+    init[root] = Infinity;
+    for (const its of cols) if (its.length) {
+      NE.push({ v: root, w: its[0].ports[0].v, minlen: 0, weight: 0 });
+      init[root] = Math.min(init[root], init[its[0].ports[0].v]);
+    }
+  } else {
+    // pinned: the root is y = 0 and every card is held at its y by a pair of opposite edges;
+    // the start is the viewer's arrangement with each lane in its gap, feasible by construction
+    for (const its of cols) for (const it of its) {
+      init[it.ports[0].v] = it.y;
+      if (it.kind === "card") NE.push({ v: root, w: it.ports[0].v, minlen: it.y, weight: 0 }, { v: it.ports[0].v, w: root, minlen: -it.y, weight: 0 });
+    }
+    init[root] = 0;
   }
   for (const h of hops) {
     const x = nv++;
     NE.push({ v: x, w: h.a.v, minlen: -(h.a.vo + h.pa), weight: h.w });
     NE.push({ v: x, w: h.b.v, minlen: -(h.b.vo + h.pb), weight: h.w });
-    init[x] = Math.min(Math.round(h.a.y + h.pa), Math.round(h.b.y + h.pb));
+    init[x] = PIN ? Math.min(h.a.y + h.pa, h.b.y + h.pb) : Math.min(Math.round(h.a.y + h.pa), Math.round(h.b.y + h.pb));
   }
-  let Y = solve(root + 1, NE, { init });
-  for (const its of cols) for (const it of its) { it.y = Y[it.ports[0].v]; for (const p of it.ports) p.y = it.y + p.off; }
+  let Y = solve(root + 1, NE, { init, feasible: !!PIN });
+  let y0 = PIN ? Y[root] : 0;
+  for (const its of cols) for (const it of its) { it.y = Y[it.ports[0].v] - y0; for (const p of it.ports) p.y = it.y + p.off; }
   {
     // bounded port slide: shift each fan inside its row toward the median of its far ports, then re-solve once
     const fanPass = (order) => {
@@ -929,25 +1029,29 @@ function computeLayout(SPEC, opt = {}) {
     let e = NE.length - 2 * hops.length;
     const init2 = new Float64Array(root + 1);
     for (const its of cols) for (const it of its) init2[it.ports[0].v] = it.y;
-    init2[root] = Y[root];
+    init2[root] = PIN ? 0 : Y[root];
     for (const h of hops) {
       NE[e].minlen = -(h.a.vo + h.pa); NE[e + 1].minlen = -(h.b.vo + h.pb);
       init2[NE[e].v] = Math.min(h.a.y + h.pa, h.b.y + h.pb);
       e += 2;
     }
-    Y = solve(root + 1, NE, { init: init2 });
-    for (const its of cols) for (const it of its) { it.y = Y[it.ports[0].v]; for (const p of it.ports) p.y = it.y + p.off; }
+    Y = solve(root + 1, NE, { init: init2, feasible: !!PIN });
+    y0 = PIN ? Y[root] : 0;
+    for (const its of cols) for (const it of its) { it.y = Y[it.ports[0].v] - y0; for (const p of it.ports) p.y = it.y + p.off; }
   }
-  for (const c of cards) {
-    const ps = c.item.ports, p0 = ps[0], pl = ps[ps.length - 1];
-    c.y = p0.y - p0.h / 2 - P.HEADER_H;
-    c.h = pl.y + pl.h / 2 - c.y;
+  if (PIN) for (const c of cards) { c.y = PIN.cards[c.id].y; c.h = PIN.cards[c.id].h; }
+  else {
+    for (const c of cards) {
+      const ps = c.item.ports, p0 = ps[0], pl = ps[ps.length - 1];
+      c.y = p0.y - p0.h / 2 - P.HEADER_H;
+      c.h = pl.y + pl.h / 2 - c.y;
+    }
+    let top = Infinity;
+    for (const c of cards) top = Math.min(top, c.y - 30);
+    for (const its of cols) for (const it of its) if (it.kind === "lane") top = Math.min(top, it.y - 20);
+    for (const c of cards) c.y -= top;
+    for (const its of cols) for (const it of its) { it.y -= top; for (const p of it.ports) p.y -= top; }
   }
-  let top = Infinity;
-  for (const c of cards) top = Math.min(top, c.y - 30);
-  for (const its of cols) for (const it of its) if (it.kind === "lane") top = Math.min(top, it.y - 20);
-  for (const c of cards) c.y -= top;
-  for (const its of cols) for (const it of its) { it.y -= top; for (const p of it.ports) p.y -= top; }
   mark("heights");
 
   // ── 7-9 x, wires, labels, with a gap fixpoint for labels that still collide ──
@@ -970,6 +1074,7 @@ function computeLayout(SPEC, opt = {}) {
     });
     colX = [];
     for (let k = 0, x = P.MARGIN; k < nCol; k++) { colX[k] = x; x += colW[k] + (gapW[k] || 0); }
+    if (PIN) colX = PIN.colX.slice();     // pinned: nothing moves sideways, so no gap widens
     for (const c of cards) { c.x = colX[c.col]; c.w = colW[c.col]; }
     routes = edges.map((E) => ({ ...wireRoute(E.hops.map((h) => {
       const g = h.gap;
@@ -984,7 +1089,7 @@ function computeLayout(SPEC, opt = {}) {
       routes[t.ei].texts.push({ ...t, x: pick.x, y: pick.y, anchor: pick.anchor, box: pick.box });
       boxes.push(pick.box);
     }
-    if (!failing.length || rounds >= P.LABEL_ROUNDS) break;
+    if (PIN || !failing.length || rounds >= P.LABEL_ROUNDS) break;
     rounds++;
     const byGap = new Map();
     for (const t of texts) { const g = edges[t.ei].hops[0].gap; (byGap.get(g) || byGap.set(g, []).get(g)).push(textW(t.text)); }
@@ -1020,7 +1125,7 @@ function computeLayout(SPEC, opt = {}) {
   mark("report");
   T.total = r2(clock() - tStart);
   T.solves = solves;
-  return { cards, cols, edges, routes, layout: pub, report, T };
+  return { cards, cols, edges, routes, colX, layout: pub, report, T };
 }
 
 // The measures of the layout, recomputed from what was published and nothing else:

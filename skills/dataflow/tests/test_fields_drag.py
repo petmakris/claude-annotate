@@ -66,16 +66,12 @@ def _drag(pg, selector, dx, dy):
     pg.mouse.up()
 
 
-def _touches(w, cid):
-    return w["from"].split(".")[0] == cid or w["to"].split(".")[0] == cid
-
-
 def _row(L, end):
     cid, fid = end.split(".", 1)
     return L["cards"][cid], L["cards"][cid]["rows"][fid]
 
 
-def test_card_drag_moves_the_card_and_its_wire_ends_only(opened):
+def test_card_drag_moves_the_card_and_keeps_every_wire_on_its_rows(opened):
     pg = opened(_spec("example-bypass.json"))
     before, k = pg.evaluate(LAYOUT), _zoom(pg)
     _drag(pg, '.grip[data-card="cmd"]', 0, 90)
@@ -86,20 +82,15 @@ def test_card_drag_moves_the_card_and_its_wire_ends_only(opened):
     assert (c1["x"], c1["h"], c1["rowOrder"]) == (c0["x"], c0["h"], c0["rowOrder"])
     for fid, r in c0["rows"].items():
         assert c1["rows"][fid]["y"] == pytest.approx(r["y"] + dy, abs=0.05)
+    # the other cards stay put; only where a card sits among the lanes of its column may change
+    strip = lambda c: {k: v for k, v in c.items() if k != "order"}  # noqa: E731
     for cid in before["cards"]:
         if cid != "cmd":
-            assert after["cards"][cid] == before["cards"][cid]
-    moved = 0
+            assert strip(after["cards"][cid]) == strip(before["cards"][cid])
+    # every wire is laid out again, and each still starts and ends on its own rows
     for w0, w1 in zip(before["wires"], after["wires"]):
-        if not _touches(w0, "cmd"):
-            assert w1 == w0
-            continue
-        moved += 1
-        for end, at in (("from", "start"), ("to", "end")):
-            shift = dy if w0[end].startswith("cmd.") else 0
-            assert w1[at][0] == w0[at][0]
-            assert w1[at][1] == pytest.approx(w0[at][1] + shift, abs=0.05)
-    assert moved
+        assert (w1["start"][0], w1["end"][0]) == (w0["start"][0], w0["end"][0])
+    _assert_wires_on_rows(after)
 
 
 def test_wires_stay_attached_to_their_ports(opened):
@@ -108,12 +99,8 @@ def test_wires_stay_attached_to_their_ports(opened):
     _drag(pg, '.grip[data-card="env"]', 0, -70)
     _drag(pg, '.grip[data-card="cmd"]', 0, 120)
     after = pg.evaluate(LAYOUT)
-    for w0, w1 in zip(before["wires"], after["wires"]):
-        for end, at in (("from", "start"), ("to", "end")):
-            (_, r0), (c1, r1) = _row(before, w0[end]), _row(after, w1[end])
-            # the same offset from the row's centre: the fan of a busy row is kept
-            assert w1[at][1] - r1["y"] == pytest.approx(w0[at][1] - r0["y"], abs=0.05)
-            assert r1["y"] - r1["h"] / 2 <= w1[at][1] <= r1["y"] + r1["h"] / 2
+    _assert_wires_on_rows(after)
+    for w1 in after["wires"]:
         assert abs(w1["end"][0] - _row(after, w1["to"])[0]["x"]) < 0.5
     # the drawn path starts at the published start
     d = pg.evaluate("() => [...document.querySelectorAll('.edge .wire')].map(p => p.getAttribute('d'))")
@@ -150,10 +137,7 @@ def test_row_drag_reorders_its_card(opened):
         assert r["y"] - r["h"] / 2 == pytest.approx(top, abs=0.02)
         top += r["h"]
     assert top == pytest.approx(c1["y"] + c1["h"], abs=0.02)
-    for w0, w1 in zip(before["wires"], after["wires"]):
-        if w0["from"].startswith("entity."):
-            r0, r1 = c0["rows"][w0["from"].split(".", 1)[1]], c1["rows"][w1["from"].split(".", 1)[1]]
-            assert w1["start"][1] - r1["y"] == pytest.approx(w0["start"][1] - r0["y"], abs=0.05)
+    _assert_wires_on_rows(after)
     moved = [w for w in after["wires"] if w["from"] == f"entity.{first}"]
     assert moved and all(w["start"][1] != w0["start"][1] for w, w0 in zip(moved, [x for x in before["wires"] if x["from"] == f"entity.{first}"]))
 
@@ -339,12 +323,13 @@ def test_a_row_moves_freely_inside_a_tall_card_and_its_wires_follow(opened):
     assert float(_tops(c1)[-1]).is_integer()                   # snapped to whole pixels
     for fid in c0["rowOrder"][:-1]:
         assert c1["rows"][fid] == c0["rows"][fid]
+    # the row's wires moved with it, and every wire is still on its rows
     n = 0
     for w0, w1 in zip(before["wires"], after["wires"]):
         for end, at in (("from", "start"), ("to", "end")):
             if w0[end] == f"dto.{last}":
                 n += 1
-                assert w1[at][1] == pytest.approx(w0[at][1] + shift, abs=0.05)
+                assert w1[at][1] - w0[at][1] == pytest.approx(shift, abs=2 * 5 + 0.05)   # a fan may slide 5 px either way
     assert n
     _assert_wires_on_rows(after)
 
@@ -515,3 +500,140 @@ def test_reset_and_undo_are_findable(opened):
     assert "R resets" in help_ and "undoes" in help_
     pg.set_viewport_size({"width": 800, "height": 700})
     assert pg.is_visible("#help") and "R resets" in pg.inner_text("#help")
+
+
+# ── wires laid out again from scratch around the viewer's arrangement ──
+
+import random  # noqa: E402
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+
+
+def _card(cid, *fids):
+    return {"id": cid, "name": cid, "fields": [{"id": f, "label": f} for f in fids]}
+
+
+# A feeds B past a middle column; the other wires go through the middle cards, so the lane of
+# A.p → B.p has to find its way through that column
+SKIP = {"title": "skip", "cards": [_card("A", "a", "p", "c"), _card("M1", "m"), _card("M2", "n"), _card("B", "b", "p", "d")],
+        "edges": [{"from": "A.a", "to": "M1.m"}, {"from": "M1.m", "to": "B.b"}, {"from": "A.c", "to": "M2.n"},
+                  {"from": "M2.n", "to": "B.d"}, {"from": "A.p", "to": "B.p"}]}
+
+
+def _key(pg):
+    return pg.evaluate("() => window.__arrangementKey")
+
+
+def _arrange(pg, key, arrangement):
+    pg.evaluate("([k, v]) => localStorage.setItem(k, JSON.stringify(v))", [key, arrangement])
+    pg.reload()
+    pg.wait_for_function("() => window.__layoutReport")
+    return pg.evaluate(LAYOUT)
+
+
+def _at(L, cid, y=None, h=None):
+    """an arrangement entry putting card cid's top at y (and its height to h), rows packed"""
+    c = L["cards"][cid]
+    e = {"dy": round(y - c["y"], 2) if y is not None else 0, "order": c["rowOrder"]}
+    if h is not None:
+        e["h"] = h
+    return e
+
+
+def _lane(L, frm, to):
+    w = next(w for w in L["wires"] if w["from"] == frm and w["to"] == to)
+    assert len(w["hops"]) == 2
+    return w["hops"][0][1], w["hops"][0][3], w["hops"][1][3]   # start, lane, end
+
+
+def test_two_level_ends_with_a_free_corridor_get_a_flat_lane(opened):
+    pg = opened(SKIP)
+    computed = pg.evaluate(LAYOUT)
+    key = _key(pg)
+    ay = computed["cards"]["A"]["rows"]["p"]["y"]
+    # B's p row level with A's, both middle cards far below: nothing stands between them
+    b = computed["cards"]["B"]
+    by = ay - (b["rows"]["p"]["y"] - b["y"])
+    L = _arrange(pg, key, {"B": _at(computed, "B", by), "M1": _at(computed, "M1", ay + 300), "M2": _at(computed, "M2", ay + 420)})
+    start, lane, end = _lane(L, "A.p", "B.p")
+    assert abs(start - end) < 0.5
+    assert abs(lane - start) < 0.5 and abs(end - lane) < 0.5
+    assert pg.evaluate("L => window.__measure(L)", L)["behind_card"] == 0
+
+
+def test_a_lane_goes_between_two_cards_once_a_gap_opens(opened):
+    pg = opened(SKIP)
+    computed = pg.evaluate(LAYOUT)
+    key = _key(pg)
+    ay = computed["cards"]["A"]["rows"]["p"]["y"]
+    b = computed["cards"]["B"]
+    by = ay - (b["rows"]["p"]["y"] - b["y"])
+    h1 = computed["cards"]["M1"]["h"]
+    # closed: M1 and M2 stacked tight across the level of the two ends
+    closed = {"B": _at(computed, "B", by), "M1": _at(computed, "M1", ay - h1 + 10), "M2": _at(computed, "M2", ay + 20)}
+    L = _arrange(pg, key, closed)
+    m1, m2 = L["cards"]["M1"], L["cards"]["M2"]
+    _, lane, _ = _lane(L, "A.p", "B.p")
+    assert lane <= m1["y"] - 42 + 0.01 or lane >= m2["y"] + m2["h"] + 13 - 0.01      # around both, never through
+    assert pg.evaluate("L => window.__measure(L)", L)["behind_card"] == 0
+    # open: 60 px of air above the level and 80 below it
+    opened_ = {"B": _at(computed, "B", by), "M1": _at(computed, "M1", ay - h1 - 60), "M2": _at(computed, "M2", ay + 80)}
+    L = _arrange(pg, key, opened_)
+    m1, m2 = L["cards"]["M1"], L["cards"]["M2"]
+    start, lane, end = _lane(L, "A.p", "B.p")
+    assert m1["y"] + m1["h"] + 13 - 0.01 <= lane <= m2["y"] - 42 + 0.01
+    assert abs(lane - start) < 0.5 and abs(end - lane) < 0.5
+    assert pg.evaluate("L => window.__measure(L)", L)["behind_card"] == 0
+
+
+def _random_arrangement(L, rnd):
+    out = {}
+    for cid, c in L["cards"].items():
+        if rnd.random() < 0.35:
+            continue
+        hs = [c["rows"][f]["h"] for f in c["rowOrder"]]
+        order = c["rowOrder"][:]
+        if rnd.random() < 0.3:
+            rnd.shuffle(order)
+            hs = [c["rows"][f]["h"] for f in order]
+        extra = rnd.choice([0, 0, rnd.randint(10, 160)])
+        cuts = sorted(rnd.randint(0, extra) for _ in order)
+        tops, y = [], 46
+        for i, h in enumerate(hs):
+            tops.append(y + cuts[i])
+            y += h
+        out[cid] = {"dy": rnd.randint(-220, 220) or 1, "order": order, "h": 46 + sum(hs) + extra, "tops": tops}
+    return out or _random_arrangement(L, rnd)
+
+
+SPECS = sorted([p for p in FIELDS.glob("example-*.json")] + [p for p in FIXTURES.glob("*.json")])
+
+
+@pytest.mark.parametrize("path", SPECS, ids=lambda p: p.stem)
+def test_rearranged_at_random_no_wire_runs_behind_a_card_and_the_routes_are_deterministic(opened, path):
+    spec = json.loads(path.read_text())
+    pg = opened(spec)
+    computed = pg.evaluate(LAYOUT)
+    key = _key(pg)
+    rnd = random.Random(f"{path.stem}-7")
+    for _ in range(2 if "stress" in path.stem else 4):
+        arrangement = _random_arrangement(computed, rnd)
+        L = _arrange(pg, key, arrangement)
+        assert L != computed
+        assert pg.evaluate("L => window.__measure(L)", L)["behind_card"] == 0
+        _assert_wires_on_rows(L)
+        for cid, c in L["cards"].items():
+            _assert_rows_fit(c)
+    # the same arrangement in another browser draws the same routes, byte for byte
+    init = f"localStorage.setItem({json.dumps(key)}, {json.dumps(json.dumps(arrangement))});"
+    other = opened(spec, init=init)
+    assert json.dumps(other.evaluate(LAYOUT)) == json.dumps(L)
+
+
+def test_reset_after_a_reroute_is_the_computed_layout_exactly(opened):
+    pg = opened(SKIP)
+    computed = pg.evaluate(LAYOUT)
+    _drag(pg, '.grip[data-card="M1"]', 0, 200)
+    assert pg.evaluate(LAYOUT) != computed
+    pg.click("#zreset")
+    assert json.dumps(pg.evaluate(LAYOUT)) == json.dumps(computed)
