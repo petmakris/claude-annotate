@@ -25,8 +25,4 @@ jobs:
         with:
           node-version: '20'
       - run: pip install pytest pytest-xdist
-      # talk.py is a uv script with its own dependencies; its suite skips
-      # without aiohttp, so install it where talk can run (3.11+).
-      - if: matrix.python-version == '3.12'
-        run: pip install 'aiohttp>=3.10,<4'
       - run: python3 -m pytest skills -q

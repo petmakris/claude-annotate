@@ -16,9 +16,6 @@
         "./skills/annotate-doctor",
         "./skills/dataflow",
         "./skills/specimen",
-        "./skills/talk",
-        "./skills/meet",
-        "./skills/stage",
         "./skills/deck",
         "./skills/slides"
       ]

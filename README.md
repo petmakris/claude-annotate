@@ -29,50 +29,18 @@ your machine.
 That registers the marketplace, which publishes two plugins. Install either or both:
 
     /plugin install claude-annotate      # comment on a long answer, build and review slide decks, draw a feature's
-                                         # data flow, see one Java object filled with real values,
-                                         # put live views of what you are working on in front of you (/stage),
-                                         # or talk the problem through out loud (/talk)
-                                         # sit in a meeting and answer when named (/meet)
+                                         # data flow, or see one Java object filled with real values
     /plugin install claude-ide-review    # ask questions on a PR diff line or walkthrough step, in IntelliJ
 
 `claude-ide-review` also needs the IntelliJ half, which is a separate download —
 grab the `.zip` from [Releases](https://github.com/petmakris/claude-annotate/releases)
 and install it via **Settings → Plugins → ⚙ → Install Plugin from Disk…**
 
-All eight skills push to the same **webcompanion daemon**, a standalone service
+All seven skills push to the same **webcompanion daemon**, a standalone service
 installed separately from its own repository (see [Related](#related)) — not
-something this repository runs. (`talk` and `meet` serve their own call page too, and additionally need `uv` and an `OPENAI_API_KEY`; their board is the stage. Both listen on the Mac for free while nobody is talking; `meet` needs Apple Silicon for that.) `show-diff` degrades gracefully without it:
+something this repository runs. `show-diff` degrades gracefully without it:
 diffs still open, only the per-line comment feature is unavailable. The other
-seven have no server of their own to fall back to.
-
-## Setting up /talk
-
-`/talk` is a spoken conversation with the session you are in: OpenAI's GPT-Live is the
-voice, and every answer comes from that Claude session with its full history and tools.
-It needs a microphone, so it runs on your own machine, not in a cloud session.
-
-0. **Install and start the webcompanion daemon.** See [How it works](#how-it-works): all skills
-   push to this daemon. Run `/annotate-doctor` to check whether it is installed and running, or
-   to have it install and start it for you.
-1. **Install `uv`** if you do not have it: `brew install uv` (or see
-   [docs.astral.sh/uv](https://docs.astral.sh/uv/)).
-2. **Create an OpenAI API key** at
-   [platform.openai.com/api-keys](https://platform.openai.com/api-keys). It is the only
-   key `/talk` needs; Claude answers from your session, so no Anthropic key is involved.
-3. **Store it** where only you can read it:
-
-       mkdir -p ~/.config/talk
-       ( umask 077; echo 'OPENAI_API_KEY=sk-...' > ~/.config/talk/keys.env )
-
-   An `OPENAI_API_KEY` already in your environment works too, and wins over the file.
-4. **Check it** by running `/talk`. Claude checks for the key before starting and says
-   exactly what is missing. For a full check of the key and GPT-Live access, ask Claude
-   to run `talk.py --doctor`.
-
-Then say `/talk` (optionally with a topic) and open the link it gives you. A call costs
-about $0.05 per minute of OpenAI usage. To see the session's tool calls on the call page
-while it works, install the optional activity hook described at the end of
-`skills/talk/SKILL.md`.
+six have no server of their own to fall back to.
 
 ## Which diff tool, when
 
@@ -225,7 +193,7 @@ not over a LAN hostname.
 
 ## Related
 
-All eight skills (`annotate`, `deck`, `dataflow`, `specimen`, `stage`, `walkthrough`,
+All seven skills (`annotate`, `deck`, `dataflow`, `specimen`, `walkthrough`,
 `ask_diff`, `show-diff`) push to the same **webcompanion daemon** — one always-on process
 per machine, installed separately (`pipx install webcompanion`) from its own
 repository, not something this repository runs. Run `/annotate-doctor` to
