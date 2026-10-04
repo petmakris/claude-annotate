@@ -9,8 +9,9 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("playwright", reason="browser suite: pip install playwright")
-from playwright.sync_api import sync_playwright  # noqa: E402
+from skills.tests.harness import require_playwright
+
+require_playwright()
 
 from skills.dataflow.fields import render  # noqa: E402
 
@@ -20,14 +21,6 @@ LAYOUT = "() => window.__layout"
 
 def _spec(name):
     return json.loads((FIELDS / name).read_text())
-
-
-@pytest.fixture(scope="module")
-def browser():
-    with sync_playwright() as pw:
-        b = pw.chromium.launch()
-        yield b
-        b.close()
 
 
 @pytest.fixture
