@@ -1,0 +1,654 @@
+/* annotate page styles, part 3 of 13 (see style.css): the page lock, the
+   round drawer, the change bar and diff pane, the pflow source pane, the fold
+   pill, the view controls, typography and the settings pane. */
+
+/* ── Page-wide single-flight lock ─────────────────────────────────────── */
+/* BUSY: an event is in flight. EDITING: one comment card is open. Only
+   SUBMISSION is disabled — the card-submit button, which would fire a second
+   event mid-flight. Marking (the selection menu, choice picks and
+   their notes) stays live: marks are local until Submit, so there's work the
+   user can still do while Claude applies the current round. Passive reading,
+   scrolling, and block search stay live too (they are not gated here). */
+.busy-banner {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  /* Lock ribbon: pinned flush to the top of the screen while the page is
+     locked, so it stays visible no matter how far the user scrolls. */
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto 12px;
+  padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--text);
+  font-size: 14px;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.busy-banner .busy-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: busy-spin 0.8s linear infinite;
+  flex: none;
+}
+@keyframes busy-spin { to { transform: rotate(360deg); } }
+
+/* Dead-watcher warning: the Claude session behind this page is gone (no
+   heartbeat). Same ribbon position as the busy banner, warning tone. */
+.watcher-dead-banner {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto 12px;
+  padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, #f59e0b 55%, var(--border));
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: color-mix(in srgb, #f59e0b 14%, var(--surface));
+  color: var(--text);
+  font-size: 14px;
+}
+
+/* Advisory pill: more than one live Claude session is attached to this
+   workspace at once. Purely informational — unlike busy/watcher-dead above,
+   it doesn't gate anything. Sits in the header title, hidden by default. */
+.attached-pill {
+  display: none;
+  font-size: 11px; font-weight: 600;
+  color: #b45309;
+  background: color-mix(in srgb, #b45309 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, #b45309 35%, var(--surface));
+  border-radius: 999px; padding: 2px 10px; margin-left: 10px;
+}
+.attached-pill.show { display: inline-block; }
+
+body.is-busy .card-submit-btn {
+  pointer-events: none;
+  opacity: 0.4;
+}
+/* The currently-open editor stays usable while EDITING (only OTHER
+   affordances are frozen); BUSY freezes everything including open cards. */
+body.is-busy .comment-card {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* Clicking comment on a second block while one is unsaved is refused — one
+   editor at a time — and this is the refusal saying so. The card is scrolled
+   to and pulsed rather than an error being printed somewhere: the answer to
+   "why did nothing happen" is the open card itself, and the only useful thing
+   to do with it is look at it. Two beats, because one reads as a rendering
+   glitch. Respects prefers-reduced-motion — the scroll and the focus still
+   carry the message without the pulse. */
+@keyframes card-calling {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  25%, 75% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
+}
+.comment-card.is-calling { animation: card-calling 1.1s ease-in-out; }
+@media (prefers-reduced-motion: reduce) {
+  .comment-card.is-calling { animation: none; outline: 2px solid var(--accent); }
+}
+
+/* Mockup kind: full-fidelity HTML rendered in a sandboxed iframe. */
+.mockup-frame { width: 100%; border: 0; display: block; background: #fff; border-radius: 8px; }
+.mockup-missing { padding: 16px; color: var(--text-dim); font-style: italic; }
+
+/* Text for assistive tech only: the dock's per-kind counts are a glyph
+   and a number on screen, which reads aloud as a bare "2". */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ── Round review drawer ──────────────────────────────────────────────
+   The collapsed state is the old dock. Expanded, it is the manifest for a
+   batch of irreversible decisions the user made across several screens —
+   which is why every row can be jumped to and removed. */
+#round-dock {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px;
+  z-index: 40; width: min(560px, calc(100vw - 40px));
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; overflow: hidden;
+  box-shadow: 0 10px 34px rgba(15,23,42,.20), 0 2px 8px rgba(15,23,42,.10);
+}
+.rd-head {
+  display: flex; align-items: center; gap: 10px; padding: 10px 13px;
+  cursor: pointer; border-bottom: 1px solid var(--border);
+  background: var(--surface-soft);
+}
+.rd-caret {
+  color: var(--text-dim); font-size: 11px; transition: transform 140ms ease;
+  /* A <button> now (keyboard-openable drawer); strip the UA chrome so it
+     looks exactly like the caret it replaced. */
+  background: none; border: none; padding: 4px; margin: -4px;
+  font-family: inherit; line-height: 1; cursor: pointer; border-radius: 4px;
+}
+#round-dock[data-open="true"] .rd-caret { transform: rotate(180deg); }
+.rd-caret:focus-visible,
+.rd-body:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.rd-body:focus-visible { border-radius: 4px; }
+.rd-summary { display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
+  font-size: 12px; color: var(--text-dim); }
+.rd-summary b { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+/* compact's per-kind count chip inserts CONTROL_SPECS' raw COMPACT_ICON svg
+   with no wrapping class (renderDock: `span.innerHTML = \`${glyph} <b>...`),
+   so unlike .rd-k just below — which does get styled — this one had no
+   size and no fill/stroke rule at all: unstyled, it renders at the SVG
+   default intrinsic size AND paints as a solid black blob, found while
+   auditing every other site the compact icon renders at. */
+.rd-summary svg {
+  width: 12px; height: 12px; vertical-align: -1px;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+#round-submit {
+  margin-left: auto; flex: none; border: none; border-radius: 999px;
+  padding: 8px 17px; font: inherit; font-size: 12.5px; font-weight: 700;
+  cursor: pointer; background: var(--text-strong); color: var(--surface);
+}
+#round-submit:disabled { opacity: .45; cursor: default; }
+.rd-list { max-height: 268px; overflow-y: auto; display: none; }
+#round-dock[data-open="true"] .rd-list { display: block; }
+.rd-row {
+  display: flex; align-items: flex-start; gap: 9px; padding: 8px 13px;
+  border-bottom: 1px solid var(--surface-soft); cursor: pointer; font-size: 12.5px;
+}
+.rd-row:last-child { border-bottom: none; }
+.rd-row:hover { background: var(--hover-tint); }
+.rd-k {
+  flex: none; width: 21px; height: 21px; border-radius: 5px; color: #fff;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 10px;
+}
+.rd-k svg { width: 12px; height: 12px; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.rd-k[data-kind="delete"]  { background: #dc2626; }
+.rd-k[data-kind="comment"] { background: var(--accent); }
+.rd-k[data-kind="compact"] { background: #7c3aed; }
+.rd-k[data-kind="choice"]  { background: #0891b2; }
+.rd-k[data-kind="edit"]    { background: var(--ed-green); }
+.rd-body { flex: 1; min-width: 0; }
+.rd-where { color: var(--text-dim); font-size: 10.5px; margin-bottom: 1px; }
+.rd-text { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* An edit's row: what the reader struck, and what they wrote. */
+.rd-text del { color: var(--type-reject-fg); text-decoration: line-through; }
+.rd-text ins { color: var(--mine-fg); text-decoration: none; background: var(--mine-wash); border-radius: 3px; padding: 0 2px; }
+.rd-said { color: var(--accent); font-style: italic; margin-top: 2px; font-size: 11.5px; }
+.rd-x {
+  flex: none; border: none; background: transparent; color: var(--text-dim);
+  cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 4px; border-radius: 4px;
+}
+.rd-x:hover { color: #dc2626; background: color-mix(in srgb, #dc2626 10%, transparent); }
+.rd-foot {
+  padding: 7px 13px; font-size: 11px; color: var(--text-dim);
+  background: var(--surface-soft); border-top: 1px solid var(--border);
+}
+/* Brief highlight when a drawer row scrolls you to its mark. */
+.rd-flash { animation: rd-flash 1.2s ease; }
+@keyframes rd-flash {
+  0%, 100% { background: transparent; }
+  30%      { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+}
+
+/* ══ NEW ── Change summary bar (after the ack) ═══════════════════════ */
+/* The offset is zero, not the mockup's 62px: that value cleared the mockup's
+   own demo toolbar, which is scaffolding that never shipped. The real
+   .page-header (core.css) sets no `position` and scrolls away, so nothing
+   reserves space above this bar — any offset pins it as an opaque slab with
+   prose scrolling above it. Do not reintroduce the mockup number. */
+.change-bar {
+  position: sticky; top: 0; z-index: 18; display: flex; align-items: center; gap: 10px;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto 12px;
+  padding: 9px 13px; border-radius: 9px; font-size: 12.5px;
+  background: #fffbeb; border: 1px solid #fcd34d; color: #78350f;
+}
+.change-bar .cb-dot { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; flex: none; }
+.change-bar b { font-variant-numeric: tabular-nums; }
+.change-bar .cb-split { color: #92400e; opacity: .85; }
+.change-bar .cb-nav { margin-left: auto; display: inline-flex; gap: 5px; }
+.change-bar .cb-nav button {
+  border: 1px solid #fcd34d; background: #fff; color: #92400e; border-radius: 6px;
+  font: inherit; font-size: 11.5px; font-weight: 600; padding: 3px 9px; cursor: pointer;
+}
+.change-bar .cb-nav button:hover { background: #fef3c7; }
+
+/* ══ NEW ── Per-block "what changed" ═════════════════════════════════ */
+.card-diff-toggle {
+  flex: none; border: 1px solid var(--border); background: var(--surface);
+  color: var(--text-dim); border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: 10.5px; font-weight: 650; padding: 2px 9px;
+}
+.card-diff-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.card-diff-toggle[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.diff-pane { display: none; padding: 10px 18px 14px; border-top: 1px dashed var(--border); background: var(--surface-soft); }
+section.block[data-diff="open"] .diff-pane { display: block; }
+.diff-pane .diff-h {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-dim); margin: 0 0 9px;
+}
+.diff-pane .diff-h-space { flex: 1; }
+
+/* Two views of the same rows. Reader answers "what does it say now", diff
+   answers "what exactly moved" — the switch is the whole point, so it sits in
+   the pane header where the reader is already looking. */
+.diff-views { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; flex: none; }
+.diff-view-btn {
+  font: inherit; font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  padding: 3px 10px; border: 0; border-left: 1px solid var(--border);
+  background: var(--surface); color: var(--text-dim); cursor: pointer;
+}
+.diff-view-btn:first-child { border-left: 0; }
+.diff-view-btn:hover { color: var(--accent); }
+.diff-view-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+.diff-view-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* One pane holds both trees; the switch just decides which is on screen.
+   Rendering both up front keeps switching instant and means a view can never
+   disagree with the other about what changed. */
+.diff-pane[data-view="reader"] .d-uni,
+.diff-pane[data-view="diff"] .d-reader { display: none; }
+
+/* ── Reader ─────────────────────────────────────────────────────────────
+   The new text, readable as prose. Structure and emphasis survive, so the
+   pane and the card above it finally look like the same document. */
+.d-reader { font-size: 13.5px; line-height: 1.66; }
+.d-reader p { padding: 0; margin: 0 0 8px; }
+.d-reader p:last-child, .d-reader .d-li:last-child { margin-bottom: 0; }
+.d-li { display: grid; grid-template-columns: 24px 1fr; gap: 2px; align-items: start; margin: 0 0 8px; }
+.d-marker { font-weight: 700; color: var(--text-strong); }
+/* Reader puts the marker in its own grid column; the diff row is inline,
+   so it needs the gap spelled out or it reads "1.Which". */
+.d-txt .d-marker { margin-right: 5px; }
+.d-ins {
+  background: #dcfce7; color: #14532d; text-decoration: none;
+  border-radius: 3px; padding: 0 1px; box-shadow: inset 0 -1px 0 rgba(20, 83, 45, .28);
+}
+/* A deletion has no room in the new text, so it folds to a counter you open.
+   Reading what it says now is the common case; reading what it used to say is
+   one click, and the click is always available. */
+.d-cut {
+  font: inherit; font-size: 9.5px; font-weight: 700; letter-spacing: .02em;
+  vertical-align: 1px; white-space: nowrap;
+  background: #fde8e8; color: #8c2020; border: 0; border-radius: 999px;
+  padding: 1px 7px; margin: 0 2px; cursor: pointer;
+}
+.d-cut:hover { background: #f9d0d0; }
+.d-cut:focus-visible { outline: 2px solid #8c2020; outline-offset: 1px; }
+.d-cut-open {
+  background: #fde8e8; color: #8c2020; text-decoration: line-through;
+  border-radius: 3px; padding: 0 2px; margin: 0 1px;
+}
+/* A paragraph that is simply gone has nowhere in the new text to fold into,
+   and is the one change a reader most needs told about outright. */
+.d-gone {
+  display: block; padding: 6px 10px; margin: 0 0 8px;
+  border-left: 3px solid #e9b4b4; background: #fde8e8; color: #8c2020;
+  border-radius: 3px 7px 7px 3px;
+}
+.d-gone-lab {
+  display: block; font-size: 9px; font-weight: 700; letter-spacing: .07em;
+  text-transform: uppercase; opacity: .72; margin-bottom: 1px;
+}
+
+/* ── Diff ───────────────────────────────────────────────────────────────
+   Paragraph by paragraph. Word-level marks only inside a pair that stayed
+   recognisably the same paragraph, which is why this view cannot produce the
+   word-level confetti the old single-paragraph pane did. */
+.d-uni { display: grid; gap: 7px; font-size: 13px; line-height: 1.62; }
+.d-row { display: grid; grid-template-columns: 18px 1fr; gap: 9px; align-items: start; }
+.d-gut { font-weight: 700; color: var(--text-dim); text-align: center; padding-top: 2px; }
+.d-row.d-del .d-gut { color: #8c2020; }
+.d-row.d-ins-row .d-gut { color: #14532d; }
+.d-row.d-mod .d-gut { color: var(--accent); }
+.d-txt { padding: 4px 9px; border-radius: 6px; }
+.d-row.d-del .d-txt { background: #fde8e8; color: #8c2020; }
+.d-row.d-ins-row .d-txt { background: #dcfce7; color: #14532d; }
+.d-row.d-mod .d-txt { background: var(--surface); border: 1px solid var(--border); }
+.d-row.d-del .d-txt strong, .d-row.d-ins-row .d-txt strong { color: inherit; }
+.d-cut-text {
+  background: rgba(190, 40, 40, .15); color: #8c2020;
+  text-decoration: line-through; border-radius: 3px; padding: 0 2px;
+}
+/* Untouched paragraphs are context, not news — collapsed by default so the
+   pane is as long as the change is, not as long as the block is. */
+.d-fold {
+  font: inherit; font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text-dim); background: transparent;
+  border: 1px dashed var(--border); border-radius: 7px;
+  padding: 4px 11px; text-align: left; cursor: pointer;
+}
+.d-fold:hover { border-color: var(--accent); color: var(--accent); }
+.d-fold:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.d-fold-body { display: grid; gap: 7px; }
+.d-fold-body[hidden] { display: none; }
+.d-fold-body .d-txt { color: var(--text-dim); }
+
+/* The change note. Above the diff, not below it: a one-line reason makes the
+   marks underneath legible, and on a compact the Lost: line is the only place
+   a user can ever learn what was irreversibly discarded. */
+.diff-why {
+  margin: 0 0 11px; padding: 7px 10px; border-radius: 4px 8px 8px 4px;
+  font-size: 11.5px; line-height: 1.6;
+  background: var(--surface); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); color: var(--text-dim);
+}
+.diff-why-line + .diff-why-line { margin-top: 4px; }
+.diff-why b { color: var(--text-strong); font-weight: 650; }
+/* The Lost: line names what a compact irreversibly discarded — the only
+   place a user can ever learn that. Distinct from the Why: line via the
+   same violet family compact already uses elsewhere (#7c3aed), but as a
+   calm text tint, not a warning badge. */
+.diff-lost, .diff-lost b { color: #6d28d9; }
+
+/* Attribution chips in the card header. */
+.attr-chip {
+  flex: none; display: inline-flex; align-items: center; gap: 4px;
+  border-radius: 999px; padding: 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: .02em;
+}
+.attr-chip.a-you   { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent); }
+.attr-chip.a-sweep { background: #fef3c7; color: #92400e; }
+
+/* ── Legend pane ────────────────────────────────────────────────────── */
+/* A pane of the menu now, not a popover of its own. It keeps the clamp it
+   grew when the keyboard section took it from ~430px to 621px, measured —
+   the menu's own max-height would otherwise let it push the panel past the
+   viewport edge on a laptop. */
+.legend-pop {
+  padding: 10px;
+  max-height: 62vh;
+  overflow-y: auto;
+}
+/* The popover IS the panel — it already has the surface, border and shadow, so
+   the inner body must not draw a second card inside it. */
+.legend-pop .legend-body {
+  margin-top: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+
+/* ── pflow source pane ─────────────────────────────────────────────────────
+   A flowchart authored as Python ships its source. It sits under the chart as
+   one row per line: the number and the code share a row, so the gutter cannot
+   drift out of step with the text the way two stacked layers would. Rows whose
+   line produced a node carry that node's id, which is what lets hovering
+   either view light both (`.is-node-active`). Clicking a row used to open a
+   comment on that node; it no longer does — a picture is commented as a whole
+   from the card header — so the pane is now a reading aid that pairs source to
+   shape, not a second way in.
+
+   `.sk-fence` sits on the body so it takes the fence ground and base colour
+   here exactly as a fenced code block does. Deliberately not a
+   <pre><code>: `main.prose pre code.sk-fence` sets a font-size and line-height for
+   fenced code that would silently override the row metrics. */
+.pflow {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.pflow-head {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 7px 12px;
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--border);
+}
+.pflow-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-dim);
+}
+.pflow-hint { font-size: 11.5px; color: var(--text-dim); }
+
+.pflow-body {
+  overflow-x: auto;
+  padding: 10px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.pflow-row { display: flex; min-width: max-content; }
+.pflow-num {
+  flex: none; width: 3em; padding-right: 12px;
+  text-align: right; opacity: 0.45; user-select: none;
+}
+.pflow-line { flex: 1 1 auto; white-space: pre; padding-right: 16px; }
+/* pflow's tags are Python comments, so the theme paints them all one grey.
+   Warm them up so the side-channel reads as a channel. */
+.pflow-tag { color: #ffb86b; font-weight: 600; }
+
+/* `is-live` no longer means "clickable" — it means "this line drew a node",
+   which is what the cross-highlight below reads. No pointer cursor: the pane
+   is a reading aid now, and the comment on it comes from the card header. */
+.pflow-row.is-live:hover,
+.pflow-row.is-node-active {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.annotate-flow g.node.is-node-active .node-shape {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+/* === Fold-chord pill ================================================= */
+/* Transient "⌘K …" indicator while the fold chord is armed — the role
+   VS Code's status bar plays for a pending chord. Display-gated on the
+   [hidden] attribute explicitly: an author display rule would beat the UA
+   default, the exact cascade bug .general-composer[hidden] guards against. */
+.chord-pill {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.chord-pill[hidden] { display: none; }
+
+/* === Code anchors ====================================================
+   A block that cites code shows the real source UNDER its prose, full width
+   of the card. It never sits beside the prose: there was a two-column split
+   (prose left, code right) with a setting and a per-pane widen button to
+   escape it, and all three are gone. A block with no anchors renders exactly
+   as before; the pane's own rules are further down, under .code-col.
+
+   The pane is a READING AID. Nothing inside it is a click target, for the
+   same reason the flowchart source pane gave that up: a code line painted
+   like a jump-to-source link that opens a comment box instead is a lie
+   about what a click does. Comments come from the card header. */
+
+/* === Page-wide view controls =========================================
+   Two stops. Normal is a 1600px column; Wide has no cap at all, so the
+   column is the viewport less main.prose's own side gutters. The bar above
+   is full width at both (see the :root note), so it never moves.
+
+   script.js writes data-width on every render, chosen or not, so on the
+   live page the attribute is never absent. An export may carry none, and
+   then the :root default — Normal's 1600px — applies.
+
+   Nothing else sets --content-max on <body> any more (documents with code
+   used to get a wider column of their own), so these rules no longer
+   depend on their position in the file. */
+body[data-width="normal"] { --content-max: 1600px; }
+body[data-width="wide"]   { --content-max: none; }
+
+/* === Typography, chosen in the settings popover ======================
+   Each rule redefines a token declared in core.css's :root. Nothing here
+   names an element, so adding a family later is one line and no hunt
+   through the stylesheet — and a family nobody selects is never fetched,
+   because no rule references it until <body> carries the attribute.
+   Only the CODE font is a choice. The prose is Inter, always: core.css's
+   --font-prose names it and nothing here redefines it. */
+body[data-code-font="jetbrains"] { --font-code: 'JetBrains Mono', ui-monospace, Menlo, monospace; }
+/* Monaspace needs a rule of its own now that it is no longer the default the
+   :root token carries. Choosing it was silently a no-op for exactly as long
+   as it took to notice: nothing painted it back, so the page stayed on
+   whatever :root said. */
+body[data-code-font="monaspace"] { --font-code: 'Monaspace Radon', ui-monospace, SFMono-Regular, Menlo, monospace; }
+body[data-code-font="system"]    { --font-code: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* Reading size scales the PROSE only, never the chrome. Scaling <body>
+   would grow the header with it and move the controls out from under the
+   pointer mid-click; code panes keep their own 12px, because a pane is a
+   quotation from a file and its line breaks are the file's, not the
+   reader's. 15.5px is body's own size, restated here as the base the
+   scale multiplies. */
+body[data-text-size="small"] { --text-scale: 0.94; }
+body[data-text-size="large"] { --text-scale: 1.12; }
+main.prose { font-size: calc(15.5px * var(--text-scale)); }
+
+/* The top bar's own rule is in core.css, which is the shared engine and not
+   ours to edit. It centres the bar on --content-max; this puts it full
+   width, one gutter in, at every stop. Overridden here rather than there, and prefixed with `body`
+   so it wins at (0,1,1) against core's (0,1,0) — the two files are linked in
+   the right order today, but a rule that depends on link order is a rule that
+   breaks the day someone reorders the <head>. */
+body .page-header {
+  padding: 10px var(--content-gutter);
+}
+
+/* === Settings pane ====================================================
+   Was a popover with its own toggle; it is the settings PANE's body now.
+   The panel around it owns the position, the shadow and the scroll, so this
+   keeps only what is about the settings themselves. */
+.settings-pop {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 12px;
+}
+#settings-groups { display: flex; flex-direction: column; gap: 12px; }
+.set-group { display: flex; flex-direction: column; gap: 5px; }
+.set-group[hidden] { display: none; }
+.set-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-dim);
+}
+/* Wrapping rows, not a fixed grid: the labels are words of different lengths
+   ("High contrast light" beside "Dark"), and a grid would either clip the long
+   ones or leave the short ones swimming. */
+.set-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.set-row button {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 9px;
+  background: none; border: 1px solid var(--border); border-radius: 7px;
+  cursor: pointer; font-family: inherit; font-size: 12px;
+  color: var(--text); white-space: nowrap;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+.set-row button:hover { background: var(--hover-tint); border-color: var(--text-dim); }
+/* The chosen one is filled, not merely outlined. An outline-only state is
+   what the old theme popover used, and inside a panel of six rows of
+   outlined buttons there was no way to see at a glance which was live. */
+.set-row button[aria-pressed="true"] {
+  background: var(--accent); border-color: var(--accent); color: var(--accent-fg);
+}
+.set-row button[aria-pressed="true"] .pt-name { color: var(--accent-fg); }
+/* At the foot of the panel, under a hairline, and deliberately NOT styled as
+   a seventh row: the rows are choices that stay chosen, and this is an action
+   that fires once. Quiet by default — it undoes work, however cheaply, so it
+   must not be the most eye-catching thing in a panel full of preferences —
+   and it turns warning-red only under the pointer, where the tooltip
+   explaining that it reaches every document is already showing. */
+.set-reset {
+  margin-top: 2px;
+  padding: 5px 9px;
+  background: none;
+  border: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-dim);
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+.set-reset:hover {
+  color: #b91c1c;
+  border-color: color-mix(in srgb, #b91c1c 45%, var(--border));
+  background: color-mix(in srgb, #b91c1c 7%, transparent);
+}
+
+/* The highlighter's palette is the SAME element it always was, moved in
+   here — highlighter.js finds it by id and keeps its handlers. Only the
+   geometry it had as a free-floating popover is undone. */
+.settings-pop .palette-pop {
+  position: static; padding: 0; gap: 6px;
+  background: none; border: 0; border-radius: 0; box-shadow: none;
+}
+
+/* The code theme is a named list, not a row of bare swatches: "Midnight" says
+   what you are choosing in a way a dark square next to a light one does not,
+   and the chip shows the actual ground and ink of the theme it names. It had
+   its own popover in the header once; it is a section of the settings panel
+   now, and script.js builds its buttons out of these two classes. */
+.pt-chip {
+  flex: none; width: 30px; height: 22px; border-radius: 5px;
+  border: 1px solid rgba(0, 0, 0, .18);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--font-code);
+  font-size: 11px;
+}
+.pt-name { font-weight: 600; }
+
+/* === The resume command ================================================
+   Populated by entry.js, which knows this session's slug and cwd. It lives in
+   the menu's status block now: the popover it used to have was a second button
+   about the same subject as the watcher pill. */
+.resume-hint { margin: 0; font-size: 12.5px; color: var(--text-dim); }
+/* A path has no spaces, so normal wrapping has nowhere to break it — it just
+   runs past the panel's fixed 288px instead. `anywhere` lets it break at any
+   character as a last resort, which only bites once a run is too long to fit
+   on its own line; short paths still read as one unbroken word. */
+.resume-hint code {
+  font-family: var(--font-code); color: var(--text);
+  overflow-wrap: anywhere;
+}
+.resume-cmd-row { display: flex; align-items: center; gap: 6px; }
+.resume-cmd {
+  flex: 1; min-width: 0;
+  padding: 6px 8px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font-code);
+  font-size: 12px;
+  color: var(--text-strong);
+  overflow-x: auto;
+  white-space: pre;
+}
+.resume-copy-btn {
+  flex: none;
+  padding: 6px 10px;
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600;
+  color: var(--text);
+}
+.resume-copy-btn:hover { background: var(--hover-tint); border-color: var(--text-dim); }
+.resume-status { margin: 0; font-size: 11.5px; color: var(--text-dim); min-height: 1.2em; }

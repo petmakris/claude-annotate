@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light only">
+<title>{{title}}</title>
+<style>
+  :root {
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --serif:Georgia,"Iowan Old Style","Times New Roman",serif;
+    --paper:#eceff3; --surface:#ffffff; --ink:#080b10; --muted:#39424f;
+    --line:#9aa5b4; --line-soft:#c9d1db; --dot:#dde1e7;
+    --raw:#08534d;   --raw-soft:rgba(8,83,77,.13);
+    --group:#8a4405; --group-soft:rgba(138,68,5,.13);
+    --accent:#23309e; --accent-soft:rgba(35,48,158,.12);
+    --shadow:0 1px 2px rgba(8,11,16,.06),0 6px 20px rgba(8,11,16,.08);
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; overflow:hidden; }
+  body { background:var(--paper); color:var(--ink); font-family:var(--sans); font-size:14px; line-height:1.5; }
+  code { font-family:var(--mono); font-size:.88em; }
+
+  /* the canvas */
+  #stage { position:fixed; inset:0; cursor:grab; touch-action:none;
+           background-image:radial-gradient(var(--dot) .8px, transparent .9px); }
+  #stage.panning { cursor:grabbing; }
+  #stage svg { width:100%; height:100%; display:block; user-select:none; -webkit-user-select:none; }
+
+  .stage  { font-family:var(--sans); font-size:9.5px; letter-spacing:1.3px; font-weight:600; fill:var(--muted); }
+  .card   { fill:var(--surface); stroke-width:1.6; }
+  .cardshadow { fill:rgba(8,11,16,.05); }
+  .cname  { font-family:var(--mono); font-size:13px; font-weight:600; }
+  .csub   { font-family:var(--sans); font-size:9.5px; fill:var(--muted); }
+  .crule  { stroke-width:1.3; opacity:.85; }
+  .rowrule{ stroke-width:1; opacity:.3; }
+  .fname  { font-family:var(--mono); font-size:11px; }
+  .hit    { fill:transparent; }
+  .node   { cursor:pointer; }
+  .node.is-muted { opacity:.55; }
+  .node:hover .hit { fill:rgba(35,48,158,.05); }
+  .edge   { cursor:pointer; }
+  .wire   { fill:none; stroke-width:1.6; }
+  .wirehit{ fill:none; stroke:transparent; stroke-width:11px; }
+  /* Halo: the label is painted stroke-first in the ground colour, so a wire passing
+     behind it is interrupted rather than striking through the words. */
+  .elabel, .enote { font-family:var(--sans); font-size:9px;
+            paint-order:stroke; stroke:var(--paper); stroke-width:3.5px; stroke-linejoin:round; }
+  .enote  { fill:var(--muted); font-style:italic; }
+
+  .has-sel .edge, .has-sel .node { opacity:.16; transition:opacity .16s ease; }
+  .has-sel .edge.on, .has-sel .node.on { opacity:1; }
+  .has-sel .edge.on .wire { stroke-width:2.2; }
+  .has-sel .node.on .hit { fill:var(--accent-soft); }
+  @media (prefers-reduced-motion: reduce) { .has-sel .edge, .has-sel .node { transition:none; } }
+
+  /* floating chrome */
+  .float { position:fixed; background:var(--surface); border:1px solid var(--line);
+           border-radius:10px; box-shadow:var(--shadow); }
+  #title { top:14px; left:14px; padding:10px 14px; display:flex; gap:12px; align-items:center; max-width:calc(100vw - 28px); }
+  #title .eyebrow { font-size:10px; font-weight:600; letter-spacing:.13em; text-transform:uppercase; color:var(--muted); }
+  #title h1 { font-family:var(--serif); font-size:19px; font-weight:600; margin:0; line-height:1.15; white-space:nowrap; }
+  button { font:inherit; color:inherit; }
+  .btn { border:1px solid var(--line); background:var(--surface); border-radius:7px; padding:4px 10px;
+         font-size:12px; cursor:pointer; white-space:nowrap; }
+  .btn:hover { border-color:var(--ink); }
+  .btn[aria-pressed="true"] { background:var(--ink); color:#fff; border-color:var(--ink); }
+
+  #about { top:76px; left:14px; width:min(560px, calc(100vw - 28px)); max-height:calc(100vh - 150px);
+           overflow:auto; padding:16px 18px; display:none; font-size:13px; }
+  #about.open { display:block; }
+  #about h2 { font-size:10.5px; letter-spacing:.11em; text-transform:uppercase; color:var(--muted); margin:14px 0 6px; }
+  #about h2:first-child { margin-top:0; }
+  #about p { margin:0 0 8px; }
+  #about table { border-collapse:collapse; font-size:11.5px; width:100%; }
+  #about th { text-align:left; font-size:10px; letter-spacing:.09em; text-transform:uppercase; color:var(--muted);
+              font-weight:600; border-bottom:1px solid var(--line); padding:5px 10px 5px 0; }
+  #about td { padding:5px 10px 5px 0; vertical-align:top; border-bottom:1px solid var(--line-soft); }
+  #about td:nth-child(2) { font-family:var(--mono); font-size:11px; word-break:break-all; }
+  #about tr:last-child td { border-bottom:none; }
+
+  #legend { left:14px; bottom:14px; padding:8px 12px; display:flex; flex-wrap:wrap; gap:4px 16px; font-size:11.5px;
+            color:var(--muted); max-width:calc(100vw - 300px); }
+  #legend:empty { display:none; }
+  .key { display:inline-flex; align-items:center; gap:6px; }
+  .sw { width:10px; height:10px; border-radius:3px; border:1px solid var(--line); background:var(--line-soft); }
+  .sw.raw   { background:var(--raw-soft);   border-color:var(--raw); }
+  .sw.group { background:var(--group-soft); border-color:var(--group); }
+  .sw.accent{ background:var(--accent-soft);border-color:var(--accent); }
+
+  #nav { right:14px; bottom:14px; padding:8px; width:236px; }
+  #mini { display:block; width:100%; height:70px; background:var(--paper); border-radius:6px; cursor:pointer; }
+  #mini .vp { fill:rgba(35,48,158,.08); stroke:var(--accent); stroke-width:1.5; vector-effect:non-scaling-stroke; }
+  #zoombar { display:flex; gap:4px; margin-top:8px; align-items:center; }
+  #zoombar .btn { padding:3px 9px; }
+  #zpct { flex:1; text-align:center; font-variant-numeric:tabular-nums; }
+
+  #help { position:fixed; right:262px; bottom:14px; font-size:11.5px; color:var(--muted); background:rgba(236,239,243,.92);
+          padding:4px 10px; border-radius:6px; pointer-events:none; }
+  @media (max-width:900px) { #help { display:none; } #legend { max-width:calc(100vw - 280px); } }
+
+  /* render.py --check hides the chrome before its screenshot */
+  body.shot #title, body.shot #about, body.shot #legend, body.shot #nav, body.shot #help { display:none; }
+</style>
+</head>
+<body>
+
+<div id="stage"><svg id="svg" role="img" aria-label="{{title}}">
+  <defs id="defs"></defs>
+  <g id="cam"><g id="content"></g></g>
+</svg></div>
+
+<div id="title" class="float">
+  <div><div class="eyebrow" id="eyebrow"></div><h1 id="h1"></h1></div>
+  <button class="btn" id="aboutBtn" aria-pressed="false" aria-controls="about">About</button>
+</div>
+<div id="about" class="float"></div>
+
+<div id="legend" class="float"></div>
+<div id="help">drag or scroll to pan · pinch or ⌘-scroll to zoom · F fits · hover a field to trace it</div>
+
+<div id="nav" class="float">
+  <svg id="mini" aria-label="overview"><use href="#content"/><rect class="vp" id="vp"/></svg>
+  <div id="zoombar">
+    <button class="btn" id="zout" title="Zoom out (−)" aria-label="Zoom out">−</button>
+    <button class="btn" id="zpct" title="Reset to 100% (1)">100%</button>
+    <button class="btn" id="zin" title="Zoom in (+)" aria-label="Zoom in">+</button>
+    <button class="btn" id="zfit" title="Fit (F)">Fit</button>
+  </div>
+</div>
+
+<script type="application/json" id="spec">/*SPEC*/</script>
+<script>/*ENGINE*/</script>
+</body>
+</html>

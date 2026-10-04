@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AUDIENCE — the one-line claim of the deck</title>
+<!-- Shared harness and theme. Empty in the skeleton on purpose: `python3 <slides skill>/framework/inline.py THIS_FILE`
+     fills the framework, theme and logo blocks, and the deck owns those copies from then on. -->
+<!-- framework:css -->
+<!-- /framework:css -->
+<!-- theme:css -->
+<!-- /theme:css -->
+
+<!-- Per-deck components go in their own <style> block here, never inside deck.css. -->
+
+<style>
+/* pdf-export print rules */
+@media print{
+  @page{size:1280px 720px;margin:0}
+  html,body{background:#fff!important;margin:0!important;padding:0!important;
+            -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  /* The body stack ends in system-ui, which on macOS resolves to San Francisco.
+     Chrome cannot embed SF as a real font — it writes each glyph as an unhinted
+     Type 3 procedure, which most PDF viewers render badly. Helvetica embeds
+     properly as TrueType. Georgia (--head) and Menlo (--mono) already do. */
+  :root{--body:Helvetica,Arial,sans-serif!important}
+  body,.deck,.slide{font-family:Helvetica,Arial,sans-serif}
+  /* every on-screen control is appended to <body>; only .deck is content */
+  body>*:not(.deck){display:none!important}
+  /* the deck JS sets an inline zoom to fit the browser window; undo it for print */
+  .deck{display:block!important;gap:0!important;zoom:1!important}
+  .slide{box-shadow:none!important;margin:0!important;border-radius:0!important;
+         break-inside:avoid;page-break-inside:avoid;
+         break-after:page;page-break-after:always}
+  .slide:last-child{break-after:auto;page-break-after:auto}
+}
+</style>
+</head>
+<body>
+<div class="deck">
+
+<!-- ============ 1 · COVER ============ -->
+<section class="slide tslide"><span class="num">1</span>
+  <div class="bar"></div>
+  <div class="wmk"><!-- theme:logo --><!-- /theme:logo --></div>
+  <div style="position:absolute;left:86px;top:150px;color:var(--accent);font-weight:bold;font-size:14px;letter-spacing:5px">AUDIENCE · YYYY-MM-DD</div>
+  <div style="position:absolute;left:82px;top:200px;font-family:var(--head);font-weight:bold;font-size:54px;line-height:1.15;color:#fff;max-width:1080px">The title —<br>second line</div>
+  <div style="position:absolute;left:86px;top:330px;font-size:20px;color:var(--on-dark-mute);max-width:900px">One sentence saying what the room is about to get.</div>
+  <div class="home-toc" style="position:absolute;left:84px;top:404px;right:84px">
+    <a href="#sec-one"><span class="n">01</span> First section</a>
+    <a href="#sec-two"><span class="n">02</span> Second section</a>
+  </div>
+</section>
+
+<!-- ============ 2 · CONTENT ============ -->
+<section class="slide" id="sec-one"><span class="num">2</span>
+  <div class="kick">01 · SECTION LABEL</div>
+  <div class="title">What this slide says, said plainly</div>
+  <ul class="introb compact" style="top:180px">
+    <li><b>The claim in bold.</b><span class="sub">The evidence, in one or two sentences of the same voice.</span></li>
+    <li><b>The second claim.</b><span class="sub">Detail that would otherwise be spoken and forgotten.</span></li>
+    <li><b>The third claim.</b><span class="sub">Stop at four. A fifth is a second slide.</span></li>
+  </ul>
+</section>
+
+</div>
+<nav class="floatnav" aria-label="Jump to section">
+  <div class="fn-menu">
+    <span class="fn-head">JUMP TO</span>
+    <a href="#sec-one">First section</a>
+    <a href="#sec-two">Second section</a>
+  </div>
+  <div class="fn-tab">☰ JUMP</div>
+</nav>
+
+<!-- framework:js -->
+<!-- /framework:js -->
+</body>
+</html>

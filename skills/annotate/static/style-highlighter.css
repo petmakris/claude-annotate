@@ -1,0 +1,115 @@
+/* annotate page styles, part 4 of 13 (see style.css): the reading
+   highlighter (highlighter.js). */
+
+/* === Reading highlighter =============================================
+   #fcd34d measured against every colour prose actually uses on it: body
+   text #3a3d44 is 7.54:1 AAA, bold #1d1d1f is 11.67:1 AAA, a link #1e40af
+   is 6.05:1 AA. It also separates from the card surface #f8f9fb better
+   than any softer yellow tried (1.37:1 vs 1.10–1.21:1) — and being a hue
+   shift rather than only a luminance one, it reads as a marker at a
+   glance. No other yellow is in use on the page.
+   ::highlight() accepts a small set of properties; background-color is
+   one of them, and the text keeps its own colour underneath. */
+/* Every colour measured against all three of the colours prose actually
+   uses on it -- body #3a3d44, bold #1d1d1f, link #1e40af -- and none is
+   below AA on any of them. Worst case in the set is pink against a link at
+   4.81:1. Change one and recompute all three; the helper is in the handoff
+   doc under "The light palette".
+     yellow  7.54 / 11.67 / 6.05      green   7.14 / 11.04 / 5.72
+     orange  6.45 /  9.98 / 5.17      blue    6.03 /  9.33 / 4.84
+     pink    6.00 /  9.28 / 4.81
+   The default rule comes first and every named colour overrides it by
+   ancestor attribute -- verified in a browser that ::highlight() does honour
+   an ancestor selector, since it is a pseudo on the originating element and
+   not something you can style inline. */
+::highlight(annotate-read) { background-color: #fcd34d; }
+body[data-highlight-color="yellow"] ::highlight(annotate-read) { background-color: #fcd34d; }
+body[data-highlight-color="green"]  ::highlight(annotate-read) { background-color: #6ee7b7; }
+body[data-highlight-color="orange"] ::highlight(annotate-read) { background-color: #fdba74; }
+body[data-highlight-color="blue"]   ::highlight(annotate-read) { background-color: #93c5fd; }
+body[data-highlight-color="pink"]   ::highlight(annotate-read) { background-color: #f9a8d4; }
+
+/* On a dark page the five marker colours stay exactly as they are — they are
+   the reader's choice and they are what a highlighter looks like — but the
+   INK on them has to flip. --text is #d1d7e0 on dark, and light grey over
+   #fcd34d is 1.8:1: a mark would erase the words it is meant to pick out.
+   One rule rather than five, because the fix is about the ground the mark
+   sits on and not about which colour it is. Measured on all five: 12.8:1
+   over yellow, 12.1 green, 11.0 orange, 10.2 blue, 10.2 pink.
+   ::highlight() takes `color` as well as `background-color`, so this needs no
+   change to how the marks are applied. */
+body[data-page-theme="dark"] ::highlight(annotate-read) { color: #10141a; }
+
+/* While the highlighter is on, the selection IS the marker: the drag paints
+   in the chosen colour, opaque, so what you see while dragging is exactly the
+   mark it leaves. Any translucent selection composites with a mark it crosses
+   into a second colour -- the accent blue went olive over yellow, and the grey
+   that replaced it read as a dull second marker beside the yellow. Same ink
+   rule as the marks on a dark page. */
+body[data-highlighter="on"] ::selection { background: #fcd34d; }
+body[data-highlighter="on"][data-highlight-color="green"]  ::selection { background: #6ee7b7; }
+body[data-highlighter="on"][data-highlight-color="orange"] ::selection { background: #fdba74; }
+body[data-highlighter="on"][data-highlight-color="blue"]   ::selection { background: #93c5fd; }
+body[data-highlighter="on"][data-highlight-color="pink"]   ::selection { background: #f9a8d4; }
+body[data-highlighter="on"][data-page-theme="dark"] ::selection { color: #10141a; }
+
+/* The colour swatch that used to sit in the header — a button whose own dot
+   showed the colour it would paint in — is gone. The colour is a section of
+   the settings panel now, where the five swatches ARE the control and there
+   is nothing left to mirror the choice onto. The pressed state on those
+   swatches is still painted by highlighter.js, from the same
+   body[data-highlight-color] it always used. */
+
+/* Anchored to its button by .icon-btn-wrap, same as the legend popover, and
+   opened/closed by the same initTopPanels machinery so Esc, click-outside and
+   one-panel-at-a-time all behave identically. */
+.palette-pop {
+  position: absolute; top: calc(100% + 9px); right: 0; z-index: 60;
+  display: flex; gap: 6px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 34px rgba(20, 22, 28, .20), 0 2px 6px rgba(20, 22, 28, .08);
+}
+.palette-pop[hidden] { display: none; }
+.palette-pop button {
+  width: 24px; height: 24px; padding: 0; cursor: pointer;
+  border-radius: 6px; border: 1px solid rgba(0, 0, 0, .22);
+}
+.palette-pop button:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+.palette-pop button[aria-pressed="true"] { outline: 2px solid var(--text-strong); outline-offset: 1px; }
+.palette-pop button[data-color="yellow"] { background: #fcd34d; }
+.palette-pop button[data-color="green"]  { background: #6ee7b7; }
+.palette-pop button[data-color="orange"] { background: #fdba74; }
+.palette-pop button[data-color="blue"]   { background: #93c5fd; }
+.palette-pop button[data-color="pink"]   { background: #f9a8d4; }
+
+/* Armed — which is the only state in which the bar shows it. A bare icon
+   like its neighbours (no border), but it keeps the soft yellow fill: it is
+   a MODE indicator, and a bare grey icon would not say "dragging marks text
+   now". Scoped under .page-header to outrank the bare .icon-btn rule. */
+.page-header .hl-btn[aria-pressed="true"],
+.page-header .hl-btn[aria-pressed="true"]:hover { color: #92400e; background: #fef3c7; }
+/* The eraser has no rule here any more: #highlighter-clear is a .menu-tile in
+   the menu, and it is offered unconditionally. It is a command, not a mode --
+   "clear every highlight" is a sensible thing to ask whether or not the
+   highlighter is armed. Worth stating plainly, because nothing else records
+   it: the eraser used to be offered ONLY while highlighting was running, and
+   is now permanently present in the menu.
+
+   The rules this replaces reserved a transparent 26px slot rather than using
+   `display: none`, for a reason that was measured: .header-actions is
+   right-aligned, so revealing a control pushed everything to its left over by
+   26px, sliding the eraser itself under a pointer that had not moved since the
+   click that revealed it -- and the next click would land on clear-all, which
+   wipes the page.
+
+   That hazard is superseded, not forgotten. It needed the arming click to land
+   IN the bar, so the pointer was already sitting there when the layout moved.
+   Arming is #menu-highlighter now, inside the panel and below the bar, and
+   #highlighter-toggle sits to the LEFT of the menu button -- so the controls
+   near where the pointer actually is (the menu button, Done) do not move at
+   all, and only the search field shifts left. Which is what makes the
+   highlighter's own `display: none` escape safe here; see "The highlighter's
+   escape" in style-menu.css. */

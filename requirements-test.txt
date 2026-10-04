@@ -1,0 +1,11 @@
+# What the test suite runs with — CI, .githooks/pre-push and the command in
+# CLAUDE.md all install from this one file. The plugin itself needs none of it.
+#
+# Every version here supports Python 3.9, the declared floor CI also runs.
+pytest==8.4.2
+pytest-xdist==3.8.0
+playwright==1.60.0
+# The daemon the browser and push suites start privately (skills/tests/harness.py).
+# PyPI's 1.0.0 predates the asset routes annotate's page needs, so it is pinned
+# to a commit; bump it when annotate starts relying on a newer daemon.
+webcompanion @ git+https://github.com/petmakris/webcompanion@914161e17f789348f4dd625aee57db58ed0b0f04

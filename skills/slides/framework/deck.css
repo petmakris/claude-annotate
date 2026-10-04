@@ -1,0 +1,311 @@
+  /* Structure only. Every colour and face this file uses by name comes from the
+     theme block inlined after it (themes/<name>/theme.css). */
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--stage);font-family:var(--body);color:var(--ink);padding:32px 0}
+  .deck{display:flex;flex-direction:column;align-items:center;gap:28px}
+
+  /* 16:9 slide canvas — 1280x720 logical px */
+  .slide{
+    position:relative;width:1280px;height:720px;background:var(--paper);
+    overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.35);
+    flex:none;
+  }
+  .num{position:absolute;left:-46px;top:6px;color:#cfcec6;font-family:var(--mono);font-size:13px}
+  .wm{position:absolute;left:67px;bottom:30px;font-family:var(--head);font-style:italic;color:var(--faint);font-size:13px}
+  .pg{position:absolute;right:80px;bottom:14px;color:var(--faint);font-size:12px}
+
+  /* A five-colour strip along the slide's bottom edge. Opt-in — add the markup below to a
+     slide that wants it, nothing renders it automatically.
+     <div class="footbar"><i></i><i></i><i></i><i></i><i></i></div> */
+  .footbar{position:absolute;left:0;bottom:0;width:100%;height:13px;display:flex}
+  .footbar i{flex:1}
+  .footbar i:nth-child(1){background:var(--bar1)}
+  .footbar i:nth-child(2){background:var(--bar2)}
+  .footbar i:nth-child(3){background:var(--bar3)}
+  .footbar i:nth-child(4){background:var(--bar4)}
+  .footbar i:nth-child(5){background:var(--bar5)}
+
+  /* content slide scaffolding */
+  .kick{position:absolute;left:67px;top:50px;color:var(--accent);font-weight:bold;font-size:13px;letter-spacing:3px}
+  .title{position:absolute;left:67px;top:84px;font-family:var(--head);font-weight:bold;font-size:40px;color:var(--ink)}
+  .lead{position:absolute;left:67px;right:67px;font-size:18px;color:var(--mute)}
+
+  .card{position:absolute;background:var(--panel);box-shadow:0 4px 14px rgba(0,0,0,.10)}
+  .card.warm{background:var(--panel2)}
+  .pad{padding:22px 26px}
+  h3.ch{font-family:var(--head);font-weight:bold;color:var(--ink)}
+  .mono{font-family:var(--mono)}
+  .muted{color:var(--mute)}
+  .faint{color:var(--faint)}
+  .ital{font-style:italic}
+  .ctr{text-align:center}
+
+  /* title slide */
+  .tslide{background:var(--dark);color:#fff}
+  .tslide .bar{position:absolute;left:0;top:0;width:18px;height:100%;background:var(--accent)}
+  .tslide .wmk{position:absolute;right:80px;top:48px;font-family:var(--head);font-style:italic;color:var(--on-dark-mute);font-size:14px}
+
+  /* section divider */
+  .divider{background:var(--dark);color:#fff}
+  .divider .ghost{position:absolute;right:54px;top:-66px;font-family:var(--head);font-weight:bold;font-size:430px;line-height:1;color:var(--dark-ghost);user-select:none;pointer-events:none}
+  .divider .dkick{position:absolute;left:88px;top:250px;color:var(--accent);font-weight:bold;font-size:15px;letter-spacing:6px}
+  .divider .dname{position:absolute;left:83px;top:292px;font-family:var(--head);font-weight:bold;font-size:80px;line-height:1.05;color:#fff;max-width:1080px}
+  .divider .drule{position:absolute;left:90px;top:424px;width:64px;height:9px;background:var(--accent)}
+  .divider .dtag{position:absolute;left:90px;top:460px;width:980px;font-size:22px;color:var(--on-dark);line-height:1.5}
+
+  /* larger, fuller bullet list */
+  ul.introb{position:absolute;left:67px;right:67px;list-style:none}
+  ul.introb li{position:relative;padding-left:32px;font-size:23px;line-height:1.5;color:var(--ink)}
+  ul.introb li + li{margin-top:28px}
+  ul.introb li:before{content:"";position:absolute;left:3px;top:14px;width:10px;height:10px;border-radius:50%;background:var(--accent)}
+  ul.introb.compact li{font-size:21px}
+  ul.introb.compact li + li{margin-top:20px}
+  ul.introb.compact li:before{top:12px}
+  ul.introb li b{color:var(--ink)}
+  ul.introb li .sub{display:block;font-size:16.5px;color:var(--mute);margin-top:4px;line-height:1.45}
+
+  /* question slides: the big open question + supporting asks */
+  .bigq{position:absolute;left:67px;right:67px;top:170px;font-family:var(--head);font-style:italic;font-size:31px;line-height:1.35;color:var(--ink)}
+  .bigq b{color:var(--accent);font-style:normal}
+  ul.asks{position:absolute;left:67px;right:67px;list-style:none}
+  ul.asks li{position:relative;padding-left:30px;font-size:20px;line-height:1.45;color:var(--ink)}
+  ul.asks li + li{margin-top:22px}
+  ul.asks li:before{content:"?";position:absolute;left:0;top:0;font-family:var(--head);font-weight:bold;font-size:21px;color:var(--accent)}
+  ul.asks li .sub{display:block;font-size:15.5px;color:var(--mute);margin-top:3px;line-height:1.45}
+  .dtake{position:absolute;left:67px;right:67px;bottom:46px;font-family:var(--head);font-style:italic;font-size:19px;color:var(--ink);text-align:center}
+
+  /* example strip — evidence panel pinned right */
+  .expanel{position:absolute;background:var(--panel);border-left:5px solid var(--neutral);border-radius:0 10px 10px 0;padding:18px 22px;box-shadow:0 4px 14px rgba(0,0,0,.08)}
+  .expanel .eh{font-family:var(--mono);font-size:11px;letter-spacing:2px;font-weight:bold;color:var(--neutral);margin-bottom:11px}
+  .expanel ul{list-style:none}
+  .expanel li{position:relative;padding-left:16px;margin-bottom:10px;font-size:14px;line-height:1.45;color:var(--ink)}
+  .expanel li:last-child{margin-bottom:0}
+  .expanel li:before{content:"";position:absolute;left:0;top:7px;width:5px;height:5px;border-radius:50%;background:var(--neutral)}
+  .expanel li b{color:var(--ink)}
+  .expanel.warm{border-left-color:var(--accent)}
+  .expanel.warm .eh{color:var(--accent)}
+  .expanel.warm li:before{background:var(--accent)}
+
+  /* controlled-context comparison panels */
+  .ctxp{position:absolute;top:250px;width:545px;background:var(--panel);border-radius:11px;box-shadow:0 4px 14px rgba(0,0,0,.09);overflow:hidden}
+  .ctxp .top{height:7px;width:100%}
+  .ctxp .body{padding:20px 26px}
+  .ctxp .nm{font-family:var(--head);font-weight:bold;font-size:24px;color:var(--ink)}
+  .ctxp .st{font-size:13px;color:var(--faint);font-style:italic;margin-bottom:14px}
+  .ctxp ul{list-style:none}
+  .ctxp li{position:relative;padding-left:24px;margin-bottom:10px;font-size:15.5px;line-height:1.45;color:var(--ink)}
+  .ctxp li.y:before{content:"✓";position:absolute;left:0;top:0;color:var(--settled);font-weight:bold}
+  .ctxp li.q:before{content:"?";position:absolute;left:0;top:0;color:var(--accent);font-family:var(--head);font-weight:bold}
+
+  /* guardrail rows */
+  .grail{position:absolute;left:67px;right:67px;top:218px;display:flex;flex-direction:column;gap:30px}
+  .grail .gr{display:grid;grid-template-columns:62px 1fr;align-items:baseline;column-gap:26px}
+  .grail .gr .n{font-family:var(--head);font-weight:bold;font-size:38px;line-height:.9}
+  .grail .gr:nth-child(1) .n{color:var(--accent)}
+  .grail .gr:nth-child(2) .n{color:var(--settled)}
+  .grail .gr:nth-child(3) .n{color:var(--neutral)}
+  .grail .gr:nth-child(4) .n{color:var(--wrong)}
+  .grail .gr .tt{font-size:25px;font-weight:bold;color:var(--ink);line-height:1.2}
+  .grail .gr .ds{font-size:16.5px;color:var(--mute);margin-top:4px;line-height:1.45}
+
+  /* toc + nav + present (same harness as the 06-06 deck) */
+  html{scroll-behavior:auto}
+  .slide{scroll-margin-top:28px}
+  .tslide .home-toc{display:flex;flex-wrap:wrap;gap:14px}
+  .tslide .home-toc a{display:inline-flex;align-items:baseline;gap:11px;border:1px solid var(--dark-rule);border-radius:10px;padding:13px 20px;background:var(--dark-raised);color:var(--on-dark);text-decoration:none;transition:border-color .15s ease,color .15s ease,background .15s ease}
+  .tslide .home-toc a:hover{border-color:var(--accent);color:#fff;background:var(--dark-hover)}
+  .tslide .home-toc a .n{font-family:var(--head);font-weight:bold;font-size:17px;color:var(--accent);line-height:1}
+
+  .present-btn{position:fixed;right:16px;bottom:16px;z-index:1001;background:var(--dark);color:var(--on-dark);
+    border:1px solid var(--accent);border-radius:6px;padding:8px 14px;font-family:var(--mono);
+    font-size:13px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+  .present-btn:hover{color:var(--accent)}
+  body.present{overflow:hidden;background:#000;padding:0}
+  body.present .deck{gap:0}
+  body.present .slide{display:none}
+  body.present .slide.current{display:block;position:fixed;left:50%;top:50%;
+    transform:translate(-50%,-50%) scale(var(--present-scale,1));transform-origin:center center;box-shadow:none;
+    transition:left .28s ease}
+  body.present .present-btn{display:none}
+  /* progressive reveal: hidden only while presenting; deck.js steps .frag-on */
+  body.present .frag{opacity:0;visibility:hidden;transition:opacity .25s ease,visibility .25s ease}
+  body.present .frag.frag-on{opacity:1;visibility:visible}
+  @media print{.present-btn{display:none}}
+
+  /* persistent floating nav — hover the left-edge tab to reveal jump links */
+  .floatnav{position:fixed;top:50%;left:0;transform:translateY(-50%);z-index:999;display:flex;flex-direction:row-reverse;align-items:stretch}
+  .fn-menu{background:var(--dark);box-shadow:0 6px 24px rgba(0,0,0,.45);border-radius:0 8px 8px 0;
+    max-width:0;opacity:0;overflow:hidden;white-space:nowrap;
+    transition:max-width .25s ease,opacity .2s ease,padding .25s ease;padding:16px 0}
+  .floatnav:hover .fn-menu{max-width:240px;opacity:1;padding:16px 20px}
+  .fn-menu .fn-head{color:var(--accent);font-weight:bold;font-size:10px;letter-spacing:3px;display:block;margin-bottom:8px}
+  .fn-menu a{display:block;color:var(--on-dark);text-decoration:none;font-family:var(--mono);font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--dark-rule);transition:color .15s ease}
+  .fn-menu a:last-child{border-bottom:none}
+  .fn-menu a:hover{color:var(--accent)}
+  .fn-tab{background:var(--dark);color:var(--on-dark);writing-mode:vertical-rl;text-orientation:mixed;
+    font-family:var(--mono);font-size:11px;letter-spacing:3px;font-weight:bold;
+    display:flex;align-items:center;justify-content:center;padding:0 8px;
+    border-right:3px solid var(--accent);border-radius:0 8px 8px 0;
+    box-shadow:0 4px 16px rgba(0,0,0,.4);user-select:none;cursor:pointer}
+  .floatnav:hover .fn-tab{border-radius:0}
+  body.present .floatnav{display:none}
+  @media print{.floatnav{display:none}}
+
+
+  /* feature intro: prose (added for the 798 rebuild) */
+  .pro{position:absolute;left:67px;right:120px;font-size:21px;line-height:1.62;color:#333330}
+  .pro p{margin:0 0 20px 0}
+  .pro b{color:var(--ink)}
+  .conseq{position:absolute;left:67px;right:120px;font-size:19px;line-height:1.55;color:var(--mute)}
+  .conseq b{color:var(--ink)}
+  .fnote{position:absolute;left:67px;right:120px;font-size:16px;line-height:1.55;color:var(--mute);border-top:1px solid var(--rule);padding-top:13px}
+  .fnote b{color:var(--ink)}
+
+  /* platform divider: a word rather than a numeral behind the title */
+  .divider .ghost.word{font-size:300px;top:52px;right:70px;letter-spacing:-14px}
+
+  /* ── step chain ───────────────────────────────────────────────────────
+     equal-width steps + arrows */
+  .flow{position:absolute;left:67px;right:67px;display:flex;align-items:stretch}
+  .flow .fs{flex:1;background:var(--panel);border-radius:10px;padding:18px 20px 17px;
+            box-shadow:0 3px 12px rgba(0,0,0,.08)}
+  .flow .fs .fn{font-family:var(--mono);font-size:10.5px;letter-spacing:1.8px;font-weight:bold;
+                color:var(--accent);margin-bottom:9px}
+  .flow .fs .ft{font-size:18px;font-weight:bold;line-height:1.25;color:var(--ink)}
+  .flow .fs .fd{font-size:14px;color:var(--mute);line-height:1.45;margin-top:8px}
+  .flow .fs.term{background:var(--panel2)}
+  .flow .arw{flex:none;width:34px;display:flex;align-items:center;justify-content:center;
+             color:#C9C7BC;font-size:21px;font-family:var(--mono)}
+
+  /* ── status table ─────────────────────────────────────────────────────
+     label + value chip + description rows */
+  .stab{position:absolute;left:67px;width:672px;font-size:16px}
+  .stab .sr{display:grid;grid-template-columns:126px 1fr;align-items:baseline;column-gap:20px;
+            padding:13px 0;border-bottom:1px solid #EFEEE7}
+  .stab .sr:last-child{border-bottom:none}
+  .stab .sv{font-family:var(--mono);font-size:12.5px;font-weight:bold;padding:4px 10px;
+            border-radius:5px;text-align:center}
+  .stab .sv.ok  {background:#F0EFEA;color:#8A897F}
+  .stab .sv.info{background:#EEF1FB;color:#3B4FA8}
+  .stab .sv.warn{background:#FFF0DF;color:#A8631B}
+  .stab .sv.err {background:#FBECF3;color:#B3357A}
+  .stab .sd{color:var(--ink);line-height:1.42}
+  .stab .sd em{display:block;color:var(--mute);font-style:normal;font-size:14px;margin-top:3px}
+  .stab.tight{font-size:15.5px}
+  .stab.tight .sr{padding:10px 0}
+  .stab.tight .sd em{font-size:13.5px}
+  .stab.wide{width:auto;right:67px}
+  .stab.wide .sr{grid-template-columns:132px 1fr;padding:11px 0}
+
+  /* ── side panel ───────────────────────────────────────────────────────
+     Same shape as .expanel above
+     (neutral border, eyebrow heading, bullet list) but settled-coloured and bold-first-line —
+     the two are near-duplicates; consolidating them is a later cleanup, not this one. */
+  .rails{position:absolute;right:67px;width:404px;background:var(--panel);
+         border-left:5px solid var(--settled);border-radius:0 10px 10px 0;padding:20px 24px;
+         box-shadow:0 4px 14px rgba(0,0,0,.08)}
+  .rails .rh{font-family:var(--mono);font-size:10.5px;letter-spacing:1.8px;font-weight:bold;
+             color:var(--settled);margin-bottom:14px}
+  .rails ul{list-style:none}
+  .rails li{position:relative;padding-left:18px;margin-bottom:15px;font-size:15px;
+            line-height:1.4;color:var(--ink);font-weight:bold}
+  .rails li:last-child{margin-bottom:0}
+  .rails li:before{content:"";position:absolute;left:0;top:7px;width:6px;height:6px;
+                   border-radius:50%;background:var(--settled)}
+  .rails li .sub{display:block;font-size:13.5px;color:var(--mute);margin-top:4px;
+                 line-height:1.42;font-weight:normal}
+  .rails.tight li{margin-bottom:11px;font-size:14.5px;line-height:1.38}
+  .rails.tight li .sub{font-size:13px;margin-top:3px;line-height:1.4}
+
+  /* ── external link chip ──────────────────────────────────────────────
+     link out to a captured demo/walkthrough */
+  .evlink{position:absolute;right:67px;top:88px;display:inline-flex;align-items:center;gap:9px;
+          padding:9px 16px;border-radius:8px;border:1px solid var(--accent);background:var(--panel2);
+          font-family:var(--mono);font-size:12.5px;letter-spacing:.4px;color:var(--accent);
+          text-decoration:none;font-weight:bold}
+  .evlink:hover{background:var(--accent);color:#fff}
+  .evlink .sub{font-family:var(--body);font-weight:normal;letter-spacing:0;color:var(--mute);font-size:12px}
+  .evlink:hover .sub{color:#FCEDE2}
+  @media print{.evlink{background:var(--panel2);color:var(--accent)}}
+
+  /* ── footer band ──────────────────────────────────────────────────────
+  Pins at bottom:36px — a .strip
+     shrinks the usable band above it to y=640, not 720; see SKILL.md layout discipline.
+     .demo is the same idea with a dashed border, for a live-demo call-out. */
+  .strip{position:absolute;left:67px;right:67px;bottom:36px;padding:14px 22px;border-radius:9px;
+         background:var(--panel2);font-size:15.5px;color:var(--ink);line-height:1.45}
+  .strip b{font-family:var(--mono);font-size:10.5px;letter-spacing:1.8px;color:var(--accent);
+           display:block;margin-bottom:6px;font-weight:bold}
+  .strip .mono{font-family:var(--mono);font-size:14px;color:var(--neutral)}
+  .demo{position:absolute;left:67px;right:67px;bottom:34px;padding:13px 20px;border-radius:9px;
+        background:var(--panel2);border:1px dashed #E7C8AC;font-size:15px;color:var(--mute)}
+  .demo b{color:var(--accent);font-family:var(--mono);font-size:12px;letter-spacing:2px}
+
+  /* ── alignment tree ───────────────────────────────────────────────────
+     an epic-and-children issue tree as
+     flat rows. .st is reserved by the tree's status pill — a .ctxp subtitle must
+     use .stt, never bare .st, or it inherits the pill's bold/padding/min-width. */
+  .chd{position:absolute;left:67px;right:67px;top:118px;display:flex;align-items:center;gap:14px;
+       padding-bottom:12px;border-bottom:2px solid var(--accent)}
+  .chd .ck{font-family:var(--mono);font-size:15px;font-weight:bold;color:var(--mute)}
+  .chd .cn{font-family:var(--head);font-weight:bold;font-size:27px;color:var(--ink)}
+  .chd .pill{font-size:12.5px;font-weight:bold;padding:3px 11px;border-radius:5px;
+             background:#E6F2E9;color:#3F7A52}
+  .chd .rel{font-size:12.5px;font-weight:bold;padding:3px 11px;border-radius:5px;
+            background:#EEF1FB;color:#3B4FA8;font-family:var(--mono)}
+  .chd .cl{margin-left:auto;font-family:var(--head);font-style:italic;font-size:17px;color:var(--mute)}
+  .tree{position:absolute;left:67px;right:67px;top:186px;font-size:16px}
+  .tr{display:grid;grid-template-columns:1fr auto auto;align-items:center;
+      column-gap:14px;padding:7px 0;border-bottom:1px solid #EFEEE7}
+  .tr:last-child{border-bottom:none}
+  .tr .lbl{display:flex;align-items:center;gap:11px;min-width:0}
+  .tr .txt{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tr.epic .txt{font-weight:bold}
+  .tr .ind{display:inline-block;flex:none;color:#C9C7BC;font-family:var(--mono);font-size:15px}
+  .k{flex:none;font-family:var(--mono);font-size:13px;font-weight:bold;letter-spacing:.3px;
+     padding:3px 9px;border-radius:5px;border:1px solid;white-space:nowrap}
+  .ep{flex:none;font-family:var(--mono);font-size:11.5px;color:#5A6BB5;background:#EEF1FB;
+      border-radius:4px;padding:2px 7px}
+  .cmps{display:flex;gap:6px;flex:none}
+  .cmp{font-size:12px;padding:2px 9px;border-radius:5px;border:1px dashed;white-space:nowrap}
+  .st{flex:none;font-size:12.5px;font-weight:bold;padding:3px 11px;border-radius:5px;
+      white-space:nowrap;min-width:88px;text-align:center}
+  .st.done{background:#2F52D9;color:#fff}
+  .st.wip {background:#E7EBFA;color:#3B4FA8}
+  .st.todo{background:#F0EFEA;color:#8A897F}
+  .st.note{background:none;color:var(--faint);font-style:italic;font-weight:normal;font-family:var(--head)}
+
+  /* ── data table ───────────────────────────────────────────────────────
+     a real multi-column table.
+     Distinct from .stab, which is a two-column status list, not a table.
+
+     The first column is styled automatically as the label column — do NOT
+     put class="k" on it. .k is the alignment tree's ticket-key chip and
+     carries border:1px solid, which draws stray rules through table cells.
+     Cell borders are zeroed explicitly because border-collapse:collapse
+     otherwise lets adjacent edges paint where no rule asked for them. */
+  .dtable{position:absolute;left:67px;right:67px}
+  .dtable .cap{font-family:var(--mono);font-size:10.5px;letter-spacing:1.8px;font-weight:bold;
+               color:var(--accent);margin-bottom:12px}
+  .dtable .cap span{color:var(--faint);letter-spacing:1.2px;font-weight:normal}
+  .dtable table{width:100%;border-collapse:collapse}
+  .dtable th,.dtable td{border:0;text-align:left;background:none}
+  .dtable th{font-family:var(--mono);font-size:10px;letter-spacing:1.6px;color:var(--faint);
+             font-weight:bold;padding:0 18px 9px 0;border-bottom:2px solid var(--accent)}
+  .dtable td{font-size:16px;color:var(--ink);padding:12px 18px 12px 0;
+             border-bottom:1px solid var(--rule);vertical-align:top;line-height:1.35}
+  .dtable tr:last-child td{border-bottom:0}
+  .dtable td:first-child{font-family:var(--mono);font-size:13px;color:var(--mute);
+                         line-height:1.5;padding-right:28px}
+  .dtable td:last-child{padding-right:0}
+  .dtable td.ok{color:var(--settled);font-weight:bold}
+  .dtable td.no{color:var(--wrong);font-weight:bold}
+  .dtable td.hi{color:var(--settled);font-weight:bold;background:#F2F5EC}
+  .dtable td .sub{display:block;font-family:var(--body);font-size:13px;font-weight:normal;
+                  color:var(--mute);margin-top:4px;line-height:1.4}
+  .dtable td .note{font-weight:normal;color:var(--mute)}
+  .dtable.compact td{font-size:15px;padding:8px 18px 8px 0}
+  .dtable.compact td .sub{font-size:12.5px}
+  .dtable.zebra td{border-bottom:0}
+  .dtable.zebra tbody tr:nth-child(odd) td{background:var(--panel)}
+  .dtable.zebra td:first-child{padding-left:12px}

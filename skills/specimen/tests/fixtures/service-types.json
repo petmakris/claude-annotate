@@ -1,0 +1,1063 @@
+{
+  "commit": "2abc1234",
+  "root": "com.example.reporting.AnalyticsQueryService",
+  "types": {
+    "AggregationDescription": {
+      "kind": "unhandled",
+      "reason": "'AggregationDescription' could not be resolved through the file's imports, its compilation unit, its package, or a wildcard"
+    },
+    "AnalyticsData": {
+      "kind": "unhandled",
+      "reason": "'AnalyticsData' could not be resolved through the file's imports, its compilation unit, its package, or a wildcard"
+    },
+    "BANK,": {
+      "kind": "unhandled",
+      "reason": "'BANK,' could not be resolved through the file's imports, its compilation unit, its package, or a wildcard"
+    },
+    "MarketValue": {
+      "kind": "unhandled",
+      "reason": "'MarketValue' could not be resolved through the file's imports, its compilation unit, its package, or a wildcard"
+    },
+    "T": {
+      "kind": "unhandled",
+      "reason": "'T' could not be resolved through the file's imports, its compilation unit, its package, or a wildcard"
+    },
+    "CategoryContributor": {
+      "kind": "unhandled",
+      "reason": "'CategoryContributor' could not be resolved through the file's imports, its compilation unit, its package, or a wildcard"
+    },
+    "Classification.ClassificationId": {
+      "kind": "unhandled",
+      "reason": "'Classification.ClassificationId' could not be resolved through the file's imports, its compilation unit, its package, or a wildcard"
+    },
+    "WeightAndMarketValue": {
+      "kind": "unhandled",
+      "reason": "'WeightAndMarketValue' could not be resolved through the file's imports, its compilation unit, its package, or a wildcard"
+    },
+    "com.example.reporting.AnalyticsQueryService": {
+      "fields": [
+        {
+          "args": [],
+          "base": "AnalyticsComputationService",
+          "declared": "AnalyticsComputationService",
+          "line": 39,
+          "name": "analyticsComputationService",
+          "nullability": "unmarked"
+        },
+        {
+          "args": [],
+          "base": "ClassificationRepository",
+          "declared": "ClassificationRepository",
+          "line": 40,
+          "name": "classificationRepository",
+          "nullability": "unmarked"
+        },
+        {
+          "args": [],
+          "base": "ClassificationsProperties",
+          "declared": "ClassificationsProperties",
+          "line": 41,
+          "name": "classificationsProperties",
+          "nullability": "unmarked"
+        }
+      ],
+      "kind": "behaviour",
+      "line": 38,
+      "source": "/w/src/main/java/com/example/reporting/AnalyticsQueryService.java"
+    },
+    "com.example.reporting.AnalyticsQueryService$AnalyticsData$CategoryValue": {
+      "fields": [
+        {
+          "args": [],
+          "base": "Category",
+          "declared": "Category",
+          "line": 107,
+          "name": "category",
+          "nullability": "unmarked"
+        },
+        {
+          "args": [],
+          "base": "T",
+          "declared": "T",
+          "line": 107,
+          "name": "value",
+          "nullability": "unmarked"
+        }
+      ],
+      "kind": "data",
+      "line": 107,
+      "source": "/w/src/main/java/com/example/reporting/AnalyticsQueryService.java"
+    },
+    "com.example.analytics.model.AnalyticQuery$Aggregation": {
+      "fields": [
+        {
+          "args": [
+            "Category"
+          ],
+          "base": "Set",
+          "declared": "Set<Category>",
+          "line": 18,
+          "name": "filteringCategory",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "Classification",
+          "declared": "Classification",
+          "line": 19,
+          "name": "groupingClassification",
+          "nullability": "non-null"
+        }
+      ],
+      "kind": "data",
+      "line": 18,
+      "source": "/w/src/main/java/com/example/analytics/model/AnalyticQuery.java"
+    },
+    "com.example.analytics.model.AnalyticsResult": {
+      "fields": [
+        {
+          "args": [
+            "Chart"
+          ],
+          "base": "List",
+          "declared": "List<Chart>",
+          "line": 19,
+          "name": "charts",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "MarketValue",
+          "declared": "MarketValue",
+          "line": 19,
+          "name": "totalWealth",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "MarketValue",
+          "declared": "MarketValue",
+          "line": 19,
+          "name": "totalWealthAfter",
+          "nullability": "nullable"
+        }
+      ],
+      "kind": "data",
+      "line": 19,
+      "source": "/w/src/main/java/com/example/analytics/model/AnalyticsResult.java"
+    },
+    "com.example.analytics.model.AnalyticsResult$Allocation": {
+      "fields": [
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 74,
+          "name": "allocationInPortfolio",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 75,
+          "name": "allocationInGroup",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "MarketValue",
+          "declared": "MarketValue",
+          "line": 76,
+          "name": "marketValue",
+          "nullability": "non-null"
+        }
+      ],
+      "kind": "data",
+      "line": 74,
+      "source": "/w/src/main/java/com/example/analytics/model/AnalyticsResult.java"
+    },
+    "com.example.analytics.model.AnalyticsResult$Chart": {
+      "fields": [
+        {
+          "args": [
+            "CategoryId"
+          ],
+          "base": "Set",
+          "declared": "Set<CategoryId>",
+          "line": 20,
+          "name": "filteringCategoryId",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "Classification.ClassificationId",
+          "declared": "Classification.ClassificationId",
+          "line": 21,
+          "name": "groupingClassificationId",
+          "nullability": "non-null"
+        },
+        {
+          "args": [
+            "CategoryAllocation"
+          ],
+          "base": "List",
+          "declared": "List<CategoryAllocation>",
+          "line": 22,
+          "name": "allocations",
+          "nullability": "non-null"
+        },
+        {
+          "args": [
+            "CategoryRiskContribution"
+          ],
+          "base": "List",
+          "declared": "List<CategoryRiskContribution>",
+          "line": 23,
+          "name": "riskContributions",
+          "nullability": "non-null"
+        },
+        {
+          "args": [
+            "CategoryContributors"
+          ],
+          "base": "List",
+          "declared": "List<CategoryContributors>",
+          "line": 24,
+          "name": "categoryContributors",
+          "nullability": "non-null"
+        }
+      ],
+      "kind": "data",
+      "line": 20,
+      "source": "/w/src/main/java/com/example/analytics/model/AnalyticsResult.java"
+    },
+    "com.example.analytics.model.AnalyticsResult$Contributor": {
+      "fields": [
+        {
+          "args": [],
+          "base": "Asset",
+          "declared": "Asset",
+          "line": 49,
+          "name": "asset",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 50,
+          "name": "currentAllocationInPortfolio",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 51,
+          "name": "proposedAllocationInPortfolio",
+          "nullability": "nullable"
+        },
+        {
+          "args": [],
+          "base": "MarketValue",
+          "declared": "MarketValue",
+          "line": 52,
+          "name": "currentMarketValueInRefCurrency",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "MarketValue",
+          "declared": "MarketValue",
+          "line": 53,
+          "name": "proposedMarketValueInRefCurrency",
+          "nullability": "nullable"
+        },
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 54,
+          "name": "currentRiskContribution",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 55,
+          "name": "proposedRiskContribution",
+          "nullability": "nullable"
+        }
+      ],
+      "kind": "data",
+      "line": 49,
+      "source": "/w/src/main/java/com/example/analytics/model/AnalyticsResult.java"
+    },
+    "com.example.analytics.model.AnalyticsResult$MarketValue": {
+      "fields": [
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 78,
+          "name": "amount",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "Currency",
+          "declared": "Currency",
+          "line": 79,
+          "name": "currency",
+          "nullability": "non-null"
+        }
+      ],
+      "kind": "data",
+      "line": 78,
+      "source": "/w/src/main/java/com/example/analytics/model/AnalyticsResult.java"
+    },
+    "com.example.analytics.model.AnalyticsResult$Strategy": {
+      "fields": [
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 71,
+          "name": "allocationInPortfolio",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 72,
+          "name": "allocationInGroup",
+          "nullability": "non-null"
+        }
+      ],
+      "kind": "data",
+      "line": 71,
+      "source": "/w/src/main/java/com/example/analytics/model/AnalyticsResult.java"
+    },
+    "com.example.analytics.model.AnalyticsResult$CategoryAllocation": {
+      "fields": [
+        {
+          "args": [],
+          "base": "Category",
+          "declared": "Category",
+          "line": 27,
+          "name": "category",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "Allocation",
+          "declared": "Allocation",
+          "line": 28,
+          "name": "current",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "Allocation",
+          "declared": "Allocation",
+          "line": 29,
+          "name": "proposed",
+          "nullability": "nullable"
+        },
+        {
+          "args": [],
+          "base": "Strategy",
+          "declared": "Strategy",
+          "line": 30,
+          "name": "strategy",
+          "nullability": "nullable"
+        }
+      ],
+      "kind": "data",
+      "line": 27,
+      "source": "/w/src/main/java/com/example/analytics/model/AnalyticsResult.java"
+    },
+    "com.example.analytics.model.AnalyticsResult$CategoryContributors": {
+      "fields": [
+        {
+          "args": [],
+          "base": "Category",
+          "declared": "Category",
+          "line": 40,
+          "name": "category",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 41,
+          "name": "currentAllocationInPortfolio",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 42,
+          "name": "proposedAllocationInPortfolio",
+          "nullability": "nullable"
+        },
+        {
+          "args": [],
+          "base": "MarketValue",
+          "declared": "MarketValue",
+          "line": 43,
+          "name": "currentMarketValueInRefCurrency",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "MarketValue",
+          "declared": "MarketValue",
+          "line": 44,
+          "name": "proposedMarketValueInRefCurrency",
+          "nullability": "nullable"
+        },
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 45,
+          "name": "currentRiskContribution",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 46,
+          "name": "proposedRiskContribution",
+          "nullability": "nullable"
+        },
+        {
+          "args": [
+            "Contributor"
+          ],
+          "base": "List",
+          "declared": "List<Contributor>",
+          "line": 47,
+          "name": "contributors",
+          "nullability": "non-null"
+        }
+      ],
+      "kind": "data",
+      "line": 40,
+      "source": "/w/src/main/java/com/example/analytics/model/AnalyticsResult.java"
+    },
+    "com.example.analytics.model.AnalyticsResult$CategoryRiskContribution": {
+      "fields": [
+        {
+          "args": [],
+          "base": "Category",
+          "declared": "Category",
+          "line": 32,
+          "name": "category",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "RiskContribution",
+          "declared": "RiskContribution",
+          "line": 33,
+          "name": "current",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "RiskContribution",
+          "declared": "RiskContribution",
+          "line": 34,
+          "name": "proposed",
+          "nullability": "nullable"
+        }
+      ],
+      "kind": "data",
+      "line": 32,
+      "source": "/w/src/main/java/com/example/analytics/model/AnalyticsResult.java"
+    },
+    "com.example.analytics.service.AnalyticsComputationService": {
+      "fields": [
+        {
+          "args": [],
+          "base": "StrategyRepository",
+          "declared": "StrategyRepository",
+          "line": 73,
+          "name": "strategyRepository",
+          "nullability": "unmarked"
+        },
+        {
+          "args": [],
+          "base": "ExchangeRateRepository",
+          "declared": "ExchangeRateRepository",
+          "line": 78,
+          "name": "exchangeRateRepository",
+          "nullability": "unmarked"
+        },
+        {
+          "args": [],
+          "base": "RiskContributionService",
+          "declared": "RiskContributionService",
+          "line": 79,
+          "name": "riskContributionService",
+          "nullability": "unmarked"
+        }
+      ],
+      "kind": "behaviour",
+      "line": 69,
+      "source": "/w/src/main/java/com/example/analytics/service/AnalyticsComputationService.java"
+    },
+    "com.example.analytics.service.RiskContribution": {
+      "fields": [
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 13,
+          "name": "totalContribution",
+          "nullability": "unmarked"
+        },
+        {
+          "args": [
+            "PositionContribution"
+          ],
+          "base": "List",
+          "declared": "List<PositionContribution>",
+          "line": 14,
+          "name": "positionContributions",
+          "nullability": "unmarked"
+        }
+      ],
+      "kind": "data",
+      "line": 11,
+      "source": "/w/src/main/java/com/example/analytics/service/RiskContribution.java"
+    },
+    "com.example.analytics.service.RiskContribution$PositionContribution": {
+      "fields": [
+        {
+          "args": [],
+          "base": "Asset",
+          "declared": "Asset",
+          "line": 21,
+          "name": "asset",
+          "nullability": "unmarked"
+        },
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 21,
+          "name": "contribution",
+          "nullability": "unmarked"
+        }
+      ],
+      "kind": "data",
+      "line": 21,
+      "source": "/w/src/main/java/com/example/analytics/service/RiskContribution.java"
+    },
+    "com.example.compliance.Solicitation": {
+      "fields": [
+        {
+          "args": [],
+          "base": "BANK,",
+          "declared": "BANK,",
+          "line": 4,
+          "name": "CLIENT",
+          "nullability": "unmarked"
+        }
+      ],
+      "kind": "data",
+      "line": 3,
+      "source": "/w/src/main/java/com/example/compliance/Solicitation.java"
+    },
+    "com.example.simulation.BuySell": {
+      "fields": [
+        {
+          "args": [],
+          "base": "RequestHash",
+          "declared": "RequestHash",
+          "line": 11,
+          "name": "requestHash",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "Solicitation",
+          "declared": "Solicitation",
+          "line": 12,
+          "name": "solicitation",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "AssetId",
+          "declared": "AssetId",
+          "line": 13,
+          "name": "assetId",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "Currency",
+          "declared": "Currency",
+          "line": 14,
+          "name": "cashCurrency",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "BuySellType",
+          "declared": "BuySellType",
+          "line": 15,
+          "name": "type",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 16,
+          "name": "value",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "Currency",
+          "declared": "Currency",
+          "line": 17,
+          "name": "amountCurrency",
+          "nullability": "unmarked"
+        }
+      ],
+      "kind": "data",
+      "line": 11,
+      "source": "/w/src/main/java/com/example/simulation/BuySell.java"
+    },
+    "com.example.simulation.BuySell$BuySellType": {
+      "kind": "data",
+      "line": 47,
+      "source": "/w/src/main/java/com/example/simulation/BuySell.java"
+    },
+    "com.example.simulation.CashChangeAssumption": {
+      "fields": [
+        {
+          "args": [],
+          "base": "RequestHash",
+          "declared": "RequestHash",
+          "line": 10,
+          "name": "requestHash",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "Solicitation",
+          "declared": "Solicitation",
+          "line": 11,
+          "name": "solicitation",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "AssetId",
+          "declared": "AssetId",
+          "line": 12,
+          "name": "cashAssetId",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 13,
+          "name": "value",
+          "nullability": "non-null"
+        }
+      ],
+      "kind": "data",
+      "line": 10,
+      "source": "/w/src/main/java/com/example/simulation/CashChangeAssumption.java"
+    },
+    "com.example.simulation.CashExchange": {
+      "fields": [
+        {
+          "args": [],
+          "base": "RequestHash",
+          "declared": "RequestHash",
+          "line": 11,
+          "name": "requestHash",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "Solicitation",
+          "declared": "Solicitation",
+          "line": 12,
+          "name": "solicitation",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "AssetId",
+          "declared": "AssetId",
+          "line": 13,
+          "name": "cashAssetIdToSell",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "AssetId",
+          "declared": "AssetId",
+          "line": 14,
+          "name": "cashAssetIdToBuy",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "ChangeType",
+          "declared": "ChangeType",
+          "line": 15,
+          "name": "changeType",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 16,
+          "name": "value",
+          "nullability": "non-null"
+        }
+      ],
+      "kind": "data",
+      "line": 11,
+      "source": "/w/src/main/java/com/example/simulation/CashExchange.java"
+    },
+    "com.example.simulation.RequestHash": {
+      "fields": [
+        {
+          "args": [],
+          "base": "String",
+          "declared": "String",
+          "line": 7,
+          "name": "hash",
+          "nullability": "unmarked"
+        }
+      ],
+      "kind": "data",
+      "line": 7,
+      "source": "/w/src/main/java/com/example/simulation/RequestHash.java"
+    },
+    "com.example.simulation.MultiLegSwitch": {
+      "fields": [
+        {
+          "args": [],
+          "base": "RequestHash",
+          "declared": "RequestHash",
+          "line": 12,
+          "name": "requestHash",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "Solicitation",
+          "declared": "Solicitation",
+          "line": 13,
+          "name": "solicitation",
+          "nullability": "non-null"
+        },
+        {
+          "args": [
+            "SwitchLeg"
+          ],
+          "base": "List",
+          "declared": "List<SwitchLeg>",
+          "line": 14,
+          "name": "legsOut",
+          "nullability": "non-null"
+        },
+        {
+          "args": [
+            "SwitchLeg"
+          ],
+          "base": "List",
+          "declared": "List<SwitchLeg>",
+          "line": 15,
+          "name": "legsIn",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "String",
+          "declared": "String",
+          "line": 16,
+          "name": "type",
+          "nullability": "unmarked"
+        }
+      ],
+      "kind": "data",
+      "line": 12,
+      "source": "/w/src/main/java/com/example/simulation/MultiLegSwitch.java"
+    },
+    "com.example.simulation.SimulationScenario": {
+      "fields": [
+        {
+          "args": [
+            "TargetChange"
+          ],
+          "base": "List",
+          "declared": "List<TargetChange>",
+          "line": 13,
+          "name": "targetChanges",
+          "nullability": "unmarked"
+        },
+        {
+          "args": [
+            "BuySell"
+          ],
+          "base": "List",
+          "declared": "List<BuySell>",
+          "line": 14,
+          "name": "buySells",
+          "nullability": "unmarked"
+        },
+        {
+          "args": [
+            "CashExchange"
+          ],
+          "base": "List",
+          "declared": "List<CashExchange>",
+          "line": 15,
+          "name": "cashExchanges",
+          "nullability": "unmarked"
+        },
+        {
+          "args": [
+            "MultiLegSwitch"
+          ],
+          "base": "List",
+          "declared": "List<MultiLegSwitch>",
+          "line": 16,
+          "name": "switches",
+          "nullability": "unmarked"
+        },
+        {
+          "args": [
+            "CashChangeAssumption"
+          ],
+          "base": "List",
+          "declared": "List<CashChangeAssumption>",
+          "line": 17,
+          "name": "cashChangeAssumptions",
+          "nullability": "unmarked"
+        },
+        {
+          "args": [],
+          "base": "Integer",
+          "declared": "Integer",
+          "line": 19,
+          "name": "simulatedTemplateIdChange",
+          "nullability": "nullable"
+        },
+        {
+          "args": [],
+          "base": "String",
+          "declared": "String",
+          "line": 21,
+          "name": "simulatedStrategyIdChange",
+          "nullability": "nullable"
+        },
+        {
+          "args": [],
+          "base": "UUID",
+          "declared": "UUID",
+          "line": 22,
+          "name": "simulatedModelPortfolioIdChange",
+          "nullability": "nullable"
+        }
+      ],
+      "kind": "data",
+      "line": 13,
+      "source": "/w/src/main/java/com/example/simulation/SimulationScenario.java"
+    },
+    "com.example.simulation.SwitchLeg": {
+      "fields": [
+        {
+          "args": [],
+          "base": "AssetId",
+          "declared": "AssetId",
+          "line": 17,
+          "name": "assetId",
+          "nullability": "unmarked"
+        }
+      ],
+      "kind": "behaviour",
+      "line": 15,
+      "source": "/w/src/main/java/com/example/simulation/SwitchLeg.java"
+    },
+    "com.example.simulation.TargetChange": {
+      "fields": [
+        {
+          "args": [],
+          "base": "RequestHash",
+          "declared": "RequestHash",
+          "line": 11,
+          "name": "requestHash",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "Solicitation",
+          "declared": "Solicitation",
+          "line": 12,
+          "name": "solicitation",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "AssetId",
+          "declared": "AssetId",
+          "line": 13,
+          "name": "assetId",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "Currency",
+          "declared": "Currency",
+          "line": 14,
+          "name": "cashCurrency",
+          "nullability": "unmarked"
+        },
+        {
+          "args": [],
+          "base": "BigDecimal",
+          "declared": "BigDecimal",
+          "line": 15,
+          "name": "value",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "TargetChangeType",
+          "declared": "TargetChangeType",
+          "line": 16,
+          "name": "type",
+          "nullability": "non-null"
+        },
+        {
+          "args": [],
+          "base": "Currency",
+          "declared": "Currency",
+          "line": 17,
+          "name": "amountCurrency",
+          "nullability": "unmarked"
+        }
+      ],
+      "kind": "data",
+      "line": 11,
+      "source": "/w/src/main/java/com/example/simulation/TargetChange.java"
+    },
+    "com.example.simulation.TargetChange$TargetChangeType": {
+      "kind": "data",
+      "line": 50,
+      "source": "/w/src/main/java/com/example/simulation/TargetChange.java"
+    },
+    "com.example.risk.ChangeType": {
+      "fields": [
+        {
+          "args": [],
+          "base": "String",
+          "declared": "String",
+          "line": 15,
+          "name": "externalName",
+          "nullability": "unmarked"
+        },
+        {
+          "args": [],
+          "base": "boolean",
+          "declared": "boolean",
+          "line": 16,
+          "name": "actionableOrder",
+          "nullability": "unmarked"
+        }
+      ],
+      "kind": "data",
+      "line": 8,
+      "source": "/w/src/main/java/com/example/risk/ChangeType.java"
+    },
+    "com.example.catalog.config.ClassificationsProperties": {
+      "accessors_observed": [
+        "getId"
+      ],
+      "kind": "leaf",
+      "reason": "no source in worktree; com.example.catalog.config is not checked out here"
+    },
+    "com.example.money.Currency": {
+      "accessors_observed": [
+        "getId",
+        "getName"
+      ],
+      "kind": "leaf",
+      "reason": "no source in worktree; com.example.money is not checked out here"
+    },
+    "com.example.catalog.domain.Category": {
+      "accessors_observed": [
+        "getId",
+        "getName"
+      ],
+      "kind": "leaf",
+      "reason": "no source in worktree; com.example.catalog.domain is not checked out here"
+    },
+    "com.example.catalog.domain.Category.CategoryId": {
+      "accessors_observed": [
+        "getValue"
+      ],
+      "kind": "leaf",
+      "reason": "no source in worktree; com.example.catalog.domain is not checked out here"
+    },
+    "com.example.catalog.domain.Classification": {
+      "accessors_observed": [
+        "getId",
+        "getName",
+        "getClassificationId",
+        "getCategories"
+      ],
+      "kind": "leaf",
+      "reason": "no source in worktree; com.example.catalog.domain is not checked out here"
+    },
+    "com.example.catalog.infrastructure.ClassificationRepository": {
+      "accessors_observed": [
+        "findById",
+        "getAll"
+      ],
+      "kind": "leaf",
+      "reason": "no source in worktree; com.example.catalog.infrastructure is not checked out here"
+    },
+    "com.example.inventory.domain.Asset": {
+      "accessors_observed": [
+        "getCurrency",
+        "getId",
+        "getName",
+        "getCategories"
+      ],
+      "kind": "leaf",
+      "reason": "no source in worktree; com.example.inventory.domain is not checked out here"
+    },
+    "com.example.inventory.domain.AssetId": {
+      "accessors_observed": [
+        "getValue"
+      ],
+      "kind": "leaf",
+      "reason": "no source in worktree; com.example.inventory.domain is not checked out here"
+    }
+  },
+  "worktree": "/w"
+}

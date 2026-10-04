@@ -1,0 +1,788 @@
+/* Annotate skill — response typography and block-level annotation UI.
+   Skill-agnostic tokens, fonts, header, comment cards, etc. live in core.css.
+
+   One stylesheet in thirteen files, cut at its own section markers and linked
+   by entry.js in this order: style.css (this: prose, annotation containers,
+   the legend, the composer, cards, choice blocks), then style-search,
+   style-page, style-highlighter, style-code, style-explain, style-maximize,
+   style-menu, style-narration, style-choice-queue, style-selection,
+   style-read-aloud and style-edit. Order is cascade order, exactly as it was
+   in one file, so a rule that overrides an earlier one must stay in the same
+   file or a later one. */
+
+/* Unify the page column. core.css ships a 1400px content-max for diff
+   views; annotate's reading column is set here instead. The prose and the
+   sticky bars inside it derive their width from --content-max, and every
+   band of chrome derives its inset from --content-gutter.
+   1600px is the Normal stop (see the view controls below). It is also the
+   :root default, so a page that carries no data-width at all — an export —
+   reads at Normal rather than at some older measure. */
+:root {
+  --content-max: 1600px;
+  --content-gutter: 24px;
+  /* The page chrome — top bar, composer band, footer actions — is FULL
+     WIDTH at every stop, one gutter in from the viewport edge, and never
+     follows --content-max. The bar is not content: when it followed the
+     reading column, narrowing the column dragged the search box and every
+     control inwards with it, so the controls moved under the pointer.
+     Measured then: the width toggle sat at x=980 / 1051 / 1261 across the
+     stops, a 281px swing from a setting that is about prose. It later sat
+     on a 1600px measure of its own, which was fine while 1600px was the
+     widest column; with Wide uncapped, a capped bar would sit inset from
+     the column below it. Full width is the one measure no column exceeds,
+     so at Wide the bar and the column share a left edge, and at Normal the
+     bar simply keeps it. test_browser_review.py measures both stops. */
+}
+
+/* === Response content (prose) ======================================== */
+main.prose {
+  flex: 1;
+  padding: 26px var(--content-gutter) 80px var(--content-gutter);
+  max-width: var(--content-max);
+  width: 100%;
+  margin: 0 auto;
+}
+main.prose h1 { color: var(--text-strong); margin-top: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.022em; }
+main.prose h2 { color: var(--text-strong); margin-top: 1.4em; font-size: 21px; font-weight: 700; letter-spacing: -0.022em; }
+main.prose h3 {
+  color: var(--accent);
+  margin-top: 1.6em;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+main.prose p, main.prose li, main.prose blockquote {
+  position: relative;
+  padding: 4px 140px 4px 6px;
+  border-radius: 3px;
+  transition: background-color 120ms ease;
+}
+main.prose h1, main.prose h2, main.prose h3,
+main.prose h4, main.prose h5, main.prose h6 {
+  padding-right: 140px;
+  transition: background-color 120ms ease;
+  border-radius: 3px;
+}
+main.prose [data-block-id]:hover { background: var(--hover-tint); }
+main.prose blockquote p:hover { background: transparent; }
+/* Sequence blocks are ordinary cards: constant var(--surface) background
+   like every other block, no per-card hover wash. A prose-era override
+   here used to force them transparent, which read as a gray card that
+   flashed white on hover — the card rules (see "Card layout") already
+   neutralize the hover tint, and the useful hover affordance lives on the
+   diagram's own steps (diagram.css thickens the hovered arrow). */
+/* The <pre> is a bare, corner-clipping wrapper; the visible surface is the
+   inner code element (dark theme via code-theme.css, light fallback below). */
+main.prose pre {
+  margin: 1em 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 100%;
+}
+/* Syntax-highlighted code (Shiki, through code-paint.js). code-theme.css
+   paints the dark ground on code.sk-fence and every token carries its own
+   colour; this rule owns only the layout. */
+main.prose pre code.sk-fence {
+  display: block;
+  padding: 14px 16px;
+  overflow-x: auto;
+  /* No border-radius here — the parent <pre> clips to its own 8px radius. */
+  font-family: var(--font-code);
+  font-size: 13px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+/* Fallback when the highlighter is unavailable (failed to load): plain code
+   keeps the original light card so it stays readable on the light page. */
+main.prose pre code:not(.sk-fence) {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: var(--text);
+  white-space: pre;
+  overflow-x: auto;
+  font-family: var(--font-code);
+  font-size: 13.5px;
+}
+/* Inline code only — must not match <code> inside <pre>. */
+main.prose :not(pre) > code {
+  background: var(--surface);
+  padding: 1px 6px; border-radius: 3px;
+  font-family: var(--font-code);
+  font-size: 0.92em;
+}
+main.prose blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 16px;
+  margin: 1em 0;
+  color: var(--text-dim);
+}
+main.prose blockquote p { margin: 0.4em 0; padding: 0; }
+main.prose blockquote p:hover { background: transparent; }
+main.prose hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 2em 0;
+}
+main.prose ul, main.prose ol {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+main.prose li > ul, main.prose li > ol {
+  margin: 0.25em 0;
+}
+main.prose a {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+main.prose a:hover { filter: brightness(1.1); }
+main.prose table {
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 0.95em;
+  /* display:block turns the table itself into the scroll container. Prose
+     cells still wrap to fit the card; when an unbreakable token (file path,
+     UUID, inline code) makes the grid wider than the card, it scrolls
+     horizontally instead of being clipped by the card's overflow:hidden. */
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+main.prose th, main.prose td {
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  text-align: left;
+}
+/* Phone width: one unbreakable token (a column name, a path) set the
+   min-content width of its whole column and squeezed the prose columns
+   beside it — Notes measured 92px wide at 390px, one row 248px tall. Both
+   halves are needed: `anywhere` alone lets the token break, but then every
+   column shrinks to fit the card (measured: 46px columns); the floor keeps
+   each column readable and lets the table scroll, which it already does.
+   Desktop keeps the old rule — a wide token scrolls the table — because a
+   floor there would push many-column tables that fit today into scrolling. */
+@media (max-width: 600px) {
+  main.prose th, main.prose td { overflow-wrap: anywhere; min-width: 9em; }
+}
+main.prose th {
+  background: var(--surface);
+  font-weight: 600;
+}
+
+/* === Block-level annotation containers =============================== */
+[data-block-id] { position: relative; }
+
+[data-block-id][data-engaged-type] {
+  padding-left: 12px;
+  margin-left: -12px;
+  border-radius: 0 4px 4px 0;
+}
+[data-block-id][data-engaged-type]::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 4px; bottom: 4px;
+  width: 3px;
+  border-radius: 2px;
+}
+[data-block-id][data-engaged-type="reject"]              { background: var(--type-reject-wash); }
+[data-block-id][data-engaged-type="reject"]::before      { background: var(--type-reject-fg); }
+[data-block-id][data-engaged-type="comment"]             { background: var(--type-comment-wash); }
+[data-block-id][data-engaged-type="comment"]::before     { background: var(--type-comment-fg); }
+
+[data-block-id][data-engaged-type="reject"]:hover   { background: color-mix(in srgb, var(--type-reject-wash) 55%, var(--hover-tint)); }
+[data-block-id][data-engaged-type="comment"]:hover  { background: color-mix(in srgb, var(--type-comment-wash) 55%, var(--hover-tint)); }
+
+/* === Read-only mode ==================================================
+   A shared link renders the document and nothing that would be refused.
+   Every control, the round dock and the comment composers go away. There is
+   no longer an exception: the fold used to survive here because it never
+   left the reader's browser, but compact replaced it and compact is an edit,
+   which belongs to whoever owns the workspace. */
+body.read-only .sel-menu,
+body.read-only .sel-composer,
+body.read-only #round-dock,
+body.read-only .comment-card { display: none; }
+
+/* === Legend ==========================================================
+   Reference material, not chrome the reader needs on every visit, so it lives
+   in the menu's help pane and paints as .legend-pop — see the pane rules
+   further down. These inner rules are shared with the exported standalone
+   HTML, which has no menu and renders the table inline.
+   Open state persists nowhere on purpose: reopening is cheap. */
+.legend-body {
+  margin-top: 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+.legend-entry { padding: 9px 0; border-bottom: 1px solid var(--border); }
+.legend-entry:last-of-type { border-bottom: 0; }
+.legend-entry-name {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; font-weight: 600; color: var(--text);
+}
+.legend-entry-name .legend-icon {
+  width: 14px; height: 14px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; color: var(--text-dim);
+}
+/* What it tells Claude, in Claude's voice — quoted in the copy, so it is set
+   as speech. What happens to the content is the consequence, set quieter. */
+.legend-entry-tells {
+  margin: 5px 0 0; font-size: 12px; color: var(--text); font-style: italic;
+}
+.legend-entry-does {
+  margin: 3px 0 0; font-size: 11.5px; color: var(--text-dim); line-height: 1.5;
+}
+.legend-note {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+/* Pending delete: greyed and struck through, NOT removed. Nothing is actually
+   deleted until the round is submitted, so the card has to look reversible —
+   choosing Delete on the title again un-marks it. The header stays legible so the
+   undo affordance is findable. */
+section.block[data-block-mark="delete"] .card-body {
+  opacity: .45;
+  text-decoration: line-through;
+}
+section.block[data-block-mark="delete"] .card-title {
+  text-decoration: line-through;
+  color: var(--text-dim);
+}
+
+/* A card marked compact dims whole, the same reversible-until-submit promise
+   the pending delete makes, without the strikethrough that would claim the
+   content is being dropped from the plan. */
+section.block[data-block-mark="compact"] .card-body { opacity: .5; }
+section.block[data-block-mark="compact"] .card-title { color: var(--text-dim); }
+
+/* Your words: a section holding words the reader wrote in the editor says so
+   after its title. Quiet, in the rule's green, and outranked by a pending
+   section mark, which is a decision still to send. */
+section.block[data-mine]:not([data-block-mark]) .card-title::after {
+  content: "✎ your words";
+  margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  display: inline-block; vertical-align: 2px;
+  color: var(--mine-fg);
+  background: var(--mine-wash);
+  box-shadow: inset 0 0 0 1px var(--mine-rule);
+}
+
+/* A section mark is named after the title, since the strip that used to carry
+   it is gone. */
+section.block[data-block-mark] .card-title::after {
+  margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  color: #fff; vertical-align: 2px;
+  /* inline-block so a struck-through title does not strike its own badge */
+  display: inline-block; text-decoration: none;
+}
+section.block[data-block-mark="delete"] .card-title::after { content: "✕ delete section"; background: var(--type-reject-fg); }
+section.block[data-block-mark="compact"] .card-title::after { content: "⤓ compact section"; background: #7c3aed; }
+section.block[data-block-mark="comment"] .card-title::after { content: "💬 section"; background: var(--accent); }
+
+/* === The legend's keyboard section ==================================
+   The keys existed before this panel documented them — `/` and `g` and the
+   ⌘K chords have been bound for a long time — and nobody could have known.
+   A shortcut nobody can discover is a shortcut nobody has. The legend is
+   already the page's answer to "what does this do", so it answers this too. */
+.legend-keys { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 11px; }
+.legend-keys-head {
+  margin: 0 0 7px;
+  font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-dim);
+}
+.legend-keytable { border-collapse: collapse; font-size: 12px; }
+.legend-keytable td { padding: 3px 12px 3px 0; vertical-align: baseline; }
+.legend-keytable td:first-child { white-space: nowrap; }
+.legend-keys kbd {
+  display: inline-block;
+  min-width: 17px; padding: 1px 5px;
+  border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px;
+  background: var(--surface-soft);
+  font-family: var(--font-code); font-size: 10.5px;
+  color: var(--text); text-align: center;
+}
+
+
+
+/* === The keyboard cursor ============================================
+   j and k move it, c comments on it, f folds it. Drawn as a rail down the
+   left edge rather than a ring around the card: a ring on a card that is
+   already bordered reads as a second border, and at this width the eye
+   stops seeing it. The rail is in the gutter where nothing else paints, so
+   it says "you are here" without competing with the block's own state —
+   a block can be marked, engaged AND focused at once.
+
+   The strip it reveals is the point: see the four-way reveal above.
+
+   Drawn as a ::before and not as the inset box-shadow this repo uses for the
+   code pane's anchor row: on a card that shadow loses. `section.block.card`
+   and `section.block[data-kb-focus]` are both (0,2,1), so the card's own
+   three-layer shadow wins on source order and the rail never paints —
+   measured, not guessed. Out-specifying it would mean restating all three
+   layers here to avoid flattening the card. The section is already
+   position:relative with no ::before of its own, so this costs no layout. */
+section.block[data-kb-focus]::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--accent);
+  z-index: 1;
+}
+section.block[data-kb-focus] .card-title { color: var(--text-strong); }
+/* Focus is a cursor, not a selection: it must survive the page being busy,
+   so unlike the marks it is never dimmed by body.is-busy. */
+
+/* === General composer (page-level comment) =========================== */
+/* Opened by #composer-toggle, and painted as a third band of the top bar
+   rather than as a box in the reading column: full-bleed surface, its own
+   bottom hairline, and the SAME full-width gutter the top bar uses (the
+   `body .page-header` override below), so both bands share one left edge. A third band, the statusline strip, once
+   shared it too; it was removed with the route that fed it. Every
+   part of core.css's centred-box geometry has to be undone for that — its base
+   rule is `max-width: var(--content-max); margin: 0 auto 8px; padding: 16px
+   56px 0`, and leaving any of it in place leaves the band inset from the bar
+   above it by a different amount at every viewport width. */
+.general-composer {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 12px var(--content-gutter) 13px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+/* core.css's base rule is `.general-composer { display: flex; ... }` (0,1,0
+   specificity), which beats the UA default `[hidden] { display: none }`
+   (0,1,0 too, but the UA stylesheet always loses to an author stylesheet of
+   equal specificity) — so the bare `hidden` attribute this task's collapsed
+   composer relies on did nothing and the full textarea rendered anyway.
+   `[hidden]` added to a class selector here is 0,2,0, which wins. Same
+   specificity trick core.css already uses for `body.read-only .general-composer`
+   just above in that file. */
+.general-composer[hidden] { display: none; }
+.general-hint {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.general-hint kbd {
+  font-family: var(--font-code);
+  font-size: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+/* === Footer submit actions =========================================== */
+footer.actions {
+  position: sticky; bottom: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 12px var(--content-gutter);
+  display: flex; align-items: center; gap: 12px;
+}
+.actions-spacer { flex: 1; }
+.comment-count {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+footer.actions button {
+  background: var(--accent); color: var(--accent-fg);
+  border: none; padding: 8px 16px; border-radius: 5px;
+  font-weight: 600; cursor: pointer; font-size: 14px;
+}
+footer.actions button:hover { filter: brightness(1.1); }
+footer.actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+#submit-status { color: var(--text-dim); font-size: 13px; }
+#submit-status.ok { color: #86efac; }
+#submit-status.err { color: #fca5a5; }
+
+/* === Per-comment submit button ======================================= */
+.card-submit-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+.card-submit-hint {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.card-submit-hint kbd {
+  font-family: var(--font-code);
+  font-size: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.card-submit-btn {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border: none;
+  padding: 6px 14px;
+  border-radius: 5px;
+  font-weight: 600;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: filter 140ms ease;
+}
+.card-submit-btn:hover { filter: brightness(1.1); }
+.card-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* === Voice dictation mic button ===================================== */
+.voice-mic-btn {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.voice-mic-btn:hover { border-color: var(--accent); }
+.voice-mic-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.voice-mic-btn.listening {
+  background: #dc2626; color: #fff; border-color: #dc2626;
+  animation: voice-pulse 1.1s ease-in-out infinite;
+}
+.voice-interim {
+  font-size: 12.5px; color: var(--text-dim); font-style: italic; margin-right: auto;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%;
+}
+.voice-interim.voice-note { font-style: normal; white-space: normal; max-width: 60%; }
+.card-submit-row:has(.listening) .card-submit-hint,
+.sel-row:has(.listening) .card-submit-hint { display: none; }
+@keyframes voice-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+  50%      { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
+/* === Card layout ==================================================== */
+section.block.card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 1px 1px rgba(20, 24, 40, .04), 0 4px 14px rgba(20, 24, 40, .08), 0 12px 32px rgba(20, 24, 40, .05);
+  margin: 0 0 12px;
+  overflow: hidden;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 18px;
+}
+.card-head:hover { background: var(--hover-tint); }
+.card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+  user-select: none;
+}
+.card-head-spacer { flex: 1; }
+/* Phone width: the header is one flex row that never wrapped, so the title
+   got whatever the controls left — 67 to 86px, and a long title 480px tall,
+   one word per line. Below 600px the title takes the whole first row (less
+   the chevron) and the controls and chips wrap under it. */
+@media (max-width: 600px) {
+  .card-head { flex-wrap: wrap; row-gap: 8px; }
+  .card-title { flex: 1 1 calc(100% - 38px); min-width: 0; }
+}
+.card-body {
+  position: relative;
+  padding: 2px 18px 16px 18px;
+  border-top: 1px solid var(--border);
+}
+/* The card owns the surface; neutralize the prose-era per-block tint/bar so
+   the whole card doesn't change colour on hover or when engaged. */
+main.prose section.block.card:hover { background: var(--surface); }
+section.block.card[data-engaged-type] { background: var(--surface); }
+section.block.card[data-engaged-type]::before { display: none; }
+/* Engaged state shows as a left accent bar on the card body instead. */
+.card-body { border-left: 3px solid transparent; }
+section.block.card[data-engaged-type="comment"] .card-body { border-left-color: var(--type-comment-fg); }
+section.block.card[data-engaged-type="reject"]  .card-body { border-left-color: var(--type-reject-fg); }
+
+/* Inside a card the wide right gutter (old hover-action room) is gone; tighten
+   per-element padding so prose fills the card.
+   The `main.prose` prefix is load-bearing, not decoration. `main.prose p` sets
+   `padding: 4px 140px 4px 6px` at specificity (0,1,2); a bare `.card-body p`
+   is (0,1,1) and LOSES, so for as long as that prefix was missing every card
+   paragraph kept reserving 140px for buttons that are not there — measured at
+   140px computed, costing 128px of text width in the two-column code layout.
+   Same specificity trap the code pane hit with its own caption (see the
+   note above `.cp-body` below, which records it). Adding
+   `main.prose` makes these (0,2,2), which wins on class count.
+   Nothing needs the reserve any more: no control sits beside a paragraph;
+   the selection menu floats over the page.
+   e2e item 13 measures the computed padding, because no source check can see
+   which of two rules won. */
+main.prose .card-body p,
+main.prose .card-body li,
+main.prose .card-body blockquote { padding-right: 12px; }
+main.prose .card-body h1, main.prose .card-body h2, main.prose .card-body h3,
+main.prose .card-body h4, main.prose .card-body h5, main.prose .card-body h6 { padding-right: 12px; }
+/* `pre` is deliberately NOT in that list. A `.card-body pre { padding-right:
+   14px }` rule used to sit here and, like the rules above, never won against
+   `main.prose pre { padding: 0 }`. Giving it the prefix that would make it win
+   was tried and rendered: the <pre> is a bare wrapper whose inner <code> is
+   the visible dark surface, so right-only padding pulls that surface 14px off
+   the card's right edge while its left edge stays put — an asymmetric slab.
+   Flush is correct, so the rule is gone rather than fixed. */
+.card-body > .block-content > :first-child { margin-top: 8px; }
+
+/* === Block updating overlay ========================================= */
+section.block {
+  position: relative;
+}
+
+/* Dim + disable the underlying content while a rewrite is in flight. */
+section.block.is-updating > *:not(.updating-overlay) {
+  opacity: 0.42;
+  filter: saturate(0.7);
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 180ms ease;
+}
+
+
+/* Warm tinted veil covering the block content, sits below the pill. */
+.updating-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(253, 243, 234, 0.55);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Centered pill: spinner + label + elapsed timer. */
+.updating-overlay .updating-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: #8a4d1e;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 999px;
+  box-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.06),
+    0 0 0 4px color-mix(in srgb, var(--accent) 8%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 2;
+}
+
+.updating-overlay .updating-spinner {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: updating-spin 0.85s linear infinite;
+}
+
+.updating-overlay .updating-timer {
+  color: color-mix(in srgb, var(--accent) 85%, #000);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+@keyframes updating-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* === Card collapse ================================================== */
+section.block.card.collapsed .card-body { display: none; }
+/* Collapsed cards are header-only; tint that bar gray so it reads as a
+   distinct, closed section against the white expanded cards. */
+section.block.card.collapsed .card-head { background: var(--surface-soft); }
+section.block.card.collapsed .card-head:hover { background: var(--surface-hover); }
+.card-chevron {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  /* An easy 26px round
+     target instead of the bare 14px text glyph it used to be. */
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 50%;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+.card-head:hover .card-chevron { color: var(--text-strong); }
+
+/* === Section · version pill ==========================================
+   Composite chip in the card header. Left segment = section number, right
+   segment = version. The version half lights up accent only once the block
+   has been rewritten (v > 1). */
+.section-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: stretch;
+  height: 18px;
+  font-family: var(--font-code);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  overflow: hidden;
+  user-select: none;
+}
+.section-pill .sp-sec,
+.section-pill .sp-ver {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+}
+.section-pill .sp-sec { color: var(--text); }
+.section-pill .sp-ver { border-left: 1px solid var(--border); }
+.section-pill.bumped .sp-ver {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-left-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* ── Choice blocks ──────────────────────────────────────────────────────── */
+.choice-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.choice-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.choice-option {
+  display: flex;
+  align-items: flex-start;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+.choice-option:hover {
+  border-color: var(--accent);
+  background: var(--surface-soft);
+}
+.choice-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.choice-option.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.choice-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.choice-option-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.choice-option-label {
+  color: var(--text-strong);
+  font-weight: 500;
+}
+.choice-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.choice-option-desc {
+  color: var(--text-dim);
+  font-size: 0.85em;
+}
+/* An option that carries content. The card stays `user-select: none` so a
+   click reads as a pick; the body opts back in, because code in an option is
+   something the reader copies. */
+.choice-option.has-body .choice-option-text { flex: 1; min-width: 0; }
+.choice-option-body {
+  margin-top: 0.5rem;
+  user-select: text;
+  cursor: text;
+  color: var(--text);
+}
+.choice-option-body > :first-child { margin-top: 0; }
+.choice-option-body > :last-child { margin-bottom: 0; }
+.choice-footer {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+.choice-note {
+  flex: 1;
+  resize: none;
+  overflow: hidden;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.4;
+}
+.choice-note:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.15);
+}
+.choice-note::placeholder { color: var(--text-dim); }

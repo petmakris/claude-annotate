@@ -1,0 +1,125 @@
+/* annotate page styles, part 11 of 13 (see style.css): the selection menu
+   (selection.js). */
+
+/* ── The selection menu ─────────────────────────────────────────────────
+   One dark bar above whatever is selected. Icon buttons, then whatever later
+   features register (Explain, Edit) after a divider. Dark on the light theme and light on the dark one, so
+   it reads as floating above the page in both. */
+.sel-menu {
+  position: absolute; z-index: 60; display: flex; align-items: center; gap: 2px;
+  padding: 4px; border-radius: 10px; white-space: nowrap; font-size: 12.5px;
+  background: var(--text-strong); color: var(--surface);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .28);
+}
+.sel-menu button {
+  border: 0; background: transparent; color: inherit; font: inherit; font-weight: 500;
+  padding: 6px 7px; border-radius: 7px; display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer;
+}
+.sel-menu button:hover, .sel-menu button:focus-visible {
+  background: color-mix(in srgb, var(--surface) 16%, transparent); outline: none;
+}
+.sel-menu svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; }
+.sel-menu .sel-state { padding: 0 8px; font-weight: 600; }
+.sel-menu .sel-sep { width: 1px; align-self: stretch; margin: 4px 3px;
+  background: color-mix(in srgb, var(--surface) 35%, transparent); }
+
+/* A whole section is the scope: the card says so, not just the menu. */
+/* No --card-shadow variable exists: the card's resting shadow is repeated so
+   the outline does not drop it. Keep in step with section.block.card. */
+section.block[data-sel-scope] { box-shadow: 0 0 0 2px var(--accent),
+  0 1px 1px rgba(20, 24, 40, .04), 0 4px 14px rgba(20, 24, 40, .08), 0 12px 32px rgba(20, 24, 40, .05); }
+::highlight(annotate-scope) { background-color: color-mix(in srgb, var(--accent) 10%, transparent); }
+
+/* Marks on the selected words. The same three meanings as the dock. */
+::highlight(annotate-delete) {
+  color: var(--type-reject-fg); text-decoration: line-through;
+  background-color: color-mix(in srgb, var(--type-reject-fg) 10%, transparent);
+}
+::highlight(annotate-compact) {
+  background-color: color-mix(in srgb, #7c3aed 14%, transparent);
+  text-decoration: underline 2px color-mix(in srgb, #7c3aed 65%, transparent);
+}
+/* Your words: a quiet green rule and a light wash, under marks made on them. */
+::highlight(annotate-mine) {
+  background-color: var(--mine-wash);
+  text-decoration: underline 2px var(--mine-rule);
+  text-underline-offset: 3px;
+}
+::highlight(annotate-comment) {
+  background-color: color-mix(in srgb, var(--accent) 14%, transparent);
+  text-decoration: underline 2px var(--accent);
+}
+
+.sel-composer {
+  display: block; margin: 8px 0 4px; padding: 10px 12px; border-radius: 10px;
+  background: var(--type-comment-wash);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+  font-weight: 400; font-style: normal;
+}
+.sel-quote { font-size: 12px; font-style: italic; color: var(--text-dim);
+  border-left: 2px solid var(--accent); padding-left: 8px; margin-bottom: 8px; }
+.sel-composer textarea {
+  display: block; width: 100%; box-sizing: border-box; min-height: 40px; max-height: 240px;
+  resize: none; padding: 8px 12px; font: inherit; font-size: 14px; line-height: 1.5;
+  border: 1px solid var(--control-border); border-radius: 7px;
+  background: var(--surface); color: var(--text); caret-color: var(--accent);
+}
+.sel-composer textarea:focus { outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.sel-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.sel-cancel { padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 500;
+  border: 1px solid var(--control-border); border-radius: 5px; background: transparent;
+  color: var(--text); cursor: pointer; }
+.sel-chip {
+  display: block; margin: 6px 0 2px; padding: 4px 9px; font-size: 13px; border-radius: 8px;
+  color: var(--type-comment-fg); background: var(--type-comment-wash);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+.sel-chip-x { margin-left: 6px; padding: 0 4px; border: none; border-radius: 4px;
+  background: transparent; color: inherit; font: inherit; line-height: 1;
+  cursor: pointer; opacity: .65; }
+.sel-chip-x:hover, .sel-chip-x:focus-visible { opacity: 1; background: var(--hover-tint); }
+body.read-only .sel-chip-x { display: none; }
+body.read-only .sel-menu, body.read-only .sel-composer { display: none; }
+
+/* The title is how a whole section is chosen: selecting any of it opens the
+   menu on the section. The card's `user-select: none` above made that
+   impossible (a double-click selected nothing), and only the chevron
+   collapses, so a selectable title folds nothing away. */
+section.block .card-title { user-select: text; }
+
+/* Inside a maximised card or a full-screen element, the menu is that
+   element's child and must sit above its content. */
+.sel-menu.sel-menu-layered { z-index: 1300; }
+/* A comment box with words in it is not replaced by a new selection; it
+   flashes instead, to say where those words are. */
+.sel-composer.sel-flash { animation: sel-flash .8s ease-out; }
+@keyframes sel-flash {
+  0%, 40% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 55%, transparent); }
+  100%    { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent); }
+}
+
+/* On a phone the menu is a sheet on the bottom edge, with full-size targets. */
+.sel-menu.sel-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; top: auto; border-radius: 16px 16px 0 0;
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px;
+  padding: 10px 12px calc(14px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface); color: var(--text); white-space: normal;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, .18);
+}
+.sel-sheet .sel-quote { grid-column: 1 / -1; font-size: 12px; font-style: italic; color: var(--text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel-sheet .sel-state { grid-column: 1 / -1; }
+.sel-sheet .sel-sep { display: none; }
+.sel-sheet button { min-height: 48px; justify-content: center; flex-direction: column; gap: 2px;
+  border: 1px solid var(--border); background: var(--surface-soft); color: var(--text); grid-column: span 2; }
+/* Explain aloud and Read as written lead the sheet, two to a row. */
+.sel-sheet button.sp-wide { grid-column: span 3; flex-direction: row; gap: 8px; font-weight: 600; }
+.sel-sheet, .sel-sheet * { user-select: none; -webkit-user-select: none; }
+.sel-sheet { position: fixed; }
+.sel-sheet .sel-close { position: absolute; top: 0; right: 4px; width: 44px; height: 44px; min-height: 44px;
+  padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; }
+.sel-sheet .sel-quote, .sel-sheet .sel-state { min-height: 34px; box-sizing: border-box; padding-right: 44px;
+  display: flex; align-items: center; }

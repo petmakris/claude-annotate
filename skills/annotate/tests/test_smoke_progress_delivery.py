@@ -1,0 +1,96 @@
+"""Getting a narration line from the daemon to the panel.
+
+compat.js strips `__`-prefixed anchors out of the version map before
+script.js sees it — correct, and it means script.js never hears about a
+progress write. So the panel needs its own signal, and compat.js already has
+the pattern: it dispatches `annotate:busy` whenever the page lock moves.
+
+The second edit is the sharp one. On a daemon too old to report acks,
+compat.js clears the page lock on an item change. For the progress anchor
+that rule is exactly backwards: Claude's first narration line would unlock
+the page and dismiss the very ribbon the narration captions.
+"""
+import re
+import unittest
+from pathlib import Path
+from skills.annotate.tests.page_source import SCRIPT_JS
+
+STATIC = Path(__file__).resolve().parents[1] / "static"
+COMPAT = (STATIC / "compat.js").read_text()
+
+ANCHOR = "__progress__"
+
+
+class TestTheUnlockRuleExemptsTheTrail(unittest.TestCase):
+    def test_the_anchor_has_one_spelling(self):
+        self.assertIn('const PROGRESS = "%s"' % ANCHOR, COMPAT,
+                      "the anchor is retyped instead of named once")
+
+    def test_the_guard_exists(self):
+        self.assertIn("ev.anchor === PROGRESS", COMPAT,
+                      "nothing distinguishes a progress write from a block write")
+
+    def test_the_guard_comes_BEFORE_the_unlock(self):
+        # Ordering is the whole property. A guard placed after the unlock line
+        # would not prevent the unlock; it would just run afterwards.
+        body = COMPAT[COMPAT.index("function toOldShape("):]
+        guard = body.index("ev.anchor === PROGRESS")
+        unlock = body.index('ev.kind === "item" && isBusy()')
+        self.assertLess(guard, unlock,
+                        "a progress write still clears the page lock")
+
+    def test_the_old_daemon_fallback_still_unlocks_on_an_ordinary_item(self):
+        # The fallback this rule exists for must survive the exemption.
+        body = COMPAT[COMPAT.index("function toOldShape("):]
+        at = body.index('ev.kind === "item" && isBusy() && acksReported === false')
+        self.assertIn("release(Object.keys(inflight))", body[at:at + 200])
+
+
+class TestThePanelGetsItsOwnSignal(unittest.TestCase):
+    def test_a_progress_delta_is_re_broadcast(self):
+        self.assertIn("annotate:progress", COMPAT)
+
+    def test_it_follows_the_event_the_page_already_uses(self):
+        # annotate:busy is the precedent. One pattern, not two.
+        self.assertIn('new CustomEvent("annotate:progress"', COMPAT)
+
+    def test_the_signal_is_scoped_to_the_progress_anchor(self):
+        # Dispatched from inside the guard, not for every item change.
+        idx = COMPAT.index("annotate:progress")
+        window = COMPAT[max(0, idx - 400):idx]
+        self.assertIn("ev.anchor === PROGRESS", window,
+                      "every item change dispatches a progress event")
+
+
+SCRIPT = SCRIPT_JS.read_text()
+HOOKS = Path(__file__).resolve().parents[1] / "hooks"
+
+
+class TestTheDeadCaptionPathIsGone(unittest.TestCase):
+    """applyProgress captioned the ribbon from a map keyed by event id, fed by
+    `data.progress`. compat.js has never carried that key, so it has been a
+    no-op since the cutover. progress.js replaces it."""
+
+    def test_the_function_is_deleted(self):
+        self.assertNotIn("applyProgress", SCRIPT)
+
+    def test_nothing_reads_the_key_that_never_existed(self):
+        self.assertNotIn("data.progress", SCRIPT)
+
+    def test_the_dormant_hook_is_gone(self):
+        self.assertFalse((HOOKS / "progress_publish.py").exists(),
+                         "a file documenting a feature nobody can reach")
+
+    def test_the_block_caption_is_not_written_by_the_narration_panel(self):
+        # The trail is per EVENT and carries no block id, so progress.js can
+        # only write the same sentence into every `.updating-label` on the
+        # page: a round touching five blocks would show the identical line on
+        # all five. The per-block pill keeps script.js's own "updating" text
+        # and its own timer; the current line lives in the panel.
+        progress_js = (STATIC / "progress.js").read_text()
+        code = "\n".join(l for l in progress_js.splitlines()
+                         if not l.lstrip().startswith("//"))
+        self.assertNotIn("updating-label", code,
+                         "progress.js writes the same line into every block caption")
+        self.assertIn('label.className = "updating-label"', SCRIPT)
+        self.assertIn('label.textContent = "updating"', SCRIPT)

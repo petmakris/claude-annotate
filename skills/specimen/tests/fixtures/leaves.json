@@ -1,0 +1,33 @@
+{
+  "captured": "2026-09-16T09:47:09Z",
+  "deployment": "example capture",
+  "types": {
+    "com.example.catalog.domain.Category": {
+      "instances": [
+        {
+          "id": "1294",
+          "name": "CHF"
+        },
+        {
+          "id": "1295",
+          "name": "EUR"
+        },
+        {
+          "id": "1296",
+          "name": "USD"
+        }
+      ]
+    },
+    "com.example.catalog.domain.Classification": {
+      "instances": [
+        {
+          "id": "54",
+          "name": "Currency"
+        }
+      ]
+    },
+    "com.example.money.Currency": {
+      "instances": []
+    }
+  }
+}

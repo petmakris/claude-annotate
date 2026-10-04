@@ -1,0 +1,183 @@
+{
+  "title": "Order Field Provenance",
+  "eyebrow": "example · checkout service",
+  "lede": "How an <code>Order</code> row becomes the JSON the checkout page reads. Each column is a real record with its fields in declaration order; every arrow runs from the field it reads to the field it writes.",
+  "caption": "<code>customer</code> fans out into <code>customerId</code> and <code>customerName</code>. Three amount fields converge on one <code>totalCents</code>. <code>internalNotes</code> and <code>createdBy</code> are dropped at the first hop. From the DTO onward the mapping is one-to-one; only the JSON names change.",
+  "legend": [
+    {
+      "tone": "raw",
+      "text": "minor units (cents), never converted"
+    },
+    {
+      "text": "faded — present on the source, not carried forward"
+    }
+  ],
+  "cards": [
+    {
+      "id": "entity",
+      "stage": "ENTITY",
+      "name": "Order",
+      "sub": "orders · OrderEntity",
+      "fields": [
+        {
+          "id": "id",
+          "label": "id"
+        },
+        {
+          "id": "customer",
+          "label": "customer"
+        },
+        {
+          "id": "subtotal",
+          "label": "subtotalCents",
+          "tone": "raw"
+        },
+        {
+          "id": "tax",
+          "label": "taxCents",
+          "tone": "raw"
+        },
+        {
+          "id": "shipping",
+          "label": "shippingCents",
+          "tone": "raw"
+        },
+        {
+          "id": "notes",
+          "label": "internalNotes",
+          "muted": true
+        },
+        {
+          "id": "createdBy",
+          "label": "createdBy",
+          "muted": true
+        }
+      ]
+    },
+    {
+      "id": "dto",
+      "stage": "DTO",
+      "name": "OrderDto",
+      "sub": "checkout · OrderMapper",
+      "fields": [
+        {
+          "id": "id",
+          "label": "orderId"
+        },
+        {
+          "id": "cid",
+          "label": "customerId"
+        },
+        {
+          "id": "cname",
+          "label": "customerName"
+        },
+        {
+          "id": "total",
+          "label": "totalCents",
+          "tone": "raw",
+          "strong": true
+        }
+      ]
+    },
+    {
+      "id": "json",
+      "stage": "RESPONSE",
+      "name": "order.json",
+      "sub": "GET /api/orders/{id}",
+      "fields": [
+        {
+          "id": "id",
+          "label": "order_id"
+        },
+        {
+          "id": "cid",
+          "label": "customer_id"
+        },
+        {
+          "id": "cname",
+          "label": "customer_name"
+        },
+        {
+          "id": "total",
+          "label": "total_cents",
+          "tone": "raw"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "entity.id",
+      "to": "dto.id",
+      "label": "rename"
+    },
+    {
+      "from": "entity.customer",
+      "to": "dto.cid"
+    },
+    {
+      "from": "entity.customer",
+      "to": "dto.cname",
+      "label": "getId() · displayName()"
+    },
+    {
+      "from": "entity.subtotal",
+      "to": "dto.total",
+      "tone": "raw"
+    },
+    {
+      "from": "entity.tax",
+      "to": "dto.total",
+      "tone": "raw"
+    },
+    {
+      "from": "entity.shipping",
+      "to": "dto.total",
+      "tone": "raw",
+      "label": "sum of all three"
+    },
+    {
+      "from": "dto.id",
+      "to": "json.id"
+    },
+    {
+      "from": "dto.cid",
+      "to": "json.cid"
+    },
+    {
+      "from": "dto.cname",
+      "to": "json.cname"
+    },
+    {
+      "from": "dto.total",
+      "to": "json.total",
+      "tone": "raw",
+      "label": "snake_case only"
+    }
+  ],
+  "sources": {
+    "head": [
+      "Stage",
+      "File",
+      "Detail"
+    ],
+    "rows": [
+      [
+        "entity",
+        "OrderEntity",
+        "declaration order"
+      ],
+      [
+        "mapper",
+        "OrderMapper",
+        "toDto"
+      ],
+      [
+        "response",
+        "OrderController",
+        "Jackson SNAKE_CASE naming"
+      ]
+    ]
+  }
+}

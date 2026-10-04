@@ -1,0 +1,301 @@
+/* annotate page styles, part 5 of 13 (see style.css): the code column and
+   code anchor panes, and the pane themes. */
+
+/* One column: the prose, then the panes under it, both the full width of the
+   card. The card body is plain block flow — no grid — so there is no display
+   rule here for `.collapsed .card-body { display: none; }` to lose to. Its
+   padding moves onto the prose, so the pane band can run edge to edge under
+   it with only its own hairline between them. */
+section.block.card[data-has-code="1"] .card-body {
+  padding: 0;
+}
+section.block.card[data-has-code="1"] .card-body > .block-content {
+  padding: 2px 18px 16px 18px;
+  min-width: 0;
+}
+.code-col {
+  border-top: 1px solid var(--border);
+  /* Padding and gap, where there was none of either: the panes used to run
+     edge to edge and butt against each other, so the rail read as one dense
+     block rather than as N separate citations. */
+  padding: 12px;
+  gap: 12px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Light theme, contrast-checked against the annotate page's light ground
+   (this is deliberately NOT Tokyo Night Day — that theme fails 8 of 9
+   tokens on this ground, worst case 1.85:1, which is the washed-out result
+   being avoided here). Scoped to .codepane so the vendored Tokyo Night Dark
+   theme in code-theme.css keeps painting ordinary fenced code blocks
+   elsewhere on the page untouched. */
+/* === Code pane themes ================================================
+   Every colour the pane paints comes from a variable declared here, and a
+   theme is nothing but a block that redeclares them. That is the whole
+   reason for this indirection: adding a theme should be ~15 lines, not a
+   duplicate of every rule below, and a rule that hardcodes a hex is a rule
+   that silently ignores the theme picker.
+   Defaults below ARE the Daylight theme (VS Code Light+'s ground and text).
+   Nothing below AA ships: test_browser_explain.py measures every token. */
+.codepane {
+  --cp-ground:    #ffffff;
+  --cp-chrome:    #f3f3f3;
+  --cp-divider:   #d4d4d4;
+  --cp-anchor-bg: #ffffff;
+  --cp-accent:    #0451a5;
+  --cp-text:      #000000;
+  --cp-dim:       #4e5665;
+  --cp-muted:     #5f6773;
+  --cp-punct:     #333a45;
+  --cp-number:    #7c2d12;
+  --cp-keyword:   #6b21a8;
+  --cp-string:    #065f46;
+  --cp-comment:   #4e5665;
+  --cp-moved-fg:  #92400e;
+  --cp-moved-bg:  #fde8c8;
+  --cp-bad-fg:    #991b1b;
+  --cp-bad-bg:    #fcdada;
+  /* The project pill's saturation and lightness. Its HUE is set per element
+     by JS from the project's name; everything else is the theme's, so the
+     pill stays readable on a dark ground instead of inheriting a pale
+     background computed with no idea what it would sit on. */
+  --cp-pill-s:    58%;
+  --cp-pill-bg-l: 86%;
+  --cp-pill-fg-l: 26%;
+
+  /* The explain kind's ink. No card: a label is distinguished by COLOUR and
+     TYPEFACE on the code's own ground, not by a slab behind it.
+     A card was tried first, in every shade from a neutral +16 L* to an
+     inverted paper note, and the reason none of them is here is that a box
+     around two sentences, five times down a pane, is more furniture than the
+     pane can carry. What actually separates a label is that it is prose set
+     in a prose face — the colour only has to confirm it.
+     WHY THIS HUE. The pane already spends seven on syntax: red/tag 12°,
+     number 56°, string 126°, teal 182°, accent 249°, text 284°, keyword
+     306°. The widest arc it leaves free is 70° of warm gold centred on 91°,
+     and the next two (216° blue, 339° rose) are respectively lost in the
+     pane's own blue-violet and read as a diff deletion next to code. So the
+     whole annotation layer — ink, lead-in and every rail — lives at 86-92°,
+     which also keeps it ≥38° off each theme's number token, the nearest
+     thing to it in that arc. Contrast is matched across themes rather than
+     merely passing: body 7.5-10.7:1, lead-in 5.6-11.3:1, rails 3.2-4.1:1.
+     The light themes sit lower than the dark one on purpose: a very dark
+     yellow cannot hold its hue, because the sRGB gamut narrows to nothing
+     there and clipping drags it toward red — the first attempt asked for
+     11.4:1 and landed at 69 degrees, outside the arc it was chosen for.
+     The solver now maximises chroma subject to BOTH contrast and hue. */
+  --ex-ink:        #4d4841;
+  --ex-ink-strong: #705600;
+  --ex-rail:       #9a7b04;
+
+  background: var(--cp-ground);
+  border-radius: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-code);
+}
+/* Two panes stacked in one column (a block citing more than one file) were
+   separated by a single hairline, which is not enough: three panes read as one
+   striped slab, and the eye cannot tell where one citation ends and the next
+   begins. They are now discrete cards with real space between them — see the
+   `gap` and `padding` on `.code-col`, which is where the separation lives. */
+.code-col > .codepane {
+  border: 1px solid var(--cp-divider);
+  border-radius: 8px;
+}
+
+/* One band, not three. The header used to be the first of a stack — head
+   (35px) + note (27px) + status (39px) = 101px above the first line of code,
+   which on a six-line pane is more chrome than content. The note moved onto
+   the code ground as a caption and the drift notice became `.cp-chip` below,
+   so this band now carries identity, drift and controls on a single row.
+   e2e item 14 measures the height above the first `.cp-row`. */
+.cp-head {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 11px;
+  background: var(--cp-chrome);
+  border-bottom: 1px solid var(--cp-divider);
+  font-size: 11px;
+}
+.cp-path {
+  color: var(--cp-accent);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: flex; align-items: center; gap: 7px; min-width: 0;
+}
+/* The project, tinted from its own name. Only the HUE comes from JS (see
+   hueFromName in script.js); saturation and lightness are the theme's, so a
+   dark pane gets a dark pill with light text rather than the pale one a
+   fully JS-computed colour would have forced on it. --cp-pill-h has a
+   fallback so a pane with no project segment still paints something sane. */
+.cp-proj {
+  /* Shrinks only after file:line has, and only when the band genuinely runs
+     out: a truncated pill defeats its own purpose, since the tint is there to
+     be recognised alongside a name. 42% clipped `app-worktrees` while
+     the header still had room to spare. */
+  flex: 0 1 auto;
+  background: hsl(var(--cp-pill-h, 220) var(--cp-pill-s, 58%) var(--cp-pill-bg-l, 86%));
+  color: hsl(var(--cp-pill-h, 220) var(--cp-pill-s, 58%) var(--cp-pill-fg-l, 26%));
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  max-width: 68%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* file:line is a button because it copies, but it must not look like one --
+   it is the pane's identity first and an action second. Underline on hover
+   is the whole affordance. */
+.codepane .cp-loc {
+  flex: 0 1 auto;
+  font: inherit; background: none; border: 0; padding: 0;
+  color: var(--cp-accent); cursor: pointer;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.codepane .cp-loc:hover { text-decoration: underline; }
+.codepane .cp-loc[data-flash] { color: var(--cp-muted); text-decoration: none; cursor: default; }
+.cp-spacer { flex: 1; }
+/* Scoped under .codepane, and that prefix is load-bearing. `main.prose a`
+   sets the page accent at specificity (0,1,2); a bare `.cp-jump` is (0,1,0)
+   and lost, so this link has been painting #0071e3 rather than the colour its
+   own rule names. Measured, that is 3.45:1 on Daylight's chrome band and
+   3.16:1 on Midnight's — below AA on every theme, including the one already
+   shipped. `.codepane .cp-jump` is (0,2,0), which wins on class count.
+   Same trap as the one that cost the card prose 140px; see that rule. */
+/* The header's control is an icon button on a 22px square. It was an
+   uppercase word, OPEN ↗, sitting at the same visual weight as the path it
+   shared a band with — so the chrome read as loudly as the thing it was
+   chrome for. The icon inherits `currentColor`, which is why no theme needs
+   its own rule for it.
+   `.codepane` prefix is load-bearing on cp-jump: `main.prose a` is (0,1,2) and
+   a bare `.cp-jump` at (0,1,0) loses to it. Same trap as the card prose. */
+.codepane .cp-jump {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; flex: 0 0 auto;
+  background: none; border: 1px solid transparent; border-radius: 5px;
+  color: var(--cp-dim); cursor: pointer; padding: 0;
+  font: inherit; text-decoration: none;
+}
+.codepane .cp-jump:hover {
+  color: var(--cp-accent); border-color: var(--cp-divider);
+  background: color-mix(in srgb, var(--cp-accent) 8%, transparent);
+}
+.codepane .cp-jump[disabled] { cursor: default; opacity: 0.55; }
+/* A failed open, said in colour as well as in the tooltip — an icon button
+   cannot turn into its own error message the way a text one could. */
+.codepane .cp-jump[data-failed] { color: var(--cp-bad-fg); border-color: var(--cp-bad-fg); }
+/* Drift, as a chip in the header band rather than a row of its own. A pane
+   that still has code to show does not need a whole sentence to say the line
+   moved — but it must not go quiet either, so the chip is bordered, bold and
+   uppercase rather than a tint.
+   The border is doing real work: measured, no warm fill light enough to sit
+   in this band separates from #d8dde7 by more than 1.14:1, so a fill alone
+   would leave a chip with no edge. The border is the chip's own text colour
+   (5.93:1 moved / 6.40:1 stale on their fills), the same device .cp-jump's
+   hover border uses. An EMPTY pane keeps the full sentence instead --
+   see .cp-status and e2e item 16. */
+.cp-chip {
+  flex: none;
+  border-radius: 4px; padding: 1px 5px;
+  font-size: 9.5px; font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  border: 1px solid currentColor;
+}
+.cp-chip[data-status="moved"] { color: var(--cp-moved-fg); background: var(--cp-moved-bg); }
+.cp-chip[data-status="stale"],
+.cp-chip[data-status="missing"],
+.cp-chip[data-status="refused"] { color: var(--cp-bad-fg); background: var(--cp-bad-bg); }
+/* The pane's one band is its header. A `.cp-note` caption used to sit here,
+   carrying a short gloss the block author wrote; it was removed after being
+   seen in place — the header line says everything the pane needs to say about
+   itself, and the prose above the pane is already the place for a gloss.
+   Trap kept for whoever adds the next <p> in here: `main.prose p` is (0,1,2)
+   and beats a bare `.cp-*` class rule at (0,1,0), so any new paragraph inside
+   a pane must be scoped under `.codepane` or it silently inherits the prose
+   paragraph's padding. */
+.cp-body {
+  padding: 5px 0 8px; font-size: 12px; line-height: 1.62;
+  /* Code scrolls sideways; it does not wrap. A folded line stops looking like
+     the file it came from — indentation is most of how code is read, and a
+     continuation row that starts at column 0 reads as a statement of its own.
+     The cost is a scrollbar under the pane and a long line whose tail has to
+     be scrolled to, which is the trade this pane is meant to make.
+     The grid column is what makes the rows agree on a width, and the two
+     halves of the minmax are both load-bearing — measured on a real page,
+     across every pane on it:
+       `max-content` as the MINIMUM floors the track at the longest line, so
+       every row stretches to the full scrolled width. Without it each row
+       ends where its own text does, and an anchored row's band and inset bar
+       stop mid-pane the moment you scroll.
+       `1fr` as the maximum fills the pane when the code is SHORTER than the
+       column. `minmax(100%, max-content)` reads like the obvious spelling of
+       this and does not work: in a scroll container the track clamps to 100%
+       and never grows, which measures as rows stuck at the visible width. */
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr);
+  overflow-x: auto; color: var(--cp-text);
+}
+/* The inset lives on the ROW, not on .cp-line: it has to be real geometry
+   between the anchor row's 3px inset bar and the first glyph, and padding
+   inside the text span would leave that span's own left edge sitting on the
+   bar. Every row carries it equally, so indentation is untouched. */
+/* The row no longer sets its own width. It is a grid item now, so it stretches
+   to the column .cp-body sizes to the longest line — which is what keeps every
+   row's background running the full scrolled width instead of ending wherever
+   its own text does. `min-width: 0` stays to stop the flex line below from
+   forcing a floor of its own. */
+.cp-row { display: flex; min-width: 0; padding-left: 12px; }
+/* No line numbers. An anchored-row-only number was tried and reversed after
+   seeing it rendered: it was still a number to read, and the header already
+   states `file:134` — the pane is for glancing at what the code says, not for
+   locating it. The inset the gutter used to provide now lives on .cp-row —
+   see that rule; code-anchors.e2e.cjs item 15 measures it against the bar. */
+/* `pre`, not `pre-wrap`: one source line is one row, however long it runs.
+   `flex: 0 0 auto` goes with it — a growing line would be shrunk back to the
+   column by flex, and a line that cannot wrap would then just spill out of a
+   row too narrow to hold it, leaving the grid above sizing to the wrong width.
+   The right padding is the gutter at the end of the scroll. */
+.cp-line { flex: 0 0 auto; white-space: pre; padding-right: 8px; }
+/* A blank context line renders nothing at all now, so at a full row height it
+   reads as a hole in the pane rather than as the blank line it is. */
+.cp-row.is-blank { height: 9px; }
+/* The anchored line is the one the prose is about; the padding around it is
+   there so the line has a home, not to be read. */
+.cp-row.is-anchor { background: var(--cp-anchor-bg); box-shadow: inset 3px 0 0 var(--cp-accent); }
+/* De-emphasise context rows by desaturation, not opacity: opacity blends
+   ink toward the paper, which is fine on a dark ground but drags a comment
+   token down to 2.17:1 on this light one. A flat muted grey holds every
+   context row at 4.61:1 regardless of what token colour it would otherwise
+   carry. `body` is in the selector so it outranks the per-theme token rules
+   below (0,3,0), which would otherwise win a context row's colours back. */
+.codepane .cp-row.is-context,
+body .codepane .cp-row.is-context .sk {
+  color: var(--cp-muted);
+}
+.cp-truncated {
+  padding: 5px 12px 2px 12px;
+  color: var(--cp-muted); font-size: 11px; font-style: italic;
+}
+
+/* A pane that could not resolve says so, and shows no code at all. A pane
+   rendering whatever now sits at that line number would be a lie the reader
+   has no way to detect. */
+/* Reached only by a pane with NO code: stale, missing, refused. When there
+   are lines to look at the drift is a `.cp-chip` in the header instead. An
+   empty pane's entire content is the reason it is empty, so shortening that
+   to a chip would leave a box that says nothing — e2e item 16.
+   No grey band: this sits directly on the code ground, so an empty pane is
+   one surface rather than a bar stacked on another. */
+.cp-status {
+  padding: 6px 12px 8px;
+  font-family: var(--font-prose);
+  font-size: 11.5px; line-height: 1.5;
+}
+/* The dark-theme originals (#e0af68, #f7768e) measure 2.42:1 and 3.09:1 on
+   this ground — both fail AA. These are darker equivalents in the same
+   amber/red families: #92400e is 5.72:1, #991b1b is 6.70:1 on #e3e7ee. */
+.cp-status[data-status="moved"] { color: var(--cp-moved-fg); }
+.cp-status[data-status="stale"],
+.cp-status[data-status="missing"],
+.cp-status[data-status="refused"] { color: var(--cp-bad-fg); }

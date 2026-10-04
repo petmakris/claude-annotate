@@ -1,0 +1,162 @@
+/* annotate page styles, part 13 of 13 (see style.css): editing a section in
+   place (edit.js). */
+
+/* === Editing a section in place (edit.js) ============================
+   Ported from the dashboard's task document editor (tasks-extra.css,
+   .pd-editbar / .pd-cm--live / .pd-cm--source / .pd-split), renamed to
+   ed-* and set in annotate's tokens.
+
+   The source view's highlight style (editor/src/source.ts) and the live
+   decorations read the dashboard's neutral ramp by name, so the names are
+   defined here, light and dark, mapped onto annotate's own neutrals. An
+   undefined one silently paints its tokens in the inherited colour. */
+:root {
+  --n-50: #f1f3f6;
+  --n-100: #e6e9ee;
+  --n-200: #d4d8e0;
+  --n-300: #9a9ea7;
+  --n-400: #7c8089;
+  --n-700: #3a3d44;
+  --n-900: #1d1d1f;
+  --pink: #b4236c;
+  --text-muted: var(--text-dim);
+  --ed-orange: #d97706;
+  --ed-orange-strong: #b45309;
+  --ed-green: #15803d;
+  --ed-green-strong: #166534;
+  --ed-warn-bg: #fff4e0;
+  --ed-warn-text: #7a3e00;
+  --mine-rule: color-mix(in srgb, var(--ed-green) 55%, transparent);
+  --mine-wash: color-mix(in srgb, var(--ed-green) 7%, transparent);
+  --mine-fg: var(--ed-green-strong);
+}
+:root:has(body[data-page-theme="dark"]) {
+  --n-50: #313131;
+  --n-100: #3a3a3a;
+  --n-200: #484848;
+  --n-300: #7b7b7b;
+  --n-400: #939393;
+  --n-700: #d4d4d4;
+  --n-900: #f2f2f2;
+  --pink: #f47fb5;
+  --text-muted: var(--text-dim);
+  --ed-orange: #f0a43a;
+  --ed-orange-strong: #f5b860;
+  --ed-green: #3ecf8e;
+  --ed-green-strong: #5ad9a0;
+  --ed-warn-bg: rgba(240, 164, 58, 0.14);
+  --ed-warn-text: #f5c27a;
+  --mine-rule: color-mix(in srgb, var(--ed-green) 50%, transparent);
+  --mine-wash: color-mix(in srgb, var(--ed-green) 9%, transparent);
+  --mine-fg: var(--ed-green-strong);
+}
+
+/* The card while open: the rendered text stays in the DOM, hidden; the
+   same 2px outline a whole-section scope has. */
+section.block[data-editing] .block-content:not(.ed-rich) { display: none; }
+section.block.card[data-editing] { box-shadow: 0 0 0 2px var(--accent),
+  0 1px 1px rgba(20, 24, 40, .04), 0 4px 14px rgba(20, 24, 40, .08), 0 12px 32px rgba(20, 24, 40, .05); }
+
+.ed-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding: 7px 18px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface)); font-size: 12.5px; color: var(--text); }
+.ed-bar + .card-body { border-top-color: transparent; }
+.ed-bar--conflict { background: var(--ed-warn-bg); color: var(--ed-warn-text); }
+.ed-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: 0 0 auto; }
+.ed-dot--dirty { background: var(--ed-orange); }
+.ed-dot--warn { background: var(--ed-orange-strong); }
+.ed-state { font-weight: 650; color: var(--text-strong); }
+.ed-msg { font-weight: 600; }
+.ed-hint { color: var(--text-dim); font-size: 11.5px; }
+.ed-sp { flex: 1; }
+.ed-seg { display: inline-flex; padding: 2px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); }
+.ed-seg button { height: 22px; padding: 0 10px; border: 0; border-radius: 5px; background: none; font: inherit; font-size: 11.5px;
+  font-weight: 600; color: var(--text-dim); cursor: pointer; }
+.ed-seg button:hover { color: var(--text-strong); }
+.ed-seg button.is-on { background: var(--accent); color: var(--accent-fg); }
+.ed-btn { height: 26px; padding: 0 11px; border: 1px solid var(--control-border); border-radius: 6px; background: transparent;
+  color: inherit; font: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; }
+.ed-btn:hover { background: var(--hover-tint); }
+.ed-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+.ed-btn--primary:hover { background: var(--accent); filter: brightness(1.1); }
+.ed-btn--danger { border-color: var(--type-reject-fg); color: var(--type-reject-fg); font-weight: 600; }
+.ed-btn:disabled { opacity: .5; cursor: default; }
+.ed-bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The host replaces .block-content in the card body's flow. */
+.ed-host { margin-top: 8px; }
+
+/* Rich: the section itself, editable. It IS a .block-content beside the
+   hidden one, so every page rule that lays out a section lays it out; these
+   only undo what ProseMirror's own element and a tight list's paragraphs add.
+   Nothing here may move a line: test_browser_edit_rich.py measures it. */
+.ed-host.ed-rich { margin-top: 0; }
+.ed-rich > .ed-rich-pm { caret-color: var(--accent); }
+.ed-rich > .ed-rich-pm > :first-child { margin-top: 8px; }
+.ed-rich .ed-tight > li > p { margin: 0; padding: 0; }
+.ed-rich .ed-tight > li > p:hover { background: none; }
+.ed-rich pre code.sk-fence { white-space: pre; }
+.ed-rich .ed-fence-eol { display: none; }
+.ed-rich ::selection { background: var(--selection); }
+/* The words ⌘K will link, still marked while focus is in the bar's field. */
+.ed-rich .ed-sel-held { background: var(--selection); }
+.ed-rich .ProseMirror-selectednode { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ed-rich .ProseMirror-gapcursor { display: none; }
+
+/* ⌘K: the address of a link, asked for in the bar. */
+.ed-linkwrap { display: inline-flex; flex: 1 1 260px; min-width: 180px; }
+.ed-link { width: 100%; height: 26px; padding: 0 9px; border: 1px solid var(--accent); border-radius: 6px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.ed-link::placeholder { color: var(--text-dim); }
+.ed-btn.is-on { background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: var(--accent); }
+.ed-diff-none { color: var(--text-dim); font-family: inherit; }
+.ed-split-k { display: none; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--n-400);
+  padding: 7px 12px; border-bottom: 1px solid var(--border); background: var(--n-50); }
+.ed-cm .cm-cursor { border-left: 2px solid var(--accent); }
+.ed-cm .cm-selectionBackground, .ed-cm .cm-focused .cm-selectionBackground { background: var(--selection) !important; }
+
+/* Source: every byte, in the code face, with gutters. */
+.ed-cm--source .ed-src { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.ed-cm--source .cm-editor { font-size: 12.5px; background: var(--surface); }
+.ed-cm--source .cm-editor.cm-focused { outline: none; }
+.ed-cm--source .cm-scroller { font-family: var(--font-code); line-height: 1.65; overflow: visible; }
+.ed-cm--source .cm-content { padding: 10px 0; color: var(--n-700); caret-color: var(--accent); }
+.ed-cm--source .cm-line { padding: 0 16px 0 10px; }
+.ed-cm--source .cm-gutters { background: var(--n-50); border-right: 1px solid var(--border); color: var(--n-300); }
+.ed-cm--source .cm-lineNumbers .cm-gutterElement { padding: 0 8px 0 12px; min-width: 34px; }
+.ed-cm--source .cm-foldGutter .cm-gutterElement { padding: 0 6px 0 2px; color: var(--n-400); cursor: pointer; }
+.ed-cm--source .cm-foldGutter .cm-gutterElement:hover { color: var(--accent); }
+.ed-cm--source .cm-editor.cm-focused .cm-activeLine { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.ed-cm--source .cm-editor.cm-focused .cm-activeLineGutter { background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent); }
+.ed-cm--source .cm-editor:not(.cm-focused) .cm-activeLine,
+.ed-cm--source .cm-editor:not(.cm-focused) .cm-activeLineGutter { background: none; }
+.ed-cm--source .cm-foldPlaceholder { background: var(--n-100); border: 1px solid var(--border); color: var(--text-dim); border-radius: 4px; padding: 0 6px; }
+.cm-src-hline { background: var(--n-50); }
+.cm-src-bq { box-shadow: inset 3px 0 0 var(--co-bd); background: var(--co-bg); --co-bd: var(--n-200); --co-bg: transparent; }
+.cm-src-bq--stop { --co-bd: var(--type-reject-fg); --co-bg: color-mix(in srgb, var(--type-reject-fg) 5%, transparent); }
+.cm-src-bq--warn { --co-bd: var(--ed-orange); --co-bg: color-mix(in srgb, var(--ed-orange) 6%, transparent); }
+.cm-src-bq--ok { --co-bd: var(--ed-green); --co-bg: color-mix(in srgb, var(--ed-green) 5%, transparent); }
+.cm-src-bq--info { --co-bd: var(--accent); --co-bg: color-mix(in srgb, var(--accent) 8%, transparent); }
+.cm-src-table { background: color-mix(in srgb, #7c3aed 3%, transparent); }
+.cm-src-ref { color: var(--accent); font-weight: 600; }
+
+@media (max-width: 760px) {
+  .ed-hint { display: none; }
+}
+
+/* Show what changed: theirs struck, yours added. */
+.ed-diff { margin: 0 0 10px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.ed-diff .ed-split-k { display: block; }
+.ed-diff-body { padding: 10px 12px; font-family: var(--font-code); font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; }
+.ed-diff del { color: var(--type-reject-fg); background: var(--type-reject-wash); text-decoration: line-through; }
+.ed-diff ins { color: var(--status-live-fg); background: var(--status-live-bg); text-decoration: none; }
+
+/* A refusal or failure from e / ✎, said where the eye already is. */
+.ed-toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 90;
+  padding: 9px 14px; border-radius: 9px; font-size: 13px; font-weight: 500;
+  background: var(--text-strong); color: var(--surface); box-shadow: 0 10px 30px rgba(0, 0, 0, .28); }
+@media (pointer: coarse) {
+  .ed-btn { height: 40px; }
+  .ed-seg button { height: 36px; }
+}

@@ -1,0 +1,455 @@
+/* annotate page styles, part 6 of 13 (see style.css): the `explain` pane. */
+
+/* === kind: explain ===================================================
+   A pane whose explanation rides on the code instead of sitting in the prose
+   around it. Every colour below comes from the pane's own theme
+   variables, so this kind inherits every pane theme for
+   free and a new pane theme never has to know this kind exists.
+
+   TWO WEIGHTS, and the order matters. The first cut of this had 2px of full
+   accent on every rail and the label a step BELOW --cp-text, which put the
+   loudest thing in the pane on the connector and the quietest on the
+   explanation. Rails are structure and sit at 1px; the label is the content
+   and gets --cp-anchor-bg as a ground of its own. The ground is what does the
+   work — re-tinting label text on the code's background only adds one more
+   colour competing with syntax, whereas a different surface reads as
+   commentary immediately.
+
+   --cp-anchor-bg rather than a new token on purpose: it is already the
+   per-theme "lifted surface tied to the accent", it is already contrast-
+   checked in every theme, and using it means a label panel and an anchored
+   row are the same colour, which is true — both mean "this is the bit the
+   prose is about". */
+.codepane.ex .cp-loc { cursor: default; }
+
+/* Positioning context for the mark overlays. */
+.ex-row { position: relative; }
+
+/* EVERY offset in this kind assumes one character is exactly 1ch, and that is
+   only true with tracking off. `ch` is a font metric — the advance of "0" —
+   and knows nothing about letter-spacing, while core.css sets -0.003em on
+   `body` and these rows inherit it. Rendered text is then narrower than its
+   own `ch` count by 0.036px per character, which COMPOUNDS with the column
+   index: measured in Chromium at 12px, 1.2px of drift by column 27 and 2.3px
+   by column 51, so the longest lines — the ones this kind exists for — are
+   the worst affected. Zeroing it here restores the identity the overlays rest
+   on. Scoped to these rows, so ordinary code panes keep the page's tracking.
+   test_browser_explain.py measures the underline against a DOM Range over the
+   real glyphs, which is what caught this; no source-level check can. */
+.ex-row .cp-line { letter-spacing: 0; }
+
+/* The span, marked by an overlay rather than by wrapping the text. Wrapping
+   would mean splitting highlight.js's output at a character offset, and an
+   inline element inside a `white-space: pre` row shifts every glyph after it
+   — so the underline would drift off the very span it measures. An overlay
+   costs no layout, which is also why the badge below can sit on the line
+   without pushing the code sideways. */
+.ex-uline {
+  position: absolute;
+  bottom: 2.5px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--ex-rail);
+  pointer-events: none;
+}
+
+.ex-badge {
+  flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--ex-rail);
+  color: var(--cp-ground);
+  font-family: var(--font-prose);
+  font-size: 9px; font-weight: 800; font-style: normal;
+  line-height: 1;
+}
+.ex-badge--onspan {
+  position: absolute;
+  top: 50%;
+  margin-left: 4px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+/* The value chip: the real number this example carries at this exact span.
+   Kept visible in every mode, walked or static — unlike the on-span badge, it
+   is not restating something the tray already says, so hiding it mid-walk
+   would remove the one thing this feature is for.
+
+   On-span only in "drop" (ladder) mode, ≤2 marks on the line — see
+   explainRow. In "badge" mode the marks already sit close enough to need
+   numbered footnotes instead of a ladder (LADDER_MAX, explain.py), and a
+   chip wide enough to read at that spacing overlaps the very next span; its
+   value prints in `.ex-notes` instead, inline with the entry it belongs to,
+   which is `.ex-val-chip` with no positioning node around it.
+
+   Same split as `.ex-at`/`.ex-pin` on THIS, the on-span form: it carries the
+   `ch` offset and stays in the code font so that metric agrees with the
+   column arithmetic that positions it; `.ex-val-chip` one level in carries
+   the look. Measured the wrong way round first, same as the pin — see the
+   note over `.ex-at`. */
+.ex-val {
+  position: absolute;
+  top: 50%;
+  margin-left: 10px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+/* Green, not the label's gold: a value is a fact read off the run, not a
+   claim about the code, and sharing --ex-ink-strong made it look like one
+   more thing the label was saying. --cp-string is already this pane's green
+   — tuned for contrast in all four themes — so the chip is a tint of it
+   rather than a new colour to carry through every theme by hand. A solid
+   fill was tried first and read as a card; a soft tint plus unbolded text
+   is the "milder" version, same as the label's own ink-not-card choice. */
+.ex-val-chip {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--cp-string) 16%, transparent);
+  color: var(--cp-string);
+  font-family: var(--font-prose);
+  font-size: 10.5px;
+  font-weight: 400;
+  font-style: normal;
+  white-space: nowrap;
+}
+.ex-note .ex-val-chip { margin-left: 10px; }
+/* Same fix as `.ex-lbl code` just above, and for the same reason:
+   `main.prose :not(pre) > code` outweighs a bare `.ex-val-chip code` and
+   paints its own pale box over this one — see the comment there. A value is
+   often partly a code-formatted number (`` `157.38` ``), and that box was
+   exactly the "white background" this chip was just built to not have. */
+main.prose .ex-val-chip code {
+  font-family: inherit;
+  font-size: inherit;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+
+/* The label: prose face, warm ink, nothing behind it.
+   A card was tried first — every shade from a neutral +16 L* to an inverted
+   paper note — and none of them is here because a box around two sentences,
+   five times down one pane, is more furniture than the pane can carry. The
+   thing that actually separates a label is that it is prose set in a prose
+   face; the ink only has to confirm it. See the note on --ex-ink above for
+   why the ink is where it is on the wheel.
+   The measure is wider than the card's was: without an edge to hold the eye,
+   a short line looks stranded rather than deliberate. */
+.ex-lbl {
+  padding: 2px 0 2px 2px;
+  max-width: 480px;
+  font-family: var(--font-prose);
+  font-size: 12px; line-height: 1.5; letter-spacing: -0.002em;
+  color: var(--ex-ink);
+}
+.ex-lbl b { color: var(--ex-ink-strong); font-weight: 700; }
+.ex-lbl em { font-style: italic; }
+/* An identifier inside a label. Deliberately NOT a filled chip: that would
+   put back a miniature of the card this kind just stopped drawing.
+   `main.prose` is load-bearing, and this is the third rule in this file to
+   need it. `main.prose :not(pre) > code` (0,2,2) paints every inline code
+   span with `background: var(--surface)`, and a bare `.ex-lbl code` is
+   (0,1,1) and loses — so the chips came back as pale boxes on the code
+   ground, which is exactly the furniture the card was removed to avoid.
+   Matching its specificity and sitting later in the file is what wins.
+   `background: none` is then doing real work, not tidying. */
+main.prose .ex-lbl code {
+  font-family: var(--font-code);
+  font-size: 10.5px;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  color: var(--ex-ink);
+  border-bottom: 1px dotted color-mix(in srgb, var(--ex-rail) 45%, transparent);
+}
+
+/* --- the ladder (1-2 marks on a line) --- */
+.ex-lad { padding: 3px 12px 9px; }
+.ex-lad-row { display: flex; align-items: flex-start; }
+.ex-lad-row + .ex-lad-row { margin-top: 5px; }
+/* Widths are whole `ch` counts and nothing subtracts pixels from them,
+   because the stem below contributes no width. */
+.ex-gap { flex: none; }
+/* 1px wide with -1px margin: draws AT its column and consumes nothing, so a
+   row with three stems still measures its gaps in plain `ch`. */
+.ex-stem {
+  flex: none;
+  width: 1px; margin-left: -1px;
+  align-self: stretch;
+  background: var(--ex-rail);
+}
+.ex-elbow {
+  flex: none;
+  width: 12px; height: 13px;
+  border-left: 1px solid var(--ex-rail);
+  border-bottom: 1px solid var(--ex-rail);
+  border-bottom-left-radius: 6px;
+}
+.ex-lad-row .ex-lbl { margin-left: 9px; }
+
+/* --- the numbered list (3+ marks on a line) --- */
+.ex-notes {
+  padding: 5px 12px 9px 24px;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.ex-note { display: flex; align-items: flex-start; gap: 9px; }
+.ex-note .ex-badge { margin-top: 6px; }
+
+/* --- the range bracket --- */
+/* The one form here with no column arithmetic at all: the bracket stretches
+   to whatever its rows add up to, so a range annotation never needs a span,
+   a column or a length. */
+.ex-range { display: flex; align-items: stretch; padding: 2px 12px 2px 0; }
+.ex-range-code { flex: 0 0 auto; }
+.ex-brk {
+  flex: none;
+  width: 10px; margin-left: 12px;
+  align-self: stretch;
+  border: 1px solid var(--ex-rail);
+  border-left: 0;
+  border-radius: 0 5px 5px 0;
+}
+.ex-lbl--range { align-self: center; margin-left: 12px; max-width: 280px; }
+
+/* --- the walk -------------------------------------------------------
+   One note at a time, in the order they were written. Everything below is
+   scoped to `[data-walk]` ON PURPOSE, and it is the load-bearing decision in
+   this section: the pane is always built in full — every underline, every
+   ladder, every bracket — and walking only *suppresses* what is not current.
+   Deleting the attribute therefore restores the entire pane with no cleanup,
+   which is exactly what the export does (export.js strips the three control
+   nodes and the attribute; there is no second renderer for a static page).
+   Hiding those labels per element instead would leave the export to find and
+   unhide each one, and a label that stayed hidden would be content silently
+   missing from a file someone was sent. */
+
+/* While walking, the prose lives in the tray and nowhere else: the ladder and
+   the numbered list would otherwise print the same sentence twice in one pane.
+   The MARKS stay in the DOM and only lose their ink, because their position is
+   the one thing that cannot be recomputed later. */
+.codepane.ex[data-walk] .ex-lad,
+.codepane.ex[data-walk] .ex-notes,
+.codepane.ex[data-walk] .ex-lbl--range { display: none; }
+.codepane.ex[data-walk] .ex-uline { opacity: 0; transition: opacity .14s ease; }
+.codepane.ex[data-walk] .ex-uline.is-now { opacity: 1; }
+.codepane.ex[data-walk] .ex-badge--onspan { display: none; }
+
+/* The rest of the snippet does not disappear, and — unlike an ordinary code
+   pane's context rows — it does not lose its syntax colour either. That was
+   the previous cut here: every non-current row forced to one flat
+   `--cp-muted` ink, which is right for a context row nobody asked about, but
+   an `explain` block is ALL rows the reader asked about — the snippet was
+   quoted on purpose, not pulled in as surrounding context. Greying out most
+   of a five-line snippet because the walk is on line 2 read as "this pane
+   has no Java colours," which was the actual bug report: it wasn't that
+   highlighting had failed, the highlighter was tagging every token correctly the whole
+   time, it's that the rule painted over its own output. The CURRENT row still
+   needs to read as the one under discussion — that's `.is-lit` below, the
+   same background-plus-rail an ordinary pane already gives `.is-anchor` —
+   but it earns that by addition, not by taking colour away from its
+   neighbours. */
+.codepane.ex[data-walk] .cp-row.is-lit {
+  background: var(--cp-anchor-bg);
+  box-shadow: inset 3px 0 0 var(--cp-accent);
+}
+
+/* The pin: a step's number parked past the end of its line. `.ex-at` carries
+   the offset and NOT the styling, because `ch` is a metric of the element's
+   own font — a pin set in the prose face resolves a narrower `ch` than the
+   column arithmetic was written in and lands back among the glyphs. Measured
+   the wrong way round first: the dots sat on top of the code. */
+.ex-at {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  display: inline-flex; align-items: center; gap: 5px;
+  pointer-events: none;
+}
+.ex-at > * { pointer-events: auto; }
+.ex-pin {
+  margin-left: 10px; padding: 0;
+  width: 15px; height: 15px; border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--ex-rail) 60%, transparent);
+  background: transparent; color: var(--ex-ink);
+  font-family: var(--font-prose); font-size: 9.5px; font-weight: 800; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; opacity: .55;
+  transition: opacity .14s ease, background-color .14s ease;
+}
+.ex-pin:hover { opacity: 1; }
+.ex-pin.is-now {
+  opacity: 1; background: var(--ex-rail); color: var(--cp-ground);
+  border-color: var(--ex-rail);
+}
+
+/* The tray. Its height is reserved in script.js to the longest note, so the
+   page below it never moves as you step. */
+.ex-tray {
+  padding: 10px 14px 11px 24px;
+  border-top: 1px solid var(--cp-divider);
+  background: color-mix(in srgb, var(--cp-chrome) 55%, var(--cp-ground));
+}
+.ex-tray .ex-lbl { max-width: 760px; }
+
+.ex-bar {
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--cp-divider);
+  background: var(--cp-chrome);
+  font-family: var(--font-prose); font-size: 11.5px; color: var(--cp-dim);
+}
+.ex-step {
+  font: inherit; cursor: pointer;
+  border: 1px solid var(--cp-divider); border-radius: 5px;
+  background: var(--cp-ground); color: var(--cp-text);
+  padding: 1px 9px 2px; line-height: 1.6;
+}
+.ex-step:disabled { opacity: .4; cursor: default; }
+.ex-count { font-variant-numeric: tabular-nums; }
+.ex-pips { display: flex; gap: 5px; margin-left: auto; }
+.ex-pip { width: 6px; height: 6px; border-radius: 50%; background: var(--cp-divider); }
+.ex-pip.on { background: var(--ex-rail); }
+
+/* --- Themes ---------------------------------------------------------
+   A theme redeclares the variables and nothing else. Every one of these is
+   scoped under `.codepane`, which is not decoration: code-theme.css paints
+   ordinary fenced blocks across the whole page, and a theme that escaped
+   this scope would recolour them while looking perfectly correct inside the
+   pane. Midnight is the dangerous one — it would look RIGHT while leaking.
+   view-controls.e2e.cjs item 11 samples an ordinary fenced block under every
+   theme, not just once, for exactly that reason.
+   Contrast for all four is in the handoff doc; nothing below AA ships. */
+
+/* Each theme's ground and text are the Shiki theme's own (code-paint.js
+   PANE_THEMES) — the token colours are designed for exactly that ground, and
+   test_browser_explain.py measures every token at 4.5:1 on it. The anchor /
+   current-row wash is the only colour behind code this file chooses: each is
+   the strongest tint toward the accent that keeps the theme's dimmest token
+   at 4.5:1. Light+ has no room at all (its type colour is 4.59:1 on white),
+   so Daylight marks the current row with the rail alone.
+
+   Midnight — GitHub Dark. */
+body[data-pane-theme="midnight"] .codepane {
+  /* The one dark pane: the label goes 16 L* LIGHTER, and keeps a trace of
+     the page's blue in its text so it still belongs to this pane. */
+  /* The only dark theme: the pill inverts — dark ground, light ink. */
+  --cp-pill-s:    42%;
+  --cp-pill-bg-l: 26%;
+  --cp-pill-fg-l: 80%;
+  --cp-ground:    #0d1117;
+  --cp-chrome:    #161b22;
+  --cp-divider:   #30363d;
+  --cp-anchor-bg: #17253c;
+  --cp-accent:    #58a6ff;
+  --cp-text:      #e6edf3;
+  --cp-dim:       #9da7b3;
+  --cp-muted:     #8b949e;
+  --cp-punct:     #e6edf3;
+  --cp-number:    #ff9e64;
+  --cp-keyword:   #bb9af7;
+  --cp-string:    #9ece6a;
+  --cp-comment:   #8f99c4;
+  --cp-moved-fg:  #e0af68;
+  --cp-moved-bg:  #3a2f1c;
+  --cp-bad-fg:    #f7768e;
+  --cp-bad-bg:    #3d2029;
+  /* The one dark pane: the ink lightens, the hue does not move. */
+  --ex-ink:        #ada89f;
+  --ex-ink-strong: #ffc978;
+  --ex-rail:       #967919;
+}
+
+/* High contrast dark — GitHub Dark High Contrast. */
+body[data-pane-theme="contrast-dark"] .codepane {
+  /* The one dark pane: the label goes 16 L* LIGHTER, and keeps a trace of
+     the page's blue in its text so it still belongs to this pane. */
+  /* The only dark theme: the pill inverts — dark ground, light ink. */
+  --cp-pill-s:    42%;
+  --cp-pill-bg-l: 26%;
+  --cp-pill-fg-l: 80%;
+  --cp-ground:    #0a0c10;
+  --cp-chrome:    #151b23;
+  --cp-divider:   #7a828e;
+  --cp-anchor-bg: #1b2c4c;
+  --cp-accent:    #71b7ff;
+  --cp-text:      #f0f3f6;
+  --cp-dim:       #c5d1de;
+  --cp-muted:     #9ea7b3;
+  --cp-punct:     #f0f3f6;
+  --cp-number:    #ff9e64;
+  --cp-keyword:   #bb9af7;
+  --cp-string:    #9ece6a;
+  --cp-comment:   #8f99c4;
+  --cp-moved-fg:  #e0af68;
+  --cp-moved-bg:  #3a2f1c;
+  --cp-bad-fg:    #f7768e;
+  --cp-bad-bg:    #3d2029;
+  /* The one dark pane: the ink lightens, the hue does not move. */
+  --ex-ink:        #ada89f;
+  --ex-ink-strong: #ffc978;
+  --ex-rail:       #967919;
+}
+
+/* Contrast — near-black on pure white, nothing below 6.4:1 anywhere and most
+   of it far above. The one to reach for when the pane has to be readable in
+   bad light or on a bad screen. */
+body[data-pane-theme="contrast"] .codepane {
+  /* Pushed apart deliberately — this theme exists for legibility. */
+  --cp-pill-s:    62%;
+  --cp-pill-bg-l: 90%;
+  --cp-pill-fg-l: 20%;
+  --cp-ground:    #ffffff;
+  --cp-chrome:    #eef0f4;
+  --cp-divider:   #b6bcc7;
+  --cp-anchor-bg: #f0f5fa;
+  --cp-accent:    #0b3ea8;
+  --cp-text:      #0e1116;
+  --cp-dim:       #3a4150;
+  --cp-muted:     #4a5160;
+  --cp-punct:     #1c2230;
+  --cp-number:    #8a2a00;
+  --cp-keyword:   #5b0f96;
+  --cp-string:    #00503a;
+  --cp-comment:   #4a5160;
+  --cp-moved-fg:  #7a3400;
+  --cp-moved-bg:  #ffe6c2;
+  --cp-bad-fg:    #8a0f0f;
+  --cp-bad-bg:    #ffd6d6;
+  --ex-ink:        #5b574f;
+  --ex-ink-strong: #806500;
+  --ex-rail:       #a88819;
+}
+
+/* Code tokens. Each one is a Shiki token carrying every pane theme's colour
+   as a CSS variable (--shiki-<theme>), written by code-paint.js from Shiki's
+   own multi-theme output; the reader's "Code theme" picks which one paints.
+   The token colours are the Shiki themes' own — nothing here restates them. */
+.codepane .cp-body { color: var(--cp-text); background: transparent; }
+/* Daylight is the pane's base palette (the .codepane block above), so its
+   tokens are the base rule too. */
+.codepane .sk {
+  color: var(--shiki-daylight);
+  font-style: var(--shiki-daylight-font-style, inherit);
+  font-weight: var(--shiki-daylight-font-weight, inherit);
+  text-decoration: var(--shiki-daylight-text-decoration, inherit);
+}
+[data-pane-theme="midnight"] .codepane .sk {
+  color: var(--shiki-midnight);
+  font-style: var(--shiki-midnight-font-style, inherit);
+  font-weight: var(--shiki-midnight-font-weight, inherit);
+  text-decoration: var(--shiki-midnight-text-decoration, inherit);
+}
+[data-pane-theme="contrast-dark"] .codepane .sk {
+  color: var(--shiki-contrast-dark);
+  font-style: var(--shiki-contrast-dark-font-style, inherit);
+  font-weight: var(--shiki-contrast-dark-font-weight, inherit);
+  text-decoration: var(--shiki-contrast-dark-text-decoration, inherit);
+}
+[data-pane-theme="contrast"] .codepane .sk {
+  color: var(--shiki-contrast);
+  font-style: var(--shiki-contrast-font-style, inherit);
+  font-weight: var(--shiki-contrast-font-weight, inherit);
+  text-decoration: var(--shiki-contrast-text-decoration, inherit);
+}

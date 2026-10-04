@@ -1,0 +1,90 @@
+/* annotate page styles, part 9 of 13 (see style.css): the narration panel
+   (progress.js). */
+
+/* === The narration panel ===============================================
+   What Claude is doing, while the page waits. Same anchor and sticky
+   behaviour as .busy-banner (it sits directly under the header and pins to
+   the top of the screen), but deliberately NOT the accent ribbon: this is
+   information to read, not an alarm. The accent survives as a left edge,
+   because the ribbon's colour was the only thing saying "you cannot submit
+   another round" and that meaning must not be lost with its background. */
+#progress-panel {
+  position: sticky;
+  top: 0;
+  z-index: 19;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 0 10px 10px;
+  color: var(--text);
+  font-size: 13px;
+}
+#progress-panel[data-state="done"] { border-left-color: var(--status-live-fg); }
+body.read-only #progress-panel { display: none; }
+
+/* The panel replaces the lock ribbon while it is working, rather than sharing
+   the top of the screen with it. Both are `position: sticky; top: 0` siblings
+   in the same containing block and the ribbon's z-index 20 beats the panel's
+   19, so they do not stack — they overlap. Measured in Chromium at
+   scrollY 600 with both present: the ribbon occupied 0–45.4px and .pg-head
+   1–41.8px, and `elementFromPoint` at the head's own centre (701, 21)
+   returned `busy-banner` — the current line, the step count, the elapsed
+   timer and the caret were all behind it. They coexist by construction: the
+   panel exists only while Claude is working, which is exactly when the page
+   is locked.
+
+   The panel wins because it says everything the ribbon says and more. The
+   ribbon is a spinner, "Claude is applying your round…" and an elapsed timer;
+   the panel is a spinner, the line Claude is actually on, a step count, the
+   same elapsed timer, and the trail — with the accent left edge that carries
+   the ribbon's "you cannot submit another round" (decision 5). Offsetting one
+   below the other would pin two spinners and two timers to the top of the
+   screen to say one thing. The moment the trail closes, `data-state` flips to
+   `done`, this rule stops matching, and the ribbon comes back for whatever is
+   left of the lock — including the case where Claude never narrates at all
+   and no panel is ever built. */
+body:has(#progress-panel[data-state="working"]) .busy-banner { display: none; }
+
+.pg-head { display: flex; align-items: center; gap: 9px; padding: 10px 13px; }
+.pg-now { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+          white-space: nowrap; }
+.pg-count, .pg-timer {
+  font-family: var(--font-code); font-size: 11px; color: var(--text-dim);
+  flex: none;
+}
+.pg-mark { width: 14px; height: 14px; flex: none; display: inline-flex;
+           align-items: center; justify-content: center; }
+.pg-spin {
+  border: 2px solid var(--accent); border-top-color: transparent;
+  border-radius: 50%; animation: busy-spin 0.8s linear infinite;
+}
+.pg-tick { color: var(--status-live-fg); font-size: 14px; }
+.pg-caret {
+  background: none; border: 0; padding: 2px 4px; cursor: pointer;
+  color: var(--text-dim); display: inline-flex; align-items: center; flex: none;
+}
+.pg-caret svg { width: 14px; height: 14px; fill: none; stroke: currentColor;
+                stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#progress-panel[data-open="0"] .pg-caret svg { transform: rotate(180deg); }
+
+#progress-feed {
+  border-top: 1px solid var(--border);
+  padding: 7px 13px 10px;
+  max-height: 190px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+#progress-panel[data-open="0"] #progress-feed { display: none; }
+.pg-line {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 3px 0; color: var(--text-dim); line-height: 1.5;
+}
+.pg-line .t {
+  font-family: var(--font-code); font-size: 10.5px; color: var(--text-dim);
+  flex: none; width: 38px; font-variant-numeric: tabular-nums; opacity: .75;
+}
+.pg-line.now { color: var(--text); font-weight: 500; }

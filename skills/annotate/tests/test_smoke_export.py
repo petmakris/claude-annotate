@@ -1,0 +1,252 @@
+"""Structural guards for the Share button (a standalone HTML export).
+
+Behaviour is proven in tests/e2e/export-share.e2e.cjs, which opens the
+PRODUCED FILE in a fresh browser page with the server killed:
+
+    NODE_PATH=$(npm root -g) node skills/annotate/tests/e2e/export-share.e2e.cjs
+
+What is worth guarding cheaply here is the one property that makes the file
+safe to send: comments are REMOVED from the export, not hidden. `body.read-only`
+hides comment cards with CSS, so an export built on that mode would look right
+and still carry every private note to whoever received the file.
+"""
+# NOTE: the browser-driven proof this file used to point at is gone. The 19
+# e2e suites spawned annotate's own server, which was deleted when annotate
+# moved onto the webcompanion daemon. They are recoverable from git history
+# and are repointable — the page they drove is unchanged, only the way it is
+# served — but until they are, what remains below is static assertion only.
+import re
+from pathlib import Path
+from skills.annotate.tests.page_source import STYLE_CSS
+
+REPO = Path(__file__).resolve().parents[3]
+EXPORT_JS = REPO / "skills" / "annotate" / "static" / "export.js"
+# The page shell and its asset list used to be printed by server.py; they now
+# live in the renderer the daemon loads — shell.js for the markup, entry.js for
+# which stylesheets and scripts are pulled in and in what order. These tests
+# assert against the page's source either way, so they read both.
+class _PageSource:
+    """The page's markup and its asset list, as a single string to assert on.
+
+    shell.js holds the markup as a JSON-encoded JS string literal, so reading
+    the file raw would hand these tests `id=\\"block-search\\"` and every
+    markup assertion would fail on the escaping rather than on the thing it
+    is checking. The literal is decoded back to real HTML here, and entry.js
+    (which lists the stylesheets and scripts, in load order) is appended.
+    """
+
+    def __init__(self, repo):
+        static = repo / "skills" / "annotate" / "static"
+        self._shell = static / "shell.js"
+        self._entry = static / "entry.js"
+
+    def read_text(self, *a, **k):
+        # Decoded by one shared helper: the encoding of SHELL_HTML is shell.js's
+        # business, and it has already changed once.
+        from .shell_source import shell_html
+        return shell_html(self._shell) + "\n" + self._entry.read_text(*a, **k)
+
+
+SERVER_PY = _PageSource(REPO)
+# Annotate's OWN stylesheets, and only those. A constant pointing at the
+# SHARED skills/_shared/web_companion copy used to sit here; annotate's has
+# deliberately diverged from it, and asserting Share's styling against the
+# shared file is what let the read-only guard below go vacuous when Share
+# became a menu row and annotate dropped its export-btn rules. Nothing reads
+# the shared copy any more, so nothing names it.
+ANNOTATE_CORE_CSS = REPO / "skills" / "annotate" / "static" / "core.css"
+ANNOTATE_STYLE_CSS = STYLE_CSS
+
+
+def _read_only_selectors(css):
+    """Every selector in `css` that a read-only body switches on.
+
+    Extracted rather than substring-matched. The assertion this feeds is that
+    NO read-only rule reaches Share, and `"body.read-only .menu-tile" not in
+    css` would pass just as happily against a stylesheet containing no
+    read-only rules whatsoever -- a guard that cannot fail, which is exactly
+    the failure mode being repaired here.
+    """
+    css = re.sub(r"/\*.*?\*/", " ", css, flags=re.S)   # or the selector carries
+    out = []                                           # the comment above it
+    for block in re.finditer(r"([^{}]+)\{[^{}]*\}", css):
+        out.extend(sel.strip() for sel in block.group(1).split(",")
+                   if "body.read-only" in sel)
+    return out
+
+
+def _strip_selectors():
+    """The selectors the export actually deletes.
+
+    Read out of the STRIP array literal rather than the whole file: the module
+    comment names several of these selectors while explaining the rule, so a
+    file-wide `in src` check would keep passing after the list itself had been
+    emptied.
+    """
+    src = EXPORT_JS.read_text()
+    body = src.split("const STRIP = [", 1)[1].split("].join", 1)[0]
+    return [line.split("//")[0].strip().strip(",").strip('"')
+            for line in body.splitlines() if line.strip().startswith('"')]
+
+
+def test_the_export_deletes_every_comment_carrier():
+    """Each of these renders comment text or review state inside main.prose,
+    which is the subtree the export clones. Missing one ships private notes."""
+    selectors = _strip_selectors()
+    for needle in (".inline-comments",  # comment cards, mounted after a block
+                   ".sel-menu",         # the selection menu
+                   ".sel-composer",     # an open span comment box
+                   ".sel-chip"):        # a span comment's text, in the prose
+        assert needle in selectors, f"the export no longer removes {needle!r}"
+
+
+def test_the_export_strips_review_state_attributes():
+    """A block marked "delete" carries data-block-mark, which the stylesheet
+    renders struck through and faded. Left on, the reader receives a document
+    that looks half-retracted."""
+    src = EXPORT_JS.read_text()
+    body = src.split("const STATE_ATTRS = [", 1)[1].split("];", 1)[0]
+    for needle in ("data-block-mark", "data-engaged-type", "data-sel-scope"):
+        assert needle in body, f"the export no longer strips {needle!r}"
+
+
+def test_the_export_does_not_reuse_read_only_mode():
+    """read-only HIDES comment cards; the export must DELETE them. Reaching
+    for that class here would silently reintroduce the leak."""
+    src = EXPORT_JS.read_text()
+    assert 'class="exported"' in src, \
+        "the export no longer marks its output body as exported"
+    # The prose mentions `body.read-only` to explain WHY it is not used; the
+    # code must not actually reach for it.
+    assert 'read-only"' not in src.replace("`body.read-only`", ""), \
+        "the export is building a read-only page instead of removing the nodes"
+
+
+def test_fonts_are_embedded_once():
+    """The Inter face names the same woff2 twice (woff2-variations, then
+    woff2). Embedding both costs half a megabyte in every shared file, so the
+    src list is deduped — and deduped BEFORE embedding, while a url() still
+    holds a comma-free path."""
+    src = EXPORT_JS.read_text()
+    assert "dedupeFontSrc" in src, "the duplicate-font-src guard is gone"
+    # Asserted as an ORDER, not as one literal call: the pipeline grew a third
+    # stage (stripUnusedFontFaces) between these two, and a string match on
+    # `embedFonts(dedupeFontSrc(` failed on a change that kept the invariant
+    # it was guarding perfectly intact.
+    pipeline = src[src.index("const css = await embedFonts("):]
+    pipeline = pipeline[:pipeline.index("\n")]
+    assert pipeline.index("embedFonts") < pipeline.index("dedupeFontSrc"), \
+        "dedupe no longer runs before embedding"
+
+
+def test_only_the_fonts_the_document_uses_are_embedded():
+    """Several families ship; at most three are ever on screen (Inter for the
+    prose, the reader's code font, Monaspace for diagrams). An export inlines
+    every font as base64, so the rest are dropped before embedding.
+    """
+    src = EXPORT_JS.read_text()
+    assert "stripUnusedFontFaces" in src, \
+        "every @font-face is embedded again, used or not"
+    pipeline = src[src.index("const css = await embedFonts("):]
+    pipeline = pipeline[:pipeline.index("\n")]
+    assert pipeline.index("stripUnusedFontFaces") < pipeline.index("dedupeFontSrc") or \
+        pipeline.index("embedFonts") < pipeline.index("stripUnusedFontFaces"), \
+        "the unused faces must be dropped before embedFonts fetches them"
+    # The map must cover every value the settings panel can store, or a reader's
+    # font is silently dropped from their own export.
+    for value in ("system", "monaspace", "jetbrains"):
+        assert value in src, f"FONT_FAMILIES has no entry for {value!r}"
+    assert "proseFont" not in src, "the export still looks up a prose-font choice"
+
+
+def test_the_exported_body_carries_every_view_preference():
+    """The export has no JS to re-derive these and no controls to change them,
+    so they are baked onto <body>. A camelCase dataset key becomes a kebab
+    attribute — `codeFont` is `data-code-font`. That conversion used to name
+    its two exceptions by hand, which emitted `data-proseFont` the moment a
+    third key was added: an attribute no rule matches, so the reader's font
+    would have been dropped from the file while looking exported."""
+    src = EXPORT_JS.read_text()
+    for key in ("width", "paneTheme", "codeFont", "textSize"):
+        assert key in src, f"the export no longer carries {key}"
+    for gone in ("codeLayout", "proseFont"):
+        assert gone not in src, f"the export still bakes the removed {gone}"
+    assert 'k.replace(/[A-Z]/g' in src, \
+        "the camelCase-to-kebab conversion is hand-listed again"
+
+
+def test_the_search_state_is_undone():
+    """An active search hides non-matching sections. Copying that into the file
+    hands the reader a document with blocks silently missing."""
+    src = EXPORT_JS.read_text()
+    assert "search-hidden" in src, "the export no longer un-hides filtered blocks"
+    assert "search-hit" in src, "the export no longer unwraps highlight marks"
+
+
+def test_the_button_is_wired_into_the_page():
+    server = SERVER_PY.read_text()
+    assert 'id="export-btn"' in server, "the Share button is not in the header"
+    assert "export.js" in server, "export.js is not in the page's asset list"
+
+
+def test_share_survives_a_read_only_link():
+    """Someone holding a shared link is exactly who wants a copy, and the
+    export is built entirely from what their own page already shows.
+
+    Share is a tile of the menu now rather than a button of its own, so the
+    property to guard is that no read-only rule reaches .menu-tile -- the way
+    one deliberately reaches .done-btn, which a guest genuinely cannot use.
+    """
+    shell = SERVER_PY.read_text()
+    core = ANNOTATE_CORE_CSS.read_text()
+    style = ANNOTATE_STYLE_CSS.read_text()
+
+    # Check the element Share actually is. Naming a class it no longer carries
+    # is how the previous version of this test stopped guarding anything.
+    assert re.search(r'id="export-btn"[^>]*class="menu-tile"', shell), \
+        "Share is not a menu tile -- this test is asserting about the wrong element"
+    assert ".menu-tile {" in style, "menu tiles have no styling"
+
+    reached = _read_only_selectors(core) + _read_only_selectors(style)
+    # Control case: a read-only rule DOES reach Done. Without this, an
+    # extraction that silently returned nothing would read as "Share is safe".
+    assert any(".done-btn" in sel for sel in reached), \
+        "no read-only rule reaches .done-btn -- _read_only_selectors is broken, " \
+        "so the assertion below proves nothing"
+    hides_share = [sel for sel in reached
+                   if ".menu-tile" in sel or "export-btn" in sel
+                   or ".menu-pop" in sel]
+    assert hides_share == [], \
+        f"Share is hidden on a read-only link, where it would be most " \
+        f"useful: {hides_share}"
+
+
+
+
+def test_a_document_with_diagrams_keeps_the_font_its_geometry_was_measured_for():
+    """Diagram SVG is laid out on the server from Monaspace's 0.62em advance
+    (skills/annotate/diagrams/text_metrics.py), so diagram.css pins that family
+    directly and it does NOT follow the reader's code font.
+
+    Which made it the one family the reader's choice cannot speak for. When
+    JetBrains Mono became the default code font, the unused-font strip would
+    have dropped Monaspace from every export — and a shared file's diagrams
+    would have fallen back to a system mono inside boxes drawn for a different
+    one. The live page looked perfect; only the exported copy was wrong.
+    """
+    src = EXPORT_JS.read_text()
+    assert ".annotate-seq" in src and ".annotate-flow" in src, \
+        "the export no longer notices that the document contains diagrams"
+    assert '"Monaspace Radon"' in src.split("function stripUnusedFontFaces", 1)[1][:600], \
+        "a document with diagrams no longer keeps Monaspace"
+
+
+def test_diagram_css_still_names_its_font_directly():
+    """The counterpart to the test above: tokenising these rules to
+    var(--font-code) would make diagram text follow a setting the geometry
+    around it cannot follow."""
+    css = (Path(__file__).resolve().parents[1] / "static" / "diagram.css").read_text()
+    assert "'Monaspace Radon'" in css, \
+        "diagram text now follows the reader's code font, but its SVG is still " \
+        "measured for Monaspace — regenerate the metrics or revert this"
+    assert "var(--font-code)" not in css

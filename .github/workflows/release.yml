@@ -1,0 +1,45 @@
+name: release
+on:
+  push:
+    # Releases are tagged v<plugin version>, e.g. v0.1.96.
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        # build.gradle.kts derives the plugin version from the commit count,
+        # so a shallow clone would produce the wrong version number.
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - run: ./gradlew buildPlugin
+        working-directory: ide-plugin
+      # The tag names the version users will see; the zip carries the one
+      # Gradle derived. Refuse to publish when they disagree.
+      - name: Tag matches the built version
+        working-directory: ide-plugin
+        run: |
+          zip="build/distributions/claude-ide-review-${GITHUB_REF_NAME#v}.zip"
+          if [ ! -f "$zip" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match the built plugin: $(ls build/distributions)"
+            exit 1
+          fi
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: ide-plugin/build/distributions/*.zip
+          body: |
+            Install in IntelliJ: **Settings → Plugins → ⚙ → Install Plugin from Disk…**
+            and pick the `.zip` below.
+
+            This is the IDE half. The Claude Code half installs separately:
+
+                /plugin marketplace add petmakris/claude-annotate
+                /plugin install claude-ide-review

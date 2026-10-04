@@ -1,0 +1,210 @@
+/* annotate page styles, part 2 of 13 (see style.css): block search and its
+   takeover (search.js). */
+
+/* === Block search ===================================================== */
+.header-search {
+  position: relative;
+  /* One icon wide at rest — the same 28px square as the bare menu button
+     beside it. The input is still here and still focusable — clicking it is
+     what opens the bar — but it shows nothing but its own magnifier until it
+     does. */
+  width: 28px;
+  transition: width 160ms ease;
+}
+.header-search .search-icon {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 13px;
+  height: 13px;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+.search-input {
+  width: 100%;
+  padding: 5px 28px 5px 28px;
+  background: var(--surface);
+  border: 1px solid var(--control-border);
+  border-radius: 7px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.15);
+}
+/* Collapsed, the field is a button: no placeholder to read at 28px, and a
+   pointer that says "this opens something". */
+.header-search .search-input { cursor: pointer; }
+/* ...and it looks like one: a bare icon, like the menu button beside it.
+   The rules above give the field its 28px of side padding and its
+   --control-border outline, and on a border-box input 56px of padding does
+   not fit a 28px slot — the input rendered 58px wide, overflowed its slot,
+   and ran its dark outline underneath #menu-toggle (measured at 1280px:
+   input x=1140-1198, menu button x=1170-1196), which read as one frame
+   round search and burger. At rest it has no padding, no border, no
+   background and no focus ring, so it is exactly its slot and paints
+   nothing but the hover tint. Keyed on "neither open state" rather than on
+   "0", so the page before search.js has written the attribute is covered
+   too. Typing and filtered get today's bordered field back untouched. */
+.page-header:not([data-searching="1"]):not([data-searching="filtered"]) .search-input {
+  height: 28px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  transition: background 140ms ease;
+}
+.page-header:not([data-searching="1"]):not([data-searching="filtered"]) .search-input:hover {
+  background: var(--header-hover);
+}
+.page-header:not([data-searching="1"]):not([data-searching="filtered"]) .search-icon {
+  left: 7px; width: 14px; height: 14px;
+}
+.page-header:not([data-searching="1"]):not([data-searching="filtered"]) .header-search:hover .search-icon {
+  color: var(--text-strong);
+}
+.page-header[data-searching="1"] .search-input { cursor: text; }
+.page-header:not([data-searching="1"]) .search-input::placeholder {
+  color: transparent;
+}
+.search-input::placeholder { color: var(--text-dim); }
+.search-kbd {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: var(--font-code);
+  font-size: 10px;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+/* Hide the kbd hint once the user is typing (input has focus). */
+.search-input:focus + .search-kbd { opacity: 0; }
+
+/* Clear (×) button — occupies the same right slot as the kbd hint, shown only
+   while there's a query. The wrapper gets .has-query from search.js. */
+.search-clear {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+.search-clear:hover { background: var(--surface-hover); color: var(--text-strong); }
+.header-search.has-query .search-clear { display: inline-flex; }
+.header-search.has-query .search-kbd { display: none; }
+
+.search-hidden { display: none !important; }
+
+.search-count {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 0 6px 14px;
+}
+
+main.prose mark.search-hit {
+  background: var(--highlight);
+  color: var(--text-strong);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* === The takeover ======================================================
+   Focused, the field is the bar. The title steps aside rather than shrinking
+   — a truncated title beside a search box is worse than no title, and the
+   title is still one Esc away. Everything else in the actions goes with it,
+   including Done: nothing in the bar is worth clicking while you are typing
+   a filter, and the row must not reflow as the field grows.
+
+   Three states, not two, and `data-searching` carries all three because they
+   are mutually exclusive by construction (search.js writes exactly one):
+
+     "0"         at rest — no focus, no query. A 28px magnifier, whole bar.
+     "1"         typing — the field has focus. Full takeover, as above.
+     "filtered"  a query is live and focus has moved on.
+
+   The third state exists because the first two left the bar unreachable. The
+   takeover was keyed on "focused OR holds a query", so typing a filter and
+   then clicking away hid Done and the menu with no way back: Escape was gated
+   on the field having focus, and the only recovery was the mouse-only ×.
+   Submitting a round was unreachable from behind a filter.
+
+   What decision 9 actually required is narrower than what was built: the
+   FIELD must not collapse while a query is live, because the document
+   underneath is filtered and a 28px magnifier hides the reason. It never
+   required the rest of the bar to go with it. Hiding the bar is right while
+   you are typing; it is wrong once you have stopped. So "filtered" keeps the
+   field open at a width that shows its query and gives Done and the menu
+   straight back. */
+.page-header[data-searching="1"] .header-title { display: none; }
+.page-header[data-searching="1"] .header-actions { flex: 1; }
+.page-header[data-searching="1"] .header-search { width: 100%; }
+.page-header[data-searching="1"] .header-actions > *:not(.header-search) {
+  display: none;
+}
+/* Filtered but not focused: a real field, not the whole bar. A fixed measure
+   rather than flex:1, because the title stays and the field growing to fill
+   what is left would be the takeover again under another name. The `40vw`
+   half of this min() bounds the FIELD; it does nothing to keep the FIELD
+   from crowding the title off a phone, because the title is the thing that
+   was overflowing. Measured in Chromium with the field, Done and the menu
+   all on screen: document overflow was +73px at 320px wide, +40px at 375px,
+   +16px at 414px, 0px at 768px (where the title's natural width plus
+   everything else already fits). The real ceiling is viewport minus title
+   minus Done minus menu, not a fraction of the viewport spent on the field
+   alone — see the .header-title override below, which is what actually
+   fixes it. */
+.page-header[data-searching="filtered"] .header-search {
+  width: min(190px, 40vw);
+}
+.page-header[data-searching="filtered"] .search-input { cursor: text; }
+/* core.css's `.header-title` is a flex item with no min-width override, so
+   per the flexbox default (min-width: auto) it refuses to shrink below its
+   own min-content width — about 151px — and pushes Done and the menu off
+   the right edge instead of giving up space to them. That is the actual
+   cause of the overflow measured above; the field's own 40vw cap never
+   touched it. Overridden here rather than in core.css, per this file's
+   header rules being the place that already undoes core.css's box geometry
+   (see .general-composer above). min-width: 0 lets `.header-title` shrink
+   under pressure, overflow: hidden clips what no longer fits, and the
+   ellipsis on #hdr-title turns that clipping into a legible "title
+   truncated" instead of a mid-character cut. At rest there's no pressure
+   (the field is 28px) and while typing `.header-title` is `display: none`
+   two rules up, so this is inert in both of those states and only bites in
+   `filtered`, which is where the overflow was measured. */
+.header-title { min-width: 0; overflow: hidden; }
+.header-title #hdr-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The `/` hint has nowhere to live at rest: the field is 28px wide and the
+   magnifier already occupies it. It was a hint about how to OPEN search, so
+   it is useless once search is open — which is the only state with room for
+   it. Hidden here rather than deleted from the shell; the keyboard pane in
+   the menu still teaches `/`, and that is now its only home. */
+.page-header:not([data-searching="1"]) .search-kbd { display: none; }

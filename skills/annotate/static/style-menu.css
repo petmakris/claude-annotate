@@ -1,0 +1,210 @@
+/* annotate page styles, part 8 of 13 (see style.css): the menu, its tiles,
+   the status block and the header icons. */
+
+/* === The menu ==========================================================
+   Nine controls left the bar for this panel. It reuses .icon-btn-wrap for
+   anchoring and the initTopPanels machinery for opening and closing, so the
+   only genuinely new thing here is the pane switch.
+
+   318px because the root pane is a grid of four 72px tiles: 4 x 72, three
+   4px gaps, the pane's 6px padding each side and the 1px border come to
+   318. It used to be 288px, sized for a list of rows whose widest line was a
+   shortcut description; the help pane is that same list and reads the same
+   at 318, just with shorter wrapping. Much wider than this and a menu stops
+   reading as a menu and starts reading as a dialog. max-height + scroll for
+   the same reason .settings-pop had them: the settings pane holds seven
+   sections and the next preference is a row in script.js's SETTINGS spec. */
+.menu-pop {
+  position: absolute; top: calc(100% + 9px); right: 0; z-index: 60;
+  display: flex; flex-direction: column;
+  width: 318px; max-height: 78vh; overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 34px rgba(20, 22, 28, .20), 0 2px 6px rgba(20, 22, 28, .08);
+  font-size: 12.5px;
+}
+.menu-pop[hidden] { display: none; }
+
+/* Exactly one pane at a time, chosen by the attribute initMenuPanes writes.
+   Panes are siblings rather than a scroller so the panel's height is the
+   height of the pane you are on, not of the tallest one. */
+.menu-pane { display: none; flex-direction: column; gap: 2px; padding: 6px; }
+.menu-pop[data-pane="root"] [data-pane-name="root"],
+.menu-pop[data-pane="settings"] [data-pane-name="settings"],
+.menu-pop[data-pane="help"] [data-pane-name="help"] { display: flex; }
+
+/* === The root pane: tiles ==============================================
+   Under the status block, every command is a tile: a 20px icon over a
+   one-word caption, four to a row. It replaced three headed lists of rows
+   ("This response", "View", "Document"), whose headings were doing the work
+   the icons now do, in a panel you had to read top to bottom to find one of
+   seven things.
+
+   The caption is deliberately short, so it is never the name: every tile
+   carries its full name as aria-label and its full sentence as title. Two
+   modules write THROUGH a tile — fullscreen.js swaps the icon in the
+   [data-icon] slot and the caption in [data-label]; export.js swaps the
+   caption for "Preparing…" / "Saved ✓" and back — so the caption clips
+   rather than wraps when one of those runs long.
+
+   The hover tint is mixed from --text into the panel's own surface rather
+   than taken from --hover-tint, which is one step off --surface in light and
+   IS --surface-soft in dark: on a tile with no border that is a hover you
+   cannot see. */
+.menu-tiles {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px;
+  margin-top: 2px; padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.menu-tile {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  min-width: 0; padding: 10px 2px 8px;
+  border: 0; border-radius: 8px; background: none;
+  font-family: inherit; font-size: 11px; font-weight: 500; line-height: 1.2;
+  color: var(--text); cursor: pointer;
+  /* Background only: a colour transition would leave a just-pressed tile
+     reading its old colour for 140ms, and the caption and icon would
+     disagree mid-flight. */
+  transition: background 140ms ease;
+}
+.menu-tile:hover {
+  background: color-mix(in srgb, var(--text) 8%, var(--surface));
+  color: var(--text-strong);
+}
+/* The same cascade trap as .icon-btn[hidden] in core.css: an author
+   `display: flex` beats the UA [hidden] rule at equal specificity. The
+   highlighter tile is hidden on a browser with no Highlight API. */
+.menu-tile[hidden] { display: none; }
+.menu-tile > svg, .menu-tile-icon svg {
+  width: 20px; height: 20px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round;
+  color: var(--text-dim);
+}
+.menu-tile:hover > svg, .menu-tile:hover .menu-tile-icon svg { color: var(--text-strong); }
+.menu-tile-icon { display: inline-flex; flex: none; }
+.menu-tile-label {
+  max-width: 100%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* The G shortcut, tucked into the Comment tile's corner: the row used to
+   say it in full, and the keys pane still does. */
+.menu-tile-kbd {
+  position: absolute; top: 5px; right: 6px;
+  font-family: var(--font-code); font-size: 9.5px; line-height: 1;
+  color: var(--text-dim);
+}
+/* A tile whose thing is currently ON (the highlighter; Full screen). Both
+   icon shapes, as the base rule above: an icon is a bare child svg on most
+   tiles and an svg inside the [data-icon] slot on the one a module rewrites
+   (Full screen). Naming only `> svg` lit the caption and left that icon grey
+   — measured, when these were rows, at rgb(131,134,143) beside a
+   rgb(0,113,227) label. */
+.menu-tile[aria-pressed="true"],
+.menu-tile[aria-pressed="true"]:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+}
+.menu-tile[aria-pressed="true"] > svg,
+.menu-tile[aria-pressed="true"] .menu-tile-icon svg,
+.menu-tile[aria-pressed="true"] .menu-tile-kbd { color: var(--accent); }
+
+.menu-back {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 8px 9px; border: 0; border-bottom: 1px solid var(--border);
+  background: none; cursor: pointer;
+  font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--text);
+}
+.menu-back svg {
+  width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; color: var(--text-dim);
+}
+
+/* === The status block ==================================================
+   What the Watching pill said, with room to say what it means. The dot on
+   #menu-toggle is the same fact at a glance; this is the same fact in
+   words, plus the resume command when nothing is attached. */
+.menu-status { display: flex; gap: 9px; align-items: flex-start; padding: 10px; }
+.menu-status-dot {
+  width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex: none;
+  background: var(--text-dim);
+}
+.menu-status.watcher-live .menu-status-dot { background: var(--status-live-fg); }
+.menu-status.watcher-stale .menu-status-dot { background: var(--type-reject-fg); }
+.menu-status-text { min-width: 0; }
+.menu-status-title { font-weight: 600; font-size: 12.5px; color: var(--text); }
+.menu-status-sub {
+  font-size: 11.5px; color: var(--text-dim); line-height: 1.5; margin-top: 2px;
+}
+.menu-resume { margin-top: 8px; }
+.menu-resume[hidden] { display: none; }
+/* The read-only badge is the only thing in the menu that is not a control:
+   it describes what the page IS. Hidden unless the body says so. */
+.menu-readonly { display: none; margin-top: 8px; }
+body.read-only .menu-readonly { display: inline-flex; }
+
+/* === Bare header icons =================================================
+   The search trigger, the menu button and (while armed) the highlighter are
+   bare 28px icons on the header's ground: no border, no background, a tint
+   on hover. core.css's .icon-btn is the shared, framed version — surface
+   fill, --border outline, 26px — and three framed squares plus the resting
+   search field's own outline read as one box drawn round the right end of
+   the bar. Done keeps its frame and is now the only framed control, which is
+   what makes it read as THE action of the bar rather than one of four.
+
+   Overridden here rather than in core.css, the same way this file's search
+   rules already undo core.css's header geometry: core.css is a per-skill
+   copy of a shared file, and the frame is right for the other skills that
+   use it.
+
+   --header-hover is mixed from --text into the header's own ground
+   (--surface-soft), so it is a visible step in both page themes: #e0e2e7 on
+   light's #eef0f4, #404040 on dark's #313131. --hover-tint would not do —
+   in dark it IS --surface-soft, a hover of nothing. */
+.page-header { --header-hover: color-mix(in srgb, var(--text) 8%, var(--surface-soft)); }
+.page-header .icon-btn {
+  width: 28px; height: 28px;
+  border: 0; border-radius: 7px;
+  background: transparent;
+  color: var(--text-dim);
+}
+.page-header .icon-btn svg { width: 16px; height: 16px; }
+.page-header .icon-btn:hover {
+  background: var(--header-hover);
+  color: var(--text-strong);
+}
+/* Open, the menu button keeps core.css's accent fill — the one cue that the
+   panel below belongs to it. Restated because the bare rule above outranks
+   core.css's. */
+.page-header .icon-btn[aria-expanded="true"] {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+/* === The menu button ===================================================
+   The watcher's colour, absorbed. The button stays a menu button — a tinted
+   or filled button reads as "this control is active", which is a different
+   claim from "something is watching this page".
+
+   The dot's ring is the header's ground, not the button's: with no button
+   background behind it the ring is what separates the dot from the bar, and
+   anything else paints a visible halo. */
+.menu-btn { position: relative; overflow: visible; }
+.menu-btn::after {
+  content: ""; position: absolute; top: -2px; right: -2px;
+  width: 8px; height: 8px; border-radius: 50%;
+  border: 2px solid var(--surface-soft);
+  background: var(--text-dim);
+}
+.menu-btn.watcher-live::after { background: var(--status-live-fg); }
+.menu-btn.watcher-stale::after { background: var(--type-reject-fg); }
+
+/* === The highlighter's escape ==========================================
+   The one control allowed back into the bar, and only while it is armed.
+   The highlighter is a MODE: it changes what dragging over text does, and a
+   mode whose only indicator is buried in a menu is a mode nobody can see.
+   highlighter.js already maintains aria-pressed here, so this rule is the
+   entire feature — no JavaScript knows about it. */
+#highlighter-toggle:not([aria-pressed="true"]) { display: none; }
