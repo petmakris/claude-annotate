@@ -75,6 +75,18 @@ lit path when a field is selected; `1` is 100%. A minimap and zoom buttons sit
 bottom-right. The title chip's **About** button opens the `lede`, the `caption`
 and the sources table. The legend is a strip at bottom-left.
 
+The reader can rearrange the drawing by hand. Dragging a card's title moves it up
+or down its column, dragging a field reorders it within its card, and dragging a
+card's top or bottom edge resizes it and spreads its rows. After every move the
+engine lays the wires out again around the new arrangement, with the cards held
+where the reader put them. **↶** and **↷** in the title bar, or `⌘Z` and `⇧⌘Z`,
+undo and redo a move. **Reset layout**, or `R`, returns to the computed layout.
+
+An arrangement belongs to one viewer. It is kept in that browser's
+`localStorage`, under a key derived from the spec, and never written into the
+file. Another reader, `render.py --check` and a re-render all see the computed
+layout.
+
 ## The file stays offline
 
 `render.py` emits a complete document with **no external references at all** —
@@ -82,7 +94,7 @@ no webfont, no CDN, no script src, no image URL — so it renders the same when
 emailed, opened on a plane or behind a proxy. Anything added to the renderer
 must keep that true; `skills/dataflow/tests/test_fields.py` enforces it.
 
-Nothing is hand-placed. `render.py` validates the spec and inlines it with the
+Nothing in the file is hand-placed. `render.py` validates the spec and inlines it with the
 engine: the three parts of `fields/engine/` (`validate.js`, `layout.js`,
 `view.js`), joined in that order. The engine computes every coordinate from the
 cards and wires alone, without measuring the page. The diagram is read from a field back
