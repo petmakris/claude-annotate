@@ -10,12 +10,15 @@
       "version": "0.1.0",
       "source": "./",
       "strict": false,
-      "description": "Read Claude's long answers in a browser and comment on any block; Claude rewrites that block in place. Also builds and reviews slide decks (/slides, /deck), draws a feature's data flow (/dataflow) and shows one Java object filled with real values (/specimen). Requires Python 3.9+ on PATH, and /annotate, /deck, /dataflow and /specimen also need the separately-installed webcompanion daemon (pipx install webcompanion && webcompanion install-service); run /annotate-doctor to check or install it. /slides does not use the daemon.",
+      "description": "Read Claude's long answers in a browser and comment on any block; Claude rewrites that block in place. Also builds and reviews slide decks (/slides, /deck), draws a feature's data flow (/dataflow) and shows one Java object filled with real values (/specimen). Puts live views of your work in front of you (/stage), talks a problem through out loud (/talk) and sits in a meeting answering when named (/meet). Requires Python 3.9+ on PATH, and /annotate, /deck, /dataflow, /specimen, /stage, /talk and /meet also need the separately-installed webcompanion daemon (pipx install webcompanion && webcompanion install-service); run /annotate-doctor to check or install it. /talk and /meet also need uv and an OPENAI_API_KEY. /slides does not use the daemon.",
       "skills": [
         "./skills/annotate",
         "./skills/annotate-doctor",
         "./skills/dataflow",
         "./skills/specimen",
+        "./skills/talk",
+        "./skills/meet",
+        "./skills/stage",
         "./skills/deck",
         "./skills/slides"
       ]
