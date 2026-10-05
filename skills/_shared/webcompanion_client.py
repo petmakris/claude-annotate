@@ -227,15 +227,6 @@ def register_assets(sid: str, static_root: str, entry: str, *, kind: str) -> Non
             {"static_root": static_root, "entry": entry})
 
 
-def register_mount(sid: str, name: str, root: str, *, kind: str) -> dict:
-    """Serve `root` (a directory inside the session's cwd) at the page-relative `mounts/<name>/`."""
-    return request("POST", f"/s/{sid}/api/mounts" + _kind_qs(kind), {"name": name, "root": root})
-
-
-def delete_item(sid: str, anchor: str, *, kind: str) -> None:
-    request("DELETE", f"/s/{sid}/items/{urllib.parse.quote(anchor, safe='')}" + _kind_qs(kind))
-
-
 def get_threads(sid: str, *, kind: str) -> dict:
     return request("GET", f"/s/{sid}/threads" + _kind_qs(kind))
 
