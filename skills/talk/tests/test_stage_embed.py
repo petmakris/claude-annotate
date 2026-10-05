@@ -1,11 +1,11 @@
 import asyncio
 from unittest.mock import patch
 
-from helpers import AUTH, CALL, make_args, running_app, talk  # AUTH: the header dict the other suites use
+from helpers import AUTH, CALL, make_args, run, running_app, talk
 
 
-def run(coro):
-    return asyncio.run(coro)
+async def serve(tmp_path, args):
+    await talk.serve(talk.Call(args, "T", tmp_path / "out"))
 
 
 def test_stage_view_maps_code_diagram_and_table():
@@ -41,9 +41,9 @@ def test_a_board_tag_is_published_to_the_stage(tmp_path):
         async with running_app(tmp_path, code=code) as (client, ctl, log):
             ctl.stage_cwd = str(code)
             with patch.object(talk.stage_mod, "show") as show:
-                ctl.turns.offer("d1", [{"who": "you", "text": "show me"}])
+                ctl.offer("show me", typed=True)
                 await client.get("/api/turn?wait=1", headers=AUTH)
-                await client.post("/api/reply", json={"id": "d1", "text": "[[show code: a.py:1-1 | A]] Here."},
+                await client.post("/api/reply", json={"id": "t1", "text": "[[show code: a.py:1-1 | A]] Here."},
                                   headers=AUTH)
             return show.call_args
 
@@ -57,10 +57,10 @@ def test_a_stage_failure_is_reported_as_a_board_problem(tmp_path):
         async with running_app(tmp_path) as (client, ctl, log):
             ctl.stage_cwd = str(tmp_path)
             with patch.object(talk.stage_mod, "show", side_effect=RuntimeError("daemon said no")):
-                ctl.turns.offer("d1", [{"who": "you", "text": "draw"}])
+                ctl.offer("draw", typed=True)
                 await client.get("/api/turn?wait=1", headers=AUTH)
                 resp = await client.post("/api/reply", json={
-                    "id": "d1", "text": "[[show diagram | D]]graph TD; A-->B[[/show]] Done."}, headers=AUTH)
+                    "id": "t1", "text": "[[show diagram | D]]graph TD; A-->B[[/show]] Done."}, headers=AUTH)
                 return (await resp.json())["board_problems"]
 
     assert any("daemon said no" in p for p in run(go()))
@@ -97,16 +97,16 @@ def test_without_code_the_stage_folder_is_the_git_root_of_the_current_folder(tmp
 
     with patch.object(talk.stage_mod, "ensure_stage", side_effect=refuse):
         try:
-            run(talk.serve(make_args(), "T", "", talk.SessionLog(tmp_path / "out", "T", "t")))
+            run(serve(tmp_path, make_args()))
         except SystemExit:
             pass
     assert seen == [str(repo.resolve())]
 
 
 def test_a_daemon_refusal_stops_talk_with_a_clear_message(tmp_path):
-    with patch.object(talk.stage_mod, "ensure_stage", side_effect=RuntimeError("POST /api/sessions -> 500 boom")):
+    with patch.object(talk.stage_mod, "ensure_stage", side_effect=talk.stage_mod.wc.DaemonHTTPError("POST", "/api/sessions", 500, "boom")):
         try:
-            run(talk.serve(make_args(code=tmp_path), "T", "", talk.SessionLog(tmp_path / "out", "T", "t")))
+            run(serve(tmp_path, make_args(code=tmp_path)))
         except SystemExit as e:
             message = str(e)
         else:
@@ -115,7 +115,7 @@ def test_a_daemon_refusal_stops_talk_with_a_clear_message(tmp_path):
 
 
 def test_a_stage_show_runs_off_the_event_loop_one_at_a_time(tmp_path):
-    """stage.show makes blocking HTTP calls; on the loop they would stall the voice socket."""
+    """stage.show makes blocking HTTP calls; on the loop they would stall every other request."""
     import threading
     import time
 
@@ -138,10 +138,10 @@ def test_a_stage_show_runs_off_the_event_loop_one_at_a_time(tmp_path):
 
             t = asyncio.create_task(ticker())
             with patch.object(talk.stage_mod, "show", side_effect=slow_show):
-                ctl.turns.offer("d1", [{"who": "you", "text": "draw"}])
+                ctl.offer("draw", typed=True)
                 await client.get("/api/turn?wait=1", headers=AUTH)
                 await client.post("/api/reply", json={
-                    "id": "d1", "text": "[[show table | T1]]| a |\n|---|\n| 1 |[[/show]]"
+                    "id": "t1", "text": "[[show table | T1]]| a |\n|---|\n| 1 |[[/show]]"
                                     "[[show table | T2]]| b |\n|---|\n| 2 |[[/show]] Done."}, headers=AUTH)
             t.cancel()
             return ticks

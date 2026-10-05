@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""The Claude Code session's side of talk --llm session: wait for a voice turn, send a reply.
+"""The Claude Code session's side of talk: wait for a turn, send a reply.
 
-reply exit codes: 0 sent (or a late status ignored, or held for a call that is waking to say it), 2 refused or unreachable, 3 superseded by a
-newer turn, 4 the call has ended.
+reply exit codes: 0 sent (or a status for a turn already answered, ignored), 2 refused, unreachable or no
+such turn, 4 the call has ended.
 """
 
 import argparse
@@ -84,9 +84,6 @@ def reply(turn_id: str, status_text: str | None, end: bool) -> int:
     try:
         _, raw = request(state, "POST", "/api/reply", body)
     except urllib.error.HTTPError as err:
-        if err.code == 409:
-            print("superseded: a newer turn is waiting; re-arm the doorbell")
-            return 3
         if err.code == 410:
             print("call ended: the call is over and nothing was said. Do not re-arm.")
             return 4
@@ -102,12 +99,6 @@ def reply(turn_id: str, status_text: str | None, end: bool) -> int:
     if result.get("ignored"):
         print(f"ignored: {result['ignored']}")
         return 0
-    if result.get("ended"):
-        print(f"ended: {result['ended']}")
-        return 0
-    if result.get("held"):
-        print(f"held: {result['held']}")
-        return 0
     print("sent")
     for problem in result.get("board_problems", []):
         print(f"board: {problem}")
@@ -118,11 +109,11 @@ def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    bell = sub.add_parser("doorbell", help="wait for the next voice turn, print it, exit")
+    bell = sub.add_parser("doorbell", help="wait for the next turn, print it, exit")
     bell.add_argument("--wait", type=float, default=25.0, help="seconds per long-poll")
-    rep = sub.add_parser("reply", help="send a spoken reply (read from stdin) for a turn")
+    rep = sub.add_parser("reply", help="send a reply (read from stdin) for a turn; it is shown and read aloud")
     rep.add_argument("id")
-    rep.add_argument("--status", help="a few words said while working, instead of a reply")
+    rep.add_argument("--status", help="a few words shown while working, instead of a reply")
     rep.add_argument("--end", action="store_true", help="this reply wraps up the call")
     args = parser.parse_args()
     if args.command == "reply" and args.status and args.end:

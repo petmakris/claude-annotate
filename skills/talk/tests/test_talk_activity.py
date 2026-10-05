@@ -3,7 +3,7 @@ import json
 import os
 import sys
 
-from helpers import SKILL_DIR, TOKEN, running_app
+from helpers import SKILL_DIR, TOKEN, run, running_app
 
 sys.path.insert(0, str(SKILL_DIR))
 
@@ -73,18 +73,18 @@ def test_the_doorbell_claims_the_session_and_other_sessions_are_ignored(tmp_path
             await run_hook(state, event("me", "PostToolUse", "Read", {"file_path": "/x/EDR.java"}))
             return [(a["label"], a["state"]) for a in ctl.activity]
 
-    assert asyncio.run(go()) == [("Reading EDR.java", "done")]
+    assert run(go()) == [("Reading EDR.java", "done")]
 
 
 def test_the_hook_exits_cleanly_without_a_call(tmp_path):
-    code = asyncio.run(run_hook(tmp_path / "missing.json", event("me", "PreToolUse", "Read", {"file_path": "/x"})))
+    code = run(run_hook(tmp_path / "missing.json", event("me", "PreToolUse", "Read", {"file_path": "/x"})))
     assert code == 0
 
 
 def test_the_hook_exits_cleanly_when_the_server_is_gone(tmp_path):
     state = tmp_path / "state.json"
     state.write_text(json.dumps({"port": 1, "token": TOKEN}))
-    code = asyncio.run(run_hook(state, event("me", "PreToolUse", "Read", {"file_path": "/x"})))
+    code = run(run_hook(state, event("me", "PreToolUse", "Read", {"file_path": "/x"})))
     assert code == 0
 
 
@@ -100,7 +100,7 @@ async def run_shim(state_path, event):
 
 
 def test_the_shim_is_silent_without_a_call(tmp_path):
-    code, output = asyncio.run(run_shim(tmp_path / "missing.json", event("me", "PreToolUse", "Read", {"file_path": "/x"})))
+    code, output = run(run_shim(tmp_path / "missing.json", event("me", "PreToolUse", "Read", {"file_path": "/x"})))
     assert (code, output) == (0, b"")
 
 
@@ -116,13 +116,13 @@ def test_the_shim_forwards_to_the_script_named_in_the_state_file(tmp_path):
             await run_shim(state, event("me", "PreToolUse", "Read", {"file_path": "/x/EDR.java"}))
             return [a["label"] for a in ctl.activity]
 
-    assert asyncio.run(go()) == ["Reading EDR.java"]
+    assert run(go()) == ["Reading EDR.java"]
 
 
 def test_the_shim_survives_a_state_file_naming_a_missing_script(tmp_path):
     state = tmp_path / "state.json"
     state.write_text(json.dumps({"port": 1, "token": TOKEN, "activity_script": "/nowhere/talk_activity.py"}))
-    code, output = asyncio.run(run_shim(state, event("me", "PreToolUse", "Read", {"file_path": "/x"})))
+    code, output = run(run_shim(state, event("me", "PreToolUse", "Read", {"file_path": "/x"})))
     assert (code, output) == (0, b"")
 
 
@@ -139,7 +139,7 @@ def run_through_hook(tmp_path, *events):
                 await run_hook(state, e)
             return [(a["label"], a["state"]) for a in ctl.activity]
 
-    return asyncio.run(go())
+    return run(go())
 
 
 def test_a_failed_tool_call_is_finished(tmp_path):

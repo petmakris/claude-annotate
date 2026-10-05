@@ -3,13 +3,9 @@ import json
 import os
 import sys
 
-from helpers import SKILL_DIR, TOKEN, running_app, spoken
+from helpers import SKILL_DIR, TOKEN, run, running_app, spoken
 
 CLIENT = str(SKILL_DIR / "talk_client.py")
-
-
-def run(coro):
-    return asyncio.run(coro)
 
 
 def write_state(path, port):
@@ -129,7 +125,8 @@ def test_reply_sends_stdin_as_the_spoken_text(tmp_path):
     assert said == ["Hello there."]
 
 
-def test_reply_to_a_superseded_turn_exits_3(tmp_path):
+def test_reply_to_a_turn_merged_into_a_newer_one_says_no_such_turn(tmp_path):
+    """Two turns sent before the doorbell collects them become one, under the newer id."""
     state = tmp_path / "state.json"
 
     async def go():
@@ -140,9 +137,26 @@ def test_reply_to_a_superseded_turn_exits_3(tmp_path):
             proc = await client_proc(state, "reply", "d1")
             return await finish(proc, "Stale.")
 
-    code, out, _ = run(go())
-    assert code == 3
-    assert out.startswith("superseded")
+    code, _, err = run(go())
+    assert code == 2
+    assert "no such turn" in err
+
+
+def test_a_reply_to_an_earlier_turn_is_still_shown_after_a_newer_one_arrives(tmp_path):
+    state = tmp_path / "state.json"
+
+    async def go():
+        async with running_app(tmp_path) as (client, ctl, log):
+            write_state(state, client.server.port)
+            ctl.turns.offer("d1", [{"who": "you", "text": "one"}])
+            await ctl.turns.next(timeout=1)
+            ctl.turns.offer("d2", [{"who": "you", "text": "two"}])
+            proc = await client_proc(state, "reply", "d1")
+            return await finish(proc, "The first answer."), spoken(ctl)
+
+    (code, out, _), said = run(go())
+    assert code == 0 and out.strip() == "sent"
+    assert said == ["The first answer."]
 
 
 def test_reply_status_does_not_read_stdin(tmp_path):
@@ -200,7 +214,7 @@ def test_reply_after_the_call_ended_exits_4(tmp_path):
             write_state(state, client.server.port)
             ctl.turns.offer("d1", [{"who": "you", "text": "one"}])
             await ctl.turns.next(timeout=1)
-            ctl.done.set()
+            ctl.end("test")
             proc = await client_proc(state, "reply", "d1")
             return await finish(proc, "Too late."), spoken(ctl)
 
