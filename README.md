@@ -55,39 +55,35 @@ standalone service installed separately from its own repository (`pipx install
 webcompanion && webcompanion install-service`; see [Related](#related)) — not
 something this repository runs. `show-diff` degrades gracefully without it:
 diffs still open, only the per-line comment feature is unavailable. (`talk`
-serves its own call page too, and additionally needs `uv` and an Azure speech
-key; its board is the stage.) The other eight have no server of their own to fall back to (`dataflow`'s field view is the
+serves its own call page too, and additionally needs `uv` and the VoiceStudio app; its board is the stage.) The other eight have no server of their own to fall back to (`dataflow`'s field view is the
 one part of them that never needs it). `slides` does not use the daemon, and
 `annotate-doctor` only checks it.
 
 ## Setting up /talk
 
 `/talk` is a spoken discussion with the session you are in. You press **Talk**, speak and
-press **Send**; Azure turns your words into text, the Claude session answers with its full
-history and tools, and Azure reads the answer aloud in a player you control: pause, back 5 or
-15 seconds, and speeds from 0.75× to 1.5×. It needs a microphone, so the page runs in your
-own browser, on `localhost` or over https.
+press **Send**; VoiceStudio turns your words into text on your machine, the Claude session
+answers with its full history and tools, and VoiceStudio reads the answer aloud in a player
+you control: pause, back 5 or 15 seconds, and speeds from 0.75× to 1.5×. Nothing is sent to
+a cloud speech service. It needs a microphone, so the page runs in your own browser, on
+`localhost` or over https.
 
 0. **Install and start the webcompanion daemon.** See [How it works](#how-it-works): all skills
    push to this daemon. Run `/annotate-doctor` to check whether it is installed and running, or
    to have it install and start it for you.
 1. **Install `uv`** if you do not have it: `brew install uv` (or see
    [docs.astral.sh/uv](https://docs.astral.sh/uv/)).
-2. **Create an Azure Speech resource** in the Azure portal and copy one of its keys and its
-   region. It is the only key `/talk` needs; Claude answers from your session, so no
-   Anthropic key is involved.
-3. **Store them** where only you can read them:
+2. **Install VoiceStudio**, the local speech app, with a text-to-speech engine and a Whisper
+   speech-to-text model. `/talk` uses its OpenAI-style routes at `http://127.0.0.1:3900`; set
+   `VOICESTUDIO_URL` for another address, and `OMNIVOICE_API_KEY` when that address is not
+   this machine. On a Mac, `/talk` opens the app when it is not running.
+3. **Check it** by asking Claude to run `talk.py --doctor`. It speaks a sentence through
+   VoiceStudio and checks that speech to text hears it back.
 
-       mkdir -p ~/.config/talk
-       ( umask 077; printf 'AZURE_SPEECH_KEY=...\nAZURE_SPEECH_REGION=westeurope\n' > ~/.config/talk/keys.env )
-
-   Variables already in your environment work too, and win over the file.
-4. **Check it** by asking Claude to run `talk.py --doctor`. It speaks a sentence through
-   Azure and checks that speech to text hears it back.
-
-Then say `/talk` (optionally with a topic) and open the link it gives you. English and Greek
-can be switched on the page. To see the session's tool calls on the call page while it works,
-install the optional activity hook described at the end of `skills/talk/SKILL.md`.
+Then say `/talk` (optionally with a topic) and open the link it gives you. The page detects
+the language you speak, or you can fix it to English or Greek. To see the session's tool
+calls on the call page while it works, install the optional activity hook described at the
+end of `skills/talk/SKILL.md`.
 
 ## Which diff tool, when
 

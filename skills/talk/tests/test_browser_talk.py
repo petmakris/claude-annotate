@@ -1,4 +1,4 @@
-"""The call page in a real browser, against a served call with a fake Azure and a fake microphone."""
+"""The call page in a real browser, against a served call with a fake VoiceStudio and a fake microphone."""
 import asyncio
 import threading
 from contextlib import contextmanager
@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("playwright", reason="browser suite: add --with playwright")
 
-from helpers import CALL, TOKEN, FakeAzure, make_args, talk  # noqa: E402
+from helpers import CALL, TOKEN, FakeSpeech, make_args, talk  # noqa: E402
 
 FAKE_MIC = ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream",
             "--autoplay-policy=no-user-gesture-required"]
@@ -19,7 +19,7 @@ def served(tmp_path):
     """A call served on a loop in its own thread. Yields (url, call, loop, fake)."""
     from aiohttp import web
 
-    fake = FakeAzure()
+    fake = FakeSpeech()
     loop = asyncio.new_event_loop()
     box = {}
     ready = threading.Event()
@@ -34,7 +34,7 @@ def served(tmp_path):
         ready.set()
 
     thread = threading.Thread(target=loop.run_forever, daemon=True)
-    with patch.object(talk.azure, "transcribe", fake.transcribe), patch.object(talk.azure, "synthesize", fake.synthesize):
+    with patch.object(talk.speech, "transcribe", fake.transcribe), patch.object(talk.speech, "synthesize", fake.synthesize):
         thread.start()
         asyncio.run_coroutine_threadsafe(start(), loop)
         assert ready.wait(10)
@@ -101,7 +101,7 @@ def test_the_speed_and_language_are_kept_per_viewer(tmp_path, pw):
             page.wait_for_selector("#recording:not([hidden])")
             page.click("#send")
             page.wait_for_selector("#idle:not([hidden])")
-            assert fake.locales == ["el-GR"]
+            assert fake.languages == ["el"]
             page.reload()
             assert page.get_attribute("#lang button[data-lang='el']", "aria-pressed") == "true"
         finally:
@@ -117,7 +117,7 @@ def test_nothing_heard_says_so_and_cancel_sends_nothing(tmp_path, pw):
             page.click("#talk")
             page.wait_for_selector("#recording:not([hidden])")
             page.click("#cancel")
-            assert fake.locales == []
+            assert fake.languages == []
             fake.heard = ""
             page.click("#talk")
             page.wait_for_selector("#recording:not([hidden])")

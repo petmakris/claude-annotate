@@ -4,18 +4,18 @@
 #   "aiohttp>=3.10,<4",
 # ]
 # ///
-"""talk: a spoken conversation with a Claude Code session, one turn at a time, on Azure speech.
+"""talk: a spoken conversation with a Claude Code session, one turn at a time, on local speech.
 
     browser page: press Talk, speak, press Send
-        -> this script -> Azure speech to text -> a turn the session collects (talk_client.py doorbell)
+        -> this script -> VoiceStudio speech to text -> a turn the session collects (talk_client.py doorbell)
     the session answers (talk_client.py reply)
-        -> board tags go on the stage, the rest -> Azure text to speech -> an mp3 the page plays,
+        -> board tags go on the stage, the rest -> VoiceStudio text to speech -> an mp3 the page plays,
            with pause, skip back and speed buttons
 
     uv run --script talk.py --topic "The findings deck" --code <repo>
     uv run --script talk.py --doctor
 
-AZURE_SPEECH_KEY and AZURE_SPEECH_REGION come from the environment or ~/.config/talk/keys.env.
+Speech runs in the VoiceStudio app on this machine, at VOICESTUDIO_URL (default http://127.0.0.1:3900).
 """
 
 import argparse
@@ -34,13 +34,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from live_turns import TurnQueue  # noqa: E402
-import azure  # noqa: E402
+import voicestudio as speech  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from skills.stage import stage as stage_mod  # noqa: E402
 
-CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "talk"
-KEYS_FILE = CONFIG_DIR / "keys.env"
 DATA_DIR = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "talk"
 SESSIONS_DIR = DATA_DIR / "sessions"
 DEFAULT_PORT = 8766
@@ -75,19 +73,6 @@ def remove_state_file(port: int) -> None:
 def say(line: str) -> None:
     print(line, flush=True)
 
-
-def load_keys() -> None:
-    """Real environment variables win over the keys file."""
-    if not KEYS_FILE.exists():
-        return
-    for raw in KEYS_FILE.read_text().splitlines():
-        line = raw.split("#", 1)[0].strip()
-        if "=" not in line:
-            continue
-        name, value = (part.strip() for part in line.split("=", 1))
-        value = value.strip("'\"")
-        if name and value and not os.environ.get(name):
-            os.environ[name] = value
 
 
 
@@ -378,7 +363,7 @@ class Call:
         self.audio_dir.mkdir(parents=True, exist_ok=True)
         self.transcript = out_dir / "transcript.md"
         self.transcript.write_text(f"# {topic}\n\n_talk · {dt.datetime.now():%Y-%m-%d %H:%M} · "
-                                   f"Azure voice {args.voice}_\n\n")
+                                   f"VoiceStudio voice {args.voice}_\n\n")
         self.entries: list[dict] = []
         self.version = 0
         self.turns = TurnQueue()
@@ -394,9 +379,10 @@ class Call:
         self.last_turn = time.time()  # the last entry of any kind: the idle clock
         self.stage_cwd: str | None = None  # set by serve(); None in tests means "no stage"
         self.stage_pending: list = []
-        # Azure calls and stage shows block: they run off the loop. Stage shows one at a time,
+        # Speech calls and stage shows block: they run off the loop. Stage shows one at a time,
         # since each reads the stage's layout and writes it back.
-        self.speech_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="speech")
+        # VoiceStudio runs one speech job at a time; queueing here keeps a transcription behind one answer, not four.
+        self.speech_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="speech")
         self.stage_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="stage")
 
     # -- the record ---------------------------------------------------------
@@ -499,13 +485,12 @@ class Call:
     async def speak(self, entry: dict) -> None:
         spoken = speakable(entry["text"])
         path = self.audio_dir / f"{entry['id']:04d}.mp3"
-        locale = azure.LANGUAGES.get(self.args.language, "en-US")
         loop = asyncio.get_running_loop()
         try:
-            audio = await loop.run_in_executor(self.speech_pool, azure.synthesize, spoken, self.args.voice, locale)
+            audio = await loop.run_in_executor(self.speech_pool, speech.synthesize, spoken, self.args.voice)
             path.write_bytes(audio)
             entry.update(audio=f"audio/{path.name}", speech="ready")
-        except (azure.SpeechError, OSError) as err:
+        except (speech.SpeechError, OSError) as err:
             entry.update(speech="failed", speech_error=str(err))
             say(f"speech: {err}")
         self.changed()
@@ -575,7 +560,7 @@ def build_app(call: Call, token: str, call_id: str, stage_url: str | None = None
         if not ours(request):
             return await gone(request)
         config = {"topic": call.topic, "token": token, "stageUrl": stage_url, "language": call.args.language,
-                  "languages": list(azure.LANGUAGES)}
+                  "languages": list(speech.LANGUAGES)}
         html = PAGE.replace("__CONFIG__", json.dumps(config).replace("</", "<\\/"))
         return web.Response(text=html, content_type="text/html", headers={"Cache-Control": "no-store"})
 
@@ -602,12 +587,13 @@ def build_app(call: Call, token: str, call_id: str, stage_url: str | None = None
             return forbidden()
         if call.ended:
             return web.json_response({"error": "the call has ended"}, status=410)
-        locale = azure.LANGUAGES.get(request.query.get("lang", ""), azure.LANGUAGES.get(call.args.language, "en-US"))
+        lang = request.query.get("lang", call.args.language)
+        language = speech.LANGUAGES.get(lang, speech.LANGUAGES.get(call.args.language))
         wav = await request.read()
         loop = asyncio.get_running_loop()
         try:
-            text = await loop.run_in_executor(call.speech_pool, azure.transcribe, wav, locale)
-        except azure.SpeechError as err:
+            text = await loop.run_in_executor(call.speech_pool, speech.transcribe, wav, language)
+        except speech.SpeechError as err:
             return web.json_response({"error": str(err)}, status=502)
         if not text.strip():
             return web.json_response({"text": ""})
@@ -715,6 +701,13 @@ async def watch(call: Call) -> None:
             call.closed.set()
 
 
+def warm_up(voice: str) -> None:
+    try:
+        speech.synthesize("Ready.", voice)
+    except speech.SpeechError as err:
+        say(f"speech: warm-up failed: {err}")
+
+
 async def serve(call: Call) -> None:
     from aiohttp import web
 
@@ -747,6 +740,8 @@ async def serve(call: Call) -> None:
     for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         loop.add_signal_handler(sig, lambda: (call.end("interrupted"), call.closed.set()))
     watcher = asyncio.create_task(watch(call))
+    # The first speech after VoiceStudio starts loads its model (about 11 s): pay that before the first answer.
+    loop.run_in_executor(call.speech_pool, warm_up, args.voice)
     try:
         await call.closed.wait()
     finally:
@@ -763,29 +758,30 @@ async def serve(call: Call) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Doctor: the key, a round trip through Azure, the stage's daemon
+# Doctor: VoiceStudio, a round trip through it, the stage's daemon
 # ---------------------------------------------------------------------------
 
 
 def doctor(args) -> int:
     ok = True
     try:
-        _, region = azure.key_and_region()
-        say(f"[ok] Azure speech key found, region {region}")
-    except azure.SpeechError as err:
-        say(f"[FAIL] {err}. Add AZURE_SPEECH_KEY=... and AZURE_SPEECH_REGION=... to {KEYS_FILE}")
+        info = speech.ensure_running(say=say)
+        say(f"[ok] VoiceStudio at {speech.base_url()}: {info.get('status')} on {info.get('device')}, "
+            f"version {info.get('version')}")
+    except speech.SpeechError as err:
+        say(f"[FAIL] {err}")
         return 1
     phrase = "The doorbell is ready."
     try:
         t = time.time()
-        wav = azure.synthesize(phrase, args.voice, fmt="riff-16khz-16bit-mono-pcm")
+        wav = speech.synthesize(phrase, args.voice, fmt="wav")
         say(f"[ok] text to speech with {args.voice} in {time.time() - t:.1f}s")
         t = time.time()
-        heard = azure.transcribe(wav)
+        heard = speech.transcribe(wav, "en")
         good = "doorbell" in heard.lower()
         ok &= good
         say(f"[{'ok' if good else 'FAIL'}] speech to text heard {heard!r} in {time.time() - t:.1f}s")
-    except azure.SpeechError as err:
+    except speech.SpeechError as err:
         ok = False
         say(f"[FAIL] {err}")
     problem = stage_mod.daemon_status()
@@ -796,14 +792,16 @@ def doctor(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="A spoken conversation with a Claude Code session on Azure speech.")
+    parser = argparse.ArgumentParser(description="A spoken conversation with a Claude Code session, on VoiceStudio speech.")
     parser.add_argument("--topic", help="what the call is about (required unless --doctor)")
     parser.add_argument("--code", type=Path, help="the folder [[show code: ...]] reads from, and the stage's folder")
     parser.add_argument("--out", type=Path, help="where the transcript and audio go")
-    parser.add_argument("--voice", default=os.environ.get("TALK_VOICE", azure.DEFAULT_VOICE),
-                        help=f"Azure neural voice (default {azure.DEFAULT_VOICE}, which also speaks Greek)")
-    parser.add_argument("--language", choices=list(azure.LANGUAGES), default=os.environ.get("TALK_LANGUAGE", "en"),
-                        help="what the page listens for first; the page can switch (default en)")
+    parser.add_argument("--voice", default=os.environ.get("TALK_VOICE", speech.DEFAULT_VOICE),
+                        help=f"VoiceStudio voice: an OpenAI voice name, which maps to the active engine's default "
+                             f"voice, or a VoiceStudio profile id (default {speech.DEFAULT_VOICE})")
+    parser.add_argument("--language", choices=list(speech.LANGUAGES), default=os.environ.get("TALK_LANGUAGE", "auto"),
+                        help="the language the page listens for first; auto detects it; the page can switch "
+                             "(default auto)")
     parser.add_argument("--port", type=int, default=int(os.environ.get("TALK_PORT", DEFAULT_PORT)))
     parser.add_argument("--url-base", default=os.environ.get("TALK_URL_BASE"),
                         help="this server's address as reached from another machine (scheme and host), "
@@ -813,7 +811,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "(scheme and host); default: the daemon's own")
     parser.add_argument("--no-open", action="store_true", help="don't open the page in the default browser")
     parser.add_argument("--idle-minutes", type=int, default=60, help="end the call after this long with no turn")
-    parser.add_argument("--doctor", action="store_true", help="check the Azure key with a round trip, and the stage")
+    parser.add_argument("--doctor", action="store_true", help="check VoiceStudio with a round trip, and the stage")
     return parser
 
 
@@ -824,15 +822,14 @@ def main() -> int:
         args.code = args.code.expanduser().resolve()
         if not args.code.is_dir():
             parser.error(f"--code: not a folder: {args.code}")
-    load_keys()
     if args.doctor:
         return doctor(args)
     if not args.topic:
         parser.error("--topic is required")
     try:
-        azure.key_and_region()
-    except azure.SpeechError as err:
-        say(f"{err}. Add AZURE_SPEECH_KEY=... and AZURE_SPEECH_REGION=... to {KEYS_FILE} and run again.")
+        speech.ensure_running(say=say)
+    except speech.SpeechError as err:
+        say(f"{err}. Start the VoiceStudio app, then run again.")
         return 2
     out_dir = args.out or SESSIONS_DIR / f"{dt.datetime.now():%Y%m%d-%H%M%S}-{slugify(args.topic)}"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1137,8 +1134,9 @@ paintPlayer();
 
 // ---- talking -----------------------------------------------------------
 for (const code of CFG.languages) {
-  const b = document.createElement("button"); b.className = "btn"; b.type = "button"; b.textContent = code.toUpperCase();
-  b.title = code === "el" ? "I speak Greek" : "I speak English";
+  const b = document.createElement("button"); b.className = "btn"; b.type = "button";
+  b.textContent = code === "auto" ? "Auto" : code.toUpperCase();
+  b.title = {auto: "Detect the language I speak", en: "I speak English", el: "I speak Greek"}[code] || code;
   b.onclick = () => { language = code; store.set("language", code); paintLang(); };
   b.dataset.lang = code; $("lang").append(b);
 }

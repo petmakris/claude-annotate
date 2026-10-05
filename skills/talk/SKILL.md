@@ -1,21 +1,21 @@
 ---
 name: talk
-description: Start a spoken discussion with this Claude Code session in a browser page. The user presses Talk, speaks and presses Send; Azure turns it into text, this session answers with its full history and tools, and Azure reads the answer aloud in a player with pause, skip back and speed buttons. Code, diagrams and tables go on a stage beside the conversation. Use when the user says "/talk", "let's talk about X", "voice discussion", or wants to discuss something out loud.
+description: Start a spoken discussion with this Claude Code session in a browser page. The user presses Talk, speaks and presses Send; VoiceStudio, running on this Mac, turns it into text, this session answers with its full history and tools, and VoiceStudio reads the answer aloud in a player with pause, skip back and speed buttons. Code, diagrams and tables go on a stage beside the conversation. Use when the user says "/talk", "let's talk about X", "voice discussion", or wants to discuss something out loud.
 user-invocable: true
 argument-hint: optional — the topic (defaults to what the conversation is about)
 ---
 
 # /talk — a spoken discussion with this session
 
-`$SKILL_DIR` is this skill's base directory, as shown when the skill loads. It holds `talk.py` (the server and call page), `azure.py` (speech) and `talk_client.py` (this session's side of the call).
+`$SKILL_DIR` is this skill's base directory, as shown when the skill loads. It holds `talk.py` (the server and call page), `voicestudio.py` (speech) and `talk_client.py` (this session's side of the call).
 
-How it works: the page records the user while they hold the floor, one turn at a time: they press **Talk**, speak, and press **Send**, or type instead. `talk.py` sends the recording to Azure speech to text and queues the words as a turn. A background "doorbell" command in this session exits with the turn, which wakes this session. This session answers with `talk_client.py reply`. The page shows the answer at once and plays Azure's reading of it, with buttons to pause, go back 5 or 15 seconds, and change the speed. Nothing listens between turns, so nothing is said by accident and nothing bills while the user thinks. Azure costs a few cents an hour of talk.
+How it works: the page records the user while they hold the floor, one turn at a time: they press **Talk**, speak, and press **Send**, or type instead. `talk.py` sends the recording to VoiceStudio's speech to text (Whisper) and queues the words as a turn. A background "doorbell" command in this session exits with the turn, which wakes this session. This session answers with `talk_client.py reply`. The page shows the answer at once and plays VoiceStudio's reading of it, with buttons to pause, go back 5 or 15 seconds, and change the speed. Nothing listens between turns, so nothing is said by accident. Speech runs on this machine: nothing is sent to a cloud service and nothing is billed.
 
 ## 1. Preconditions (check silently; fix what you can)
 
 1. **A browser with a microphone.** The page records through the browser, so it must be opened on `localhost` or over https. In a cloud session with no way to reach the page, stop and say so.
 2. **uv.** `command -v uv`; if missing, `brew install uv`.
-3. **The Azure speech key**, `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION`, from the environment or `~/.config/talk/keys.env`. If neither has it, tell the user to add both lines to that file. Never ask for a key in the chat and never print a file that holds keys. If the user asks to check the setup, or a call fails, run `uv run --script "$SKILL_DIR/talk.py" --doctor` and relay its `[ok]`/`[FAIL]` lines; it speaks a sentence through Azure and checks it is heard back.
+3. **VoiceStudio**, the local speech app, answering at `VOICESTUDIO_URL` (default `http://127.0.0.1:3900`). Its server runs only while the app is open; on a Mac `talk.py` opens it with `open -a VoiceStudio` and waits, which takes about a minute from cold. If the user asks to check the setup, or a call fails, run `uv run --script "$SKILL_DIR/talk.py" --doctor` and relay its `[ok]`/`[FAIL]` lines; it speaks a sentence through VoiceStudio and checks it is heard back.
 4. **webcompanion.** The stage needs the daemon. `python3 "$SKILL_DIR/../stage/stage.py" link --cwd "<repo root>"` must print a URL. If it fails, relay its message.
 
 The topic is one line naming what the call is about, from the argument or the conversation. No briefing is written: this session already has the context.
@@ -24,10 +24,10 @@ The topic is one line naming what the call is about, from the argument or the co
 
 1. Start the server, **`run_in_background: true`**:
    ```
-   uv run --script "$SKILL_DIR/talk.py" --topic "<topic>" --out "${TMPDIR:-/tmp}/talk/<slug>-<HHMMSS>" --code "<repo root>" [--no-open] [--language el]
+   uv run --script "$SKILL_DIR/talk.py" --topic "<topic>" --out "${TMPDIR:-/tmp}/talk/<slug>-<HHMMSS>" --code "<repo root>" [--no-open] [--language en|el]
    ```
-   `--code` is the repository this session works in; the board reads code from it. `--no-open` when the user is at another machine. `--language el` when the user will speak Greek; the page can switch between English and Greek at any time. `--voice` picks another Azure neural voice; the default, `en-US-AvaMultilingualNeural`, reads Greek text in Greek too. `TALK_URL_BASE` and `TALK_STAGE_BASE` give this server's and the daemon's addresses as another machine reaches them.
-2. Poll the task's output file for about ten seconds until it shows `Open http://127.0.0.1:8766/c/<call id>`. The line `Stage <url> (folder <path>)` names the stage's folder: keep that exact path for every `stage.py` call during the call. Then arm the doorbell, **`run_in_background: true`**:
+   `--code` is the repository this session works in; the board reads code from it. `--no-open` when the user is at another machine. `--language` fixes the language the page listens for first; the default, `auto`, lets Whisper detect it, and the page can switch between Auto, English and Greek at any time. Answers are read in the language they are written in. `--voice` takes a VoiceStudio voice profile id; OpenAI's voice names, such as the default `alloy`, all map to VoiceStudio's default voice. `TALK_URL_BASE` and `TALK_STAGE_BASE` give this server's and the daemon's addresses as another machine reaches them.
+2. Poll the task's output file until it shows (about ten seconds, or about a minute when VoiceStudio had to be opened) `Open http://127.0.0.1:8766/c/<call id>`. The line `Stage <url> (folder <path>)` names the stage's folder: keep that exact path for every `stage.py` call during the call. Then arm the doorbell, **`run_in_background: true`**:
    ```
    python3 "$SKILL_DIR/talk_client.py" doorbell
    ```

@@ -37,12 +37,12 @@ def test_a_recording_becomes_a_turn(tmp_path):
             fake.heard = "show me the queue"
             resp = await client.post("/api/listen?lang=el", data=silent_wav(), headers=AUTH)
             turn = await (await client.get("/api/turn?wait=1", headers=AUTH)).json()
-            return await resp.json(), turn, fake.locales
+            return await resp.json(), turn, fake.languages
 
-    said, turn, locales = run(go())
+    said, turn, languages = run(go())
     assert said["text"] == "show me the queue"
     assert turn == {"type": "turn", "id": "t1", "said": [{"who": "you", "text": "show me the queue"}]}
-    assert locales == ["el-GR"]
+    assert languages == ["el"]
 
 
 def test_a_recording_with_nothing_heard_is_no_turn(tmp_path):
@@ -58,12 +58,12 @@ def test_a_recording_with_nothing_heard_is_no_turn(tmp_path):
 def test_a_speech_failure_reaches_the_page(tmp_path):
     async def go():
         async with running_app(tmp_path) as (client, call, fake):
-            fake.fail = "Azure rejected the key"
+            fake.fail = "cannot reach VoiceStudio"
             resp = await client.post("/api/listen", data=silent_wav(), headers=AUTH)
             return resp.status, await resp.json()
 
     status, body = run(go())
-    assert status == 502 and "rejected" in body["error"]
+    assert status == 502 and "VoiceStudio" in body["error"]
 
 
 def test_typed_text_becomes_a_turn_marked_typed(tmp_path):
@@ -99,7 +99,7 @@ def test_an_answer_is_shown_at_once_then_read_aloud_and_served(tmp_path):
     assert said == ["Use external only here."]
 
 
-def test_an_answer_azure_cannot_read_is_still_shown(tmp_path):
+def test_an_answer_voicestudio_cannot_read_is_still_shown(tmp_path):
     async def go():
         async with running_app(tmp_path) as (client, call, fake):
             call.offer("hi", typed=True)
@@ -228,10 +228,21 @@ def test_the_transcript_records_the_call(tmp_path):
     assert "**You:** hello" in text and "**Claude:** Hi." in text
 
 
-def test_a_reply_without_a_key_fails_at_start_not_mid_call(tmp_path, monkeypatch, capsys):
-    monkeypatch.delenv("AZURE_SPEECH_KEY", raising=False)
-    monkeypatch.setattr(talk, "KEYS_FILE", tmp_path / "none.env")
+def test_a_recording_in_auto_mode_lets_whisper_detect_the_language(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            await client.post("/api/listen?lang=auto", data=silent_wav(), headers=AUTH)
+            await client.post("/api/listen", data=silent_wav(), headers=AUTH)
+            return fake.languages
+
+    assert run(go()) == [None, None]
+
+
+def test_without_voicestudio_talk_stops_at_start_not_mid_call(tmp_path, monkeypatch, capsys):
+    def down(**kw):
+        raise talk.speech.SpeechError("cannot reach VoiceStudio at http://127.0.0.1:1")
+
+    monkeypatch.setattr(talk.speech, "ensure_running", down)
     monkeypatch.setattr("sys.argv", ["talk.py", "--topic", "T"])
     assert talk.main() == 2
-    assert "AZURE_SPEECH_KEY" in capsys.readouterr().out
-
+    assert "Start the VoiceStudio app" in capsys.readouterr().out
