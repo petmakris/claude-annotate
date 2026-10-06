@@ -196,6 +196,13 @@ Banners: `WEBCOMPANION_EVENT skill=interactive-review sid=<sid> event_id=<id>`,
 Each stdout line wakes you once; the watcher stays alive across many events
 until the session terminates.
 
+**Never stop the monitor while the review is open**, however long it has been
+quiet, and never to save turns. The IDE plugin treats a heartbeat older than
+180s as an ended session (`DaemonSessionClient.REAP_AFTER_MS`) and latches it
+one-way for that sid: the user sees "session ended — read-only", and re-arming
+does not undo it — only a new session does. Only `webcompanion end` ends a
+review.
+
 ## Handling a watcher event — read the matching reference
 
 Every wake-up after this point is a watcher banner. **`Read` the named file

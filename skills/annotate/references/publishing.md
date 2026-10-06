@@ -92,7 +92,16 @@ createConfluencePage(cloudId: <cloudId>,
 ```
 
 Created as a **draft**: the first publish of a document is never live until its
-author has read it. Record the result:
+author has read it.
+
+> **Verify on the next publish.** One real publish saw the attachment upload in
+> step 3 refused on a draft page — 404, "there is a content object with status
+> : draft". If that happens, the draft-then-attach order cannot work: create
+> the page with `isPrivate: true` and no `status` instead (status `current`,
+> view-restricted to its creator), and correct this step once confirmed either
+> way.
+
+Record the result:
 
 ```bash
 claude-annotate confluence.state --workspace "<workspace>" \
@@ -151,6 +160,11 @@ claude-annotate confluence.state --workspace "<workspace>" \
 ```
 
 Give the user the page URL and say it is a draft, if it is.
+
+The markdown read-back (`getConfluencePage`) does not render media nodes, so a
+published picture looks missing there. Before concluding an image did not
+land, read the stored body: `getConfluenceContent` with
+`bodyFormat: atlas_doc_format`, `detail: full`.
 
 ## Refreshing a published page
 

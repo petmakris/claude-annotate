@@ -8,7 +8,7 @@ Run the tests with:
 
     uv run -q --with-requirements requirements-test.txt python -m playwright install chromium
 
-`pytest.ini` runs them in parallel (`-n auto`): the whole suite, about 2,460 tests with the browser suites, takes about 55 seconds on a busy machine (load average 30-40). For one file, name it instead of `skills`. Add `-n 0` to run serially.
+`pytest.ini` runs them in parallel on 4 workers (`-n 4`), not `-n auto`: each worker drives its own Chromium, and one Chromium per core on a many-core laptop once coincided with a hard system freeze. Do not raise it on a laptop, and do not run the suite alongside other heavy jobs (local speech models, other browser suites). For one file, name it instead of `skills`. Add `-n 0` to run serially.
 
 The browser and push suites never touch the daemon you are running. Each xdist worker starts its own webcompanion from the pinned package, under a throwaway HOME on a free port, and one Chromium that every test takes a fresh context from (`skills/tests/harness.py`, `skills/conftest.py`). Without playwright or webcompanion those suites skip; `CLAUDE_ANNOTATE_STRICT_TESTS=1` makes that a failure, and CI and the pre-push hook set it. On a slow machine, `PYTEST_TIMEOUT_SCALE=2` doubles every explicit browser wait.
 

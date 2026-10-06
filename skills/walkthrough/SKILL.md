@@ -190,6 +190,12 @@ Banners: `WEBCOMPANION_EVENT skill=walkthrough sid=<sid> event_id=<id>`,
 `WEBCOMPANION_FINISHED`, `WEBCOMPANION_CANCELLED`, `WEBCOMPANION_DROPPED`.
 Each stdout line wakes you once; the watcher stays alive across many events.
 
+**Never stop the monitor while the walkthrough is open**, however long it has
+been quiet, and never to save turns. The IDE plugin treats a heartbeat older
+than 180s as an ended session (`DaemonSessionClient.REAP_AFTER_MS`) and latches
+it one-way for that sid; re-arming does not undo it — only a new session does.
+Only `webcompanion end` ends a walkthrough.
+
 ## Handling a watcher event
 
 When a task-notification's first stdout line is `WEBCOMPANION_EVENT`,
