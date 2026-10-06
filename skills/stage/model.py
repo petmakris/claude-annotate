@@ -197,8 +197,8 @@ def parse_source(raw: str, cwd: Path, stdin_text: str | None = None) -> dict:
 
 
 def visual_source(tool: str, text: str) -> dict:
-    """A sequence or flowchart spec (JSON), drawn by the shared tools: the grid as `html`, a sequence's
-    numbered key as `key`."""
+    """A sequence or flowchart spec (JSON), drawn by the shared tools in the stage's face and keyed for
+    frames: the grid as `html`, a sequence's numbered key as `key`."""
     try:
         spec = json.loads(text)
     except ValueError as e:
@@ -207,9 +207,10 @@ def visual_source(tool: str, text: str) -> dict:
         raise SourceError(f"{tool}:- must be a JSON object")
     try:
         if tool == "sequence":
-            html, key = sequence.render(spec, "v"), sequence.render_key(spec, "v")
+            html = sequence.render(spec, "v", keyed=True, face="stage")
+            key = sequence.render_key(spec, "v", keyed=True, face="stage")
         else:
-            html, key = flowchart.render(spec, "v"), ""
+            html, key = flowchart.render(spec, "v", keyed=True, face="stage"), ""
     except (sequence.ValidationError, flowchart.ValidationError) as e:
         raise SourceError(f"{tool}:-: {e}") from None
     return {"type": "inline", "format": "visual", "tool": tool, "spec": spec, "html": html, "key": key}

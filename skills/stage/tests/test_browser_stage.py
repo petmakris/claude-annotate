@@ -4,8 +4,10 @@ its slide without taking the front back, measured in a real browser.
 Runs against this worker's private daemon (`wc_config`) and its shared browser."""
 from __future__ import annotations
 
+import json
 import os
 import time
+from pathlib import Path
 from unittest.mock import patch
 
 from skills.stage import model, scene, stage
@@ -773,7 +775,7 @@ def test_a_code_scene_steps_its_focus_and_a_tapped_tab_opens_on_the_rest_frame(t
         send({"type": "stage:frame", "view": "c", "n": 1, "animate": True})
         frame.locator('section.pane[data-view="c"] .code.k-dim').wait_for(timeout=3000)
         assert frame.locator(".ln.k-focus").evaluate_all("els => els.map(e => e.dataset.line)") == ["2", "3"]
-        assert frame.locator('section.pane[data-view="c"] .vstep').inner_text() == "1/2"
+        assert frame.locator('section.pane[data-view="c"] .vstep').inner_text() == "Step 1 of 2"
         send({"type": "stage:frame", "view": "c", "n": 2, "animate": True})
         _until_frame(page, "c", 2)
         assert frame.locator(".ln.k-focus").evaluate_all("els => els.map(e => e.dataset.line)") == ["5"]
@@ -793,7 +795,7 @@ def test_a_code_scene_steps_its_focus_and_a_tapped_tab_opens_on_the_rest_frame(t
         send({"type": "stage:frame", "view": "c", "n": 99})
         _until_frame(page, "c", 99)
         assert frame.locator(".ln.k-focus").count() == 0
-        assert frame.locator('section.pane[data-view="c"] .vstep').inner_text() == "2/2"
+        assert frame.locator('section.pane[data-view="c"] .vstep').inner_text() == "Step 2 of 2"
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
@@ -871,7 +873,7 @@ def test_a_scene_shown_during_a_call_opens_on_frame_0_and_a_frame_sent_early_wai
         stage.show(str(tmp_path), "fresh", CODE5, title="Fresh", extra={"scene": steps})
         frame.locator('section.pane[data-view="fresh"] .ln').first.wait_for(timeout=5000)
         assert _frames(frame)["fresh"] == 0
-        assert frame.locator('section.pane[data-view="fresh"] .vstep').inner_text() == "0/2"
+        assert frame.locator('section.pane[data-view="fresh"] .vstep').inner_text() == "2 steps"
         stage.show(str(tmp_path), "early", CODE5, title="Early", extra={"scene": steps})
         frame.locator('section.pane[data-view="early"] .ln').first.wait_for(timeout=5000)
         assert _frames(frame)["early"] == 2
@@ -903,7 +905,7 @@ def test_a_flowchart_scene_draws_its_frames_on_the_one_layout_and_a_theme_switch
         send({"type": "stage:state", "front": "flow", "frames": {"flow": 0}, "keys": 0})
         card = frame.locator('section.pane[data-view="flow"] .diagram .k-card')
         card.wait_for(timeout=3000)
-        assert card.inner_text() == "advisory drops :workflows · 0/6"
+        assert card.inner_text() == "advisory drops :workflows"
         assert frame.locator('section.pane[data-view="flow"] .diagram > svg .k-key:not(.k-hidden)').count() == 0
         box = frame.locator('section.pane[data-view="flow"] .diagram > svg [id*="-flowchart-wf-"]').bounding_box()
         send({"type": "stage:frame", "view": "flow", "n": 1, "animate": True})
@@ -922,7 +924,7 @@ def test_a_flowchart_scene_draws_its_frames_on_the_one_layout_and_a_theme_switch
         _until_frame(page, "flow", 3)
         send({"type": "stage:frame", "view": "flow", "n": 4, "animate": True})
         _until_frame(page, "flow", 4)
-        assert "k-dim" in frame.locator('section.pane[data-view="flow"] .diagram > svg').get_attribute("class")
+        assert "k-dim" in frame.locator('section.pane[data-view="flow"] .diagram').get_attribute("class")
         assert "k-focus" in edge.get_attribute("class")
         send({"type": "stage:state", "frames": {"flow": 3}, "keys": 0})
         _until_frame(page, "flow", 3)
@@ -931,7 +933,7 @@ def test_a_flowchart_scene_draws_its_frames_on_the_one_layout_and_a_theme_switch
         page.wait_for_timeout(300)
         _until_frame(page, "flow", 3)
         assert not _hidden(frame, '[id*="-flowchart-engine-"]') and _hidden(frame, '[id*="-flowchart-legacy-"]')
-        assert "k-dim" not in (frame.locator('section.pane[data-view="flow"] .diagram > svg').get_attribute("class") or "")
+        assert "k-dim" not in (frame.locator('section.pane[data-view="flow"] .diagram').get_attribute("class") or "")
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
@@ -985,4 +987,96 @@ def test_markdown_and_other_text_files_show_on_the_stage_instead_of_downloading(
         assert downloads == []
     finally:
         no_watch.stop()
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+# -- the shared tools on the stage ------------------------------------------------------------------
+
+SEQ_SPEC = {"actors": [{"id": "c", "label": "Contract"}, {"id": "l", "label": "Ledger"}, {"id": "k", "label": "Core"}],
+            "steps": [{"id": "s1", "from": "c", "to": "c", "arrow": "self", "label": "dev build", "sub": "2026-R1-dev-139"},
+                      {"id": "s2", "from": "c", "to": "l", "arrow": "request", "label": "pins 139", "note": "13 Jan"},
+                      {"id": "s3", "from": "c", "to": "k", "arrow": "request", "label": "jumps to 16", "tone": "good"}]}
+FLOW_SPEC = {"nodes": [{"id": "a", "role": "entry", "label": "Turn"}, {"id": "b", "role": "decision", "label": "Free?"},
+                       {"id": "c", "role": "success", "label": "Played"}],
+             "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": "c", "label": "yes"}]}
+
+
+def _visual(tool, spec):
+    return model.parse_source(f"{tool}:-", Path("."), json.dumps(spec))
+
+
+def _all_hidden(frame, view, key):
+    return frame.locator(f'section.pane[data-view="{view}"] [data-key="{key}"]').evaluate_all(
+        "els => els.length > 0 && els.every(e => e.classList.contains('k-hidden'))")
+
+
+def test_a_sequence_steps_in_with_its_actors_and_a_lit_step_lights_its_arrow_and_its_key_row(tmp_path, wc_config, browser):
+    steps = _scene(scene.sequence_model(SEQ_SPEC), [["next"], ["next"], ["focus s2"]], "Pins")
+    res = stage.show(str(tmp_path), "seq", _visual("sequence", SEQ_SPEC), title="Pins", extra={"scene": steps})
+    try:
+        page, frame, send = _embedded(browser, res["url"], width=1400)
+        frame.locator('section.pane[data-view="seq"] .vkey .seq-key-row').first.wait_for(timeout=5000)
+        send({"type": "stage:frame", "view": "seq", "n": 0})
+        _until_frame(page, "seq", 0)
+        assert _all_hidden(frame, "seq", "step:s1") and _all_hidden(frame, "seq", "actor:c")
+        assert frame.locator('section.pane[data-view="seq"] .k-card').inner_text() == "Pins"
+        send({"type": "stage:frame", "view": "seq", "n": 1, "animate": True})
+        _until_frame(page, "seq", 1)
+        page.wait_for_timeout(200)
+        assert not _all_hidden(frame, "seq", "step:s1") and not _all_hidden(frame, "seq", "actor:c")
+        assert _all_hidden(frame, "seq", "step:s2") and _all_hidden(frame, "seq", "actor:l")
+        send({"type": "stage:frame", "view": "seq", "n": 3})
+        _until_frame(page, "seq", 3)
+        lit = frame.locator('section.pane[data-view="seq"] .k-focus').evaluate_all(
+            "els => els.map(e => e.tagName.toLowerCase() + ':' + e.dataset.key)")
+        assert sorted(lit) == ["div:step:s2", "g:step:s2"]
+        grid, key = (frame.locator(f'section.pane[data-view="seq"] {s}').bounding_box() for s in (".vgrid", ".vkey"))
+        assert key["x"] > grid["x"] + grid["width"] - 5, "the key sits beside the grid on a wide pane"
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def test_a_flowchart_spec_brings_each_arrow_with_its_second_end_and_back_and_next_step_by_hand(tmp_path, wc_config, browser):
+    steps = _scene(scene.flowchart_spec_model(FLOW_SPEC), [["+ a"], ["+ b"], ["+ c"]], "Floor")
+    res = stage.show(str(tmp_path), "flow", _visual("flowchart", FLOW_SPEC), title="Floor", extra={"scene": steps})
+    try:
+        page, frame, send = _embedded(browser, res["url"])
+        frame.locator('section.pane[data-view="flow"] .vgrid svg').wait_for(timeout=5000)
+        send({"type": "stage:frame", "view": "flow", "n": 1})
+        _until_frame(page, "flow", 1)
+        assert _all_hidden(frame, "flow", "edge:a->b#0") and not _all_hidden(frame, "flow", "node:a")
+        send({"type": "stage:frame", "view": "flow", "n": 2})
+        _until_frame(page, "flow", 2)
+        assert not _all_hidden(frame, "flow", "edge:a->b#0") and _all_hidden(frame, "flow", "edge:b->c#0")
+        assert frame.locator('section.pane[data-view="flow"] .vstep').inner_text() == "Step 2 of 3"
+        frame.locator('section.pane[data-view="flow"] .stepnext').click()
+        _until_frame(page, "flow", 3)
+        assert not _all_hidden(frame, "flow", "edge:b->c#0")
+        page.wait_for_function("got.some(m => m.type === 'stage:follow' && m.on === false)", timeout=3000)
+        frame.locator('section.pane[data-view="flow"] .stepback').click()
+        _until_frame(page, "flow", 2)
+        send({"type": "stage:frame", "view": "flow", "n": 1})
+        page.wait_for_timeout(300)
+        assert _frames(frame)["flow"] == 2, "stepping by hand stops the voice moving the frame"
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def test_fit_grows_a_small_diagram_and_the_stage_draws_in_its_own_fonts_with_no_network(tmp_path, wc_config, browser):
+    res = stage.show(str(tmp_path), "flow", _visual("flowchart", FLOW_SPEC), title="Floor")
+    try:
+        page = _page(browser, res["url"])
+        hosts = []
+        page.on("request", lambda r: hosts.append(r.url.split("/")[2]))
+        page.reload()
+        svg = page.locator('section.pane[data-view="flow"] .vgrid svg')
+        svg.wait_for(timeout=5000)
+        drawn = float(svg.get_attribute("width"))
+        page.wait_for_function("document.fonts.check('12px \"Geist Mono\"') && document.fonts.check('12px Geist')",
+                               timeout=5000)
+        assert svg.bounding_box()["width"] > drawn * 1.3
+        assert set(hosts) == {res["url"].split("/")[2]}, hosts
+        page.locator("button", has_text="Actual size").click()
+        assert abs(svg.bounding_box()["width"] - drawn) < 1
+    finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])

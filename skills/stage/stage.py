@@ -7,7 +7,7 @@
 
 <source>: a project file (path[#fragment]), http(s)://..., session:<kind>/<slug>,
 code:<path>:<a>-<b>[ highlight x[-y]], change:<path>[ since <rev>] (what changed, read from git),
-or diagram:- / table:- with the body on stdin.
+or diagram:- / table:- / sequence:- / flowchart:- with the body on stdin.
 Prints the stage URL. Exit 2: the name or source was refused. Exit 3: no daemon, or the
 daemon refused a request.
 """
@@ -264,7 +264,7 @@ def main(argv=None) -> int:
     cwd = str(Path(args.cwd).expanduser().resolve()) if args.cwd else repo_root(Path.cwd())
     try:
         if args.cmd == "show":
-            stdin = sys.stdin.read() if args.source in ("diagram:-", "table:-") else None
+            stdin = sys.stdin.read() if args.source.endswith(":-") else None
             source = model.parse_source(args.source, Path(cwd), stdin)
             res = show(cwd, args.name, source, title=args.title, background=args.background, slug=args.slug)
             print(res["url"])

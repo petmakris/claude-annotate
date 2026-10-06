@@ -168,12 +168,13 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .tabs .count{font:600 11px/1 var(--sans);color:var(--acc);padding:2px 6px;border-radius:999px;background:var(--acc-soft);font-variant-numeric:tabular-nums}
 .tabs button[aria-selected="true"] .count{background:var(--panel)}
 
-/* Diagrams: Fit never draws larger than mermaid did, nor wider or taller than the pane */
+/* Diagrams: Fit draws as large as the pane allows, up to twice what mermaid drew, so a small diagram is read at
+   a size worth reading; never wider or taller than the pane */
 .diagram{position:relative;flex:1 1 auto;align-self:stretch;min-height:220px;box-sizing:border-box;background:var(--panel);
   border:1px solid var(--line);border-radius:12px}
 .diagram.fit{overflow:hidden}
 .diagram.fit svg{position:absolute;inset:16px;margin:auto;width:calc(100% - 32px);height:calc(100% - 32px);
-  max-width:var(--w,100%)!important;max-height:var(--h,100%)}
+  max-width:calc(var(--w,50%) * 2)!important;max-height:calc(var(--h,50%) * 2)}
 .diagram.actual{overflow:auto;padding:16px}
 .diagram.actual svg{display:block;width:var(--w);height:var(--h);max-width:none!important}
 .diagram .node rect{rx:10px;ry:10px}
@@ -273,13 +274,63 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .k-hidden{opacity:0!important;pointer-events:none}
 .code.k-dim .ln:not(.k-focus){opacity:.45}
 .code .ln.k-focus{background:var(--spot-bg);box-shadow:inset 3px 0 0 var(--mark-bar);opacity:1}
-.tablewrap table.k-dim tbody tr:not(.k-focus){opacity:.45}
+.md.k-dim tbody tr:not(.k-focus){opacity:.45}
 .tablewrap tbody tr.k-focus,.tablewrap tbody tr.k-focus:nth-child(even){background:var(--hl-soft);box-shadow:inset 3px 0 0 var(--claude)}
-.diagram svg.k-dim .k-key:not(.k-focus){opacity:.3}
+.diagram.k-dim svg .k-key:not(.k-focus){opacity:.3}
 .diagram svg g.node.k-focus :is(rect,polygon,circle,ellipse,path){stroke:var(--claude)!important;stroke-width:3px!important}
 .diagram svg path.k-focus{stroke:var(--claude)!important;stroke-width:3px!important}
 .k-card{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;
   font:600 22px/1.3 var(--sans);color:var(--ink);pointer-events:none}
-.vstep{font:500 12px/1 var(--sans);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
-.vstep:empty{display:none}
+.stepbar{display:inline-flex;align-items:center;gap:8px}
+.stepbar .btn{min-height:28px;padding:3px 10px}
+.stepbar .btn:disabled{opacity:.4;cursor:default;background:none}
+.vstep{font:500 12px/1 var(--sans);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;min-width:6.5em;text-align:center}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+/* Fonts ship beside this file: the stage's diagrams are measured in them (visuals/text_metrics.py, face "stage"). */
+@font-face{font-family:"Geist";src:url("fonts/Geist-Variable.woff2") format("woff2");font-weight:100 900;font-display:swap}
+@font-face{font-family:"Geist Mono";src:url("fonts/GeistMono-Variable.woff2") format("woff2");font-weight:100 900;font-display:swap}
+
+/* The shared sequence and flowchart tools (visuals.css) draw with the page's colours: these are the stage's. */
+:root{--text:var(--ink);--text-strong:var(--ink);--text-dim:var(--muted);--border:var(--line);--surface-soft:var(--row-alt);
+  --diagram-ground:var(--panel);--link:var(--acc);--accent:var(--claude);--vis-mono:var(--mono);
+  --t-plain:#3c4c5b;--t-edge:#3a6d99;--t-internal:#a2560a;--t-service:#0c6d63;--t-cheap:#7c8a97;--t-hot:#a3364f;--t-good:#2c6b4c;
+  --t-dropped:#98a2ad;--t-internal-bg:#f8ecdd;--t-hot-bg:#f8e6ea;--t-good-bg:#e2f0e8;--t-edge-bg:#e4edf5;--t-service-bg:#dff0ed;--t-cheap-bg:#eef0f4}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --t-plain:#adb7c2;--t-edge:#6cb0e8;--t-internal:#e0a458;--t-service:#4cc6b8;--t-cheap:#9a9a9a;--t-hot:#f2848f;--t-good:#63c98d;
+  --t-dropped:#767f8b;--t-internal-bg:#3b2f1e;--t-hot-bg:#3d2429;--t-good-bg:#1f3a2a;--t-edge-bg:#1e3347;--t-service-bg:#17393a;--t-cheap-bg:#313131}}
+:root[data-theme="dark"]{
+  --t-plain:#adb7c2;--t-edge:#6cb0e8;--t-internal:#e0a458;--t-service:#4cc6b8;--t-cheap:#9a9a9a;--t-hot:#f2848f;--t-good:#63c98d;
+  --t-dropped:#767f8b;--t-internal-bg:#3b2f1e;--t-hot-bg:#3d2429;--t-good-bg:#1f3a2a;--t-edge-bg:#1e3347;--t-service-bg:#17393a;--t-cheap-bg:#313131}
+/* visuals.css sets the light palette on .annotate-seq itself; on the stage the root's palette, light or dark, wins. */
+.visual .annotate-seq{--t-plain:inherit;--t-edge:inherit;--t-internal:inherit;--t-service:inherit;--t-cheap:inherit;--t-hot:inherit;
+  --t-good:inherit;--t-dropped:inherit;--t-internal-bg:inherit;--t-hot-bg:inherit;--t-good-bg:inherit;--t-edge-bg:inherit;
+  --t-service-bg:inherit;--t-cheap-bg:inherit}
+
+/* A visual: the grid, and a sequence's key beside it on a wide pane, under it on a narrow one. Fit draws the
+   grid as wide as its column allows, up to one and a half times its size, so its labels stay in step with the
+   key beside it, and never smaller than laid out: a narrow pane scrolls it sideways. Actual size draws it as laid out. */
+.visual{position:relative;flex:1 0 auto;align-self:stretch;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;padding:20px;container-type:inline-size;font-family:var(--sans);color:var(--ink)}
+.visual .vinner{display:flex;flex-direction:column;gap:20px}
+.visual .vgrid{min-width:0;overflow-x:auto}
+.visual.fit .vgrid svg{display:block;margin:0 auto;width:max(var(--w), min(100%, calc(var(--w) * 1.5)));height:auto;max-width:none}
+.visual.actual .vgrid svg{display:block;width:var(--w);height:var(--h);max-width:none}
+/* A flowchart has no key, so Fit sizes it to the pane both ways, as a Mermaid diagram is. */
+.visual-flowchart.fit{flex:1 1 auto;min-height:260px;padding:0}
+.visual-flowchart.fit :is(.vinner,.vgrid){position:absolute;inset:16px;overflow:hidden}
+.visual-flowchart.fit .vgrid svg{position:absolute;inset:0;margin:auto;width:100%;height:100%;
+  max-width:calc(var(--w) * 1.5);max-height:calc(var(--h) * 1.5)}
+.visual .vkey .seq-key{margin:0;border-top:0;padding-top:0}
+@container (min-width:1000px){
+  .visual-sequence .vinner{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,380px);align-items:start}
+  .visual-sequence .vkey{border-left:1px solid var(--line);padding-left:20px}
+}
+.visual .seq-key-row{border-radius:8px;transition:opacity .3s ease-out,background-color .2s}
+.visual .seq-key-row.k-focus{background:var(--hl-soft);box-shadow:inset 3px 0 0 var(--claude)}
+.visual .step-row.k-focus .row-bg{fill:var(--spot-bg)}
+.visual .step-row.k-focus .arr{stroke-width:2.6}
+.visual g.node.k-focus .node-shape{stroke:var(--claude)!important;stroke-width:3px!important}
+.visual path.flow-edge.k-focus{stroke:var(--claude)!important;stroke-width:2.6px}
+.visual.k-dim .k-key:not(.k-focus):not([data-key^="actor:"]){opacity:.35}
+

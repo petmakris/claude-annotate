@@ -155,7 +155,8 @@ const ICON_PATHS = {
   points: '<path d="M6 4h8M6 8h8M6 12h8"/><circle cx="2.6" cy="4" r=".9"/><circle cx="2.6" cy="8" r=".9"/><circle cx="2.6" cy="12" r=".9"/>',
 };
 const icon = (kind) => `<svg class="ico" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[kind] || ICON_PATHS.page}</svg>`;
-const kindOf = (src) => (src.type === "inline" ? (src.format in ICON_PATHS ? src.format : "page") : "page");
+const kindOf = (src) => (src.type !== "inline" ? "page" : src.format === "visual" ? "diagram"
+  : src.format in ICON_PATHS ? src.format : "page");
 
 const EMPTY_LINE = "When Claude shows code, a diagram, a table or a page, it appears here.";
 const WC = window.WebCompanion;
@@ -224,6 +225,7 @@ function metaText(src) {
   if (src.format === "change") return `Change · ${src.path} · +${src.added} −${src.removed}` + (src.rev ? ` · since ${src.rev}` : "");
   if (src.format === "points") { const n = src.items.length; return `${n} key ${n === 1 ? "point" : "points"} from this call`; }
   if (src.format === "diagram") return "Diagram";
+  if (src.format === "visual") return src.tool === "sequence" ? "Sequence diagram" : "Flowchart";
   return "Board";
 }
 
@@ -264,8 +266,13 @@ function header(v) {
   if (v.body.scene) {
     const repairs = +v.body.scene.repairs || 0;
     if (repairs) meta.append(` · ${repairs} ${repairs === 1 ? "repair" : "repairs"}`);
+    const bar = document.createElement("span"); bar.className = "stepbar";
+    const back = button("Back", () => stepBy(v, -1), "stepback");
     const step = document.createElement("span"); step.className = "vstep";
-    h.querySelector(".prow2").insertBefore(step, h.querySelector(".vage"));
+    const next = button("Next", () => stepBy(v, 1), "stepnext");
+    back.setAttribute("aria-label", "Previous step"); next.setAttribute("aria-label", "Next step");
+    bar.append(back, step, next);
+    h.querySelector(".prow2").insertBefore(bar, h.querySelector(".vage"));
   }
   h.querySelector(".vage").textContent = ago(v.changedAt);
   if (caption) {
@@ -277,9 +284,10 @@ function header(v) {
     a.className = "btn sm open"; a.target = "_blank"; a.rel = "noopener"; a.textContent = "Open ↗";
     a.href = frameUrl(src, v.body.rev);
     btns.append(a);
-  } else if (["code", "table", "diagram", "change", "points"].includes(src.format)) {
+  } else if (["code", "table", "diagram", "change", "points", "visual"].includes(src.format)) {
     const text = () => src.format === "code" ? src.lines.join("\n") : src.format === "change" ? unifiedText(src)
-      : src.format === "points" ? src.items.map((it) => `${it.n}. ${it.text}`).join("\n") : src.body;
+      : src.format === "points" ? src.items.map((it) => `${it.n}. ${it.text}`).join("\n")
+      : src.format === "visual" ? JSON.stringify(src.spec, null, 2) : src.body;
     const copy = button("Copy", async () => {
       await copyText(text()).catch(() => {});
       copy.textContent = "Copied";
@@ -297,13 +305,13 @@ function header(v) {
     wrap.setAttribute("aria-pressed", String(wrapOn()));
     btns.append(wrap);
   }
-  if (src.type === "inline" && src.format === "diagram") {
+  if (src.type === "inline" && (src.format === "diagram" || src.format === "visual")) {
     const seg = document.createElement("div"); seg.className = "seg"; seg.setAttribute("role", "group");
     seg.setAttribute("aria-label", "Diagram size");
     const set = (actual) => {
       v.actual = actual;
       fit.setAttribute("aria-pressed", String(!actual)); real.setAttribute("aria-pressed", String(actual));
-      const box = v.pane.querySelector(".diagram");
+      const box = v.pane.querySelector(".diagram, .visual");
       if (box) { box.classList.toggle("fit", !actual); box.classList.toggle("actual", actual); }
     };
     const fit = button("Fit", () => set(false)), real = button("Actual size", () => set(true));
@@ -584,7 +592,7 @@ function restart(el, cls) {
 
 // ---- Diagrams ------------------------------------------------------------------------------
 
-// Fit: never larger than drawn, never wider or taller than the pane. Actual size: as drawn.
+// Fit: up to twice as drawn, never wider or taller than the pane. Actual size: as drawn.
 function sizeSvg(box) {
   const svg = box.querySelector("svg"); if (!svg) return;
   const vb = svg.viewBox?.baseVal;
@@ -615,6 +623,13 @@ function renderInline(v, seq) {
   } else if (src.format === "points") {
     box.className = "points";
     paintPoints(v, box, src);
+  } else if (src.format === "visual") {
+    box.className = `visual visual-${src.tool} ` + (v.actual ? "actual" : "fit");
+    box.innerHTML = `<div class="vinner"><div class="vgrid">${src.html}</div>` +
+      (src.key ? `<div class="vkey">${src.key}</div>` : "") + "</div>";
+    sizeSvg(box);
+    paintSpot(v, box);
+    requestAnimationFrame(() => { if (current()) paintFrame(v, box); });
   } else if (src.format === "diagram") {
     box.className = "diagram drawing";
     box.innerHTML = `<div class="spin"></div><span>Drawing the diagram…</span>`;
@@ -1000,7 +1015,7 @@ function clearSpots(scope = panesEl) {
 // Lights up the spot in this view's painted box, if the spot is on this view. `box` is the box just
 // painted (it may not be in the pane yet); without it, the pane's own.
 function paintSpot(v, box) {
-  box = box || v.pane.querySelector(".code, .md, .diagram");
+  box = box || v.pane.querySelector(".code, .md, .diagram, .visual");
   if (!box) return;
   clearSpots(box.parentElement || box);
   box.classList.remove("dimmed");
@@ -1039,7 +1054,7 @@ const firstFrame = (body) => {
 
 function paintFrame(v, box, animate = false) {
   const scene = v.body.scene;
-  box = box || v.pane.querySelector(".code, .md, .diagram");
+  box = box || v.pane.querySelector(".code, .md, .diagram, .visual");
   if (!scene || !box) return;
   const n = v.frame ?? scene.rest;
   const done = applyFrame(scene, box, n, animate && v.applied === n - 1 ? v.applied : null);
@@ -1048,10 +1063,24 @@ function paintFrame(v, box, animate = false) {
   if (done.focused && !v.pane.hidden) requestAnimationFrame(() => { if (done.focused.isConnected) centre(done.focused); });
   const step = v.pane.querySelector(".vstep");
   if (step) step.textContent = stepLabel(scene, n);
+  const back = v.pane.querySelector(".stepback"), next = v.pane.querySelector(".stepnext");
+  if (back) back.disabled = n <= 0;
+  if (next) next.disabled = n >= scene.rest;
   if (done.missing.length && !v.missReported) {
     v.missReported = true;
     post({ type: "stage:keymiss", view: v.body.name, keys: done.missing });
   }
+}
+
+// Back and Next move one frame, from the empty start to the rest frame. Stepping by hand takes the
+// stage off the voice, as a tapped tab does, until the next answer.
+function stepBy(v, delta) {
+  const scene = v.body.scene;
+  if (!scene) return;
+  const n = Math.max(0, Math.min((v.frame ?? scene.rest) + delta, scene.rest));
+  if (embedded && follow) setFollow(false);
+  v.frame = n;
+  if (v.filled && !v.stale) paintFrame(v, null, delta > 0);
 }
 
 function setFrame(name, n, animate) {
