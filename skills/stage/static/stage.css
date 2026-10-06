@@ -302,10 +302,6 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 :root[data-theme="dark"]{
   --t-plain:#adb7c2;--t-edge:#6cb0e8;--t-internal:#e0a458;--t-service:#4cc6b8;--t-cheap:#9a9a9a;--t-hot:#f2848f;--t-good:#63c98d;
   --t-dropped:#767f8b;--t-internal-bg:#3b2f1e;--t-hot-bg:#3d2429;--t-good-bg:#1f3a2a;--t-edge-bg:#1e3347;--t-service-bg:#17393a;--t-cheap-bg:#313131}
-/* visuals.css sets the light palette on .annotate-seq itself; on the stage the root's palette, light or dark, wins. */
-.visual .annotate-seq{--t-plain:inherit;--t-edge:inherit;--t-internal:inherit;--t-service:inherit;--t-cheap:inherit;--t-hot:inherit;
-  --t-good:inherit;--t-dropped:inherit;--t-internal-bg:inherit;--t-hot-bg:inherit;--t-good-bg:inherit;--t-edge-bg:inherit;
-  --t-service-bg:inherit;--t-cheap-bg:inherit}
 
 /* A visual: the grid, and a sequence's key beside it on a wide pane, under it on a narrow one. Fit draws the
    grid as wide as its column allows, up to one and a half times its size, so its labels stay in step with the

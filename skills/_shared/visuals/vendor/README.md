@@ -5,6 +5,6 @@
 package step; `elk_driver.mjs` is the only thing that loads it.
 
 Upgrade: `npm pack elkjs@<version>`, copy `package/lib/elk.bundled.js` here,
-run `python3 -m pytest skills/annotate/tests/test_elk_driver.py -q`.
+run `python3 -m pytest skills/_shared/visuals/tests/test_elk_driver.py -q`.
 
 Licence: EPL-2.0, see `ELK_LICENSE.txt`.

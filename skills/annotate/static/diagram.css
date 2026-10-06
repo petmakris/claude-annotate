@@ -28,8 +28,10 @@ section.block[data-kind="flowchart"] .block-content {
 
 /* ── tone palette ──────────────────────────────────────────────────
    A tone is what the reader should conclude from an edge, not the mechanism
-   that carried it. `plain` is the unclassed default. */
-.annotate-seq {
+   that carried it. `plain` is the unclassed default. On the root, so the
+   dark set below overrides it: declared on the svg it beat the inherited
+   dark inks, and a dark page drew light arrows. */
+:root {
   --t-plain:    #3c4c5b;
   --t-edge:     #3a6d99;
   --t-internal: #a2560a;
