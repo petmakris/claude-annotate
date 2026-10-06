@@ -33,7 +33,12 @@ function loadStage() {
 }
 if (CFG.stageUrl) {
   $("openstage").href = CFG.stageUrl;
-  $("stage").addEventListener("load", () => { if ($("stage").getAttribute("src")) stageReady(); });
+  // Only the stage saying it is ready counts: a page that failed to load fires "load" too (Chrome's own
+  // error page), and that must show the Reload box, not an empty frame.
+  $("stage").addEventListener("load", () => {
+    if (!$("stage").getAttribute("src") || stageUp) return;
+    clearTimeout(stageTimer); stageTimer = setTimeout(() => { if (!stageUp) stageFailed(); }, window.__stageReadyMs || 4000);
+  });
   $("reloadstage").onclick = loadStage;
   loadStage();
 } else { $("stagewrap").remove(); $("nostage").hidden = false; }
@@ -70,6 +75,7 @@ window.addEventListener("message", ev => {
     // theme and following go first, and the queue's older copies of them are dropped.
     stageUp = true; stageReady();
     toStage({type: "stage:theme", theme: document.documentElement.dataset.theme});
+    toStage({type: "stage:zoom", zoom: screenMode === "tv" ? TV_ZOOM : 1});
     toStage({type: "stage:follow", on: follow});
     for (const msg of stageOutbox.splice(0)) if (msg.type !== "stage:theme" && msg.type !== "stage:follow") toStage(msg);
     resync();
@@ -171,19 +177,23 @@ let live = null;            // the open microphone of live mode, while it listen
 let held = null;            // the answer the user's speech is over: ducked, paused, or waiting after a cue word
 let deferred = null;        // a new answer that came while the user was talking: it plays once they are done
 let liveNote = "";          // why live mode is not listening, when it stopped by itself
-let liveFlash = null;       // a short-lived line: {text, until}  // the subtitles were hidden: the pill's captions button brings them back
+let liveFlash = null;       // a short-lived line: {text, until}
+let screenMode = store.get("screen", "desk") === "tv" ? "tv" : "desk";  // tv: everything read from across the room
+const TV_ZOOM = 1.35;
+let undoable = null;        // {entry, until}: the live turn the Undo button can still take back
+let fillerFor = null, turnSentAt = 0;  // "One moment." is said once per turn, when Claude takes a while  // the subtitles were hidden: the pill's captions button brings them back
 
 // ---- the conversation --------------------------------------------------
 // Keyed: each entry keeps its element until what it shows changes, so a new entry leaves the others
 // (and a text selection in them) alone.
 const nodes = new Map();    // entry id -> {el, sig}
 let rendered = false;
-const sigOf = e => `${e.who}|${e.text.length}|${e.speech}|${e.words?.length || 0}|${e.speech_error || ""}|${e.n || 0}`;
+const sigOf = e => `${e.who}|${e.text.length}|${e.speech}|${e.words?.length || 0}|${e.speech_error || ""}|${e.n || 0}|${e.withdrawn ? 1 : 0}`;
 
 function buildEntry(e) {
   let el;
   if (e.who === "you" || e.who === "claude") {
-    el = document.createElement("div"); el.className = "turn " + e.who;
+    el = document.createElement("div"); el.className = "turn " + e.who + (e.withdrawn ? " withdrawn" : "");
     const who = document.createElement("div"); who.className = "who"; who.textContent = e.who === "you" ? "You" : "Claude";
     if (e.who === "claude") { const s = document.createElement("small"); s.textContent = "answer " + e.n; who.append(s); }
     if (e.typed) { const s = document.createElement("small"); s.textContent = "typed"; who.append(s); }
@@ -307,7 +317,7 @@ function wordSpans(e) {
   return out;
 }
 function paintSubs() {
-  const you = view.entries.findLast(e => e.who === "you");
+  const you = view.entries.findLast(e => e.who === "you" && !e.withdrawn);
   $("askedtext").textContent = you ? you.text : "";
   const e = shownAnswer(), sig = e ? e.id + "|" + sigOf(e) : (view.ended ? "ended" : "none");
   if (sig !== capSig) {
@@ -400,6 +410,7 @@ function paintSettings() {
   for (const b of $("barge").children) b.setAttribute("aria-pressed", String(b.dataset.choice === barge));
   for (const b of $("endpause").children) b.setAttribute("aria-pressed", String(+b.dataset.choice === endPause));
   $("liveopts").hidden = talkMode !== "live";
+  for (const b of $("screen").children) b.setAttribute("aria-pressed", String(b.dataset.choice === screenMode));
   $("endlbl").textContent = view.ended ? "Close" : "End call"; $("end").disabled = closed;
 }
 function paintAll() {
@@ -407,6 +418,12 @@ function paintAll() {
   paintSubs(); paintPill(); paintSettings();
   $("app").dataset.state = appState(); $("app").toggleAttribute("data-ended", !!view.ended);
   $("app").toggleAttribute("data-live", listening());
+  $("app").toggleAttribute("data-tv", screenMode === "tv");
+  // The mode, always on screen: from across the room the mic button alone does not say it.
+  $("modechip").textContent = talkMode === "manual" ? "Press to talk" : listening() ? "Live · listening" : "Live · off";
+  $("modechip").classList.toggle("on", listening());
+  const canUndo = !!undoable && Date.now() < undoable.until && !view.ended;
+  $("undo").hidden = !canUndo;
 }
 
 // ---- the connection ------------------------------------------------------
@@ -1043,7 +1060,7 @@ function chime(freq) {
 }
 function flash(text) { liveFlash = {text, until: Date.now() + 2500}; setTimeout(paintAll, 2600); }
 async function sendLive(u) {
-  const q = new URLSearchParams({lang: language});
+  const q = new URLSearchParams({lang: language, live: "1"});
   if (u.over) { q.set("interrupted", u.over.id); q.set("at", u.over.at); }
   if (u.gate) q.set("keyword", "1");
   if (!u.gate) { busy = true; paintAll(); }
@@ -1065,7 +1082,13 @@ async function sendLive(u) {
     break;
   }
   busy = false;
-  if (body && body.keyword) {
+  if (body && body.command) {
+    runCommand(body.command, body);
+  } else if (body && body.held) {
+    // A thought left hanging ("so what about the… um"): the server waits for its end, so a turn is coming.
+    if (held) { audio.pause(); clearTimeout(held.armTimer); held = null; }
+    audio.volume = 1; deferred = null;
+  } else if (body && body.keyword) {
     // A cue word alone: the answer stops where it was, and what is said next is the question.
     if (held) {
       audio.pause(); held.paused = true; held.armed = true; audio.volume = 1;
@@ -1076,10 +1099,47 @@ async function sendLive(u) {
     if (held) { audio.pause(); clearTimeout(held.armTimer); held = null; }
     audio.volume = 1; deferred = null;
     chime(520);
+    undoable = {entry: body.entry.id, until: Date.now() + 8000}; setTimeout(paintAll, 8100);
+    turnSentAt = Date.now();
     view.v = -1; if (wake) wake();
   } else if (body && !body.ignored && !u.over) flash("Didn't catch that.");
   paintAll();
 }
+// A spoken command, acted on here: no turn, no wait for Claude.
+function runCommand(cmd, body) {
+  chime(700);
+  if (cmd === "mute") { stopLive("Stopped listening. Press the mic to listen."); return; }
+  if (cmd === "withdraw") { undoable = null; flash("Taken back."); if (held) { held.armed = false; } return; }  // settle resumes a held answer
+  const h = held;
+  release();
+  if (cmd === "pause") { audio.pause(); return; }
+  if (!current) { const e = lastAnswer(); if (e && e.speech === "ready") load(e, true); return; }
+  if (cmd === "resume") { if (h && h.paused) audio.currentTime = h.from; audio.play().catch(() => {}); return; }
+  if (cmd === "repeat") { audio.currentTime = h ? h.from : sentenceStart(); audio.play().catch(() => {}); return; }
+  if (cmd === "back") { if (h) audio.currentTime = h.from; jump(-1); audio.play().catch(() => {}); }
+}
+$("undo").onclick = async () => {
+  const u = undoable; undoable = null; paintAll();
+  if (!u) return;
+  try {
+    const r = await api("/api/withdraw", {method: "POST", body: JSON.stringify({entry: u.entry}), headers: {"Content-Type": "application/json"}});
+    const b = await r.json().catch(() => ({}));
+    flash(b.withdrawn ? "Taken back." : "Too late: Claude already has it.");
+    view.v = -1; if (wake) wake();
+  } catch { showError("Undo failed: the call server did not answer."); }
+};
+// "One moment.": once per live turn, when Claude has worked a few seconds and nothing is playing.
+const fillerAudio = new Audio();
+setInterval(() => {
+  if (talkMode !== "live" || !view.filler || !turnSentAt || fillerFor === turnSentAt) return;
+  if (!view.working || Date.now() - turnSentAt < 3000 || !audio.paused || userBusy()) return;
+  fillerFor = turnSentAt;
+  fillerAudio.src = audioUrl(view.filler); fillerAudio.volume = 0.8; fillerAudio.play().catch(() => {});
+}, 500);
+for (const b of $("screen").children) b.onclick = () => {
+  screenMode = b.dataset.choice; store.set("screen", screenMode);
+  toStage({type: "stage:zoom", zoom: screenMode === "tv" ? TV_ZOOM : 1}); paintAll();
+};
 function setTalkMode(mode) {
   talkMode = mode; store.set("talkMode", mode);
   if (mode === "live") { if (recorder) sendRecording(); startLive(); }   // an open recording goes first, once

@@ -298,6 +298,39 @@ def is_backchannel(text: str) -> bool:
     return " ".join(spoken_words(text)) in BACKCHANNELS
 
 
+# Live mode's spoken commands: the whole utterance, and the page acts on it without a turn.
+COMMANDS = {"go on": "resume", "continue": "resume", "carry on": "resume", "keep going": "resume", "resume": "resume",
+            "pause": "pause", "stop": "pause", "be quiet": "pause",
+            "repeat": "repeat", "repeat that": "repeat", "say that again": "repeat", "come again": "repeat",
+            "go back": "back", "back": "back",
+            "scratch that": "withdraw", "never mind": "withdraw", "nevermind": "withdraw", "forget it": "withdraw",
+            "cancel": "withdraw", "cancel that": "withdraw",
+            "stop listening": "mute",
+            "συνέχισε": "resume", "σταμάτα": "pause", "ξαναπές το": "repeat", "πάλι": "repeat", "πίσω": "back",
+            "άκυρο": "withdraw", "άσε": "withdraw", "σταμάτα να ακούς": "mute"}
+COURTESY = {"please", "claude", "ok", "okay", "now", "παρακαλώ"}
+
+
+def command_of(text: str) -> str | None:
+    words = spoken_words(text)
+    while words and words[0] in COURTESY:
+        words = words[1:]
+    while words and words[-1] in COURTESY:
+        words = words[:-1]
+    return COMMANDS.get(" ".join(words))
+
+
+# A sentence that stops on one of these is a thought still going: live mode waits for the rest.
+DANGLING = {"and", "but", "so", "or", "because", "um", "uh", "erm", "er", "the", "a", "an", "to", "of", "with", "if",
+            "that", "then", "like", "which", "when", "is", "my", "your", "και", "αλλά", "γιατί", "ότι", "το", "η", "ο"}
+LIVE_JOIN_S = 4.0  # how long a thought left hanging waits for its end before it goes as it is
+
+
+def dangling(text: str) -> bool:
+    words = spoken_words(text)
+    return bool(words) and (words[-1] in DANGLING or text.rstrip().endswith(("...", "…", "-", "—")))
+
+
 def _words_of_identifier(token: str) -> str:
     parts = [p for p in re.split(r"_+", token) if p]
     out = []
@@ -1130,6 +1163,10 @@ class Call:
         self.out_dir = out_dir
         self.audio_dir = out_dir / "audio"
         self.audio_dir.mkdir(parents=True, exist_ok=True)
+        self.live_held: dict | None = None   # a live thought left hanging, waiting for its end
+        self.said_lines: dict[int, dict] = {}  # entry id -> its line in the turn queue, to take it back
+        self.filler: str | None = None        # "audio/filler.<ext>": "One moment." in this call's voice
+        self.filler_making = False
         self.transcript = out_dir / "transcript.md"
         if fresh:
             self.transcript.write_text(f"# {topic}\n\n_talk · {dt.datetime.now():%Y-%m-%d %H:%M} · "
@@ -1266,14 +1303,81 @@ class Call:
 
     # -- turns --------------------------------------------------------------
 
-    def offer(self, text: str, typed: bool, interrupted: dict | None = None) -> dict:
+    def offer(self, text: str, typed: bool, interrupted: dict | None = None, live: bool = False) -> dict:
         self.turn_count += 1
         entry = self.add("you", text, typed=typed, **({"interrupted": interrupted} if interrupted else {}))
         said = {"who": "you", "text": text}
         if interrupted:
             said["interrupted"] = interrupted
+        if self.turns.working:  # said while Claude works on the last turn: an addition to it, not a new question
+            said["while_working"] = True
+        self.said_lines[entry["id"]] = said
         self.turns.offer(f"t{self.turn_count}", [said])
+        if live:
+            self.want_filler()
         return entry
+
+    def withdraw(self, entry_id) -> bool:
+        """Take back what the user said, while no doorbell has collected it."""
+        said = self.said_lines.get(entry_id)
+        if said is None or not self.turns.withdraw(said):
+            return False
+        for entry in self.entries:
+            if entry["id"] == entry_id:
+                entry["withdrawn"] = True
+        self.changed()
+        return True
+
+    def withdraw_last(self) -> bool:
+        """"Never mind": a thought still hanging, else the last thing said if Claude does not have it yet."""
+        if self.live_held:
+            self.live_held["timer"].cancel()
+            self.live_held = None
+            return True
+        last = next((e for e in reversed(self.entries) if e["who"] == "you" and not e.get("withdrawn")), None)
+        return last is not None and self.withdraw(last["id"])
+
+    def live_join(self, text: str, interrupted: dict | None) -> tuple[str, dict | None]:
+        """What was said, after the thought it finishes, if one was left hanging."""
+        held, self.live_held = self.live_held, None
+        if not held:
+            return text, interrupted
+        held["timer"].cancel()
+        return f"{held['text']} {text}".strip(), held["interrupted"] or interrupted
+
+    def live_hold(self, text: str, interrupted: dict | None) -> None:
+        timer = asyncio.get_running_loop().call_later(LIVE_JOIN_S, self.live_flush)
+        self.live_held = {"text": text, "interrupted": interrupted, "timer": timer}
+
+    def live_flush(self) -> None:
+        """No end came for a hanging thought: it goes as it is."""
+        held, self.live_held = self.live_held, None
+        if held and not self.ended:
+            self.offer(held["text"], typed=False, interrupted=held["interrupted"], live=True)
+
+    def want_filler(self) -> None:
+        """Make "One moment." once, in this call's voice, for the page to say while Claude works."""
+        if self.filler or self.filler_making:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self.filler_making = True
+
+        async def make() -> None:
+            try:
+                made = await loop.run_in_executor(self.speech_pool, speech.speak, "One moment.", self.voice)
+                path = self.audio_dir / f"filler.{made.ext}"
+                path.write_bytes(made.audio)
+                self.filler = f"audio/{path.name}"
+                self.changed()
+            except Exception as err:  # noqa: BLE001
+                say(f"speech: the filler was not made: {type(err).__name__}: {err}")
+            finally:
+                self.filler_making = False
+
+        loop.create_task(make())
 
     def interruption(self, entry_id, at) -> dict | None:
         """What the user had heard of an answer when they cut in: its number and its last words before
@@ -1636,7 +1740,7 @@ class Call:
     def view(self) -> dict:
         return {"v": self.version, "entries": self.entries, "working": self.turns.working,
                 "stalled": self.turns.stalled, "activity": self.activity_view() if self.turns.working else [],
-                "ended": self.ended, "heard_upto": self.heard_upto}
+                "ended": self.ended, "heard_upto": self.heard_upto, "filler": self.filler}
 
 
 # ---------------------------------------------------------------------------
@@ -1895,7 +1999,7 @@ def build_app(server: Server):
 
     async def audio(request):
         call = by_link(request)
-        if call is None or not re.fullmatch(r"\d{4}\.(wav|mp3)", request.match_info["name"]):
+        if call is None or not re.fullmatch(r"(\d{4}|filler)\.(wav|mp3)", request.match_info["name"]):
             return web.Response(status=404)
         path = call.audio_dir / request.match_info["name"]
         if not path.is_file():
@@ -1941,8 +2045,16 @@ def build_app(server: Server):
         # "mm-hm" means go on; with cue words, only words that start with one interrupt, and a cue word
         # alone means "stop and listen".
         q = request.query
+        live = q.get("live") == "1"
         if "interrupted" in q and call.echo_of(text, q.get("interrupted"), q.get("at")):
             return web.json_response({"text": "", "echo": True})
+        # A spoken command is acted on by the page and is no turn. "Never mind" takes back what Claude
+        # does not have yet; once it does, the words go to Claude as said.
+        command = command_of(text) if live else None
+        if command == "withdraw" and call.withdraw_last():
+            return web.json_response({"text": "", "command": "withdraw", "withdrawn": True})
+        if command and command != "withdraw":
+            return web.json_response({"text": "", "command": command})
         if "interrupted" in q and is_backchannel(text):
             return web.json_response({"text": "", "backchannel": True})
         if q.get("keyword"):
@@ -1955,7 +2067,24 @@ def build_app(server: Server):
         interrupted = call.interruption(q.get("interrupted"), q.get("at")) if "interrupted" in q else None
         if server.handing_over:  # past the last save: the page keeps the turn and sends it to the next server
             return web.json_response({"error": "the talk server is restarting; try again in a moment"}, status=503)
-        return web.json_response({"text": text, "entry": call.offer(text, typed=False, interrupted=interrupted)})
+        if live:
+            # A thought that stops on "and", "um", "the"... waits a few seconds for the rest of it.
+            text, interrupted = call.live_join(text, interrupted)
+            if dangling(text):
+                call.live_hold(text, interrupted)
+                return web.json_response({"text": text, "held": True})
+        return web.json_response({"text": text, "entry": call.offer(text, typed=False, interrupted=interrupted, live=live)})
+
+    async def withdraw(request):
+        """Undo: take back what was said, while Claude does not have it yet."""
+        call = call_of(request)
+        if call is None:
+            return refused(request)
+        body = await request.json() if request.can_read_body else {}
+        entry = body.get("entry") if isinstance(body, dict) else None
+        if not isinstance(entry, int) or isinstance(entry, bool):
+            return web.json_response({"error": "name the entry to take back"}, status=400)
+        return web.json_response({"withdrawn": call.withdraw(entry)})
 
     async def typed(request):
         call = call_of(request)
@@ -2104,6 +2233,7 @@ def build_app(server: Server):
         web.get("/api/state", state),
         web.post("/api/listen", listen),
         web.post("/api/say", typed),
+        web.post("/api/withdraw", withdraw),
         web.post("/api/floor", floor),
         web.post("/api/stop", stop),
         web.post("/api/close", close),

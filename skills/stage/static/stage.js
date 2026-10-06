@@ -21,6 +21,7 @@
 //     {type:'stage:key', view, index}     key point number index (from 1) was just said: it gets the bar
 //                                         and a short glow; the Key points tab is never fronted for it
 //     {type:'stage:theme', theme}         'light' or 'dark', chosen on the call page
+//     {type:'stage:zoom', zoom}           how large everything draws: 1 at a desk, more on a TV across the room
 //     {type:'stage:follow', on}           the call page's switch turned following on or off
 //     {type:'stage:frame', view, n, animate}  show frame n of the view's scene, animated only as the next one;
 //                                         never for the view in front while following is off
@@ -1154,6 +1155,10 @@ function onMessage(m) {
     if (v && selectedName() !== v.body.name) markUpdated(v, true);
   }
   else if (m.type === "stage:answer") { setFollow(true); spot = null; clearSpots(); }
+  else if (m.type === "stage:zoom") {
+    const z = Number(m.zoom);
+    if (z >= 0.5 && z <= 3) document.documentElement.style.zoom = z === 1 ? "" : String(z);
+  }
   else if (m.type === "stage:theme") {
     const theme = m.theme === "dark" ? "dark" : "light";
     if (document.documentElement.dataset.theme === theme) return;

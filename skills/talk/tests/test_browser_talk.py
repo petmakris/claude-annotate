@@ -62,8 +62,11 @@ async def add_entry(call, who, text):
     call.add(who, text)
 
 
-def stage_page(page, body="<body style='margin:0;background:#cde'>the stage</body>"):
-    """Serve the dummy stage URL as a plain page."""
+READY = "<script>parent.postMessage({type: 'stage:ready'}, '*')</script>"
+
+
+def stage_page(page, body="<body style='margin:0;background:#cde'>the stage" + READY + "</body>"):
+    """Serve the dummy stage URL as a page that says it is ready, as the real stage does."""
     page.route(STAGE, lambda route: route.fulfill(content_type="text/html", body=body))
 
 
@@ -431,7 +434,7 @@ def test_a_stage_that_does_not_load_offers_reload_and_a_new_tab(tmp_path, browse
         def stage(route):
             requests.append(route)
             if len(requests) > 1:
-                route.fulfill(content_type="text/html", body="<body>the stage</body>")
+                route.fulfill(content_type="text/html", body="<body>the stage" + READY + "</body>")
         page.route(STAGE, stage)
         page.goto(url, wait_until="domcontentloaded")  # the page's own load waits on the stalled stage
         assert page.is_visible("text=Loading the stage")
@@ -742,3 +745,14 @@ def test_live_speech_over_an_answer_pauses_it_and_noise_lets_it_go_on(tmp_path, 
             assert page.evaluate(PAUSED)                          # words said: the answer stays stopped
         finally:
             browser.close()
+
+
+def test_a_stage_that_loads_an_error_page_says_it_did_not_load(tmp_path, browser):
+    with served(tmp_path, stage_url=STAGE) as (url, call, loop, fake):
+        page = browser.new_page(viewport={"width": 1400, "height": 900})
+        page.add_init_script("window.__stageReadyMs = 500")
+        # Loaded, but not the stage: what Chrome shows when the daemon does not answer fires "load" too.
+        page.route(STAGE, lambda route: route.fulfill(status=502, content_type="text/html", body="<body>Bad gateway</body>"))
+        page.goto(url)
+        page.wait_for_selector("text=The stage did not load.", timeout=5000)
+        assert page.is_visible("#reloadstage")

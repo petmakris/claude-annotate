@@ -40,6 +40,18 @@ class TurnQueue:
         self.offered_at = self.clock()
         self._changed.set()
 
+    def withdraw(self, line: dict) -> bool:
+        """Take back a line no doorbell has collected yet; False once one has."""
+        for i, held in enumerate(self.lines):
+            if held is line or held == line:
+                del self.lines[i]
+                if not self.lines and self.pending_id:
+                    self.offered_ids.discard(self.pending_id)
+                    self.pending_id = None
+                self._changed.set()
+                return True
+        return False
+
     def put_back(self, event: dict) -> None:
         """A collected turn whose doorbell went away before it was printed: offer it again."""
         if event.get("type") != "turn":

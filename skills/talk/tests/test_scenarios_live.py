@@ -167,7 +167,7 @@ def test_s05_a_long_monologue_reaches_claude_as_one_turn(tmp_path, pw):
             page = live_page(browser, url)
             page.wait_for_selector("#talk[aria-label='Stop listening']", timeout=5000)
             page.evaluate("LIVE.maxMs = 3000")  # the 60 s cap, scaled down: 5 s of speech crosses it
-            script = Script("first half of the sentence and the", "second half")
+            script = Script("a long thought about the mapper", "the rest of it")  # ends whole: not held as a thought going on
             with patch.object(talk.speech, "transcribe", script):
                 page.wait_for_timeout(9000)
             said = drain(loop, call)
@@ -465,5 +465,64 @@ def test_s26_a_click_shorter_than_a_word_sends_nothing(tmp_path, pw):
             seen = listens(page)
             page.wait_for_timeout(5000)
             assert seen == []
+        finally:
+            browser.close()
+
+
+# ---- scene 27: "pause" and "go on" said over an answer ---------------------------------------------
+
+def test_s27_saying_pause_then_go_on_steers_the_answer_with_no_turn(tmp_path, pw):
+    with served(tmp_path) as (url, call, loop, fake):
+        fake.seconds = 40.0
+        browser = launch(pw, tmp_path, ("s", 3), ("v", 1), ("s", 3))  # one word every 7 s
+        try:
+            page = live_page(browser, url, endPause=800)
+            on_loop(loop, call.answer(LONG))
+            page.wait_for_function(PLAYING, timeout=5000)
+            with patch.object(talk.speech, "transcribe", Script("Pause.", "go on")):
+                page.wait_for_function(PAUSED, timeout=8000)
+                page.wait_for_timeout(2500)
+                assert page.evaluate(PAUSED)                       # it stays paused: "pause" was acted on
+                page.wait_for_function(PLAYING, timeout=9000)      # "go on"
+            assert drain(loop, call, 0.5) == []                     # neither became a turn
+        finally:
+            browser.close()
+
+
+# ---- scene 28: the Undo button takes back a turn Claude has not collected ---------------------------
+
+def test_s28_undo_takes_back_what_was_just_said(tmp_path, pw):
+    with served(tmp_path) as (url, call, loop, fake):
+        browser = launch(pw, tmp_path, ("s", 3), ("v", 1), ("s", 30))
+        try:
+            page = live_page(browser, url, endPause=800)
+            fake.heard = "a question I regret"
+            page.wait_for_selector("#undo:not([hidden])", timeout=8000)
+            page.click("#undo")
+            page.wait_for_selector("#status:has-text('Taken back.')", timeout=3000)
+            assert drain(loop, call, 0.5) == []
+            assert any(e.get("withdrawn") for e in call.entries if e["who"] == "you")
+        finally:
+            browser.close()
+
+
+# ---- scene 29: the TV screen ------------------------------------------------------------------------
+
+def test_s29_the_tv_screen_grows_the_subtitles_and_zooms_the_stage(tmp_path, pw):
+    from test_browser_talk import STAGE_PROBE
+    with served(tmp_path, stage_url=STAGE) as (url, call, loop, fake):
+        browser = launch(pw, tmp_path, ("s", 30))
+        try:
+            page = live_page(browser, None)
+            stage_page(page, STAGE_PROBE)
+            page.goto(url)
+            on_loop(loop, call.answer("A short answer."))
+            page.wait_for_selector("#cap:has-text('A short answer.')", timeout=5000)
+            desk = page.evaluate("parseFloat(getComputedStyle($('cap')).fontSize)")
+            open_gear(page); page.click("#screen button[data-choice='tv']"); page.keyboard.press("Escape")
+            tv = page.evaluate("parseFloat(getComputedStyle($('cap')).fontSize)")
+            page.frame(url=STAGE).wait_for_function("got.some(m => m.type === 'stage:zoom' && m.zoom === 1.35)", timeout=2000)
+            assert (desk, tv) == (18.0, 30.0)
+            assert page.inner_text("#modechip") in ("Live · listening", "Live · off")
         finally:
             browser.close()

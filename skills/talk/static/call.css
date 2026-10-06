@@ -163,6 +163,26 @@ svg{display:block;flex:none}
 .row[aria-pressed="true"] .sw{background:var(--acc)}
 .row[aria-pressed="true"] .sw::after{transform:translateX(14px)}
 .liveopts{display:flex;flex-direction:column;gap:14px}
+.undo{margin-left:8px;padding:1px 9px;border-radius:999px;border:1px solid var(--sub-line);color:var(--sub-ink);font:500 12px var(--sans)}
+.undo:hover{background:var(--sub-shade)}
+.mode{flex:none;padding:1px 8px;border-radius:999px;font:500 11px var(--sans);white-space:nowrap;background:var(--shade);color:var(--muted)}
+.mode.on{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good)}
+.turn.withdrawn .text{text-decoration:line-through;opacity:.55}
+/* TV: read from across the room. Everything the user watches grows; the stage zooms itself (stage:zoom). */
+.app[data-tv] .subs{padding:14px 56px 16px;max-width:min(1100px,100%)}
+.app[data-tv] .cap{font-size:30px}
+.app[data-tv] .asked,.app[data-tv] .capnote,.app[data-tv] .preplbl{font-size:17px}
+.app[data-tv] .status{font-size:22px}
+.app[data-tv] .dock{width:min(1100px,calc(100% - 32px))}
+.app[data-tv] .pill{width:min(820px,100%);padding:8px;gap:10px}
+.app[data-tv] .pill>.ib:not(.mic){width:48px;height:48px;margin-bottom:12px}
+.app[data-tv] .ib.mic{width:72px;height:72px}
+.app[data-tv] .ib svg{transform:scale(1.35)}
+.app[data-tv] .compose textarea{font-size:20px}
+.app[data-tv] .corner{bottom:30px}
+.app[data-tv] .left{font-size:15px}
+.app[data-tv] .mode{font-size:14px;padding:3px 12px}
+.app[data-tv] .frame::before{padding:5px}
 /* Live: the mic button is the switch for listening; it breathes with the room while it listens */
 .ib.mic.live{background:var(--good);box-shadow:0 0 0 calc(3px + var(--lvl,0) * 9px) color-mix(in srgb,var(--good) 22%,transparent)}
 .ib.mic.live.muted{background:var(--faint);box-shadow:none}
