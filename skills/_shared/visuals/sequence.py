@@ -18,6 +18,7 @@ import re
 from html import escape as _html_escape
 from typing import Any
 
+from . import text_metrics
 from .text_metrics import text_px
 
 ARROW_TYPES = ("request", "event", "self", "band")
@@ -280,7 +281,7 @@ def _render_legend(lines: list[list[tuple[dict, float]]]) -> str:
     return "".join(parts)
 
 
-def render(spec: dict[str, Any], block_id: str, *, keyed: bool = False) -> str:
+def render(spec: dict[str, Any], block_id: str, *, keyed: bool = False, face: str = "annotate") -> str:
     """Render a validated spec to the grid: arrows, bands and numbered badges.
 
     The words that used to sit on these arrows are in `render_key(spec)`.
@@ -293,6 +294,11 @@ def render(spec: dict[str, Any], block_id: str, *, keyed: bool = False) -> str:
 
     Raises ValidationError if spec is malformed.
     """
+    with text_metrics.face(face):
+        return _render(spec, block_id, keyed)
+
+
+def _render(spec: dict[str, Any], block_id: str, keyed: bool) -> str:
     validate(spec)
 
     actors = spec["actors"]
@@ -358,7 +364,7 @@ def render(spec: dict[str, Any], block_id: str, *, keyed: bool = False) -> str:
     return "".join(parts)
 
 
-def render_key(spec: dict[str, Any], block_id: str, *, keyed: bool = False) -> str:
+def render_key(spec: dict[str, Any], block_id: str, *, keyed: bool = False, face: str = "annotate") -> str:
     """The numbered key that reads alongside `render(spec)`'s grid.
 
     HTML, not SVG, and deliberately so: it is the half that has to reflow when
@@ -368,6 +374,11 @@ def render_key(spec: dict[str, Any], block_id: str, *, keyed: bool = False) -> s
     bands has no numbers, and an empty key div would draw a rule under the grid
     for no reason.
     """
+    with text_metrics.face(face):
+        return _render_key(spec, block_id, keyed)
+
+
+def _render_key(spec: dict[str, Any], block_id: str, keyed: bool) -> str:
     validate(spec)
     steps = spec["steps"]
     phase_at = {p["start_at"]: str(p["label"]) for p in (spec.get("phases") or [])}

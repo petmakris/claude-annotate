@@ -24,6 +24,7 @@ from typing import Any
 from . import flavours, views
 from .elk_layout import layout
 from .flowchart_layout import SIDE_GUTTER
+from . import text_metrics
 from .text_metrics import line_h, text_px
 
 # A node's `href` is written straight into an <a> that script.js injects with
@@ -549,15 +550,16 @@ def _draw(spec: dict[str, Any], block_id: str, positions: dict[str, Any],
 
 
 def render(spec: dict[str, Any], block_id: str,
-           variant: str = flavours.DEFAULT, *, keyed: bool = False) -> str:
+           variant: str = flavours.DEFAULT, *, keyed: bool = False, face: str = "annotate") -> str:
     """Render a validated flowchart spec to an SVG string with hit-target IDs. With `keyed`, every
     node, edge and edge label carries a `data-key` (`node:<id>`, `edge:<from>-><to>#<n>`) for the
-    stage's frames."""
+    stage's frames. `face` names the fonts the page draws it in (see text_metrics)."""
     validate(spec)
     nodes = spec["nodes"]
     edges = spec.get("edges") or []
-    positions, canvas_w, canvas_h, routes = layout(nodes, edges, variant)
-    return _draw(spec, block_id, positions, canvas_w, canvas_h, routes, keyed)
+    with text_metrics.face(face):
+        positions, canvas_w, canvas_h, routes = layout(nodes, edges, variant)
+        return _draw(spec, block_id, positions, canvas_w, canvas_h, routes, keyed)
 
 
 def render_variants(spec: dict[str, Any],
