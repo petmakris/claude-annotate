@@ -81,7 +81,8 @@ A new inline format, `visual`: `{"type": "inline", "format": "visual", "tool": "
 
 - `[[show sequence | Title]] {json} [[/show]]` and `[[show flowchart | Title]] {json} [[/show]]`. A body starting with `{` is a spec for the tool. Any other body under `flowchart` stays a Mermaid diagram, so `KIND_ALIASES` keeps working.
 - An invalid spec does not reach the stage. The board says what the validator said, as `diagram_problems` does for Mermaid.
-- Frames work as they do for any board: with no verb tags, the steps are spread over the answer's sentences (`auto_steps`). `[[+ s3]]`, `[[next]]`, `[[focus a]]` and `[[point s3]]` work as they do now.
+- Frames work as they do for any board: with no verb tags, the steps are spread over the answer's sentences (`auto_steps`). `[[+ s3]]`, `[[next]]`, `[[focus a]]` and `[[point s3]]` work as they do now. For these two tools, a `point` or `focus` with no reveal verb keeps the sentence-by-sentence reveal and lights its step on top of it (found on the live check: one point otherwise showed the whole diagram at once).
+- Fit for a visual: a sequence grid grows to its column up to 1.5× and never shrinks below its laid-out size (a narrow pane scrolls it sideways, as annotate does); a flowchart fits the pane both ways up to 1.5×. Mermaid diagrams grow up to 2×. Chosen on the live check: at 2× a sequence grid's labels outgrew the key beside it.
 - Talk's SKILL.md gains a row for each tool with a short example, and annotate's "when to use which" rules: a sequence for who-talks-to-whom over time, a flowchart for branching, Mermaid for a quick sketch, a table for facts.
 
 ### 6. Annotate

@@ -1358,7 +1358,12 @@ class Call:
         starts = sentence_starts(shown)
         for i, (at, view) in enumerate(fronts):
             item = self.board.item_for(view)
-            model = scene_model(item) if item and view not in runs else None
+            own = runs.get(view, [])
+            reveals = any(c["verb"].name in ("+", "next", "all") for _, cues in own for c in cues)
+            # A sequence or flowchart comes in a sentence at a time unless its verbs reveal it themselves:
+            # a point or a focus only lights what the sentences bring in.
+            stepped = item is not None and (view not in runs or (item["kind"] in VISUAL_KINDS and not reveals))
+            model = scene_model(item) if stepped else None
             if model is None or at >= len(shown):
                 continue
             end = fronts[i + 1][0] if i + 1 < len(fronts) else len(shown)
@@ -1369,11 +1374,14 @@ class Call:
             if item["kind"] not in VISUAL_KINDS:
                 self.board.problem(f'"{item.get("title") or item["kind"]}" has {len(model.order)} elements and no verbs, '
                                    "so it was stepped one sentence at a time (dump); tag the word that names each thing")
-            runs[view] = []
+            merged: dict[int, list] = {}
+            for pos, cues in own:
+                merged.setdefault(pos, []).extend(cues)
             for pos, group in zip(said, steps):
                 cue = {"kind": "frame", "view": view, "verb": group[0]}
-                runs[view].append([pos, [cue]])
+                merged.setdefault(pos, []).insert(0, cue)
                 timed.append((pos, cue))
+            runs[view] = [[pos, merged[pos]] for pos in sorted(merged)]
         for view, view_runs in runs.items():
             item = self.board.item_for(view)
             title = item.get("title") or item["kind"]

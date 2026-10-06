@@ -919,3 +919,14 @@ def test_a_point_lights_a_step_or_a_node_of_a_visual(tmp_path):
     assert call.board.items[-1]["scene"]["frames"][1]["focus"] == ["node:b"]
     call.split_reply("[[point Turn: step s9]] No such step.")
     assert any("no step s9" in p for p in call.board.problems)
+
+
+def test_a_point_on_a_visual_lights_its_step_while_the_rest_still_comes_in_a_sentence_at_a_time(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply(f"[[show sequence | Turn]] {SEQ} [[/show]] The page sends. It queues. [[point: step s3]] It answers. "
+                     "It plays.")
+    built = call.board.items[0]["scene"]
+    assert built["start"] == "empty" and built["steps"] == 4
+    shown = [set(f["show"]) for f in built["frames"]]
+    assert "step:s1" in shown[1] and "step:s3" not in shown[2]
+    assert "step:s3" in shown[3] and built["frames"][3]["focus"] == ["step:s3"]
