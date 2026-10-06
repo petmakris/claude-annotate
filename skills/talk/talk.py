@@ -273,14 +273,29 @@ def spoken_words(text: str) -> list[str]:
     return re.findall(r"\w+", text.lower())
 
 
-def after_keyword(text: str, keyword: str) -> str | None:
-    """The text after a leading keyword ("Listen, why is that?" -> "why is that?"), "" for the keyword
-    alone, None when the text does not start with it."""
-    words = spoken_words(keyword)
-    if not words:
-        return None
-    m = re.match(r"\W*" + r"\W+".join(map(re.escape, words)) + r"\b[\s,.:;!?…-]*", text, re.IGNORECASE)
-    return text[m.end():].strip() if m else None
+# Words people cut in with. Longer ones first, so "hold on" is matched before "hold".
+CUE_WORDS = ("hold on", "wait a second", "wait", "sorry", "listen", "excuse me", "stop",
+             "περίμενε", "συγγνώμη", "άκου", "σταμάτα")
+# Replies that mean "go on": over an answer they never become a turn.
+BACKCHANNELS = {"mm", "mhm", "mm hm", "mmhm", "hmm", "uh huh", "yeah", "yes", "yep", "ok", "okay", "right", "sure",
+                "i see", "got it", "alright", "go on", "continue", "ναι", "εντάξει", "μάλιστα", "συνέχισε"}
+
+
+def after_keyword(text: str, keywords=CUE_WORDS) -> str | None:
+    """The text after a leading cue word ("Wait, why is that?" -> "why is that?"), "" for the cue word
+    alone, None when the text does not start with one."""
+    for keyword in ([keywords] if isinstance(keywords, str) else keywords):
+        words = spoken_words(keyword)
+        if not words:
+            continue
+        m = re.match(r"\W*" + r"\W+".join(map(re.escape, words)) + r"\b[\s,.:;!?…-]*", text, re.IGNORECASE)
+        if m:
+            return text[m.end():].strip()
+    return None
+
+
+def is_backchannel(text: str) -> bool:
+    return " ".join(spoken_words(text)) in BACKCHANNELS
 
 
 def _words_of_identifier(token: str) -> str:
@@ -1288,9 +1303,16 @@ class Call:
             at = int(at)
         except (TypeError, ValueError):
             return False
-        near = set(spoken_words(entry["text"][max(0, at - 400):at + 400]))
-        said = spoken_words(text)
-        return len(said) >= 2 and sum(w in near for w in said) / len(said) >= 0.7
+        # Echo repeats a run of the answer's words in order; a question that borrows a few of them does not.
+        near, said = spoken_words(entry["text"][max(0, at - 400):at + 400]), spoken_words(text)
+        run = 0
+        for i in range(len(said)):
+            for j in range(len(near)):
+                k = 0
+                while i + k < len(said) and j + k < len(near) and said[i + k] == near[j + k]:
+                    k += 1
+                run = max(run, k)
+        return run >= 4 and run >= 0.6 * len(said)
 
     def collected(self) -> None:
         self.activity = []
@@ -1916,13 +1938,15 @@ def build_app(server: Server):
         if not text.strip():
             return web.json_response({"text": ""})
         # Live mode: the user spoke over an answer. Its own words heard back are an echo, not a turn;
-        # with a keyword, only words that start with it interrupt, and the keyword alone means "stop and listen".
+        # "mm-hm" means go on; with cue words, only words that start with one interrupt, and a cue word
+        # alone means "stop and listen".
         q = request.query
         if "interrupted" in q and call.echo_of(text, q.get("interrupted"), q.get("at")):
             return web.json_response({"text": "", "echo": True})
-        keyword = q.get("keyword", "").strip()
-        if keyword:
-            rest = after_keyword(text, keyword)
+        if "interrupted" in q and is_backchannel(text):
+            return web.json_response({"text": "", "backchannel": True})
+        if q.get("keyword"):
+            rest = after_keyword(text)
             if rest is None:
                 return web.json_response({"text": text, "ignored": True})
             if not rest:

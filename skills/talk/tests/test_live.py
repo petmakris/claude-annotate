@@ -44,7 +44,7 @@ def test_with_the_keyword_only_words_that_start_with_it_interrupt(tmp_path):
     async def go():
         async with running_app(tmp_path) as (client, call, fake):
             entry = await _answer(call)
-            path = f"/api/listen?keyword=listen&interrupted={entry['id']}&at=10"
+            path = f"/api/listen?keyword=1&interrupted={entry['id']}&at=10"
             out = []
             for heard in ("so anyway the dog", "Listen.", "Listen, why merge them?"):
                 fake.heard = heard
@@ -59,8 +59,37 @@ def test_with_the_keyword_only_words_that_start_with_it_interrupt(tmp_path):
     assert [s["text"] for s in turn["said"]] == ["why merge them?"]
 
 
-def test_the_keyword_is_matched_as_a_word_at_the_start():
-    assert talk.after_keyword("Listen, why?", "listen") == "why?"
-    assert talk.after_keyword("listen", "listen") == ""
-    assert talk.after_keyword("Listening is hard", "listen") is None
-    assert talk.after_keyword("I said listen", "listen") is None
+def test_cue_words_are_matched_as_words_at_the_start():
+    assert talk.after_keyword("Listen, why?") == "why?"
+    assert talk.after_keyword("Hold on. Why merge?") == "Why merge?"
+    assert talk.after_keyword("wait") == ""
+    assert talk.after_keyword("Περίμενε, γιατί;") == "γιατί;"
+    assert talk.after_keyword("Listening is hard") is None
+    assert talk.after_keyword("I said wait") is None
+
+
+def test_mm_hm_over_an_answer_means_go_on_and_is_no_turn(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            entry = await _answer(call)
+            out = []
+            for heard in ("Mm-hm.", "yeah", "Okay, go on"):
+                fake.heard = heard
+                out.append(await (await client.post(f"/api/listen?interrupted={entry['id']}&at=10", data=silent_wav(), headers=AUTH)).json())
+            return out, (await client.get("/api/turn?wait=0.1", headers=AUTH)).status
+
+    out, status = run(go())
+    assert out[0] == out[1] == {"text": "", "backchannel": True}
+    assert out[2]["text"] == "Okay, go on" and status == 200  # more than a backchannel: a turn
+
+
+def test_a_question_that_borrows_the_answers_words_is_not_taken_for_echo(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            entry = await _answer(call)
+            fake.heard = "the pending id?"
+            at = ANSWER.index("The first") + 10
+            return await (await client.post(f"/api/listen?interrupted={entry['id']}&at={at}", data=silent_wav(), headers=AUTH)).json()
+
+    said = run(go())
+    assert said["text"] == "the pending id?" and "echo" not in said

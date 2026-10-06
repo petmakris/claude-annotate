@@ -36,6 +36,9 @@ svg{display:block;flex:none}
 .app:not([data-state="idle"]) .frame::before{opacity:1;animation:orbit 4s linear infinite}
 .app:not([data-state="idle"]) .frame::after{opacity:1}
 .app[data-state="working"] .frame::before{animation-duration:1.6s}
+/* live and listening, nobody talking: a steady green edge, so the open microphone shows from across the room */
+.app[data-live][data-state="idle"] .frame{--ring:var(--good)}
+.app[data-live][data-state="idle"] .frame::before{opacity:.7;animation:none;background:var(--ring)}
 .stage{position:relative;height:100%;overflow:hidden;background:var(--bg);display:grid}
 .stagewrap{position:relative;min-height:0;display:grid}
 #stage{width:100%;height:100%;border:0;display:block;background:var(--bg)}

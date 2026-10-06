@@ -167,7 +167,11 @@ let subsOff = store.get("subsOff", false);
 let talkMode = store.get("talkMode", "manual") === "live" ? "live" : "manual";  // live: the microphone stays open
 let barge = store.get("barge", "talk") === "keyword" ? "keyword" : "talk";    // how live speech interrupts an answer
 let endPause = [800, 1200, 2000].includes(store.get("endPause", 1200)) ? store.get("endPause", 1200) : 1200;
-let live = null;            // the open microphone of live mode, while it listens  // the subtitles were hidden: the pill's captions button brings them back
+let live = null;            // the open microphone of live mode, while it listens
+let held = null;            // the answer the user's speech is over: ducked, paused, or waiting after a cue word
+let deferred = null;        // a new answer that came while the user was talking: it plays once they are done
+let liveNote = "";          // why live mode is not listening, when it stopped by itself
+let liveFlash = null;       // a short-lived line: {text, until}  // the subtitles were hidden: the pill's captions button brings them back
 
 // ---- the conversation --------------------------------------------------
 // Keyed: each entry keeps its element until what it shows changes, so a new entry leaves the others
@@ -342,7 +346,10 @@ function statusText() {
   if (recorder) return null;
   if (live && live.speech) return {text: "Hearing you…"};
   if (live && live.suspended) return {text: "Click anywhere to start listening.", warn: true};
-  if (live && live.armed && !busy) return {text: "Listening. Go ahead."};
+  if (live && live.parked) return {text: live.parked === "floor" ? "Listening in another call. Press the mic to listen here."
+    : "Listening on another screen. Press the mic to listen here."};
+  if (held && held.armed && !busy) return {text: "Listening. Go ahead."};
+  if (liveFlash && Date.now() < liveFlash.until && !busy) return {text: liveFlash.text};
   if (busy) return {text: "Turning your words into text…", shimmer: true};
   if (view.ended) return {text: closed ? "Closed. You can close this tab." : "The call has ended: " + view.ended + ". Answers can still be replayed."};
   if (view.stalled) return {text: "Claude has not picked this up yet. Check the terminal: the session may be waiting for a permission.", warn: true};
@@ -350,6 +357,8 @@ function statusText() {
     const run = view.activity.filter(a => a.state === "running").pop();
     return {text: run ? run.label + " · " + Math.round(run.seconds) + "s" : "Claude is working…", shimmer: true};
   }
+  // Live mode always says whether it listens: from across the room the mic button alone is too small.
+  if (talkMode === "live") return live ? (shownAnswer() ? null : {text: "Listening."}) : {text: liveNote || "Not listening. Press the mic to listen."};
   return null;
 }
 function appState() {
@@ -360,11 +369,12 @@ function appState() {
 }
 function paintPill() {
   const rec = !!recorder, ended = !!view.ended, shown = shownAnswer();
-  $("talk").hidden = ended; $("talk").disabled = busy; $("talk").classList.toggle("busy", busy);
-  const liveLabel = live ? "Stop listening" : "Listen";
+  const liveMode = talkMode === "live";
+  $("talk").hidden = ended; $("talk").disabled = busy && !liveMode; $("talk").classList.toggle("busy", busy && !liveMode);
+  const liveLabel = !live ? "Listen" : live.suspended ? "Start listening" : live.parked ? "Listen here" : "Stop listening";
   $("talk").setAttribute("aria-label", rec ? "Send" : talkMode === "live" ? liveLabel : "Talk");
   $("talk").dataset.tip = rec ? "Send" : talkMode === "live" ? liveLabel : "Talk";
-  $("talk").classList.toggle("live", talkMode === "live"); $("talk").classList.toggle("muted", talkMode === "live" && !live);
+  $("talk").classList.toggle("live", liveMode); $("talk").classList.toggle("muted", liveMode && !listening());
   $("cancel").hidden = !rec; $("send").hidden = !rec;
   $("hist").hidden = rec; $("compose").hidden = rec || ended; $("sendtext").hidden = rec || ended;
   $("back").hidden = rec || !current;
@@ -396,6 +406,7 @@ function paintAll() {
   if (view.ended && live) { stopLive(); return; }  // stopLive paints again
   paintSubs(); paintPill(); paintSettings();
   $("app").dataset.state = appState(); $("app").toggleAttribute("data-ended", !!view.ended);
+  $("app").toggleAttribute("data-live", listening());
 }
 
 // ---- the connection ------------------------------------------------------
@@ -467,10 +478,10 @@ function takeFloor(heard) {
 }
 function topicOf(id) { const c = (view.calls || []).find(x => x.id === id); return c ? c.topic : ""; }
 function yieldFloor(id) {
-  const busyHere = !audio.paused || !!recorder;
+  const busyHere = !audio.paused || !!recorder || listening();
   if (!audio.paused) audio.pause();
   if (recorder) { stopRecording(); setMode("idle"); }
-  if (live) stopLive();
+  if (live) parkLive("floor");
   if (busyHere) { const t = topicOf(id); showError("Paused: you are talking in " + (t ? "“" + t + "”" : "another call") + "."); }
 }
 if (floorChannel) floorChannel.onmessage = ev => { const id = ev.data && ev.data.call; if (id && id !== CFG.call) yieldFloor(id); };
@@ -545,7 +556,8 @@ function maybeAutoplay() {
   const last = fresh[fresh.length - 1];
   // Only the call the user is talking in reads new answers aloud; another call's wait, marked new.
   const mine = !view.floor_call || view.floor_call === CFG.call;
-  if (!current || audio.paused || audio.ended) load(last, autoplay && !recorder && !(live && (live.speech || live.armed)) && mine);
+  if (userBusy()) { if (mine && autoplay) deferred = last; return; }  // played once they are done (settle)
+  if (!current || audio.paused || audio.ended) load(last, autoplay && !recorder && mine);
 }
 // ---- the word being said ------------------------------------------------
 function playFrom(e, t) {
@@ -642,6 +654,7 @@ audio.addEventListener("ended", () => { if (current) syncStage(view.entries.find
 audio.addEventListener("seeking", () => { cueSync = true; });
 function skip(by) { audio.currentTime = Math.min(Math.max(0, audio.currentTime + by), audio.duration || 0); paintPill(); }
 function togglePlay() {
+  release();
   if (!current) { const e = lastAnswer(); if (e) load(e, true); return; }
   if (audio.paused) audio.play().catch(() => {}); else audio.pause();
 }
@@ -689,7 +702,7 @@ function jump(dir) {
 // The keys steer the answer wherever nothing is being typed: on this page, on the stage (which
 // passes them on as stage:key), and in the text field while it is empty. False: the key was not used.
 function mediaKey(key) {
-  if (recorder || busy || openPop) return false;
+  if (recorder || openPop || (busy && talkMode !== "live")) return false;
   if (key === " ") {
     const e = shownAnswer();
     if (!current && !(e && e.speech === "ready")) return false;
@@ -850,42 +863,87 @@ document.addEventListener("keydown", ev => {
 });
 
 // ---- live mode: the microphone stays open --------------------------------------------
-// A loudness detector notices speech (keeping the moment before it, so the first syllable is kept) and
-// sends it after a pause. Speech over an answer interrupts it: with "By talking" the answer pauses at
-// once and resumes if nothing was said; with "Say listen" it goes on unless the words start with
-// "listen", and "listen" alone stops it and waits. The server drops the answer's own words heard
-// back through a speaker, and tells Claude how far the user had heard.
-const LIVE = {chunk: 2048, preMs: 400, minRms: 0.012, startMs: 160, startOverMs: 320, overGain: 1.8, minSpeechMs: 350, maxMs: 60000};
+// A loudness detector notices speech, keeping the moment before it so the first syllable is kept, and
+// sends it after a pause. Only voiced time counts, against a noise floor that follows the room.
+// Speech over an answer holds it (`held`): with "By talking" the voice drops at once and stops after
+// LIVE.pauseMs of real speech; with cue words it plays on unless the words start with "wait",
+// "listen" and the like, and a cue alone stops it and waits. Whatever was said settles the hold: a
+// turn leaves the answer stopped, nothing (a cough, "mm-hm", its own echo) resumes it from the start
+// of its sentence. One page listens per call and one call per browser: the others park.
+const LIVE = {chunk: 2048, preMs: 400, minRms: 0.012, startMs: 160, startOverMs: 320, overGain: 1.8, minSpeechMs: 350,
+              floorMs: 8000, pauseMs: 700, duck: 0.2, maxMs: 60000, hardMs: 420000, armedMs: 6000, sleepMs: 600000};
 const liveQueue = [];
-let liveSending = false;
+let liveSending = false, wokeAt = 0;
+const PAGE_ID = Math.random().toString(36).slice(2);
+const liveChannel = "BroadcastChannel" in window ? new BroadcastChannel("talk-live") : null;
+const listening = () => !!live && !live.suspended && !live.parked;
+// The user is talking, or what they said is on its way: new answers wait and the held answer stays held.
+const userBusy = () => !!held || !!(live && live.speech) || liveQueue.length > 0 || liveSending;
+const later = ms => new Promise(ok => setTimeout(ok, ms));
+
 async function startLive() {
   if (live || view.ended) return;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { showError("This page cannot reach a microphone. Open it over https or on localhost."); return; }
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}}); }
   catch (err) { showError("No microphone: " + err.message); return; }
-  if (live || talkMode !== "live") { stream.getTracks().forEach(t => t.stop()); return; }
+  if (live || talkMode !== "live" || view.ended) { stream.getTracks().forEach(t => t.stop()); return; }
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
   const source = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(LIVE.chunk, 1, 1);
-  live = {stream, ctx, source, node, rate: ctx.sampleRate, noise: 0.01, pre: [], loud: 0, quiet: 0,
-          speech: false, chunks: [], ms: 0, over: null, paused: false, armed: null, suspended: ctx.state === "suspended"};
+  live = {stream, ctx, source, node, rate: ctx.sampleRate, recent: [], pre: [], loud: 0, quiet: 0, voiced: 0, ms: 0,
+          speech: false, chunks: [], floorTaken: false, parked: null, lastVoice: performance.now(),
+          suspended: ctx.state === "suspended"};
   node.onaudioprocess = ev => liveChunk(new Float32Array(ev.inputBuffer.getChannelData(0)));
   source.connect(node); node.connect(ctx.destination);
-  if (live.suspended) {
-    // Chrome starts audio only after a click on the page: one click (or remote press) and it listens.
-    const wake = () => { if (!live) return; live.ctx.resume().then(() => { if (live) { live.suspended = false; paintAll(); } }); };
-    document.addEventListener("pointerdown", wake, {once: true});
-    document.addEventListener("keydown", wake, {once: true});
-  }
-  paintAll();
+  const track = stream.getAudioTracks()[0];
+  if (track) track.onended = () => { if (live && live.stream === stream) stopLive("The microphone was lost. Press the mic to listen again."); };
+  liveNote = "";
+  claimLive();
 }
-function stopLive() {
+function stopLive(note = "") {
   const l = live; live = null;
   if (!l) return;
   l.node.disconnect(); l.source.disconnect(); l.stream.getTracks().forEach(t => t.stop()); l.ctx.close();
   levels.fill(0); $("app").style.removeProperty("--lvl");
+  liveQueue.length = 0;           // said but not yet sent: dropped with the microphone
+  liveNote = note;
+  if (held) held.armed = false;
+  settle();                       // an answer the speech was holding goes on
   paintAll();
 }
+// Chrome starts audio only after a click or key on the page. A click in the stage lands in its frame,
+// and shows here only as this window losing focus.
+function wakeLive() {
+  if (!live || !live.suspended) return;
+  wokeAt = performance.now();
+  live.ctx.resume().then(() => { if (live && live.ctx.state === "running") { live.suspended = false; paintAll(); } }).catch(() => {});
+}
+document.addEventListener("pointerdown", wakeLive, true);
+document.addEventListener("keydown", wakeLive, true);
+window.addEventListener("blur", wakeLive);
+// This page listens: other pages of this call stop (a TV and a laptop both open), and other calls yield
+// the floor (one voice is never sent to two calls).
+function claimLive() {
+  if (!live) return;
+  live.parked = null;
+  if (liveChannel) liveChannel.postMessage({call: CFG.call, page: PAGE_ID});
+  if (view.floor_call && view.floor_call !== CFG.call) takeFloor(null);
+  paintAll();
+}
+function parkLive(why) {
+  if (!live) return;
+  if (live.speech) { live.speech = false; live.chunks = []; }
+  live.parked = why;
+  settle(); paintAll();
+}
+if (liveChannel) liveChannel.onmessage = ev => {
+  const m = ev.data || {};
+  if (m.call === CFG.call && m.page !== PAGE_ID && live && !live.parked) parkLive("screen");
+};
+// Coming back to this page (a tab, a window, the TV's input) is the user choosing to talk here.
+window.addEventListener("focus", () => { if (live && live.parked) claimLive(); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && live && live.parked) claimLive(); });
+
 // The character the voice has reached in the answer being played: how far the user heard.
 function heardAt() {
   const e = current && (view.entries.find(x => x.id === current.id) || current);
@@ -893,40 +951,63 @@ function heardAt() {
   const k = wordAt(e, audio.currentTime);
   return k < 0 ? 0 : e.words[k][1];
 }
+// Where an interrupted answer picks up again: the start of the sentence it was in.
+function sentenceStart() {
+  const e = current && (view.entries.find(x => x.id === current.id) || current), t = audio.currentTime || 0;
+  const starts = e && sentenceTimes(e);
+  if (!starts) return Math.max(0, t - 2);
+  const i = starts.findLastIndex(s => s <= t + 0.05);
+  return i < 0 ? 0 : starts[i];
+}
 function liveChunk(d) {
   const l = live;
   if (!l || l.suspended) return;
   let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
-  const lvl = Math.sqrt(sum / d.length), ms = d.length / l.rate * 1000;
+  const lvl = Math.sqrt(sum / d.length), ms = d.length / l.rate * 1000, now = performance.now();
   levels.push(Math.min(1, lvl * 8)); levels.shift();
   if (!meterRaf) meterRaf = requestAnimationFrame(paintMeter);
-  const over = !!current && !audio.paused;
-  const thr = Math.max(LIVE.minRms, l.noise * 3) * (over ? LIVE.overGain : 1);
+  if (l.parked) return;
+  // The floor is the quietest moment of the last few seconds: a fan or music switched on raises it,
+  // so a louder room never reads as speech that does not end.
+  l.recent.push(lvl); if (l.recent.length * ms > LIVE.floorMs) l.recent.shift();
+  const over = !!held || (!!current && !audio.paused);
+  const thr = Math.max(LIVE.minRms, Math.min(...l.recent) * 3) * (over ? LIVE.overGain : 1);
   if (!l.speech) {
     l.pre.push(d); if (l.pre.length * ms > LIVE.preMs) l.pre.shift();
-    if (lvl > thr) { l.loud += ms; if (l.loud >= (over ? LIVE.startOverMs : LIVE.startMs)) speechStarts(over); }
-    else { l.loud = 0; l.noise = Math.max(0.002, l.noise * 0.97 + lvl * 0.03); }
+    if (lvl > thr) { l.loud += ms; if (l.loud >= (over ? LIVE.startOverMs : LIVE.startMs)) speechStarts(); }
+    else l.loud = 0;
+    if (now - l.lastVoice > LIVE.sleepMs && !userBusy() && !busy) stopLive("Asleep after 10 minutes of quiet. Press the mic to listen.");
     return;
   }
   l.chunks.push(d); l.ms += ms;
-  l.quiet = lvl < thr * 0.7 ? l.quiet + ms : 0;
-  if (l.quiet >= endPause || l.ms >= LIVE.maxMs) speechEnds();
+  if (lvl >= thr * 0.7) { l.voiced += ms; l.quiet = 0; l.lastVoice = now; } else l.quiet += ms;
+  if (!l.floorTaken && l.voiced >= LIVE.minSpeechMs) {   // a cough never takes the floor from another call
+    l.floorTaken = true;
+    if (view.floor_call !== CFG.call) takeFloor(null);
+  }
+  if (held && held.ducked && !held.paused && l.voiced >= LIVE.pauseMs) { audio.pause(); held.paused = true; paintAll(); }
+  // A long turn is cut only at a pause in it, past the cap; the hard cap keeps the recording under the server's limit.
+  if (l.quiet >= endPause || (l.ms >= LIVE.maxMs && l.quiet > 0) || l.ms >= LIVE.hardMs) speechEnds();
 }
-function speechStarts(over) {
+function speechStarts() {
   const l = live;
-  l.speech = true; l.chunks = l.pre.splice(0); l.ms = l.chunks.length * LIVE.chunk / l.rate * 1000; l.quiet = 0; l.loud = 0;
-  l.over = l.armed ? l.armed : over ? {id: current.id, at: heardAt()} : null;
-  l.paused = false;
-  if (over && barge === "talk") { audio.pause(); l.paused = true; }
-  if (view.floor_call !== CFG.call) takeFloor(null);
+  // The loud run that started the speech is speech already: it counts as voiced time.
+  l.speech = true; l.chunks = l.pre.splice(0); l.ms = l.loud; l.voiced = l.loud; l.quiet = 0; l.loud = 0; l.floorTaken = false;
+  l.lastVoice = performance.now();
+  if (held && held.armed) { clearTimeout(held.armTimer); held.armTimer = 0; }   // the question after a cue word
+  else if (!held && current && !audio.paused) {
+    held = {id: current.id, at: heardAt(), from: sentenceStart(), ducked: false, paused: false, armed: false, armTimer: 0};
+  }
+  if (held && barge === "talk" && !held.ducked && !held.paused && !audio.paused) { audio.volume = LIVE.duck; held.ducked = true; }
   paintAll();
 }
 function speechEnds() {
   const l = live;
-  const u = {chunks: l.chunks, ms: l.ms - l.quiet, rate: l.rate, over: l.over, paused: l.paused,
-             gate: barge === "keyword" && !!l.over && !l.armed};
-  l.speech = false; l.chunks = []; l.ms = 0; l.quiet = 0; l.over = null; l.paused = false;
-  if (u.ms < LIVE.minSpeechMs) { if (u.paused) audio.play().catch(() => {}); paintAll(); return; }
+  const u = {chunks: l.chunks, rate: l.rate, over: held ? {id: held.id, at: held.at} : null,
+             gate: barge === "keyword" && !!held && !held.armed};
+  const voiced = l.voiced;
+  l.speech = false; l.chunks = []; l.ms = 0; l.voiced = 0; l.quiet = 0;
+  if (voiced < LIVE.minSpeechMs) { settle(); return; }   // a click or a breath: nothing to send
   liveQueue.push(u); paintAll(); drainLive();
 }
 async function drainLive() {
@@ -934,40 +1015,89 @@ async function drainLive() {
   liveSending = true;
   while (liveQueue.length) await sendLive(liveQueue.shift());
   liveSending = false;
+  settle();
 }
+// What happens to a held answer once nothing more is being said or sent: a newer answer plays, else the
+// held one picks up from the start of its sentence. An answer that was stopped for a question is not held.
+function settle() {
+  if ((live && live.speech) || liveQueue.length || liveSending || (held && held.armed)) return;
+  const h = held; held = null;
+  audio.volume = 1;
+  if (deferred) { const e = deferred; deferred = null; load(view.entries.find(x => x.id === e.id) || e, true); return; }
+  if (h && h.paused && current && current.id === h.id) { audio.currentTime = h.from; audio.play().catch(() => {}); }
+  paintAll();
+}
+// The user took the player in hand (Space, a button): whatever speech was holding lets go of it.
+function release() {
+  if (!held) return;
+  clearTimeout(held.armTimer); held = null; audio.volume = 1;
+}
+// A soft tone in the headphones: a higher one when a cue word stopped the answer, a lower one when a turn went.
+function chime(freq) {
+  const ctx = live && live.ctx;
+  if (!ctx || ctx.state !== "running") return;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.frequency.value = freq; g.gain.setValueAtTime(0.0001, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.05, ctx.currentTime + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
+  o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.2);
+}
+function flash(text) { liveFlash = {text, until: Date.now() + 2500}; setTimeout(paintAll, 2600); }
 async function sendLive(u) {
   const q = new URLSearchParams({lang: language});
   if (u.over) { q.set("interrupted", u.over.id); q.set("at", u.over.at); }
-  if (u.gate) q.set("keyword", "listen");
+  if (u.gate) q.set("keyword", "1");
   if (!u.gate) { busy = true; paintAll(); }
-  let body = {};
-  try {
-    const resp = await api("/api/listen?" + q, {method: "POST", body: toWav(u.chunks, u.rate), headers: {"Content-Type": "audio/wav"}});
-    body = await resp.json().catch(() => ({}));
-    if (!resp.ok) showError(body.error || "Sending failed: HTTP " + resp.status);
-  } catch (err) { showError("Sending failed: " + err.message); }
+  const wav = toWav(u.chunks, u.rate);
+  let body = null;
+  // A restarting server (503) or a dropped connection is tried again for a while; what still does not
+  // go is kept for Send again, as a recording is in Press to talk.
+  for (let tries = 0; ; tries++) {
+    try {
+      const resp = await api("/api/listen?" + q, {method: "POST", body: wav, headers: {"Content-Type": "audio/wav"}});
+      if (resp.status === 503 && tries < 5) { await later(1000 * 2 ** tries); continue; }
+      const got = await resp.json().catch(() => ({}));
+      if (resp.ok) body = got;
+      else { showError(got.error || "Sending failed: HTTP " + resp.status); if (![410, 413].includes(resp.status) && !u.gate) unsent = wav; }
+    } catch (err) {
+      if (tries < 3) { await later(1000 * 2 ** tries); continue; }
+      showError("Sending failed: " + err.message); if (!u.gate) unsent = wav;
+    }
+    break;
+  }
   busy = false;
-  if (body.keyword) {
-    // "listen" alone: the answer stops where it was, and the next thing said is the turn.
-    if (!audio.paused) audio.pause();
-    if (live) live.armed = u.over;
-  } else if (body.entry) {
-    if (live) live.armed = null;
+  if (body && body.keyword) {
+    // A cue word alone: the answer stops where it was, and what is said next is the question.
+    if (held) {
+      audio.pause(); held.paused = true; held.armed = true; audio.volume = 1;
+      held.armTimer = setTimeout(() => { if (held && held.armed && !(live && live.speech)) { held.armed = false; settle(); } }, LIVE.armedMs);
+    }
+    chime(880);
+  } else if (body && body.entry) {
+    if (held) { audio.pause(); clearTimeout(held.armTimer); held = null; }
+    audio.volume = 1; deferred = null;
+    chime(520);
     view.v = -1; if (wake) wake();
-  } else if (u.paused && !(live && live.armed)) audio.play().catch(() => {});
+  } else if (body && !body.ignored && !u.over) flash("Didn't catch that.");
   paintAll();
 }
 function setTalkMode(mode) {
   talkMode = mode; store.set("talkMode", mode);
-  if (mode === "live") startLive(); else stopLive();
+  if (mode === "live") { if (recorder) sendRecording(); startLive(); }   // an open recording goes first, once
+  else stopLive();
   paintAll();
 }
 for (const b of $("tmode").children) b.onclick = () => setTalkMode(b.dataset.choice);
 for (const b of $("barge").children) b.onclick = () => { barge = b.dataset.choice; store.set("barge", barge); paintSettings(); };
 for (const b of $("endpause").children) b.onclick = () => { endPause = +b.dataset.choice; store.set("endPause", endPause); paintSettings(); };
 
-$("talk").onclick = () => talkMode === "live" ? (live ? stopLive() : startLive())
-  : recorder ? sendRecording() : startRecording();
+// In live mode the mic button is the switch for listening. While Chrome holds the audio back it starts
+// it, and the same press must not then switch listening off.
+function liveButton() {
+  if (live && (live.suspended || performance.now() - wokeAt < 1000)) { wakeLive(); return; }
+  if (live && live.parked) { claimLive(); return; }
+  if (live) stopLive(); else startLive();
+}
+$("talk").onclick = () => talkMode === "live" ? liveButton() : recorder ? sendRecording() : startRecording();
 $("send").onclick = sendRecording;
 $("cancel").onclick = () => { stopRecording(); setMode("idle"); };
 $("sendtext").onclick = sendText;

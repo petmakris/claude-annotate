@@ -696,6 +696,7 @@ def _live_browser(pw, tmp_path):
     return pw.chromium.launch(args=[*FAKE_MIC, f"--use-file-for-fake-audio-capture={_mic_file(tmp_path / 'mic.wav')}"])
 
 
+@pytest.mark.xdist_group("live-mic")
 def test_live_mode_sends_what_is_said_after_a_pause_with_no_button(tmp_path, pw):
     with served(tmp_path) as (url, call, loop, fake):
         browser = _live_browser(pw, tmp_path)
@@ -715,6 +716,7 @@ def test_live_mode_sends_what_is_said_after_a_pause_with_no_button(tmp_path, pw)
             browser.close()
 
 
+@pytest.mark.xdist_group("live-mic")
 def test_live_speech_over_an_answer_pauses_it_and_noise_lets_it_go_on(tmp_path, pw):
     with served(tmp_path) as (url, call, loop, fake):
         fake.seconds = 30.0
@@ -727,7 +729,10 @@ def test_live_speech_over_an_answer_pauses_it_and_noise_lets_it_go_on(tmp_path, 
             on_loop(loop, call.answer("A long answer that keeps going. " * 6))
             page.wait_for_function(PLAYING, timeout=5000)
             page.wait_for_function(PAUSED, timeout=8000)          # cut in on
-            page.wait_for_function(PLAYING, timeout=8000)         # nothing said: it resumes
+            try:
+                page.wait_for_function(PLAYING, timeout=8000)     # nothing said: it resumes
+            except Exception:
+                raise AssertionError(page.evaluate("({held, deferred: !!deferred, speech: live && live.speech, q: liveQueue.length, sending: liveSending, busy, vol: audio.volume, t: audio.currentTime, paused: audio.paused, cur: current && current.id})"))
             fake.heard = "hold on, why?"
             page.wait_for_function(PAUSED, timeout=10000)
             turn = on_loop(loop, call.turns.next(timeout=10))
