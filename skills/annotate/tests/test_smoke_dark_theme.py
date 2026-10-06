@@ -20,7 +20,7 @@ from skills.annotate.tests.page_source import SCRIPT_JS, STYLE_CSS
 STATIC = Path(__file__).resolve().parents[1] / "static"
 CORE = (STATIC / "core.css").read_text()
 CSS = STYLE_CSS.read_text()
-DIAGRAM = (STATIC / "diagram.css").read_text()
+DIAGRAM = (STATIC / "visuals.css").read_text() + (STATIC / "diagram.css").read_text()
 JS = SCRIPT_JS.read_text()
 EXPORT = (STATIC / "export.js").read_text()
 

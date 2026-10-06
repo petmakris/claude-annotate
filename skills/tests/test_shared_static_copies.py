@@ -41,6 +41,7 @@ EXPECTED = {
     "fonts/Geist-Variable.woff2": ["stage"],
     "fonts/GeistMono-Variable.woff2": ["stage"],
     "fonts/GEIST_LICENSE.txt": ["stage"],
+    "visuals.css": ["annotate", "stage"],
     "wc-threads.js": ["dataflow"],
     "wc-boot.js": ["annotate", "dataflow", "deck"],
     "wc-open.js": ["annotate", "dataflow", "specimen"],

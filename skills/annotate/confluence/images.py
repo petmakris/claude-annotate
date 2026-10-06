@@ -3,8 +3,8 @@
 The SVG annotate stores is deliberately style-free: `class="actor-box
 tone-edge"`, and the colours live in the stylesheet. That is right for a page
 that themes its diagrams, and fatal for one lifted out of it — so this module
-rebuilds the missing half, inlining core.css (palette, type), diagram.css
-(tone tokens) and the two woff2 faces as data URIs.
+rebuilds the missing half, inlining core.css (palette, type), visuals.css
+(the drawing), diagram.css (tone tokens) and the two woff2 faces as data URIs.
 
 Chromium, not librsvg: diagram.css uses `color-mix()`, which librsvg does not
 implement. `rsvg-convert` would not fail — it would draw the washes wrong and
@@ -70,7 +70,7 @@ def _intrinsic_size(svg: str) -> tuple[str, str]:
 
 def standalone_html(svg: str) -> str:
     """The SVG with everything it needs to look like it does on the page."""
-    css = (STATIC / "core.css").read_text() + (STATIC / "diagram.css").read_text()
+    css = "".join((STATIC / name).read_text() for name in ("core.css", "visuals.css", "diagram.css"))
     css = _FONT_FACE_RE.sub("", css)
     width, height = _intrinsic_size(svg)
     wrapped = "<div style='width:%spx;height:%spx'>%s</div>" % (width, height, svg)

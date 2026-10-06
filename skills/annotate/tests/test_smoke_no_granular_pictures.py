@@ -26,6 +26,12 @@ from skills.annotate.tests.page_source import SCRIPT_JS, STYLE_CSS
 REPO = Path(__file__).resolve().parents[3]
 STATIC = REPO / "skills" / "annotate" / "static"
 DIAGRAM_CSS = STATIC / "diagram.css"
+VISUALS_CSS = STATIC / "visuals.css"
+
+
+def _diagram_css() -> str:
+    """How the page draws diagrams: the shared visuals.css, then annotate's diagram.css."""
+    return VISUALS_CSS.read_text() + DIAGRAM_CSS.read_text()
 
 
 def _strip_comments(js: str) -> str:
@@ -74,7 +80,7 @@ def test_pflow_rows_are_not_comment_targets():
 
 
 def test_pictures_do_not_advertise_a_click_they_no_longer_answer():
-    css = DIAGRAM_CSS.read_text()
+    css = _diagram_css()
     for rule in (".annotate-seq .step-row { cursor: pointer; }",
                  ".annotate-flow .node { cursor: pointer; }"):
         assert rule not in css, f"{rule} promises a click nothing answers"
@@ -87,7 +93,7 @@ def test_engaged_and_focus_state_survives():
     """Comments made before the rule changed still anchor by step id, and the
     row/node they point at still has to light up when their card is focused —
     otherwise an existing session's cards lose their target."""
-    css = DIAGRAM_CSS.read_text()
+    css = _diagram_css()
     assert '.annotate-seq .step-row[data-card-focus]' in css
     assert '.annotate-flow .node[data-card-focus]' in css
     assert '.annotate-seq .step-row[data-engaged-type="comment"]' in css
@@ -102,7 +108,7 @@ def test_the_badge_is_the_one_licensed_click_and_its_answer_ships_with_it():
     must not have one. The licence is conditional: if the key ever stops being
     painted alongside the grid, the badge becomes exactly the dead affordance
     the rest of this file exists to prevent."""
-    css = DIAGRAM_CSS.read_text()
+    css = _diagram_css()
     assert ".annotate-seq .badge-hit    { cursor: pointer; outline: none; }" in css, \
         "the badge lost the pointer cursor for the click it does answer"
     assert ".annotate-seq .step-row { cursor: pointer; }" not in css, \
@@ -136,7 +142,7 @@ def test_the_key_cannot_widen_the_card_it_sits_in():
     A key row that bleeds past it does not bleed, it scrolls: the first cut
     carried `margin: 0 -10px` and put a 1111px row inside a 1091px card, giving
     every sequence card 10px of horizontal scroll for nothing."""
-    css = DIAGRAM_CSS.read_text()
+    css = _diagram_css()
     block = css.split(".seq-key-row {", 1)[1].split("}", 1)[0]
     assert "margin" not in block, \
         f"a margin on .seq-key-row can push it past the scroll container: {block.strip()!r}"

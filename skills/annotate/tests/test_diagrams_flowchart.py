@@ -310,7 +310,7 @@ def test_stylesheet_caps_the_flowchart_rather_than_stretching_it():
     import re
 
     css = (pathlib.Path(__file__).resolve().parents[1]
-           / "static" / "diagram.css").read_text()
+           / "static" / "visuals.css").read_text()
     rule = [l for l in css.splitlines() if l.startswith(".annotate-flow {")][0]
     assert "max-width: 100%" in rule
     # a bare `width: 100%` is the stretch this rule exists to avoid

@@ -164,7 +164,7 @@ body.exported .export-foot {
   const CODE_FAMILIES = { monaspace: "Monaspace Radon", jetbrains: "JetBrains Mono",
                           system: null };
 
-  // Diagram text is pinned to Monaspace Radon in diagram.css and does NOT
+  // Diagram text is pinned to Monaspace Radon in visuals.css and does NOT
   // follow the reader's code font, because the SVG around it was measured for
   // that typeface: skills/_shared/visuals/text_metrics.py sizes every box,
   // lane and label from an advance width of 0.62em, which is Monaspace's.

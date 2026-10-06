@@ -41,6 +41,7 @@ const CSS = [
   "style-selection.css",
   "style-read-aloud.css",
   "style-edit.css",
+  "visuals.css",
   "diagram.css",
   "popover.css",
   "code-theme.css",

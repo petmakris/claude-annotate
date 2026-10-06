@@ -67,14 +67,15 @@ Long responses (multi-step plans, analyses, lists of findings) get pushed to a b
 `diagrams/text_metrics.py` measures text with the **real advance widths of the
 bundled fonts**, so nodes, pills and canvases are sized from their content
 rather than from fixed constants. The widths live in the generated
-`diagrams/font_metrics.py`; regenerate them after changing a bundled font:
+`skills/_shared/visuals/font_metrics.py`; regenerate them after changing a bundled font:
 
     pip install fonttools brotli   # build-time only, never a runtime dependency
     python tools/gen_font_metrics.py \
       skills/_shared/static/fonts \
       skills/_shared/visuals/font_metrics.py
 
-If a font size changes in `static/diagram.css`, mirror it in `STYLES` in
+If a font size changes in `static/visuals.css` (its source is
+`skills/_shared/static/visuals.css`), mirror it in `_styles` in
 `text_metrics.py` — that table is the only place layout learns about type.
 
 `tests/test_flowchart_geometry.py` and `tests/test_sequence_geometry.py` assert
