@@ -415,3 +415,58 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
   .ln-cur .ln-lbl b{font-size:16px}
 }
 @media (prefers-reduced-motion:reduce){.ln-enter .ln-line,.ln-enter .ln-dot,.ln-enter .ln-loop{animation:none}}
+
+/* A table board, the wide grid: it spans the stage, row names in bold, headers in small capitals, code
+   in chips. Rows arrive as they are said; the one being said is large on an amber band, the ones
+   before it step back, and a cell that is pointed at gets a spot of its own. */
+.pbody>.md.grid{align-self:stretch;width:100%;margin-inline:0}  /* not centred and shrunk to its content */
+.md.grid>.tablewrap{width:100%;border-radius:16px}
+.md.grid table{width:100%;font:16px/1.4 var(--sans)}
+.md.grid thead th{padding:12px 20px;font:600 12px/1.4 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.md.grid td{padding:12px 20px;vertical-align:middle;transition:font-size .35s cubic-bezier(.2,.7,.2,1),padding .35s,background-color .3s,color .3s}
+.md.grid td.key{font-weight:600;color:var(--ink);width:20%;white-space:normal}
+.md.grid tbody tr:nth-child(even){background:none}
+.md.grid tbody tr.k-hidden{display:none}
+.md.grid.g-on tbody tr:not(.g-cur) td{color:var(--muted);font-size:15px}
+.md.grid tbody tr.g-cur td{font-size:21px;padding-top:18px;padding-bottom:18px;background:var(--hl-soft)}
+.md.grid tbody tr.g-cur td:first-child{box-shadow:inset 4px 0 0 var(--claude)}
+.md.grid.k-dim tbody tr:not(.k-focus){opacity:1}
+.md.grid tbody tr td.k-focus,.md.grid tbody tr.g-cur td.k-focus{background:var(--word);color:var(--ink);font-weight:600}  /* over the row's band */
+.md.grid code{font-size:.86em}
+@media (max-width:600px){.md.grid tbody tr.g-cur td{font-size:17px}}
+
+/* The map: a flowchart the stage draws itself (map.js). Parts not said yet are faint dashed ghosts;
+   the part being said is a large card with its detail; the arrow that just arrived draws in. */
+.visual.map{position:relative;padding:0;border:0;background:none;flex:0 0 auto;align-self:stretch}
+.map .t-plain{--tc:var(--t-plain);--tb:var(--row-alt)} .map .t-edge{--tc:var(--t-edge);--tb:var(--t-edge-bg)}
+.map .t-internal{--tc:var(--t-internal);--tb:var(--t-internal-bg)} .map .t-good{--tc:var(--t-good);--tb:var(--t-good-bg)}
+.map .t-hot{--tc:var(--t-hot);--tb:var(--t-hot-bg)}
+.map .m-edges{position:absolute;left:0;top:0;width:100%;overflow:visible}
+.map .m-line{fill:none;stroke:var(--tc);stroke-width:2;transition:stroke-width .3s}
+.map .m-tip{fill:var(--tc)}
+.map .m-elabel rect{fill:var(--bg);stroke:var(--line)}
+.map .m-elabel text{font:500 12.5px var(--sans);fill:var(--muted);text-anchor:middle}
+.map .m-edge.m-cur .m-line{stroke-width:3.5}
+.map .m-edge.m-cur .m-elabel text{font-weight:600;fill:var(--ink)}
+.map .m-line.m-draw{stroke-dasharray:var(--len);stroke-dashoffset:var(--len);animation:m-draw .7s cubic-bezier(.4,0,.2,1) forwards}
+@keyframes m-draw{to{stroke-dashoffset:0}}
+.map .m-dot{fill:var(--tc)}
+.map .m-node{position:absolute;transform:translate(-50%,-50%);width:180px;min-height:52px;box-sizing:border-box;padding:9px 14px;border-radius:14px;
+  background:var(--panel);border:1.5px solid var(--tc);text-align:center;display:flex;flex-direction:column;justify-content:center;
+  transition:width .4s cubic-bezier(.2,.7,.2,1),padding .4s,background-color .3s,box-shadow .3s,opacity .4s;z-index:1}
+.map .m-node b{font:600 15px/1.25 var(--sans);color:var(--ink)}
+.map .m-node code,.map .m-node .m-sub{display:none}
+.map .m-node.m-decision{border-radius:14px 14px 14px 14px;border-width:2px;border-style:double}
+.map .m-node.m-cur{width:260px;padding:14px 18px;background:var(--tb);z-index:2;
+  box-shadow:0 0 0 5px color-mix(in srgb,var(--tc) 18%,transparent),0 18px 40px -18px rgba(15,23,42,.45)}
+.map .m-node.m-cur b{font-size:19px}
+.map .m-node.m-cur code{display:block;margin-top:4px;font:400 12px/1.4 var(--mono);color:var(--faint);overflow-wrap:anywhere}
+.map .m-node.m-cur .m-sub{display:block;margin-top:4px;font:400 13px/1.35 var(--sans);color:var(--muted)}
+/* a ghost: there, faint and dashed, until it is said */
+.map .k-hidden{opacity:.28!important;pointer-events:auto}
+.map .m-node.k-hidden{border-style:dashed;background:none}
+.map .m-node.k-hidden b{color:var(--muted)}
+.map .m-edge.k-hidden{opacity:.16!important}
+.map .m-edge.k-hidden .m-elabel{opacity:0}
+.map.k-dim .k-key:not(.k-focus):not(.k-hidden){opacity:.6}
+@media (prefers-reduced-motion:reduce){.map .m-line.m-draw{animation:none;stroke-dasharray:none}}

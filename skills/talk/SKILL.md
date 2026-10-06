@@ -77,11 +77,11 @@ Board tags are taken out of the speech and drawn on the stage beside the convers
 | code | existing code you are explaining | `[[show code: talk/live_turns.py:40-58 \| How a turn waits]]` |
 | change | after you edit a file, instead of describing the edit | `[[show change: talk/talk.py \| What I changed]]` |
 | sequence | who talks to whom, in time: a request's path, a release, an event's life | `[[show sequence \| Turn path]]` a JSON spec `[[/show]]` |
-| flowchart | a decision or a process that branches, joins or ends in outcomes | `[[show flowchart \| Floor rule]]` a JSON spec `[[/show]]` |
-| diagram | a quick sketch of how parts connect (Mermaid) | `[[show diagram \| Turn path]] graph LR; P[Page] --> Q[Queue] [[/show]]` |
+| flowchart | how parts connect, or a decision or process that branches, joins or ends in outcomes: drawn as a map | `[[show flowchart \| Floor rule]]` a JSON spec `[[/show]]` |
+| diagram | a Mermaid sketch, only for a shape the map cannot draw (a state machine, an ER model) | `[[show diagram \| States]] stateDiagram-v2 … [[/show]]` |
 | table | a comparison or a list of facts | `[[show table \| Ports]]` a markdown table `[[/show]]` |
 
-**Sequence and flowchart** are annotate's drawing tools: the stage draws them in its own type, they keep long names and versions on one line, and they step in time with your voice. Pick one by the question: two or more actors exchanging things in order is a sequence; a branch, a join or several outcomes is a flowchart; anything else that is quick to sketch is a Mermaid diagram; facts side by side are a table. A body that is not JSON is drawn as Mermaid.
+**Sequence and flowchart** are annotate's drawing tools: the stage draws them in its own type, they keep long names and versions on one line, and they step in time with your voice. Pick one by the question: two or more actors exchanging things in order is a sequence; how parts connect, a branch, a join or several outcomes is a flowchart; facts side by side are a table; Mermaid only for what neither draws. A body that is not JSON is drawn as Mermaid. On the stage a flowchart is a **map**: the whole of it shows from the start as faint dashed ghosts, and each part lights up as you reach it, the one being said drawn large with its `ref` or `method` and its `sub` under its label, so give every node a short `label` (2 to 4 words), its file or call in `ref` or `method`, and one line on what it does in `sub`. A table is a wide grid: rows arrive one per sentence, the row being said is drawn large, and you can point at one cell.
 
 The spec is annotate's: `$SKILL_DIR/../annotate/references/block-kinds/sequence.md` and `flowchart.md` beside it hold every field. The body is only the inner `spec` object, never annotate's `{"id", "kind", "spec"}` wrapper; annotate's `source` form, `views`, layout flavours and `href` do not apply here. In short:
 
@@ -101,7 +101,7 @@ On the stage a sequence unfolds as **lanes**: the actors keep their columns, eac
 
 **Pointing while you talk.**
 
-- `[[point: lines 12-14]]` before a sentence lights up those lines and dims the rest. It also takes `line N`, `row N` (counted under the header), `row "name"` (by its first cell), `node X` (a flowchart or Mermaid node id) and `step S` (a sequence step id); a lit step lights its arrow and its line in the key together. On a change board, line numbers are the new ones. It points at the last board shown; name another one by its title: `[[point Turn path: node Q]]`. Use two to four in an explanation, not one per sentence.
+- `[[point: lines 12-14]]` before a sentence lights up those lines and dims the rest. It also takes `line N`, `row N` (counted under the header), `row "name"` (by its first cell), `cell "row" / "column"` (one cell, by its row's first cell and its column's header, or by numbers: `cell 2 / 3`), `node X` (a flowchart or Mermaid node id) and `step S` (a sequence step id); a lit step lights its arrow and its line in the key together. On a change board, line numbers are the new ones. It points at the last board shown; name another one by its title: `[[point Turn path: node Q]]`. Use two to four in an explanation, not one per sentence.
 - `[[key: one short line]]` after the sentence it sums up. It is not said. It goes on the **Key points** board, which is pinned first, keeps every key point of the call, and lights each one up as the voice reaches it.
 
 **Building a board up while you talk.** A sequence, a flowchart or a table can come in one thing at a time. Write the board once, whole, then put a verb just before the word that names each thing. Tags with no spoken word between them make one step.

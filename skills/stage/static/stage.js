@@ -38,8 +38,9 @@
 //     {type:'stage:keymiss', view, keys}                         keys of a scene its drawing does not hold; they stay shown
 // Unknown types are ignored.
 import { flowchartKeys, nodeElements } from "./svg_keys.js";
-import { applyFrame, stepLabel } from "./scene.js";
+import { applyFrame, currentKey, stepLabel } from "./scene.js";
 import { layoutLanes, renderLanes } from "./lanes.js";
+import { layoutMap, renderMap } from "./map.js";
 
 const VENDOR = ["highlight.min.js", "marked.min.js", "purify.min.js"]
   .map((f) => new URL("vendor/" + f, import.meta.url).href);
@@ -313,7 +314,7 @@ function header(v) {
     wrap.setAttribute("aria-pressed", String(wrapOn()));
     btns.append(wrap);
   }
-  if (src.type === "inline" && (src.format === "diagram" || (src.format === "visual" && src.tool !== "sequence"))) {
+  if (src.type === "inline" && src.format === "diagram") {
     const seg = document.createElement("div"); seg.className = "seg"; seg.setAttribute("role", "group");
     seg.setAttribute("aria-label", "Diagram size");
     const set = (actual) => {
@@ -596,6 +597,7 @@ function paintTable(v, box, src) {
   if (!hasMarkdown()) { box.innerHTML = `<pre>${esc(src.body)}</pre>`; return; }
   markdownInto(box, src.body);
   shapeTables(box);
+  box.classList.add("grid");  // a table board: the wide grid, its row being said the large one
   pulseDiff(v, box, "rows", [...box.querySelectorAll("tbody tr")].map((tr) => tr.textContent));
   paintSpot(v, box);
   paintFrame(v, box);
@@ -657,6 +659,11 @@ function renderInline(v, seq) {
     box.className = "visual lanes";
     renderLanes(box, src.spec, embedded);
     requestAnimationFrame(() => { if (current()) paintFrame(v, box); });
+  } else if (src.format === "visual" && src.tool === "flowchart") {
+    // A flowchart is a map the stage draws itself: ghosts first, lit part by part with the voice.
+    box.className = "visual map";
+    renderMap(box, src.spec, embedded);
+    requestAnimationFrame(() => { if (current()) { paintFrame(v, box); if (!v.body.scene) layoutMap(box, null); } });
   } else if (src.format === "visual") {
     box.className = `visual visual-${src.tool} ` + (v.actual ? "actual" : "fit");
     box.innerHTML = `<div class="vinner"><div class="vgrid">${src.html}</div>` +
@@ -1112,6 +1119,14 @@ function paintFrame(v, box, animate = false) {
   const done = applyFrame(scene, box, n, animate && v.applied === n - 1 ? v.applied : null);
   if (!done) return;
   if (box.classList.contains("lanes")) { layoutLanes(box, scene, n); done.focused = null; }  // lanes scroll themselves
+  if (box.classList.contains("map")) { layoutMap(box, scene, n); done.focused = null; }  // the map is placed to fit
+  if (box.classList.contains("grid")) {
+    const cur = currentKey(scene, n, "row#");
+    for (const tr of box.querySelectorAll("tbody tr")) tr.classList.toggle("g-cur", tr.dataset.key === cur);
+    box.classList.toggle("g-on", !!cur);
+    const row = cur && box.querySelector(`tbody tr[data-key="${cur}"]`);
+    if (row) done.focused = row;  // keep the row being said in view
+  }
   v.applied = n;
   // Checked a frame later: a pane filled as it is fronted is still hidden while it paints.
   if (done.focused) requestAnimationFrame(() => { if (done.focused.isConnected && !v.pane.hidden) centre(done.focused); });

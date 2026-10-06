@@ -23,6 +23,18 @@ _VERB = re.compile(r"(?:(?P<sym>[+-])|(?P<word>next|all|focus|mark|strike|callou
 _TARGET = re.compile(r"none|(?:lines?\s+)?\d+(?:\s*[-–]\s*\d+)?|rows?\s+\S.*|nodes?\s+[\w.-]+"
                      r"|[\w.-]+?\s*-+>\s*[\w.-]+|[\w.-]+", re.IGNORECASE)
 _LINES = re.compile(r"(?:lines?\s+)?(?P<a>\d+)(?:\s*[-–]\s*(?P<b>\d+))?", re.IGNORECASE)
+_CELL = re.compile(r"cells?\s+(?P<r>.+?)\s*(?:/|,|×)\s*(?P<c>.+)", re.IGNORECASE)
+
+
+def _column(model: "SceneModel", raw: str) -> int | None:
+    """A column by its number or its header, quoted or not."""
+    text = raw.strip().strip("\"'“”‘’").strip()
+    if text.isdigit():
+        return int(text)
+    hit = model.names.get("col:" + fold(text))
+    return int(hit) if hit else None
+
+
 _ROW = re.compile(r"rows?\s+(?:(?P<n>\d+)|\"(?P<q>[^\"]+)\"|“(?P<c>[^”]+)”|'(?P<s>[^']+)'|(?P<bare>\S.*))",
                   re.IGNORECASE)
 _EDGE = re.compile(r"(?P<a>[\w.-]+?)\s*-+>\s*(?P<b>[\w.-]+)")
@@ -57,12 +69,25 @@ def lines_model(numbers) -> SceneModel:
     return SceneModel("lines", [f"line:{n}" for n in numbers])
 
 
-def rows_model(cells: list[str]) -> SceneModel:
+def rows_model(cells: list[str], header: list[str] | None = None) -> SceneModel:
+    """A table's rows, named by their first cell. With its header, every cell is a key too
+    (`cell#<row>.<column>`, both counted from 1), so one cell can be the one being said; a cell
+    brings its row, and a column is named by its header (kept in `names` as `col:<header>`)."""
     keys = [f"row#{i}" for i in range(1, len(cells) + 1)]
     names: dict[str, str] = {}
     for key, cell in zip(keys, cells):
         names.setdefault(fold(cell), key)
-    return SceneModel("rows", keys, order=list(keys), names=names, can_hide=True)
+    up: dict[str, list[str]] = {}
+    cols = len(header or [])
+    for c, head in enumerate(header or [], 1):
+        if fold(head):
+            names.setdefault("col:" + fold(head), str(c))
+    down: dict[str, list[str]] = {}
+    for r in range(1, len(cells) + 1):
+        for c in range(1, cols + 1):
+            up[f"cell#{r}.{c}"] = [f"row#{r}"]
+            down.setdefault(f"row#{r}", []).append(f"cell#{r}.{c}")  # a row shown shows its cells
+    return SceneModel("rows", keys + list(up), order=list(keys), up=up, down=down, names=names, can_hide=True)
 
 
 _HEADER = re.compile(r"\A\s*(?:graph|flowchart)\b(?:[ \t]+(?:TB|TD|BT|RL|LR)\b)?", re.IGNORECASE)
@@ -350,6 +375,11 @@ def resolve(model: SceneModel, raw: str, title: str) -> tuple[list[str], str | N
         a, b = sorted((int(m["a"]), int(m["b"] or m["a"])))
         keys = [f"line:{n}" for n in range(a, b + 1) if f"line:{n}" in model.keys]
         return (keys, None) if keys else ([], f'"{raw}" is outside the lines of "{title}"; dropped')
+    if model.kind == "rows" and (cell := _CELL.fullmatch(raw)):
+        row, _ = resolve(model, "row " + cell["r"].strip(), title)
+        col = _column(model, cell["c"])
+        key = f"cell#{row[0].split('#')[1]}.{col}" if row and col else None
+        return ([key], None) if key in model.keys else ([], dropped)
     if model.kind == "rows":
         m = _ROW.fullmatch(raw)
         if m and m["n"]:
@@ -392,6 +422,8 @@ def _reveal(model: SceneModel, key: str, shown: set) -> None:
         if k not in shown:
             shown.add(k)
             stack.extend(model.up.get(k, []))
+            if k.startswith("row#"):  # a row is shown whole, however it came in
+                stack.extend(model.down.get(k, []))
 
 
 def _arrows(model: SceneModel, shown: set) -> None:

@@ -632,6 +632,13 @@ def table_first_cells(body: str) -> list[str]:
     return [table_cells(ln)[0] for ln in rows]
 
 
+def table_header(body: str) -> list[str]:
+    """The header cells of the first markdown table: the line above its separator."""
+    lines = [ln.strip() for ln in body.splitlines()]
+    sep = next((i for i, ln in enumerate(lines) if _TABLE_SEP.match(ln)), None)
+    return table_cells(lines[sep - 1]) if sep else []
+
+
 def cell_text(cell: str) -> str:
     """A markdown table cell as the stage shows it: links become their text, and code and emphasis
     marks go, so a row named by what the reader sees matches what the server checked."""
@@ -664,7 +671,8 @@ def scene_model(item: dict) -> stage_scene.SceneModel | None:
     if kind == "change":
         return stage_scene.lines_model(sorted({r["new"] for h in item["hunks"] for r in h["lines"] if r["new"] is not None}))
     if kind == "table":
-        return stage_scene.rows_model([cell_text(c) for c in table_first_cells(item["body"])])
+        return stage_scene.rows_model([cell_text(c) for c in table_first_cells(item["body"])],
+                                      [cell_text(c) for c in table_header(item["body"])])
     if kind == "diagram":
         return stage_scene.flowchart_model(item["body"])
     if kind == "sequence":

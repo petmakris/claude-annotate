@@ -6,6 +6,8 @@
 // (`actor:<id>` on the chips, `step:<id>` on the rows) and, after each frame, lays the rows out
 // around the current step: the step pointed at, else the newest one shown.
 
+import { currentKey } from "./scene.js";
+
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const TONES = new Set(["plain", "edge", "internal", "service", "cheap", "hot", "good", "dropped"]);
 const tone = (t) => "t-" + (TONES.has(t) ? t : "plain");
@@ -75,9 +77,9 @@ export function layoutLanes(box, scene, n = null) {
   const frame = scene ? scene.frames[Math.max(0, Math.min(n ?? last, last))] : null;
   const show = frame ? new Set(frame.show) : null, focus = frame ? new Set(frame.focus) : new Set();
   const shown = steps.filter((s) => !show || show.has("step:" + s.id));
-  const atRest = !scene || n == null || n >= scene.rest;
-  const pointed = [...shown].reverse().find((s) => focus.has("step:" + s.id));
-  const cur = pointed || (!atRest && shown.length ? shown[shown.length - 1] : null);
+  // the step that just arrived, else the one pointed at, else the newest; none at rest
+  const curKey = scene && n != null ? currentKey(scene, n, "step:") : null;
+  const cur = curKey ? steps.find((s) => "step:" + s.id === curKey) || null : null;
   const curId = cur ? cur.id : null;
   const on = new Set(shown.map((s) => s.id));
   for (const r of box.querySelectorAll(".ln-row")) {

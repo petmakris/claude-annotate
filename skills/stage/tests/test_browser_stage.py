@@ -237,9 +237,9 @@ def test_a_table_board_has_a_real_header_and_sizes_its_own_columns(tmp_path, wc_
         key_w = pane.locator("tbody tr:first-child td:first-child").bounding_box()["width"]
         table_w = pane.locator("table").bounding_box()["width"]
         assert key_w < 0.3 * table_w
-        bg = page.evaluate("""[...document.querySelectorAll('section.pane[data-view="areas"] tbody tr')]
-            .slice(0, 2).map(tr => getComputedStyle(tr).backgroundColor)""")
-        assert bg[0] != bg[1]
+        # rows are divided by a line (the grid has no zebra stripes: the band is for the row being said)
+        line = page.evaluate("""getComputedStyle(document.querySelector('section.pane[data-view="areas"] tbody td')).borderBottomStyle""")
+        assert line == "solid"
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
@@ -851,7 +851,7 @@ def test_tapping_the_tab_already_in_front_keeps_the_frame_and_the_following(tmp_
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
 
-def test_a_table_scene_keeps_hidden_rows_in_their_place_and_says_its_repairs(tmp_path, wc_config, browser):
+def test_a_table_scene_grows_as_rows_are_said_and_says_its_repairs(tmp_path, wc_config, browser):
     body = "| Name | Region |\n|---|---|\n| Azure | eu |\n| AWS | us |\n| GCP | eu |\n| OVH | fr |"
     steps = _scene(scene.rows_model(["Azure", "AWS", "GCP", "OVH"]), [["+ row 1"], ["+ Azur, row 9"], ["all"]], "Clouds")
     res = stage.show(str(tmp_path), "t", {"type": "inline", "format": "table", "body": body}, title="Clouds",
@@ -866,7 +866,7 @@ def test_a_table_scene_keeps_hidden_rows_in_their_place_and_says_its_repairs(tmp
         send({"type": "stage:state", "frames": {"t": 1}, "keys": 0})
         _until_frame(page, "t", 1)
         hidden = frame.locator('section.pane[data-view="t"] tbody tr.k-hidden')
-        assert hidden.count() == 3 and table.bounding_box()["height"] == full
+        assert hidden.count() == 3 and table.bounding_box()["height"] < full / 2  # rows not said yet take no room
         assert frame.locator('section.pane[data-view="t"] tbody tr').nth(0).evaluate(
             "r => getComputedStyle(r).opacity") == "1"
     finally:
@@ -1061,10 +1061,15 @@ def test_a_flowchart_spec_brings_each_arrow_with_its_second_end_and_back_and_nex
     res = stage.show(str(tmp_path), "flow", _visual("flowchart", FLOW_SPEC), title="Floor", extra={"scene": steps})
     try:
         page, frame, send = _embedded(browser, res["url"])
-        frame.locator('section.pane[data-view="flow"] .vgrid svg').wait_for(timeout=5000)
+        frame.locator('section.pane[data-view="flow"] .map .m-node').first.wait_for(state="attached", timeout=5000)
         send({"type": "stage:frame", "view": "flow", "n": 1})
         _until_frame(page, "flow", 1)
         assert _all_hidden(frame, "flow", "edge:a->b#0") and not _all_hidden(frame, "flow", "node:a")
+        # not said yet is a ghost on the map: there, faint and dashed, not gone
+        ghost = frame.locator('section.pane[data-view="flow"] .m-node[data-key="node:b"]')
+        assert float(ghost.evaluate("e => getComputedStyle(e).opacity")) > 0.1
+        assert ghost.evaluate("e => getComputedStyle(e).borderTopStyle") == "dashed"
+        assert frame.locator('section.pane[data-view="flow"] .m-node.m-cur').get_attribute("data-key") == "node:a"
         send({"type": "stage:frame", "view": "flow", "n": 2})
         _until_frame(page, "flow", 2)
         assert not _all_hidden(frame, "flow", "edge:a->b#0") and _all_hidden(frame, "flow", "edge:b->c#0")
@@ -1082,42 +1087,37 @@ def test_a_flowchart_spec_brings_each_arrow_with_its_second_end_and_back_and_nex
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
 
-def test_fit_grows_a_small_diagram_and_the_stage_draws_in_its_own_fonts_with_no_network(tmp_path, wc_config, browser):
+def test_a_map_fits_its_board_and_draws_in_the_stages_own_fonts_with_no_network(tmp_path, wc_config, browser):
     res = stage.show(str(tmp_path), "flow", _visual("flowchart", FLOW_SPEC), title="Floor")
     try:
         page = _page(browser, res["url"])
         hosts = []
         page.on("request", lambda r: hosts.append(r.url.split("/")[2]))
         page.reload()
-        svg = page.locator('section.pane[data-view="flow"] .vgrid svg')
-        svg.wait_for(timeout=5000)
-        drawn = float(svg.get_attribute("width"))
+        node = page.locator('section.pane[data-view="flow"] .m-node').first
+        node.wait_for(timeout=5000)
         page.wait_for_function("document.fonts.check('12px \"Geist Mono\"') && document.fonts.check('12px Geist')",
                                timeout=5000)
-        assert svg.bounding_box()["width"] > drawn * 1.3
         assert set(hosts) == {res["url"].split("/")[2]}, hosts
-        page.locator("button", has_text="Actual size").click()
-        assert abs(svg.bounding_box()["width"] - drawn) < 1
+        board_box = page.locator('section.pane[data-view="flow"] .map').bounding_box()
+        for b in page.locator('section.pane[data-view="flow"] .m-node').evaluate_all("els => els.map(e => e.getBoundingClientRect().toJSON())"):
+            assert board_box["x"] - 1 <= b["x"] and b["x"] + b["width"] <= board_box["x"] + board_box["width"] + 1
+        assert page.locator("button", has_text="Actual size").count() == 0  # a map always fits: no size buttons
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
 
-def test_every_flowchart_on_the_stage_draws_its_own_arrowheads(tmp_path, wc_config, browser):
+def test_every_arrow_on_every_map_draws_its_own_head(tmp_path, wc_config, browser):
     res = stage.show(str(tmp_path), "one", _visual("flowchart", FLOW_SPEC), title="One")
     stage.show(str(tmp_path), "two", _visual("flowchart", FLOW_SPEC), title="Two")
     try:
         page = _page(browser, res["url"])
-        board(page, "one")
-        page.locator('section.pane[data-view="one"] .vgrid svg').wait_for(timeout=5000)
-        board(page, "two")
-        page.locator('section.pane[data-view="two"] .vgrid svg').wait_for(timeout=5000)
-        ids = page.locator("marker").evaluate_all("els => els.map(e => e.id)")
-        assert len(ids) == 2 and len(set(ids)) == 2, "url(#id) finds the first in the page, maybe in a hidden pane"
-        ends = page.locator(".vgrid path.flow-edge").evaluate_all(
-            "els => els.map(e => [e.closest('section').dataset.view, e.getAttribute('marker-end')])")
-        for view, end in ends:
-            marker = page.locator(f'section.pane[data-view="{view}"] marker[id="{end[5:-1]}"]')
-            assert marker.count() == 1, (view, end)
+        for name in ("one", "two"):
+            board(page, name)
+            page.locator(f'section.pane[data-view="{name}"] .m-edge').first.wait_for(timeout=5000)
+            heads = page.locator(f'section.pane[data-view="{name}"] .m-edge').evaluate_all(
+                "els => els.map(g => [g.querySelector('.m-tip').getAttribute('d') || '', getComputedStyle(g.querySelector('.m-tip')).fill])")
+            assert len(heads) == 2 and all(d.startswith("M ") and fill not in ("none", "rgba(0, 0, 0, 0)") for d, fill in heads), heads
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
@@ -1159,5 +1159,41 @@ def test_in_a_call_space_and_the_arrows_go_to_the_call_page_unless_a_control_has
         page.keyboard.press("Space")
         page.wait_for_timeout(200)
         assert len(keys()) == 3
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+ENGINES = {"type": "inline", "format": "table", "body": "| | Azure | VoiceStudio |\n|---|---|---|\n"
+           "| Speed | a second or two per answer | about as long to make as to play |\n| Cost | billed per character | free |\n"
+           "| Needs | `TALK_AZURE_KEY_COMMAND` | the VoiceStudio app open |"}
+
+
+def test_a_table_board_grows_the_row_being_said_and_spots_a_cell(tmp_path, wc_config, browser):
+    model = scene.rows_model(["Speed", "Cost", "Needs"], ["", "Azure", "VoiceStudio"])
+    steps = _scene(model, [["next"], ["focus cell Speed / Azure"], ["next"]], "Engines")
+    res = stage.show(str(tmp_path), "t", ENGINES, title="Engines", extra={"scene": steps})
+    try:
+        page, frame, send = _embedded(browser, res["url"], width=1300)
+        pane = frame.locator('section.pane[data-view="t"]')
+        pane.locator("tbody tr").first.wait_for(state="attached", timeout=5000)
+        size = lambda sel: pane.locator(sel).evaluate("e => parseFloat(getComputedStyle(e).fontSize)")  # noqa: E731
+        send({"type": "stage:frame", "view": "t", "n": 1, "animate": True})
+        _until_frame(page, "t", 1)
+        page.wait_for_timeout(450)  # rows grow over .35 s
+        assert pane.locator("tbody tr:visible").count() == 1 and size('tr[data-key="row#1"] td:nth-child(2)') == 21
+        send({"type": "stage:frame", "view": "t", "n": 2})
+        _until_frame(page, "t", 2)
+        page.wait_for_timeout(450)  # rows grow over .35 s
+        assert pane.locator("td.k-focus").evaluate_all("els => els.map(e => e.dataset.key)") == ["cell#1.2"]
+        spot = pane.locator("td.k-focus").evaluate("e => getComputedStyle(e).backgroundColor")
+        band = pane.locator('tr[data-key="row#1"] td:nth-child(3)').evaluate("e => getComputedStyle(e).backgroundColor")
+        assert spot != band  # the cell stands out from its row
+        assert size('tr[data-key="row#1"] td:nth-child(2)') == 21  # the pointed cell's row is the one being said
+        send({"type": "stage:frame", "view": "t", "n": 3, "animate": True})
+        _until_frame(page, "t", 3)
+        page.wait_for_timeout(450)
+        assert size('tr[data-key="row#2"] td:nth-child(2)') == 21 and size('tr[data-key="row#1"] td:nth-child(2)') == 15  # the new row is said
+        wrap, board = pane.locator(".tablewrap").bounding_box(), pane.locator(".pbody").bounding_box()
+        assert wrap["width"] > board["width"] - 60  # the grid spans the stage
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])

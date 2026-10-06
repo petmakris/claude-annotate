@@ -876,7 +876,8 @@ def test_a_board_of_more_than_three_things_and_no_verbs_comes_in_one_sentence_at
     assert [(c["n"], shown[c["at"]:c["at"] + 5]) for c in call.reply_cues if c["kind"] == "frame"] == [
         (1, "Azure"), (2, "AWS i"), (3, "GCP f"), (4, "OVH c")]
     built = call.board.items[0]["scene"]
-    assert built["start"] == "empty" and [len(f["show"]) for f in built["frames"]] == [0, 1, 2, 3, 4, 4]
+    rows = [[k for k in f["show"] if k.startswith("row#")] for f in built["frames"]]  # each row brings its cells
+    assert built["start"] == "empty" and [len(r) for r in rows] == [0, 1, 2, 3, 4, 4]
     assert call.board.problems == ['"Clouds" has 4 elements and no verbs, so it was stepped one sentence at a time '
                                    "(dump); tag the word that names each thing"]
 

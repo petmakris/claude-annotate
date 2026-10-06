@@ -15,7 +15,10 @@ function stampKeys(kind, box) {
   }
   if (kind === "rows") {
     const rows = [...(box.querySelector("table")?.querySelectorAll("tbody tr") || [])];
-    rows.forEach((tr, i) => { tr.dataset.key = "row#" + (i + 1); });
+    rows.forEach((tr, i) => {
+      tr.dataset.key = "row#" + (i + 1);
+      [...tr.children].forEach((td, j) => { td.dataset.key = `cell#${i + 1}.${j + 1}`; });
+    });
     return rows.length > 0;
   }
   const svg = box.querySelector("svg");
@@ -85,4 +88,20 @@ export function applyFrame(scene, box, n, from = null) {
   }
   paintCard(scene, box, n);
   return { missing: scene.keys.filter((k) => !found.has(k)), focused };
+}
+
+// The one that is being said: what arrived with this frame, else what is pointed at. `kind` picks the
+// keys that count (row# for a table, step: for a sequence); a pointed cell counts as its row.
+export function currentKey(scene, n, prefix) {
+  if (!scene) return null;
+  const last = scene.frames.length - 1, at = (i) => scene.frames[Math.max(0, Math.min(i, last))];
+  if (n >= scene.rest) return null;
+  const mine = (k) => k.startsWith(prefix) ? k : prefix === "row#" && k.startsWith("cell#") ? "row#" + k.slice(5).split(".")[0] : null;
+  const before = n > 0 ? new Set(at(n - 1).show) : new Set();
+  const arrived = at(n).show.filter((k) => k.startsWith(prefix) && !before.has(k));
+  if (arrived.length) return arrived[arrived.length - 1];
+  const pointed = at(n).focus.map(mine).filter(Boolean);
+  if (pointed.length) return pointed[pointed.length - 1];
+  const shown = at(n).show.filter((k) => k.startsWith(prefix));
+  return shown.length ? shown[shown.length - 1] : null;
 }
