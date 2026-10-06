@@ -182,6 +182,22 @@ def test_an_unknown_slug_is_an_error_and_creates_nothing(tmp_path, daemon, capsy
     assert not [r for r in rows if r.get("cwd", "").startswith(str(tmp_path))]
 
 
+def test_a_push_by_slug_to_a_finished_session_is_refused(tmp_path, daemon, capsys):
+    """A push used to land on a page the reader had clicked Done on. The page
+    changed, and the watcher armed after it reported FINISHED at once."""
+    first = _push(tmp_path, FIRST, capsys=capsys)
+    _call(daemon, "POST", "/s/%s/api/finish" % first["sid"])
+    before = _items(daemon, first["sid"])
+    path = _write(tmp_path / "blocks.json", SECOND)
+    rc = push_mod.main(["--blocks", str(path), "--cwd", str(tmp_path / "repo"),
+                        "--slug", first["slug"]])
+    assert rc != 0
+    err = capsys.readouterr().err
+    assert "finished" in err
+    assert "webcompanion unfinish --sid %s" % first["sid"] in err
+    assert _items(daemon, first["sid"]) == before
+
+
 def test_a_push_records_the_session_in_the_conversation_marker(tmp_path, daemon, capsys):
     first = _push(tmp_path, FIRST, capsys=capsys)
     entries = session_mod.entries()

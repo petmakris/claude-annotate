@@ -304,9 +304,20 @@ def resolve_slug(slug: str) -> dict:
     one the session was created in (a resume from elsewhere, a `cd` earlier in
     the turn) found nothing, fell through to creating a new session, and the
     reader's page never changed. The slug alone names the session: slugs are
-    unique within a kind."""
+    unique within a kind.
+
+    A finished or cancelled session is refused. Pushing into one changed a
+    page the reader had closed, and the watcher armed after it reported
+    FINISHED at once, so their next comment reached no one."""
     for row in wc.all_sessions():
         if row.get("kind") == KIND and row.get("slug") == slug:
+            state = row.get("state", "live")
+            if state != "live":
+                raise PushError(
+                    "the annotate session %r is %s; the reader closed it. "
+                    "Push without --slug for a new page, or reopen this one "
+                    "first with `webcompanion unfinish --sid %s`."
+                    % (slug, state, row["sid"]))
             return row
     raise PushError(
         "no annotate session has the slug %r. Check it against "
