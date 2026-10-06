@@ -211,3 +211,12 @@ def test_a_highlight_is_ordered_clamped_and_refused_outside_the_range(tmp_path):
     assert model.parse_source("code:a.py:5-200 highlight 9-40", tmp_path)["highlight"] == [9, 10]
     with pytest.raises(model.SourceError, match="outside lines 5-8"):
         model.parse_source("code:a.py:5-8 highlight 1-2", tmp_path)
+
+
+def test_a_file_is_framed_only_when_a_browser_can_show_it():
+    for name in ("deck.html", "Deck.HTM", "chart.svg", "report.pdf", "shot.png", "clip.webm"):
+        assert model.file_display(name) == "page", name
+    for name in ("notes.md", "README.markdown"):
+        assert model.file_display(name) == "markdown", name
+    for name in ("config.yaml", "rows.csv", "run.sh", "talk.py", "Main.java", "app.ts", "Makefile", "build.log"):
+        assert model.file_display(name) == "text", name

@@ -80,7 +80,8 @@ def _complete_source(cwd: str, sid: str, source: dict) -> tuple:
         folder = path.parent
         mount = model.mount_name(folder, Path(cwd))
         wc.register_mount(sid, mount, str(folder), kind=KIND)
-        source.update(mount=mount, file=path.name, missing=not path.is_file())
+        source.update(mount=mount, file=path.name, missing=not path.is_file(),
+                      display=model.file_display(path.name))
         return source, model.dir_rev(folder)
     if source["type"] == "session":
         source["sid"] = _session_sid(cwd, source["kind"], source["slug"])

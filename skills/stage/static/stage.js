@@ -210,7 +210,7 @@ function tableRows(body) {
 
 // The meta line in plain words, never a raw format name.
 function metaText(src) {
-  if (src.type === "file") return `Page · ${src.path}`;
+  if (src.type === "file") return `${{ markdown: "Document", text: "File" }[src.display] || "Page"} · ${src.path}`;
   if (src.type === "url") { try { return `Page · ${new URL(src.url).host}`; } catch { return `Page · ${src.url}`; } }
   if (src.type === "session") return `${src.kind} · ${src.slug}`;
   if (src.format === "code") {
@@ -722,12 +722,41 @@ function fillPane(v, update = false) {
     const p = document.createElement("p"); p.className = "waiting";
     p.textContent = `Waiting for ${src.path}`; body.append(p); return;
   }
+  if (src.type === "file" && src.display && src.display !== "page") { paintFile(v, body, seq); return; }
   const wrap = document.createElement("div"); wrap.className = "framewrap";
   const frame = document.createElement("iframe");
   frame.className = "frame"; frame.title = title; frame.src = frameUrl(src, rev);
   wrap.append(frame);
   body.append(wrap);
   if (update) restart(wrap, "pulse");
+}
+
+// A file a browser would download from a frame: read it, then show Markdown as a document and
+// anything else as text. A save repaints it in place, where the reader had scrolled to.
+function paintFile(v, body, seq) {
+  const src = v.body.source, top = v.fileTop || 0;
+  const box = document.createElement("div");
+  box.className = src.display === "markdown" ? "md doc" : "code";
+  box.addEventListener("scroll", () => { v.fileTop = box.scrollTop; });
+  body.append(box);
+  const current = () => v.renderSeq === seq && box.isConnected;
+  const paint = (text) => {
+    if (src.display === "markdown" && hasMarkdown()) {
+      box.innerHTML = DOMPurify.sanitize(marked.parse(text), { FORBID_TAGS: ["form", "meta", "iframe", "style", "base"] });
+    } else {
+      const pre = document.createElement("pre"); pre.className = "filetext"; pre.textContent = text;
+      box.replaceChildren(pre);
+    }
+    box.scrollTop = top;
+  };
+  fetch(frameUrl(src, v.body.rev, "#"))
+    .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`${r.status}`))))
+    .then((text) => {
+      if (!current()) return;
+      paint(text);
+      if (src.display === "markdown" && !hasMarkdown()) libsReady().then(() => { if (current() && hasMarkdown()) paint(text); });
+    })
+    .catch((err) => { if (current()) note(box, `${src.path} could not be read (${err.message}).`, () => fillPane(v)); });
 }
 
 // Double-buffered: the new frame loads hidden over the old one and takes its place only once

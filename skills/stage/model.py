@@ -25,6 +25,21 @@ _HUNK_RE = re.compile(r"^@@ -(?P<old>\d+)(?:,\d+)? \+(?P<new>\d+)(?:,\d+)? @@")
 _SESSION_RE = re.compile(r"^session:(?P<kind>[a-z][a-z0-9_-]{0,63})/(?P<slug>[^/\s]+)$")
 
 
+# A browser shows these in a frame. Any other file in a frame is downloaded instead, so the stage
+# reads it and shows it itself: Markdown as a document, the rest as text.
+PAGE_SUFFIXES = {".html", ".htm", ".xhtml", ".svg", ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp",
+                 ".avif", ".bmp", ".ico", ".mp4", ".webm", ".mp3", ".wav", ".ogg"}
+MARKDOWN_SUFFIXES = {".md", ".markdown"}
+
+
+def file_display(name: str) -> str:
+    """How the stage shows a file: "page" in a frame, "markdown" rendered, or "text"."""
+    suffix = Path(name).suffix.lower()
+    if suffix in PAGE_SUFFIXES:
+        return "page"
+    return "markdown" if suffix in MARKDOWN_SUFFIXES else "text"
+
+
 class SourceError(ValueError):
     """The source cannot be shown as asked; the message says why, for a person."""
 

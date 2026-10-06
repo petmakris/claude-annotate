@@ -193,6 +193,9 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .md{flex:0 1 auto;align-self:stretch;min-height:0;max-width:100%;display:flex;flex-direction:column;gap:12px;overflow:auto;font-size:14px;line-height:1.55}
 .md>*{flex:none;margin:0}
 .md>.tablewrap{flex:0 1 auto;min-height:0}
+.md.doc{align-self:stretch;max-width:860px;margin-inline:auto;width:100%;font-size:15px;line-height:1.6}
+.md.doc>*{margin:0}
+.code>pre.filetext{margin:0;padding:12px 18px;white-space:pre;font:inherit}
 .md pre{margin:0;padding:12px 14px;font:12.5px/1.6 var(--mono);white-space:pre-wrap;color:var(--ink);background:var(--panel);
   border:1px solid var(--line);border-radius:12px}
 .tablewrap{width:fit-content;max-width:100%;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-sizing:border-box}

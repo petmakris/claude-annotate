@@ -952,3 +952,37 @@ def test_a_scene_on_a_diagram_that_cannot_be_drawn_leaves_the_error_card_alone(t
         assert pane.locator(".k-card").count() == 0 and _frames(frame)["bad"] is None
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def test_markdown_and_other_text_files_show_on_the_stage_instead_of_downloading(tmp_path, wc_config, browser):
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "notes.md").write_text("# Plan\n\n- one <b>bold</b>\n\n<img src=x onerror=\"window.hit=1\">\n")
+    (proj / "conf.yaml").write_text("key: <value>\n")
+    no_watch = patch.object(stage, "start_watch", lambda cwd, sid: None)
+    no_watch.start()
+    res = stage.show(str(proj), "notes", model.parse_source("notes.md", proj), title="Notes")
+    stage.show(str(proj), "conf", model.parse_source("conf.yaml", proj), title="Conf", background=True)
+    try:
+        page = _page(browser, res["url"])
+        downloads = []
+        page.on("download", lambda d: downloads.append(d.suggested_filename))
+        page.wait_for_selector('section.pane[data-view="notes"] .doc h1')
+        assert page.inner_text('section.pane[data-view="notes"] .doc h1') == "Plan"
+        assert page.evaluate("window.hit") is None
+        assert page.locator('section.pane[data-view="notes"] iframe').count() == 0
+        page.locator('button[role=tab][data-view="conf"]').click()
+        page.wait_for_selector('section.pane[data-view="conf"] pre.filetext')
+        assert page.inner_text('section.pane[data-view="conf"] pre.filetext').strip() == "key: <value>"
+        (proj / "notes.md").write_text("# Plan two\n")
+        t = time.time() + 5
+        os.utime(proj / "notes.md", (t, t))
+        assert "notes" in stage.tick(str(proj), res["sid"])
+        page.locator('button[role=tab][data-view="notes"]').click()
+        page.wait_for_function(
+            "document.querySelector('section.pane[data-view=\"notes\"] .doc h1')?.textContent === 'Plan two'",
+            timeout=5000)
+        assert downloads == []
+    finally:
+        no_watch.stop()
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
