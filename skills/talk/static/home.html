@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Talk calls</title>
+<script>/* the theme the call pages chose: talk.theme is "light", "dark" or "system" */
+try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"light"');
+  document.documentElement.dataset.theme = t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light"; } catch {}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/tokens.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 14px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+main{max-width:680px;margin:0 auto;padding:32px 16px 48px}
+h1{font:600 20px/1.3 var(--sans);margin:0 0 4px}
+.sub{margin:0 0 20px;color:var(--muted);font-size:13px}
+ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+a.call{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;border:1px solid var(--line);background:var(--panel);
+  color:inherit;text-decoration:none;min-width:0}
+a.call:hover{border-color:var(--acc-mid)}
+a.call:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+a.call.new{border-color:color-mix(in srgb,var(--claude) 45%,transparent);background:var(--claude-soft)}
+a.call.ended{opacity:.65}
+.what{flex:1;min-width:0}
+.what b{display:block;font:600 15px/1.35 var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.what span{font-size:12.5px;color:var(--muted)}
+.state{font:500 12.5px var(--sans);color:var(--muted);white-space:nowrap}
+a.call.new .state{color:var(--claude);font-weight:600}
+a.call.floor .state{color:var(--acc)}
+.open{font:500 13px var(--sans);padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);white-space:nowrap}
+.empty{color:var(--faint);padding:24px 0;text-align:center}
+.err{color:var(--warn);font-size:12.5px;margin-top:12px}
+.err:empty{display:none}
+</style></head>
+<body><main>
+<h1>Talk calls</h1>
+<p class="sub">Every call open on this machine. You talk in one at a time: starting to talk in one pauses the others.</p>
+<ol id="list"></ol>
+<p class="empty" id="empty" hidden>No call is open. Start one with /talk in a Claude Code session.</p>
+<p class="err" id="err" role="status"></p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const clock = t => new Date(t * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+function stateOf(c) {
+  if (c.unheard) return c.unheard === 1 ? "New answer" : c.unheard + " new answers";
+  if (c.ended) return "Ended";
+  if (c.working) return "Claude is working";
+  return c.floor ? "Talking now" : "Open";
+}
+let sig = "";
+async function refresh() {
+  try {
+    const r = await fetch("/api/calls", {cache: "no-store"});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const calls = (await r.json()).calls;
+    $("err").textContent = "";
+    const next = JSON.stringify(calls.map(c => [c.id, c.topic, stateOf(c), c.floor]));
+    if (next === sig) return;
+    sig = next;
+    $("empty").hidden = calls.length > 0;
+    $("list").replaceChildren(...calls.map(c => {
+      const li = document.createElement("li"), a = document.createElement("a");
+      a.href = "/c/" + encodeURIComponent(c.id);
+      a.className = "call" + (c.unheard ? " new" : "") + (c.ended ? " ended" : "") + (c.floor ? " floor" : "");
+      const what = document.createElement("div"); what.className = "what";
+      const b = document.createElement("b"); b.textContent = c.topic;
+      const when = document.createElement("span"); when.textContent = "Started " + clock(c.started);
+      what.append(b, when);
+      const st = document.createElement("span"); st.className = "state"; st.textContent = stateOf(c);
+      const open = document.createElement("span"); open.className = "open"; open.textContent = "Open";
+      a.append(what, st, open); li.append(a); return li;
+    }));
+  } catch (err) { $("err").textContent = "The talk server is not answering. Trying again…"; }
+}
+refresh(); setInterval(refresh, 2000);
+</script>
+</body></html>

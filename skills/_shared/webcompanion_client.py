@@ -2,7 +2,7 @@
 
 Every skill talks to the daemon through this module rather than hand-rolling
 its own `urllib` calls: annotate (push, pull, progress, session), dataflow,
-walkthrough, ask_diff and deck.
+walkthrough, ask_diff, deck, stage and talk.
 
 Stdlib only, deliberately: this plugin ships with no pip dependencies, and
 `webcompanion` itself is only ever `pipx`-installed (an isolated venv the
@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -51,6 +52,11 @@ class DaemonUnreachable(DaemonError):
 
 class ContractMismatch(DaemonError):
     """The daemon returned 426 — client and daemon disagree on the wire contract."""
+
+
+class SlugMismatch(DaemonError):
+    """The daemon gave the session another slug than the one asked for, or the slug names a
+    session that is no longer live: the caller and the daemon disagree on which session it is."""
 
 
 class DaemonHTTPError(DaemonError):
@@ -137,9 +143,30 @@ def _kind_qs(kind: str) -> str:
     return "?kind=" + urllib.parse.quote(kind)
 
 
+SID_RE = re.compile(r"^\d{6}-\d{6}-[0-9a-f]{16}$")
+
+
+def slugify(text: str) -> str:
+    """A requested slug as the daemon stores it (registry._slugify): lowercase, every run of other
+    characters one '-', no '-' at either end, at most 40 characters."""
+    s = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+    return s[:40].strip("-")
+
+
+def _rows(answer) -> list:
+    return answer if isinstance(answer, list) else (answer or {}).get("sessions", [])
+
+
+def finish_session(sid: str) -> None:
+    request("POST", f"/s/{urllib.parse.quote(sid, safe='')}/api/finish")
+
+
 def create_or_attach(kind: str, cwd: str, *, title: str | None = None,
                      slug: str | None = None, supersede: bool = False) -> dict:
-    """Resolve `slug` to a live session if given and found; otherwise create one.
+    """Resolve `slug` (a slug, normalised as the daemon does, or a sid) to a live session if given
+    and found; otherwise create one. A slug that names an ended session, a session in another
+    folder, or that the daemon would store under another name raises SlugMismatch instead of
+    quietly creating a second session.
 
     Attach-before-create, the same order annotate's push uses: a slug is
     unique only within a kind, so resolving it here (rather than trusting the
@@ -152,15 +179,35 @@ def create_or_attach(kind: str, cwd: str, *, title: str | None = None,
     attach-by-slug path, which does not create anything and would have no
     effect there anyway.
     """
+    want = slugify(slug) if slug else ""
     if slug:
         try:
             rows = request("GET", "/api/sessions" + "?cwd=%s&kind=%s"
                            % (urllib.parse.quote(cwd), urllib.parse.quote(kind)))
         except (DaemonNotConfigured, DaemonUnreachable):
             rows = []
-        for row in (rows if isinstance(rows, list) else rows.get("sessions", [])):
-            if row.get("slug") == slug:
-                return row
+        rows = _rows(rows)
+        named = [r for r in rows if r.get("slug") == want or r.get("sid") == slug]
+        live = next((r for r in named if r.get("state", "live") == "live"), None)
+        if live is not None:
+            return live
+        if named:
+            raise SlugMismatch("%s session %s in %s was ended (%s): reopen it with "
+                               "'webcompanion unfinish --sid %s', or pass another slug"
+                               % (kind, named[0].get("slug"), cwd, named[0].get("state"), named[0].get("sid")))
+        if SID_RE.match(slug):
+            raise SlugMismatch("no %s session with sid %s in %s" % (kind, slug, cwd))
+        if not want:
+            raise SlugMismatch("slug %r has no letters or digits" % slug)
+        try:
+            others = all_sessions(kind)
+        except DaemonHTTPError:
+            others = []
+        elsewhere = [r for r in others if r.get("slug") == want]
+        if elsewhere:
+            r = elsewhere[0]
+            raise SlugMismatch("%s session %s is in %s (%s), not in %s: pass that folder, or another slug"
+                               % (kind, want, r.get("cwd"), r.get("state", "live"), cwd))
     body: dict = {"kind": kind, "cwd": cwd}
     if title:
         body["title"] = title
@@ -168,7 +215,15 @@ def create_or_attach(kind: str, cwd: str, *, title: str | None = None,
         body["slug"] = slug
     if supersede:
         body["supersede"] = True
-    return request("POST", "/api/sessions", body)
+    row = request("POST", "/api/sessions", body)
+    if want and row.get("slug") != want:
+        try:
+            finish_session(row["sid"])
+        except (DaemonError, KeyError):
+            pass
+        raise SlugMismatch("asked the daemon for %s session %s and got %s: that slug is already taken "
+                           "in another folder or by an ended session" % (kind, want, row.get("slug")))
+    return row
 
 
 def list_sessions(cwd: str, kind: str) -> list[dict]:
@@ -186,12 +241,12 @@ def list_sessions(cwd: str, kind: str) -> list[dict]:
                    % (urllib.parse.quote(cwd), urllib.parse.quote(kind)))
 
 
-def all_sessions() -> list[dict]:
-    """GET /api/sessions?scope=all -- every session of every kind, any cwd,
+def all_sessions(kind: str | None = None) -> list[dict]:
+    """GET /api/sessions?scope=all -- every session of `kind` (every kind when None), any cwd,
     in any state. For a lookup by slug, which is unique within a kind and so
     needs no cwd."""
-    rows = request("GET", "/api/sessions?scope=all")
-    return rows if isinstance(rows, list) else rows.get("sessions", [])
+    rows = _rows(request("GET", "/api/sessions?scope=all"))
+    return [r for r in rows if kind is None or r.get("kind") == kind]
 
 
 def put_items(sid: str, items: dict, *, kind: str, replace: bool = False,
@@ -257,3 +312,12 @@ def submit_event(sid: str, anchor: str, text: str, *, kind: str,
         body["images"] = images
     res = request("POST", f"/s/{sid}/api/submit" + _kind_qs(kind), body)
     return res["event_id"]
+
+
+def register_mount(sid: str, name: str, root: str, *, kind: str) -> dict:
+    """Serve `root` (a directory inside the session's cwd) at the page-relative `mounts/<name>/`."""
+    return request("POST", f"/s/{sid}/api/mounts" + _kind_qs(kind), {"name": name, "root": root})
+
+
+def delete_item(sid: str, anchor: str, *, kind: str) -> None:
+    request("DELETE", f"/s/{sid}/items/{urllib.parse.quote(anchor, safe='')}" + _kind_qs(kind))

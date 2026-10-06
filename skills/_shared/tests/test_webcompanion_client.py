@@ -109,11 +109,12 @@ def test_create_or_attach_attaches_by_slug(daemon):
 def test_create_or_attach_falls_through_to_create_when_slug_not_found(daemon):
     _FakeDaemon.script = [
         (200, []),
+        (200, []),
         (201, {"sid": "s2", "slug": "my-slug", "kind": "dataflow", "url": "/s/s2/", "token": "tok"}),
     ]
     res = wc.create_or_attach("dataflow", "/repo", slug="my-slug")
     assert res["sid"] == "s2"
-    assert _FakeDaemon.seen[1][0] == "POST"
+    assert [m for m, *_ in _FakeDaemon.seen] == ["GET", "GET", "POST"]
 
 
 def test_list_sessions(daemon):

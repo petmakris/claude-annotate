@@ -1,0 +1,10 @@
+Vendored so the stage paints with no network. Update by downloading the new exact version
+from the same place and changing this list.
+
+highlight.min.js  highlight.js 11.9.0  https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js
+marked.min.js     marked 12.0.2        https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js
+purify.min.js     DOMPurify 3.4.16     https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js
+mermaid.min.js    mermaid 11.17.2      https://cdn.jsdelivr.net/npm/mermaid@11.17.2/dist/mermaid.min.js
+
+mermaid is loaded on demand, when a diagram is shown. Its SVG ids are read in svg_keys.js only, and
+test_every_flowchart_key_resolves_in_the_vendored_mermaid must pass before an upgrade lands.

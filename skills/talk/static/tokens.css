@@ -1,0 +1,21 @@
+/* tokens:start */
+/* One token set for talk and stage, kept byte-identical in talk.py and stage.css (talk/tests/test_tokens.py). */
+:root{color-scheme:light dark;
+  --bg:#F5F6F8;--panel:#FFFFFF;--ink:#1B2230;--muted:#667085;--faint:#98A2B3;--line:#E1E5EA;--row-alt:#F9FAFB;
+  --acc:#0F6E74;--on-acc:#FFFFFF;--acc-soft:#EAF4F4;--acc-mid:#B7DADB;--you:#2F5BD3;--you-soft:#EEF2FD;--claude:#A6520B;--claude-soft:#FDF3EA;
+  --hl-soft:#FDF3EA;--word:#F7D9BC;--bad:#B42318;--bad-soft:#FEF3F2;--bad-line:#F3C5C0;--warn:#B54708;--warn-soft:#FEF6EE;
+  --good:#1A7F37;--add-bg:#E6F4EA;--del-bg:#FCE8E8;--code-bg:#0F1720;--code-ink:#D6DEEB;--code-faint:#56657A;--code-line:#1E2A38;
+  --sans:"Geist",system-ui,-apple-system,sans-serif;--mono:"Geist Mono",ui-monospace,Menlo,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F1318;--panel:#161B22;--ink:#E6E9EF;--muted:#A3ABB9;--faint:#6F7888;--line:#262D39;--row-alt:#1A2029;
+  --acc:#5FAFAF;--on-acc:#0F1318;--acc-soft:rgba(95,175,175,.14);--acc-mid:rgba(95,175,175,.35);--you:#8AA7F0;--you-soft:rgba(138,167,240,.12);
+  --claude:#FFAF5F;--claude-soft:rgba(255,175,95,.08);--hl-soft:rgba(255,175,95,.12);--word:rgba(255,175,95,.35);
+  --bad:#F97066;--bad-soft:rgba(249,112,102,.12);--bad-line:rgba(249,112,102,.4);--warn:#FDB022;--warn-soft:rgba(253,176,34,.10);
+  --good:#56D364;--add-bg:rgba(46,160,67,.15);--del-bg:rgba(248,81,73,.15);--code-bg:#0B0F14;--code-ink:#D6DEEB;--code-faint:#56657A;--code-line:#262D39}}
+:root[data-theme="dark"]{
+  --bg:#0F1318;--panel:#161B22;--ink:#E6E9EF;--muted:#A3ABB9;--faint:#6F7888;--line:#262D39;--row-alt:#1A2029;
+  --acc:#5FAFAF;--on-acc:#0F1318;--acc-soft:rgba(95,175,175,.14);--acc-mid:rgba(95,175,175,.35);--you:#8AA7F0;--you-soft:rgba(138,167,240,.12);
+  --claude:#FFAF5F;--claude-soft:rgba(255,175,95,.08);--hl-soft:rgba(255,175,95,.12);--word:rgba(255,175,95,.35);
+  --bad:#F97066;--bad-soft:rgba(249,112,102,.12);--bad-line:rgba(249,112,102,.4);--warn:#FDB022;--warn-soft:rgba(253,176,34,.10);
+  --good:#56D364;--add-bg:rgba(46,160,67,.15);--del-bg:rgba(248,81,73,.15);--code-bg:#0B0F14;--code-ink:#D6DEEB;--code-faint:#56657A;--code-line:#262D39}
+/* tokens:end */
