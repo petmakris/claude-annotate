@@ -1,15 +1,14 @@
 """Which speech engine talk uses, and the one way talk.py calls it.
 
 Azure speech when its key is found: AZURE_SPEECH_KEY (and AZURE_SPEECH_REGION) in the environment,
-else the vault entry `azure-speech` (fields token and region) through `@secrets read`. Without a key,
-the local VoiceStudio app. TALK_SPEECH=azure or TALK_SPEECH=voicestudio picks one by hand.
+else the output of TALK_AZURE_KEY_COMMAND, a command that prints the key (with TALK_AZURE_REGION for
+its region). Without a key, the local VoiceStudio app. TALK_SPEECH=azure or TALK_SPEECH=voicestudio picks one by hand.
 
 Every answer is made in one request, never piece by piece: pieces joined together pause and click
 at every seam. While it is made, the page shows a progress bar timed by estimate() and learn().
 """
 
 import os
-import shutil
 import subprocess
 import threading
 import time
@@ -39,27 +38,29 @@ KEY_RETRY_S = 60.0
 _rates: dict[str, float] = {}  # engine name -> seconds of work per character, learned from each answer
 
 
-def vault_field(name: str) -> str:
-    """One field of the vault entry `azure-speech`, or "" when the vault cannot be read."""
-    if not shutil.which("@secrets"):
+def command_key() -> str:
+    """The key TALK_AZURE_KEY_COMMAND prints, or "" when it is unset, fails or prints nothing."""
+    command = os.environ.get("TALK_AZURE_KEY_COMMAND", "").strip()
+    if not command:
         return ""
     try:
-        out = subprocess.run(["@secrets", "read", "azure-speech", name], capture_output=True, text=True,
-                             timeout=20, stdin=subprocess.DEVNULL)
+        out = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=20,
+                             stdin=subprocess.DEVNULL)
     except (OSError, subprocess.TimeoutExpired):
         return ""
     return out.stdout.strip() if out.returncode == 0 else ""
 
 
 def azure_key() -> tuple[str, str] | None:
-    """(key, region) for Azure speech, or None. The environment wins over the vault. A key found is
-    kept until forget_key(); a key not found is looked for again after KEY_RETRY_S, since the vault
-    may only have been locked or slow."""
+    """(key, region) for Azure speech, or None. AZURE_SPEECH_KEY wins over the key command. A key found
+    is kept until forget_key(); a key not found is looked for again after KEY_RETRY_S, since the
+    command may only have been slow, or its store locked."""
     global _key, _key_missed_at
     with _lock:
         if _key is None and time.monotonic() - _key_missed_at >= KEY_RETRY_S:
-            key = os.environ.get("AZURE_SPEECH_KEY", "").strip() or vault_field("token")
-            region = os.environ.get("AZURE_SPEECH_REGION", "").strip() or (vault_field("region") if key else "")
+            key = os.environ.get("AZURE_SPEECH_KEY", "").strip() or command_key()
+            region = (os.environ.get("AZURE_SPEECH_REGION", "").strip()
+                      or os.environ.get("TALK_AZURE_REGION", "").strip())
             if key:
                 _key = (key, region or "westeurope")
             else:
@@ -104,8 +105,8 @@ def ensure_running(say=print) -> dict:
 def fix() -> str:
     """What the user does when the engine is not ready."""
     if engine().NAME == "Azure":
-        return "Check the vault entry azure-speech (fields token and region)"
-    return "Start the VoiceStudio app, or add the vault entry azure-speech to speak with Azure"
+        return "Check the Azure key (AZURE_SPEECH_KEY or TALK_AZURE_KEY_COMMAND) and its region"
+    return "Start the VoiceStudio app, or set AZURE_SPEECH_KEY or TALK_AZURE_KEY_COMMAND to speak with Azure"
 
 
 def describe(info: dict) -> str:

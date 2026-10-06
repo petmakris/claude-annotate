@@ -1,4 +1,4 @@
-"""Which engine talk speaks with: Azure when a key is found, else VoiceStudio, never the vault in a test."""
+"""Which engine talk speaks with: Azure when a key is found, else VoiceStudio, never a real key command in a test."""
 import pytest
 
 import azure_speech
@@ -15,9 +15,10 @@ def fresh(monkeypatch):
     monkeypatch.delenv("TALK_SPEECH", raising=False)
     monkeypatch.delenv("AZURE_SPEECH_KEY", raising=False)
     monkeypatch.delenv("AZURE_SPEECH_REGION", raising=False)
-    vault = {}
-    monkeypatch.setattr(speech, "vault_field", lambda name: vault.get(name, ""))
-    return vault
+    monkeypatch.delenv("TALK_AZURE_REGION", raising=False)
+    found = {}
+    monkeypatch.setattr(speech, "command_key", lambda: found.get("token", ""))
+    return found
 
 
 def test_a_key_in_the_environment_picks_azure(fresh, monkeypatch):
@@ -26,10 +27,23 @@ def test_a_key_in_the_environment_picks_azure(fresh, monkeypatch):
     assert speech.azure_key() == ("k", "westeurope")
 
 
-def test_a_key_in_the_vault_picks_azure_with_its_region(fresh):
-    fresh.update(token="vault-key", region="switzerlandwest")
+def test_a_key_from_the_command_picks_azure_with_its_region(fresh, monkeypatch):
+    fresh.update(token="command-key")
+    monkeypatch.setenv("TALK_AZURE_REGION", "switzerlandwest")
     assert speech.engine() is azure_speech
-    assert speech.azure_key() == ("vault-key", "switzerlandwest")
+    assert speech.azure_key() == ("command-key", "switzerlandwest")
+
+
+def test_the_key_command_prints_the_key(monkeypatch):
+    monkeypatch.setenv("TALK_AZURE_KEY_COMMAND", "printf ' secret-key\\n'")
+    assert speech.command_key() == "secret-key"
+
+
+def test_a_failing_or_missing_key_command_gives_no_key(monkeypatch):
+    monkeypatch.setenv("TALK_AZURE_KEY_COMMAND", "echo partial; exit 3")
+    assert speech.command_key() == ""
+    monkeypatch.delenv("TALK_AZURE_KEY_COMMAND")
+    assert speech.command_key() == ""
 
 
 def test_no_key_falls_back_to_voicestudio(fresh):
@@ -37,7 +51,7 @@ def test_no_key_falls_back_to_voicestudio(fresh):
 
 
 def test_talk_speech_picks_by_hand(fresh, monkeypatch):
-    fresh.update(token="vault-key")
+    fresh.update(token="command-key")
     monkeypatch.setenv("TALK_SPEECH", "voicestudio")
     assert speech.engine() is voicestudio
     monkeypatch.setattr(speech, "_engine", None)
@@ -63,7 +77,7 @@ def test_ssml_escapes_the_text():
     assert "a &lt; b &amp; c" in azure_speech.ssml("a < b & c", "v")
 
 
-def test_a_key_the_vault_could_not_give_is_looked_for_again_later(fresh, monkeypatch):
+def test_a_key_the_command_could_not_give_is_looked_for_again_later(fresh, monkeypatch):
     clock = [1000.0]
     monkeypatch.setattr(speech.time, "monotonic", lambda: clock[0])
     assert speech.azure_key() is None

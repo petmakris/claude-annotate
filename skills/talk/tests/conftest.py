@@ -11,7 +11,7 @@ from pathlib import Path
 
 # Servers and clients started by the tests keep their files here, never in the real talk folder.
 os.environ["TALK_RUN_DIR"] = tempfile.mkdtemp(prefix="talk-run-")
-# Tests never read the vault or reach Azure: the engine is VoiceStudio, faked where a test speaks.
+# Tests never run a key command or reach Azure: the engine is VoiceStudio, faked where a test speaks.
 os.environ["TALK_SPEECH"] = "voicestudio"
 os.environ["TALK_REVIVE"] = "0"
 

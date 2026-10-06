@@ -33,7 +33,7 @@ def _sdk():
 def _config():
     found = azure_key()
     if not found:
-        raise SpeechError("no Azure speech key: set AZURE_SPEECH_KEY, or add the vault entry azure-speech")
+        raise SpeechError("no Azure speech key: set AZURE_SPEECH_KEY or TALK_AZURE_KEY_COMMAND")
     key, region = found
     return _sdk().SpeechConfig(subscription=key, region=region)
 
@@ -43,7 +43,7 @@ def _failure(sdk, result, what: str) -> SpeechError:
     reason = getattr(detail, "error_details", "") or getattr(detail, "reason", "") or result.reason
     if "401" in str(reason) or "Authentication" in str(reason):
         forget_key()
-        return SpeechError(f"Azure rejected the key for {what}: check the vault entry azure-speech (token, region)")
+        return SpeechError(f"Azure rejected the key for {what}: check the key and its region")
     return SpeechError(f"Azure {what} failed: {reason}")
 
 
@@ -51,7 +51,7 @@ def ensure_running(say=print) -> dict:
     """Azure needs nothing started: only a key. What doctor and a launch print about it."""
     found = azure_key()
     if not found:
-        raise SpeechError("no Azure speech key: set AZURE_SPEECH_KEY, or add the vault entry azure-speech")
+        raise SpeechError("no Azure speech key: set AZURE_SPEECH_KEY or TALK_AZURE_KEY_COMMAND")
     _sdk()
     return {"status": "ok", "region": found[1]}
 

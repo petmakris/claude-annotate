@@ -2469,7 +2469,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "(default auto)")
     parser.add_argument("--port", type=int, default=int(os.environ.get("TALK_PORT", DEFAULT_PORT)))
     parser.add_argument("--url-base", default=os.environ.get("TALK_URL_BASE"),
-                        help="this server's https address (scheme and host), e.g. from @devdomains; "
+                        help="this server's https address (scheme and host), as the browser reaches it; "
                              "printed as the Link line")
     parser.add_argument("--stage-base", default=os.environ.get("TALK_STAGE_BASE"),
                         help="the webcompanion daemon's address as reached from the browser "
