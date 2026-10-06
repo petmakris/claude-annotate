@@ -76,26 +76,44 @@ Board tags are taken out of the speech and drawn on the stage beside the convers
 |---|---|---|
 | code | existing code you are explaining | `[[show code: talk/live_turns.py:40-58 \| How a turn waits]]` |
 | change | after you edit a file, instead of describing the edit | `[[show change: talk/talk.py \| What I changed]]` |
-| diagram | how parts connect | `[[show diagram \| Turn path]] graph LR; P[Page] --> Q[Queue] [[/show]]` |
+| sequence | who talks to whom, in time: a request's path, a release, an event's life | `[[show sequence \| Turn path]]` a JSON spec `[[/show]]` |
+| flowchart | a decision or a process that branches, joins or ends in outcomes | `[[show flowchart \| Floor rule]]` a JSON spec `[[/show]]` |
+| diagram | a quick sketch of how parts connect (Mermaid) | `[[show diagram \| Turn path]] graph LR; P[Page] --> Q[Queue] [[/show]]` |
 | table | a comparison or a list of facts | `[[show table \| Ports]]` a markdown table `[[/show]]` |
+
+**Sequence and flowchart** are annotate's drawing tools: the stage draws them in its own type, they keep long names and versions on one line, and they step in time with your voice. Pick one by the question: two or more actors exchanging things in order is a sequence; a branch, a join or several outcomes is a flowchart; anything else that is quick to sketch is a Mermaid diagram; facts side by side are a table. A body that is not JSON is drawn as Mermaid.
+
+The spec is annotate's: `$SKILL_DIR/../annotate/references/block-kinds/sequence.md` and `flowchart.md` beside it hold every field. In short:
+
+```
+[[show sequence | Release path]] {"actors": [{"id": "c", "label": "Contract"}, {"id": "m", "label": "Service"}],
+ "steps": [{"id": "s1", "from": "c", "to": "c", "arrow": "self", "label": "dev build published", "sub": "2026-R1-dev-139", "note": "13 Jan"},
+           {"id": "s2", "from": "c", "to": "m", "arrow": "request", "label": "pins build 139", "tone": "internal"}],
+ "legend": [{"tone": "internal", "label": "the service pins a build"}]} [[/show]]
+[[show flowchart | Floor rule]] {"nodes": [{"id": "a", "role": "entry", "label": "Turn arrives"},
+ {"id": "b", "role": "decision", "label": "Floor free?"}, {"id": "c", "role": "success", "label": "Played"}],
+ "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": "c", "label": "yes"}]} [[/show]]
+```
+
+A sequence step's `arrow` is `request`, `event` (dashed), `self` or `band` (a sentence laid across actors); `sub` is a monospace line under its label, the place for a version or a path, and `note` a short right-hand value such as a date. A flowchart node's `role` is `entry`, `code`, `call`, `decision`, `success` or `error`. With no verbs, a sequence brings in one step per sentence and a flowchart one node per sentence, each arrow arriving with its second end; that is usually what you want, so verbs are optional here. A spec the tool refuses is not shown, and a `board:` line quotes why.
 
 `code` shows at most 60 lines you read in this turn; `highlight 44-47` before the bar marks lines. `change` is read from git: the file against HEAD, or against another revision with `since <rev>` (`talk/talk.py since HEAD~2`). A new file shows as all added.
 
 **Pointing while you talk.**
 
-- `[[point: lines 12-14]]` before a sentence lights up those lines and dims the rest. It also takes `line N`, `row N` (counted under the header), `row "name"` (by its first cell) and `node X` (a Mermaid node id). On a change board, line numbers are the new ones. It points at the last board shown; name another one by its title: `[[point Turn path: node Q]]`. Use two to four in an explanation, not one per sentence.
+- `[[point: lines 12-14]]` before a sentence lights up those lines and dims the rest. It also takes `line N`, `row N` (counted under the header), `row "name"` (by its first cell), `node X` (a flowchart or Mermaid node id) and `step S` (a sequence step id); a lit step lights its arrow and its line in the key together. On a change board, line numbers are the new ones. It points at the last board shown; name another one by its title: `[[point Turn path: node Q]]`. Use two to four in an explanation, not one per sentence.
 - `[[key: one short line]]` after the sentence it sums up. It is not said. It goes on the **Key points** board, which is pinned first, keeps every key point of the call, and lights each one up as the voice reaches it.
 
-**Building a board up while you talk.** A flowchart or a table can come in one thing at a time. Write the board once, whole, then put a verb just before the word that names each thing. Tags with no spoken word between them make one step.
+**Building a board up while you talk.** A sequence, a flowchart or a table can come in one thing at a time. Write the board once, whole, then put a verb just before the word that names each thing. Tags with no spoken word between them make one step.
 
 | Verb | Effect |
 |---|---|
-| `[[+ api]]`, `[[+ api->db, db]]` | reveal; an edge brings its two nodes, a node its subgraph box |
+| `[[+ api]]`, `[[+ api->db, db]]`, `[[+ s3]]` | reveal; an edge brings its two nodes, a node its subgraph box, a step its two actors; an edge also comes in by itself once both its nodes are shown |
 | `[[next]]`, `[[next 2]]` | reveal the next one or two things, in the order the board declares them |
 | `[[all]]` | reveal everything still hidden |
 | `[[focus api->db]]`, `[[focus 42-45]]`, `[[focus row 2]]`, `[[focus none]]` | light these and dim the rest; `point` does the same |
 
-Targets are the flowchart's node and subgraph ids, edges as `a->b`, code lines and table rows. Name another board by its title first: `[[+ Turn path: Q]]`. At most three things before the first verb. A board of more than three things with no verbs comes in one thing per sentence, and a `board:` line says so. A target that names nothing exactly is read as the nearest id or label, or dropped; each such repair is a `board:` line and is counted on the board's header. During a call a page (a file, an address or a session) opens behind the board in front and never comes forward by itself: say that it is there.
+Targets are node and subgraph ids, edges as `a->b`, sequence step and actor ids, code lines and table rows, or their labels. Name another board by its title first: `[[+ Turn path: Q]]`. At most three things before the first verb. A board of more than three things with no verbs comes in one thing per sentence, and a `board:` line says so. A target that names nothing exactly is read as the nearest id or label, or dropped; each such repair is a `board:` line and is counted on the board's header. During a call a page (a file, an address or a session) opens behind the board in front and never comes forward by itself: say that it is there.
 
 **Rules.**
 

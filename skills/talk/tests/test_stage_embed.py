@@ -312,7 +312,7 @@ def test_the_worked_example_steps_with_the_voice_and_lands_right_after_every_jum
             asyncio.run_coroutine_threadsafe(call.answer(WORKED), loop).result(10)
             card = stage.locator(f'section.pane[data-view="{view}"] .diagram .k-card')
             card.wait_for(timeout=20000)
-            assert card.inner_text() == "advisory drops :workflows · 0/6"
+            assert card.inner_text() == "advisory drops :workflows"
             inner = _stage_frame(page)
             assert _applied(inner, view) == 0
             page.wait_for_selector("#playpause:not([hidden])", timeout=10000)
@@ -371,7 +371,7 @@ def test_a_code_scene_steps_its_focus_with_the_voice(tmp_path, wc_config, pw):
             page.wait_for_function("audio.ended", timeout=15000)
             lines = stage.locator('section.pane[data-view="steps"] .ln.k-focus')
             assert lines.evaluate_all("els => els.map(e => e.dataset.line)") == ["7"]
-            assert stage.locator('section.pane[data-view="steps"] .vstep').inner_text() == "2/2"
+            assert stage.locator('section.pane[data-view="steps"] .vstep').inner_text() == "Step 2 of 2"
             page.evaluate(f"audio.currentTime = {dict(_cue_times(page, 'steps'))[1] + 0.05}")
             stage.locator('section.pane[data-view="steps"] .ln.k-focus[data-line="2"]').wait_for(timeout=5000)
             assert lines.count() == 2

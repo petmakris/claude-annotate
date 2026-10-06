@@ -1,6 +1,6 @@
 ---
 name: stage
-description: Put something in front of the user on a live page and keep it current while you work — a deck or HTML page being edited, a running app or dashboard URL, another webcompanion session, a code range, a Mermaid diagram or a table. Each view has a name; showing the same name again updates it in place, and a file view reloads on every save. Use when the user says "/stage", "show me", "put it on the stage", or when seeing the thing would beat reading about it. /talk uses it for its board.
+description: Put something in front of the user on a live page and keep it current while you work — a deck or HTML page being edited, a running app or dashboard URL, another webcompanion session, a code range, a sequence diagram, a flowchart, a Mermaid diagram or a table. Each view has a name; showing the same name again updates it in place, and a file view reloads on every save. Use when the user says "/stage", "show me", "put it on the stage", or when seeing the thing would beat reading about it. /talk uses it for its board.
 argument-hint: "[<name> <source>]"
 allowed-tools:
   - Bash
@@ -31,6 +31,7 @@ that names an ended stage or a stage in another folder fails rather than making 
 | `code:<path>:<a>-<b> [highlight x-y]` | at most 60 lines of real code |
 | `change:<path> [since <rev>]` | what changed in a file, read from git (working tree against HEAD by default); at most 80 diff lines |
 | `diagram:-` / `table:-` | Mermaid or a markdown table, body on stdin (heredoc) |
+| `sequence:-` / `flowchart:-` | a sequence diagram or flowchart drawn by annotate's tools from a JSON spec on stdin (the spec is in `$SKILL_DIR/../annotate/references/block-kinds/`); a refused spec exits 2 with the reason |
 
 Rules:
 

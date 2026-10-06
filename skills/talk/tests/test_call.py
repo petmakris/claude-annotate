@@ -461,7 +461,7 @@ def test_a_point_lights_up_lines_of_the_last_board_and_a_bad_point_is_reported(t
     _, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point Nope: row 1]] There.", code)
     assert problems == ['point not shown: no board titled "Nope" in this call']
     entry, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point: wibble]] There.", code)
-    assert problems == ['point not shown: expected line N, lines A-B, row N, row "text" or node ID']
+    assert problems == ['point not shown: expected line N, lines A-B, row N, row "text", node ID or step ID']
     assert [c["kind"] for c in entry["cues"]] == ["front"] and "wibble" not in entry["text"]
 
 
@@ -867,3 +867,55 @@ def test_an_untagged_table_is_stepped_like_a_tagged_one(tmp_path):
     call = talk.Call(make_args(), "T", tmp_path / "out")
     call.split_reply(f"Here they are.\n{CLOUDS}\nAzure first. AWS next. GCP then. OVH last.")
     assert call.board.items[0]["scene"]["steps"] == 4
+
+
+SEQ = ('{"actors": [{"id": "p", "label": "Page"}, {"id": "s", "label": "Server"}], "steps": ['
+       '{"id": "s1", "from": "p", "to": "s", "arrow": "request", "label": "send"},'
+       '{"id": "s2", "from": "s", "to": "s", "arrow": "self", "label": "queue"},'
+       '{"id": "s3", "from": "s", "to": "p", "arrow": "event", "label": "answer"},'
+       '{"id": "s4", "from": "p", "to": "p", "arrow": "self", "label": "play"}]}')
+FLOW = ('{"nodes": [{"id": "a", "role": "entry", "label": "Turn"}, {"id": "b", "role": "success", "label": "Played"}],'
+        ' "edges": [{"from": "a", "to": "b"}]}')
+
+
+def _call(tmp_path):
+    from helpers import make_args
+    return talk.Call(make_args(), "T", tmp_path / "out")
+
+
+def test_a_sequence_spec_is_drawn_by_the_shared_tool_and_steps_one_sentence_at_a_time(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply(f"[[show sequence | Turn]] {SEQ} [[/show]] The page sends. It queues. It answers. It plays.")
+    item = call.board.items[0]
+    name, source, title = talk.stage_view(item)
+    assert (item["kind"], source["format"], source["tool"], title) == ("sequence", "visual", "sequence", "Turn")
+    assert 'data-key="step:s1"' in source["html"] and 'data-key="step:s1"' in source["key"]
+    shown = [set(f["show"]) for f in item["scene"]["frames"]]
+    assert "step:s1" in shown[1] and "step:s2" not in shown[1] and "step:s4" in shown[4]
+    assert not [p for p in call.board.problems if "stepped one sentence at a time" in p]
+
+
+def test_a_bad_spec_never_reaches_the_stage_and_the_board_says_why(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply('[[show sequence | Turn]] {"actors": [], "steps": []} [[/show]] Nothing to see.')
+    assert call.board.items == []
+    assert any("requires at least 2 actors" in p for p in call.board.problems)
+
+
+def test_a_flowchart_written_in_mermaid_stays_a_mermaid_diagram_and_a_spec_becomes_a_visual(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply(f"[[show flowchart | Old]] graph LR; A-->B [[/show]] One. [[show flowchart | New]] {FLOW} [[/show]] Two.")
+    old, new = call.board.items
+    assert old["kind"] == "diagram" and talk.stage_view(old)[1]["format"] == "diagram"
+    assert new["kind"] == "flowchart" and talk.stage_view(new)[1]["tool"] == "flowchart"
+
+
+def test_a_point_lights_a_step_or_a_node_of_a_visual(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply(f"[[show sequence | Turn]] {SEQ} [[/show]] [[+ s1]] It sends. [[point: step s3]] It answers.")
+    frames = call.board.items[0]["scene"]["frames"]
+    assert frames[2]["focus"] == ["step:s3"]
+    call.split_reply(f"[[show flowchart | Floor]] {FLOW} [[/show]] [[point: node b]] Played.")
+    assert call.board.items[-1]["scene"]["frames"][1]["focus"] == ["node:b"]
+    call.split_reply("[[point Turn: step s9]] No such step.")
+    assert any("no step s9" in p for p in call.board.problems)
