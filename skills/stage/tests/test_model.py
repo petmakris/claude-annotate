@@ -239,7 +239,35 @@ def test_a_sequence_or_flowchart_spec_on_stdin_is_drawn_by_the_shared_tools(tmp_
 
 
 def test_a_bad_spec_says_what_the_tool_said(tmp_path):
-    with pytest.raises(model.SourceError, match="sequence:- is not JSON"):
+    with pytest.raises(model.SourceError, match="sequence:-: not JSON"):
         model.parse_source("sequence:-", tmp_path, "graph LR; a-->b")
     with pytest.raises(model.SourceError, match="sequence:-: .*actor"):
         model.parse_source("sequence:-", tmp_path, json.dumps({"actors": [], "steps": []}))
+
+
+def test_numbers_where_the_tools_want_text_are_drawn_and_a_wrong_shape_is_refused(tmp_path):
+    seq = {"actors": [{"id": 1, "label": "Page"}, {"id": 2, "label": "Server"}],
+           "steps": [{"id": 1, "from": 1, "to": 2, "arrow": "request", "label": 404}]}
+    drawn = model.parse_source("sequence:-", tmp_path, json.dumps(seq))
+    assert 'data-key="step:1"' in drawn["html"] and "404" in drawn["key"]
+    flow = {"nodes": [{"id": 1, "label": 404}, {"id": "b", "label": "B"}], "edges": [{"from": 1, "to": "b"}]}
+    assert 'data-key="node:1"' in model.parse_source("flowchart:-", tmp_path, json.dumps(flow))["html"]
+    with pytest.raises(model.SourceError, match="nodes must be a list of objects"):
+        model.parse_source("flowchart:-", tmp_path, json.dumps({"nodes": ["a", "b"]}))
+    with pytest.raises(model.SourceError, match="edges must be a list of objects"):
+        model.parse_source("flowchart:-", tmp_path, json.dumps({"nodes": [{"id": "a", "label": "A"}], "edges": "x"}))
+    with pytest.raises(model.SourceError, match="block wrapper"):
+        model.parse_source("flowchart:-", tmp_path, json.dumps({"id": "s", "kind": "flowchart", "spec": FLOW}))
+
+
+def test_a_spec_the_tool_cannot_draw_is_refused_not_raised(tmp_path, monkeypatch):
+    monkeypatch.setattr(model.flowchart, "render", lambda *a, **k: 1 / 0)
+    with pytest.raises(model.SourceError, match="could not draw this spec"):
+        model.parse_source("flowchart:-", tmp_path, json.dumps(FLOW))
+
+
+def test_stdin_kinds_take_talks_names_and_an_unknown_one_is_refused(tmp_path):
+    assert model.parse_source("mermaid:-", tmp_path, "graph TD; A-->B")["format"] == "diagram"
+    assert model.parse_source("grid:-", tmp_path, "| a |\n|---|\n| 1 |")["format"] == "table"
+    with pytest.raises(model.SourceError, match="unknown chart:-"):
+        model.parse_source("chart:-", tmp_path, "x")

@@ -16,7 +16,7 @@ def test_a_flowchart_names_its_groups_nodes_and_edges_in_declaration_order():
     m = scene.flowchart_model(EXAMPLE)
     assert m.keys == ["group:adv", "node:pws", "node:legacy", "node:wf", "node:engine",
                       "edge:pws->wf#0", "edge:wf->engine#0", "edge:pws->legacy#0"]
-    assert m.order == m.keys[1:]
+    assert m.order == m.keys[1:5]
     assert m.up["edge:pws->wf#0"] == ["node:pws", "node:wf"] and m.up["node:pws"] == ["group:adv"]
     assert m.down == {"group:adv": ["node:pws", "node:legacy"]}
     assert m.names["flowable engine"] == "node:engine" and m.names[":advisory"] == "group:adv"
@@ -85,7 +85,9 @@ def test_a_target_that_names_nothing_exactly_is_repaired_and_said():
     assert scene.resolve(m, "node wf", "T") == (["node:wf"], None)
     assert scene.resolve(m, "ProposalWorkflowServiceImp", "T") == (
         ["node:pws"], '"ProposalWorkflowServiceImp" in "T" read as node:pws')
-    assert scene.resolve(m, ":advisory", "T") == (["group:adv"], '":advisory" in "T" read as group:adv')
+    assert scene.resolve(m, ":advisory", "T") == (["group:adv"], None)
+    assert scene.resolve(m, '"Flowable engine"', "T") == (["node:engine"], None)
+    assert scene.resolve(m, ":advisor", "T") == (["group:adv"], '":advisor" in "T" read as group:adv')
     assert scene.resolve(m, "wf->pws", "T") == (
         ["edge:pws->wf#0"], '"wf->pws" in "T" read as pws->wf: that edge only goes the other way')
     assert scene.resolve(m, "nope", "T") == ([], '"nope" in "T" matches nothing; dropped')
@@ -148,7 +150,7 @@ def test_repairs_are_counted_and_what_is_never_revealed_comes_in_with_the_rest_f
     built, notes = scene.compile_scene(model, [verbs("+ pwss"), verbs("+ ghost")], "T")
     assert built["repairs"] == 2
     assert notes == ['"pwss" in "T" read as node:pws', '"ghost" in "T" matches nothing; dropped',
-                     '6 of 7 elements of "T" are never revealed; they come in with the rest frame']
+                     '3 of 4 elements of "T" are never revealed; they come in with the rest frame']
     assert built["frames"][-1]["show"] == model.keys
 
 
@@ -161,8 +163,8 @@ def test_next_reveals_in_declaration_order_and_says_when_nothing_is_left():
 
 def test_a_board_with_more_than_three_elements_and_no_verbs_is_stepped_per_sentence():
     model = scene.flowchart_model(EXAMPLE)
-    assert [[v.count for v in g] for g in scene.auto_steps(model, 3)] == [[3], [3], [3]]
-    assert len(scene.auto_steps(model, 20)) == 7
+    assert [[v.count for v in g] for g in scene.auto_steps(model, 3)] == [[1], [1], [2]]
+    assert len(scene.auto_steps(model, 20)) == 4
     assert scene.auto_steps(scene.flowchart_model("graph TD; P-->Q"), 5) == []
     assert scene.auto_steps(scene.lines_model(range(1, 30)), 5) == []
     assert scene.auto_steps(model, 0) == []
@@ -218,3 +220,23 @@ def test_steps_actors_and_nodes_are_found_by_id_by_word_or_by_label():
     flow = scene.flowchart_spec_model(FLOW_SPEC)
     assert scene.resolve(flow, "b->c", "Floor")[0] == ["edge:b->c#0", "edge:b->c#1"]
     assert scene.resolve(flow, "Floor free?", "Floor")[0] == ["node:b"]
+
+
+def test_auto_steps_spread_evenly_and_never_end_on_an_empty_sentence():
+    model = scene.flowchart_model("graph TD; A-->B; B-->C; C-->D; D-->E")
+    assert [g[0].count for g in scene.auto_steps(model, 4)] == [1, 1, 1, 2]
+    built, notes = scene.compile_scene(model, scene.auto_steps(model, 4), "T")
+    assert notes == [] and built["frames"][4]["show"] == model.keys
+
+
+def test_next_and_all_name_their_board_by_title():
+    assert (scene.parse_verb("next Turn path").title, scene.parse_verb("next Turn path").count) == ("Turn path", 1)
+    assert (scene.parse_verb("next Turn path: 2").title, scene.parse_verb("next Turn path: 2").count) == ("Turn path", 2)
+    assert (scene.parse_verb("next 3").title, scene.parse_verb("next 3").count) == ("", 3)
+    assert scene.parse_verb("all: Turn path").title == "Turn path"
+
+
+def test_an_edge_between_ids_with_spaces_is_the_edge():
+    model = scene.flowchart_spec_model({"nodes": [{"id": "Order service"}, {"id": "db"}],
+                                        "edges": [{"from": "Order service", "to": "db"}]})
+    assert scene.resolve(model, "Order service->db", "T") == (["edge:Order service->db#0"], None)

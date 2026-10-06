@@ -8,6 +8,8 @@ Every answer is made in one request, never piece by piece: pieces joined togethe
 at every seam. While it is made, the page shows a progress bar timed by estimate() and learn().
 """
 
+from __future__ import annotations
+
 import os
 import subprocess
 import threading
@@ -35,20 +37,30 @@ _engine = None
 _key: tuple[str, str] | None = None
 _key_missed_at = float("-inf")
 KEY_RETRY_S = 60.0
+key_failure = ""  # why TALK_AZURE_KEY_COMMAND last gave no key: its exit, first stderr line or timeout, never its output
 _rates: dict[str, float] = {}  # engine name -> seconds of work per character, learned from each answer
 
 
 def command_key() -> str:
     """The key TALK_AZURE_KEY_COMMAND prints, or "" when it is unset, fails or prints nothing."""
+    global key_failure
     command = os.environ.get("TALK_AZURE_KEY_COMMAND", "").strip()
     if not command:
         return ""
     try:
         out = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=20,
                              stdin=subprocess.DEVNULL)
-    except (OSError, subprocess.TimeoutExpired):
+    except subprocess.TimeoutExpired:
+        key_failure = "it took over 20 s"
         return ""
-    return out.stdout.strip() if out.returncode == 0 else ""
+    except OSError as err:
+        key_failure = f"it could not run ({err.strerror or err})"
+        return ""
+    key = out.stdout.strip() if out.returncode == 0 else ""
+    first = next((ln.strip() for ln in out.stderr.splitlines() if ln.strip()), "")
+    key_failure = "" if key else (f"it exited {out.returncode}" if out.returncode else "it printed nothing") + (
+        f": {first[:160]}" if first else "")
+    return key
 
 
 def azure_key() -> tuple[str, str] | None:
@@ -86,12 +98,22 @@ def engine():
             import azure_speech as chosen
         else:
             import voicestudio as chosen
+            if not choice and key_failure:
+                print(f"speech: TALK_AZURE_KEY_COMMAND gave no key ({key_failure}), so this server speaks with "
+                      "VoiceStudio", flush=True)
         _engine = chosen
     return _engine
 
 
-def name() -> str:
-    return engine().NAME
+def name(wait: bool = True) -> str:
+    """The engine's name. With wait=False an engine still being chosen (its key command running) is not
+    waited for, so a health check never stalls the server."""
+    if not wait and _engine is None:
+        return "choosing"
+    try:
+        return engine().NAME
+    except SpeechError as err:
+        return f"none ({err})"
 
 
 def default_voice() -> str:
@@ -104,7 +126,11 @@ def ensure_running(say=print) -> dict:
 
 def fix() -> str:
     """What the user does when the engine is not ready."""
-    if engine().NAME == "Azure":
+    try:
+        chosen = engine().NAME
+    except SpeechError as err:
+        return f"Fix {err}"
+    if chosen == "Azure":
         return "Check the Azure key (AZURE_SPEECH_KEY or TALK_AZURE_KEY_COMMAND) and its region"
     return "Start the VoiceStudio app, or set AZURE_SPEECH_KEY or TALK_AZURE_KEY_COMMAND to speak with Azure"
 

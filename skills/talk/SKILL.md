@@ -56,7 +56,7 @@ For every turn:
    ```
    End the turn with one short line in the terminal, such as "Answered, listening." Everything meant for the user goes through `reply`.
 
-`reply` exit codes: 0 sent (a status for a turn already answered prints `ignored` and is not shown); 2 refused, unreachable or no such turn; 4 the call has ended, so nothing was shown and you do not re-arm. `board:` lines after `sent` name a tag that was not shown as asked, or was shown only after a fix: fix it in the next answer. A doorbell that prints `doorbell superseded` was replaced by a newer one: do not re-arm for it.
+`reply` exit codes: 0 sent (a status for a turn already answered prints `ignored` and is not shown); 2 refused, unreachable or no such turn; 4 the call has ended, so nothing was shown and you do not re-arm; when it names a transcript, write the recap from it as for `TALK_END`. `board:` lines after `sent` name a tag that was not shown as asked, or was shown only after a fix: fix it in the next answer. A doorbell that prints `doorbell superseded` was replaced by a newer one: do not re-arm for it.
 
 ### Writing the answer
 
@@ -83,7 +83,7 @@ Board tags are taken out of the speech and drawn on the stage beside the convers
 
 **Sequence and flowchart** are annotate's drawing tools: the stage draws them in its own type, they keep long names and versions on one line, and they step in time with your voice. Pick one by the question: two or more actors exchanging things in order is a sequence; a branch, a join or several outcomes is a flowchart; anything else that is quick to sketch is a Mermaid diagram; facts side by side are a table. A body that is not JSON is drawn as Mermaid.
 
-The spec is annotate's: `$SKILL_DIR/../annotate/references/block-kinds/sequence.md` and `flowchart.md` beside it hold every field. In short:
+The spec is annotate's: `$SKILL_DIR/../annotate/references/block-kinds/sequence.md` and `flowchart.md` beside it hold every field. The body is only the inner `spec` object, never annotate's `{"id", "kind", "spec"}` wrapper; annotate's `source` form, `views`, layout flavours and `href` do not apply here. In short:
 
 ```
 [[show sequence | Release path]] {"actors": [{"id": "c", "label": "Contract"}, {"id": "m", "label": "Service"}],
@@ -155,4 +155,4 @@ To load new code into a server that holds calls, run `uv run --script "$SKILL_DI
 
 ## The activity hook
 
-`hooks/talk-activity.sh` is an optional hook that lists this session's tool calls on the call page while it works. It exits at once when no call is running and never fails a tool call. Each session shows only on the call its doorbell names, so other sessions on the machine never appear. To install it, copy it somewhere outside any git checkout (for example `~/.claude/hooks/`) and register it in `~/.claude/settings.json`, with a timeout of 5 seconds, for `PreToolUse`, `PostToolUse`, `PostToolUseFailure` and `PermissionDenied` (matcher `*`), and for `Stop` and `StopFailure`.
+`hooks/talk-activity.sh` lists this session's tool calls on the call page while it works. The plugin registers it through its `hooks/hooks.json`, so nothing needs installing; remove any older copy registered in `~/.claude/settings.json`, or every event shows twice. It exits at once when no call is running and never fails a tool call. Each session shows only on the call its doorbell names, so other sessions on the machine never appear.

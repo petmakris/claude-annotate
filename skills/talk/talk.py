@@ -28,6 +28,8 @@ carries them on under the same id and token, and the page and the session's door
 Speech runs on Azure when its key is found, else in the VoiceStudio app on this machine (speech.py).
 """
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import concurrent.futures
@@ -44,6 +46,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import unicodedata
 import urllib.error
 import urllib.parse
@@ -378,8 +381,15 @@ def board_block_kind(marker: str) -> str | None:
 
 def block_head(kind: str, body: str) -> tuple[str, str]:
     """Split a block that was never closed: (the block-shaped head, the rest, given back to speech).
-    A table is the run of lines starting with '|'; a diagram runs to its closing ``` when it began
-    with a fence, else to the first blank line."""
+    A table is the run of lines starting with '|'; a JSON spec runs to the end of its object; a
+    diagram runs to its closing ``` when it began with a fence, else to the first blank line."""
+    if kind != "table" and body.lstrip().startswith("{"):
+        lead = len(body) - len(body.lstrip())
+        try:
+            _, end = json.JSONDecoder().raw_decode(body, lead)
+            return body[:end], body[end:]
+        except ValueError:
+            pass
     lines = body.splitlines(keepends=True)
     i = 0
     while i < len(lines) and not lines[i].strip():
@@ -501,7 +511,7 @@ _POINT_HEAD = re.compile(r"point(?![a-z0-9])\s*(?P<rest>.*)\Z", re.IGNORECASE | 
 _POINT_TARGET = re.compile(
     r"(?:(?P<line>lines?)\s+(?P<a>\d+)(?:\s*[-–]\s*(?P<b>\d+))?"
     r"|rows?\s+(?:(?P<n>\d+)|\"(?P<text>[^\"]+)\"|“(?P<curly>[^”]+)”|'(?P<single>[^']+)')"
-    r"|nodes?\s+(?P<node>[A-Za-z0-9_][\w-]*)|steps?\s+(?P<step>[A-Za-z0-9_][\w.-]*))\Z", re.IGNORECASE)
+    r"|nodes?\s+(?P<node>[^\s:\[\]][^:\[\]]*?)|steps?\s+(?P<step>[^\s:\[\]][^:\[\]]*?))\s*\Z", re.IGNORECASE)
 POINT_FORMS = 'expected line N, lines A-B, row N, row "text", node ID or step ID'
 
 
@@ -544,11 +554,17 @@ def table_cells(row: str) -> list[str]:
 
 
 def table_first_cells(body: str) -> list[str]:
-    """The first cell of every body row of a markdown table, as the stage counts its rows: after the
-    separator, every line holding a pipe, with or without a leading one."""
-    lines = [ln.strip() for ln in body.splitlines() if ln.strip()]
+    """The first cell of every body row of the first markdown table, as the stage counts its rows:
+    after the separator, every line up to the first blank one, with or without a leading pipe."""
+    lines = [ln.strip() for ln in body.splitlines()]
     sep = next((i for i, ln in enumerate(lines) if _TABLE_SEP.match(ln)), None)
-    rows = [ln for ln in lines[sep + 1 :] if "|" in ln] if sep is not None else [ln for ln in lines if ln.startswith("|")][1:]
+    if sep is None:
+        return [table_cells(ln)[0] for ln in lines if ln.startswith("|")][1:]
+    rows = []
+    for ln in lines[sep + 1 :]:
+        if not ln:
+            break
+        rows.append(ln)
     return [table_cells(ln)[0] for ln in rows]
 
 
@@ -561,33 +577,20 @@ def cell_text(cell: str) -> str:
     return t.strip()
 
 
-def diagram_nodes(body: str) -> str:
-    """A flowchart's body without its `graph TD` head, where node ids are looked for."""
-    return re.sub(r"\A\s*(?:graph|flowchart)(?:\s+[A-Za-z]{2})?\s*;?", " ", body, flags=re.IGNORECASE)
-
-
-def is_flowchart(body: str) -> bool:
-    """Whether the diagram is a graph or flowchart: the only kind whose nodes the stage can light up."""
-    first = next((ln.strip() for ln in body.splitlines() if ln.strip() and not ln.strip().startswith("%%")), "")
-    return bool(re.match(r"(?:graph|flowchart)\b", first, re.IGNORECASE))
-
-
-def has_node(body: str, node: str) -> bool:
-    """Whether `node` is a node of a flowchart: an id where a node is defined or linked, never the
-    direction after `graph`, a word inside a label or on an edge, a subgraph's id or `end`. Any other
-    diagram has no node the stage can light up."""
-    if not is_flowchart(body):
-        return False
-    # Labels go first, so a word inside one never counts as a node.
-    text = diagram_nodes(body)
-    text = re.sub(r"(?m)^[ \t]*(?:subgraph\b.*|end[ \t]*;?[ \t]*)$", "", text)
-    text = re.sub(r'"[^"\n]*"', '""', text)
-    text = re.sub(r"\|[^|\n]*\|", "||", text)
-    text = re.sub(r"(?<![-=.<>ox])(?:--|==|-\.)[ \t]+[^\n]*?[ \t]+(?:-->|---|==>|\.->)", " --> ", text)
-    for _ in range(3):  # nested shapes such as [( )] and (( ))
-        text = re.sub(r"[\[({][^\[\](){}\n]*[\])}]", "[]", text)
-    after = r"\s*(?:[\[({>;&]|[-=.~]{2}|-\.|:::|$)"
-    return bool(re.search(r"(?m)(?:^|[;\s&>|-])" + re.escape(node) + after, text))
+def spec_tool(body: str) -> str | None:
+    """Which shared tool a JSON body is written for, by its keys: nodes for a flowchart, actors or
+    steps for a sequence. None when it is not a JSON object or names neither."""
+    try:
+        spec = json.loads(body)
+    except ValueError:
+        return None
+    if not isinstance(spec, dict):
+        return None
+    if "nodes" in spec:
+        return "flowchart"
+    if "actors" in spec or "steps" in spec:
+        return "sequence"
+    return None
 
 
 def scene_model(item: dict) -> stage_scene.SceneModel | None:
@@ -914,14 +917,16 @@ class Board:
                     return
                 target = {"type": "row", "text": said}
         else:
-            node = m["node"]
-            if not is_flowchart(item["body"]):
+            # The stage lights what the scene keys, so a node is one the scene found: a subgraph too.
+            node, model = m["node"].strip(), scene_model(item)
+            if model is None:
                 self.problem(f'point not shown: "{name}" is not a graph or flowchart, so the stage cannot light a node in it')
                 return
-            if not has_node(item["body"], node):
+            key = next((k for k in (f"node:{node}", f"group:{node}") if k in model.keys), None)
+            if key is None:
                 self.problem(f'point not shown: no node {node} in "{name}"')
                 return
-            target = {"type": "node", "id": node}
+            target = {"type": "key", "key": key}
         self.cues.append({"kind": "frame", "view": item["view"],
                           "verb": stage_scene.Verb("focus", keys=self.target_keys(item, target))})
 
@@ -932,7 +937,7 @@ class Board:
             use = "step ID" if item["kind"] == "sequence" else "node ID"
             self.problem(f'point not shown: "{name}" is a {item["kind"]}; use {use}')
             return
-        key = f"{want[0]}:{want[1]}"
+        key = f"{want[0]}:{want[1].strip()}"
         if key not in scene_model(item).keys:
             self.problem(f'point not shown: no {want[0]} {want[1]} in "{name}"')
             return
@@ -947,7 +952,7 @@ class Board:
                 return [f"row#{target['n']}"]
             cells = [fold_like_stage(cell_text(c)) for c in table_first_cells(item["body"])]
             return [f"row#{cells.index(fold_like_stage(target['text'])) + 1}"]
-        return [f"node:{target['id']}"]
+        return [target["key"]]
 
     def close_block(self, cut: bool = False) -> str:
         """Put an open diagram or table on the board, without a ``` fence the model may have wrapped it in.
@@ -982,11 +987,18 @@ class Board:
             return rest
         if kind in VISUAL_KINDS and not item["body"].startswith("{"):
             item["kind"] = kind = "diagram"
+        elif kind == "diagram" and item["body"].startswith("{"):
+            tool = spec_tool(item["body"])
+            if tool:
+                self.problem(f'"{title}" is a {tool} spec, so it was drawn as one; write [[show {tool} | ...]]')
+                item["kind"] = kind = tool
         if kind in VISUAL_KINDS:
             try:
                 item["visual"] = stage_model.visual_source(kind, item["body"])
             except stage_model.SourceError as e:
-                self.problem(f'{kind} "{title}" not shown: {str(e).split(": ", 1)[-1]}')
+                other = spec_tool(item["body"])
+                hint = f"; this looks like a {other} spec, write [[show {other} | ...]]" if other not in (None, kind) else ""
+                self.problem(f'{kind} "{title}" not shown: {str(e).split(": ", 1)[-1]}{hint}')
                 return rest
         if kind == "diagram":
             for problem in diagram_problems(item["body"], title):
@@ -1345,6 +1357,20 @@ class Call:
             self.put_on_stage(item)
         return shown
 
+    def split_reply_safely(self, text: str) -> str:
+        """split_reply, but a board that breaks never costs the answer: the turn is already taken, so
+        the words are said without the boards and a board: line says why."""
+        try:
+            return self.split_reply(text)
+        except Exception as e:
+            traceback.print_exc()
+            self.board.open, self.board.spill, self.board.cues = None, "", []
+            self.reply_cues, self.reply_items = [], []
+            self.board.problem(f"the boards of this answer failed ({type(e).__name__}: {e}), so it is said without them")
+            text = re.sub(r"\[\[\s*show\b(?:(?!\[\[\s*/\s*show\s*\]\]).)*\[\[\s*/\s*show\s*\]\]", "", text,
+                          flags=re.IGNORECASE | re.DOTALL)
+            return re.sub(r"\[\[[^\[\]]*\]\]", "", text).strip()
+
     def compile_scenes(self, shown: str, timed: list) -> list:
         runs: dict[str, list] = {}
         for at, cue in timed:
@@ -1439,7 +1465,7 @@ class Call:
         """Show an answer at once, then read it aloud in the background."""
         # Off the loop: a change tag reads git, and the page's polls and audio must not wait for it.
         # One reply at a time, since splitting writes the board's and the call's state.
-        shown = await asyncio.get_running_loop().run_in_executor(self.reply_pool, self.split_reply, text)
+        shown = await asyncio.get_running_loop().run_in_executor(self.reply_pool, self.split_reply_safely, text)
         if not shown:
             return {}
         # Every key the speech thread sets exists already, so a page poll never sees the entry change size.
@@ -1837,6 +1863,8 @@ def build_app(server: Server):
             return web.json_response({"error": str(err)}, status=502)
         if not text.strip():
             return web.json_response({"text": ""})
+        if server.handing_over:  # past the last save: the page keeps the turn and sends it to the next server
+            return web.json_response({"error": "the talk server is restarting; try again in a moment"}, status=503)
         return web.json_response({"text": text, "entry": call.offer(text, typed=False)})
 
     async def typed(request):
@@ -1849,6 +1877,8 @@ def build_app(server: Server):
         text = str(body.get("text", "")).strip() if isinstance(body, dict) else ""
         if not text:
             return web.json_response({"error": "nothing to send"}, status=400)
+        if server.handing_over:
+            return web.json_response({"error": "the talk server is restarting; try again in a moment"}, status=503)
         return web.json_response({"text": text, "entry": call.offer(text[:4000], typed=True)})
 
     async def floor(request):
@@ -1923,7 +1953,7 @@ def build_app(server: Server):
             return web.json_response({"error": "a status cannot end the call; send the wrap-up with end"},
                                      status=400)
         if call.ended:
-            return web.json_response({"error": "the call has ended"}, status=410)
+            return web.json_response({"error": "the call has ended", "transcript": str(call.transcript)}, status=410)
         if not status and not text.strip() and not end:
             return web.json_response({"error": "nothing to say: the reply is empty"}, status=400)
         result = call.turns.accept_reply(str(body.get("id", "")), final=not status)
@@ -1948,7 +1978,7 @@ def build_app(server: Server):
         if not server.is_server(token_of(request)):
             return forbidden()
         return web.json_response({"code": server.code, "calls": len(server.calls), "pid": os.getpid(),
-                                  "open": server.open_count(), "engine": speech.name(), "handover": True})
+                                  "open": server.open_count(), "engine": speech.name(wait=False), "handover": True})
 
     async def register(request):
         if not server.is_server(token_of(request)):
@@ -2184,10 +2214,12 @@ async def run_server(port: int) -> int:
         say(f"talk: port {port} is in use{f' by pid {holder}' if holder else ''}: {err}")
         await runner.cleanup()
         return 1
+    loop = asyncio.get_running_loop()
+    # Chosen off the loop: TALK_AZURE_KEY_COMMAND may take seconds, and no request should wait on it.
+    loop.run_in_executor(None, speech.name)
     adopt_calls(server)
     server.write_files()
     say(f"talk: server on port {port}, pid {os.getpid()}, code {server.code}, {len(server.calls)} call(s) carried over")
-    loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         loop.add_signal_handler(sig, server.stop.set)
     try:
@@ -2451,6 +2483,9 @@ def launch(args) -> int:
 def doctor(args) -> int:
     ok = True
     try:
+        chosen = speech.engine().NAME
+        if speech.key_failure and chosen != "Azure":
+            say(f"[--] TALK_AZURE_KEY_COMMAND is set but gave no key: {speech.key_failure}")
         info = speech.ensure_running(say=say)
         say(f"[ok] {speech.describe(info)}")
     except speech.SpeechError as err:
@@ -2487,7 +2522,7 @@ def doctor(args) -> int:
             ok = False
             say(f"[FAIL] the server file names pid {health.get('pid')}, but pid {holder} listens on port {args.port}")
         engine = health.get("engine")
-        if engine and engine != speech.name():
+        if engine and engine != "choosing" and engine != speech.name():
             say(f"[--] the server speaks with {engine}, while this environment would choose {speech.name()}; "
                 "it changes when the server restarts")
     elif port_held(args.port):

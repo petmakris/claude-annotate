@@ -138,9 +138,11 @@ window.addEventListener("blur", () => {
 
 // ---- the toast: an error for a while, or a lost connection until it is back ----
 let errText = "", errTimer = null, connText = "", connDown = false;
+let unsent = null;          // a recording the server did not take: kept, so the user never says it twice
 function paintToast() {
-  const text = connText || errText;
-  $("toast").hidden = !text; $("toasttext").textContent = text; $("retry").hidden = !connDown;
+  const text = connText || errText || (unsent ? "Your recording was not sent." : "");
+  $("toast").hidden = !text; $("toasttext").textContent = text;
+  $("retry").hidden = !connDown && !unsent; $("retry").textContent = connDown ? "Retry" : "Send again";
 }
 function showError(text) {
   errText = text || ""; clearTimeout(errTimer);
@@ -152,10 +154,12 @@ function showError(text) {
 let view = {v: -1, entries: [], working: false, stalled: false, activity: [], ended: null, calls: [], floor_call: null, floor_n: 0};
 let seen = null;            // ids of answers that existed when the page loaded: never auto-played
 let current = null;         // the entry in the player
-let language = store.get("language", CFG.language);
+// A language the launch named wins; with none named, the one the user last picked on this origin.
+let language = CFG.language && CFG.language !== "auto" ? CFG.language : store.get("language", "auto");
 let speed = store.get("speed", 1);
 let autoplay = store.get("autoplay", true);
 let recorder = null;
+let starting = false;       // the microphone is being asked for: a second press must not open a second one
 let busy = false;           // the recording is being turned into text
 let closed = false;         // the ended call was closed from here
 
@@ -420,7 +424,7 @@ async function poll() {
     wake = null;
   }
 }
-$("retry").onclick = () => { if (wake) wake(); };
+$("retry").onclick = () => { if (connDown) { if (wake) wake(); } else if (unsent) sendWav(unsent); };
 
 // ---- the floor: one call talks at a time ----------------------------------
 // Pressing Talk, sending text or playing an answer takes the floor for this call. Every other call's
@@ -659,12 +663,16 @@ function setMode(mode) {
 }
 
 async function startRecording() {
+  if (starting) return;
   showPop(null);
   showError("");
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { showError("This page cannot reach a microphone. Open it over https or on localhost."); return; }
   let stream;
+  starting = true;
   try { stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}}); }
   catch (err) { showError("No microphone: " + err.message); return; }
+  finally { starting = false; }
+  if (recorder) { stream.getTracks().forEach(t => t.stop()); return; }
   takeFloor(null);
   audio.pause();
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -711,15 +719,31 @@ function toWav(chunks, rate) {
 
 async function sendRecording() {
   const r = stopRecording();
-  const wav = toWav(r.chunks, r.ctx.sampleRate);
+  await sendWav(toWav(r.chunks, r.ctx.sampleRate));
+}
+
+// While the server restarts (503, or no answer at all) the recording is sent again until the next
+// server takes it, for up to three minutes. A recording still not taken is kept for Send again.
+async function sendWav(wav) {
+  unsent = null;
   setMode("busy");
-  try {
-    const resp = await api("/api/listen?lang=" + language, {method: "POST", body: wav, headers: {"Content-Type": "audio/wav"}});
-    const body = await resp.json().catch(() => ({}));
-    if (!resp.ok) showError(body.error || "Sending failed: HTTP " + resp.status);
-    else if (!body.text) showError("Nothing was heard. Try again, a little closer to the microphone.");
-    view.v = -1;
-  } catch (err) { showError("Sending failed: " + err.message); }
+  const until = Date.now() + 180000;
+  for (let wait = 1000; ; wait = Math.min(wait * 2, 8000)) {
+    let resp = null, failed = "";
+    try { resp = await api("/api/listen?lang=" + language, {method: "POST", body: wav, headers: {"Content-Type": "audio/wav"}}); }
+    catch (err) { failed = err.message; }
+    if (resp && resp.status !== 503) {
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) { if (![410, 413].includes(resp.status)) unsent = wav; showError(body.error || "Sending failed: HTTP " + resp.status); }
+      else if (!body.text) showError("Nothing was heard. Try again, a little closer to the microphone.");
+      view.v = -1;
+      break;
+    }
+    if (Date.now() > until) { unsent = wav; showError("Sending failed: " + (failed || "the talk server is restarting")); break; }
+    errText = "Reconnecting… your recording is kept and will be sent."; paintToast();
+    await new Promise(ok => setTimeout(ok, wait));
+  }
+  if (errText.startsWith("Reconnecting…")) showError("");
   setMode("idle");
 }
 

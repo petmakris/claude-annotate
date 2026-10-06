@@ -211,7 +211,6 @@ def flowchart_model(body: str) -> SceneModel | None:
                     pairs[(a, b)] = n + 1
                     key = f"edge:{a}->{b}#{n}"
                     edges.append((a, b, key))
-                    order.append(key)
     if not nodes and not groups:
         return None
 
@@ -267,9 +266,11 @@ def parse_verb(marker: str) -> Verb | None:
     if name in LATER:
         return Verb(name)
     if name == "next":
-        return Verb(name, count=int(rest) if rest.isdigit() and int(rest) > 0 else 1)
+        count = re.search(r"(?:\A|[\s:])(\d+)\s*\Z", rest)
+        title = (rest[: count.start()] if count else rest).strip(" :")
+        return Verb(name, title=title, count=int(count[1]) if count and int(count[1]) > 0 else 1)
     if name == "all":
-        return Verb(name, title=rest.rstrip(":").strip())
+        return Verb(name, title=rest.strip(" :"))
     title, targets = split_title(rest)
     return Verb(name, title=title, targets=split_targets(targets))
 
@@ -330,9 +331,12 @@ def _closest(model: SceneModel, raw: str) -> str | None:
 
 
 def _entity(model: SceneModel, raw: str) -> tuple[str | None, bool]:
+    raw = re.sub(r'\A(["“\'])(.*)["”\']\Z', r"\2", raw.strip())
     for key in (p + raw for p in _prefixes(model)):
         if key in model.keys:
             return key, False
+    if fold(raw) in model.names:
+        return model.names[fold(raw)], False
     return _closest(model, raw), True
 
 
@@ -364,7 +368,7 @@ def resolve(model: SceneModel, raw: str, title: str) -> tuple[list[str], str | N
         if actor and f"actor:{actor[1].strip()}" in model.keys:
             return [f"actor:{actor[1].strip()}"], None
     ident = m[1].strip() if m else raw
-    edge = _EDGE.fullmatch(ident)
+    edge = _EDGE.fullmatch(ident) or re.fullmatch(r"(?P<a>.+?)\s*-+>\s*(?P<b>[^>]+)", ident)
     if edge:
         (a, fuzzy_a), (b, fuzzy_b) = _entity(model, edge["a"]), _entity(model, edge["b"])
         if a is None or b is None:
@@ -404,9 +408,9 @@ def _snap(model: SceneModel, shown: set, focus: set) -> dict:
 def auto_steps(model: SceneModel, sentences: int) -> list[list[Verb]]:
     if not model.can_hide or len(model.order) <= AUTO_STEP_OVER or sentences < 1:
         return []
-    k = min(sentences, len(model.order))
-    per = -(-len(model.order) // k)
-    return [[Verb("next", count=per)] for _ in range(k)]
+    n = len(model.order)
+    k = min(sentences, n)
+    return [[Verb("next", count=(i + 1) * n // k - i * n // k)] for i in range(k)]
 
 
 def compile_scene(model: SceneModel, groups: list[list[Verb]], title: str) -> tuple[dict | None, list[str]]:

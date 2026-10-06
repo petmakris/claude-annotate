@@ -178,13 +178,17 @@ def parse_source(raw: str, cwd: Path, stdin_text: str | None = None) -> dict:
         if not m:
             raise SourceError(f"expected session:<kind>/<slug>: {raw}")
         return {"type": "session", "kind": m["kind"], "slug": m["slug"]}
-    if raw in ("sequence:-", "flowchart:-"):
-        return visual_source(raw.split(":")[0], stdin_text or "")
-    if raw in ("diagram:-", "table:-"):
+    if raw.endswith(":-") and re.fullmatch(r"[A-Za-z]\w*:-", raw):
+        kind = raw[:-2].lower()
+        kind = {"mermaid": "diagram", "graph": "diagram", "flow": "diagram", "grid": "table"}.get(kind, kind)
+        if kind in ("sequence", "flowchart"):
+            return visual_source(kind, stdin_text or "")
+        if kind not in ("diagram", "table"):
+            raise SourceError(f"unknown {raw}: stdin takes sequence:-, flowchart:-, diagram:- or table:-")
         body = (stdin_text or "").strip()
         if not body:
-            raise SourceError(f"{raw} reads its body from stdin, and stdin was empty")
-        return {"type": "inline", "format": raw.split(":")[0], "body": body}
+            raise SourceError(f"{kind}:- reads its body from stdin, and stdin was empty")
+        return {"type": "inline", "format": kind, "body": body}
     if raw.startswith("code:"):
         return code_source(cwd, raw[len("code:"):])
     if raw.startswith("change:"):
@@ -196,15 +200,36 @@ def parse_source(raw: str, cwd: Path, stdin_text: str | None = None) -> dict:
     return {"type": "file", "path": path.relative_to(cwd.resolve()).as_posix(), "fragment": fragment or None}
 
 
+_PARTS = {"sequence": "actors, steps, phases, legend", "flowchart": "nodes, edges"}
+
+
+def _plain(tool: str, spec: dict) -> dict:
+    """The spec with every list checked to hold objects, and a number written where the tools expect
+    text (`"id": 1`, `"label": 404`) turned into that text."""
+    out = {}
+    for name, value in spec.items():
+        if name in _PARTS[tool].split(", ") and value is not None:
+            if not isinstance(value, list) or not all(isinstance(x, dict) for x in value):
+                raise SourceError(f"{tool}:-: {name} must be a list of objects")
+            value = [{k: str(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else v
+                      for k, v in x.items()} for x in value]
+        out[name] = value
+    return out
+
+
 def visual_source(tool: str, text: str) -> dict:
     """A sequence or flowchart spec (JSON), drawn by the shared tools in the stage's face and keyed for
     frames: the grid as `html`, a sequence's numbered key as `key`."""
     try:
         spec = json.loads(text)
     except ValueError as e:
-        raise SourceError(f"{tool}:- is not JSON ({e.msg}, line {e.lineno})") from None
+        raise SourceError(f"{tool}:-: not JSON ({e.msg}, line {e.lineno})") from None
     if not isinstance(spec, dict):
-        raise SourceError(f"{tool}:- must be a JSON object")
+        raise SourceError(f"{tool}:-: the spec must be a JSON object")
+    if "spec" in spec or "source" in spec:
+        raise SourceError(f"{tool}:-: give the spec object itself ({_PARTS[tool]}), not annotate's "
+                          "block wrapper or its `source` form")
+    spec = _plain(tool, spec)
     try:
         if tool == "sequence":
             html = sequence.render(spec, "v", keyed=True, face="stage")
@@ -213,6 +238,8 @@ def visual_source(tool: str, text: str) -> dict:
             html, key = flowchart.render(spec, "v", keyed=True, face="stage"), ""
     except (sequence.ValidationError, flowchart.ValidationError) as e:
         raise SourceError(f"{tool}:-: {e}") from None
+    except Exception as e:
+        raise SourceError(f"{tool}:-: the tool could not draw this spec ({type(e).__name__}: {e})") from None
     return {"type": "inline", "format": "visual", "tool": tool, "spec": spec, "html": html, "key": key}
 
 

@@ -6,6 +6,8 @@ http://127.0.0.1:3900). A loopback address needs no key; a remote one needs OMNI
 which is sent as a bearer token, never in a URL. The server runs one speech job at a time.
 """
 
+from __future__ import annotations
+
 import io
 import json
 import os

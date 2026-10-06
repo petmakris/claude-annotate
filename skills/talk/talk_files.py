@@ -9,6 +9,8 @@ talk.py writes them, talk_client.py reads a call's file, and the activity hook r
 `TALK_RUN_DIR` moves the folder, which the tests use.
 """
 
+from __future__ import annotations
+
 import json
 import os
 from pathlib import Path

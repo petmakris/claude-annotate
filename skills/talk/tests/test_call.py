@@ -185,6 +185,39 @@ def test_ending_from_the_page_reaches_the_doorbell_and_refuses_replies(tmp_path)
     assert run(go()) == ("ended from the page", 410)
 
 
+def test_a_late_reply_names_the_transcript_for_the_recap(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            call.offer("hi", typed=True)
+            await call.turns.next(timeout=1)
+            await client.post("/api/stop", headers=AUTH)
+            late = await client.post("/api/reply", json={"id": "t1", "text": "Too late."}, headers=AUTH)
+            return late.status, (await late.json())["transcript"]
+
+    status, transcript = run(go())
+    assert status == 410 and transcript.endswith("transcript.md")
+
+
+def test_a_turn_heard_after_the_hand_over_began_is_refused_so_the_page_sends_it_again(tmp_path):
+    from helpers import add_call, running_server
+
+    async def go():
+        async with running_server() as (client, server, fake):
+            call = add_call(server, tmp_path)
+            heard = fake.transcribe
+
+            def slow(audio, language=None):
+                server.handing_over = True  # the restart began while this was being heard
+                return heard(audio, language)
+
+            fake.transcribe = slow
+            with __import__("unittest.mock").mock.patch.object(talk.speech, "transcribe", slow):
+                resp = await client.post("/api/listen", data=silent_wav(), headers=AUTH)
+            return resp.status, [e for e in call.entries if e["who"] == "you"]
+
+    assert run(go()) == (503, [])
+
+
 def test_state_answers_same_until_something_changes(tmp_path):
     async def go():
         async with running_app(tmp_path) as (client, call, fake):
@@ -630,11 +663,15 @@ def test_a_row_is_matched_by_the_text_the_stage_shows(tmp_path):
 
 
 def test_a_node_is_one_the_flowchart_defines_not_any_word(tmp_path):
-    assert talk.has_node("graph TD; A[label text]-->B\nB --> Aβ", "Aβ")
-    assert not talk.has_node("graph TD; A[label text]-->B", "TD")
-    assert not talk.has_node("graph TD; A[label text]-->B", "label")
-    assert talk.has_node("flowchart LR\n  A -.-> B & C\n  C:::hot", "C")
-    assert not talk.has_node("sequenceDiagram\nAlice->>Bob: hi", "Bob")
+    def problems_for(body, node):
+        return cues_of(tmp_path, f"[[show diagram | D]]{body}[[/show]] Flow. [[point: node {node}]] No.")[1]
+
+    assert problems_for("graph TD; A[label text]-->B\nB --> Aβ", "Aβ") == []
+    assert problems_for("graph TD; A[label text]-->B", "label") == ['point not shown: no node label in "D"']
+    assert problems_for("flowchart LR\n  A -.-> B & C\n  C:::hot", "C") == []
+    assert problems_for("---\ntitle: F\n---\ngraph TD\nA-->B", "B") == []
+    assert problems_for("graph TD\nsubgraph S1 [Group]\nA\nend\nS1-->C", "S1") == []
+    assert problems_for("graph TD\nA@{ shape: rect }\nA-->B", "A") == []
     _, problems = cues_of(tmp_path, "[[show diagram | D]]graph TD; A[Ask]-->B[[/show]] Flow. [[point: node TD]] No.")
     assert problems == ['point not shown: no node TD in "D"']
 
@@ -695,8 +732,7 @@ def test_a_spaced_close_tag_closes_the_block(tmp_path):
 def test_a_mermaid_subroutine_named_show_stays_in_the_diagram(tmp_path):
     spoken, items, problems = split(tmp_path, "[[show diagram | Flow]]graph TD\nA-->B[[Show results]]\nB-->C\n[[/show]] after.")
     assert items[0]["body"] == "graph TD\nA-->B[[Show results]]\nB-->C" and spoken == "after."
-    assert problems == ['"Flow" has 5 elements and no verbs, so it was stepped one sentence at a time (dump); '
-                        "tag the word that names each thing"]
+    assert problems == []
 
 
 def test_a_caption_after_the_closing_fence_is_said(tmp_path):
@@ -731,8 +767,10 @@ def test_a_range_past_the_end_says_where_it_was_cut(tmp_path):
 def test_a_node_point_in_a_diagram_the_stage_cannot_light_is_a_problem(tmp_path):
     _, problems = cues_of(tmp_path, "[[show diagram | S]]sequenceDiagram\nAlice->>Bob: hi[[/show]] Hi. [[point S: node Alice]] Her.")
     assert problems == ['point not shown: "S" is not a graph or flowchart, so the stage cannot light a node in it']
-    for word in ("Backend", "end", "Yes"):
-        assert not talk.has_node("graph TD\nsubgraph Backend\nA -- Yes --> B\nend", word)
+    for word in ("end", "Yes"):
+        _, problems = cues_of(tmp_path, "[[show diagram | G]]graph TD\nsubgraph Backend\nA -- Yes --> B\nend[[/show]] "
+                                        f"Hi. [[point G: node {word}]] It.")
+        assert problems == [f'point not shown: no node {word} in "G"']
 
 
 def test_mermaid_types_the_stage_draws_are_not_a_problem():
@@ -848,7 +886,7 @@ def test_fewer_sentences_than_things_bring_several_in_at_once(tmp_path):
     call = talk.Call(make_args(), "T", tmp_path / "out")
     call.split_reply("[[show diagram | D]]graph TD; A-->B; B-->C; C-->D[[/show]] It starts at A. It ends at D.")
     built = call.board.items[0]["scene"]
-    assert [len(f["show"]) for f in built["frames"]] == [0, 5, 7, 7]
+    assert [len(f["show"]) for f in built["frames"]] == [0, 3, 7, 7]
 
 
 def test_a_small_board_code_and_a_board_said_last_are_never_stepped(tmp_path):
@@ -930,3 +968,38 @@ def test_a_point_on_a_visual_lights_its_step_while_the_rest_still_comes_in_a_sen
     shown = [set(f["show"]) for f in built["frames"]]
     assert "step:s1" in shown[1] and "step:s3" not in shown[2]
     assert "step:s3" in shown[3] and built["frames"][3]["focus"] == ["step:s3"]
+
+
+def test_an_unclosed_spec_ends_with_its_json_and_the_speech_after_it_is_said(tmp_path):
+    spoken, items, problems = split(tmp_path, f"Here. [[show sequence | P]] {SEQ} The client asks. The server answers.")
+    assert [i["kind"] for i in items] == ["sequence"]
+    assert spoken == "Here. The client asks. The server answers."
+    assert problems[0] == 'missing [[/show]] after "P", closed it at the end of the sequence'
+
+
+def test_a_spec_under_a_mermaid_name_is_drawn_by_its_tool_and_a_wrong_tool_is_named(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply(f"[[show flow | F]] {FLOW} [[/show]] Played.")
+    assert call.board.items[0]["kind"] == "flowchart"
+    assert call.board.problems[0] == '"F" is a flowchart spec, so it was drawn as one; write [[show flowchart | ...]]'
+    call.split_reply(f"[[show sequence | S]] {FLOW} [[/show]] Played.")
+    assert "this looks like a flowchart spec" in call.board.problems[-1]
+
+
+def test_a_board_that_breaks_never_costs_the_answer(tmp_path, monkeypatch):
+    call = _call(tmp_path)
+    monkeypatch.setattr(call, "compile_scenes", lambda *a: 1 / 0)
+    shown = call.split_reply_safely(f"The page sends. [[show sequence | P]] {SEQ} [[/show]] It answers. [[+ s1]] Done.")
+    assert " ".join(shown.split()) == "The page sends. It answers. Done."
+    assert "the boards of this answer failed (ZeroDivisionError" in call.board.problems[-1]
+
+
+def test_a_point_names_a_flowchart_node_whose_id_has_a_dot(tmp_path):
+    call = _call(tmp_path)
+    spec = FLOW.replace('"id": "b"', '"id": "api.gw"').replace('"to": "b"', '"to": "api.gw"')
+    call.split_reply(f"[[show flowchart | F]] {spec} [[/show]] [[point: node api.gw]] The gateway.")
+    assert call.board.problems == [] and call.board.items[0]["scene"]["frames"][1]["focus"] == ["node:api.gw"]
+
+
+def test_rows_are_the_first_tables_up_to_a_blank_line(tmp_path):
+    assert talk.table_first_cells("| k |\n|---|\n| one |\n| two |\n\n| x |\n|---|\n| y |") == ["one", "two"]

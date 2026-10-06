@@ -12,6 +12,8 @@ TALK_RECONNECT_S seconds. When nothing has taken the port after a few seconds, t
 server itself (TALK_REVIVE=0 turns that off), which picks up every call the last one left open.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -194,7 +196,13 @@ def reply(call_id: str | None, turn_id: str, status_text: str | None, end: bool)
         return 2
     except urllib.error.HTTPError as err:
         if err.code == 410:
-            print("call ended: the call is over and nothing was said. Do not re-arm.")
+            transcript = ""
+            try:
+                transcript = json.loads(err.read() or b"{}").get("transcript") or ""
+            except (ValueError, AttributeError, OSError):
+                pass
+            print("call ended: the call is over and nothing was said. Do not re-arm."
+                  + (f" Transcript {transcript}: write the recap from it." if transcript else ""))
             return 4
         if err.code == 404:
             print(f"no such turn: {turn_id} was never offered in this call ({error_text(err)})", file=sys.stderr)

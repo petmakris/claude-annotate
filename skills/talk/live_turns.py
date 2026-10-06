@@ -5,6 +5,8 @@ collects them are merged into one. The session collects a turn with a long poll 
 doorbell) and answers it once; a turn the user sent meanwhile waits for the next doorbell.
 """
 
+from __future__ import annotations
+
 import asyncio
 import time
 

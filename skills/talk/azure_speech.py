@@ -6,6 +6,8 @@ Text to speech reports each word as it is made, so no second pass is needed to t
 Named azure_speech, not azure, so it never shadows the SDK's own `azure` package.
 """
 
+from __future__ import annotations
+
 import io
 import threading
 import wave

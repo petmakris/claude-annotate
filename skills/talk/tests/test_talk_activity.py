@@ -139,7 +139,7 @@ def test_the_shim_is_silent_without_a_call(tmp_path):
     assert (code, output) == (0, b"")
 
 
-def test_the_shim_forwards_to_the_script_named_in_the_state_file(tmp_path):
+def test_the_shim_runs_the_script_beside_it_for_every_server(tmp_path):
     state = tmp_path / "state.json"
 
     async def go():
@@ -154,7 +154,7 @@ def test_the_shim_forwards_to_the_script_named_in_the_state_file(tmp_path):
     assert run(go()) == ["Reading EDR.java"]
 
 
-def test_the_shim_survives_a_state_file_naming_a_missing_script(tmp_path):
+def test_the_shim_survives_a_stale_state_file(tmp_path):
     state = tmp_path / "state.json"
     write_server(state, 1, activity_script="/nowhere/talk_activity.py")
     code, output = run(run_shim(state, event("me", "PreToolUse", "Read", {"file_path": "/x"})))

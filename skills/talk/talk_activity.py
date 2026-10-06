@@ -4,6 +4,8 @@
 Reads the hook event on stdin. Does nothing, quickly and silently, when no call is running.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import re

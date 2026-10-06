@@ -31,7 +31,7 @@ that names an ended stage or a stage in another folder fails rather than making 
 | `code:<path>:<a>-<b> [highlight x-y]` | at most 60 lines of real code |
 | `change:<path> [since <rev>]` | what changed in a file, read from git (working tree against HEAD by default); at most 80 diff lines |
 | `diagram:-` / `table:-` | Mermaid or a markdown table, body on stdin (heredoc) |
-| `sequence:-` / `flowchart:-` | a sequence diagram or flowchart drawn by annotate's tools from a JSON spec on stdin (the spec is in `$SKILL_DIR/../annotate/references/block-kinds/`); a refused spec exits 2 with the reason |
+| `sequence:-` / `flowchart:-` | a sequence diagram or flowchart drawn by annotate's tools from a JSON spec on stdin (the spec is in `$SKILL_DIR/../annotate/references/block-kinds/`; give only the inner `spec` object, not annotate's block wrapper or its `source` form); a refused spec exits 2 with the reason |
 
 Rules:
 
