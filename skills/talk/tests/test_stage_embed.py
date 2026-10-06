@@ -451,11 +451,12 @@ def test_a_key_points_chip_opens_the_pinned_board(tmp_path, wc_config, browser):
             f"{_table('Alpha', 'a1')} About alpha. [[key: alpha comes first]] And more. [[key: then more]]"),
             loop).result(10)
         stage.locator('button[role=tab][data-view="key-points"]').wait_for(timeout=10000)
-        assert stage.locator("button[role=tab]").evaluate_all("els => els.map(e => e.dataset.view)") == ["key-points", "alpha"]
         stage.locator('button[role=tab][data-view="alpha"][aria-selected="true"]').wait_for(timeout=5000)
+        assert stage.locator("button[role=tab]").evaluate_all("els => els.map(e => e.dataset.view)") == ["key-points", "alpha"]
         page.click("#hist")
         page.locator("button.chip.board", has_text="Key points: +2").click()
         stage.locator('button[role=tab][data-view="key-points"][aria-selected="true"]').wait_for(timeout=5000)
+        stage.locator('section.pane[data-view="key-points"] li .kt').nth(1).wait_for(timeout=5000)
         assert stage.locator('section.pane[data-view="key-points"] li .kt').all_text_contents() == [
             "alpha comes first", "then more"]
     wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % slug)
