@@ -163,7 +163,11 @@ let recorder = null;
 let starting = false;       // the microphone is being asked for: a second press must not open a second one
 let busy = false;           // the recording is being turned into text
 let closed = false;         // the ended call was closed from here
-let subsOff = store.get("subsOff", false);  // the subtitles were hidden: the pill's captions button brings them back
+let subsOff = store.get("subsOff", false);
+let talkMode = store.get("talkMode", "manual") === "live" ? "live" : "manual";  // live: the microphone stays open
+let barge = store.get("barge", "talk") === "keyword" ? "keyword" : "talk";    // how live speech interrupts an answer
+let endPause = [800, 1200, 2000].includes(store.get("endPause", 1200)) ? store.get("endPause", 1200) : 1200;
+let live = null;            // the open microphone of live mode, while it listens  // the subtitles were hidden: the pill's captions button brings them back
 
 // ---- the conversation --------------------------------------------------
 // Keyed: each entry keeps its element until what it shows changes, so a new entry leaves the others
@@ -336,6 +340,9 @@ $("subsbtn").onclick = () => setSubs(true);
 // The line under the stage while there is no answer to read: the first that applies.
 function statusText() {
   if (recorder) return null;
+  if (live && live.speech) return {text: "Hearing you…"};
+  if (live && live.suspended) return {text: "Click anywhere to start listening.", warn: true};
+  if (live && live.armed && !busy) return {text: "Listening. Go ahead."};
   if (busy) return {text: "Turning your words into text…", shimmer: true};
   if (view.ended) return {text: closed ? "Closed. You can close this tab." : "The call has ended: " + view.ended + ". Answers can still be replayed."};
   if (view.stalled) return {text: "Claude has not picked this up yet. Check the terminal: the session may be waiting for a permission.", warn: true};
@@ -346,7 +353,7 @@ function statusText() {
   return null;
 }
 function appState() {
-  if (recorder) return "listening";
+  if (recorder || (live && live.speech)) return "listening";
   if (busy || (view.working && !view.ended)) return "working";
   if (current && !audio.paused) return "speaking";
   return "idle";
@@ -354,7 +361,10 @@ function appState() {
 function paintPill() {
   const rec = !!recorder, ended = !!view.ended, shown = shownAnswer();
   $("talk").hidden = ended; $("talk").disabled = busy; $("talk").classList.toggle("busy", busy);
-  $("talk").setAttribute("aria-label", rec ? "Send" : "Talk"); $("talk").dataset.tip = rec ? "Send" : "Talk";
+  const liveLabel = live ? "Stop listening" : "Listen";
+  $("talk").setAttribute("aria-label", rec ? "Send" : talkMode === "live" ? liveLabel : "Talk");
+  $("talk").dataset.tip = rec ? "Send" : talkMode === "live" ? liveLabel : "Talk";
+  $("talk").classList.toggle("live", talkMode === "live"); $("talk").classList.toggle("muted", talkMode === "live" && !live);
   $("cancel").hidden = !rec; $("send").hidden = !rec;
   $("hist").hidden = rec; $("compose").hidden = rec || ended; $("sendtext").hidden = rec || ended;
   $("back").hidden = rec || !current;
@@ -376,9 +386,14 @@ function paintSettings() {
   for (const b of $("lang").children) b.setAttribute("aria-pressed", String(b.dataset.lang === language));
   $("autoplay").setAttribute("aria-pressed", String(autoplay));
   $("follow").setAttribute("aria-pressed", String(follow)); $("follow").disabled = !CFG.stageUrl;
+  for (const b of $("tmode").children) b.setAttribute("aria-pressed", String(b.dataset.choice === talkMode));
+  for (const b of $("barge").children) b.setAttribute("aria-pressed", String(b.dataset.choice === barge));
+  for (const b of $("endpause").children) b.setAttribute("aria-pressed", String(+b.dataset.choice === endPause));
+  $("liveopts").hidden = talkMode !== "live";
   $("endlbl").textContent = view.ended ? "Close" : "End call"; $("end").disabled = closed;
 }
 function paintAll() {
+  if (view.ended && live) { stopLive(); return; }  // stopLive paints again
   paintSubs(); paintPill(); paintSettings();
   $("app").dataset.state = appState(); $("app").toggleAttribute("data-ended", !!view.ended);
 }
@@ -455,6 +470,7 @@ function yieldFloor(id) {
   const busyHere = !audio.paused || !!recorder;
   if (!audio.paused) audio.pause();
   if (recorder) { stopRecording(); setMode("idle"); }
+  if (live) stopLive();
   if (busyHere) { const t = topicOf(id); showError("Paused: you are talking in " + (t ? "“" + t + "”" : "another call") + "."); }
 }
 if (floorChannel) floorChannel.onmessage = ev => { const id = ev.data && ev.data.call; if (id && id !== CFG.call) yieldFloor(id); };
@@ -529,7 +545,7 @@ function maybeAutoplay() {
   const last = fresh[fresh.length - 1];
   // Only the call the user is talking in reads new answers aloud; another call's wait, marked new.
   const mine = !view.floor_call || view.floor_call === CFG.call;
-  if (!current || audio.paused || audio.ended) load(last, autoplay && !recorder && mine);
+  if (!current || audio.paused || audio.ended) load(last, autoplay && !recorder && !(live && (live.speech || live.armed)) && mine);
 }
 // ---- the word being said ------------------------------------------------
 function playFrom(e, t) {
@@ -833,7 +849,125 @@ document.addEventListener("keydown", ev => {
   $("text").focus();
 });
 
-$("talk").onclick = () => recorder ? sendRecording() : startRecording();
+// ---- live mode: the microphone stays open --------------------------------------------
+// A loudness detector notices speech (keeping the moment before it, so the first syllable is kept) and
+// sends it after a pause. Speech over an answer interrupts it: with "By talking" the answer pauses at
+// once and resumes if nothing was said; with "Say listen" it goes on unless the words start with
+// "listen", and "listen" alone stops it and waits. The server drops the answer's own words heard
+// back through a speaker, and tells Claude how far the user had heard.
+const LIVE = {chunk: 2048, preMs: 400, minRms: 0.012, startMs: 160, startOverMs: 320, overGain: 1.8, minSpeechMs: 350, maxMs: 60000};
+const liveQueue = [];
+let liveSending = false;
+async function startLive() {
+  if (live || view.ended) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { showError("This page cannot reach a microphone. Open it over https or on localhost."); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}}); }
+  catch (err) { showError("No microphone: " + err.message); return; }
+  if (live || talkMode !== "live") { stream.getTracks().forEach(t => t.stop()); return; }
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const source = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(LIVE.chunk, 1, 1);
+  live = {stream, ctx, source, node, rate: ctx.sampleRate, noise: 0.01, pre: [], loud: 0, quiet: 0,
+          speech: false, chunks: [], ms: 0, over: null, paused: false, armed: null, suspended: ctx.state === "suspended"};
+  node.onaudioprocess = ev => liveChunk(new Float32Array(ev.inputBuffer.getChannelData(0)));
+  source.connect(node); node.connect(ctx.destination);
+  if (live.suspended) {
+    // Chrome starts audio only after a click on the page: one click (or remote press) and it listens.
+    const wake = () => { if (!live) return; live.ctx.resume().then(() => { if (live) { live.suspended = false; paintAll(); } }); };
+    document.addEventListener("pointerdown", wake, {once: true});
+    document.addEventListener("keydown", wake, {once: true});
+  }
+  paintAll();
+}
+function stopLive() {
+  const l = live; live = null;
+  if (!l) return;
+  l.node.disconnect(); l.source.disconnect(); l.stream.getTracks().forEach(t => t.stop()); l.ctx.close();
+  levels.fill(0); $("app").style.removeProperty("--lvl");
+  paintAll();
+}
+// The character the voice has reached in the answer being played: how far the user heard.
+function heardAt() {
+  const e = current && (view.entries.find(x => x.id === current.id) || current);
+  if (!e || !e.words || !e.words.length) return 0;
+  const k = wordAt(e, audio.currentTime);
+  return k < 0 ? 0 : e.words[k][1];
+}
+function liveChunk(d) {
+  const l = live;
+  if (!l || l.suspended) return;
+  let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
+  const lvl = Math.sqrt(sum / d.length), ms = d.length / l.rate * 1000;
+  levels.push(Math.min(1, lvl * 8)); levels.shift();
+  if (!meterRaf) meterRaf = requestAnimationFrame(paintMeter);
+  const over = !!current && !audio.paused;
+  const thr = Math.max(LIVE.minRms, l.noise * 3) * (over ? LIVE.overGain : 1);
+  if (!l.speech) {
+    l.pre.push(d); if (l.pre.length * ms > LIVE.preMs) l.pre.shift();
+    if (lvl > thr) { l.loud += ms; if (l.loud >= (over ? LIVE.startOverMs : LIVE.startMs)) speechStarts(over); }
+    else { l.loud = 0; l.noise = Math.max(0.002, l.noise * 0.97 + lvl * 0.03); }
+    return;
+  }
+  l.chunks.push(d); l.ms += ms;
+  l.quiet = lvl < thr * 0.7 ? l.quiet + ms : 0;
+  if (l.quiet >= endPause || l.ms >= LIVE.maxMs) speechEnds();
+}
+function speechStarts(over) {
+  const l = live;
+  l.speech = true; l.chunks = l.pre.splice(0); l.ms = l.chunks.length * LIVE.chunk / l.rate * 1000; l.quiet = 0; l.loud = 0;
+  l.over = l.armed ? l.armed : over ? {id: current.id, at: heardAt()} : null;
+  l.paused = false;
+  if (over && barge === "talk") { audio.pause(); l.paused = true; }
+  if (view.floor_call !== CFG.call) takeFloor(null);
+  paintAll();
+}
+function speechEnds() {
+  const l = live;
+  const u = {chunks: l.chunks, ms: l.ms - l.quiet, rate: l.rate, over: l.over, paused: l.paused,
+             gate: barge === "keyword" && !!l.over && !l.armed};
+  l.speech = false; l.chunks = []; l.ms = 0; l.quiet = 0; l.over = null; l.paused = false;
+  if (u.ms < LIVE.minSpeechMs) { if (u.paused) audio.play().catch(() => {}); paintAll(); return; }
+  liveQueue.push(u); paintAll(); drainLive();
+}
+async function drainLive() {
+  if (liveSending) return;
+  liveSending = true;
+  while (liveQueue.length) await sendLive(liveQueue.shift());
+  liveSending = false;
+}
+async function sendLive(u) {
+  const q = new URLSearchParams({lang: language});
+  if (u.over) { q.set("interrupted", u.over.id); q.set("at", u.over.at); }
+  if (u.gate) q.set("keyword", "listen");
+  if (!u.gate) { busy = true; paintAll(); }
+  let body = {};
+  try {
+    const resp = await api("/api/listen?" + q, {method: "POST", body: toWav(u.chunks, u.rate), headers: {"Content-Type": "audio/wav"}});
+    body = await resp.json().catch(() => ({}));
+    if (!resp.ok) showError(body.error || "Sending failed: HTTP " + resp.status);
+  } catch (err) { showError("Sending failed: " + err.message); }
+  busy = false;
+  if (body.keyword) {
+    // "listen" alone: the answer stops where it was, and the next thing said is the turn.
+    if (!audio.paused) audio.pause();
+    if (live) live.armed = u.over;
+  } else if (body.entry) {
+    if (live) live.armed = null;
+    view.v = -1; if (wake) wake();
+  } else if (u.paused && !(live && live.armed)) audio.play().catch(() => {});
+  paintAll();
+}
+function setTalkMode(mode) {
+  talkMode = mode; store.set("talkMode", mode);
+  if (mode === "live") startLive(); else stopLive();
+  paintAll();
+}
+for (const b of $("tmode").children) b.onclick = () => setTalkMode(b.dataset.choice);
+for (const b of $("barge").children) b.onclick = () => { barge = b.dataset.choice; store.set("barge", barge); paintSettings(); };
+for (const b of $("endpause").children) b.onclick = () => { endPause = +b.dataset.choice; store.set("endPause", endPause); paintSettings(); };
+
+$("talk").onclick = () => talkMode === "live" ? (live ? stopLive() : startLive())
+  : recorder ? sendRecording() : startRecording();
 $("send").onclick = sendRecording;
 $("cancel").onclick = () => { stopRecording(); setMode("idle"); };
 $("sendtext").onclick = sendText;
@@ -845,5 +979,6 @@ $("end").onclick = () => {
 
 applyTheme();
 setMode("idle");
+if (talkMode === "live") startLive();
 if (matchMedia("(hover: hover) and (pointer: fine)").matches) $("text").focus();
 poll();

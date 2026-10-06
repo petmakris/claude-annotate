@@ -676,3 +676,64 @@ def test_space_with_no_answer_yet_goes_to_the_text_field(tmp_path, browser):
         page.evaluate("document.activeElement.blur()")
         page.keyboard.type(" hi")
         assert page.input_value("#text") == " hi"
+
+
+def _mic_file(path, before=3.0, speech=1.0, after=3.0, rate=48000):
+    """A WAV Chrome plays as the microphone, over and over: silence, a second of loud noise standing in
+    for speech, silence."""
+    import random
+    import struct
+    import wave
+    rnd = random.Random(1)
+    frames = [0] * int(before * rate) + [int(rnd.uniform(-0.35, 0.35) * 32767) for _ in range(int(speech * rate))] + [0] * int(after * rate)
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+        w.writeframes(struct.pack(f"<{len(frames)}h", *frames))
+    return str(path)
+
+
+def _live_browser(pw, tmp_path):
+    return pw.chromium.launch(args=[*FAKE_MIC, f"--use-file-for-fake-audio-capture={_mic_file(tmp_path / 'mic.wav')}"])
+
+
+def test_live_mode_sends_what_is_said_after_a_pause_with_no_button(tmp_path, pw):
+    with served(tmp_path) as (url, call, loop, fake):
+        browser = _live_browser(pw, tmp_path)
+        try:
+            page = browser.new_page()
+            page.add_init_script("localStorage.setItem('talk.talkMode', '\"live\"')")
+            page.goto(url)
+            page.wait_for_selector("#talk[aria-label='Stop listening']", timeout=5000)  # the microphone opened
+            fake.heard = "how does the doorbell work"
+            page.wait_for_selector("#app[data-state='listening']", timeout=8000)  # the noise: "Hearing you…"
+            turn = on_loop(loop, call.turns.next(timeout=8))
+            assert [s["text"] for s in turn["said"]] == ["how does the doorbell work"]
+            # The mic button is the switch: off, nothing more is heard.
+            page.click("#talk")
+            assert page.get_attribute("#talk", "aria-label") == "Listen" and page.evaluate("document.querySelector('#talk').classList.contains('muted')")
+        finally:
+            browser.close()
+
+
+def test_live_speech_over_an_answer_pauses_it_and_noise_lets_it_go_on(tmp_path, pw):
+    with served(tmp_path) as (url, call, loop, fake):
+        fake.seconds = 30.0
+        browser = _live_browser(pw, tmp_path)
+        try:
+            page = browser.new_page()
+            page.add_init_script("localStorage.setItem('talk.talkMode', '\"live\"')")
+            page.goto(url)
+            fake.heard = ""  # the noise is no words: the answer carries on
+            on_loop(loop, call.answer("A long answer that keeps going. " * 6))
+            page.wait_for_function(PLAYING, timeout=5000)
+            page.wait_for_function(PAUSED, timeout=8000)          # cut in on
+            page.wait_for_function(PLAYING, timeout=8000)         # nothing said: it resumes
+            fake.heard = "hold on, why?"
+            page.wait_for_function(PAUSED, timeout=10000)
+            turn = on_loop(loop, call.turns.next(timeout=10))
+            said = turn["said"][-1]
+            assert said["text"] == "hold on, why?" and said["interrupted"]["answer"] == 1
+            page.wait_for_timeout(1500)
+            assert page.evaluate(PAUSED)                          # words said: the answer stays stopped
+        finally:
+            browser.close()

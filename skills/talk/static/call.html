@@ -55,6 +55,14 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"light"');
       <button type="button" data-choice="dark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>Dark</button>
       <button type="button" data-choice="system"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Auto</button>
     </div></div>
+    <div><h4>Talking</h4><div class="segc" id="tmode" role="group" aria-label="How you talk">
+      <button type="button" data-choice="manual">Press to talk</button><button type="button" data-choice="live">Live</button></div></div>
+    <div class="liveopts" id="liveopts" hidden>
+      <div><h4>Interrupt Claude</h4><div class="segc" id="barge" role="group" aria-label="Interrupt Claude">
+        <button type="button" data-choice="talk">By talking</button><button type="button" data-choice="keyword">Say “listen”</button></div></div>
+      <div><h4>Send after a pause of</h4><div class="segc" id="endpause" role="group" aria-label="Send after a pause of">
+        <button type="button" data-choice="800">0.8 s</button><button type="button" data-choice="1200">1.2 s</button><button type="button" data-choice="2000">2 s</button></div></div>
+    </div>
     <div><h4>I speak</h4><div class="segc" id="lang" role="group" aria-label="Language I speak"></div></div>
     <div><h4>Voice speed</h4><div class="segc" id="speeds" role="group" aria-label="Voice speed"></div></div>
     <button class="row" id="autoplay" type="button" aria-pressed="true">Play new answers by themselves<span class="sw" aria-hidden="true"></span></button>

@@ -268,6 +268,21 @@ _PASCAL = re.compile(r"\b(?:[A-Z][a-z0-9]+){2,}\b")
 _CAPS_WORD = re.compile(r"\b[A-Z]{4,}\b")
 
 
+def spoken_words(text: str) -> list[str]:
+    """The words of a sentence, lowercased, without punctuation: for comparing what was heard."""
+    return re.findall(r"\w+", text.lower())
+
+
+def after_keyword(text: str, keyword: str) -> str | None:
+    """The text after a leading keyword ("Listen, why is that?" -> "why is that?"), "" for the keyword
+    alone, None when the text does not start with it."""
+    words = spoken_words(keyword)
+    if not words:
+        return None
+    m = re.match(r"\W*" + r"\W+".join(map(re.escape, words)) + r"\b[\s,.:;!?…-]*", text, re.IGNORECASE)
+    return text[m.end():].strip() if m else None
+
+
 def _words_of_identifier(token: str) -> str:
     parts = [p for p in re.split(r"_+", token) if p]
     out = []
@@ -1236,11 +1251,46 @@ class Call:
 
     # -- turns --------------------------------------------------------------
 
-    def offer(self, text: str, typed: bool) -> dict:
+    def offer(self, text: str, typed: bool, interrupted: dict | None = None) -> dict:
         self.turn_count += 1
-        entry = self.add("you", text, typed=typed)
-        self.turns.offer(f"t{self.turn_count}", [{"who": "you", "text": text}])
+        entry = self.add("you", text, typed=typed, **({"interrupted": interrupted} if interrupted else {}))
+        said = {"who": "you", "text": text}
+        if interrupted:
+            said["interrupted"] = interrupted
+        self.turns.offer(f"t{self.turn_count}", [said])
         return entry
+
+    def interruption(self, entry_id, at) -> dict | None:
+        """What the user had heard of an answer when they cut in: its number and its last words before
+        `at`, a character offset into its text. None when the page named no answer this call holds."""
+        try:
+            entry_id, at = int(entry_id), int(at)
+        except (TypeError, ValueError):
+            return None
+        n = 0
+        for entry in self.entries:
+            if entry["who"] == "claude":
+                n += 1
+                if entry["id"] == entry_id:
+                    heard = entry["text"][:max(0, at)].rstrip()
+                    tail = heard[-160:]
+                    return {"answer": n, "heard": ("…" if len(tail) < len(heard) else "") + tail,
+                            "rest_unheard": at < len(entry["text"].rstrip())}
+        return None
+
+    def echo_of(self, text: str, entry_id, at) -> bool:
+        """Mostly the answer's own words from around where it was playing: the microphone heard the
+        speaker, not the user."""
+        entry = next((e for e in self.entries if e["who"] == "claude" and str(e["id"]) == str(entry_id)), None)
+        if entry is None:
+            return False
+        try:
+            at = int(at)
+        except (TypeError, ValueError):
+            return False
+        near = set(spoken_words(entry["text"][max(0, at - 400):at + 400]))
+        said = spoken_words(text)
+        return len(said) >= 2 and sum(w in near for w in said) / len(said) >= 0.7
 
     def collected(self) -> None:
         self.activity = []
@@ -1865,9 +1915,23 @@ def build_app(server: Server):
             return web.json_response({"error": str(err)}, status=502)
         if not text.strip():
             return web.json_response({"text": ""})
+        # Live mode: the user spoke over an answer. Its own words heard back are an echo, not a turn;
+        # with a keyword, only words that start with it interrupt, and the keyword alone means "stop and listen".
+        q = request.query
+        if "interrupted" in q and call.echo_of(text, q.get("interrupted"), q.get("at")):
+            return web.json_response({"text": "", "echo": True})
+        keyword = q.get("keyword", "").strip()
+        if keyword:
+            rest = after_keyword(text, keyword)
+            if rest is None:
+                return web.json_response({"text": text, "ignored": True})
+            if not rest:
+                return web.json_response({"text": "", "keyword": True})
+            text = rest
+        interrupted = call.interruption(q.get("interrupted"), q.get("at")) if "interrupted" in q else None
         if server.handing_over:  # past the last save: the page keeps the turn and sends it to the next server
             return web.json_response({"error": "the talk server is restarting; try again in a moment"}, status=503)
-        return web.json_response({"text": text, "entry": call.offer(text, typed=False)})
+        return web.json_response({"text": text, "entry": call.offer(text, typed=False, interrupted=interrupted)})
 
     async def typed(request):
         call = call_of(request)
