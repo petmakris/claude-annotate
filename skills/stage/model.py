@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import subprocess
 from pathlib import Path
+
+from skills._shared.visuals import flowchart, sequence
 
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 MAX_CODE_LINES = 60
@@ -175,6 +178,8 @@ def parse_source(raw: str, cwd: Path, stdin_text: str | None = None) -> dict:
         if not m:
             raise SourceError(f"expected session:<kind>/<slug>: {raw}")
         return {"type": "session", "kind": m["kind"], "slug": m["slug"]}
+    if raw in ("sequence:-", "flowchart:-"):
+        return visual_source(raw.split(":")[0], stdin_text or "")
     if raw in ("diagram:-", "table:-"):
         body = (stdin_text or "").strip()
         if not body:
@@ -189,6 +194,25 @@ def parse_source(raw: str, cwd: Path, stdin_text: str | None = None) -> dict:
     if not path.parent.is_dir():
         raise SourceError(f"no such folder in the project: {path.parent}")
     return {"type": "file", "path": path.relative_to(cwd.resolve()).as_posix(), "fragment": fragment or None}
+
+
+def visual_source(tool: str, text: str) -> dict:
+    """A sequence or flowchart spec (JSON), drawn by the shared tools: the grid as `html`, a sequence's
+    numbered key as `key`."""
+    try:
+        spec = json.loads(text)
+    except ValueError as e:
+        raise SourceError(f"{tool}:- is not JSON ({e.msg}, line {e.lineno})") from None
+    if not isinstance(spec, dict):
+        raise SourceError(f"{tool}:- must be a JSON object")
+    try:
+        if tool == "sequence":
+            html, key = sequence.render(spec, "v"), sequence.render_key(spec, "v")
+        else:
+            html, key = flowchart.render(spec, "v"), ""
+    except (sequence.ValidationError, flowchart.ValidationError) as e:
+        raise SourceError(f"{tool}:-: {e}") from None
+    return {"type": "inline", "format": "visual", "tool": tool, "spec": spec, "html": html, "key": key}
 
 
 def mount_name(directory: Path, cwd: Path) -> str:

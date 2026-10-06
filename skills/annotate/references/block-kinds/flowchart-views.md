@@ -43,7 +43,7 @@ if the reasoning behind it was good.
 ## The loop
 
 ```python
-from skills.annotate.diagrams import views
+from skills._shared.visuals import views
 report = views.check(spec)
 print(report.summary())
 ```

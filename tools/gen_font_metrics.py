@@ -1,4 +1,4 @@
-"""Generate skills/annotate/diagrams/font_metrics.py from the bundled woff2 fonts.
+"""Generate skills/_shared/visuals/font_metrics.py from the bundled woff2 fonts.
 
 Run offline with fontTools installed; the generated module is pure data so the
 skill itself keeps zero third-party runtime dependencies.

@@ -17,7 +17,7 @@
 - No new comments beyond one module docstring per new module; an existing comment made false is fixed in place.
 - Browser tests run at most 4 workers on this Mac (`-n 4`).
 - Commit messages are one line, with no attribution. Ask before pushing claude-annotate.
-- Deviation from the spec, decided here: `write_text_atomic` moves to `skills/_shared/atomic.py`, not into `visuals/`, because annotate's blocks and session use it for reasons unrelated to drawing.
+- Decided while building, and folded into the spec: `write_text_atomic` stays in annotate; `visuals.css` and the Geist fonts follow the existing `_shared/static/` canonical-plus-checked-copies pattern; the stage keeps its own asset root.
 
 ## Review Focus
 

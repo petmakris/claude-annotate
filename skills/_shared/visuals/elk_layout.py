@@ -10,6 +10,7 @@ stays pure.
 """
 from __future__ import annotations
 
+import contextlib
 import functools
 import hashlib
 import json
@@ -20,7 +21,6 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from skills.annotate.atomic import write_text_atomic
 
 from . import flavours, views
 from .flowchart_layout import layout as _python_layout
@@ -32,6 +32,20 @@ BUNDLE = Path(__file__).with_name("vendor") / "elk.bundled.js"
 # ELK on a diagram-sized graph is ~130 ms. The ceiling is for a wedged node
 # process, not for a slow layout.
 LAYOUT_TIMEOUT_S = 20
+
+
+def _write_atomic(path: Path, text: str) -> None:
+    """Write `path` whole or not at all, under a temp name of its own, so racing writers never mix."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
 
 
 class ElkUnavailable(RuntimeError):
@@ -110,7 +124,7 @@ def _cache_put(key: str, text: str) -> None:
     if d is None:
         return
     try:
-        write_text_atomic(d / (key + ".json"), text)
+        _write_atomic(d / (key + ".json"), text)
         _prune(d)
     except OSError:
         pass  # a cache that cannot be written is a cache miss next time

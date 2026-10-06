@@ -3,7 +3,7 @@ import re
 
 import pytest
 
-from skills.annotate.diagrams.sequence import (
+from skills._shared.visuals.sequence import (
     ValidationError, validate, render, render_key,
 )
 

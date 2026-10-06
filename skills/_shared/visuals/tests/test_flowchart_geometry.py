@@ -15,10 +15,10 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from skills.annotate.diagrams import flowchart as fc
-from skills.annotate.diagrams.elk_layout import layout as elk_layout
-from skills.annotate.diagrams.flowchart import render
-from skills.annotate.diagrams.text_metrics import line_h, text_px
+from skills._shared.visuals import flowchart as fc
+from skills._shared.visuals.elk_layout import layout as elk_layout
+from skills._shared.visuals.flowchart import render
+from skills._shared.visuals.text_metrics import line_h, text_px
 
 PAD = 6.0  # min clearance we require between two node shapes
 

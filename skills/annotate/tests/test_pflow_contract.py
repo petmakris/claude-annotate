@@ -5,7 +5,7 @@ rules, so a change to either side breaks here instead of in a user's browser.
 """
 import pytest
 
-from skills.annotate.diagrams.flowchart import _KNOWN_ROLES, validate, render
+from skills._shared.visuals.flowchart import _KNOWN_ROLES, validate, render
 from skills.annotate.pflow import compile_source
 
 BRANCHY = '''"""A flow with every shape in it."""

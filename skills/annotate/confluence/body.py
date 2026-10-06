@@ -19,8 +19,8 @@ from typing import Any
 
 from skills.annotate.confluence.constants import media_token
 from skills.annotate.confluence.markdown_html import to_html
-from skills.annotate.diagrams.sequence import _numbered
-from skills.annotate.diagrams.views import ALL_VIEW
+from skills._shared.visuals.sequence import _numbered
+from skills._shared.visuals.views import ALL_VIEW
 
 # The kinds that publish a picture. `prepare` lists the PNGs to render from
 # this and `render_block` emits the figures from it, because the two used to

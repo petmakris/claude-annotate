@@ -26,7 +26,7 @@ Success, seen on a live call:
 
 ### 1. The library: `skills/_shared/visuals/`
 
-The `diagrams/` modules move to `skills/_shared/visuals/`, with `vendor/` and `elk_driver.mjs`. `write_text_atomic` moves with them as `visuals/atomic.py`. Annotate's other users of `atomic` import it from there. Every import of `skills.annotate.diagrams` changes to `skills._shared.visuals`, the tests that cover those modules move to `skills/_shared/visuals/tests/`, and nothing is left behind as a re-export.
+The `diagrams/` modules move to `skills/_shared/visuals/`, with `vendor/` and `elk_driver.mjs`. `write_text_atomic` stays in annotate, which is its only skill user; the ELK cache gets a private copy of its few lines. The shared layer's guard counts a package as one unit, and allows a package's `vendor/` and a file its own module names and runs. Every import of `skills.annotate.diagrams` changes to `skills._shared.visuals`, the tests that cover those modules move to `skills/_shared/visuals/tests/`, and nothing is left behind as a re-export.
 
 **Keys, opt-in.** `sequence.render`, `sequence.render_key` and `flowchart.render` gain a keyword `keyed: bool = False`. With `keyed=True` they add `data-key` to every part the eye can land on:
 
@@ -39,13 +39,13 @@ The `diagrams/` modules move to `skills/_shared/visuals/`, with `vendor/` and `e
 
 Annotate never passes `keyed`, so its output does not change.
 
-**Typefaces.** `text_metrics` takes a face profile. `annotate` (the default) keeps Bricolage Grotesque and Monaspace Radon. `stage` measures Geist and Geist Mono. `tools/gen_font_metrics.py` generates both tables into `font_metrics.py`. `render` and `render_key` take `face: str = "annotate"`, and the stage passes `face="stage"`. Geist and Geist Mono (OFL) ship as woff2 in `skills/_shared/visuals/fonts/`, and the stage loads them from there instead of from Google Fonts.
+**Typefaces.** `text_metrics` takes a face profile. `annotate` (the default) keeps Bricolage Grotesque and Monaspace Radon. `stage` measures Geist and Geist Mono. `tools/gen_font_metrics.py` generates both tables into `font_metrics.py`. `render` and `render_key` take `face: str = "annotate"`, and the stage passes `face="stage"`. Geist and Geist Mono (OFL) ship as woff2 in `skills/_shared/static/fonts/`, with a checked copy in `skills/stage/static/fonts/`, and the stage loads them from there instead of from Google Fonts.
 
-**CSS.** `skills/_shared/visuals/visuals.css` holds the sequence and flowchart rules, written against the token names annotate already uses. Annotate's `diagram.css` keeps those rules between `/* visuals:begin */` and `/* visuals:end */`, byte-identical to `visuals.css`. A test fails if they differ, because annotate's page can only load files from its own `static/` folder. The stage loads `visuals.css` directly, and maps annotate's token names onto its own colours in `stage.css`, for light and dark. Font families in `visuals.css` are variables, `--vis-sans` and `--vis-mono`, defaulting to annotate's fonts. The stage sets them to Geist.
+**CSS.** `skills/_shared/static/visuals.css` holds the sequence and flowchart rules, written against the token names annotate already uses. As with every shared page asset, annotate and stage each keep a checked-in copy in their own `static/`, and `skills/tests/test_shared_static_copies.py` fails when a copy differs. Annotate's `diagram.css` drops those rules and its page loads `visuals.css` beside it. The stage loads its copy, and maps annotate's token names onto its own colours in `stage.css`, for light and dark. Font families in `visuals.css` are variables, `--vis-sans` and `--vis-mono`, defaulting to annotate's fonts. The stage sets them to Geist.
 
-### 2. The stage's asset root is `skills/`
+### 2. The stage's assets
 
-`stage.py` registers `skills/` as the session's asset root, with the entry `stage/static/entry.js`. Every stage asset is already addressed relative to its own script, so nothing else moves. `entry.js` loads `../../_shared/visuals/visuals.css` and the fonts beside it.
+The stage keeps its own `static/` as its asset root. `entry.js` loads its copy of `visuals.css` and the local fonts.
 
 ### 3. One frame engine, on `data-key`
 

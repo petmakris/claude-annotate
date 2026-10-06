@@ -72,7 +72,7 @@ rather than from fixed constants. The widths live in the generated
     pip install fonttools brotli   # build-time only, never a runtime dependency
     python tools/gen_font_metrics.py \
       skills/_shared/static/fonts \
-      skills/annotate/diagrams/font_metrics.py
+      skills/_shared/visuals/font_metrics.py
 
 If a font size changes in `static/diagram.css`, mirror it in `STYLES` in
 `text_metrics.py` — that table is the only place layout learns about type.

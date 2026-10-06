@@ -18,7 +18,7 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from skills.annotate.diagrams.sequence import render, render_key
+from skills._shared.visuals.sequence import render, render_key
 
 
 def _spec(**extra) -> dict:

@@ -1,7 +1,7 @@
 """The Node side of ELK: a graph in, a laid-out graph out."""
 import pytest
 
-from skills.annotate.diagrams.elk_layout import ElkUnavailable, run_elk
+from skills._shared.visuals.elk_layout import ElkUnavailable, run_elk
 
 
 def _graph():

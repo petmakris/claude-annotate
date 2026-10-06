@@ -1,8 +1,8 @@
 """Multi-view flowcharts: the checker, the two spec fields, and per-view render."""
 import pytest
 
-from skills.annotate.diagrams import flowchart, views
-from skills.annotate.diagrams.flowchart import ValidationError
+from skills._shared.visuals import flowchart, views
+from skills._shared.visuals.flowchart import ValidationError
 
 W, R, P = "write", "read", "persist"
 
@@ -168,7 +168,7 @@ def test_bands_do_not_change_the_shipped_default_for_unbanded_specs():
 def test_the_fallback_layout_is_still_measured(monkeypatch):
     """Without ELK the nodes are placed in Python and the edges are beziers.
     That is a real drawing, so it gets a real count — of that drawing."""
-    from skills.annotate.diagrams import elk_layout
+    from skills._shared.visuals import elk_layout
 
     def boom(_graph):
         raise elk_layout.ElkUnavailable("no node on PATH")
@@ -192,7 +192,7 @@ def test_crossings_are_counted_on_path_vertices_not_resampled_points():
     corners off an orthogonal route. A crossing that happens near a corner then
     vanishes — a false negative in the one measurement this module exists to
     make. The drawing's own vertices are the only honest input."""
-    from skills.annotate.diagrams import elk_layout, flowchart
+    from skills._shared.visuals import elk_layout, flowchart
 
     spec = orders_sync()
     pos, w, h, routes = elk_layout.layout(spec["nodes"], spec["edges"], "layered")

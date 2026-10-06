@@ -4,9 +4,9 @@ import pathlib
 import pytest
 
 from skills.annotate import render as render_mod
-from skills.annotate.diagrams import views
-from skills.annotate.diagrams.flowchart import ValidationError, validate
-from skills.annotate.tests.test_views import orders_sync
+from skills._shared.visuals import views
+from skills._shared.visuals.flowchart import ValidationError, validate
+from skills._shared.visuals.tests.test_views import orders_sync
 from skills.annotate.tests.page_source import SCRIPT_JS
 
 SCRIPT = SCRIPT_JS

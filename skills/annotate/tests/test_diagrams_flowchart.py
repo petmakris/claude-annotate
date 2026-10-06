@@ -1,8 +1,8 @@
 """Flowchart validator + renderer tests."""
 import pytest
 
-from skills.annotate.diagrams import flowchart as flowchart_module
-from skills.annotate.diagrams.flowchart import (
+from skills._shared.visuals import flowchart as flowchart_module
+from skills._shared.visuals.flowchart import (
     ValidationError, render, render_variants, validate,
 )
 

@@ -132,7 +132,7 @@ that a specific function lacks a direct unit test.
    `skills/_shared/static/markdown-it.min.js` and its per-skill copies,
    `skills/annotate/static/vendor/`, `skills/annotate/static/shiki-langs/`,
    `ide-plugin/src/main/resources/web/highlight.min.js`),
-   `skills/annotate/diagrams/vendor/`, the fonts, and
+   `skills/_shared/visuals/vendor/`, the fonts, and
    `ide-plugin/gradle/wrapper/gradle-wrapper.jar`.
 3. `FakeReviewServer.java` — a test double; its simplifications are its
    purpose. Route drift there belongs to `/audit-http-surface`, not here.

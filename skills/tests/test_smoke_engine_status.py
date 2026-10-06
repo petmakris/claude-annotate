@@ -21,8 +21,8 @@ SKILLS = REPO / "skills"
 SHARED = SKILLS / "_shared"
 
 # Not modules: page assets another workstream owns, the package markers, the
-# shared layer's own tests, and its README.
-_NOT_MODULES = {"static", "tests", "__pycache__", ".pytest_cache"}
+# shared layer's own tests, its README, and third-party code a module loads.
+_NOT_MODULES = {"static", "tests", "vendor", "__pycache__", ".pytest_cache"}
 
 
 def _shared_files():
@@ -51,6 +51,19 @@ def _production_files():
     return out
 
 
+def _unit(f: Path) -> Path:
+    """What counts importers: a top-level module, or the whole package a file belongs to."""
+    top = SHARED / f.relative_to(SHARED).parts[0]
+    return top if top.is_dir() else f
+
+
+def _read_by_its_package(f: Path) -> bool:
+    """A non-Python file a module of its own package runs or reads, named in that module."""
+    unit = _unit(f)
+    return unit.is_dir() and any(f.name in p.read_text(encoding="utf-8", errors="replace")
+                                 for p in unit.rglob("*.py") if "tests" not in p.parts)
+
+
 def _importing_skills(module: Path) -> set:
     """The skills whose production code imports `module`."""
     dotted = ".".join(module.relative_to(REPO).with_suffix("").parts)
@@ -67,15 +80,16 @@ class TestTheSharedLayer(unittest.TestCase):
         self.assertTrue((SHARED / "README.md").is_file())
 
     def test_only_python_modules_live_here(self):
-        others = [f.relative_to(REPO).as_posix() for f in _shared_files() if f.suffix != ".py"]
+        others = [f.relative_to(REPO).as_posix() for f in _shared_files()
+                  if f.suffix != ".py" and not _read_by_its_package(f)]
         self.assertEqual(others, [], "a script in _shared belongs to the skill that runs it")
 
     def test_every_shared_module_has_two_skills_importing_it(self):
         lonely = {}
-        for module in _shared_files():
-            users = _importing_skills(module)
+        for unit in sorted({_unit(f) for f in _shared_files() if f.suffix == ".py"}):
+            users = _importing_skills(unit)
             if len(users) < 2:
-                lonely[module.relative_to(REPO).as_posix()] = sorted(users)
+                lonely[unit.relative_to(REPO).as_posix()] = sorted(users)
         self.assertEqual(lonely, {},
                          "move a module with one importer into that skill; "
                          "delete one with none")

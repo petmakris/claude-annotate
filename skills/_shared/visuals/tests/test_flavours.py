@@ -1,7 +1,7 @@
 """House-set presets and the viability gate."""
 import pytest
 
-from skills.annotate.diagrams import flavours
+from skills._shared.visuals import flavours
 
 
 def _positions(boxes):

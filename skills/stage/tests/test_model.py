@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 from pathlib import Path
@@ -220,3 +221,25 @@ def test_a_file_is_framed_only_when_a_browser_can_show_it():
         assert model.file_display(name) == "markdown", name
     for name in ("config.yaml", "rows.csv", "run.sh", "talk.py", "Main.java", "app.ts", "Makefile", "build.log"):
         assert model.file_display(name) == "text", name
+
+
+SEQ = {"actors": [{"id": "p", "label": "Page"}, {"id": "s", "label": "Server"}],
+       "steps": [{"id": "s1", "from": "p", "to": "s", "arrow": "request", "label": "POST /turn"}]}
+FLOW = {"nodes": [{"id": "a", "role": "entry", "label": "Start"}, {"id": "b", "role": "success", "label": "Done"}],
+        "edges": [{"from": "a", "to": "b"}]}
+
+
+def test_a_sequence_or_flowchart_spec_on_stdin_is_drawn_by_the_shared_tools(tmp_path):
+    seq = model.parse_source("sequence:-", tmp_path, json.dumps(SEQ))
+    assert (seq["type"], seq["format"], seq["tool"]) == ("inline", "visual", "sequence")
+    assert seq["html"].startswith("<svg") and "POST /turn" in seq["key"]
+    flow = model.parse_source("flowchart:-", tmp_path, json.dumps(FLOW))
+    assert flow["tool"] == "flowchart" and flow["html"].startswith("<svg") and flow["key"] == ""
+    assert flow["spec"] == FLOW
+
+
+def test_a_bad_spec_says_what_the_tool_said(tmp_path):
+    with pytest.raises(model.SourceError, match="sequence:- is not JSON"):
+        model.parse_source("sequence:-", tmp_path, "graph LR; a-->b")
+    with pytest.raises(model.SourceError, match="sequence:-: .*actor"):
+        model.parse_source("sequence:-", tmp_path, json.dumps({"actors": [], "steps": []}))

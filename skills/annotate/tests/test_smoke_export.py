@@ -225,7 +225,7 @@ def test_share_survives_a_read_only_link():
 
 def test_a_document_with_diagrams_keeps_the_font_its_geometry_was_measured_for():
     """Diagram SVG is laid out on the server from Monaspace's 0.62em advance
-    (skills/annotate/diagrams/text_metrics.py), so diagram.css pins that family
+    (skills/_shared/visuals/text_metrics.py), so diagram.css pins that family
     directly and it does NOT follow the reader's code font.
 
     Which made it the one family the reader's choice cannot speak for. When

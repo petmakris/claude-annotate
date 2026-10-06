@@ -8,9 +8,9 @@ import subprocess
 
 import pytest
 
-from skills.annotate.diagrams import elk_layout
+from skills._shared.visuals import elk_layout
 from skills.annotate.render import render_block
-from skills.annotate.tests.test_views import orders_sync
+from skills._shared.visuals.tests.test_views import orders_sync
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None,
                                 reason="node not installed")

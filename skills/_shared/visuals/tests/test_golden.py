@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from skills.annotate.diagrams import flowchart, sequence
+from skills._shared.visuals import flowchart, sequence
 
 FUNCS = {"sequence.render": sequence.render, "sequence.render_key": sequence.render_key,
          "flowchart.render": flowchart.render, "flowchart.render_variants": flowchart.render_variants}

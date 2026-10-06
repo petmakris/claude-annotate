@@ -166,7 +166,7 @@ body.exported .export-foot {
 
   // Diagram text is pinned to Monaspace Radon in diagram.css and does NOT
   // follow the reader's code font, because the SVG around it was measured for
-  // that typeface: skills/annotate/diagrams/text_metrics.py sizes every box,
+  // that typeface: skills/_shared/visuals/text_metrics.py sizes every box,
   // lane and label from an advance width of 0.62em, which is Monaspace's.
   // JetBrains Mono is 0.6em, so a diagram rendered in it sits wrong inside
   // geometry computed for the other one.

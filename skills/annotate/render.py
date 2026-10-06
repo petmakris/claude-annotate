@@ -15,11 +15,11 @@ from __future__ import annotations
 import html as _html
 from typing import Callable
 
-from skills.annotate.diagrams.sequence import render, render_key
-from skills.annotate.diagrams.flowchart import render as render_flowchart
-from skills.annotate.diagrams.flowchart import render_variants as render_flowchart_variants
-from skills.annotate.diagrams import elk_layout, flavours
-from skills.annotate.diagrams import views as views_mod
+from skills._shared.visuals.sequence import render, render_key
+from skills._shared.visuals.flowchart import render as render_flowchart
+from skills._shared.visuals.flowchart import render_variants as render_flowchart_variants
+from skills._shared.visuals import elk_layout, flavours
+from skills._shared.visuals import views as views_mod
 from skills.annotate.pflow import PflowError, compile_source as compile_pflow
 from skills.annotate.explain import compile_spec as compile_explain
 

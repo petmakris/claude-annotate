@@ -1,4 +1,4 @@
-from skills.annotate.diagrams.flowchart_layout import assign_layers, layout, node_size
+from skills._shared.visuals.flowchart_layout import assign_layers, layout, node_size
 
 
 def test_assign_layers_linear():
@@ -42,8 +42,8 @@ def test_node_is_sized_from_its_text():
 
 
 def test_node_size_decision_is_a_diamond_that_contains_its_text():
-    from skills.annotate.diagrams.flowchart_layout import node_lines, text_box
-    from skills.annotate.diagrams.text_metrics import line_h, text_px
+    from skills._shared.visuals.flowchart_layout import node_lines, text_box
+    from skills._shared.visuals.text_metrics import line_h, text_px
     node = {"id": "f", "role": "decision", "label": "toggle ON?",
             "ref": "OrderWorkflowActionsService:164"}
     w, h = node_size(node)

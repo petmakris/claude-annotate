@@ -17,10 +17,10 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from skills.annotate.diagrams.sequence import (
+from skills._shared.visuals.sequence import (
     ACTOR_GAP, ACTOR_W_MIN, BADGE_R, ROW_H, render,
 )
-from skills.annotate.diagrams.text_metrics import text_px
+from skills._shared.visuals.text_metrics import text_px
 
 
 def _spec(labels: list[str], **extra) -> dict:
@@ -188,7 +188,7 @@ def test_every_message_step_is_numbered_and_a_band_is_not():
 def test_actor_name_wrapping_is_lossless():
     """Tokenising must never drop a character: an extracting regex turned
     `auth-service` into `authservice` and `<script>` into `script`."""
-    from skills.annotate.diagrams.sequence import _name_lines
+    from skills._shared.visuals.sequence import _name_lines
     for label in ("EnrichedProposalBatchService", "auth-service-gateway",
                   "api.gateway.internal", "worker_pool_manager", "<script>x</script>"):
         assert "".join(_name_lines(label, 100)) == label, label

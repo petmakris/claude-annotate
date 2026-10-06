@@ -3,7 +3,7 @@ from unittest import mock
 
 import pytest
 
-from skills.annotate.diagrams import elk_layout, flavours
+from skills._shared.visuals import elk_layout, flavours
 
 
 def _graph():
