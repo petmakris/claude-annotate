@@ -39,6 +39,7 @@
 // Unknown types are ignored.
 import { flowchartKeys, nodeElements } from "./svg_keys.js";
 import { applyFrame, stepLabel } from "./scene.js";
+import { layoutLanes, renderLanes } from "./lanes.js";
 
 const VENDOR = ["highlight.min.js", "marked.min.js", "purify.min.js"]
   .map((f) => new URL("vendor/" + f, import.meta.url).href);
@@ -312,7 +313,7 @@ function header(v) {
     wrap.setAttribute("aria-pressed", String(wrapOn()));
     btns.append(wrap);
   }
-  if (src.type === "inline" && (src.format === "diagram" || src.format === "visual")) {
+  if (src.type === "inline" && (src.format === "diagram" || (src.format === "visual" && src.tool !== "sequence"))) {
     const seg = document.createElement("div"); seg.className = "seg"; seg.setAttribute("role", "group");
     seg.setAttribute("aria-label", "Diagram size");
     const set = (actual) => {
@@ -651,6 +652,11 @@ function renderInline(v, seq) {
   } else if (src.format === "points") {
     box.className = "points";
     paintPoints(v, box, src);
+  } else if (src.format === "visual" && src.tool === "sequence") {
+    // A sequence unfolds with the voice as lanes: every arrow carries its sentence, no numbered key.
+    box.className = "visual lanes";
+    renderLanes(box, src.spec, embedded);
+    requestAnimationFrame(() => { if (current()) paintFrame(v, box); });
   } else if (src.format === "visual") {
     box.className = `visual visual-${src.tool} ` + (v.actual ? "actual" : "fit");
     box.innerHTML = `<div class="vinner"><div class="vgrid">${src.html}</div>` +
@@ -1105,6 +1111,7 @@ function paintFrame(v, box, animate = false) {
   const n = v.frame ?? scene.rest;
   const done = applyFrame(scene, box, n, animate && v.applied === n - 1 ? v.applied : null);
   if (!done) return;
+  if (box.classList.contains("lanes")) { layoutLanes(box, scene, n); done.focused = null; }  // lanes scroll themselves
   v.applied = n;
   // Checked a frame later: a pane filled as it is fronted is still hidden while it paints.
   if (done.focused) requestAnimationFrame(() => { if (done.focused.isConnected && !v.pane.hidden) centre(done.focused); });

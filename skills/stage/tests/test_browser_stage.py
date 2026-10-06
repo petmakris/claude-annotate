@@ -1021,28 +1021,37 @@ def _all_hidden(frame, view, key):
         "els => els.length > 0 && els.every(e => e.classList.contains('k-hidden'))")
 
 
-def test_a_sequence_steps_in_with_its_actors_and_a_lit_step_lights_its_arrow_and_its_key_row(tmp_path, wc_config, browser):
+def test_a_sequence_unfolds_as_lanes_with_the_step_being_said_large_and_its_own_words_on_it(tmp_path, wc_config, browser):
     steps = _scene(scene.sequence_model(SEQ_SPEC), [["next"], ["next"], ["focus s2"]], "Pins")
     res = stage.show(str(tmp_path), "seq", _visual("sequence", SEQ_SPEC), title="Pins", extra={"scene": steps})
     try:
         page, frame, send = _embedded(browser, res["url"], width=1400)
-        frame.locator('section.pane[data-view="seq"] .vkey .seq-key-row').first.wait_for(timeout=5000)
+        pane = frame.locator('section.pane[data-view="seq"]')
+        pane.locator(".lanes .ln-row").first.wait_for(state="attached", timeout=5000)
+        row = lambda s: pane.locator(f'.ln-row[data-step="{s}"]')  # noqa: E731
+        cur = lambda: pane.locator(".ln-row.ln-cur").evaluate_all("els => els.map(e => e.dataset.step)")  # noqa: E731
         send({"type": "stage:frame", "view": "seq", "n": 0})
         _until_frame(page, "seq", 0)
         assert _all_hidden(frame, "seq", "step:s1") and _all_hidden(frame, "seq", "actor:c")
-        assert frame.locator('section.pane[data-view="seq"] .k-card').inner_text() == "Pins"
+        assert pane.locator(".k-card").inner_text() == "Pins"
         send({"type": "stage:frame", "view": "seq", "n": 1, "animate": True})
         _until_frame(page, "seq", 1)
         page.wait_for_timeout(200)
         assert not _all_hidden(frame, "seq", "step:s1") and not _all_hidden(frame, "seq", "actor:c")
-        assert _all_hidden(frame, "seq", "step:s2") and _all_hidden(frame, "seq", "actor:l")
+        assert _all_hidden(frame, "seq", "step:s2") and row("s2").evaluate("e => getComputedStyle(e).display") == "none"
+        assert cur() == ["s1"] and row("s1").locator(".ln-lbl b").inner_text() == "dev build"
+        send({"type": "stage:frame", "view": "seq", "n": 2, "animate": True})
+        _until_frame(page, "seq", 2)
+        assert cur() == ["s2"]  # the newest step is the one being said
+        assert row("s2").evaluate("e => parseFloat(getComputedStyle(e.querySelector('.ln-lbl b')).fontSize)") == 19
+        assert row("s1").evaluate("e => parseFloat(getComputedStyle(e.querySelector('.ln-lbl b')).fontSize)") == 13.5
         send({"type": "stage:frame", "view": "seq", "n": 3})
         _until_frame(page, "seq", 3)
-        lit = frame.locator('section.pane[data-view="seq"] .k-focus').evaluate_all(
-            "els => els.map(e => e.tagName.toLowerCase() + ':' + e.dataset.key)")
-        assert sorted(lit) == ["div:step:s2", "g:step:s2"]
-        grid, key = (frame.locator(f'section.pane[data-view="seq"] {s}').bounding_box() for s in (".vgrid", ".vkey"))
-        assert key["x"] > grid["x"] + grid["width"] - 5, "the key sits beside the grid on a wide pane"
+        lit = pane.locator(".k-focus").evaluate_all("els => els.map(e => e.tagName.toLowerCase() + ':' + e.dataset.key)")
+        assert lit == ["div:step:s2"] and cur() == ["s2"]  # a pointed step is the large one
+        on = pane.locator(".ln-chip.ln-on").evaluate_all("els => els.map(e => e.dataset.actor)")
+        assert sorted(on) == ["c", "l"]
+        assert pane.locator(".vkey, .seq-key-row").count() == 0  # the words are on the arrows: no key
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 

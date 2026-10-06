@@ -1,0 +1,111 @@
+// Lanes: a sequence diagram that unfolds with the voice. The actors keep their columns, every arrow
+// carries its own sentence, and the step being said is the large one: its arrow draws in and a dot
+// travels from sender to receiver, while the steps before it fold to one quiet line each.
+//
+// The scene engine (scene.js) shows and lights keys as frames go by; this file only draws the keys
+// (`actor:<id>` on the chips, `step:<id>` on the rows) and, after each frame, lays the rows out
+// around the current step: the step pointed at, else the newest one shown.
+
+const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const TONES = new Set(["plain", "edge", "internal", "service", "cheap", "hot", "good", "dropped"]);
+const tone = (t) => "t-" + (TONES.has(t) ? t : "plain");
+const MARGIN = 72;    // the columns' inset from the board's edges, leaving the step numbers room
+const ROOM = 230;     // in a call, the current step stays this far above the bottom: clear of the subtitles
+
+export function renderLanes(box, spec, embedded) {
+  const steps = spec.steps || [], actors = spec.actors || [];
+  const phases = new Map((spec.phases || []).map((p) => [p.start_at, p.label]));
+  box.dataset.room = embedded ? ROOM : 24;
+  const legend = (spec.legend || []).length
+    ? `<div class="ln-legend">${spec.legend.map((l) => `<span class="${tone(l.tone)}"><i></i>${esc(l.label)}</span>`).join("")}</div>` : "";
+  box.innerHTML = `<div class="ln-head"><div class="ln-actors">${actors.map((a) =>
+      `<span class="ln-chip ${tone(a.tone)}" data-key="actor:${esc(a.id)}" data-actor="${esc(a.id)}"><i></i>${esc(String(a.label || a.id).replace(/\n/g, " "))}</span>`).join("")}</div>${legend}</div>
+    <div class="ln-body">${actors.map((a) => `<div class="ln-life" data-actor="${esc(a.id)}"></div>`).join("")}
+    ${steps.map((s, i) => (phases.has(s.id) ? `<div class="ln-phase" data-at="${esc(s.id)}">${esc(phases.get(s.id))}</div>` : "") + row(s, i)).join("")}
+    </div>`;
+  box._lanes = { spec, cur: null };
+  box.querySelector(".ln-body").style.paddingBottom = box.dataset.room + "px";
+  place(box);
+  if (!box._lanesObserved) {
+    box._lanesObserved = true;
+    new ResizeObserver(() => place(box)).observe(box);
+  }
+  layoutLanes(box, null);
+}
+
+function row(s, i) {
+  const kind = ["request", "event", "self", "band"].includes(s.arrow) ? s.arrow : "request";
+  const self = kind === "self" || (kind !== "band" && s.from === s.to);
+  const shape = kind === "band" ? `<div class="ln-band"></div>`
+    : self ? `<div class="ln-loop"></div>`
+    : `<div class="ln-arrow"><div class="ln-line"></div><div class="ln-head-tip"></div><div class="ln-dot"></div></div>`;
+  return `<div class="ln-row ${tone(s.tone)} ln-${self ? "self" : kind}" data-key="step:${esc(s.id)}" data-step="${esc(s.id)}"
+      data-from="${esc(s.from)}" data-to="${esc(s.to)}">${shape}
+    <div class="ln-lbl"><b>${esc(s.label)}</b>${s.sub ? `<code>${esc(s.sub)}</code>` : ""}</div>
+    ${s.note ? `<span class="ln-note">${esc(s.note)}</span>` : ""}<span class="ln-num">${i + 1}</span></div>`;
+}
+
+// Columns spread evenly over the board's width; every row and chip is placed on them.
+function place(box) {
+  const st = box._lanes;
+  if (!st) return;
+  const actors = st.spec.actors || [], w = box.clientWidth || 900;
+  const span = Math.max(w - 2 * MARGIN, 200), xs = new Map();
+  actors.forEach((a, i) => xs.set(a.id, Math.round(MARGIN + span * (actors.length === 1 ? 0.5 : i / (actors.length - 1)))));
+  st.xs = xs;
+  for (const el of box.querySelectorAll(".ln-chip, .ln-life")) el.style.left = xs.get(el.dataset.actor) + "px";
+  for (const r of box.querySelectorAll(".ln-row")) {
+    const a = xs.get(r.dataset.from) ?? MARGIN, b = xs.get(r.dataset.to) ?? a;
+    const lo = Math.min(a, b), hi = Math.max(a, b);
+    r.style.setProperty("--lo", lo + "px");
+    r.style.setProperty("--hi", hi + "px");
+    r.style.setProperty("--mid", (lo + hi) / 2 + "px");
+    r.classList.toggle("ln-back", b < a);
+    // a step an actor makes to itself turns towards the side with room
+    r.classList.toggle("ln-flip", r.classList.contains("ln-self") && a > w / 2);
+  }
+}
+
+// After a frame: which rows are shown, which one is the current step, and where the board scrolls.
+export function layoutLanes(box, scene, n = null) {
+  const st = box._lanes;
+  if (!st) return;
+  const steps = st.spec.steps || [];
+  const last = scene ? scene.frames.length - 1 : 0;
+  const frame = scene ? scene.frames[Math.max(0, Math.min(n ?? last, last))] : null;
+  const show = frame ? new Set(frame.show) : null, focus = frame ? new Set(frame.focus) : new Set();
+  const shown = steps.filter((s) => !show || show.has("step:" + s.id));
+  const atRest = !scene || n == null || n >= scene.rest;
+  const pointed = [...shown].reverse().find((s) => focus.has("step:" + s.id));
+  const cur = pointed || (!atRest && shown.length ? shown[shown.length - 1] : null);
+  const curId = cur ? cur.id : null;
+  const on = new Set(shown.map((s) => s.id));
+  for (const r of box.querySelectorAll(".ln-row")) {
+    r.toggleAttribute("data-on", on.has(r.dataset.step));
+    r.classList.toggle("ln-cur", r.dataset.step === curId);
+    // the arrow draws in and the dot travels only when a step becomes the current one
+    if (r.dataset.step === curId && st.cur !== curId) { r.classList.remove("ln-enter"); void r.offsetWidth; r.classList.add("ln-enter"); }
+    else if (r.dataset.step !== curId) r.classList.remove("ln-enter");
+  }
+  for (const p of box.querySelectorAll(".ln-phase")) p.toggleAttribute("data-on", on.has(p.dataset.at));
+  const involved = cur ? new Set([cur.from, cur.to]) : null;
+  for (const c of box.querySelectorAll(".ln-chip")) {
+    c.classList.toggle("ln-on", !!involved && involved.has(c.dataset.actor));
+    c.classList.toggle("ln-off", !!involved && !involved.has(c.dataset.actor));
+  }
+  st.cur = curId;
+  if (cur) requestAnimationFrame(() => follow(box));
+}
+
+// Keep the current step just above the bottom of the board (above the subtitles, in a call), with
+// the story so far stacked over it. Scrolls the pane's own scroller, never the page around it.
+function follow(box) {
+  const r = box.querySelector(".ln-row.ln-cur");
+  const scroller = box.closest(".pbody");
+  if (!r || !scroller || !r.isConnected) return;
+  const room = +box.dataset.room || 24;
+  const rb = r.getBoundingClientRect(), sb = scroller.getBoundingClientRect();
+  const want = scroller.scrollTop + (rb.bottom - sb.bottom) + room;
+  const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  scroller.scrollTo({ top: Math.max(0, want), behavior: smooth ? "smooth" : "auto" });
+}
