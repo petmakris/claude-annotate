@@ -1132,3 +1132,23 @@ def test_a_markdown_documents_links_open_apart_and_its_images_resolve_beside_it(
     finally:
         no_watch.stop()
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def test_in_a_call_space_and_the_arrows_go_to_the_call_page_unless_a_control_has_them(tmp_path, wc_config, browser):
+    res = stage.show(str(tmp_path), "c", CODE5, title="Five lines")
+    try:
+        page, frame, _ = _embedded(browser, res["url"])
+        frame.locator('section.pane[data-view="c"] .ln').first.wait_for(timeout=5000)
+        frame.locator(".pbody").first.click()
+        for key in ("Space", "ArrowLeft", "ArrowRight"):
+            page.keyboard.press(key)
+        keys = lambda: page.evaluate("got.filter(m => m.type === 'stage:key').map(m => m.key)")  # noqa: E731
+        page.wait_for_function("got.filter(m => m.type === 'stage:key').length === 3", timeout=2000)
+        assert keys() == [" ", "ArrowLeft", "ArrowRight"]
+        # A focused button takes its own Space.
+        frame.get_by_role("button", name="Copy").focus()
+        page.keyboard.press("Space")
+        page.wait_for_timeout(200)
+        assert len(keys()) == 3
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])

@@ -49,7 +49,8 @@ if (CFG.stageUrl) {
 //   {type:'stage:follow', on}           the gear's switch turned following on or off
 // Stage to talk: {type:'stage:ready'}, {type:'stage:views', list:[{name, title, kind, answer}]} on every
 // change, {type:'stage:changed', name, title, isNew}, and {type:'stage:follow', on} when following
-// changes inside the stage (a tab tap turns it off, a new answer on), and {type:'stage:missing', view} when a chip
+// changes inside the stage (a tab tap turns it off, a new answer on), {type:'stage:key', key} for Space, ← or →
+// pressed on the stage with nothing there taking them, and {type:'stage:missing', view} when a chip
 // asked for a view it does not hold: such chips are struck through. Only messages from the embedded stage's own
 // window and origin are read. Until the stage says it is ready, what talk sends waits in a short queue.
 var stageUp = false;
@@ -76,6 +77,7 @@ window.addEventListener("message", ev => {
   else if (m.type === "stage:follow") { follow = !!m.on; paintSettings(); if (follow) resync(); }
   else if (m.type === "stage:views") { stageViews = new Set((m.list || []).map(v => String(v.name))); paintMissing(); }
   else if (m.type === "stage:missing") paintMissing(String(m.view));
+  else if (m.type === "stage:key" && MEDIA_KEYS.has(m.key)) mediaKey(m.key);
 });
 
 let stageViews = null;
@@ -358,7 +360,7 @@ function paintPill() {
   $("back").hidden = rec || !current;
   $("playpause").hidden = rec || !shown || shown.speech !== "ready";
   const label = !audio.paused ? "Pause" : (current && (audio.ended || audio.currentTime >= (audio.duration || 1)) ? "Play again" : "Play");
-  $("playpause").setAttribute("aria-label", label); $("playpause").dataset.tip = label;
+  $("playpause").setAttribute("aria-label", label); $("playpause").dataset.tip = label + " · Space";
   $("playpause").classList.toggle("playing", !audio.paused);
   const calls = view.calls || [];
   $("callsbtn").hidden = rec || !calls.length; $("sep").hidden = $("callsbtn").hidden;
@@ -623,10 +625,11 @@ function stopHighlight() { if (raf) cancelAnimationFrame(raf); raf = 0; highligh
 audio.addEventListener("ended", () => { if (current) syncStage(view.entries.find(x => x.id === current.id) || current, Infinity); });
 audio.addEventListener("seeking", () => { cueSync = true; });
 function skip(by) { audio.currentTime = Math.min(Math.max(0, audio.currentTime + by), audio.duration || 0); paintPill(); }
-$("playpause").onclick = () => {
+function togglePlay() {
   if (!current) { const e = lastAnswer(); if (e) load(e, true); return; }
   if (audio.paused) audio.play().catch(() => {}); else audio.pause();
-};
+}
+$("playpause").onclick = togglePlay;
 $("back").onclick = () => skip(-10);
 $("seek").oninput = () => { audio.currentTime = Number($("seek").value); paintPill(); };
 for (const s of SPEEDS) {
@@ -641,6 +644,54 @@ for (const ev of ["play", "pause", "ended"]) audio.addEventListener(ev, paintNow
 audio.addEventListener("play", startHighlight);
 for (const ev of ["pause", "ended"]) audio.addEventListener(ev, stopHighlight);
 audio.addEventListener("seeked", () => { if (audio.paused) highlight(); });
+// ---- the keyboard: Space pauses and plays, ← and → move by a sentence ------------------
+// An answer's sentence starts, in seconds: its first word and every word after one that ends a sentence.
+function sentenceTimes(e) {
+  if (!e.words || !e.words.length) return null;
+  const out = [e.words[0][2]];
+  for (let i = 1; i < e.words.length; i++) {
+    if (/[.!?…][)\]"'”’]*$/.test(e.text.slice(e.words[i - 1][0], e.words[i - 1][1]))) out.push(e.words[i][2]);
+  }
+  return out;
+}
+const AGAIN_S = 1.0;   // ← this soon after a sentence starts goes to the one before, as a player's previous track does
+const SKIP_S = 5;      // an answer with no word timings moves by this much instead
+function jump(dir) {
+  if (!current) return;
+  const e = view.entries.find(x => x.id === current.id) || current, t = audio.currentTime || 0;
+  const starts = sentenceTimes(e);
+  if (!starts) { skip(dir * SKIP_S); return; }
+  let to;
+  if (dir < 0) {
+    const i = starts.findLastIndex(s => s <= t + 0.05);
+    to = i < 0 ? 0 : i > 0 && t - starts[i] < AGAIN_S * (audio.playbackRate || 1) ? starts[i - 1] : starts[i];
+  } else to = starts.find(s => s > t + 0.05) ?? (audio.duration || t);
+  cueSync = true;
+  audio.currentTime = to; paintPill();
+  if (audio.paused) highlight();
+}
+// The keys steer the answer wherever nothing is being typed: on this page, on the stage (which
+// passes them on as stage:key), and in the text field while it is empty. False: the key was not used.
+function mediaKey(key) {
+  if (recorder || busy || openPop) return false;
+  if (key === " ") {
+    const e = shownAnswer();
+    if (!current && !(e && e.speech === "ready")) return false;
+    togglePlay(); return true;
+  }
+  if (!current) return false;
+  jump(key === "ArrowLeft" ? -1 : 1); return true;
+}
+const MEDIA_KEYS = new Set([" ", "ArrowLeft", "ArrowRight"]);
+document.addEventListener("keydown", ev => {
+  if (!MEDIA_KEYS.has(ev.key) || ev.ctrlKey || ev.metaKey || ev.altKey || ev.shiftKey) return;
+  const at = document.activeElement;
+  const free = !at || at === document.body || (at === $("text") && !$("text").value)
+    || (at.tagName === "BUTTON" && !!at.closest("#pill, #subs"));
+  if (!free) return;
+  if (ev.key === " " && ev.repeat) { ev.preventDefault(); return; }
+  if (mediaKey(ev.key)) ev.preventDefault();
+});
 if ("mediaSession" in navigator) {
   const ms = navigator.mediaSession;
   ms.setActionHandler("play", () => audio.play()); ms.setActionHandler("pause", () => audio.pause());

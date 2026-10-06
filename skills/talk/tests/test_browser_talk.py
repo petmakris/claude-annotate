@@ -630,3 +630,49 @@ def test_a_key_typed_with_nothing_focused_goes_to_the_text_field(tmp_path, brows
         page.keyboard.type("hi there")
         assert page.evaluate("document.activeElement.id") == "text" and page.input_value("#text") == "hi there"
         assert page.is_enabled("#sendtext")
+
+
+def test_space_pauses_and_plays_and_the_arrows_move_a_sentence(tmp_path, pw):
+    with served(tmp_path, stage_url=STAGE) as (url, call, loop, fake):
+        fake.seconds = 9.0  # three sentences of three words: they start at 0, 3 and 6 s
+        browser = pw.chromium.launch(args=FAKE_MIC)
+        try:
+            page = browser.new_page()
+            stage_page(page, STAGE_PROBE)
+            page.goto(url)
+            on_loop(loop, call.answer("One two three. Four five six. Seven eight nine."))
+            page.wait_for_function(PLAYING, timeout=5000)
+            assert page.evaluate("document.activeElement.id") == "text"  # empty: the keys still steer the answer
+            page.keyboard.press("Space")
+            page.wait_for_function(PAUSED)
+            assert page.input_value("#text") == ""
+            at = lambda: round(page.evaluate("document.getElementById('audio').currentTime"), 2)  # noqa: E731
+            page.evaluate("document.getElementById('audio').currentTime = 4.5")
+            page.keyboard.press("ArrowLeft")
+            assert at() == 3.0  # the start of the sentence being said
+            page.keyboard.press("ArrowLeft")
+            assert at() == 0.0  # pressed again at its start: the sentence before
+            page.keyboard.press("ArrowRight")
+            assert at() == 3.0
+            page.keyboard.press("ArrowRight")
+            assert at() == 6.0 and page.evaluate(PAUSED)
+            page.keyboard.press("Space")
+            page.wait_for_function(PLAYING)
+            # The stage passes the keys on when they are pressed there.
+            page.frame(url=STAGE).evaluate("parent.postMessage({type: 'stage:key', key: ' '}, '*')")
+            page.wait_for_function(PAUSED)
+            # Typing is typing: with words in the field, Space is a space.
+            page.fill("#text", "so")
+            page.press("#text", "Space")
+            assert page.input_value("#text") == "so " and page.evaluate(PAUSED)
+        finally:
+            browser.close()
+
+
+def test_space_with_no_answer_yet_goes_to_the_text_field(tmp_path, browser):
+    with served(tmp_path) as (url, call, loop, fake):
+        page = browser.new_page()
+        page.goto(url)
+        page.evaluate("document.activeElement.blur()")
+        page.keyboard.type(" hi")
+        assert page.input_value("#text") == " hi"

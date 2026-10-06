@@ -31,6 +31,8 @@
 //     {type:'stage:views', list:[{name, title, kind, answer}]}   after every change to the tabs
 //     {type:'stage:changed', name, title, isNew}                 a view was created or its source changed
 //     {type:'stage:follow', on}                                  following changed here (a tab tap, a new answer)
+//     {type:'stage:key', key}                                    Space, ArrowLeft or ArrowRight pressed here, on nothing
+//                                                                that takes keys: the call page pauses or moves the answer
 //     {type:'stage:missing', view}                               a chip asked for a view this stage does not hold
 //     {type:'stage:keymiss', view, keys}                         keys of a scene its drawing does not hold; they stay shown
 // Unknown types are ignored.
@@ -881,6 +883,15 @@ function showBoards(on) {
   const sel = on && tabsEl.querySelector('[aria-selected="true"]');
   if (sel) boardsEl.scrollTop = Math.max(0, sel.offsetTop - boardsEl.clientHeight / 2);
 }
+// In a call, Space and ← → steer the answer being read, as they do on the call page: the stage passes them on
+// when nothing here takes keys (a button, a field, the list), instead of scrolling the board.
+if (embedded) document.addEventListener("keydown", (e) => {
+  if (![" ", "ArrowLeft", "ArrowRight"].includes(e.key) || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+  const at = document.activeElement;
+  if (at && at !== document.body && at.closest("button, a, input, textarea, select, [contenteditable], [tabindex], .boards")) return;
+  e.preventDefault();
+  if (!(e.key === " " && e.repeat)) post({ type: "stage:key", key: e.key });
+});
 posEl.onclick = (e) => { e.stopPropagation(); showBoards(boardsEl.hidden); };
 document.addEventListener("click", (e) => { if (!boardsEl.hidden && !e.target.closest(".boards")) showBoards(false); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !boardsEl.hidden) { showBoards(false); posEl.focus(); } });
