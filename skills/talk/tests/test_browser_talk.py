@@ -708,6 +708,7 @@ def test_live_mode_sends_what_is_said_after_a_pause_with_no_button(tmp_path, pw)
             page.add_init_script("localStorage.setItem('talk.talkMode', '\"live\"')")
             page.goto(url)
             page.wait_for_selector("#talk[aria-label='Stop listening']", timeout=5000)  # the microphone opened
+            assert page.is_hidden("#subs") and page.inner_text("#modechip") == "Live · listening"  # no card for "listening"
             fake.heard = "how does the doorbell work"
             page.wait_for_selector("#app[data-state='listening']", timeout=8000)  # the noise: "Hearing you…"
             turn = on_loop(loop, call.turns.next(timeout=8))

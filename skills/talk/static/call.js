@@ -367,8 +367,9 @@ function statusText() {
     const run = view.activity.filter(a => a.state === "running").pop();
     return {text: run ? run.label + " · " + Math.round(run.seconds) + "s" : "Claude is working…", shimmer: true};
   }
-  // Live mode always says whether it listens: from across the room the mic button alone is too small.
-  if (talkMode === "live") return live ? (shownAnswer() ? null : {text: "Listening."}) : {text: liveNote || "Not listening. Press the mic to listen."};
+  // Whether live mode listens shows on the corner chip, the mic and the frame's edge; the card only says
+  // why it stopped when it stopped by itself (asleep, the microphone lost).
+  if (talkMode === "live" && !live && liveNote) return {text: liveNote};
   return null;
 }
 function appState() {
