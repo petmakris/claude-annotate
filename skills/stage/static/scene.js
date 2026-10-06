@@ -14,7 +14,7 @@ function stampKeys(kind, box) {
     return lines.length > 0;
   }
   if (kind === "rows") {
-    const rows = [...box.querySelectorAll("tbody tr")];
+    const rows = [...(box.querySelector("table")?.querySelectorAll("tbody tr") || [])];
     rows.forEach((tr, i) => { tr.dataset.key = "row#" + (i + 1); });
     return rows.length > 0;
   }
@@ -47,6 +47,7 @@ function paintCard(scene, box, n) {
 
 export function stepLabel(scene, n) {
   if (!scene.steps) return "";
+  if (n >= scene.rest) return "All shown";
   const at = Math.min(Math.max(n, 0), scene.steps);
   return at === 0 ? `${scene.steps} ${scene.steps === 1 ? "step" : "steps"}` : `Step ${at} of ${scene.steps}`;
 }

@@ -203,10 +203,13 @@ function frameUrl(src, rev, hash) {
 }
 
 const span = (a, b) => (a === b ? `line ${a}` : `lines ${a}–${b}`);
+// The first table's body rows, counted as talk counts them: after the separator, up to a blank line.
 function tableRows(body) {
-  const rows = body.split("\n").filter((l) => /^\s*\|/.test(l));
-  const sep = rows.findIndex((l) => /^\s*\|?[\s:|-]+\|?\s*$/.test(l) && l.includes("-"));
-  return sep >= 0 ? rows.length - sep - 1 : Math.max(rows.length - 1, 0);
+  const lines = body.split("\n").map((l) => l.trim());
+  const sep = lines.findIndex((l) => /^\|?[\s:|-]+\|?$/.test(l) && l.includes("-"));
+  if (sep < 0) return Math.max(lines.filter((l) => l.startsWith("|")).length - 1, 0);
+  const end = lines.indexOf("", sep + 1);
+  return (end < 0 ? lines.length : end) - sep - 1;
 }
 
 // The meta line in plain words, never a raw format name.
@@ -248,7 +251,8 @@ async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return; } catch {}
   const ta = document.createElement("textarea");
   ta.value = text; ta.style.cssText = "position:fixed;opacity:0"; document.body.append(ta);
-  ta.select(); try { document.execCommand("copy"); } finally { ta.remove(); }
+  ta.select();
+  try { if (!document.execCommand("copy")) throw new Error("copy failed"); } finally { ta.remove(); }
 }
 
 function header(v) {
@@ -289,8 +293,7 @@ function header(v) {
       : src.format === "points" ? src.items.map((it) => `${it.n}. ${it.text}`).join("\n")
       : src.format === "visual" ? JSON.stringify(src.spec, null, 2) : src.body;
     const copy = button("Copy", async () => {
-      await copyText(text()).catch(() => {});
-      copy.textContent = "Copied";
+      copy.textContent = await copyText(text()).then(() => "Copied", () => "Copy failed");
       clearTimeout(copy._t); copy._t = setTimeout(() => { copy.textContent = "Copy"; }, 1500);
     });
     btns.append(copy);
@@ -541,6 +544,27 @@ function lightKey(n, glow = true) {
 
 const NUM = /^[-+]?[\d.,]+ ?(%|ms|s|KB|MB|GB|€|\$)?$/;
 
+// Markdown as the stage shows it: sanitized; a relative link or image read against the file it came
+// from; a link out opening in a new tab, so the stage is never navigated away; headings given ids
+// (prefixed, never clashing with the page's own) that the document's #links scroll to.
+const slug = (t) => "md-" + String(t).trim().toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").replace(/\s+/g, "-");
+function markdownInto(box, text, base = null) {
+  box.innerHTML = DOMPurify.sanitize(marked.parse(text), { FORBID_TAGS: ["form", "meta", "iframe", "style", "base"] });
+  for (const el of box.querySelectorAll("[src], a[href]")) {
+    const attr = el.hasAttribute("src") ? "src" : "href", raw = el.getAttribute(attr);
+    if (raw.startsWith("#")) { el.setAttribute("href", "#" + slug(decodeURIComponent(raw.slice(1)))); continue; }
+    if (base) { try { el.setAttribute(attr, new URL(raw, base).href); } catch {} }
+    if (el.tagName === "A") { el.target = "_blank"; el.rel = "noopener"; }
+  }
+  for (const h of box.querySelectorAll("h1, h2, h3, h4, h5, h6")) if (!h.id) h.id = slug(h.textContent);
+  box.onclick = (e) => {
+    const a = e.target.closest?.('a[href^="#"]');
+    if (!a) return;
+    e.preventDefault();
+    box.querySelector(`[id="${CSS.escape(a.getAttribute("href").slice(1))}"]`)?.scrollIntoView({ block: "start" });
+  };
+}
+
 // After marked: each table in its own scrolling box, with uniform column rules.
 function shapeTables(box) {
   for (const table of box.querySelectorAll("table")) {
@@ -565,7 +589,7 @@ function shapeTables(box) {
 
 function paintTable(v, box, src) {
   if (!hasMarkdown()) { box.innerHTML = `<pre>${esc(src.body)}</pre>`; return; }
-  box.innerHTML = DOMPurify.sanitize(marked.parse(src.body), { FORBID_TAGS: ["form", "meta", "iframe", "style", "base"] });
+  markdownInto(box, src.body);
   shapeTables(box);
   pulseDiff(v, box, "rows", [...box.querySelectorAll("tbody tr")].map((tr) => tr.textContent));
   paintSpot(v, box);
@@ -627,6 +651,7 @@ function renderInline(v, seq) {
     box.className = `visual visual-${src.tool} ` + (v.actual ? "actual" : "fit");
     box.innerHTML = `<div class="vinner"><div class="vgrid">${src.html}</div>` +
       (src.key ? `<div class="vkey">${src.key}</div>` : "") + "</div>";
+    ownMarkers(box);
     sizeSvg(box);
     paintSpot(v, box);
     requestAnimationFrame(() => { if (current()) paintFrame(v, box); });
@@ -757,12 +782,14 @@ function paintFile(v, body, seq) {
   const current = () => v.renderSeq === seq && box.isConnected;
   const paint = (text) => {
     if (src.display === "markdown" && hasMarkdown()) {
-      box.innerHTML = DOMPurify.sanitize(marked.parse(text), { FORBID_TAGS: ["form", "meta", "iframe", "style", "base"] });
+      markdownInto(box, text, new URL(frameUrl(src, v.body.rev, "#"), location.href));
     } else {
       const pre = document.createElement("pre"); pre.className = "filetext"; pre.textContent = text;
       box.replaceChildren(pre);
     }
-    box.scrollTop = top;
+    const anchor = !top && src.fragment && box.querySelector(`[id="${CSS.escape(slug(src.fragment))}"]`);
+    if (anchor) requestAnimationFrame(() => anchor.scrollIntoView({ block: "start" }));
+    else box.scrollTop = top;
   };
   fetch(frameUrl(src, v.body.rev, "#"))
     .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`${r.status}`))))
@@ -1052,6 +1079,19 @@ const firstFrame = (body) => {
   return body.scene && embedded && live ? 0 : null;
 };
 
+// Every flowchart names its arrowhead fc-arrow, and url(#fc-arrow) finds the first in the page, which
+// may sit in a hidden pane and draw nothing; each drawing gets markers of its own.
+let markerSeq = 0;
+function ownMarkers(box) {
+  for (const m of box.querySelectorAll("marker[id]")) {
+    const was = `url(#${m.id})`;
+    m.id = `${m.id}-${++markerSeq}`;
+    for (const el of box.querySelectorAll("[marker-end], [marker-start], [marker-mid]")) {
+      for (const a of ["marker-end", "marker-start", "marker-mid"]) if (el.getAttribute(a) === was) el.setAttribute(a, `url(#${m.id})`);
+    }
+  }
+}
+
 function paintFrame(v, box, animate = false) {
   const scene = v.body.scene;
   box = box || v.pane.querySelector(".code, .md, .diagram, .visual");
@@ -1060,7 +1100,8 @@ function paintFrame(v, box, animate = false) {
   const done = applyFrame(scene, box, n, animate && v.applied === n - 1 ? v.applied : null);
   if (!done) return;
   v.applied = n;
-  if (done.focused && !v.pane.hidden) requestAnimationFrame(() => { if (done.focused.isConnected) centre(done.focused); });
+  // Checked a frame later: a pane filled as it is fronted is still hidden while it paints.
+  if (done.focused) requestAnimationFrame(() => { if (done.focused.isConnected && !v.pane.hidden) centre(done.focused); });
   const step = v.pane.querySelector(".vstep");
   if (step) step.textContent = stepLabel(scene, n);
   const back = v.pane.querySelector(".stepback"), next = v.pane.querySelector(".stepnext");

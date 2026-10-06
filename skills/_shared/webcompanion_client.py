@@ -17,6 +17,7 @@ Contract reference: ~/projects/webcompanion/docs/contract.md (version 1).
 """
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import re
@@ -105,7 +106,7 @@ def request(method: str, path: str, body: dict | list | None = None, *,
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            raw = r.read().decode()
+            raw = r.read().decode(errors="replace")
     except urllib.error.HTTPError as e:
         if e.code == 404 and allow_missing:
             return None
@@ -113,7 +114,7 @@ def request(method: str, path: str, body: dict | list | None = None, *,
         if e.code == 426:
             raise ContractMismatch("contract mismatch: %s" % detail) from None
         raise DaemonHTTPError(method, path, e.code, detail) from None
-    except (urllib.error.URLError, OSError) as e:
+    except (urllib.error.URLError, OSError, http.client.HTTPException) as e:
         raise DaemonUnreachable(
             "cannot reach the webcompanion daemon on port %s (%s).\n"
             "  webcompanion status   # is the service running?\n"

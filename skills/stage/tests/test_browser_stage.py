@@ -795,7 +795,7 @@ def test_a_code_scene_steps_its_focus_and_a_tapped_tab_opens_on_the_rest_frame(t
         send({"type": "stage:frame", "view": "c", "n": 99})
         _until_frame(page, "c", 99)
         assert frame.locator(".ln.k-focus").count() == 0
-        assert frame.locator('section.pane[data-view="c"] .vstep').inner_text() == "Step 2 of 2"
+        assert frame.locator('section.pane[data-view="c"] .vstep').inner_text() == "All shown"
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
@@ -1079,4 +1079,45 @@ def test_fit_grows_a_small_diagram_and_the_stage_draws_in_its_own_fonts_with_no_
         page.locator("button", has_text="Actual size").click()
         assert abs(svg.bounding_box()["width"] - drawn) < 1
     finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def test_every_flowchart_on_the_stage_draws_its_own_arrowheads(tmp_path, wc_config, browser):
+    res = stage.show(str(tmp_path), "one", _visual("flowchart", FLOW_SPEC), title="One")
+    stage.show(str(tmp_path), "two", _visual("flowchart", FLOW_SPEC), title="Two")
+    try:
+        page = _page(browser, res["url"])
+        page.locator('button[role=tab][data-view="one"]').click()
+        page.locator('section.pane[data-view="one"] .vgrid svg').wait_for(timeout=5000)
+        page.locator('button[role=tab][data-view="two"]').click()
+        page.locator('section.pane[data-view="two"] .vgrid svg').wait_for(timeout=5000)
+        ids = page.locator("marker").evaluate_all("els => els.map(e => e.id)")
+        assert len(ids) == 2 and len(set(ids)) == 2, "url(#id) finds the first in the page, maybe in a hidden pane"
+        ends = page.locator(".vgrid path.flow-edge").evaluate_all(
+            "els => els.map(e => [e.closest('section').dataset.view, e.getAttribute('marker-end')])")
+        for view, end in ends:
+            marker = page.locator(f'section.pane[data-view="{view}"] marker[id="{end[5:-1]}"]')
+            assert marker.count() == 1, (view, end)
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def test_a_markdown_documents_links_open_apart_and_its_images_resolve_beside_it(tmp_path, wc_config, browser):
+    proj = tmp_path / "proj"
+    (proj / "docs").mkdir(parents=True)
+    (proj / "docs" / "guide.md").write_text("# Guide\n\n[out](https://example.com) [down](#install) ![pic](pic.svg)\n\n"
+                                            + "filler\n\n" * 80 + "## Install\n\nhere\n")
+    (proj / "docs" / "pic.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"/>')
+    no_watch = patch.object(stage, "start_watch", lambda cwd, sid: None)
+    no_watch.start()
+    res = stage.show(str(proj), "g", model.parse_source("docs/guide.md#install", proj), title="Guide")
+    try:
+        page = _page(browser, res["url"])
+        page.wait_for_selector('section.pane[data-view="g"] .doc h2')
+        out = page.locator('section.pane[data-view="g"] a', has_text="out")
+        assert (out.get_attribute("target"), out.get_attribute("rel")) == ("_blank", "noopener")
+        page.wait_for_function("document.querySelector('section.pane[data-view=\"g\"] img').naturalWidth > 0", timeout=5000)
+        page.wait_for_function("document.querySelector('section.pane[data-view=\"g\"] .doc').scrollTop > 0", timeout=5000)
+    finally:
+        no_watch.stop()
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
