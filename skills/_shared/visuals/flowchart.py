@@ -201,13 +201,28 @@ def _text_lines(pos: dict[str, Any]) -> str:
     return "".join(out)
 
 
-def _node_svg(pos: dict[str, Any], block_id: str) -> str:
+def _key(keyed: bool, key: str) -> str:
+    return f' data-key="{_esc(key, quote=True)}"' if keyed else ""
+
+
+def edge_keys(edges: list[dict[str, Any]]) -> list[str]:
+    """Each edge's frame key, `edge:<from>-><to>#<n>`: the n-th edge from `from` to `to`, in spec order."""
+    seen: dict[tuple[str, str], int] = {}
+    out = []
+    for e in edges:
+        pair = (e["from"], e["to"])
+        out.append(f"edge:{pair[0]}->{pair[1]}#{seen.get(pair, 0)}")
+        seen[pair] = seen.get(pair, 0) + 1
+    return out
+
+
+def _node_svg(pos: dict[str, Any], block_id: str, keyed: bool = False) -> str:
     node = pos["node"]
     cx, cy, w, h = pos["cx"], pos["cy"], pos["w"], pos["h"]
     cls = _role_class(node)
     parts = [
         f'<g class="node {cls}" data-block-id="{_esc(block_id, quote=True)}" '
-        f'data-node-id="{_esc(node["id"], quote=True)}">'
+        f'data-node-id="{_esc(node["id"], quote=True)}"{_key(keyed, "node:" + node["id"])}>'
     ]
     if node.get("role") == "decision":
         hw, hh = w / 2, h / 2
@@ -436,10 +451,10 @@ def _place_label(label: str, samples: list[tuple[float, float]],
     return base_rect
 
 
-def _label_svg(label: str, rect: tuple[float, float, float, float]) -> str:
+def _label_svg(label: str, rect: tuple[float, float, float, float], key: str = "") -> str:
     x0, y0, x1, y1 = rect
     cx = (x0 + x1) / 2
-    return (f'<g class="edge-label"><rect x="{x0:.1f}" y="{y0:.1f}" '
+    return (f'<g class="edge-label"{_key(bool(key), key)}><rect x="{x0:.1f}" y="{y0:.1f}" '
             f'width="{x1 - x0:.1f}" height="{y1 - y0:.1f}" rx="10"/>'
             f'<text x="{cx:.1f}" y="{(y0 + y1) / 2 + 3.5:.1f}" '
             f'text-anchor="middle">{_esc(label)}</text></g>')
@@ -475,7 +490,7 @@ def edge_geometry(positions: dict[str, Any], edges: list[dict[str, Any]],
 
 def _draw(spec: dict[str, Any], block_id: str, positions: dict[str, Any],
           canvas_w: float, canvas_h: float,
-          routes: dict[int, list[tuple[float, float]]]) -> str:
+          routes: dict[int, list[tuple[float, float]]], keyed: bool = False) -> str:
     """Turn one laid-out graph into SVG.
 
     Split out of `render` so `render_variants` can lay out each variant once
@@ -502,8 +517,9 @@ def _draw(spec: dict[str, Any], block_id: str, positions: dict[str, Any],
     # before it can place the first label, since a label must avoid *any*
     # edge, not just the ones drawn so far.
     edge_samples: list[list[tuple[float, float]]] = []
+    ekeys = edge_keys(edges)
     for i, (d, pts) in enumerate(edge_geometry(positions, edges, canvas_w, routes)):
-        parts.append(f'<path class="flow-edge" d="{d}" marker-end="url(#fc-arrow)"/>')
+        parts.append(f'<path class="flow-edge" d="{d}" marker-end="url(#fc-arrow)"{_key(keyed, ekeys[i])}/>')
         # Label placement walks evenly spaced points along a routed edge; the
         # fallback bezier already returns its own. Crossing measurement wants
         # neither, which is why the resampling lives here and not in the
@@ -524,22 +540,24 @@ def _draw(spec: dict[str, Any], block_id: str, positions: dict[str, Any],
         other_segments = [seg for j, segs in enumerate(edge_segments) if j != i for seg in segs]
         rect = _place_label(label, edge_samples[i], obstacles, canvas_w, canvas_h, other_segments)
         obstacles.append(rect)  # later labels avoid the ones already placed
-        labels.append(_label_svg(label, rect))
+        labels.append(_label_svg(label, rect, ekeys[i] if keyed else ""))
     for n in nodes:
-        parts.append(_node_svg(positions[n["id"]], block_id))
+        parts.append(_node_svg(positions[n["id"]], block_id, keyed))
     parts.extend(labels)
     parts.append("</svg>")
     return "".join(parts)
 
 
 def render(spec: dict[str, Any], block_id: str,
-           variant: str = flavours.DEFAULT) -> str:
-    """Render a validated flowchart spec to an SVG string with hit-target IDs."""
+           variant: str = flavours.DEFAULT, *, keyed: bool = False) -> str:
+    """Render a validated flowchart spec to an SVG string with hit-target IDs. With `keyed`, every
+    node, edge and edge label carries a `data-key` (`node:<id>`, `edge:<from>-><to>#<n>`) for the
+    stage's frames."""
     validate(spec)
     nodes = spec["nodes"]
     edges = spec.get("edges") or []
     positions, canvas_w, canvas_h, routes = layout(nodes, edges, variant)
-    return _draw(spec, block_id, positions, canvas_w, canvas_h, routes)
+    return _draw(spec, block_id, positions, canvas_w, canvas_h, routes, keyed)
 
 
 def render_variants(spec: dict[str, Any],

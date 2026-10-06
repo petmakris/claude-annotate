@@ -280,13 +280,16 @@ def _render_legend(lines: list[list[tuple[dict, float]]]) -> str:
     return "".join(parts)
 
 
-def render(spec: dict[str, Any], block_id: str) -> str:
+def render(spec: dict[str, Any], block_id: str, *, keyed: bool = False) -> str:
     """Render a validated spec to the grid: arrows, bands and numbered badges.
 
     The words that used to sit on these arrows are in `render_key(spec)`.
     Rendering one without the other leaves a diagram of unexplained numbers, so
     callers must paint both — see `render_block` in ../render.py, which puts
     them on the wire as `svg` and `key`.
+
+    With `keyed`, every actor and step carries a `data-key` (`actor:<id>`, `step:<id>`) for the
+    stage's frames, and a phase label carries the key of the step it starts at.
 
     Raises ValidationError if spec is malformed.
     """
@@ -343,19 +346,19 @@ def render(spec: dict[str, Any], block_id: str) -> str:
         )
 
     for actor, x, lines in zip(actors, xs, name_lines):
-        parts.append(_render_actor(actor, x, lines, actor_top, actor_w, box_h))
+        parts.append(_render_actor(actor, x, lines, actor_top, actor_w, box_h, keyed))
 
     if phases:
-        parts.append(_render_phases(phases, step_index, row_y, total_w))
+        parts.append(_render_phases(phases, step_index, row_y, total_w, keyed))
 
     for i, (step, num) in enumerate(_numbered(steps)):
-        parts.append(_render_step(step, block_id, actor_x, row_y(i), total_w, num))
+        parts.append(_render_step(step, block_id, actor_x, row_y(i), total_w, num, keyed))
 
     parts.append("</svg>")
     return "".join(parts)
 
 
-def render_key(spec: dict[str, Any], block_id: str) -> str:
+def render_key(spec: dict[str, Any], block_id: str, *, keyed: bool = False) -> str:
     """The numbered key that reads alongside `render(spec)`'s grid.
 
     HTML, not SVG, and deliberately so: it is the half that has to reflow when
@@ -373,7 +376,7 @@ def render_key(spec: dict[str, Any], block_id: str) -> str:
     for step, num in _numbered(steps):
         if step["id"] in phase_at:
             rows.append(
-                f'<div class="seq-key-phase"><span>'
+                f'<div class="seq-key-phase"{_key(keyed, "step", step["id"])}><span>'
                 f'{_html_escape(phase_at[step["id"]])}</span></div>'
             )
         if num is None:
@@ -386,7 +389,7 @@ def render_key(spec: dict[str, Any], block_id: str) -> str:
         sub_html = (f'<div class="seq-key-sub">{_html_escape(str(sub))}</div>') if sub else ""
         rows.append(
             f'<div class="{_cls("seq-key-row", tone)}" '
-            f'data-step-id="{_html_escape(step["id"], quote=True)}" '
+            f'data-step-id="{_html_escape(step["id"], quote=True)}"{_key(keyed, "step", step["id"])} '
             f'role="button" tabindex="0">'
             f'<span class="{_cls("seq-key-n", tone)}">{num}</span>'
             f'<div class="seq-key-text">'
@@ -418,8 +421,12 @@ def _widest_band_right(steps: list[dict[str, Any]], actor_x: dict[str, int]) -> 
     return right
 
 
+def _key(keyed: bool, kind: str, ident: str) -> str:
+    return f' data-key="{kind}:{_html_escape(ident, quote=True)}"' if keyed else ""
+
+
 def _render_actor(actor: dict[str, Any], x: int, lines: list[str], top: int,
-                  w: int, h: int) -> str:
+                  w: int, h: int, keyed: bool = False) -> str:
     tone = _tone_of(actor)
     parts = [
         f'<rect class="{_cls("actor-box", tone)}" x="{x - w // 2}" y="{top}" '
@@ -434,6 +441,8 @@ def _render_actor(actor: dict[str, Any], x: int, lines: list[str], top: int,
             f'<text class="actor-label" x="{x}" y="{y}" text-anchor="middle">'
             f'{_html_escape(text)}</text>'
         )
+    if keyed:
+        return f'<g{_key(True, "actor", actor["id"])}>' + "".join(parts) + "</g>"
     return "".join(parts)
 
 
@@ -471,7 +480,7 @@ def _render_badge(step: dict[str, Any], block_id: str, cx: float, cy: float,
 
 
 def _render_step(step: dict[str, Any], block_id: str, actor_x: dict[str, int],
-                 y: int, total_w: int, num: int | None) -> str:
+                 y: int, total_w: int, num: int | None, keyed: bool = False) -> str:
     """Emit one step row: the arrow (or band) and its numbered badge.
 
     y is the arrow centreline. No label, no sub-caption and no note — those are
@@ -486,7 +495,7 @@ def _render_step(step: dict[str, Any], block_id: str, actor_x: dict[str, int],
 
     parts = [
         f'<g class="step-row" data-block-id="{_html_escape(block_id, quote=True)}" '
-        f'data-step-id="{_html_escape(sid, quote=True)}">',
+        f'data-step-id="{_html_escape(sid, quote=True)}"{_key(keyed, "step", sid)}>',
         f'<rect class="row-bg" x="0" y="{y - ROW_H // 2}" width="{total_w}" height="{ROW_H}"/>',
     ]
 
@@ -542,6 +551,7 @@ def _render_phases(
     step_index: dict[str, int],
     row_y,
     total_w: int,
+    keyed: bool = False,
 ) -> str:
     """Phase separators: the phase name on its own row with a hairline running
     off its right shoulder to the canvas edge."""
@@ -550,13 +560,12 @@ def _render_phases(
         y = row_y(step_index[phase["start_at"]]) - ROW_H
         label = str(phase["label"]).upper()
         lx = PAD_LEFT - 20 if PAD_LEFT >= 20 else 0
-        parts.append(
+        rule_x = lx + text_px(label, "seq-legend") + 14
+        phase_parts = (
             f'<text class="phase-label" x="{lx}" y="{y + 1}">'
             f'{_html_escape(label)}</text>'
-        )
-        rule_x = lx + text_px(label, "seq-legend") + 14
-        parts.append(
             f'<line class="phase-rule" x1="{rule_x:.0f}" y1="{y - 3}" '
             f'x2="{total_w - 8}" y2="{y - 3}"/>'
         )
+        parts.append(f'<g{_key(True, "step", phase["start_at"])}>{phase_parts}</g>' if keyed else phase_parts)
     return "".join(parts)
