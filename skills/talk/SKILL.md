@@ -151,7 +151,9 @@ The conversation then continues in this session.
 
 A call outlives the server process that holds it. When the server stops (a crash, a `kill`, or a restart to load new code), its open calls are not ended: the next server on the port carries each one on with the same link, call id, conversation and stage. The page shows "Reconnecting to the call…" and then "Reconnected.", and `talk_client.py` waits up to 90 seconds for that server, starting one itself after a few seconds if nobody else has. So a doorbell or reply keeps its `--call` id through a restart, and you do not open a new call.
 
-To load new code into a server that holds calls, run `uv run --script "$SKILL_DIR/talk.py" --restart`. It hands the calls over to a new server. A server on code from before this hand-over cannot hand its calls over, so `--restart` leaves it running while it holds an open call and says so.
+On a Mac the server can run as a launchd agent, `dev.talk`: `uv run --script "$SKILL_DIR/talk.py" --install-service`, run from a shell that has the speech settings. The plist keeps `TALK_AZURE_KEY_COMMAND`, the region and the addresses, and refuses to install without a key command unless `TALK_SPEECH=voicestudio`. From then on no launch or doorbell starts a server itself: each asks launchd, so a session opened before the speech settings changed cannot start a server without them. Install it again after those settings change; `--uninstall-service` goes back to servers started by launches.
+
+To load new code into a server that holds calls, run `uv run --script "$SKILL_DIR/talk.py" --restart`. With the service installed, `--restart` and a launch that finds older code restart it through launchd, handing the calls over the same way. It hands the calls over to a new server. A server on code from before this hand-over cannot hand its calls over, so `--restart` leaves it running while it holds an open call and says so.
 
 ## The activity hook
 

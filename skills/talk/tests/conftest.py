@@ -45,3 +45,15 @@ if not collect_ignore_glob:
             raise AssertionError("a test tried to start a real talk server")
 
         monkeypatch.setattr(talk, "spawn_server", refuse)
+
+    @pytest.fixture(autouse=True)
+    def no_real_service(monkeypatch, tmp_path):
+        """A test never sees the machine's launchd service, nor drives launchctl: the plist is looked
+        for in the test's own folder, and a test that wants launchctl fakes it."""
+        import talk_service
+
+        def refuse(*args):
+            raise AssertionError(f"a test tried to run launchctl {' '.join(args)}")
+
+        monkeypatch.setattr(talk_service, "plist_path", lambda: tmp_path / "LaunchAgents" / "dev.talk.plist")
+        monkeypatch.setattr(talk_service, "launchctl", refuse)

@@ -9,7 +9,9 @@ such turn, 4 the call has ended.
 
 While the server is being replaced, both commands wait for the next one to carry the call on, for up to
 TALK_RECONNECT_S seconds. When nothing has taken the port after a few seconds, the doorbell starts a
-server itself (TALK_REVIVE=0 turns that off), which picks up every call the last one left open.
+server itself (TALK_REVIVE=0 turns that off), which picks up every call the last one left open. With
+the launchd service installed, it asks launchd to start it instead, so the server keeps the service's
+settings and not this session's.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import talk_files  # noqa: E402
+import talk_service  # noqa: E402
 
 REPLY_TIMEOUT_S = 60.0
 RECONNECT_S = float(os.environ.get("TALK_RECONNECT_S", "90"))
@@ -84,6 +87,12 @@ def port_held(port: int) -> bool:
 
 
 def spawn_server(port: int) -> None:
+    if talk_service.installed():
+        try:
+            talk_service.kickstart()
+        except (talk_service.ServiceError, OSError, subprocess.TimeoutExpired):
+            pass
+        return
     uv = shutil.which("uv")
     if not uv:
         return

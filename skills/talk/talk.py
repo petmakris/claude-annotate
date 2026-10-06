@@ -58,6 +58,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from live_turns import TurnQueue  # noqa: E402
 import talk_files  # noqa: E402
+import talk_service  # noqa: E402
 import speech  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -1598,6 +1599,7 @@ class Server:
         self.floor_n = 0  # counts every change of floor, so a page can tell an old answer from a new one
         self.speech = SpeechQueue()
         self.code = code_version()
+        self.service = False  # launchd runs it: it stays with no call, and a launch restarts it through launchd
         self.warm: set[str] = set()  # voices loaded since this server started
         self.empty_since = time.time()
         self.registering = 0
@@ -1978,7 +1980,8 @@ def build_app(server: Server):
         if not server.is_server(token_of(request)):
             return forbidden()
         return web.json_response({"code": server.code, "calls": len(server.calls), "pid": os.getpid(),
-                                  "open": server.open_count(), "engine": speech.name(wait=False), "handover": True})
+                                  "open": server.open_count(), "engine": speech.name(wait=False), "handover": True,
+                                  "service": server.service})
 
     async def register(request):
         if not server.is_server(token_of(request)):
@@ -2200,11 +2203,13 @@ def adopt_calls(server: Server) -> list[Call]:
     return adopted
 
 
-async def run_server(port: int) -> int:
-    """The one talk server of this machine: it holds every call, and exits once none is left."""
+async def run_server(port: int, stay: bool = False) -> int:
+    """The one talk server of this machine: it holds every call, and exits once none is left, unless
+    it stays (launchd runs it as a service, and would only start it again)."""
     from aiohttp import web
 
     server = Server(secrets.token_urlsafe(24), port, home_key=home_key())
+    server.service = stay
     runner = web.AppRunner(build_app(server), access_log=None)
     await runner.setup()
     try:
@@ -2230,7 +2235,7 @@ async def run_server(port: int) -> int:
                 pass
             server.write_files()
             server.save_calls()
-            if not server.calls and not server.registering and time.time() - server.empty_since > IDLE_EXIT_S:
+            if not stay and not server.calls and not server.registering and time.time() - server.empty_since > IDLE_EXIT_S:
                 say(f"talk: no call for {IDLE_EXIT_S // 60} minutes, stopping")
                 break
     finally:
@@ -2353,6 +2358,8 @@ def start_server(port: int) -> dict:
             say(f"talk: the server (pid {health.get('pid')}) runs older code {health.get('code')} and has calls "
                 f"open, so this call joins it; it updates once they have all ended{later}")
             return info
+        if health.get("service") and talk_service.installed():
+            return service_up(port, restart=True)
         try:
             server_request(info, "POST", "/api/quit")
         except urllib.error.HTTPError as err:
@@ -2368,7 +2375,31 @@ def start_server(port: int) -> dict:
         if server_health(info):
             raise SystemExit(f"talk: the server on port {port} (pid {health.get('pid')}, older code "
                              f"{health.get('code')}) did not stop when asked; stop it with `kill {health.get('pid')}`")
-    return spawn_and_wait(port)
+    return bring_up(port)
+
+
+def bring_up(port: int) -> dict:
+    """With the service installed, launchd starts the server, with the settings in its plist; without
+    it, this launch starts one, with this session's environment."""
+    return service_up(port) if talk_service.installed() else spawn_and_wait(port)
+
+
+def service_up(port: int, restart: bool = False) -> dict:
+    """Ask launchd for the server, and wait for one that answers. With restart, the running service
+    stops first (its calls are handed over) and only a server with another pid counts."""
+    before = (server_health(running_server(port)) or {}).get("pid") if restart else None
+    try:
+        talk_service.kickstart(restart)
+    except (talk_service.ServiceError, OSError, subprocess.TimeoutExpired) as err:
+        raise SystemExit(f"talk: {err}")
+    deadline = time.time() + SERVER_START_S + (HANDOVER_S if restart else 0)
+    while time.time() < deadline:
+        info = running_server(port)
+        if info and (server_health(info) or {}).get("pid") not in (None, before):
+            return info
+        time.sleep(0.2)
+    raise SystemExit(f"talk: the service {talk_service.LABEL} did not answer within {SERVER_START_S:.0f} s "
+                     f"(log {talk_files.run_dir() / 'server.log'})")
 
 
 def spawn_and_wait(port: int) -> dict:
@@ -2404,7 +2435,7 @@ def restart_server(port: int) -> int:
     if info is None:
         if port_held(port):
             raise SystemExit(f"talk: {port_report(port)}")
-        info = spawn_and_wait(port)
+        info = bring_up(port)
         health = server_health(info) or {}
         say(f"talk: no server was running; started pid {health.get('pid')}, "
             f"{health.get('open', 0)} call(s) carried over")
@@ -2415,6 +2446,21 @@ def restart_server(port: int) -> int:
         say(f"talk: the server (pid {health.get('pid')}, code {health.get('code')}) would end its {open_now} open "
             "call(s) if stopped, so it was not restarted; it updates once they have ended")
         return 2
+    if health.get("service") and talk_service.installed():
+        info = service_up(port, restart=True)
+    else:
+        stopped = stop_server(port, info, health)
+        if stopped:
+            return stopped
+        info = bring_up(port)
+    new = server_health(info) or {}
+    say(f"talk: restarted on port {port}: pid {new.get('pid')}, code {new.get('code')}, "
+        f"{new.get('open', 0)} call(s) carried over")
+    return 0
+
+
+def stop_server(port: int, info: dict, health: dict) -> int:
+    """Stop the server, its open calls kept for the next one; 0 once the port is free, else 2."""
     try:
         server_request(info, "POST", "/api/quit", {"handover": True})
     except urllib.error.HTTPError as err:
@@ -2434,10 +2480,50 @@ def restart_server(port: int) -> int:
         say(f"talk: the server (pid {health.get('pid')}) did not stop when asked; nothing was changed. "
             f"`kill {health.get('pid')}` stops it" + (" and keeps its calls for the next server" if health.get("handover") else ""))
         return 2
-    info = spawn_and_wait(port)
+    return 0
+
+
+def install_service(port: int) -> int:
+    """Run the server under launchd from now on. A server a session started is stopped first, its
+    calls handed over to the service, so its environment stops mattering at once."""
+    info = running_server(port)
+    health = (server_health(info) or {}) if info else {}
+    if info and not health.get("service"):
+        if (health.get("open", health.get("calls")) or 0) and not health.get("handover"):
+            say(f"talk: the server (pid {health.get('pid')}) would end its open calls if stopped; "
+                "install the service once they have ended")
+            return 2
+        stopped = stop_server(port, info, health)
+        if stopped:
+            return stopped
+    elif info is None and port_held(port):
+        raise SystemExit(f"talk: {port_report(port)}")
+    try:
+        spec = talk_service.install(Path(__file__).resolve(), port, talk_files.run_dir() / "server.log")
+    except (talk_service.ServiceError, OSError, subprocess.TimeoutExpired) as err:
+        say(f"talk: the service was not installed: {err}")
+        return 2
+    info = service_up(port)
     new = server_health(info) or {}
-    say(f"talk: restarted on port {port}: pid {new.get('pid')}, code {new.get('code')}, "
-        f"{new.get('open', 0)} call(s) carried over")
+    deadline = time.time() + 25  # the engine is chosen off the loop: the key command may take a while
+    while not new.get("engine") and time.time() < deadline:
+        time.sleep(0.5)
+        new = server_health(info) or new
+    env = spec["EnvironmentVariables"]
+    speech_from = (f"key from `{env['TALK_AZURE_KEY_COMMAND']}`" if env.get("TALK_AZURE_KEY_COMMAND")
+                   else f"TALK_SPEECH={env.get('TALK_SPEECH')}")
+    say(f"talk: installed {talk_service.plist_path()}; launchd runs the server (pid {new.get('pid')}, "
+        f"{new.get('open', 0)} call(s) carried over), speaking with {new.get('engine') or 'an engine still being chosen'} "
+        f"({speech_from})")
+    say("talk: install it again after the speech settings change; a session's own environment no longer matters")
+    return 0
+
+
+def uninstall_service(port: int) -> int:
+    if not talk_service.uninstall():
+        say("talk: the service was not installed")
+        return 0
+    say(f"talk: removed {talk_service.LABEL}; its open calls are kept, and the next launch starts a server itself")
     return 0
 
 
@@ -2560,6 +2646,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="replace the running server with one on this code, keeping its open calls")
     parser.add_argument("--serve", action="store_true",
                         help="run the server that holds every call of this machine; a launch starts it itself")
+    parser.add_argument("--stay", action="store_true", help="with --serve: keep running with no call (launchd)")
+    parser.add_argument("--install-service", action="store_true",
+                        help="run the server under launchd, with this shell's speech settings (macOS)")
+    parser.add_argument("--uninstall-service", action="store_true", help="stop running the server under launchd")
     return parser
 
 
@@ -2567,7 +2657,11 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
     if args.serve:
-        return asyncio.run(run_server(args.port))
+        return asyncio.run(run_server(args.port, stay=args.stay))
+    if args.install_service:
+        return install_service(args.port)
+    if args.uninstall_service:
+        return uninstall_service(args.port)
     if args.restart:
         return restart_server(args.port)
     if args.code:
