@@ -71,7 +71,6 @@ def test_one_call_talks_at_a_time_and_the_other_keeps_its_answer(tmp_path, pw):
             assert page_b.is_visible("#callsbtn")
 
             # Typing in Alpha takes the floor there, so Alpha's answer plays.
-            page_a.click("#type")
             page_a.fill("#text", "hello alpha")
             page_a.press("#text", "Enter")
             page_a.wait_for_selector("#asked:has-text('hello alpha')")
@@ -109,13 +108,11 @@ def test_a_page_on_another_device_pauses_on_its_next_poll(tmp_path, pw):
             phone, laptop = browser.new_context().new_page(), browser.new_context().new_page()
             phone.goto(f"{base}/c/call-a")
             laptop.goto(f"{base}/c/call-b")
-            phone.click("#type")
             phone.fill("#text", "hello")
             phone.press("#text", "Enter")
             phone.wait_for_selector("#asked:has-text('hello')")
             answer(loop, a, "Alpha speaks.")
             phone.wait_for_function(PLAYING, timeout=5000)
-            laptop.click("#type")
             laptop.fill("#text", "my turn")
             laptop.press("#text", "Enter")
             phone.wait_for_function(PAUSED, timeout=4000)

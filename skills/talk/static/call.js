@@ -1,5 +1,5 @@
-// The call page: the stage full screen, Claude's last answer as subtitles under it, a pill of
-// controls and a gear for settings. talk.py serves it with window.CFG filled in for one call.
+// The call page: the stage fills the window, and Claude's last answer floats over its foot as
+// subtitles, above a pill where typing and talking sit side by side; a gear holds the settings. talk.py serves it with window.CFG filled in for one call.
 const CFG = window.CFG;
 const $ = id => document.getElementById(id);
 const SPEEDS = [0.75, 0.85, 1, 1.25, 1.5];
@@ -9,7 +9,7 @@ const api = (path, opts = {}) => fetch(path, {...opts, headers: {"X-Talk-Token":
 const fmt = s => { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 
-$("topic").textContent = CFG.topic; document.title = "Talk · " + CFG.topic;
+$("topic").textContent = CFG.topic; $("topic").title = CFG.topic; document.title = "Talk · " + CFG.topic;
 // Which engine reads the answers aloud, always in view: Azure is fast and billed, VoiceStudio is local and slow.
 if (CFG.engine) {
   const ava = /^[a-z]{2}-[A-Z]{2}-([A-Z][a-z]+)/.exec(CFG.voice || "");
@@ -113,7 +113,7 @@ let follow = true;
 $("follow").onclick = () => { follow = !follow; toStage({type: "stage:follow", on: follow}); paintSettings(); if (follow) resync(); };
 
 // ---- popovers: one open at a time ---------------------------------------------
-const POPS = {hist: "pHist", type: "pType", callsbtn: "pCalls", gear: "pGear"};
+const POPS = {hist: "pHist", callsbtn: "pCalls", gear: "pGear"};
 let openPop = null;
 function showPop(pop) {
   openPop = pop && openPop !== pop ? pop : null;
@@ -121,7 +121,6 @@ function showPop(pop) {
     $(id).hidden = id !== openPop;
     $(btn).setAttribute("aria-expanded", String(id === openPop));
   }
-  if (openPop === "pType") $("text").focus();
   if (openPop === "pHist") $("convo").scrollTop = $("convo").scrollHeight;
 }
 for (const [btn, id] of Object.entries(POPS)) $(btn).onclick = ev => { ev.stopPropagation(); showPop(id); };
@@ -129,7 +128,7 @@ $("histx").onclick = () => showPop(null);
 document.addEventListener("keydown", ev => { if (ev.key === "Escape" && openPop) showPop(null); });
 // A click anywhere else closes the open layer: the buttons that open layers stop their own click.
 document.addEventListener("click", ev => {
-  if (openPop && !ev.target.closest(".pop, .sheet, .typebar, .toast")) showPop(null);
+  if (openPop && !ev.target.closest(".pop, .sheet, .toast")) showPop(null);
 });
 // A click on the stage lands in its own page, which takes the focus away from this one.
 window.addEventListener("blur", () => {
@@ -162,6 +161,7 @@ let recorder = null;
 let starting = false;       // the microphone is being asked for: a second press must not open a second one
 let busy = false;           // the recording is being turned into text
 let closed = false;         // the ended call was closed from here
+let subsOff = store.get("subsOff", false);  // the subtitles were hidden: the pill's captions button brings them back
 
 // ---- the conversation --------------------------------------------------
 // Keyed: each entry keeps its element until what it shows changes, so a new entry leaves the others
@@ -306,7 +306,7 @@ function paintSubs() {
     const same = !!e && e.id === capFor, top = capEl.scrollTop;
     capSig = sig; lastWord = null; lastK = -2;
     if (e) { if (!same) capEl.className = "cap"; capEl.replaceChildren(...wordSpans(e)); }
-    else { capEl.className = "cap hint"; capEl.textContent = view.ended ? "" : "Press the mic and say what you want to discuss."; }
+    else { capEl.className = "cap"; capEl.textContent = ""; }
     capSpans = [...capEl.querySelectorAll(".w")]; capFor = e ? e.id : null;
     capEl.scrollTo({top: same ? top : 0, behavior: "instant"});
     if (same) highlight();
@@ -314,15 +314,23 @@ function paintSubs() {
   let note = "", bad = false;
   if (e && e.speech === "failed") { note = "Not read aloud: " + (e.speech_error || "speech failed"); bad = true; }
   $("capnote").textContent = note; $("capnote").classList.toggle("bad", bad);
-  const s = statusText(), covered = !!recorder || busy || (!!view.working && !view.ended);
-  $("asked").hidden = !you || !!recorder;
-  capEl.hidden = covered; $("capnote").hidden = covered || !note;
-  paintPrep(covered ? null : e);
+  // Hidden subtitles hide the answer and keep the status: what Claude is doing still shows.
+  const s = statusText(), covered = !!recorder || busy || (!!view.working && !view.ended), off = subsOff;
+  $("asked").hidden = !you || !!recorder || off;
+  capEl.hidden = covered || !e || off; $("capnote").hidden = covered || !note || off;
+  paintPrep(covered || off ? null : e);
   $("wave").hidden = !recorder;
   $("status").hidden = !s;
   if (s) { $("status").textContent = s.text; $("status").className = "status" + (s.shimmer ? " shimmer" : "") + (s.warn ? " warn" : ""); }
-  $("seek").hidden = covered || !current;
+  $("seek").hidden = covered || !current || off;
+  const answer = !($("asked").hidden && capEl.hidden && $("capnote").hidden && $("prep").hidden && $("seek").hidden);
+  $("subs").hidden = !answer && !s;
+  $("subsx").hidden = !answer;
+  $("subsbtn").hidden = !off || !!recorder;
 }
+function setSubs(on) { subsOff = !on; store.set("subsOff", subsOff); paintSubs(); if (on && current) { lastK = -2; highlight(); } }
+$("subsx").onclick = () => setSubs(false);
+$("subsbtn").onclick = () => setSubs(true);
 // The line under the stage while there is no answer to read: the first that applies.
 function statusText() {
   if (recorder) return null;
@@ -346,7 +354,7 @@ function paintPill() {
   $("talk").hidden = ended; $("talk").disabled = busy; $("talk").classList.toggle("busy", busy);
   $("talk").setAttribute("aria-label", rec ? "Send" : "Talk"); $("talk").dataset.tip = rec ? "Send" : "Talk";
   $("cancel").hidden = !rec; $("send").hidden = !rec;
-  $("hist").hidden = rec; $("type").hidden = rec || ended;
+  $("hist").hidden = rec; $("compose").hidden = rec || ended; $("sendtext").hidden = rec || ended;
   $("back").hidden = rec || !current;
   $("playpause").hidden = rec || !shown || shown.speech !== "ready";
   const label = !audio.paused ? "Pause" : (current && (audio.ended || audio.currentTime >= (audio.duration || 1)) ? "Play again" : "Play");
@@ -754,10 +762,25 @@ async function sendText() {
   try {
     const resp = await api("/api/say", {method: "POST", body: JSON.stringify({text}), headers: {"Content-Type": "application/json"}});
     const body = await resp.json().catch(() => ({}));
-    if (resp.ok) { $("text").value = ""; showPop(null); view.v = -1; } else showError(body.error || "Sending failed: HTTP " + resp.status);
+    if (resp.ok) { $("text").value = ""; fitText(); view.v = -1; } else showError(body.error || "Sending failed: HTTP " + resp.status);
   } catch (err) { showError("Sending failed: " + err.message); }
-  $("sendtext").disabled = false;
+  $("sendtext").disabled = !$("text").value.trim();
 }
+// The text field grows with what is typed, up to a few lines, and Send waits for something to send.
+function fitText() {
+  const t = $("text"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 120) + "px";
+  $("sendtext").disabled = !t.value.trim();
+}
+$("text").addEventListener("input", fitText);
+const narrow = matchMedia("(max-width: 700px)");
+function placeholder() { $("text").placeholder = narrow.matches ? "Type or talk" : "Type to Claude, or press the mic to talk"; }
+narrow.addEventListener("change", placeholder); placeholder();
+// Typing is as direct as talking: a key pressed anywhere on the page goes to the text field.
+document.addEventListener("keydown", ev => {
+  if (ev.defaultPrevented || ev.ctrlKey || ev.metaKey || ev.altKey || ev.key.length !== 1 || openPop || recorder || view.ended) return;
+  if (document.activeElement && document.activeElement !== document.body) return;
+  $("text").focus();
+});
 
 $("talk").onclick = () => recorder ? sendRecording() : startRecording();
 $("send").onclick = sendRecording;
@@ -771,4 +794,5 @@ $("end").onclick = () => {
 
 applyTheme();
 setMode("idle");
+if (matchMedia("(hover: hover) and (pointer: fine)").matches) $("text").focus();
 poll();

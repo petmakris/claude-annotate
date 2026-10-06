@@ -18,31 +18,34 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"light"');
     <p class="nostage" id="nostage" hidden>The stage is not available for this call.</p>
   </div></div>
 
-  <section class="subs" id="subs" aria-label="Last answer" aria-live="polite">
-    <div class="asked" id="asked" hidden><b>You</b> · <span id="askedtext"></span></div>
-    <div class="cap" id="cap"></div>
-    <div class="capnote" id="capnote" hidden></div>
-    <div class="prep" id="prep" hidden><span class="preplbl" id="preplbl"></span><span class="preptrack"><i id="prepfill"></i></span></div>
-    <div class="wave" id="wave" hidden><span class="bars" id="bars"></span><span class="rectime" id="rectime">0:00</span></div>
-    <div class="status" id="status" hidden></div>
-    <input type="range" id="seek" min="0" max="0" step="0.1" value="0" aria-label="Position in the answer" hidden>
-  </section>
-
-  <footer class="bar">
-    <div class="left"><span class="live" id="live"></span><span class="topic" id="topic"></span><span class="engine" id="engine" hidden></span></div>
+  <div class="dock" id="dock">
+    <section class="subs" id="subs" aria-label="Last answer" aria-live="polite" hidden>
+      <button class="ib x" id="subsx" type="button" aria-label="Hide the subtitles" data-tip="Hide subtitles"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="asked" id="asked" hidden><b>You</b> · <span id="askedtext"></span></div>
+      <div class="cap" id="cap"></div>
+      <div class="capnote" id="capnote" hidden></div>
+      <div class="prep" id="prep" hidden><span class="preplbl" id="preplbl"></span><span class="preptrack"><i id="prepfill"></i></span></div>
+      <div class="status" id="status" hidden></div>
+      <input type="range" id="seek" min="0" max="0" step="0.1" value="0" aria-label="Position in the answer" hidden>
+    </section>
     <div class="pill" id="pill" role="toolbar" aria-label="Call controls">
       <button class="ib" id="hist" type="button" aria-label="Conversation" data-tip="Conversation" aria-expanded="false" aria-controls="pHist"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg></button>
       <button class="ib" id="back" type="button" aria-label="Back 10 seconds" data-tip="Back 10 s" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg></button>
-      <button class="ib" id="cancel" type="button" aria-label="Cancel" data-tip="Cancel" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      <button class="ib mic" id="talk" type="button" aria-label="Talk" data-tip="Talk"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg><span class="spin" aria-hidden="true"></span></button>
-      <button class="ib send" id="send" type="button" aria-label="Send" data-tip="Send" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></button>
       <button class="ib" id="playpause" type="button" aria-label="Play" data-tip="Play" hidden><svg class="i-play" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5v14l12-7z"/></svg><svg class="i-pause" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
-      <button class="ib" id="type" type="button" aria-label="Type instead" data-tip="Type instead" aria-expanded="false" aria-controls="pType"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg></button>
+      <button class="ib" id="cancel" type="button" aria-label="Cancel" data-tip="Cancel" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="compose" id="compose"><textarea id="text" rows="1" placeholder="Type to Claude, or press the mic to talk" aria-label="Type a message"></textarea></div>
+      <div class="wave" id="wave" hidden><span class="bars" id="bars"></span><span class="rectime" id="rectime">0:00</span></div>
+      <button class="ib go" id="sendtext" type="button" aria-label="Send text" data-tip="Send" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+      <button class="ib send" id="send" type="button" aria-label="Send" data-tip="Send" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></button>
+      <button class="ib mic" id="talk" type="button" aria-label="Talk" data-tip="Talk"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg><span class="spin" aria-hidden="true"></span></button>
+      <button class="ib" id="subsbtn" type="button" aria-label="Show the subtitles" data-tip="Show subtitles" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M10.5 10.2a2.5 2.5 0 1 0 0 3.6M17.5 10.2a2.5 2.5 0 1 0 0 3.6"/></svg></button>
       <span class="sep" id="sep" hidden></span>
       <button class="ib" id="callsbtn" type="button" aria-label="Other calls" data-tip="Other calls" aria-expanded="false" aria-controls="pCalls" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg><span class="dot" id="callsdot" hidden></span></button>
     </div>
-    <div class="right"><button class="ib" id="gear" type="button" aria-label="Settings" data-tip="Settings" aria-expanded="false" aria-controls="pGear"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></div>
-  </footer>
+  </div>
+
+  <div class="corner left"><span class="live" id="live"></span><span class="topic" id="topic"></span><span class="engine" id="engine" hidden></span></div>
+  <div class="corner right"><button class="ib" id="gear" type="button" aria-label="Settings" data-tip="Settings" aria-expanded="false" aria-controls="pGear"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></div>
 
   <div class="toast" id="toast" role="status" hidden><span id="toasttext"></span><button class="tbtn" id="retry" type="button" hidden>Retry</button></div>
 
@@ -66,7 +69,6 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"light"');
     <div class="convo" id="convo"><p class="empty" id="empty">Nothing has been said yet.</p></div>
   </section>
 
-  <div class="typebar" id="pType" hidden><textarea id="text" rows="1" placeholder="Type to Claude…" aria-label="Type a message"></textarea><button class="ib go" id="sendtext" type="button" aria-label="Send text" data-tip="Send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div>
 
   <audio id="audio" preload="auto"></audio>
 </div>

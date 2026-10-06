@@ -116,11 +116,10 @@ def test_speak_send_hear_the_answer_and_steer_the_player(tmp_path, pw):
             page.click("#autoplay")
             assert page.get_attribute("#autoplay", "aria-pressed") == "false"
 
-            page.click("#type")
             page.fill("#text", "and then?")
             page.press("#text", "Enter")
             page.wait_for_selector("#asked:has-text('and then?')")
-            assert page.is_hidden("#pType")
+            assert page.input_value("#text") == "" and page.is_disabled("#sendtext")
             page.click("#hist")
             assert page.locator("#convo .turn.you .who").last.inner_text().lower().endswith("typed")
         finally:
@@ -183,7 +182,7 @@ def test_an_ended_call_disables_talking_and_keeps_replay(tmp_path, pw):
             assert page.inner_text("#endlbl") == "End call"
             page.click("#end")
             page.wait_for_selector("#status:has-text('The call has ended')")
-            assert page.is_hidden("#talk") and page.is_hidden("#type")
+            assert page.is_hidden("#talk") and page.is_hidden("#text")
             assert page.get_attribute("#app", "data-ended") is not None
             assert page.inner_text("#endlbl") == "Close"
             page.click("#playpause")
@@ -235,7 +234,8 @@ def test_the_word_being_said_is_highlighted_and_a_tap_plays_from_a_word(tmp_path
             inside = """() => { const c = document.getElementById('cap').getBoundingClientRect(),
                                      w = document.querySelector('#cap .now-word').getBoundingClientRect();
                                 return w.top >= c.top - 1 && w.bottom <= c.bottom + 1; }"""
-            assert page.evaluate(inside)
+            # A word that starts a new line is scrolled to smoothly, so it is in view once that scroll settles.
+            page.wait_for_function(inside, timeout=1000)
             page.click("#playpause")  # pause
             word = page.locator("#cap .w.now-word")
             target = int(word.get_attribute("data-i")) - 2
@@ -327,10 +327,9 @@ def test_one_layer_opens_at_a_time_and_escape_or_a_click_outside_closes_it(tmp_p
         assert page.is_hidden("#pGear") and page.is_visible("#pHist")
         page.keyboard.press("Escape")
         assert page.is_hidden("#pHist")
-        page.click("#type")
-        assert page.is_visible("#pType") and page.evaluate("document.activeElement.id") == "text"
-        page.mouse.click(5, 5)
-        assert page.is_hidden("#pType")
+        page.click("#gear")
+        page.click("#text")
+        assert page.is_hidden("#pGear") and page.evaluate("document.activeElement.id") == "text"
 
 
 def test_the_conversation_sheet_lists_every_entry_and_replays_an_old_answer(tmp_path, browser):
@@ -350,11 +349,12 @@ def test_the_conversation_sheet_lists_every_entry_and_replays_an_old_answer(tmp_
         assert page.inner_text("#cap") == "First answer."
 
 
-def test_before_any_answer_the_subtitles_invite_you_to_talk(tmp_path, browser):
+def test_before_any_answer_the_text_field_invites_you_to_type_or_talk(tmp_path, browser):
     with served(tmp_path) as (url, call, loop, fake):
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 1400, "height": 900})
         page.goto(url)
-        assert page.inner_text("#cap") == "Press the mic and say what you want to discuss."
+        assert page.get_attribute("#text", "placeholder") == "Type to Claude, or press the mic to talk"
+        assert page.is_hidden("#subs") and page.is_visible("#talk") and page.is_disabled("#sendtext")
         for sel in ("#playpause", "#back", "#seek", "#callsbtn", "#asked"):
             assert page.is_hidden(sel), sel
         assert page.inner_text("#topic") == "Browser topic"
@@ -397,7 +397,7 @@ def test_a_lost_connection_says_so_and_retry_recovers(tmp_path, browser):
     with served(tmp_path) as (url, call, loop, fake):
         page = browser.new_page()
         page.goto(url)
-        page.wait_for_selector("#cap")
+        page.wait_for_selector("#talk")
         page.route("**/api/state*", lambda route: route.abort())
         page.wait_for_selector("#toast:has-text('Reconnecting to the call')", timeout=4000)
         assert page.is_visible("#retry")
@@ -412,7 +412,7 @@ def test_a_server_restarting_shows_reconnecting_not_ended(tmp_path, browser):
     with served(tmp_path) as (url, call, loop, fake):
         page = browser.new_page()
         page.goto(url)
-        page.wait_for_selector("#cap")
+        page.wait_for_selector("#talk")
         page.route("**/api/state*", lambda route: route.fulfill(
             status=503, content_type="application/json", body='{"error": "the talk server is restarting"}'))
         page.wait_for_selector("#toast:has-text('Reconnecting to the call')", timeout=4000)
@@ -587,3 +587,46 @@ def test_a_stage_that_reloads_before_an_unheard_answer_plays_gets_its_first_fram
             assert stage.evaluate("got.find(m => m.type === 'stage:state').frames") == {"flow": 0}
         finally:
             browser.close()
+
+
+def test_the_subtitles_hide_and_come_back_and_stay_hidden_across_a_reload(tmp_path, browser):
+    with served(tmp_path) as (url, call, loop, fake):
+        page = browser.new_page()
+        no_autoplay(page)
+        page.goto(url)
+        on_loop(loop, call.answer("An answer to hide."))
+        page.wait_for_selector("#cap:has-text('An answer to hide.')")
+        assert page.is_hidden("#subsbtn")
+        page.click("#subsx")
+        assert page.is_hidden("#subs") and page.is_visible("#subsbtn")
+        page.reload()
+        page.wait_for_selector("#playpause")
+        assert page.is_hidden("#subs") and page.is_visible("#subsbtn")
+        page.click("#subsbtn")
+        assert page.inner_text("#cap") == "An answer to hide." and page.is_hidden("#subsbtn")
+
+
+def test_a_hidden_answer_still_shows_what_claude_is_doing(tmp_path, browser):
+    with served(tmp_path) as (url, call, loop, fake):
+        page = browser.new_page()
+        no_autoplay(page)
+        page.goto(url)
+        on_loop(loop, call.answer("First."))
+        page.wait_for_selector("#cap:has-text('First.')")
+        page.click("#subsx")
+        page.fill("#text", "go on")
+        page.press("#text", "Enter")
+        on_loop(loop, call.turns.next(timeout=2))
+        call.collected()
+        page.wait_for_selector("#status:has-text('Claude is working…')")
+        assert page.is_visible("#subs") and page.is_hidden("#cap") and page.is_hidden("#subsx")
+
+
+def test_a_key_typed_with_nothing_focused_goes_to_the_text_field(tmp_path, browser):
+    with served(tmp_path) as (url, call, loop, fake):
+        page = browser.new_page()
+        page.goto(url)
+        page.evaluate("document.activeElement.blur()")
+        page.keyboard.type("hi there")
+        assert page.evaluate("document.activeElement.id") == "text" and page.input_value("#text") == "hi there"
+        assert page.is_enabled("#sendtext")
