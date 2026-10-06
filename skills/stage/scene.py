@@ -1,6 +1,7 @@
 """A scene: one board, the keys of what the eye can land on in it, and the frames its verbs make.
 
-Keys: node:<id>, edge:<a>-><b>#<n> (the n-th edge from a to b), group:<subgraph id>, line:<n>, row#<n>.
+Keys: node:<id>, edge:<a>-><b>#<n> (the n-th edge from a to b), group:<subgraph id>, line:<n>, row#<n>,
+and for a sequence spec actor:<id> and step:<id>. An edge shows as soon as both its ends do.
 Verbs ([[+ k]], [[next]], [[all]], [[focus k]]) compile into full snapshot frames: frame 0 is the
 opening state, one frame follows per place in the speech, and the rest frame shows everything with
 no focus. A target that names nothing exactly is repaired or dropped, and every repair is reported.
@@ -273,11 +274,52 @@ def parse_verb(marker: str) -> Verb | None:
     return Verb(name, title=title, targets=split_targets(targets))
 
 
+def sequence_model(spec: dict) -> SceneModel:
+    """A sequence spec: its actors, then its steps, which come in order and each bring their actors."""
+    actors = [f"actor:{a['id']}" for a in spec["actors"]]
+    steps = [f"step:{s['id']}" for s in spec["steps"]]
+    up = {f"step:{s['id']}": list(dict.fromkeys([f"actor:{s['from']}", f"actor:{s['to']}"])) for s in spec["steps"]}
+    names: dict[str, str] = {}
+    for s in spec["steps"]:
+        names.setdefault(fold(str(s.get("label", ""))), f"step:{s['id']}")
+    for a in spec["actors"]:
+        names.setdefault(fold(str(a.get("label", "")).replace("\n", " ")), f"actor:{a['id']}")
+    names.pop("", None)
+    return SceneModel("sequence", actors + steps, order=steps, up=up, names=names, can_hide=True)
+
+
+def flowchart_spec_model(spec: dict) -> SceneModel:
+    """A flowchart spec: its nodes in order; its edges follow their ends."""
+    nodes = [f"node:{n['id']}" for n in spec["nodes"]]
+    seen: dict[tuple[str, str], int] = {}
+    edge_map: dict[tuple[str, str], list[str]] = {}
+    up: dict[str, list[str]] = {}
+    for e in spec.get("edges") or []:
+        pair = (e["from"], e["to"])
+        key = f"edge:{pair[0]}->{pair[1]}#{seen.get(pair, 0)}"
+        seen[pair] = seen.get(pair, 0) + 1
+        edge_map.setdefault(pair, []).append(key)
+        up[key] = [f"node:{pair[0]}", f"node:{pair[1]}"]
+    names: dict[str, str] = {}
+    for n in spec["nodes"]:
+        for text in (n.get("label"), n.get("method"), n.get("ref")):
+            if text:
+                names.setdefault(fold(str(text)), f"node:{n['id']}")
+    return SceneModel("flowchart", nodes + list(up), order=nodes, up=up, names=names, edges=edge_map, can_hide=True)
+
+
+ENTITY_PREFIXES = {"sequence": ("step:", "actor:")}
+
+
+def _prefixes(model: SceneModel) -> tuple[str, ...]:
+    return ENTITY_PREFIXES.get(model.kind, ("node:", "group:"))
+
+
 def _closest(model: SceneModel, raw: str) -> str | None:
     want = fold(raw)
     if want in model.names:
         return model.names[want]
-    pool = {fold(k.split(":", 1)[1]): k for k in model.keys if k.startswith(("node:", "group:"))}
+    pool = {fold(k.split(":", 1)[1]): k for k in model.keys if k.startswith(_prefixes(model))}
     pool.update(model.names)
     best, score = None, 0.0
     for name, key in pool.items():
@@ -288,7 +330,7 @@ def _closest(model: SceneModel, raw: str) -> str | None:
 
 
 def _entity(model: SceneModel, raw: str) -> tuple[str | None, bool]:
-    for key in (f"node:{raw}", f"group:{raw}"):
+    for key in (p + raw for p in _prefixes(model)):
         if key in model.keys:
             return key, False
     return _closest(model, raw), True
@@ -316,7 +358,11 @@ def resolve(model: SceneModel, raw: str, title: str) -> tuple[list[str], str | N
             return [model.names[fold(text)]], None
         key = _closest(model, text)
         return ([key], f'"{raw}" in "{title}" read as {key}') if key else ([], dropped)
-    m = re.fullmatch(r"nodes?\s+(.+)", raw, re.IGNORECASE)
+    m = re.fullmatch(r"(?:nodes?|steps?)\s+(.+)", raw, re.IGNORECASE)
+    if m is None and model.kind == "sequence":
+        actor = re.fullmatch(r"actors?\s+(.+)", raw, re.IGNORECASE)
+        if actor and f"actor:{actor[1].strip()}" in model.keys:
+            return [f"actor:{actor[1].strip()}"], None
     ident = m[1].strip() if m else raw
     edge = _EDGE.fullmatch(ident)
     if edge:
@@ -344,7 +390,14 @@ def _reveal(model: SceneModel, key: str, shown: set) -> None:
             stack.extend(model.up.get(k, []))
 
 
+def _arrows(model: SceneModel, shown: set) -> None:
+    for k in model.keys:
+        if k.startswith("edge:") and k not in shown and all(u in shown for u in model.up.get(k, ["?"])):
+            shown.add(k)
+
+
 def _snap(model: SceneModel, shown: set, focus: set) -> dict:
+    _arrows(model, shown)
     return {"show": [k for k in model.keys if k in shown], "focus": [k for k in model.keys if k in focus]}
 
 

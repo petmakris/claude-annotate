@@ -848,7 +848,7 @@ def test_fewer_sentences_than_things_bring_several_in_at_once(tmp_path):
     call = talk.Call(make_args(), "T", tmp_path / "out")
     call.split_reply("[[show diagram | D]]graph TD; A-->B; B-->C; C-->D[[/show]] It starts at A. It ends at D.")
     built = call.board.items[0]["scene"]
-    assert [len(f["show"]) for f in built["frames"]] == [0, 4, 7, 7]
+    assert [len(f["show"]) for f in built["frames"]] == [0, 5, 7, 7]
 
 
 def test_a_small_board_code_and_a_board_said_last_are_never_stepped(tmp_path):

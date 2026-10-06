@@ -138,7 +138,7 @@ def test_a_scene_that_only_focuses_starts_with_everything_shown():
 def test_a_group_brings_its_children_and_a_focused_group_lights_them():
     model = scene.flowchart_model(EXAMPLE)
     built, _ = scene.compile_scene(model, [verbs("+ adv"), verbs("focus adv"), verbs("all")], "T")
-    assert built["frames"][1]["show"] == ["group:adv", "node:pws", "node:legacy"]
+    assert built["frames"][1]["show"] == ["group:adv", "node:pws", "node:legacy", "edge:pws->legacy#0"]
     assert built["frames"][2]["focus"] == ["group:adv", "node:pws", "node:legacy"]
     assert built["frames"][3]["show"] == model.keys
 
@@ -167,3 +167,54 @@ def test_a_board_with_more_than_three_elements_and_no_verbs_is_stepped_per_sente
     assert scene.auto_steps(scene.lines_model(range(1, 30)), 5) == []
     assert scene.auto_steps(model, 0) == []
     assert scene.compile_scene(model, [], "T") == (None, [])
+
+
+SEQ_SPEC = {"actors": [{"id": "c", "label": "Contract"}, {"id": "m", "label": "Ledger"}],
+            "steps": [{"id": "s1", "from": "c", "to": "c", "arrow": "self", "label": "dev build published"},
+                      {"id": "s2", "from": "c", "to": "m", "arrow": "request", "label": "draft pins build 139"}]}
+FLOW_SPEC = {"nodes": [{"id": "a", "role": "entry", "label": "Turn arrives"}, {"id": "b", "role": "decision", "label": "Floor free?"},
+                       {"id": "c", "role": "success", "label": "Played"}],
+             "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": "c", "label": "yes"}, {"from": "b", "to": "c"}]}
+
+
+def _shown(frame):
+    return set(frame["show"])
+
+
+def test_an_arrow_shows_once_both_its_ends_do_even_when_only_the_boxes_were_named():
+    m = scene.flowchart_model("graph LR; P[Page] --> Q[Queue]; Q --> S[Session]")
+    built, _ = scene.compile_scene(m, [[scene.Verb("+", targets=["P"])], [scene.Verb("+", targets=["Q"])],
+                                       [scene.Verb("+", targets=["S"])]], "Turn path")
+    assert "edge:P->Q#0" not in _shown(built["frames"][1])
+    assert "edge:P->Q#0" in _shown(built["frames"][2]) and "edge:Q->S#0" not in _shown(built["frames"][2])
+    assert {"edge:P->Q#0", "edge:Q->S#0"} <= _shown(built["frames"][3])
+
+
+def test_a_sequence_spec_reveals_its_steps_in_order_and_each_brings_its_actors():
+    m = scene.sequence_model(SEQ_SPEC)
+    assert m.kind == "sequence" and m.can_hide
+    assert m.keys == ["actor:c", "actor:m", "step:s1", "step:s2"] and m.order == ["step:s1", "step:s2"]
+    assert m.up["step:s2"] == ["actor:c", "actor:m"]
+    built, notes = scene.compile_scene(m, [[scene.Verb("next")], [scene.Verb("next")]], "Pins")
+    assert _shown(built["frames"][1]) == {"actor:c", "step:s1"}
+    assert _shown(built["frames"][2]) == set(m.keys) and notes == []
+
+
+def test_a_flowchart_spec_steps_through_its_nodes_and_its_arrows_follow():
+    m = scene.flowchart_spec_model(FLOW_SPEC)
+    assert m.keys == ["node:a", "node:b", "node:c", "edge:a->b#0", "edge:b->c#0", "edge:b->c#1"]
+    assert m.order == ["node:a", "node:b", "node:c"]
+    assert m.edges[("b", "c")] == ["edge:b->c#0", "edge:b->c#1"]
+    built, _ = scene.compile_scene(m, [[scene.Verb("next", count=2)], [scene.Verb("next")]], "Floor")
+    assert _shown(built["frames"][1]) == {"node:a", "node:b", "edge:a->b#0"}
+    assert {"edge:b->c#0", "edge:b->c#1"} <= _shown(built["frames"][2])
+
+
+def test_steps_actors_and_nodes_are_found_by_id_by_word_or_by_label():
+    seq = scene.sequence_model(SEQ_SPEC)
+    for raw, want in (("s2", ["step:s2"]), ("step s2", ["step:s2"]), ("actor m", ["actor:m"]),
+                      ("Ledger", ["actor:m"]), ("draft pins build 139", ["step:s2"])):
+        assert scene.resolve(seq, raw, "Pins")[0] == want, raw
+    flow = scene.flowchart_spec_model(FLOW_SPEC)
+    assert scene.resolve(flow, "b->c", "Floor")[0] == ["edge:b->c#0", "edge:b->c#1"]
+    assert scene.resolve(flow, "Floor free?", "Floor")[0] == ["node:b"]
