@@ -163,12 +163,12 @@ const WC = window.WebCompanion;
 const root = document.querySelector("[data-wc-root]") || document.body;
 const embedded = window.parent !== window;
 root.innerHTML = `<div class="stage">
-  <div class="tabbar"><nav class="tabs" role="tablist" aria-label="Stage"></nav>
-    <div class="tabtools" hidden><div class="tabnav" role="group" aria-label="Boards" hidden>
-      <button type="button" class="btn sm navbtn prev" aria-label="Previous board">‹</button>
-      <span class="tabpos"></span>
-      <button type="button" class="btn sm navbtn next" aria-label="Next board">›</button>
-    </div></div></div>
+  <div class="tabbar"><div class="tabnav" role="group" aria-label="Boards" hidden>
+      <button type="button" class="nb navbtn prev" aria-label="Previous board"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <button type="button" class="nb navbtn next" aria-label="Next board"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
+      <button type="button" class="pos" aria-haspopup="true" aria-expanded="false" aria-label="All boards"><span class="tabpos"></span><span class="posdot" hidden></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+    <div class="boards" hidden><h4>Boards, newest first</h4><nav class="tabs" role="tablist" aria-label="Stage" aria-orientation="vertical"></nav></div></div>
   <div class="panes"><div class="empty"><div class="emptycard">
     <h2>The stage is empty</h2><p class="msg">${EMPTY_LINE}</p>
     <div class="tiles">${["code", "diagram", "table", "page"].map((k) =>
@@ -176,7 +176,7 @@ root.innerHTML = `<div class="stage">
   </div></div></div>
 </div>`;
 const tabsEl = root.querySelector(".tabs"), panesEl = root.querySelector(".panes");
-const toolsEl = root.querySelector(".tabtools"), navEl = root.querySelector(".tabnav");
+const navEl = root.querySelector(".tabnav"), boardsEl = root.querySelector(".boards"), posEl = root.querySelector(".pos");
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const views = new Map();            // name -> {body, tab, pane, filled, stale, renderSeq, changedAt, snap}
 let layout = { order: [], front: null };
@@ -258,8 +258,9 @@ async function copyText(text) {
 function header(v) {
   const { source: src, title, caption } = v.body;
   const h = document.createElement("header"); h.className = "phead";
-  h.innerHTML = `<div class="prow"><h2 class="vtitle"></h2><div class="pbtns"></div></div>
-    <div class="prow2"><p class="vmeta">${icon(kindOf(src))}<span></span></p><span class="vage"></span></div>`;
+  // One row: the title, with what the board is and when it changed in a tooltip, then its steps and buttons.
+  h.innerHTML = `<div class="prow"><div class="vhead" tabindex="0">${icon(kindOf(src))}<h2 class="vtitle"></h2>
+    <div class="vtip" role="tooltip"><p class="vmeta"><span></span></p><span class="vage"></span></div></div><div class="pbtns"></div></div>`;
   h.querySelector(".vtitle").textContent = title;
   const meta = h.querySelector(".vmeta span");
   if (src.type === "inline" && src.format === "change") {
@@ -271,12 +272,12 @@ function header(v) {
     const repairs = +v.body.scene.repairs || 0;
     if (repairs) meta.append(` · ${repairs} ${repairs === 1 ? "repair" : "repairs"}`);
     const bar = document.createElement("span"); bar.className = "stepbar";
-    const back = button("Back", () => stepBy(v, -1), "stepback");
+    const back = button("", () => stepBy(v, -1), "stepback"), next = button("", () => stepBy(v, 1), "stepnext");
+    back.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>`; next.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>`;
     const step = document.createElement("span"); step.className = "vstep";
-    const next = button("Next", () => stepBy(v, 1), "stepnext");
     back.setAttribute("aria-label", "Previous step"); next.setAttribute("aria-label", "Next step");
     bar.append(back, step, next);
-    h.querySelector(".prow2").insertBefore(bar, h.querySelector(".vage"));
+    h.querySelector(".prow").insertBefore(bar, h.querySelector(".pbtns"));
   }
   h.querySelector(".vage").textContent = ago(v.changedAt);
   if (caption) {
@@ -849,24 +850,24 @@ function setTabTitle(v) {
 function markUpdated(v, on) {
   v.tab.classList.toggle("updated", on);
   if (on) v.tab.setAttribute("aria-label", v.body.title + ", updated"); else v.tab.removeAttribute("aria-label");
+  updateNav();
 }
 
-// Fade masks show the strip goes on past an edge; when it does, ‹ and › buttons and "2 of 6" show
-// where the reader is and move between boards without hunting along the strip.
-function updateFades() {
-  const { scrollLeft: l, scrollWidth: w, clientWidth: c } = tabsEl;
-  const over = w > c + 1;
-  tabsEl.classList.toggle("fade-l", l > 1);
-  tabsEl.classList.toggle("fade-r", l + c < w - 1);
+// The boards are one stage with a history: ‹ and › walk it, "2 of 5" opens the list of every board, newest
+// first, and its dot says a board changed while another was in front. The tabs are the list's rows.
+function updateNav() {
   const tabs = [...tabsEl.children], i = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
-  navEl.hidden = !over || tabs.length < 2;
+  navEl.hidden = tabs.length < 2;
+  if (navEl.hidden) showBoards(false);
   navEl.querySelector(".tabpos").textContent = i >= 0 ? `${i + 1} of ${tabs.length}` : `${tabs.length} boards`;
   navEl.querySelector(".prev").disabled = i <= 0;
   navEl.querySelector(".next").disabled = i < 0 || i >= tabs.length - 1;
-  toolsEl.hidden = navEl.hidden;
+  const changed = tabs.some((t) => t.classList.contains("updated") && t.getAttribute("aria-selected") !== "true");
+  navEl.querySelector(".posdot").hidden = !changed;
+  posEl.setAttribute("aria-label", "All boards" + (changed ? ", one changed" : ""));
 }
-tabsEl.addEventListener("scroll", updateFades, { passive: true });
-new ResizeObserver(updateFades).observe(tabsEl);
+// The pane headers start after the history buttons, which sit over their left end.
+new ResizeObserver(() => root.querySelector(".stage").style.setProperty("--navw", navEl.offsetWidth + "px")).observe(navEl);
 function step(d) {
   const tabs = [...tabsEl.children], i = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
   const next = tabs[i + d];
@@ -874,22 +875,15 @@ function step(d) {
 }
 navEl.querySelector(".prev").onclick = () => step(-1);
 navEl.querySelector(".next").onclick = () => step(1);
-
-// Scrolls the strip itself only, never the page around an embedded stage, and always to the start
-// of a tab, so the tab at the left edge is never cut in half.
-function revealTab(tab) {
-  const tabs = [...tabsEl.children], cs = getComputedStyle(tabsEl);
-  const padL = parseFloat(cs.paddingLeft) || 0, padR = parseFloat(cs.paddingRight) || 0;
-  const startOf = (t) => t.offsetLeft - tabsEl.offsetLeft - padL;  // the scrollLeft that puts t first
-  const a = startOf(tab), b = a + padL + tab.offsetWidth + padR, max = tabsEl.scrollWidth - tabsEl.clientWidth;
-  if (a < tabsEl.scrollLeft) tabsEl.scrollLeft = Math.max(0, a);
-  else if (b > tabsEl.scrollLeft + tabsEl.clientWidth) {
-    const need = b - tabsEl.clientWidth;  // the least scroll that shows the whole tab
-    const snap = tabs.map(startOf).find((s) => s >= need - 1);
-    tabsEl.scrollLeft = Math.min(max, snap ?? a);
-  }
-  updateFades();
+function showBoards(on) {
+  boardsEl.hidden = !on; posEl.setAttribute("aria-expanded", String(on));
+  // Scrolls the list itself only: scrollIntoView would also scroll the page around an embedded stage.
+  const sel = on && tabsEl.querySelector('[aria-selected="true"]');
+  if (sel) boardsEl.scrollTop = Math.max(0, sel.offsetTop - boardsEl.clientHeight / 2);
 }
+posEl.onclick = (e) => { e.stopPropagation(); showBoards(boardsEl.hidden); };
+document.addEventListener("click", (e) => { if (!boardsEl.hidden && !e.target.closest(".boards")) showBoards(false); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !boardsEl.hidden) { showBoards(false); posEl.focus(); } });
 
 // Panes fill lazily: only the one being shown is rendered, and a hidden pane whose body
 // changed is refilled the next time it is shown. `arrive`: fronted by Claude, not a click.
@@ -902,20 +896,19 @@ function select(name, arrive = false) {
     v.pane.hidden = !on;
     if (on) {
       markUpdated(v, false);
-      revealTab(v.tab);
       if (arrive && live && was !== n) { restart(v.pane, "arrive"); restart(v.tab, "flash"); }
     }
   }
 }
 
-// A pinned view (Key points) leads the strip, whatever the layout's order.
+// A pinned view (Key points) leads the history, whatever the layout's order, so the list shows it last.
 function reorderTabs() {
   let names = layout.order.filter((n) => views.has(n));
   for (const n of views.keys()) if (!names.includes(n)) names.push(n);
   names = [...names.filter((n) => views.get(n).body.pinned), ...names.filter((n) => !views.get(n).body.pinned)];
   for (const n of names) { tabsEl.append(views.get(n).tab); }
   panesEl.querySelector(".empty")?.toggleAttribute("hidden", views.size > 0);
-  updateFades();
+  updateNav();
   return names;
 }
 
@@ -949,7 +942,7 @@ function upsert(body) {
     const tab = document.createElement("button");
     tab.setAttribute("role", "tab"); tab.setAttribute("aria-selected", "false"); tab.dataset.view = body.name;
     tab.innerHTML = `<span class="ttl"></span>`;
-    tab.onclick = () => { if (selectedName() === body.name) return; select(body.name); toRest(views.get(body.name)); if (embedded && follow) setFollow(false); };
+    tab.onclick = () => { showBoards(false); if (selectedName() === body.name) return; select(body.name); toRest(views.get(body.name)); if (embedded && follow) setFollow(false); };
     const pane = document.createElement("section");
     pane.className = "pane"; pane.dataset.view = body.name; pane.hidden = true;
     panesEl.append(pane);
@@ -989,6 +982,7 @@ function remove(name) {
   const v = views.get(name); if (!v) return;
   v.renderSeq++;  // drop any diagram still drawing for it
   v.tab.remove(); v.pane.remove(); views.delete(name);
+  updateNav();
 }
 
 async function onItem(anchor, version) {

@@ -70,7 +70,7 @@ For every turn:
 
 ### Teaching with the board
 
-Board tags are taken out of the speech and drawn on the stage beside the conversation, one tab per title. Paths are relative to `--code`.
+Board tags are taken out of the speech and drawn on the stage beside the conversation, one board per title, with the latest in front and the rest one click back. Paths are relative to `--code`.
 
 | Board | Use it for | Tag |
 |---|---|---|
@@ -117,8 +117,8 @@ Targets are node and subgraph ids, edges as `a->b`, sequence step and actor ids,
 
 **Rules.**
 
-- One board per idea. Titles are 2 to 5 plain words, because they are tab names.
-- The same title updates its tab in place, and the changed rows light up. A new title makes a new tab.
+- One board per idea. Titles are 2 to 5 plain words, because they are the boards' names in the stage's header and list.
+- The same title updates its board in place, and the changed rows light up. A new title makes a new board.
 - Put each show and point tag before the sentence about it: the stage fronts it when the voice gets there.
 - Prefer a change board over describing an edit line by line.
 - At most 3 key points per answer, in the user's words.

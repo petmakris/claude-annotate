@@ -36,7 +36,11 @@ that names an ended stage or a stage in another folder fails rather than making 
 Rules:
 
 - **Name views for what they are** (`deck`, `login-flow`, `pricing-table`) and reuse the name
-  to update; a new name is a new tab.
+  to update; a new name is a new board.
+- **One board in front, the rest in a history.** The stage shows one board at a time under a 40px header:
+  ‹ and › walk through the boards, “2 of 5” opens the list of every board (newest first, Key points last),
+  and an orange dot there means a board changed while another was in front. Kind, size and update time
+  show in a tooltip on the title.
 - **Show early.** Call `show` in the same message as your first work call, not after the
   answer is written.
 - **Files must be inside the project** (`--cwd`, default the git root); anything else is refused.
@@ -47,12 +51,12 @@ Rules:
 - A view's body may also carry the number of the answer that showed it (`answer`), with its
   `kind`; /talk sets these itself through `stage.show(..., extra=...)`, with no CLI flag.
 - **During a talk call a page waits behind.** On a call's stage a file, address or session view opens
-  as a background tab and never takes the front; `stage.py` says so on stderr. Tell the user it is there.
+  as a background board and never takes the front; `stage.py` says so on stderr. Tell the user it is there.
 - **Inside a talk call the stage follows the voice.** /talk embeds the stage and steers it over
   postMessage (the protocol is at the top of `static/stage.js`): it fronts each board as the
   spoken answer reaches it and lights up the lines, row or node a `[[point ...]]` tag names. The call
-  page's gear has a **Stage follows the voice** switch for it; tapping a tab by hand turns it off,
+  page's gear has a **Stage follows the voice** switch for it; picking a board by hand turns it off,
   and the next answer turns it on again. The call page also sets the stage's light or dark theme. The answer that showed a view is
-  marked on its tab (`A3`). A stage opened on its own ignores all of this. Code, change, table and diagram views
-  can be pointed at from /talk only; /talk also keeps a pinned **Key points** tab of the call's
+  marked on its row in the list (`A3`). A stage opened on its own ignores all of this. Code, change, table and diagram views
+  can be pointed at from /talk only; /talk also keeps a pinned **Key points** board of the call's
   `[[key: ...]]` tags.

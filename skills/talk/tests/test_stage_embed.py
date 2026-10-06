@@ -8,6 +8,13 @@ from helpers import AUTH, CALL, make_args, run, running_app, talk
 NAME_RE = talk.stage_mod.model.NAME_RE
 
 
+
+def board(page, name):
+    """Open a board from the list under "n of m", as a reader does: the tabs are that list's rows."""
+    if page.locator(".boards").is_hidden():
+        page.locator(".pos").click()
+    page.locator(f'button[role=tab][data-view="{name}"]').click()
+
 def serve(tmp_path, args):
     return talk.open_call(args, "T", tmp_path / "out", Path.cwd())
 
@@ -265,7 +272,7 @@ def test_the_second_board_comes_forward_only_when_the_voice_reaches_it(tmp_path,
             asyncio.run_coroutine_threadsafe(call.answer(
                 f"{_table('Alpha', 'a1')} {FILLER} {_table('Beta', 'b1')} About Beta at last."), loop).result(10)
             beta = stage.locator('button[role=tab][data-view="beta"]')
-            beta.wait_for(timeout=10000)
+            beta.wait_for(state="attached", timeout=10000)
             page.wait_for_function("!document.getElementById('audio').paused", timeout=10000)
             assert stage.locator('button[role=tab][data-view="alpha"]').get_attribute("aria-selected") == "true"
             assert beta.get_attribute("aria-selected") == "false"
@@ -273,7 +280,7 @@ def test_the_second_board_comes_forward_only_when_the_voice_reaches_it(tmp_path,
                 return e.words.find(w => w[0] >= c.at)[2]; })()""")
             assert cue_time >= 1.0
             assert page.evaluate("audio.currentTime") < cue_time
-            stage.locator('button[role=tab][data-view="beta"][aria-selected="true"]').wait_for(timeout=15000)
+            stage.locator('button[role=tab][data-view="beta"][aria-selected="true"]').wait_for(state="attached", timeout=15000)
             heard = page.evaluate("audio.currentTime")
             assert heard >= cue_time - 0.25
         finally:
@@ -391,8 +398,8 @@ def test_a_board_chip_brings_its_board_to_the_front(tmp_path, wc_config, browser
         stage = page.frame_locator("#stage")
         asyncio.run_coroutine_threadsafe(call.answer(
             f"{_table('Alpha', 'a1')} About alpha. {_table('Beta', 'b1')} About beta."), loop).result(10)
-        stage.locator('button[role=tab][data-view="beta"]').wait_for(timeout=10000)
-        stage.locator('button[role=tab][data-view="alpha"][aria-selected="true"]').wait_for(timeout=5000)
+        stage.locator('button[role=tab][data-view="beta"]').wait_for(state="attached", timeout=10000)
+        stage.locator('button[role=tab][data-view="alpha"][aria-selected="true"]').wait_for(state="attached", timeout=5000)
         page.click("#hist")
         chips = page.locator("#convo .chips")
         chips.locator("button.chip.board").nth(1).wait_for(timeout=5000)
@@ -400,10 +407,10 @@ def test_a_board_chip_brings_its_board_to_the_front(tmp_path, wc_config, browser
         assert chips.locator("button.chip.board").count() == 2  # one labelled row, not a chip per line
         page.get_by_role("button", name="On the stage: Beta").click()
         assert page.is_hidden("#pHist")  # the sheet steps aside to show the board
-        stage.locator('button[role=tab][data-view="beta"][aria-selected="true"]').wait_for(timeout=5000)
+        stage.locator('button[role=tab][data-view="beta"][aria-selected="true"]').wait_for(state="attached", timeout=5000)
         page.click("#hist")
         page.get_by_role("button", name="On the stage: Alpha").click()
-        stage.locator('button[role=tab][data-view="alpha"][aria-selected="true"]').wait_for(timeout=5000)
+        stage.locator('button[role=tab][data-view="alpha"][aria-selected="true"]').wait_for(state="attached", timeout=5000)
     wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % slug)
 
 
@@ -450,12 +457,12 @@ def test_a_key_points_chip_opens_the_pinned_board(tmp_path, wc_config, browser):
         asyncio.run_coroutine_threadsafe(call.answer(
             f"{_table('Alpha', 'a1')} About alpha. [[key: alpha comes first]] And more. [[key: then more]]"),
             loop).result(10)
-        stage.locator('button[role=tab][data-view="key-points"]').wait_for(timeout=10000)
-        stage.locator('button[role=tab][data-view="alpha"][aria-selected="true"]').wait_for(timeout=5000)
+        stage.locator('button[role=tab][data-view="key-points"]').wait_for(state="attached", timeout=10000)
+        stage.locator('button[role=tab][data-view="alpha"][aria-selected="true"]').wait_for(state="attached", timeout=5000)
         assert stage.locator("button[role=tab]").evaluate_all("els => els.map(e => e.dataset.view)") == ["key-points", "alpha"]
         page.click("#hist")
         page.locator("button.chip.board", has_text="Key points: +2").click()
-        stage.locator('button[role=tab][data-view="key-points"][aria-selected="true"]').wait_for(timeout=5000)
+        stage.locator('button[role=tab][data-view="key-points"][aria-selected="true"]').wait_for(state="attached", timeout=5000)
         stage.locator('section.pane[data-view="key-points"] li .kt').nth(1).wait_for(timeout=5000)
         assert stage.locator('section.pane[data-view="key-points"] li .kt').all_text_contents() == [
             "alpha comes first", "then more"]

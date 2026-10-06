@@ -29,29 +29,33 @@
 html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
 .stage{display:grid;grid-template-rows:auto minmax(0,1fr);grid-template-columns:minmax(0,1fr);height:100vh;height:100dvh}
 
-/* Tabs */
-.tabbar{display:flex;align-items:center;gap:8px;min-width:0;border-bottom:1px solid var(--line);background:var(--panel)}
-.tabs{flex:1;min-width:0;display:flex;gap:4px;padding:8px 16px;overflow-x:auto;scrollbar-width:none;
-  scroll-snap-type:x proximity;scroll-padding-inline:16px;--fade:16px}
-.tabtools{flex:none;display:flex;align-items:center;gap:8px;margin-right:12px}
-.tabnav{display:flex;align-items:center;gap:4px}
-.tabnav .navbtn{min-width:30px;padding:4px 0;font-size:16px;line-height:1}
-.tabnav .navbtn:disabled{opacity:.4;cursor:default;background:var(--panel)}
-.tabpos{font:500 12px/1 var(--sans);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;min-width:3.6em;text-align:center}
-.tabtools[hidden],.tabnav[hidden]{display:none}
-.tabs::-webkit-scrollbar{display:none}
-.tabs.fade-r{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - var(--fade)),transparent);mask-image:linear-gradient(to right,#000 calc(100% - var(--fade)),transparent)}
-.tabs.fade-l{-webkit-mask-image:linear-gradient(to right,transparent,#000 var(--fade));mask-image:linear-gradient(to right,transparent,#000 var(--fade))}
-.tabs.fade-l.fade-r{-webkit-mask-image:linear-gradient(to right,transparent,#000 var(--fade),#000 calc(100% - var(--fade)),transparent);
-  mask-image:linear-gradient(to right,transparent,#000 var(--fade),#000 calc(100% - var(--fade)),transparent)}
-.tabs button{flex:none;display:inline-flex;align-items:center;gap:7px;font:500 13px/1.2 var(--sans);color:var(--muted);
-  background:none;border:0;border-radius:8px;padding:7px 12px;cursor:pointer;white-space:nowrap;scroll-snap-align:start;
-  transition:background-color .15s,color .15s}
-.tabs button:hover{color:var(--ink);background:var(--row-alt)}
-.tabs button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
-.tabs button[aria-selected="true"]{color:var(--ink);background:var(--acc-soft);box-shadow:inset 0 -2px 0 var(--acc)}
+/* The history: ‹ › and "2 of 5" over the left end of the pane's header row; the list of boards opens under it */
+.stage{position:relative;grid-template-rows:minmax(0,1fr)}
+.tabbar{position:absolute;z-index:5;top:0;left:0;height:40px;display:flex;align-items:center;padding-left:8px}
+.tabnav{display:flex;align-items:center;gap:2px}
+.tabnav[hidden]{display:none}
+.nb{width:30px;height:30px;border-radius:8px;border:0;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer;padding:0}
+.nb:hover:not(:disabled){background:var(--row-alt);color:var(--ink)}
+.nb:disabled{opacity:.35;cursor:default}
+.nb:focus-visible,.pos:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.pos{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 6px 0 8px;margin-right:4px;border:0;border-radius:8px;background:none;cursor:pointer;
+  font:500 12.5px/1 var(--sans);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pos:hover,.pos[aria-expanded="true"]{background:var(--row-alt);color:var(--ink)}
+.posdot{width:7px;height:7px;border-radius:50%;background:var(--claude)}
+.posdot[hidden]{display:none}
+.boards{position:absolute;top:38px;left:8px;width:min(360px,calc(100vw - 16px));max-height:min(60vh,420px);overflow:auto;box-sizing:border-box;
+  padding:6px;border-radius:14px;background:var(--panel);border:1px solid var(--line);box-shadow:0 18px 50px -18px rgba(15,23,42,.45)}
+.boards[hidden]{display:none}
+.boards h4{margin:4px 10px 6px;font:500 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.tabs{display:flex;flex-direction:column-reverse;gap:2px}
+.tabs button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:0;border-radius:9px;background:none;cursor:pointer;text-align:left;
+  font:400 13.5px/1.3 var(--sans);color:var(--ink)}
+.tabs button .ico{color:var(--muted)}
+.tabs button .ttl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tabs button:hover{background:var(--row-alt)}
+.tabs button:focus-visible{outline:2px solid var(--acc);outline-offset:-2px}
+.tabs button[aria-selected="true"]{background:var(--acc-soft);font-weight:500}
 .tabs button[aria-selected="true"] .ico{color:var(--acc)}
-.tabs .ttl{max-width:28ch;overflow:hidden;text-overflow:ellipsis}
 .tabs button.updated::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--claude);flex:none}
 .tabs button.flash{animation:flash .9s ease-out}
 @keyframes flash{from{background:var(--hl-soft)}}
@@ -63,15 +67,23 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .pane[hidden]{display:none}
 .pane.arrive{animation:arrive .18s ease-out}
 @keyframes arrive{from{opacity:0;transform:translateY(6px)}}
-.phead{flex:none;position:sticky;top:0;z-index:3;background:var(--panel);border-bottom:1px solid var(--line);padding:12px 20px 10px}
-.prow{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 12px}
-.vtitle{flex:1 1 14rem;min-width:0;margin:0;font:600 18px/1.3 var(--sans);color:var(--ink);overflow-wrap:anywhere;letter-spacing:-.005em}
-.pbtns{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.prow2{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 12px;margin-top:4px}
-.vmeta{display:flex;align-items:center;gap:6px;margin:0;min-width:0;font-size:12.5px;line-height:1.4;color:var(--muted)}
+/* One 40px row: the title (what it is and when it changed show on hover), its steps, its buttons */
+.phead{flex:none;position:sticky;top:0;z-index:3;background:var(--panel);border-bottom:1px solid var(--line);padding:0 10px 0 12px}
+.prow{display:flex;align-items:center;gap:8px;min-height:40px}
+.vhead{position:relative;flex:1 1 auto;min-width:0;margin-left:var(--navw,0px);display:flex;align-items:center;gap:8px;border-radius:6px}
+.vhead .ico{color:var(--acc)}
+.vhead:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.vtitle{min-width:0;margin:0;font:600 14.5px/1.3 var(--sans);color:var(--ink);letter-spacing:-.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vtip{position:absolute;z-index:20;top:calc(100% + 8px);left:0;display:flex;flex-direction:column;gap:2px;max-width:min(560px,80vw);padding:6px 10px;
+  border-radius:8px;background:var(--panel);border:1px solid var(--line);box-shadow:0 12px 30px -12px rgba(15,23,42,.35);
+  opacity:0;pointer-events:none;transition:opacity .12s}
+.vhead:hover .vtip,.vhead:focus-visible .vtip{opacity:1}
+.pbtns{flex:none;display:flex;gap:6px;align-items:center}
+.pbtns .btn.sm{min-height:28px;padding:3px 10px}
+.vmeta{margin:0;min-width:0;font-size:12.5px;line-height:1.4;color:var(--muted)}
 .vmeta span{overflow-wrap:anywhere}
 .vage{font-size:12px;color:var(--faint);white-space:nowrap}
-.vcaption{margin:8px 0 0;font-size:14px;line-height:1.5;color:var(--ink);max-width:72ch}
+.vcaption{margin:0 0 8px;font-size:14px;line-height:1.5;color:var(--ink);max-width:72ch}
 .pbody{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:safe center;justify-content:safe center;gap:10px;padding:16px 20px}
 .pbody>.points,.pbody>.md{margin-inline:auto}
 .pbody>*{flex:none;max-width:100%;box-sizing:border-box}
@@ -236,15 +248,10 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .empty.failed .tiles{display:none}
 
 @media (max-width:600px){
-  .tabs{padding:6px 8px;scroll-padding-inline:8px;--fade:10px}
-  .phead{padding:10px 12px 8px;display:flex;flex-direction:column}
-  /* Title, then what it is, then the buttons: the meta line stays under the title it describes */
-  .prow{display:contents}
-  .vtitle{order:1;flex:none}
-  .prow2{order:2;margin-top:2px}
-  .vcaption{order:3}
-  .pbtns{order:4;flex:none;margin-top:8px}
-  .vtitle{font-size:16.5px}
+  /* The title keeps the row beside the history buttons; steps and buttons wrap under it */
+  .prow{flex-wrap:wrap;gap:4px 8px}
+  .vhead{flex:1 1 60%;min-height:40px}
+  .stepbar,.pbtns{padding-bottom:6px}
   .pbody{padding:12px}
   .framewrap{min-height:70vh}
   .tablewrap .key{white-space:normal;max-width:40%}
@@ -264,12 +271,6 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
   .code.change .hunk{padding-left:calc(4.8em + 4px)}
   .points{font-size:15px}
 }
-/* A phone: the tabs get the full width, and the board buttons and Follow sit in a row under them */
-@media (max-width:560px){
-  .tabbar{flex-wrap:wrap}
-  .tabs{flex:1 0 100%;box-sizing:border-box}
-  .tabtools{flex:1 0 100%;margin:0;padding:0 8px 6px;justify-content:space-between;box-sizing:border-box}
-}
 .k-key{transition:opacity .3s ease-out}
 .k-hidden{opacity:0!important;pointer-events:none}
 .code.k-dim .ln:not(.k-focus){opacity:.45}
@@ -281,10 +282,10 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .diagram svg path.k-focus{stroke:var(--claude)!important;stroke-width:3px!important}
 .k-card{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;
   font:600 22px/1.3 var(--sans);color:var(--ink);pointer-events:none}
-.stepbar{display:inline-flex;align-items:center;gap:8px}
-.stepbar .btn{min-height:28px;padding:3px 10px}
+.stepbar{flex:none;display:inline-flex;align-items:center;gap:2px;padding:1px;border:1px solid var(--line);border-radius:9px}
+.stepbar .btn{min-height:26px;width:28px;padding:0;border:0;color:var(--muted)}
 .stepbar .btn:disabled{opacity:.4;cursor:default;background:none}
-.vstep{font:500 12px/1 var(--sans);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;min-width:6.5em;text-align:center}
+.vstep{font:500 12px/1 var(--sans);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;min-width:5.5em;text-align:center}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 
 /* Fonts ship beside this file: the stage's diagrams are measured in them (visuals/text_metrics.py, face "stage"). */

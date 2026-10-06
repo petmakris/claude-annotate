@@ -13,6 +13,13 @@ from unittest.mock import patch
 from skills.stage import model, scene, stage
 
 
+
+def board(page, name):
+    """Open a board from the list under "n of m", as a reader does: the tabs are that list's rows."""
+    if page.locator(".boards").is_hidden():
+        page.locator(".pos").click()
+    page.locator(f'button[role=tab][data-view="{name}"]').click()
+
 def test_a_new_view_comes_to_the_front_and_a_saved_file_reloads_only_its_frame(tmp_path, wc_config, browser):
     proj = tmp_path / "proj"
     proj.mkdir()
@@ -32,19 +39,19 @@ def test_a_new_view_comes_to_the_front_and_a_saved_file_reloads_only_its_frame(t
         # even though the daemon lists __layout__ before the view it names.
         stage.show(str(proj), "notes", {"type": "inline", "format": "table", "body": "| a |\n|---|\n| 1 |"})
         notes_tab = page.locator('button[role=tab][data-view="notes"]')
-        notes_tab.wait_for()
+        notes_tab.wait_for(state="attached")
         page.wait_for_function(
             "document.querySelector('button[role=tab][data-view=\"notes\"]')"
             "?.getAttribute('aria-selected') === 'true'", timeout=5000)
         assert page.locator('button[role=tab][data-view="deck"]').get_attribute("aria-selected") == "false"
         # Back on the deck to move its slide, then onto the notes again.
-        page.locator('button[role=tab][data-view="deck"]').click()
+        board(page, "deck")
         # Regression probes: move off the source fragment and onto the notes tab, and tag
         # the frame's wrapper, so a pane rebuild (which would lose all three) is
         # distinguishable from the double-buffered reload (which must keep all three).
         frame.evaluate("location.hash = 'slide-3'")
         page.eval_on_selector('section.pane[data-view="deck"] .framewrap', "e => e.dataset.probe = '1'")
-        notes_tab.click()
+        board(page, "notes")
         deck.write_text("<section id='slide-2'><h1 id='v'>two</h1></section><section id='slide-3'></section>")
         t = time.time() + 5
         os.utime(deck, (t, t))
@@ -85,7 +92,7 @@ def test_a_failed_first_load_says_so_instead_of_an_empty_stage(tmp_path, wc_conf
         page.unroute_all()
         page.evaluate("window.__same_page = 1")
         line.get_by_role("button", name="Try again").click()
-        page.locator('button[role=tab][data-view="more"]').wait_for(timeout=5000)
+        page.locator('button[role=tab][data-view="more"]').wait_for(state="attached", timeout=5000)
         assert page.locator("button[role=tab]").count() == 2
         assert page.evaluate("window.__same_page") == 1
     finally:
@@ -112,9 +119,9 @@ def test_a_stalled_cdn_never_blocks_the_stage(tmp_path, wc_config, browser):
         page = browser.new_page()
         _hang(page)
         page.goto(res["url"])
-        page.locator('button[role=tab][data-view="areas"]').wait_for(timeout=2000)
-        page.locator('button[role=tab][data-view="code"]').wait_for(timeout=2000)
-        page.locator('button[role=tab][data-view="areas"]').click()
+        page.locator('button[role=tab][data-view="areas"]').wait_for(state="attached", timeout=2000)
+        page.locator('button[role=tab][data-view="code"]').wait_for(state="attached", timeout=2000)
+        board(page, "areas")
         page.locator('section.pane[data-view="areas"] td', has_text="kappa").wait_for(timeout=2000)
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
@@ -126,12 +133,12 @@ def test_a_diagram_waiting_on_mermaid_never_holds_up_the_next_view(tmp_path, wc_
         page = browser.new_page()
         _hang(page, ("mermaid",))
         page.goto(res["url"])
-        page.locator('button[role=tab][data-view="first"]').wait_for(timeout=5000)
+        page.locator('button[role=tab][data-view="first"]').wait_for(state="attached", timeout=5000)
         stage.show(str(tmp_path), "flow", {"type": "inline", "format": "diagram", "body": "graph TD; A-->B"},
                    title="Flow")
         stage.show(str(tmp_path), "areas", TABLE, title="Areas")
         page.locator('section.pane[data-view="areas"] td', has_text="kappa").wait_for(timeout=2000)
-        page.locator('button[role=tab][data-view="flow"]').click()
+        board(page, "flow")
         page.locator('section.pane[data-view="flow"]').get_by_text("Drawing the diagram…").wait_for(timeout=2000)
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
@@ -167,7 +174,7 @@ def test_only_the_front_pane_renders_until_another_tab_is_opened(tmp_path, wc_co
                                ".map(p => [p.dataset.view, p.childElementCount]))")
         assert counts["one"] == 0 and counts["two"] == 0 and counts["three"] > 0
         assert page.locator("iframe").count() == 0  # the url view's frame is not made until it is opened
-        page.locator('button[role=tab][data-view="one"]').click()
+        board(page, "one")
         page.locator('section.pane[data-view="one"] td', has_text="kappa").wait_for(timeout=2000)
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
@@ -180,7 +187,7 @@ def test_the_stage_follows_dark_mode_with_the_shared_tokens(tmp_path, wc_config,
         _hang(page)
         page.emulate_media(color_scheme="dark")
         page.goto(res["url"])
-        page.locator('button[role=tab][data-view="one"]').wait_for(timeout=5000)
+        page.locator('button[role=tab][data-view="one"]').wait_for(state="attached", timeout=5000)
         page.wait_for_function("getComputedStyle(document.body).backgroundColor === 'rgb(15, 19, 24)'", timeout=5000)
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
@@ -299,7 +306,7 @@ def test_angle_brackets_in_diagram_labels_are_escaped_and_arrows_are_not(tmp_pat
     try:
         page = _page(browser, res["url"])
         _hang(page)
-        page.locator('button[role=tab][data-view="one"]').wait_for(timeout=5000)
+        page.locator('button[role=tab][data-view="one"]').wait_for(state="attached", timeout=5000)
         esc = lambda s: page.evaluate("s => window.__stageTest.escapeLabels(s)", s)  # noqa: E731
         assert esc("A[libexec/<domain>/<verb>] --> B") == "A[libexec/#lt;domain#gt;/#lt;verb#gt;] --> B"
         assert esc('A -->|a <b>| B("x > y") ==> C{<k>}') == 'A -->|a #lt;b#gt;| B("x #gt; y") ==> C{#lt;k#gt;}'
@@ -333,7 +340,7 @@ def test_diagrams_draw_with_safe_labels_and_a_broken_one_says_so(tmp_path, wc_co
         assert fit.get_attribute("aria-pressed") == "true"
         page.locator('section.pane[data-view="flow"]').get_by_role("button", name="Actual size").click()
         assert "actual" in page.locator('section.pane[data-view="flow"] .diagram').get_attribute("class")
-        page.locator('button[role=tab][data-view="bad"]').click()
+        board(page, "bad")
         bad = page.locator('section.pane[data-view="bad"]')
         bad.get_by_text("This diagram could not be drawn.").wait_for(timeout=20000)
         assert bad.get_by_role("button", name="Try again").is_visible()
@@ -342,7 +349,7 @@ def test_diagrams_draw_with_safe_labels_and_a_broken_one_says_so(tmp_path, wc_co
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
 
-def test_tabs_stay_reachable_on_a_phone_and_mark_background_updates(tmp_path, wc_config, browser):
+def test_boards_stay_reachable_on_a_phone_and_mark_background_updates(tmp_path, wc_config, browser):
     cwd = str(tmp_path)
     res = stage.show(cwd, "v0", TABLE, title="The first view with a long title")
     for i in range(1, 5):
@@ -350,35 +357,33 @@ def test_tabs_stay_reachable_on_a_phone_and_mark_background_updates(tmp_path, wc
     try:
         page = _page(browser, res["url"], 390, 844)
         last = page.locator('button[role=tab][data-view="v4"]')
-        last.wait_for(timeout=5000)
-        page.locator('button[role=tab][data-view="v0"]').click()
-        last.click()
-        strip = page.locator("nav.tabs").bounding_box()
-        box = last.bounding_box()
-        assert box["x"] >= strip["x"] - 1 and box["x"] + box["width"] <= strip["x"] + strip["width"] + 1
-        assert page.locator("nav.tabs").evaluate("e => e.classList.contains('fade-l')")
-        # Visible buttons say where the reader is and move between boards; no tab is cut at the left edge.
+        last.wait_for(state="attached", timeout=5000)
+        page.wait_for_function("document.querySelector('.tabpos')?.textContent === '5 of 5'", timeout=5000)
+        # The history buttons say where the reader is and move between boards.
         nav = page.get_by_role("group", name="Boards")
-        assert nav.is_visible() and nav.locator(".tabpos").inner_text() == "5 of 5"
-        assert nav.get_by_role("button", name="Next board").is_disabled()
+        assert nav.is_visible() and nav.get_by_role("button", name="Next board").is_disabled()
         nav.get_by_role("button", name="Previous board").click()
         assert page.locator('button[role=tab][data-view="v3"]').get_attribute("aria-selected") == "true"
         assert nav.locator(".tabpos").inner_text() == "4 of 5"
-        page.wait_for_timeout(300)
-        first_x = page.evaluate("""(() => { const s = document.querySelector('nav.tabs').getBoundingClientRect();
-            return [...document.querySelectorAll('button[role=tab]')].map(t => t.getBoundingClientRect())
-              .filter(r => r.right > s.left + 8).map(r => r.left - s.left)[0]; })()""")
-        assert first_x >= 0
+        # The list of boards fits the phone, newest first.
+        page.locator(".pos").click()
+        box = page.locator(".boards").bounding_box()
+        assert box["x"] >= 0 and box["x"] + box["width"] <= 390
+        rows = page.locator("nav.tabs button[role=tab]")
+        tops = {rows.nth(i).get_attribute("data-view"): rows.nth(i).bounding_box()["y"] for i in range(5)}
+        assert sorted(tops, key=tops.get) == ["v4", "v3", "v2", "v1", "v0"]
         last.click()
-        # A background change to a view that is not being read puts a dot on its tab.
+        assert page.locator(".boards").is_hidden() and last.get_attribute("aria-selected") == "true"
+        # A background change to a board that is not being read puts a dot on its row and on the counter.
         v1 = page.locator('button[role=tab][data-view="v1"]')
         stage.show(cwd, "v1", {"type": "inline", "format": "table", "body": "| a |\n|---|\n| 2 |"}, background=True)
         page.wait_for_function(
             "document.querySelector('button[role=tab][data-view=\"v1\"]').classList.contains('updated')", timeout=5000)
         assert v1.get_attribute("aria-label").endswith(", updated")
+        assert page.locator(".posdot").is_visible() and page.locator(".pos").get_attribute("aria-label") == "All boards, one changed"
         assert last.get_attribute("aria-selected") == "true"
-        v1.click()
-        assert "updated" not in v1.get_attribute("class")
+        board(page, "v1")
+        assert "updated" not in v1.get_attribute("class") and page.locator(".posdot").is_hidden()
         assert page.evaluate("document.documentElement.scrollWidth") <= 390
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
@@ -441,12 +446,12 @@ def test_the_stage_follows_the_voice_until_a_tab_is_tapped(tmp_path, wc_config, 
     stage.show(str(tmp_path), "b", CODE5, title="Five steps", background=True, extra={"answer": 3})
     try:
         alone = _page(browser, res["url"])
-        alone.locator('button[role=tab][data-view="b"]').wait_for(timeout=5000)
+        alone.locator('button[role=tab][data-view="b"]').wait_for(state="attached", timeout=5000)
         assert alone.locator(".follow").count() == 0  # on its own the stage has no follow button
         alone.close()
 
         page, frame, send = _embedded(browser, res["url"])
-        frame.locator('button[role=tab][data-view="b"]').wait_for(timeout=5000)
+        frame.locator('button[role=tab][data-view="b"]').wait_for(state="attached", timeout=5000)
         assert frame.locator(".follow").count() == 0  # the call page holds the switch
         # Where a board came from is said in plain words on the board, not as a badge on its tab.
         assert frame.locator('button[role=tab] .ans').count() == 0
@@ -456,16 +461,16 @@ def test_the_stage_follows_the_voice_until_a_tab_is_tapped(tmp_path, wc_config, 
             "a": ("Areas", "table", 3), "b": ("Five steps", "code", 3)}
         assert _selected(frame, "a")
         send({"type": "stage:front", "view": "b"})
-        frame.locator('button[role=tab][data-view="b"][aria-selected="true"]').wait_for(timeout=3000)
+        frame.locator('button[role=tab][data-view="b"][aria-selected="true"]').wait_for(state="attached", timeout=3000)
         # A tap on a tab turns following off, and tells the call page.
-        frame.locator('button[role=tab][data-view="a"]').click()
+        board(frame, "a")
         page.wait_for_function("got.some(m => m.type === 'stage:follow' && m.on === false)", timeout=2000)
         send({"type": "stage:front", "view": "b"})
         page.wait_for_timeout(300)
         assert _selected(frame, "a")
         # A chip pressed in the conversation still works, and leaves following off.
         send({"type": "stage:front", "view": "b", "manual": True})
-        frame.locator('button[role=tab][data-view="b"][aria-selected="true"]').wait_for(timeout=3000)
+        frame.locator('button[role=tab][data-view="b"][aria-selected="true"]').wait_for(state="attached", timeout=3000)
         # A new answer turns it back on, and says so.
         send({"type": "stage:answer", "n": 4})
         page.wait_for_function("got.filter(m => m.type === 'stage:follow').pop().on === true", timeout=2000)
@@ -476,7 +481,7 @@ def test_the_stage_follows_the_voice_until_a_tab_is_tapped(tmp_path, wc_config, 
         assert _selected(frame, "b")
         send({"type": "stage:follow", "on": True})
         send({"type": "stage:front", "view": "a"})
-        frame.locator('button[role=tab][data-view="a"][aria-selected="true"]').wait_for(timeout=3000)
+        frame.locator('button[role=tab][data-view="a"][aria-selected="true"]').wait_for(state="attached", timeout=3000)
         # A new view is news for the call page.
         stage.show(str(tmp_path), "c", TABLE, title="Third", background=True)
         page.wait_for_function("got.some(m => m.type === 'stage:changed' && m.name === 'c' && m.isNew)", timeout=5000)
@@ -576,16 +581,16 @@ def test_key_points_lead_the_tabs_and_light_up_as_they_are_said(tmp_path, wc_con
                extra={"kind": "points", "pinned": True})
     try:
         page, frame, send = _embedded(browser, res["url"])
-        frame.locator('button[role=tab][data-view="key-points"]').wait_for(timeout=5000)
+        frame.locator('button[role=tab][data-view="key-points"]').wait_for(state="attached", timeout=5000)
         tabs = frame.locator("button[role=tab]").evaluate_all("els => els.map(e => e.dataset.view)")
         assert tabs == ["key-points", "a"]  # first, though shown last
         assert frame.locator('button[role=tab][data-view="key-points"] .count').inner_text() == "3"
         assert _selected(frame, "a")
         send({"type": "stage:key", "view": "key-points", "index": 2})
         # Never fronted for a key: the tab gets its dot instead.
-        frame.locator('button[role=tab][data-view="key-points"].updated').wait_for(timeout=3000)
+        frame.locator('button[role=tab][data-view="key-points"].updated').wait_for(state="attached", timeout=3000)
         assert _selected(frame, "a")
-        frame.locator('button[role=tab][data-view="key-points"]').click()
+        board(frame, "key-points")
         pane = frame.locator('section.pane[data-view="key-points"]')
         lit = pane.locator("li.lit")
         lit.wait_for(timeout=3000)
@@ -613,14 +618,19 @@ def test_a_table_board_never_runs_markup_from_its_cells(tmp_path, wc_config, bro
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
 
-def test_a_phone_header_reads_title_then_meta_then_buttons(tmp_path, wc_config, browser):
+def test_a_phone_header_keeps_the_title_on_one_row_and_its_buttons_on_screen(tmp_path, wc_config, browser):
     res = stage.show(str(tmp_path), "lower", DOCSTRING, title="Lowercasing")
     try:
         page = _page(browser, res["url"], 390, 844)
         pane = page.locator('section.pane[data-view="lower"]')
         pane.locator(".ln").first.wait_for(timeout=5000)
-        y = lambda sel: pane.locator(sel).bounding_box()["y"]  # noqa: E731
-        assert y(".vtitle") < y(".vmeta") < y(".pbtns")
+        title, btns = pane.locator(".vtitle").bounding_box(), pane.locator(".pbtns").bounding_box()
+        assert title["y"] + title["height"] <= 40 and btns["x"] + btns["width"] <= 390
+        # What the board is waits in the title's tooltip.
+        assert pane.locator(".vmeta").evaluate("e => getComputedStyle(e.closest('.vtip')).opacity") == "0"
+        pane.locator(".vhead").hover()
+        page.wait_for_function("getComputedStyle(document.querySelector('.vtip')).opacity === '1'", timeout=2000)
+        assert pane.locator(".vmeta").inner_text().startswith("Code · ")
         # Wrapped on a phone, an indented line keeps its indent on the lines it wraps onto.
         ind = page.evaluate("""[...document.querySelectorAll('section.pane[data-view="lower"] .ln')]
             .map(l => +getComputedStyle(l).getPropertyValue('--ind') || 0)""")
@@ -662,7 +672,7 @@ def test_a_short_board_sits_in_the_middle_and_a_tall_one_starts_at_the_top(tmp_p
         box = short.bounding_box()
         assert abs((box["x"] + box["width"] / 2) - (body["x"] + body["width"] / 2)) < 2
         assert abs((box["y"] + box["height"] / 2) - (body["y"] + body["height"] / 2)) < 2
-        page.locator('button[role=tab][data-view="tall"]').click()
+        board(page, "tall")
         tall = page.locator('section.pane[data-view="tall"] .tablewrap')
         tall.wait_for(timeout=5000)
         top = page.locator('section.pane[data-view="tall"] .pbody').bounding_box()["y"]
@@ -675,7 +685,7 @@ def test_the_call_page_sets_the_stage_theme(tmp_path, wc_config, browser):
     res = stage.show(str(tmp_path), "one", TABLE, title="One")
     try:
         page, frame, send = _embedded(browser, res["url"])
-        frame.locator('button[role=tab][data-view="one"]').wait_for(timeout=5000)
+        frame.locator('button[role=tab][data-view="one"]').wait_for(state="attached", timeout=5000)
         send({"type": "stage:theme", "theme": "dark"})
         frame.locator("html[data-theme='dark']").wait_for(state="attached", timeout=2000)
         assert frame.locator("body").evaluate("b => getComputedStyle(b).backgroundColor") == "rgb(15, 19, 24)"
@@ -737,7 +747,7 @@ def test_every_flowchart_key_resolves_in_the_vendored_mermaid(tmp_path, wc_confi
     try:
         page = _page(browser, res["url"])
         for name in names:
-            page.locator(f'button[role=tab][data-view="{name}"]').click()
+            board(page, name)
             svg = page.locator(f'section.pane[data-view="{name}"] .diagram svg')
             svg.wait_for(timeout=20000)
             got = svg.evaluate("s => [...window.__stageTest.flowchartKeys(s).keys()].sort()")
@@ -784,8 +794,8 @@ def test_a_code_scene_steps_its_focus_and_a_tapped_tab_opens_on_the_rest_frame(t
         assert frame.locator(".ln.k-focus").count() == 0
         send({"type": "stage:frame", "view": "c", "n": 1})
         frame.locator('section.pane[data-view="c"] .code.k-dim').wait_for(timeout=3000)
-        frame.locator('button[role=tab][data-view="t"]').click()
-        frame.locator('button[role=tab][data-view="c"]').click()
+        board(frame, "t")
+        board(frame, "c")
         frame.locator('section.pane[data-view="c"] .code:not(.k-dim)').wait_for(timeout=3000)
         assert _frames(frame)["c"] == 3
         send({"type": "stage:frame", "view": "c", "n": 2})
@@ -827,12 +837,13 @@ def test_a_focus_below_the_fold_is_scrolled_into_view(tmp_path, wc_config, brows
 def test_tapping_the_tab_already_in_front_keeps_the_frame_and_the_following(tmp_path, wc_config, browser):
     steps = _scene(scene.lines_model(range(1, 6)), [["focus 2-3"], ["focus 5"]], "Five steps")
     res = stage.show(str(tmp_path), "c", CODE5, title="Five steps", extra={"scene": steps})
+    stage.show(str(tmp_path), "other", TABLE, title="Another board", background=True)  # so the list of boards shows
     try:
         page, frame, send = _embedded(browser, res["url"])
         frame.locator('section.pane[data-view="c"] .ln').first.wait_for(timeout=5000)
         send({"type": "stage:frame", "view": "c", "n": 1, "animate": True})
         _until_frame(page, "c", 1)
-        frame.locator('button[role=tab][data-view="c"]').click()
+        board(frame, "c")
         page.wait_for_timeout(300)
         assert _frames(frame)["c"] == 1
         assert not page.evaluate("got.some(m => m.type === 'stage:follow')")
@@ -868,7 +879,7 @@ def test_a_scene_shown_during_a_call_opens_on_frame_0_and_a_frame_sent_early_wai
     res = stage.show(str(tmp_path), "first", TABLE, title="First")
     try:
         page, frame, send = _embedded(browser, res["url"])
-        frame.locator('button[role=tab][data-view="first"]').wait_for(timeout=5000)
+        frame.locator('button[role=tab][data-view="first"]').wait_for(state="attached", timeout=5000)
         send({"type": "stage:frame", "view": "early", "n": 2})
         stage.show(str(tmp_path), "fresh", CODE5, title="Fresh", extra={"scene": steps})
         frame.locator('section.pane[data-view="fresh"] .ln').first.wait_for(timeout=5000)
@@ -973,14 +984,14 @@ def test_markdown_and_other_text_files_show_on_the_stage_instead_of_downloading(
         assert page.inner_text('section.pane[data-view="notes"] .doc h1') == "Plan"
         assert page.evaluate("window.hit") is None
         assert page.locator('section.pane[data-view="notes"] iframe').count() == 0
-        page.locator('button[role=tab][data-view="conf"]').click()
+        board(page, "conf")
         page.wait_for_selector('section.pane[data-view="conf"] pre.filetext')
         assert page.inner_text('section.pane[data-view="conf"] pre.filetext').strip() == "key: <value>"
         (proj / "notes.md").write_text("# Plan two\n")
         t = time.time() + 5
         os.utime(proj / "notes.md", (t, t))
         assert "notes" in stage.tick(str(proj), res["sid"])
-        page.locator('button[role=tab][data-view="notes"]').click()
+        board(page, "notes")
         page.wait_for_function(
             "document.querySelector('section.pane[data-view=\"notes\"] .doc h1')?.textContent === 'Plan two'",
             timeout=5000)
@@ -1087,9 +1098,9 @@ def test_every_flowchart_on_the_stage_draws_its_own_arrowheads(tmp_path, wc_conf
     stage.show(str(tmp_path), "two", _visual("flowchart", FLOW_SPEC), title="Two")
     try:
         page = _page(browser, res["url"])
-        page.locator('button[role=tab][data-view="one"]').click()
+        board(page, "one")
         page.locator('section.pane[data-view="one"] .vgrid svg').wait_for(timeout=5000)
-        page.locator('button[role=tab][data-view="two"]').click()
+        board(page, "two")
         page.locator('section.pane[data-view="two"] .vgrid svg').wait_for(timeout=5000)
         ids = page.locator("marker").evaluate_all("els => els.map(e => e.id)")
         assert len(ids) == 2 and len(set(ids)) == 2, "url(#id) finds the first in the page, maybe in a hidden pane"
