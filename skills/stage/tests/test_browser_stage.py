@@ -1205,18 +1205,32 @@ LOOP_SPEC = {"nodes": [{"id": "l", "role": "entry", "label": "Listening"}, {"id"
                        {"from": "s", "to": "l", "label": "nothing said"}, {"from": "k", "to": "h", "label": "you cut in"}]}
 
 
-def test_a_map_with_loops_draws_the_arrows_back_underneath(tmp_path, wc_config, browser):
+def test_a_map_with_loops_is_a_ring_whose_arrows_meet_their_heads_and_labels_sit_on_them(tmp_path, wc_config, browser):
     res = stage.show(str(tmp_path), "loop", _visual("flowchart", LOOP_SPEC), title="States")
     try:
         page = _page(browser, res["url"], 1300, 800)
         pane = page.locator('section.pane[data-view="loop"]')
         pane.locator(".m-node").first.wait_for(timeout=5000)
-        assert pane.locator(".m-edge.m-back").count() == 2
+        page.wait_for_timeout(300)
+        assert pane.locator(".map.m-ring").count() == 1  # a state machine is drawn as its loop
         boxes = pane.locator(".m-node").evaluate_all("els => els.map(e => e.getBoundingClientRect().toJSON())")
-        xs = sorted(b["x"] for b in boxes)
-        assert all(b - a > 100 for a, b in zip(xs, xs[1:]))  # one column each: the loop was cut, not stacked
-        lowest = max(b["y"] + b["height"] for b in boxes)
-        under = pane.locator(".m-edge.m-back .m-line").evaluate_all("els => els.map(e => e.getBoundingClientRect().bottom)")
-        assert all(u > lowest for u in under)  # the arrows back run under the map
+        for i, a in enumerate(boxes):  # no two states on top of each other
+            for b in boxes[i + 1:]:
+                assert a["x"] + a["width"] <= b["x"] or b["x"] + b["width"] <= a["x"] or a["y"] + a["height"] <= b["y"] or b["y"] + b["height"] <= a["y"]
+        ends = pane.locator(".m-edge").evaluate_all("""els => els.map(g => {
+            const line = g.querySelector('.m-line'), p = line.getPointAtLength(line.getTotalLength());
+            const d = g.querySelector('.m-tip').getAttribute('d').split(' ');
+            return [p.x, p.y, +d[1], +d[2], getComputedStyle(line).strokeDasharray];
+        })""")
+        for x, y, hx, hy, dash in ends:  # every head sits where its line ends, and no line is cut short
+            assert abs(x - hx) < 1 and abs(y - hy) < 1 and dash in ("none", ""), (x, y, hx, hy, dash)
+        far = pane.locator(".m-edge").evaluate_all("""els => els.filter(g => g.querySelector('.m-elabel')).map(g => {
+            const line = g.querySelector('.m-line'), t = g.querySelector('.m-elabel text');
+            const x = +t.getAttribute('x'), y = +t.getAttribute('y') - 4, n = line.getTotalLength();
+            let best = 1e9;
+            for (let i = 0; i <= 50; i++) { const p = line.getPointAtLength(n * i / 50); best = Math.min(best, Math.hypot(p.x - x, p.y - y)); }
+            return best;
+        })""")
+        assert far and max(far) < 3, far  # each label sits on the arrow it names
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])

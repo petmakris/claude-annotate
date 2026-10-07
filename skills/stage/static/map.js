@@ -97,6 +97,7 @@ function place(box) {
   const width = box.clientWidth || 900;
   const scroller = box.closest(".pbody");
   const height = Math.max(320, (scroller ? scroller.clientHeight - 32 : 480) - (+box.dataset.room || 16));
+  if (back.size) { ring(box, st, cols.flat(), width, height); return; }  // a state machine: its loop is a ring
   // Left to right while the columns fit, narrowing the parts a little first; top to bottom when there are
   // still too many for the width.
   const fits = ([w, gap]) => cols.length * w + (cols.length - 1) * gap <= width - 40;
@@ -191,6 +192,7 @@ export function layoutMap(box, scene, n) {
   const st = box._map;
   if (!st) return;
   const node = scene && n != null ? currentKey(scene, n, "node:") : null;
+  if (box.classList.contains("m-ring") && st.cur !== node) { st.cur = node; place(box); }
   const edge = scene && n != null ? currentKey(scene, n, "edge:") : null;
   const arrived = scene && n != null && n > 0 && !new Set(scene.frames[n - 1].show).has(edge);
   for (const el of box.querySelectorAll(".m-node")) el.classList.toggle("m-cur", el.dataset.key === node);
@@ -201,6 +203,7 @@ export function layoutMap(box, scene, n) {
     if (on && st.lastEdge !== edge) {
       const line = g.querySelector(".m-line");
       line.classList.remove("m-draw"); void line.getBBox(); line.classList.add("m-draw");
+      line.addEventListener("animationend", () => line.classList.remove("m-draw"), { once: true });
       line.style.setProperty("--len", Math.ceil(line.getTotalLength ? line.getTotalLength() : 600));
       if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
         const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -212,4 +215,80 @@ export function layoutMap(box, scene, n) {
     }
   }
   st.lastEdge = arrived ? edge : null;
+}
+
+// A map with loops (a state machine) is a ring: the states round an ellipse in the order the flow reaches
+// them, clockwise from the top. An arrow to the next state round bows outward; any other (a way back, a
+// skip) curves across the inside. Arrows stop at their state's card, the one being said being larger, and
+// labels that would land on each other are pushed apart along their curves.
+const RW = 170, RH = 52;
+function ring(box, st, order, width, height) {
+  box.classList.add("m-ring");
+  box.style.setProperty("--mw", RW + "px");
+  box.style.height = height + "px";
+  const n = order.length, cx = width / 2, cy = height / 2;
+  const rx = Math.max(160, Math.min(width / 2 - RW / 2 - 40, 420)), ry = Math.max(110, Math.min(height / 2 - RH / 2 - 30, 200));
+  const xy = new Map(), at = new Map(order.map((id, i) => [id, i]));
+  order.forEach((id, i) => {
+    const a = -Math.PI / 2 + (i * 2 * Math.PI) / n;
+    xy.set(id, [cx + rx * Math.cos(a), cy + ry * Math.sin(a)]);
+  });
+  st.xy = xy;
+  for (const el of box.querySelectorAll(".m-node")) {
+    const [x, y] = xy.get(el.dataset.node);
+    el.style.left = x + "px"; el.style.top = y + "px";
+  }
+  const svg = box.querySelector(".m-edges");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.style.height = height + "px";
+  // the box round a card, with a little air; the card being said is wider and taller
+  const half = (id) => (st.cur === "node:" + id ? [140, 48] : [RW / 2 + 8, RH / 2 + 8]);
+  const edge = (x1, y1, x2, y2, id) => {
+    const [hw, hh] = half(id), dx = x2 - x1, dy = y2 - y1;
+    const t = Math.min(hw / Math.abs(dx || 1e-6), hh / Math.abs(dy || 1e-6), 1);
+    return [x1 + dx * t, y1 + dy * t];
+  };
+  const labels = [];
+  (st.spec.edges || []).forEach((e, i) => {
+    const g = svg.querySelector(`[data-key="${st.ekeys[i]}"]`), a = xy.get(e.from), b = xy.get(e.to);
+    if (!g || !a || !b) return;
+    const next = (at.get(e.from) + 1) % n === at.get(e.to);
+    // bend at right angles to the straight line between the two states: away from the middle for the next
+    // state round, towards it for the rest; a line through the middle bends to its left
+    const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    let px = -(b[1] - a[1]) / len, py = (b[0] - a[0]) / len;
+    const toMiddle = (cx - mx) * px + (cy - my) * py;
+    if (Math.abs(toMiddle) > 8 && (toMiddle > 0) === next) { px = -px; py = -py; }
+    const bow = next ? 40 : Math.min(70, len * 0.18);
+    const qx = mx + px * bow, qy = my + py * bow;
+    const [sx, sy] = edge(a[0], a[1], qx, qy, e.from), [tx, ty] = edge(b[0], b[1], qx, qy, e.to);
+    const d = `M ${sx} ${sy} Q ${qx} ${qy} ${tx} ${ty}`;
+    const line = g.querySelector(".m-line");
+    line.setAttribute("d", d);
+    if (!g.classList.contains("m-cur")) line.classList.remove("m-draw");  // a stale dash would cut the new line short
+    // the head points along the curve's last stretch, from its control point into the card
+    const ang = Math.atan2(ty - qy, tx - qx), c = Math.cos(ang), s = Math.sin(ang);
+    const pt = (u, v) => `${tx - c * u + s * v} ${ty - s * u - c * v}`;
+    g.querySelector(".m-tip").setAttribute("d", `M ${tx} ${ty} L ${pt(12, 6)} L ${pt(12, -6)} Z`);
+    g.classList.toggle("m-back", !next);
+    const label = g.querySelector(".m-elabel");
+    if (label) labels.push({ label, at: (t) => [(1 - t) ** 2 * sx + 2 * (1 - t) * t * qx + t ** 2 * tx, (1 - t) ** 2 * sy + 2 * (1 - t) * t * qy + t ** 2 * ty] });
+  });
+  // each label slides along its own curve to the first spot clear of the labels placed before it and of
+  // the cards, so it always sits on the arrow it names
+  const cards = [...xy.entries()].map(([id, [x, y]]) => { const [hw, hh] = half(id); return [x - hw + 4, y - hh + 4, x + hw - 4, y + hh - 4]; });
+  const placed = [];
+  const clear = (x, y, w) => ![...placed, ...cards].some(([l, t, r, b]) => x + w / 2 > l && x - w / 2 < r && y + 11 > t && y - 11 < b);
+  for (const L of labels) {
+    const t = L.label.querySelector("text");
+    L.w = (() => { t.setAttribute("x", 0); return (t.getComputedTextLength ? t.getComputedTextLength() : 60) + 18; })();
+    const spot = [0.5, 0.4, 0.6, 0.32, 0.68, 0.25, 0.75].map(L.at).find(([x, y]) => clear(x, y, L.w)) || L.at(0.5);
+    [L.x, L.y] = spot;
+    placed.push([L.x - L.w / 2 - 4, L.y - 13, L.x + L.w / 2 + 4, L.y + 13]);
+  }
+  for (const L of labels) {
+    const t = L.label.querySelector("text"), r = L.label.querySelector("rect");
+    t.setAttribute("x", L.x); t.setAttribute("y", L.y + 4);
+    r.setAttribute("x", L.x - L.w / 2); r.setAttribute("y", L.y - 11); r.setAttribute("width", L.w); r.setAttribute("height", 22);
+  }
 }
