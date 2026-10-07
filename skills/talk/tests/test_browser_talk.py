@@ -774,3 +774,22 @@ def test_typing_while_an_answer_plays_stops_it_and_the_reply_plays(tmp_path, pw)
             page.wait_for_function("current && current.n === 2 && !audio.paused", timeout=8000)
         finally:
             browser.close()
+
+
+def test_the_gears_stage_demo_opens_the_demo_in_a_new_tab(tmp_path, browser, monkeypatch):
+    monkeypatch.setattr(talk, "open_call", lambda args, topic, out, cwd, base=None: (talk.Call(args, topic, out), []))
+    monkeypatch.setattr(talk.speech, "ensure_running", lambda **kw: {})
+    with served(tmp_path) as (url, call, loop, fake):
+        ctx = browser.new_context()
+        page = ctx.new_page()
+        page.goto(url)
+        open_gear(page)
+        assert page.is_visible("#demo")
+        with ctx.expect_page() as opened:
+            page.click("#demo")
+        demo = opened.value  # opened blank at once (no pop-up block), then sent to the demo call
+        demo.wait_for_url("**/c/**", timeout=5000)
+        assert demo.url != url
+        demo.wait_for_function("CFG.demo === true && CFG.topic === 'Stage demo'", timeout=5000)
+        open_gear(demo)
+        assert demo.is_hidden("#demo")  # the demo needs no button to itself

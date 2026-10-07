@@ -69,6 +69,7 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"light"');
     <div><h4>Voice speed</h4><div class="segc" id="speeds" role="group" aria-label="Voice speed"></div></div>
     <button class="row" id="autoplay" type="button" aria-pressed="true">Play new answers by themselves<span class="sw" aria-hidden="true"></span></button>
     <button class="row" id="follow" type="button" aria-pressed="true">Stage follows the voice<span class="sw" aria-hidden="true"></span></button>
+    <button class="demobtn" id="demo" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M10 9l5 2.5-5 2.5z"/></svg><span><b>Stage demo</b><small>Every board, explained, in a new tab</small></span></button>
     <button class="endbtn" id="end" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.7 13.3a16 16 0 0 0 3.4 2.5l1.3-1.3a2 2 0 0 1 2.1-.4 12.8 12.8 0 0 0 2.8.7 2 2 0 0 1 1.7 2v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 3.2 4.2 2 2 0 0 1 5.2 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.9.7 2.8a2 2 0 0 1-.4 2.1L9.2 9.9"/><path d="M22 2L2 22"/></svg><span id="endlbl">End call</span></button>
   </div>
 

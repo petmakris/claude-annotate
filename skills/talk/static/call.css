@@ -186,6 +186,11 @@ svg{display:block;flex:none}
 /* Live: the mic button is the switch for listening; it breathes with the room while it listens */
 .ib.mic.live{background:var(--good);box-shadow:0 0 0 calc(3px + var(--lvl,0) * 9px) color-mix(in srgb,var(--good) 22%,transparent)}
 .ib.mic.live.muted{background:var(--faint);box-shadow:none}
+.demobtn{display:flex;gap:10px;align-items:center;padding:9px 12px;border-radius:11px;text-align:left;background:var(--acc-soft);color:var(--acc)}
+.demobtn span{display:flex;flex-direction:column}
+.demobtn b{font:600 13.5px var(--sans)}
+.demobtn small{font:400 12px var(--sans);color:var(--muted)}
+.demobtn:hover{background:color-mix(in srgb,var(--acc-soft) 70%,var(--acc-mid))}
 .endbtn{display:flex;gap:8px;align-items:center;justify-content:center;padding:9px;border-radius:11px;color:var(--bad);background:var(--bad-soft);font-weight:500}
 #calls{display:flex;flex-direction:column;gap:2px}
 .callrow{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:11px;color:inherit;text-decoration:none;min-width:0}

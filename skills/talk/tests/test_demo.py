@@ -1,6 +1,7 @@
 """The stage demo: `talk.py --demo` plays demo.md's answers in a real call, one per thing said, so every
 board can be seen moving with the voice without a Claude session."""
 import asyncio
+import re
 
 from helpers import AUTH, make_args, run, running_app, talk
 
@@ -55,3 +56,33 @@ def test_demo_moves_read_what_was_said():
     assert talk.demo_move("go back", 2, 9) == 1
     assert talk.demo_move("start over", 5, 9) == 0
     assert talk.demo_move("next", 8, 9) == 8  # the last one stays
+
+
+def test_the_gears_demo_opens_one_demo_call_and_keeps_it_ready(tmp_path, monkeypatch):
+    monkeypatch.setattr(talk, "open_call", lambda args, topic, out, cwd, base=None: (
+        talk.Call(args, topic, out), []))
+    monkeypatch.setattr(talk.speech, "ensure_running", lambda **kw: {})
+
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            first = await (await client.post("/api/demo", headers=AUTH)).json()
+            again = await (await client.post("/api/demo", headers=AUTH)).json()
+            return first, again
+
+    first, again = run(go())
+    assert first["path"].startswith("/c/") and again == first  # the open one is reused
+
+
+def test_the_demo_shows_every_board_kind_and_every_way_to_steer_one():
+    """What talk can draw and how a reply steers it, read from talk itself: a kind or a form added there and
+    missing from demo.md fails here, so the demo cannot fall behind. (The audit-demo skill checks the rest.)"""
+    text = talk.DEMO_FILE.read_text()
+    kinds = set(talk.BOARD_KINDS) - {"diagram"}  # a call draws no Mermaid: a diagram becomes a flowchart
+    shown = set(re.findall(r"\[\[show (\w+)", text))
+    assert kinds <= shown, f"no demo answer shows: {sorted(kinds - shown)}"
+    forms = {"lines": r"\[\[point[^\]]*: lines? \d", "row or cell": r"\[\[point[^\]]*: (?:row|cell) ",
+             "node": r"\[\[point[^\]]*: node ", "step": r"\[\[point[^\]]*: step "}
+    missing = [name for name, rx in forms.items() if not re.search(rx, text)]
+    assert not missing, f"no demo answer points at a {missing}"
+    for tag in ("[[next]]", "[[+ ", "[[key:", "\npage:"):
+        assert tag in text, f"the demo never uses {tag.strip()}"

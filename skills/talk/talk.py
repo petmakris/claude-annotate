@@ -2065,7 +2065,7 @@ def build_app(server: Server):
         call = by_link(request)
         if call is None:
             return await gone(request)
-        config = {"topic": call.topic, "token": call.token, "call": call.id, "stageUrl": call.stage_url,
+        config = {"topic": call.topic, "token": call.token, "call": call.id, "stageUrl": call.stage_url, "demo": call.demo is not None,
                   "language": call.args.language, "languages": list(speech.LANGUAGES),
                   "engine": speech.name(), "voice": call.voice}
         html = PAGE.replace("__PRECONNECT__", stage_preconnect(call.stage_url)).replace(
@@ -2155,6 +2155,24 @@ def build_app(server: Server):
                 call.live_hold(text, interrupted)
                 return web.json_response({"text": text, "held": True})
         return web.json_response({"text": text, "entry": call.offer(text, typed=False, interrupted=interrupted, live=live)})
+
+    async def demo(request):
+        """The gear's Stage demo: the demo call that is open, else a new one, for the page to open in a tab."""
+        call = call_of(request)
+        if call is None:
+            return refused(request)
+        ready = next((c for c in server.calls.values() if c.demo is not None and not c.ended), None)
+        if ready:
+            return web.json_response({"path": f"/c/{ready.id}", "call": ready.id})
+        base = urllib.parse.urlsplit(call.stage_url or "")
+        resp = await _register_call(server, {
+            "topic": "Stage demo", "demo": True, "code": str(SKILL_DIR.parents[1]),
+            "out": str(SESSIONS_DIR / f"{dt.datetime.now():%Y%m%d-%H%M%S}-stage-demo"), "voice": call.args.voice,
+            "language": call.args.language, "stage_base": f"{base.scheme}://{base.netloc}" if base.netloc else None})
+        body = json.loads(resp.text)
+        if resp.status != 200:
+            return web.json_response({"error": body.get("error", "the demo did not open")}, status=resp.status)
+        return web.json_response({"path": body["path"], "call": body["call"]})
 
     async def withdraw(request):
         """Undo: take back what was said, while Claude does not have it yet."""
@@ -2315,6 +2333,7 @@ def build_app(server: Server):
         web.post("/api/listen", listen),
         web.post("/api/say", typed),
         web.post("/api/withdraw", withdraw),
+        web.post("/api/demo", demo),
         web.post("/api/floor", floor),
         web.post("/api/stop", stop),
         web.post("/api/close", close),
@@ -2333,7 +2352,8 @@ async def watch(call: Call) -> None:
         if not call.ended:
             if not call.last_seen and now - call.started > OPEN_TIMEOUT_MIN * 60:
                 call.end(f"the page was not opened within {OPEN_TIMEOUT_MIN} minutes")
-            elif now - call.last_turn > call.args.idle_minutes * 60 and not call.busy(call.args.idle_minutes * 60):
+            elif (call.demo is None and now - call.last_turn > call.args.idle_minutes * 60
+                  and not call.busy(call.args.idle_minutes * 60)):  # a demo stays ready: it never goes idle
                 call.end(f"nothing was said for {call.args.idle_minutes} minutes")
         elif now - call.ended_at > LINGER_S or now - call.last_seen > PAGE_GONE_S:
             call.closed.set()

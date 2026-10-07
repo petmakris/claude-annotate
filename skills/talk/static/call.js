@@ -944,10 +944,12 @@ document.addEventListener("keydown", wakeLive, true);
 window.addEventListener("blur", wakeLive);
 // This page listens: other pages of this call stop (a TV and a laptop both open), and other calls yield
 // the floor (one voice is never sent to two calls).
+let claimedAt = 0;
 function claimLive() {
   if (!live) return;
   live.parked = null;
-  if (liveChannel) liveChannel.postMessage({call: CFG.call, page: PAGE_ID});
+  claimedAt = Date.now();
+  if (liveChannel) liveChannel.postMessage({call: CFG.call, page: PAGE_ID, at: claimedAt});
   if (view.floor_call && view.floor_call !== CFG.call) takeFloor(null);
   paintAll();
 }
@@ -959,7 +961,10 @@ function parkLive(why) {
 }
 if (liveChannel) liveChannel.onmessage = ev => {
   const m = ev.data || {};
-  if (m.call === CFG.call && m.page !== PAGE_ID && live && !live.parked) parkLive("screen");
+  // Only a newer claim parks this page, the page id breaking a tie: two pages claiming at once never
+  // both stand down.
+  const newer = m.at > claimedAt || (m.at === claimedAt && String(m.page) > PAGE_ID);
+  if (m.call === CFG.call && m.page !== PAGE_ID && live && !live.parked && newer) parkLive("screen");
 };
 // Coming back to this page (a tab, a window, the TV's input) is the user choosing to talk here.
 window.addEventListener("focus", () => { if (live && live.parked) claimLive(); });
@@ -1166,6 +1171,19 @@ $("send").onclick = sendRecording;
 $("cancel").onclick = () => { stopRecording(); setMode("idle"); };
 $("sendtext").onclick = sendText;
 $("text").addEventListener("keydown", ev => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); sendText(); } });
+// The stage demo, the call's tutorial: the tab opens at once (a tab opened after the server answers would
+// be blocked as a pop-up), then goes to the demo call the server keeps ready.
+$("demo").hidden = !!CFG.demo;  // the demo's own page needs no button to itself
+$("demo").onclick = async () => {
+  const tab = window.open("", "_blank");
+  try {
+    const r = await api("/api/demo", {method: "POST"});
+    const b = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(b.error || "HTTP " + r.status);
+    if (tab) tab.location = b.path; else location.assign(b.path);
+  } catch (err) { if (tab) tab.close(); showError("The stage demo did not open: " + err.message); }
+  showPop(null);
+};
 $("end").onclick = () => {
   if (!view.ended) { api("/api/stop", {method: "POST"}).then(() => { view.v = -1; if (wake) wake(); }); return; }
   api("/api/close", {method: "POST"}).finally(() => { closed = true; paintAll(); });

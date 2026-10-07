@@ -528,3 +528,29 @@ def test_s29_the_tv_screen_grows_the_subtitles_and_zooms_the_stage(tmp_path, pw)
             assert page.inner_text("#modechip") in ("Live · listening", "Live · off")
         finally:
             browser.close()
+
+
+# ---- scene 30: two pages of one call claim the microphone at the same moment ----------------------
+
+def test_s30_two_pages_claiming_at_once_leave_exactly_one_listening(tmp_path, pw):
+    with served(tmp_path) as (url, call, loop, fake):
+        browser = launch(pw, tmp_path, ("s", 60))
+        try:
+            ctx = browser.new_context()
+            p1, p2 = live_page(ctx, url), live_page(ctx, url)
+            for p in (p1, p2):
+                p.wait_for_function("!!live", timeout=5000)
+                # each page hears the other's claim 200 ms late, so both claims are made before either arrives
+                p.evaluate("{ const h = liveChannel.onmessage; liveChannel.onmessage = ev => setTimeout(() => h(ev), 200); }")
+            for _ in range(5):
+                # the same claim time on both: crossed claims, as when a TV and a laptop open together
+                p1.evaluate("Date.now = (n => () => n)(Date.now() + 5000)")
+                p2.evaluate("Date.now = (n => () => n)(Date.now() + 5000)")
+                p1.evaluate("claimLive()"); p2.evaluate("claimLive()")
+                p1.wait_for_timeout(300)
+                listening = [p.evaluate("!!live && !live.parked") for p in (p1, p2)]
+                assert listening.count(True) == 1, listening
+                for p in (p1, p2):
+                    p.evaluate("Date.now = performance.timeOrigin ? (() => performance.timeOrigin + performance.now()) : Date.now")
+        finally:
+            browser.close()
