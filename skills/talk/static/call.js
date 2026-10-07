@@ -81,12 +81,19 @@ window.addEventListener("message", ev => {
     resync();
   }
   else if (m.type === "stage:follow") { follow = !!m.on; paintSettings(); if (follow) resync(); }
-  else if (m.type === "stage:views") { stageViews = new Set((m.list || []).map(v => String(v.name))); paintMissing(); }
+  else if (m.type === "stage:views") {
+    stageViews = new Set((m.list || []).map(v => String(v.name)));
+    boardAnswer = new Map((m.list || []).map(v => [String(v.name), v.answer]));
+    paintMissing();
+  }
+  else if (m.type === "stage:shown") frontBoard = String(m.view || "");
   else if (m.type === "stage:missing") paintMissing(String(m.view));
   else if (m.type === "stage:key" && MEDIA_KEYS.has(m.key)) mediaKey(m.key);
 });
 
 let stageViews = null;
+let boardAnswer = new Map();   // board -> the number of the answer that showed it
+let frontBoard = "";           // the board in front of the stage
 const chipSeen = new Map();
 const MISSING_AFTER_MS = 8000;
 function paintMissing(gone) {
@@ -675,8 +682,30 @@ function stopHighlight() { if (raf) cancelAnimationFrame(raf); raf = 0; highligh
 audio.addEventListener("ended", () => { if (current) syncStage(view.entries.find(x => x.id === current.id) || current, Infinity); });
 audio.addEventListener("seeking", () => { cueSync = true; });
 function skip(by) { audio.currentTime = Math.min(Math.max(0, audio.currentTime + by), audio.duration || 0); paintPill(); }
+// Play plays the board in front. When the voice is not on it (it came from an earlier answer, or this
+// answer has moved past it), Play plays that board's explanation, from the sentence it came in with,
+// and the board unfolds again; otherwise Play pauses and resumes. A board no answer explains (a page,
+// the key points) leaves Play as it is.
+function boardStart() {
+  if (!frontBoard || (!audio.paused && !audio.ended)) return null;
+  const n = boardAnswer.get(frontBoard);
+  const e = n ? view.entries.find(x => x.who === "claude" && x.n === n) : null;
+  if (!e || e.speech !== "ready" || !e.words || !e.words.length) return null;
+  const cue = (e.cues || []).find(c => c.view === frontBoard);
+  if (!cue) return null;
+  const onIt = current && current.id === e.id && !audio.ended && stateAt(e, wordCharAt(e, audio.currentTime)).front === frontBoard;
+  if (onIt) return null;
+  const w = e.words.find(w => w[0] >= cue.at) || e.words[e.words.length - 1];
+  return {e, t: cue.at === 0 ? 0 : w[2]};
+}
+function wordCharAt(e, t) { const k = wordAt(e, t); return k < 0 ? -1 : e.words[k][0]; }
 function togglePlay() {
   release();
+  const b = boardStart();
+  if (b) {
+    if (!follow) { follow = true; toStage({type: "stage:follow", on: true}); paintSettings(); }
+    playFrom(b.e, b.t); return;
+  }
   if (!current) { const e = lastAnswer(); if (e) load(e, true); return; }
   if (audio.paused) audio.play().catch(() => {}); else audio.pause();
 }

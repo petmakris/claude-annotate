@@ -817,3 +817,32 @@ def test_an_answer_whose_voice_comes_after_you_moved_on_does_not_play(tmp_path, 
         finally:
             fake.hold = None
             browser.close()
+
+
+def test_play_plays_the_board_in_front_from_where_it_came_in(tmp_path, pw):
+    with served(tmp_path, stage_url=STAGE) as (url, call, loop, fake):
+        fake.seconds = 4.0
+        browser = pw.chromium.launch(args=FAKE_MIC)
+        try:
+            page = browser.new_page()
+            stage_page(page, STAGE_PROBE)
+            page.add_init_script("localStorage.setItem('talk.autoplay', 'false')")
+            page.goto(url)
+            table = "| a | b |\n|---|---|\n| 1 | 2 |"
+            on_loop(loop, call.answer(f"First words come first. [[show table | One]]{table}[[/show]] This explains one."))
+            on_loop(loop, call.answer(f"[[show table | Two]]{table}[[/show]] This explains two."))
+            page.wait_for_function("view.entries.filter(e => e.who === 'claude' && e.speech === 'ready').length === 2", timeout=10000)
+            stage = page.frame(url=STAGE)
+            stage.evaluate("parent.postMessage({type: 'stage:views', list: [{name: 'one', answer: 1}, {name: 'two', answer: 2}]}, '*')")
+            # the reader goes back to the first answer's board and presses Play
+            stage.evaluate("parent.postMessage({type: 'stage:shown', view: 'one'}, '*')")
+            page.click("#playpause")
+            page.wait_for_function("current && current.n === 1 && !audio.paused", timeout=5000)
+            started = page.evaluate("audio.currentTime")
+            first = page.evaluate("current.words[0][2]")
+            board_word = page.evaluate("current.words.find(w => w[0] >= current.cues.find(c => c.view === 'one').at)[2]")
+            assert board_word > first and started >= board_word - 0.05  # from where the board came in, not the start
+            page.click("#playpause")
+            assert page.evaluate("audio.paused")  # on the board being said, Play pauses as before
+        finally:
+            browser.close()

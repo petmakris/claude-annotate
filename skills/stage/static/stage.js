@@ -32,6 +32,7 @@
 //     {type:'stage:views', list:[{name, title, kind, answer}]}   after every change to the tabs
 //     {type:'stage:changed', name, title, isNew}                 a view was created or its source changed
 //     {type:'stage:follow', on}                                  following changed here (a tab tap, a new answer)
+//     {type:'stage:shown', view}                                 this board is in front now, by the voice or by hand
 //     {type:'stage:key', key}                                    Space, ArrowLeft or ArrowRight pressed here, on nothing
 //                                                                that takes keys: the call page pauses or moves the answer
 //     {type:'stage:missing', view}                               a chip asked for a view this stage does not hold
@@ -924,6 +925,7 @@ function select(name, arrive = false) {
       if (arrive && live && was !== n) { restart(v.pane, "arrive"); restart(v.tab, "flash"); }
     }
   }
+  if (was !== name) post({ type: "stage:shown", view: name });  // the call's Play plays the board in front
 }
 
 // A pinned view (Key points) leads the history, whatever the layout's order, so the list shows it last.
