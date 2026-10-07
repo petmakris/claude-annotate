@@ -494,7 +494,7 @@ def test_a_point_lights_up_lines_of_the_last_board_and_a_bad_point_is_reported(t
     _, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point Nope: row 1]] There.", code)
     assert problems == ['point not shown: no board titled "Nope" in this call']
     entry, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point: wibble]] There.", code)
-    assert problems == ['point not shown: expected line N, lines A-B, row N, row "text", node ID or step ID']
+    assert problems == ['point not shown: expected line N, lines A-B, row N, row "text", cell "row" / "column", node ID or step ID']
     assert [c["kind"] for c in entry["cues"]] == ["front"] and "wibble" not in entry["text"]
 
 
@@ -511,7 +511,7 @@ def test_points_name_rows_and_nodes_and_a_titled_board(tmp_path):
     _, problems = cues_of(tmp_path, "[[show table | T]]| a |\n|---|\n| 1 |[[/show]] One. [[point: row 4]] No.")
     assert problems == ['point not shown: "T" has 1 rows, not row 4']
     _, problems = cues_of(tmp_path, "[[show table | T]]| a |\n|---|\n| 1 |[[/show]] One. [[point: line 1]] No.")
-    assert problems == ['point not shown: "T" is a table; use row N or row "text"']
+    assert problems == ['point not shown: "T" is a table; use row N, row "text" or cell "row" / "column"']
 
 
 def test_boards_all_placed_at_the_end_are_reported(tmp_path):
@@ -1004,3 +1004,13 @@ def test_a_point_names_a_flowchart_node_whose_id_has_a_dot(tmp_path):
 
 def test_rows_are_the_first_tables_up_to_a_blank_line(tmp_path):
     assert talk.table_first_cells("| k |\n|---|\n| one |\n| two |\n\n| x |\n|---|\n| y |") == ["one", "two"]
+
+
+def test_a_point_at_one_cell_lights_that_cell(tmp_path):
+    from helpers import make_args
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    call.split_reply("[[show table | Engines]]\n| | Azure | VoiceStudio |\n|---|---|---|\n| Speed | fast | slow |\n[[/show]] "
+                     '[[point: cell "Speed" / "Azure"]] Azure is fast. [[point: cell 1 / 3]] VoiceStudio is not.')
+    frames = call.board.items[0]["scene"]["frames"]
+    lit = [f["focus"] for f in frames if f["focus"]]
+    assert call.board.problems == [] and lit[:2] == [["cell#1.2"], ["cell#1.3"]]

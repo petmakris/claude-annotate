@@ -402,14 +402,16 @@ def test_s19_two_live_calls_hearing_one_voice_keep_one_listening(tmp_path, pw):
 
 def test_s20_one_call_open_on_two_pages_sends_what_was_said_once(tmp_path, pw):
     with served(tmp_path) as (url, call, loop, fake):
-        browser = launch(pw, tmp_path, ("s", 3), ("v", 1), ("s", 60))
+        # Chrome's fake microphone replays its file from the start for each page's capture: the voice comes
+        # late enough that both pages listen before either timeline reaches it, as one real microphone would.
+        browser = launch(pw, tmp_path, ("s", 6), ("v", 1), ("s", 60))
         try:
             ctx = browser.new_context()
             p1, p2 = live_page(ctx, url), live_page(ctx, url)
             fake.heard = "what about the doorbell"
             for p in (p1, p2):
                 p.wait_for_function("!!live", timeout=5000)  # both opened the microphone; one of them listens
-            p1.wait_for_timeout(7000)
+            p1.wait_for_timeout(10000)
             said = drain(loop, call)
             assert [s["text"] for s in said] == ["what about the doorbell"], said
         finally:

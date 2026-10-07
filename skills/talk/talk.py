@@ -208,6 +208,28 @@ class SpeechLane(concurrent.futures.Executor):
 # ---------------------------------------------------------------------------
 
 
+DEMO_FILE = SKILL_DIR / "demo.md"
+
+
+def load_demo(path: Path = None) -> list[str]:
+    """The stage demo's answers: demo.md without its opening comment, split on lines holding only ---."""
+    text = (path or DEMO_FILE).read_text()
+    text = re.sub(r"\A\s*<!--.*?-->\s*", "", text, flags=re.DOTALL)
+    return [a.strip() for a in re.split(r"(?m)^---\s*$", text) if a.strip()]
+
+
+def demo_move(said: str, at: int, count: int) -> int:
+    """Which demo answer a turn asks for: again, back, start over, or else the next one."""
+    words = " ".join(spoken_words(said))
+    if re.search(r"\b(start over|from the start|restart|from the beginning)\b", words):
+        return 0
+    if re.search(r"\b(again|repeat|replay|once more)\b", words):
+        return max(at, 0)
+    if re.search(r"\b(back|previous|go back)\b", words):
+        return max(at - 1, 0)
+    return min(at + 1, count - 1)
+
+
 def slugify(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:48] or "session"
 
@@ -575,8 +597,9 @@ _POINT_HEAD = re.compile(r"point(?![a-z0-9])\s*(?P<rest>.*)\Z", re.IGNORECASE | 
 _POINT_TARGET = re.compile(
     r"(?:(?P<line>lines?)\s+(?P<a>\d+)(?:\s*[-–]\s*(?P<b>\d+))?"
     r"|rows?\s+(?:(?P<n>\d+)|\"(?P<text>[^\"]+)\"|“(?P<curly>[^”]+)”|'(?P<single>[^']+)')"
+    r"|cells?\s+(?P<cell>[^\[\]]+?/[^\[\]]+?)"
     r"|nodes?\s+(?P<node>[^\s:\[\]][^:\[\]]*?)|steps?\s+(?P<step>[^\s:\[\]][^:\[\]]*?))\s*\Z", re.IGNORECASE)
-POINT_FORMS = 'expected line N, lines A-B, row N, row "text", node ID or step ID'
+POINT_FORMS = 'expected line N, lines A-B, row N, row "text", cell "row" / "column", node ID or step ID'
 
 
 def parse_point(marker: str) -> tuple[str, str] | None:
@@ -933,7 +956,7 @@ class Board:
             self.problem(f"point not shown: {POINT_FORMS}")
             return
         row_text = m["text"] or m["curly"] or m["single"]
-        wanted = "code" if m["line"] else "table" if (m["n"] or row_text) else "diagram"
+        wanted = "code" if m["line"] else "table" if (m["n"] or row_text or m["cell"]) else "diagram"
         item = self.find(title, wanted)
         if item is None:
             self.problem(f'point not shown: no board titled "{title}" in this call' if title
@@ -944,7 +967,7 @@ class Board:
             self.point_visual(item, name, m)
             return
         use = {"code": "line N or lines A-B", "change": "line N or lines A-B (new line numbers)",
-               "table": 'row N or row "text"', "diagram": "node ID"}[kind]
+               "table": 'row N, row "text" or cell "row" / "column"', "diagram": "node ID"}[kind]
         if m["step"]:
             self.problem(f'point not shown: "{name}" is a {kind}; use {use}')
             return
@@ -973,6 +996,13 @@ class Board:
                 self.problem(f'point not shown: {said} outside lines {first}-{last} of "{name}"')
                 return
             target = {"type": "lines", "a": a, "b": b}
+        elif kind == "table" and m["cell"]:
+            # One cell, read as the scene reads it: its row by number or first cell, its column by number or header.
+            keys, _ = stage_scene.resolve(scene_model(item), "cell " + m["cell"], name)
+            if not keys:
+                self.problem(f'point not shown: no cell {m["cell"].strip()} in "{name}"')
+                return
+            target = {"type": "key", "key": keys[0]}
         elif kind == "table":
             cells = table_first_cells(item["body"])
             if m["n"]:
@@ -1172,6 +1202,9 @@ class Call:
         self.audio_dir = out_dir / "audio"
         self.audio_dir.mkdir(parents=True, exist_ok=True)
         self.live_held: dict | None = None   # a live thought left hanging, waiting for its end
+        self.demo: list[str] | None = None    # a demo call: these answers play instead of a Claude session's
+        self.demo_at = -1                     # the demo answer played last
+        self.demo_starting = False
         self.said_lines: dict[int, dict] = {}  # entry id -> its line in the turn queue, to take it back
         self.filler: str | None = None        # "audio/filler.<ext>": "One moment." in this call's voice
         self.filler_making = False
@@ -1230,7 +1263,8 @@ class Call:
                 "started": self.started, "last_seen": self.last_seen, "last_turn": self.last_turn,
                 "stage": {"cwd": self.stage_cwd, "slug": self.stage_slug, "sid": self.stage_sid, "url": self.stage_url},
                 "view_names": [[list(k) if isinstance(k, tuple) else k, v] for k, v in list(self.view_names.items())],
-                "keys": list(self.keys), "board": list(self.board.items), "heard_upto": self.heard_upto}
+                "keys": list(self.keys), "board": list(self.board.items), "heard_upto": self.heard_upto,
+                "demo": self.demo_at if self.demo is not None else None}
 
     @classmethod
     def restore(cls, state: dict) -> "Call":
@@ -1251,6 +1285,8 @@ class Call:
         call.owner_session = state.get("owner_session") or ""
         call.started = float(state.get("started") or call.started)
         call.last_seen = float(state.get("last_seen") or 0.0)
+        if state.get("demo") is not None:
+            call.demo, call.demo_at = load_demo(), int(state["demo"])
         call.last_turn = float(state.get("last_turn") or call.last_turn)
         stage = state.get("stage") or {}
         call.stage_cwd, call.stage_slug, call.stage_sid = stage.get("cwd"), stage.get("slug"), stage.get("sid")
@@ -1320,10 +1356,35 @@ class Call:
         if self.turns.working:  # said while Claude works on the last turn: an addition to it, not a new question
             said["while_working"] = True
         self.said_lines[entry["id"]] = said
+        if self.demo is not None:  # no Claude session: what is said picks the demo's next answer
+            asyncio.get_running_loop().create_task(self.demo_play(demo_move(text, self.demo_at, len(self.demo))))
+            return entry
         self.turns.offer(f"t{self.turn_count}", [said])
         if live:
             self.want_filler()
         return entry
+
+    async def demo_play(self, i: int) -> None:
+        """Play demo answer i, as a Claude session's reply would come: boards, voice and all. A first line
+        `page: <path> | <title>` puts that file behind the boards first, as a page opens in a call."""
+        self.demo_at = i
+        text = self.demo[i]
+        first, _, rest = text.partition("\n")
+        m = re.fullmatch(r"page:\s*(?P<path>[^|]+?)\s*(?:\|\s*(?P<title>.+))?", first.strip())
+        if m and self.stage_cwd:
+            path, title = m["path"], (m["title"] or m["path"]).strip()
+            cwd, slug, owner = self.stage_cwd, self.stage_sid or self.stage_slug, self.stage_owner()
+            code = Path(self.args.code or cwd)
+
+            def show_page():
+                source = stage_model.parse_source(path, code)
+                stage_mod.show(cwd, slugify(title) or "page", source, title=title, slug=slug, owner=owner, background=True)
+            try:
+                await asyncio.get_running_loop().run_in_executor(self.stage_pool, show_page)
+            except Exception as err:  # noqa: BLE001
+                self.board.problem(f"the demo page {path} was not shown: {err}")
+            text = rest
+        await self.answer(text)
 
     def withdraw(self, entry_id) -> bool:
         """Take back what the user said, while no doorbell has collected it."""
@@ -2026,6 +2087,10 @@ def build_app(server: Server):
         if call is None:
             return refused(request)
         call.last_seen = time.time()
+        if call.demo is not None and call.demo_at < 0 and not call.demo_starting:
+            # A demo starts once its page is open, so the first answer plays by itself.
+            call.demo_starting = True
+            asyncio.get_running_loop().create_task(call.demo_play(0))
         since = request.query.get("v")
         v, _ = server.stamp(call)
         if since is not None and since == v:
@@ -2349,6 +2414,8 @@ async def _register_call(server: Server, body: dict):
                                                  Path(body.get("cwd") or Path.cwd()), body.get("stage_base"))
     except CallError as err:
         return refuse(502, str(err))
+    if body.get("demo"):
+        call.demo = load_demo()
     server.add(call)
     path = f"/c/{call.id}"
     server.write_call_file(call)
@@ -2758,7 +2825,7 @@ def launch(args) -> int:
     out_dir = (args.out or SESSIONS_DIR / f"{dt.datetime.now():%Y%m%d-%H%M%S}-{slugify(args.topic)}").resolve()
     body = {"topic": args.topic, "code": str(args.code) if args.code else None, "out": str(out_dir),
             "voice": args.voice, "language": args.language, "idle_minutes": args.idle_minutes,
-            "stage_base": args.stage_base, "cwd": str(Path.cwd())}
+            "stage_base": args.stage_base, "cwd": str(Path.cwd()), "demo": bool(getattr(args, "demo", False))}
     try:
         got = server_request(info, "POST", "/api/calls", body, timeout=REGISTER_S)
     except urllib.error.HTTPError as err:
@@ -2868,6 +2935,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-open", action="store_true", help="don't open the page in the default browser")
     parser.add_argument("--idle-minutes", type=int, default=60, help="end the call after this long with no turn")
     parser.add_argument("--doctor", action="store_true", help="check the speech engine with a round trip, and the stage")
+    parser.add_argument("--demo", action="store_true",
+                        help="open a call that shows every board of the stage, played from demo.md, with no Claude session")
     parser.add_argument("--restart", action="store_true",
                         help="replace the running server with one on this code, keeping its open calls")
     parser.add_argument("--serve", action="store_true",
@@ -2896,6 +2965,9 @@ def main() -> int:
             parser.error(f"--code: not a folder: {args.code}")
     if args.doctor:
         return doctor(args)
+    if args.demo:
+        args.topic = args.topic or "Stage demo"
+        args.code = args.code or SKILL_DIR.parents[1]  # the demo's boards show this repository
     if not args.topic:
         parser.error("--topic is required")
     return launch(args)

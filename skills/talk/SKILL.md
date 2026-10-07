@@ -70,6 +70,8 @@ For every turn:
 
 ### Teaching with the board
 
+To see every board move with the voice without a session answering, `uv run --script "$SKILL_DIR/talk.py" --demo` opens a call that plays `demo.md`: one answer per thing the user says or types (next, again, back, start over), written exactly as you write yours, so it is also a working example of every tag below.
+
 Board tags are taken out of the speech and drawn on the stage beside the conversation, one board per title, with the latest in front and the rest one click back. Paths are relative to `--code`.
 
 | Board | Use it for | Tag |
