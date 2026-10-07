@@ -71,3 +71,27 @@ def browser(browser_session):
         for ctx in browser_session.contexts:
             if ctx not in before:
                 ctx.close()
+
+
+LIVE_QUEUES = 2  # the live-microphone tests run in this many queues, each one test at a time
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(config, items):
+    """Spread the "live-mic" group over LIVE_QUEUES groups, in turn, so the longest serial chain of the
+    suite is split. One live microphone per queue: more side by side starve a busy machine."""
+    n = 0
+    drives = {}
+    for item in items:
+        path = str(item.fspath)
+        if path not in drives:
+            try:
+                drives[path] = "playwright" in open(path, encoding="utf-8").read()
+            except OSError:
+                drives[path] = False
+        if drives[path] or {"pw", "browser", "browser_session", "wc_daemon"} & set(getattr(item, "fixturenames", ())):
+            item.add_marker(pytest.mark.browser)  # `-m "not browser"`: the fast loop, seconds instead of minutes
+        mark = item.get_closest_marker("xdist_group")
+        if mark and (mark.args[:1] or [mark.kwargs.get("name")])[0] == "live-mic":
+            item.add_marker(pytest.mark.xdist_group(f"live-mic-{n % LIVE_QUEUES}"), append=False)
+            n += 1
