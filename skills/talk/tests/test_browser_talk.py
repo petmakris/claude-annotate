@@ -793,3 +793,27 @@ def test_the_gears_stage_demo_opens_the_demo_in_a_new_tab(tmp_path, browser, mon
         demo.wait_for_function("CFG.demo === true && CFG.topic === 'Stage demo'", timeout=5000)
         open_gear(demo)
         assert demo.is_hidden("#demo")  # the demo needs no button to itself
+
+
+def test_an_answer_whose_voice_comes_after_you_moved_on_does_not_play(tmp_path, pw):
+    import threading
+    with served(tmp_path) as (url, call, loop, fake):
+        browser = pw.chromium.launch(args=FAKE_MIC)
+        try:
+            page = browser.new_page()
+            page.goto(url)
+            fake.hold = threading.Semaphore(0)  # the first answer's voice is still being made
+            on_loop(loop, call.answer("The old board."))
+            page.wait_for_function("view.entries.some(e => e.who === 'claude')", timeout=5000)
+            page.fill("#text", "next"); page.press("#text", "Enter")  # you move on before it is ready
+            page.wait_for_function("view.entries.some(e => e.who === 'you')", timeout=5000)
+            fake.hold.release()  # now its voice is ready
+            page.wait_for_function("view.entries.find(e => e.who === 'claude').speech === 'ready'", timeout=5000)
+            page.wait_for_timeout(800)
+            assert page.evaluate("current === null || audio.paused")  # it does not start on its own
+            fake.hold.release()
+            on_loop(loop, call.answer("The new board."))
+            page.wait_for_function("current && current.text === 'The new board.' && !audio.paused", timeout=8000)
+        finally:
+            fake.hold = None
+            browser.close()

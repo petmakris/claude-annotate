@@ -572,6 +572,10 @@ function maybeAutoplay() {
   if (!fresh.length) return;
   for (const e of fresh) seen.add(e.id);
   const last = fresh[fresh.length - 1];
+  // An answer the user has already spoken or typed past (its voice was still being made) never starts by
+  // itself: it would play the old board after they moved on, and hold the player from the newer answer.
+  const at = view.entries.findIndex(e => e.id === last.id);
+  if (view.entries.slice(at + 1).some(e => e.who === "you" && !e.withdrawn)) return;
   // Only the call the user is talking in reads new answers aloud; another call's wait, marked new.
   const mine = !view.floor_call || view.floor_call === CFG.call;
   if (userBusy()) { if (mine && autoplay) deferred = last; return; }  // played once they are done (settle)
