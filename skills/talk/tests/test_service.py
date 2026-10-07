@@ -98,3 +98,41 @@ def test_a_doorbell_reviving_a_lost_server_asks_launchd_when_the_service_is_inst
     monkeypatch.setattr(talk_client.subprocess, "Popen", lambda *a, **k: pytest.fail("the doorbell started a server itself"))
     talk_client.spawn_server(8766)
     assert kicks == [False]
+
+
+def test_install_returns_the_spec_it_wrote(tmp_path, monkeypatch):
+    monkeypatch.setattr(talk_service, "supported", lambda: True)
+    monkeypatch.setattr(talk_service.shutil, "which", lambda name: "/bin/uv")
+    monkeypatch.setattr(talk_service, "launchctl", lambda *a: subprocess.CompletedProcess(a, 0, "", ""))
+    spec = talk_service.install(Path("/p/talk.py"), 8766, tmp_path / "server.log", env=KEYED)
+    assert spec == plistlib.loads(talk_service.plist_path().read_bytes())
+
+
+def test_install_service_says_it_installed_and_exits_0_or_2_when_it_could_not(monkeypatch, capsys):
+    monkeypatch.setattr(talk, "running_server", lambda port: None)
+    monkeypatch.setattr(talk, "port_held", lambda port: False)
+    monkeypatch.setattr(talk, "service_up", lambda port: {"port": port, "token": "t"})
+    monkeypatch.setattr(talk, "server_health", lambda info: {"engine": "azure", "pid": 7})
+    monkeypatch.setattr(talk_service, "install", lambda *a, **k: {"EnvironmentVariables": KEYED})
+    assert talk.install_service(8766) == 0
+    assert "installed" in capsys.readouterr().out + capsys.readouterr().err
+
+    def refuse(*a, **k):
+        raise talk_service.ServiceError("launchctl refused")
+    monkeypatch.setattr(talk_service, "install", refuse)
+    assert talk.install_service(8766) == 2
+
+
+def test_serve_runs_the_server_and_a_plain_launch_does_not(monkeypatch):
+    served = []
+
+    async def run_server(port, stay=False):
+        served.append((port, stay))
+        return 0
+    monkeypatch.setattr(talk, "run_server", run_server)
+    monkeypatch.setattr(talk.sys, "argv", ["talk.py", "--serve", "--stay", "--port", "9"])
+    assert talk.main() == 0 and served == [(9, True)]
+    monkeypatch.setattr(talk.sys, "argv", ["talk.py", "--restart", "--port", "9"])
+    monkeypatch.setattr(talk, "restart_server", lambda port: 0)
+    talk.main()
+    assert served == [(9, True)]  # --restart is not --serve

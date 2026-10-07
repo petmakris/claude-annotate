@@ -105,3 +105,41 @@ def test_stalled_only_when_nobody_collects_and_nothing_runs():
     assert q.stalled
     q.note_activity()
     assert not q.stalled
+
+
+def test_a_doorbell_that_returned_empty_still_lets_a_turn_count_as_stalled():
+    async def go():
+        clock = Clock()
+        q = TurnQueue(clock=clock)
+        assert await q.next(timeout=0.01) is None  # a doorbell rang and went away
+        q.offer("t1", [{"who": "you", "text": "hi"}])
+        clock.now += STALLED_AFTER + 1
+        return q.waiters, q.stalled
+
+    assert run(go()) == (0, True)
+
+
+def test_a_stall_needs_both_the_offer_and_the_last_tool_call_to_be_old():
+    clock = Clock()
+    q = TurnQueue(clock=clock)
+    q.offer("t1", [{"who": "you", "text": "hi"}])
+    q.note_activity()
+    clock.now += 19.5
+    assert not q.stalled  # a tool call in the last 20 s: alive, just busy
+    clock.now += 1.0
+    assert q.stalled
+
+
+def test_a_turn_put_back_while_a_newer_one_waits_absorbs_it():
+    async def go():
+        q = TurnQueue()
+        q.offer("t1", [{"who": "you", "text": "first"}])
+        turn = await q.next(timeout=0.1)
+        q.offer("t2", [{"who": "you", "text": "second"}])
+        q.put_back(turn)  # the doorbell that took t1 went away before printing it
+        return q, await q.next(timeout=0.1)
+
+    q, again = run(go())
+    assert again["id"] == "t1" and [x["text"] for x in again["said"]] == ["first", "second"]
+    assert q.accept_reply("t2") == "unknown"  # t2 was merged into t1
+    assert q.accept_reply("t1") == "ok"

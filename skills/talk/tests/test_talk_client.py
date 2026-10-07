@@ -386,3 +386,15 @@ def test_a_call_id_never_starts_with_an_option_character(monkeypatch):
     parser = argparse.ArgumentParser()
     parser.add_argument("--call")
     assert parser.parse_args(["--call=-AbCd"]).call == "-AbCd"
+
+
+def test_a_reply_to_a_call_that_closed_mid_reply_exits_2(monkeypatch, capsys):
+    import talk_client
+    monkeypatch.setattr(talk_client, "call_id_or_only", lambda c: c)
+    monkeypatch.setattr(talk_client, "load_state", lambda c: {"port": 1, "token": "t", "call": c})
+
+    def gone(call_id, body):
+        raise LookupError("the call's state file is gone")
+    monkeypatch.setattr(talk_client, "send_reply", gone)
+    assert talk_client.reply("c", "t1", "working on it", False) == 2
+    assert "not reachable" in capsys.readouterr().err
