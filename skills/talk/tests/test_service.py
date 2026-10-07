@@ -125,11 +125,8 @@ def test_install_service_says_it_installed_and_exits_0_or_2_when_it_could_not(mo
 
 def test_serve_runs_the_server_and_a_plain_launch_does_not(monkeypatch):
     served = []
-
-    async def run_server(port, stay=False):
-        served.append((port, stay))
-        return 0
-    monkeypatch.setattr(talk, "run_server", run_server)
+    monkeypatch.setattr(talk, "run_server", lambda port, stay=False: served.append((port, stay)) or "serving")
+    monkeypatch.setattr(talk.asyncio, "run", lambda job: 0 if job == "serving" else job)
     monkeypatch.setattr(talk.sys, "argv", ["talk.py", "--serve", "--stay", "--port", "9"])
     assert talk.main() == 0 and served == [(9, True)]
     monkeypatch.setattr(talk.sys, "argv", ["talk.py", "--restart", "--port", "9"])
