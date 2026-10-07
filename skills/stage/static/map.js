@@ -43,18 +43,35 @@ export function renderMap(box, spec, embedded) {
   }
 }
 
-// Columns by depth: a part sits one column right of the deepest part that leads to it. In a column,
-// parts are ordered by where the parts feeding them sit, so arrows cross as little as they can.
+// Columns by depth: a part sits one column right of the deepest part that leads to it. A loop (a state
+// machine going back to listening) is cut at the arrow that goes back, found walking forward from where
+// the flow starts; that arrow is drawn as a curve under the others. In a column, parts are ordered by
+// where the parts feeding them sit, so arrows cross as little as they can.
 function layers(spec) {
   const nodes = spec.nodes || [], edges = spec.edges || [];
+  const ids = new Set(nodes.map((n) => n.id));
+  const out = new Map(nodes.map((n) => [n.id, []]));
+  edges.forEach((e, i) => { if (ids.has(e.from) && ids.has(e.to)) out.get(e.from).push(i); });
+  const back = new Set(), state = new Map();  // 1: on the walk, 2: done
+  const walk = (id) => {
+    state.set(id, 1);
+    for (const i of out.get(id)) {
+      const to = edges[i].to;
+      if (state.get(to) === 1 || to === id) back.add(i);
+      else if (!state.has(to)) walk(to);
+    }
+    state.set(id, 2);
+  };
+  const hasIn = new Set(edges.map((e) => e.to));
+  const starts = [...nodes.filter((n) => n.role === "entry"), ...nodes.filter((n) => !hasIn.has(n.id)), ...nodes];
+  for (const n of starts) if (!state.has(n.id)) walk(n.id);
   const ins = new Map(nodes.map((n) => [n.id, []]));
-  for (const e of edges) if (ins.has(e.to) && ins.has(e.from)) ins.get(e.to).push(e.from);
+  edges.forEach((e, i) => { if (!back.has(i) && ids.has(e.from) && ids.has(e.to)) ins.get(e.to).push(e.from); });
   const depth = new Map();
-  const deep = (id, trail = new Set()) => {
+  const deep = (id) => {
     if (depth.has(id)) return depth.get(id);
-    if (trail.has(id)) return 0;  // the spec is checked for loops; this only keeps a bad one from hanging
-    trail.add(id);
-    const d = Math.max(0, ...ins.get(id).map((p) => deep(p, trail) + 1));
+    depth.set(id, 0);
+    const d = Math.max(0, ...ins.get(id).map((p) => deep(p) + 1));
     depth.set(id, d);
     return d;
   };
@@ -70,21 +87,26 @@ function layers(spec) {
       c.forEach((id, i) => pos.set(id, i));
     }
   }
-  return cols;
+  return { cols: cols.filter(Boolean), back };
 }
 
 function place(box) {
   const st = box._map;
   if (!st) return;
-  const cols = layers(st.spec);
+  const { cols, back } = layers(st.spec);
   const width = box.clientWidth || 900;
   const scroller = box.closest(".pbody");
   const height = Math.max(320, (scroller ? scroller.clientHeight - 32 : 480) - (+box.dataset.room || 16));
-  // Left to right while the columns fit; top to bottom when there are too many for the width.
-  const across = cols.length * W + (cols.length - 1) * GAP_X <= width - 40;
+  // Left to right while the columns fit, narrowing the parts a little first; top to bottom when there are
+  // still too many for the width.
+  const fits = ([w, gap]) => cols.length * w + (cols.length - 1) * gap <= width - 40;
+  const size = [[W, GAP_X], [150, 40], [130, 28]].find(fits);
+  const across = !!size;
+  const [w, gapX] = size || [W, GAP_X];
+  box.style.setProperty("--mw", w + "px");
   const xy = new Map();
   if (across) {
-    const step = cols.length > 1 ? Math.min(W + GAP_X * 2.2, (width - 40 - W) / (cols.length - 1)) : 0;
+    const step = cols.length > 1 ? Math.min(w + gapX * 2.2, (width - 40 - w) / (cols.length - 1)) : 0;
     const left = (width - (step * (cols.length - 1))) / 2;
     cols.forEach((c, i) => {
       const gap = Math.min(H + GAP_Y * 2, (height - 40) / Math.max(c.length, 1));
@@ -100,7 +122,8 @@ function place(box) {
     });
   }
   st.xy = xy; st.across = across;
-  const tall = Math.max(height, ...[...xy.values()].map(([, y]) => y + H));
+  const lowest = Math.max(...[...xy.values()].map(([, y]) => y + H));
+  const tall = Math.max(height, lowest + (back.size ? 40 + 26 * back.size : 0));
   box.style.height = tall + "px";
   for (const el of box.querySelectorAll(".m-node")) {
     const [x, y] = xy.get(el.dataset.node);
@@ -113,8 +136,23 @@ function place(box) {
     const g = svg.querySelector(`[data-key="${st.ekeys[i]}"]`), a = xy.get(e.from), b = xy.get(e.to);
     if (!g || !a || !b) return;
     let d, mx, my;
-    if (across) {
-      const x1 = a[0] + W / 2, x2 = b[0] - W / 2 - 4, c = (x2 - x1) / 2;
+    const k = [...back].indexOf(i);
+    if (k >= 0) {
+      // an arrow back: out of the bottom of one part, under the map, into the bottom of the other
+      const below = lowest + 22 + 26 * k;
+      if (across) {
+        // arrows back into the same part land side by side, not on one point
+        const o = (k - (back.size - 1) / 2) * 18, ax = a[0] + o, bx = b[0] + o;
+        const y1 = a[1] + H / 2, y2 = b[1] + H / 2 + 4;
+        d = `M ${ax} ${y1} C ${ax} ${below}, ${bx} ${below}, ${bx} ${y2}`;
+        mx = (ax + bx) / 2; my = below - 6;
+      } else {
+        const x1 = a[0] + W / 2, x2 = b[0] + W / 2 + 4, side = Math.max(a[0], b[0]) + W / 2 + 40 + 26 * k;
+        d = `M ${x1} ${a[1]} C ${side} ${a[1]}, ${side} ${b[1]}, ${x2} ${b[1]}`;
+        mx = side - 10; my = (a[1] + b[1]) / 2;
+      }
+    } else if (across) {
+      const x1 = a[0] + w / 2, x2 = b[0] - w / 2 - 4, c = (x2 - x1) / 2;
       d = `M ${x1} ${a[1]} C ${x1 + c} ${a[1]}, ${x2 - c} ${b[1]}, ${x2} ${b[1]}`;
       mx = (x1 + x2) / 2; my = (a[1] + b[1]) / 2;
     } else {
@@ -124,14 +162,26 @@ function place(box) {
     }
     g.querySelector(".m-line").setAttribute("d", d);
     // the head: a small triangle at the receiving end, in the arrow's own colour
-    const [hx, hy] = across ? [b[0] - W / 2 - 2, b[1]] : [b[0], b[1] - H / 2 - 2];
-    g.querySelector(".m-tip").setAttribute("d", across ? `M ${hx} ${hy} l -11 -6 l 0 12 z` : `M ${hx} ${hy} l -6 -11 l 12 0 z`);
+    const tip = g.querySelector(".m-tip");
+    if (k >= 0 && across) {                                                                                // up into its bottom
+      const bx = b[0] + (k - (back.size - 1) / 2) * 18;
+      tip.setAttribute("d", `M ${bx} ${b[1] + H / 2 + 2} l -6 11 l 12 0 z`);
+    }
+    else if (k >= 0) tip.setAttribute("d", `M ${b[0] + W / 2 + 2} ${b[1]} l 11 -6 l 0 12 z`);            // left into its side
+    else if (across) tip.setAttribute("d", `M ${b[0] - w / 2 - 2} ${b[1]} l -11 -6 l 0 12 z`);
+    else tip.setAttribute("d", `M ${b[0]} ${b[1] - H / 2 - 2} l -6 -11 l 12 0 z`);
+    g.classList.toggle("m-back", k >= 0);
     const label = g.querySelector(".m-elabel");
     if (label) {
       const t = label.querySelector("text"), r = label.querySelector("rect");
       t.setAttribute("x", mx); t.setAttribute("y", my + 4);
-      const w = (t.getComputedTextLength ? t.getComputedTextLength() : 60) + 14;
-      r.setAttribute("x", mx - w / 2); r.setAttribute("y", my - 10); r.setAttribute("width", w); r.setAttribute("height", 20);
+      const lw = (t.getComputedTextLength ? t.getComputedTextLength() : 60) + 14;
+      // a label wider than the gap it names sits above that arrow, clear of the parts on either side
+      if (k < 0 && across && Math.abs(b[0] - a[0]) - w < lw + 8 && Math.abs(b[1] - a[1]) < 4) {
+        my = a[1] - H / 2 - 16;
+        t.setAttribute("y", my + 4);
+      }
+      r.setAttribute("x", mx - lw / 2); r.setAttribute("y", my - 10); r.setAttribute("width", lw); r.setAttribute("height", 20);
     }
   });
 }

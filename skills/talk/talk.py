@@ -1094,6 +1094,14 @@ class Board:
             if tool:
                 self.problem(f'"{title}" is a {tool} spec, so it was drawn as one; write [[show {tool} | ...]]')
                 item["kind"] = kind = tool
+        if kind == "diagram":
+            # A call draws no Mermaid: a graph or a state diagram becomes a map, anything else is not shown.
+            spec = stage_scene.mermaid_spec(item["body"])
+            if spec is None:
+                self.problem(f'"{title}" not shown: a call draws no Mermaid; use a sequence, a flowchart or a table')
+                return rest
+            kind = item["kind"] = "flowchart"
+            item["body"] = json.dumps(spec)
         if kind in VISUAL_KINDS:
             try:
                 item["visual"] = stage_model.visual_source(kind, item["body"])

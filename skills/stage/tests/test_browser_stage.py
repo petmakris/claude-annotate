@@ -1197,3 +1197,26 @@ def test_a_table_board_grows_the_row_being_said_and_spots_a_cell(tmp_path, wc_co
         assert wrap["width"] > board["width"] - 60  # the grid spans the stage
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+LOOP_SPEC = {"nodes": [{"id": "l", "role": "entry", "label": "Listening"}, {"id": "h", "label": "Hearing"},
+                       {"id": "s", "label": "Sending"}, {"id": "k", "role": "success", "label": "Speaking"}],
+             "edges": [{"from": "l", "to": "h"}, {"from": "h", "to": "s"}, {"from": "s", "to": "k"},
+                       {"from": "s", "to": "l", "label": "nothing said"}, {"from": "k", "to": "h", "label": "you cut in"}]}
+
+
+def test_a_map_with_loops_draws_the_arrows_back_underneath(tmp_path, wc_config, browser):
+    res = stage.show(str(tmp_path), "loop", _visual("flowchart", LOOP_SPEC), title="States")
+    try:
+        page = _page(browser, res["url"], 1300, 800)
+        pane = page.locator('section.pane[data-view="loop"]')
+        pane.locator(".m-node").first.wait_for(timeout=5000)
+        assert pane.locator(".m-edge.m-back").count() == 2
+        boxes = pane.locator(".m-node").evaluate_all("els => els.map(e => e.getBoundingClientRect().toJSON())")
+        xs = sorted(b["x"] for b in boxes)
+        assert all(b - a > 100 for a, b in zip(xs, xs[1:]))  # one column each: the loop was cut, not stacked
+        lowest = max(b["y"] + b["height"] for b in boxes)
+        under = pane.locator(".m-edge.m-back .m-line").evaluate_all("els => els.map(e => e.getBoundingClientRect().bottom)")
+        assert all(u > lowest for u in under)  # the arrows back run under the map
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])

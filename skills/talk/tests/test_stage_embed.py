@@ -317,7 +317,7 @@ def test_the_worked_example_steps_with_the_voice_and_lands_right_after_every_jum
             page.wait_for_selector("#veil", state="hidden", timeout=10000)
             stage = page.frame_locator("#stage")
             asyncio.run_coroutine_threadsafe(call.answer(WORKED), loop).result(10)
-            card = stage.locator(f'section.pane[data-view="{view}"] .diagram .k-card')
+            card = stage.locator(f'section.pane[data-view="{view}"] .map .k-card')  # a Mermaid graph is drawn as a map
             card.wait_for(timeout=20000)
             assert card.inner_text() == "advisory drops :workflows"
             inner = _stage_frame(page)
@@ -334,14 +334,14 @@ def test_the_worked_example_steps_with_the_voice_and_lands_right_after_every_jum
             for n, said in cues.items():
                 assert said - 0.25 <= seen[n] <= said + 0.4, (n, said, seen[n])
             assert _applied(inner, view) == 6
-            assert stage.locator(f'section.pane[data-view="{view}"] svg g.node.k-focus').count() == 1
+            assert stage.locator(f'section.pane[data-view="{view}"] .m-node.k-focus').count() == 1
             page.evaluate(f"audio.currentTime = {cues[3] + 0.05}")
             inner.wait_for_function(f"window.__stageTest.frames()[{view!r}] === 3", timeout=5000)
             page.click("#gear")
             page.click("#theme button[data-choice='dark']")
             stage.locator("html[data-theme='dark']").wait_for(state="attached", timeout=3000)
             page.wait_for_timeout(500)
-            stage.locator(f'section.pane[data-view="{view}"] .diagram > svg').wait_for(timeout=10000)
+            stage.locator(f'section.pane[data-view="{view}"] .map .m-node').first.wait_for(timeout=10000)
             assert _applied(inner, view) == 3
             page.click("#gear")
             page.click("#back")

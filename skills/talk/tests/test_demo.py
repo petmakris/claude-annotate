@@ -17,7 +17,7 @@ def test_every_demo_answer_goes_through_the_reply_parser_without_a_board_problem
         assert call.board.problems == [], (body[:60], call.board.problems)
     # every kind of board the stage draws comes past
     kinds = {item["kind"] for item in call.board.items}
-    assert {"code", "change", "sequence", "flowchart", "table", "diagram"} <= kinds, kinds
+    assert {"code", "change", "sequence", "flowchart", "table"} <= kinds, kinds  # a call draws no Mermaid
     assert any(a.startswith("page:") for a in answers)
 
 

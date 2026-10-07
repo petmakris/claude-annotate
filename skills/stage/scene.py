@@ -175,6 +175,88 @@ def _subgraph(rest: str) -> tuple[str, str]:
     return title, title
 
 
+_STATE_HEAD = re.compile(r"\A\s*stateDiagram(?:-v2)?\b", re.IGNORECASE)
+_STATE_EDGE = re.compile(r"(?P<a>\[\*\]|[\w.-]+)\s*-->\s*(?P<b>\[\*\]|[\w.-]+)\s*(?::\s*(?P<label>.+))?\Z")
+_STATE_AS = re.compile(r'state\s+"(?P<label>[^"]+)"\s+as\s+(?P<id>[\w.-]+)\Z', re.IGNORECASE)
+_STATE_DESC = re.compile(r"(?P<id>[\w.-]+)\s*:\s*(?P<label>.+)\Z")
+
+
+def mermaid_spec(body: str) -> dict | None:
+    """A Mermaid graph, flowchart or state diagram as a flowchart spec, for the stage to draw as its map;
+    None for any other kind of Mermaid. Subgraphs are flattened; `{...}` shapes are decisions; in a state
+    diagram `[*] --> X` makes X where it starts and `X --> [*]` makes X an end."""
+    text = "\n".join(ln for ln in body.splitlines() if not ln.strip().startswith("%%")).strip()
+    nodes: dict[str, dict] = {}
+    edges: list[dict] = []
+
+    def node(ident: str, label: str = "") -> dict:
+        n = nodes.setdefault(ident, {"id": ident, "role": "code", "label": ident})
+        if label:
+            n["label"] = label
+        return n
+
+    if _STATE_HEAD.match(text):
+        starts, ends = set(), set()
+        for raw in text.splitlines()[1:]:
+            st = raw.strip()
+            if not st or _SKIP.match(st) or st in ("{", "}") or st.lower().startswith(("note", "end note")):
+                continue
+            if m := _STATE_AS.match(st):
+                node(m["id"], m["label"].strip())
+            elif m := _STATE_EDGE.match(st):
+                a, b = m["a"], m["b"]
+                if a == "[*]" and b != "[*]":
+                    starts.add(b); node(b)
+                elif b == "[*]" and a != "[*]":
+                    ends.add(a); node(a)
+                elif a != "[*]":
+                    node(a); node(b)
+                    edges.append({"from": a, "to": b, **({"label": m["label"].strip()} if m["label"] else {})})
+            elif m := _STATE_DESC.match(st):
+                node(m["id"])["sub"] = m["label"].strip()
+        for ident in starts:
+            nodes[ident]["role"] = "entry"
+        for ident in ends - starts:
+            nodes[ident]["role"] = "success"
+    else:
+        statements = _statements(body)
+        if statements is None:
+            return None
+        decisions = set()
+        for st in statements:
+            low = st.lower()
+            if low == "end" or low.startswith("subgraph") or _SKIP.match(st):
+                continue
+            decisions |= {d[1] for d in re.finditer(r"([\w][\w.-]*)\s*\{(?!\{)", st)}
+            chain, labels, i = [], [], 0
+            while True:
+                found, i = _node_group(st, i)
+                if not found:
+                    break
+                chain.append(found)
+                for ident, label in found:
+                    n = node(ident, label)
+                link = _LINK.match(st, i)
+                if not link or link.end() == i:
+                    break
+                labels.append((link["text"] or link["label"] or "").strip().strip('"'))
+                i = link.end()
+            for (left, right), label in zip(zip(chain, chain[1:]), labels):
+                for a, _ in left:
+                    for b, _ in right:
+                        edges.append({"from": a, "to": b, **({"label": label} if label else {})})
+        for ident in decisions & set(nodes):
+            nodes[ident]["role"] = "decision"
+        has_in = {e["to"] for e in edges}
+        sources = [i for i in nodes if i not in has_in]
+        for ident in sources or list(nodes)[:1]:
+            if nodes[ident]["role"] == "code":
+                nodes[ident]["role"] = "entry"
+    if not nodes:
+        return None
+    return {"nodes": list(nodes.values()), "edges": edges}
+
+
 def flowchart_model(body: str) -> SceneModel | None:
     statements = _statements(body)
     if statements is None:

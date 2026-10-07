@@ -217,6 +217,22 @@ def _plain(tool: str, spec: dict) -> dict:
     return out
 
 
+def check_flowchart(spec: dict) -> None:
+    """A flowchart the map can draw: nodes with unique ids, edges between them. Loops are fine."""
+    nodes = spec.get("nodes")
+    if not isinstance(nodes, list) or not nodes:
+        raise flowchart.ValidationError("a flowchart needs a non-empty nodes list")
+    ids = [n.get("id") for n in nodes if isinstance(n, dict)]
+    if len(ids) != len(nodes) or not all(isinstance(i, str) and i for i in ids):
+        raise flowchart.ValidationError("every node needs an id")
+    dup = next((i for i in ids if ids.count(i) > 1), None)
+    if dup:
+        raise flowchart.ValidationError(f"node id {dup!r} is used twice")
+    for e in spec.get("edges") or []:
+        if not isinstance(e, dict) or e.get("from") not in ids or e.get("to") not in ids:
+            raise flowchart.ValidationError(f"edge {e!r} names a node the spec does not have")
+
+
 def visual_source(tool: str, text: str) -> dict:
     """A sequence or flowchart spec (JSON), drawn by the shared tools in the stage's face and keyed for
     frames: the grid as `html`, a sequence's numbered key as `key`."""
@@ -235,7 +251,10 @@ def visual_source(tool: str, text: str) -> dict:
             html = sequence.render(spec, "v", keyed=True, face="stage")
             key = sequence.render_key(spec, "v", keyed=True, face="stage")
         else:
-            html, key = flowchart.render(spec, "v", keyed=True, face="stage"), ""
+            # The stage draws a flowchart as its map (map.js) and checks it here: loops are allowed, since a
+            # state machine has them, so annotate's renderer (which wants a DAG) is not used.
+            check_flowchart(spec)
+            html, key = "", ""
     except (sequence.ValidationError, flowchart.ValidationError) as e:
         raise SourceError(f"{tool}:-: {e}") from None
     except Exception as e:

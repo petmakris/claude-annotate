@@ -240,3 +240,14 @@ def test_an_edge_between_ids_with_spaces_is_the_edge():
     model = scene.flowchart_spec_model({"nodes": [{"id": "Order service"}, {"id": "db"}],
                                         "edges": [{"from": "Order service", "to": "db"}]})
     assert scene.resolve(model, "Order service->db", "T") == (["edge:Order service->db#0"], None)
+
+
+def test_mermaid_graphs_and_state_diagrams_become_map_specs():
+    from skills.stage import scene as sc
+    states = sc.mermaid_spec("stateDiagram-v2\n  [*] --> Idle\n  Idle --> Busy: work\n  Busy --> Idle: done\n  Busy --> [*]")
+    assert [(n["id"], n["role"]) for n in states["nodes"]] == [("Idle", "entry"), ("Busy", "success")]
+    assert states["edges"] == [{"from": "Idle", "to": "Busy", "label": "work"}, {"from": "Busy", "to": "Idle", "label": "done"}]
+    graph = sc.mermaid_spec("graph LR; P[Page] -->|words| Q{Queue?} -- yes --> R(Run)")
+    assert [(n["id"], n["label"], n["role"]) for n in graph["nodes"]] == [("P", "Page", "entry"), ("Q", "Queue?", "decision"), ("R", "Run", "code")]
+    assert [e.get("label") for e in graph["edges"]] == ["words", "yes"]
+    assert sc.mermaid_spec("sequenceDiagram\n  A->>B: hi") is None

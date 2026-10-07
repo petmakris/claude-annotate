@@ -234,7 +234,7 @@ def test_a_sequence_or_flowchart_spec_on_stdin_is_drawn_by_the_shared_tools(tmp_
     assert (seq["type"], seq["format"], seq["tool"]) == ("inline", "visual", "sequence")
     assert seq["html"].startswith("<svg") and "POST /turn" in seq["key"]
     flow = model.parse_source("flowchart:-", tmp_path, json.dumps(FLOW))
-    assert flow["tool"] == "flowchart" and flow["html"].startswith("<svg") and flow["key"] == ""
+    assert flow["tool"] == "flowchart" and flow["html"] == "" and flow["key"] == ""  # the stage draws it as its map
     assert flow["spec"] == FLOW
 
 
@@ -251,7 +251,7 @@ def test_numbers_where_the_tools_want_text_are_drawn_and_a_wrong_shape_is_refuse
     drawn = model.parse_source("sequence:-", tmp_path, json.dumps(seq))
     assert 'data-key="step:1"' in drawn["html"] and "404" in drawn["key"]
     flow = {"nodes": [{"id": 1, "label": 404}, {"id": "b", "label": "B"}], "edges": [{"from": 1, "to": "b"}]}
-    assert 'data-key="node:1"' in model.parse_source("flowchart:-", tmp_path, json.dumps(flow))["html"]
+    assert [n["id"] for n in model.parse_source("flowchart:-", tmp_path, json.dumps(flow))["spec"]["nodes"]] == ["1", "b"]
     with pytest.raises(model.SourceError, match="nodes must be a list of objects"):
         model.parse_source("flowchart:-", tmp_path, json.dumps({"nodes": ["a", "b"]}))
     with pytest.raises(model.SourceError, match="edges must be a list of objects"):
@@ -261,9 +261,9 @@ def test_numbers_where_the_tools_want_text_are_drawn_and_a_wrong_shape_is_refuse
 
 
 def test_a_spec_the_tool_cannot_draw_is_refused_not_raised(tmp_path, monkeypatch):
-    monkeypatch.setattr(model.flowchart, "render", lambda *a, **k: 1 / 0)
+    monkeypatch.setattr(model.sequence, "render", lambda *a, **k: 1 / 0)  # a flowchart is drawn by the stage itself
     with pytest.raises(model.SourceError, match="could not draw this spec"):
-        model.parse_source("flowchart:-", tmp_path, json.dumps(FLOW))
+        model.parse_source("sequence:-", tmp_path, json.dumps(SEQ))
 
 
 def test_stdin_kinds_take_talks_names_and_an_unknown_one_is_refused(tmp_path):

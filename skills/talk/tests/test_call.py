@@ -1,3 +1,4 @@
+import json
 import asyncio
 import threading
 import time
@@ -152,7 +153,8 @@ def test_notes_and_board_tags_leave_the_spoken_text(tmp_path):
     assert ("note", "follow up on y") in entries
     assert ("claude", "Look at the stage. That is all.") in entries
     assert said == ["Look at the stage. That is all."]  # read in one request
-    assert items[1]["body"] == "graph TD; A[[Sub]]-->B"
+    # a Mermaid graph is drawn as a map
+    assert items[1]["kind"] == "flowchart" and [n["label"] for n in json.loads(items[1]["body"])["nodes"]] == ["Sub", "B"]
 
 
 def test_a_wrap_up_ends_the_call_and_the_doorbell_hears_it(tmp_path):
@@ -369,7 +371,7 @@ def test_tag_heads_are_forgiving(tmp_path):
         assert [i["kind"] for i in items] == ["table"] and problems == [], head
     for head in ("show mermaid", "show graph", "flowchart", "diagram"):
         _, items, problems = split(tmp_path, f"[[{head} | D]]graph TD; A-->B[[/show]]")
-        assert [i["kind"] for i in items] == ["diagram"] and problems == [], head
+        assert [i["kind"] for i in items] == ["flowchart"] and problems == [], head  # Mermaid is drawn as a map
 
 
 def test_a_block_never_closed_keeps_only_its_table_and_says_the_rest(tmp_path):
@@ -393,21 +395,18 @@ def test_tags_after_a_block_left_open_still_work_and_a_colon_names_the_board(tmp
              "[[show table: Parts]]\n| Part | Job |\n|---|---|\n| talk.py | the page |\n"
              "[[point: row \"talk.py\"]] This serves the page. [[key: talk.py serves the page]]")
     spoken, items, problems = split(tmp_path, reply)
-    assert [(i["kind"], i["title"]) for i in items if i["kind"] != "keys"][:2] == [("diagram", "Flow"), ("table", "Parts")]
+    assert [(i["kind"], i["title"]) for i in items if i["kind"] != "keys"][:2] == [("flowchart", "Flow"), ("table", "Parts")]
     assert "[[" not in spoken and "It starts here." in spoken and "This serves the page." in spoken
     assert sum("missing [[/show]]" in p for p in problems) == 2
 
 
-def test_diagrams_are_checked_before_the_stage_draws_them(tmp_path):
+def test_a_call_draws_mermaid_graphs_as_maps_and_shows_no_other_mermaid(tmp_path):
     _, items, problems = split(tmp_path, "[[show mermaid | Flow]] graph TD; A-->B [[/show]]")
-    assert [i["kind"] for i in items] == ["diagram"] and problems == []
+    assert [i["kind"] for i in items] == ["flowchart"] and problems == []
     _, items, problems = split(tmp_path, "[[show diagram | Bad]] A-->B [[/show]]")
-    assert [i["kind"] for i in items] == ["diagram"]
-    assert any("does not start with a Mermaid type" in p for p in problems)
-    _, _, problems = split(tmp_path, "[[show diagram | Br]]graph TD\nA[f(x)] --> B[(Store)][[/show]]")
-    assert len(problems) == 1 and 'A["f(x)"]' in problems[0]
-    _, _, problems = split(tmp_path, '[[show diagram | Ok]]graph TD\nA["f(x)"] --> B[(Store)][[/show]]')
-    assert problems == []
+    assert items == [] and problems == ['"Bad" not shown: a call draws no Mermaid; use a sequence, a flowchart or a table']
+    _, items, problems = split(tmp_path, "[[show diagram | Seq]]sequenceDiagram\nA->>B: hi[[/show]]")
+    assert items == [] and len(problems) == 1 and "draws no Mermaid" in problems[0]
 
 
 def test_empty_blocks_unclosed_tags_and_stray_closes_are_reported_or_harmless(tmp_path):
@@ -720,25 +719,26 @@ def test_two_untagged_tables_with_one_header_get_two_views(tmp_path):
 
 def test_a_bare_kind_tag_inside_an_open_block_starts_a_new_board(tmp_path):
     spoken, items, problems = split(tmp_path, "[[show diagram | A]]graph TD\nA-->B\n\nNow [[table | B]]| x |\n|---|\n| 1 |[[/show]] done")
-    assert [(i["kind"], i["title"]) for i in items] == [("diagram", "A"), ("table", "B")]
-    assert items[0]["body"] == "graph TD\nA-->B" and "Now" in spoken and "done" in spoken
+    assert [(i["kind"], i["title"]) for i in items] == [("flowchart", "A"), ("table", "B")]
+    assert [n["id"] for n in json.loads(items[0]["body"])["nodes"]] == ["A", "B"] and "Now" in spoken and "done" in spoken
 
 
 def test_a_spaced_close_tag_closes_the_block(tmp_path):
     spoken, items, problems = split(tmp_path, "[[show diagram | A]]graph TD\nA-->B[[/ show]] done")
-    assert items[0]["body"] == "graph TD\nA-->B" and spoken == "done" and problems == []
+    assert [n["id"] for n in json.loads(items[0]["body"])["nodes"]] == ["A", "B"] and spoken == "done" and problems == []
 
 
 def test_a_mermaid_subroutine_named_show_stays_in_the_diagram(tmp_path):
     spoken, items, problems = split(tmp_path, "[[show diagram | Flow]]graph TD\nA-->B[[Show results]]\nB-->C\n[[/show]] after.")
-    assert items[0]["body"] == "graph TD\nA-->B[[Show results]]\nB-->C" and spoken == "after."
+    nodes = json.loads(items[0]["body"])["nodes"]
+    assert [(n["id"], n["label"]) for n in nodes] == [("A", "A"), ("B", "Show results"), ("C", "C")] and spoken == "after."
     assert problems == []
 
 
 def test_a_caption_after_the_closing_fence_is_said(tmp_path):
     spoken, items, problems = split(tmp_path, "[[show diagram | F]]\n```mermaid\ngraph TD\nA-->B\n```\n"
                                               "The request goes left to right.[[/show]] Done.")
-    assert items[0]["body"] == "graph TD\nA-->B" and problems == []
+    assert [n["id"] for n in json.loads(items[0]["body"])["nodes"]] == ["A", "B"] and problems == []
     assert spoken == "The request goes left to right. Done."
 
 
@@ -766,7 +766,8 @@ def test_a_range_past_the_end_says_where_it_was_cut(tmp_path):
 
 def test_a_node_point_in_a_diagram_the_stage_cannot_light_is_a_problem(tmp_path):
     _, problems = cues_of(tmp_path, "[[show diagram | S]]sequenceDiagram\nAlice->>Bob: hi[[/show]] Hi. [[point S: node Alice]] Her.")
-    assert problems == ['point not shown: "S" is not a graph or flowchart, so the stage cannot light a node in it']
+    assert problems == ['"S" not shown: a call draws no Mermaid; use a sequence, a flowchart or a table',
+                        'point not shown: no board titled "S" in this call']
     for word in ("end", "Yes"):
         _, problems = cues_of(tmp_path, "[[show diagram | G]]graph TD\nsubgraph Backend\nA -- Yes --> B\nend[[/show]] "
                                         f"Hi. [[point G: node {word}]] It.")
@@ -851,8 +852,8 @@ def test_a_verb_before_any_board_or_on_a_diagram_that_cannot_step_is_reported(tm
     _, problems = cues_of(tmp_path, "Hello. [[+ A]] There.")
     assert problems == ["+ not shown: no board has been shown yet"]
     entry, problems = cues_of(tmp_path, "[[show diagram | S]]sequenceDiagram\nAlice->>Bob: hi[[/show]] Hi. [[next]] Her.")
-    assert problems == ['verbs step flowcharts, code, changes and tables for now; "S" is shown whole']
-    assert [c["kind"] for c in entry["cues"]] == ["front"]
+    assert problems[0] == '"S" not shown: a call draws no Mermaid; use a sequence, a flowchart or a table'
+    assert entry["cues"] == []
     _, problems = cues_of(tmp_path, "[[show table | T]]| a |\n|---|\n| 1 |[[/show]] Hi. [[+ Nope: row 1]] No.")
     assert problems == ['+ not shown: no board titled "Nope" in this call']
 
@@ -941,11 +942,11 @@ def test_a_bad_spec_never_reaches_the_stage_and_the_board_says_why(tmp_path):
     assert any("requires at least 2 actors" in p for p in call.board.problems)
 
 
-def test_a_flowchart_written_in_mermaid_stays_a_mermaid_diagram_and_a_spec_becomes_a_visual(tmp_path):
+def test_a_flowchart_written_in_mermaid_and_a_spec_both_become_maps(tmp_path):
     call = _call(tmp_path)
     call.split_reply(f"[[show flowchart | Old]] graph LR; A-->B [[/show]] One. [[show flowchart | New]] {FLOW} [[/show]] Two.")
     old, new = call.board.items
-    assert old["kind"] == "diagram" and talk.stage_view(old)[1]["format"] == "diagram"
+    assert old["kind"] == "flowchart" and talk.stage_view(old)[1]["tool"] == "flowchart"
     assert new["kind"] == "flowchart" and talk.stage_view(new)[1]["tool"] == "flowchart"
 
 

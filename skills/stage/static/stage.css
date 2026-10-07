@@ -451,7 +451,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .map .m-line.m-draw{stroke-dasharray:var(--len);stroke-dashoffset:var(--len);animation:m-draw .7s cubic-bezier(.4,0,.2,1) forwards}
 @keyframes m-draw{to{stroke-dashoffset:0}}
 .map .m-dot{fill:var(--tc)}
-.map .m-node{position:absolute;transform:translate(-50%,-50%);width:180px;min-height:52px;box-sizing:border-box;padding:9px 14px;border-radius:14px;
+.map .m-node{position:absolute;transform:translate(-50%,-50%);width:var(--mw,180px);min-height:52px;box-sizing:border-box;padding:9px 14px;border-radius:14px;
   background:var(--panel);border:1.5px solid var(--tc);text-align:center;display:flex;flex-direction:column;justify-content:center;
   transition:width .4s cubic-bezier(.2,.7,.2,1),padding .4s,background-color .3s,box-shadow .3s,opacity .4s;z-index:1}
 .map .m-node b{font:600 15px/1.25 var(--sans);color:var(--ink)}

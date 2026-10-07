@@ -48,20 +48,18 @@ A map shows how parts connect, all of it faint at first. [[+ page]] Everything s
 [[/show]]
 A table comes in a row at a time. [[next]] [[point: cell "Speed" / "Azure"]] Azure answers in a second or two. [[point: cell "Speed" / "VoiceStudio"]] VoiceStudio takes about as long to make an answer as to play it. [[next]] Azure is billed per character, and VoiceStudio is free. [[next]] Azure runs on Microsoft's servers, VoiceStudio on this Mac. [[next]] Azure needs a key command, and VoiceStudio needs its app open. [[next]] [[point: cell "Picked" / "Azure"]] And talk picks Azure whenever it finds a key. [[key: a table can light one cell, not only a row]] Next is a diagram.
 ---
-[[show diagram | Live mode's states]]
-stateDiagram-v2
-  [*] --> Listening
-  Listening --> Hearing: you speak
-  Hearing --> Sending: you pause
-  Sending --> Listening: nothing was said
-  Sending --> Working: a turn went
-  Working --> Speaking: the answer is ready
-  Speaking --> Hearing: you cut in
-  Speaking --> Listening: it ends
-[[/show]]
-For a shape the map cannot draw, like the states of live mode, the stage still draws a Mermaid diagram. It listens until you speak, sends what you said after a pause, and works on it until the answer is ready. While it speaks, you can cut in, and it hears you again. [[key: Mermaid is kept for state machines and other shapes the map cannot draw]] Next is a page.
+[[show flowchart | Live mode's states]] {"nodes": [{"id": "listening", "role": "entry", "label": "Listening", "sub": "the microphone is open"},
+  {"id": "hearing", "role": "code", "label": "Hearing you", "sub": "you are speaking"},
+  {"id": "sending", "role": "code", "label": "Sending", "sub": "speech to text, after your pause"},
+  {"id": "working", "role": "code", "label": "Working", "sub": "Claude writes the answer"},
+  {"id": "speaking", "role": "success", "label": "Speaking", "sub": "the answer is read aloud"}],
+ "edges": [{"from": "listening", "to": "hearing", "label": "you speak"}, {"from": "hearing", "to": "sending", "label": "you pause"},
+  {"from": "sending", "to": "working", "label": "a turn went"}, {"from": "working", "to": "speaking", "label": "it is ready"},
+  {"from": "sending", "to": "listening", "label": "nothing said"}, {"from": "speaking", "to": "hearing", "label": "you cut in"},
+  {"from": "speaking", "to": "listening", "label": "it ends"}]} [[/show]]
+A map can go round in loops too, like the states of live mode. [[+ listening]] It listens. [[+ hearing]] When you speak, it hears you. [[+ sending]] After your pause, it sends what you said. [[+ working]] If there were words, Claude works on them. [[+ speaking]] And then it speaks the answer. [[+ sending->listening, speaking->hearing, speaking->listening]] The arrows that go back are drawn underneath: nothing said, you cut in, or the answer ends. [[key: a map can loop, and the arrows that go back run underneath]] Next is a page.
 ---
 page: README.md | The README
 A page is a file, an address or another session, and in a call it opens behind the boards. The repository's README is on the stage now: pick it from the list of boards, under the counter at the top, to read it. [[key: a page opens behind the boards; pick it from the list]] Next is the end.
 ---
-That was every board: code, a change, a sequence, a map, a table, a Mermaid diagram, a page, and the key points pinned at the end of the list. Go back through them with the arrows at the top of the stage, or say start over to play the demo again. [[key: the arrows at the top go back through every board]]
+That was every board: code, a change, a sequence, a map, a table, a map with loops, a page, and the key points pinned at the end of the list. Go back through them with the arrows at the top of the stage, or say start over to play the demo again. [[key: the arrows at the top go back through every board]]
