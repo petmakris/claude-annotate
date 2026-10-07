@@ -495,8 +495,11 @@ $("retry").onclick = () => { if (connDown) { if (wake) wake(); } else if (unsent
 // counts the takes made here, so a poll that left before a take cannot undo it.
 let floorN = 0, floorEpoch = 0, heardSent = null;
 const floorChannel = "BroadcastChannel" in window ? new BroadcastChannel("talk-floor") : null;
+let floorTakenAt = -Infinity;
+const FLOOR_CROSS_MS = 2000;
 function takeFloor(heard) {
   const epoch = ++floorEpoch;
+  floorTakenAt = performance.now();
   if (floorChannel) floorChannel.postMessage({call: CFG.call});
   api("/api/floor", {method: "POST", body: JSON.stringify(heard == null ? {} : {heard}), headers: {"Content-Type": "application/json"}})
     .then(r => r.ok ? r.json() : null).then(b => { if (b && epoch === floorEpoch) { floorN = b.floor_n; if (wake) wake(); } }).catch(() => {});
@@ -509,7 +512,12 @@ function yieldFloor(id) {
   if (live) parkLive("floor");
   if (busyHere) { const t = topicOf(id); showError("Paused: you are talking in " + (t ? "“" + t + "”" : "another call") + "."); }
 }
-if (floorChannel) floorChannel.onmessage = ev => { const id = ev.data && ev.data.call; if (id && id !== CFG.call) yieldFloor(id); };
+// Two calls that hear one voice claim the floor at once, and each hears the other's claim. Yielding to
+// it here would leave neither listening; the server keeps the later claim, and the next poll yields.
+if (floorChannel) floorChannel.onmessage = ev => {
+  const id = ev.data && ev.data.call;
+  if (id && id !== CFG.call && performance.now() - floorTakenAt > FLOOR_CROSS_MS) yieldFloor(id);
+};
 audio.addEventListener("play", () => {
   if (current && (current.id !== heardSent || view.floor_call !== CFG.call)) { heardSent = current.id; takeFloor(current.id); }
 });
