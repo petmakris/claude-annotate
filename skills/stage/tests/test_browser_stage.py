@@ -1214,6 +1214,9 @@ def test_a_map_with_loops_is_a_ring_whose_arrows_meet_their_heads_and_labels_sit
         page.wait_for_timeout(300)
         assert pane.locator(".map.m-ring").count() == 1  # a state machine is drawn as its loop
         boxes = pane.locator(".m-node").evaluate_all("els => els.map(e => e.getBoundingClientRect().toJSON())")
+        board = pane.locator(".pbody").bounding_box()
+        spread = max(b["x"] + b["width"] for b in boxes) - min(b["x"] for b in boxes)
+        assert spread > board["width"] * 0.6, (spread, board["width"])  # the ring uses the width it has
         for i, a in enumerate(boxes):  # no two states on top of each other
             for b in boxes[i + 1:]:
                 assert a["x"] + a["width"] <= b["x"] or b["x"] + b["width"] <= a["x"] or a["y"] + a["height"] <= b["y"] or b["y"] + b["height"] <= a["y"]
@@ -1232,5 +1235,29 @@ def test_a_map_with_loops_is_a_ring_whose_arrows_meet_their_heads_and_labels_sit
             return best;
         })""")
         assert far and max(far) < 3, far  # each label sits on the arrow it names
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def test_at_all_shown_nothing_is_lit_as_being_said_and_next_is_off(tmp_path, wc_config, browser):
+    model = scene.rows_model(["Speed", "Cost", "Needs"], ["", "Azure", "VoiceStudio"])
+    steps = _scene(model, [["next"], ["next"]], "Engines")
+    looped = _scene(scene.flowchart_spec_model(LOOP_SPEC), [["+ l"], ["+ h"]], "States")
+    res = stage.show(str(tmp_path), "t", ENGINES, title="Engines", extra={"scene": steps})
+    stage.show(str(tmp_path), "m", _visual("flowchart", LOOP_SPEC), title="States", extra={"scene": looped})
+    try:
+        page, frame, send = _embedded(browser, res["url"], width=1300)
+        for view, built, lit in (("t", steps, "tr.g-cur"), ("m", looped, ".m-cur")):
+            pane = frame.locator(f'section.pane[data-view="{view}"]')
+            pane.wait_for(state="attached", timeout=5000)
+            send({"type": "stage:state", "front": view, "frames": {}})
+            pane.locator("tbody tr, .m-node").first.wait_for(state="attached", timeout=5000)
+            send({"type": "stage:frame", "view": view, "n": 1, "animate": True})
+            _until_frame(page, view, 1)
+            pane.locator(lit).first.wait_for(state="attached", timeout=3000)  # a step lights what is being said
+            send({"type": "stage:frame", "view": view, "n": built["rest"]})
+            _until_frame(page, view, built["rest"])
+            assert pane.locator(lit).count() == 0, view  # all shown: nothing is the one being said
+            assert pane.locator(".stepnext").is_disabled(), view
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])

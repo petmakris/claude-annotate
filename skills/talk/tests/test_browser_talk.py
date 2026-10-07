@@ -455,9 +455,16 @@ def test_a_stage_that_loads_again_gets_the_theme_and_the_follow_state_again(tmp_
         page.click("#follow")
         page.frame(url=STAGE).wait_for_function("got.some(m => m.type === 'stage:follow' && m.on === false)", timeout=2000)
         # The stage page loads again (a daemon restart): it starts from nothing.
+        page.frame(url=STAGE).evaluate("window.__old = true")
         page.evaluate("document.getElementById('stage').src = document.getElementById('stage').src")
-        page.wait_for_timeout(500)
-        stage = page.frame(url=STAGE)
+        for _ in range(100):  # the old page is gone and the new one has its probe
+            stage = page.frame(url=STAGE)
+            try:
+                if stage and stage.evaluate("!window.__old && !!window.got"): break
+            except Exception:
+                pass  # mid-navigation
+            page.wait_for_timeout(50)
+        assert stage.evaluate("!window.__old"), "the stage never loaded again"
         stage.wait_for_function("got.some(m => m.type === 'stage:theme' && m.theme === 'dark')", timeout=3000)
         stage.wait_for_function("got.some(m => m.type === 'stage:follow' && m.on === false)", timeout=3000)
 
@@ -659,8 +666,18 @@ def test_space_pauses_and_plays_and_the_arrows_move_a_sentence(tmp_path, pw):
             assert at() == 3.0
             page.keyboard.press("ArrowRight")
             assert at() == 6.0 and page.evaluate(PAUSED)
+            page.keyboard.press("ArrowRight")
+            assert at() == 9.0  # in the last sentence: to the end
+            page.evaluate("document.getElementById('audio').currentTime = 6.0")
             page.keyboard.press("Space")
             page.wait_for_function(PLAYING)
+            # With the settings open, the keys belong to them, not the player.
+            open_gear(page)
+            page.frame(url=STAGE).evaluate("parent.postMessage({type: 'stage:key', key: ' '}, '*')")
+            page.wait_for_timeout(300)
+            assert page.evaluate(PLAYING)
+            page.click("#gear")
+            page.wait_for_selector("#pGear", state="hidden")
             # The stage passes the keys on when they are pressed there.
             page.frame(url=STAGE).evaluate("parent.postMessage({type: 'stage:key', key: ' '}, '*')")
             page.wait_for_function(PAUSED)
@@ -846,3 +863,20 @@ def test_play_plays_the_board_in_front_from_where_it_came_in(tmp_path, pw):
             assert page.evaluate("audio.paused")  # on the board being said, Play pauses as before
         finally:
             browser.close()
+
+
+def test_a_spoken_go_on_with_no_voice_ready_plays_nothing_and_breaks_nothing(tmp_path, browser):
+    with served(tmp_path) as (url, call, loop, fake):
+        page = browser.new_page()
+        errors = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(url)
+        page.wait_for_selector("#veil", state="hidden")
+        page.evaluate("runCommand('resume')")  # "go on" said before Claude has answered anything
+        fake.hold = threading.Semaphore(0)  # the voice is still being made
+        on_loop(loop, call.answer("Not ready yet."))
+        page.wait_for_function("view.entries.some(e => e.who === 'claude')", timeout=5000)
+        page.evaluate("runCommand('resume')")
+        page.wait_for_timeout(200)
+        fake.hold.release()
+        assert errors == [] and page.evaluate("!current && !audio.getAttribute('src')"), errors

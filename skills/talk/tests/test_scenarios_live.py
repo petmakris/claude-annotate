@@ -137,7 +137,10 @@ def test_s02_after_a_reload_a_click_on_the_mic_button_starts_listening(tmp_path,
         browser, page = _suspended_page(pw, tmp_path, url)
         try:
             page.click("#talk")  # the obvious thing to click on a page that says "click anywhere"
-            page.wait_for_timeout(800)
+            try:
+                page.wait_for_function("listening()", timeout=5000)
+            except Exception:
+                pass  # the state below says why
             state = page.evaluate("({live: !!live, suspended: live && live.suspended, resumed: window.__resumed || 0, label: $('talk').getAttribute('aria-label')})")
             assert state["live"] and not state["suspended"], state
         finally:
@@ -151,7 +154,10 @@ def test_s03_after_a_reload_a_click_on_the_stage_starts_listening(tmp_path, pw):
             page.wait_for_selector("#veil", state="hidden", timeout=5000)
             box = page.locator("#stage").bounding_box()
             page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 3)  # the stage fills the TV
-            page.wait_for_timeout(800)
+            try:
+                page.wait_for_function("listening()", timeout=5000)
+            except Exception:
+                pass  # the state below says why
             state = page.evaluate("({live: !!live, suspended: live && live.suspended, resumed: window.__resumed || 0, activated: navigator.userActivation.hasBeenActive, status: $('status').textContent})")
             assert state["live"] and not state["suspended"], state
         finally:
@@ -264,8 +270,11 @@ def test_s09_keyword_mode_other_words_let_the_answer_go_on(tmp_path, pw):
             on_loop(loop, call.answer(LONG))
             page.wait_for_function(PLAYING, timeout=5000)
             fake.heard = "so anyway the dog"
-            page.wait_for_timeout(6000)
+            for _ in range(120):  # the cough is heard and checked for the keyword
+                if any("keyword=1" in q for q in seen): break
+                page.wait_for_timeout(100)
             assert any("keyword=1" in q for q in seen), seen
+            page.wait_for_timeout(1000)  # the answer settles after the cough
             assert page.evaluate(PLAYING) and drain(loop, call, 0.5) == []
         finally:
             browser.close()
@@ -283,7 +292,8 @@ def test_s11_stop_listening_mid_question_lets_the_answer_go_on_and_sends_nothing
             on_loop(loop, call.answer(LONG))
             page.wait_for_function(PAUSED + " && live && live.speech", timeout=8000)
             page.click("#talk")
-            page.wait_for_timeout(3000)
+            page.wait_for_function("!live && !audio.paused", timeout=5000)
+            page.wait_for_timeout(2000)  # long enough for dropped words to have been sent, if they were
             out = page.evaluate("({live: !!live, playing: !audio.paused})")
             # The words so far are dropped, and the answer they had stopped picks up again.
             assert out == {"live": False, "playing": True} and not seen
@@ -373,11 +383,10 @@ def test_s18_after_another_call_took_the_floor_this_call_listens_again_or_says_i
             page_a.wait_for_selector("#talk[aria-label='Stop listening']", timeout=5000)
             page_b = ctx.new_page(); page_b.goto(f"{base}/c/call-b")
             page_b.fill("#text", "a question in Beta"); page_b.press("#text", "Enter")
-            page_a.wait_for_timeout(1500)
+            page_b.wait_for_function("view.entries.some(e => e.who === 'you')", timeout=5000)
             page_a.bring_to_front()
-            page_a.wait_for_timeout(1500)
-            out = page_a.evaluate("({live: !!live, toast: $('toast').hidden ? '' : $('toasttext').textContent, label: $('talk').getAttribute('aria-label')})")
-            assert out["live"] or out["toast"], out
+            # a page that gave up the floor is not listening: it listens again, or says it stopped
+            page_a.wait_for_function("listening() || !$('toast').hidden", timeout=5000)
         finally:
             browser.close()
 
@@ -391,9 +400,15 @@ def test_s19_two_live_calls_hearing_one_voice_keep_one_listening(tmp_path, pw):
             page_b = live_page(ctx, f"{base}/c/call-b")
             for p in (page_a, page_b):
                 p.wait_for_selector("#talk[aria-label='Stop listening']", timeout=5000)
-            page_a.wait_for_timeout(6000)
-            out = [p.evaluate("!!live") for p in (page_a, page_b)]
-            assert any(out), out
+            # the voice reaches one call: that one keeps listening and the other gives up the floor
+            heard = "view.entries.some(e => e.who === 'you')"
+            for _ in range(100):
+                if any(p.evaluate(heard) for p in (page_a, page_b)): break
+                page_a.wait_for_timeout(100)
+            page_a.wait_for_timeout(1000)
+            out = [p.evaluate("listening()") for p in (page_a, page_b)]
+            assert out.count(True) == 1, out
+            assert [p.evaluate(heard) for p in (page_a, page_b)].count(True) == 1  # the voice went to one call
         finally:
             browser.close()
 

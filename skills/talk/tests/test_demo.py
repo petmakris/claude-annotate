@@ -34,13 +34,13 @@ def test_a_demo_starts_when_its_page_opens_and_next_again_back_move_through_it(t
                 await asyncio.sleep(0.02)
             steps = [said()[-1]]
             for typed in ("next", "again", "next", "back", "start over"):
-                await client.post("/api/say", json={"text": typed}, headers=AUTH)
                 n = len(said())
-                for _ in range(50):
-                    if len(said()) > n - 1 and said()[-1] and len(said()) == n + 0 or len(said()) > n:
+                await client.post("/api/say", json={"text": typed}, headers=AUTH)
+                for _ in range(150):  # every move plays one new answer, "again" too
+                    if len(said()) > n:
                         break
                     await asyncio.sleep(0.02)
-                await asyncio.sleep(0.05)
+                assert len(said()) == n + 1, (typed, said())
                 steps.append(said()[-1])
             turn = (await client.get("/api/turn?wait=0.1", headers=AUTH)).status
             return steps, turn

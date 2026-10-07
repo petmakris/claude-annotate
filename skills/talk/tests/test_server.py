@@ -200,9 +200,9 @@ def test_speech_serves_recordings_then_the_floor_then_the_rest():
     listen = queue.lane(lambda: 0)
     lane_a = queue.lane(lambda: 1 if floor["call"] == "a" else 2)
     lane_b = queue.lane(lambda: 1 if floor["call"] == "b" else 2)
-    gate, order = threading.Event(), []
-    first = lane_a.submit(gate.wait, 5)
-    time.sleep(0.1)  # the worker is busy with `first`, so the jobs below queue up
+    gate, started, order = threading.Event(), threading.Event(), []
+    first = lane_a.submit(lambda: (started.set(), gate.wait(5)))
+    assert started.wait(5)  # the worker is busy with `first`, so the jobs below queue up
     jobs = [lane_a.submit(order.append, "a"), lane_b.submit(order.append, "b"), listen.submit(order.append, "listen")]
     floor["call"] = "b"  # the floor moves while they wait: b goes before a
     gate.set()
@@ -215,9 +215,9 @@ def test_speech_serves_recordings_then_the_floor_then_the_rest():
 def test_a_closed_lane_drops_what_it_has_not_started():
     queue = talk.SpeechQueue()
     lane = queue.lane(lambda: 1)
-    gate = threading.Event()
-    busy = lane.submit(gate.wait, 5)
-    time.sleep(0.1)
+    gate, started = threading.Event(), threading.Event()
+    busy = lane.submit(lambda: (started.set(), gate.wait(5)))
+    assert started.wait(5)
     waiting = lane.submit(lambda: "never")
     lane.shutdown()
     gate.set()
