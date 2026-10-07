@@ -757,3 +757,20 @@ def test_a_stage_that_loads_an_error_page_says_it_did_not_load(tmp_path, browser
         page.goto(url)
         page.wait_for_selector("text=The stage did not load.", timeout=5000)
         assert page.is_visible("#reloadstage")
+
+
+def test_typing_while_an_answer_plays_stops_it_and_the_reply_plays(tmp_path, pw):
+    with served(tmp_path) as (url, call, loop, fake):
+        fake.seconds = 20.0
+        browser = pw.chromium.launch(args=FAKE_MIC)
+        try:
+            page = browser.new_page()
+            page.goto(url)
+            on_loop(loop, call.answer("A long first answer."))
+            page.wait_for_function(PLAYING, timeout=5000)
+            page.fill("#text", "and then?"); page.press("#text", "Enter")
+            page.wait_for_function(PAUSED, timeout=3000)  # what you send moves the call on
+            on_loop(loop, call.answer("The reply."))
+            page.wait_for_function("current && current.n === 2 && !audio.paused", timeout=8000)
+        finally:
+            browser.close()

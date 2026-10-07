@@ -860,7 +860,10 @@ async function sendText() {
   try {
     const resp = await api("/api/say", {method: "POST", body: JSON.stringify({text}), headers: {"Content-Type": "application/json"}});
     const body = await resp.json().catch(() => ({}));
-    if (resp.ok) { $("text").value = ""; fitText(); view.v = -1; } else showError(body.error || "Sending failed: HTTP " + resp.status);
+    // What you send moves the call on: the answer still playing stops, so the reply plays when it comes,
+    // as it does when you press Talk.
+    if (resp.ok) { $("text").value = ""; fitText(); release(); if (!audio.paused) audio.pause(); view.v = -1; }
+    else showError(body.error || "Sending failed: HTTP " + resp.status);
   } catch (err) { showError("Sending failed: " + err.message); }
   $("sendtext").disabled = !$("text").value.trim();
 }
