@@ -1,6 +1,6 @@
 ---
 name: audit
-description: Master codebase audit for claude-annotate. Runs all focused sub-audits — `/audit-engine-boundary`, `/audit-http-surface`, `/audit-plugin-manifest`, `/audit-docs-truth`, `/audit-code-health`, `/audit-demo` — then presents one unified actionable report. Use when the user says "/audit", "audit the codebase", "run a full audit", "full sweep", or wants everything checked instead of one targeted sub-audit.
+description: Master codebase audit for claude-annotate. Runs all focused sub-audits — `/audit-engine-boundary`, `/audit-http-surface`, `/audit-plugin-manifest`, `/audit-docs-truth`, `/audit-code-health`, `/audit-demo`, `/audit-tests` — then presents one unified actionable report. Use when the user says "/audit", "audit the codebase", "run a full audit", "full sweep", or wants everything checked instead of one targeted sub-audit.
 user-invocable: true
 ---
 
@@ -31,6 +31,7 @@ When delivering, if you feel the urge to write "this was flagged but it's actual
 | `/audit-plugin-manifest` | `.claude-plugin/marketplace.json` as the registry of what ships; each skill reaching its installed code through the `bin/claude-annotate` runner; root-shared surfaces (`bin/`, and `hooks/`/`commands/`/`agents/` if they reappear). |
 | `/audit-docs-truth` | Whether the prose is true — progressive-disclosure structure across all nine skills, and README and skill-doc claims against the tree. |
 | `/audit-demo` | The talk stage demo (`skills/talk/demo.md`): every board and way to steer one shown, its narration true to the code it shows, and board features added since it last changed. |
+| `/audit-tests` | Whether the tests keep up with the code: small bugs planted in the lines changed since the last audit, each one no test fails on reported as an unguarded change; flaky tests; and tests that run exactly the same lines as another, as candidates to merge. Runs the suite many times, so it takes minutes; run it alone. |
 | `/audit-code-health` | Generic health across Python, Java and the VS Code extension — dead code, duplication, swallowed exceptions, missing timeouts, risky code with no test beside it. |
 
 `test_umbrella_dispatch_table_matches_disk` only checks this table against
