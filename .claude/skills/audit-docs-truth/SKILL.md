@@ -31,7 +31,7 @@ The current architecture, as the tree states it (verify against the code before 
 - **No in-repo server.** `skills/_shared/` holds `webcompanion_client.py`, `static/` and `README.md`; `skills/_shared/web_companion/` is deleted. Every skill except `slides` pushes to the **webcompanion daemon**, a separate project (`github.com/petmakris/webcompanion`, installed with pipx or `uv tool`), whose address and write token live in `~/.claude/webcompanion/config.json`. The daemon has one port, chosen by its own config; no skill has a `PORT_RANGE`.
 - **Contract version** is stated in `skills/_shared/webcompanion_client.py`, `vscode-plugin/src/webcompanionClient.js`, `ide-plugin/.../WebCompanionHttp.java`, `skills/annotate/static/daemon-http.js`, `skills/annotate-doctor/doctor.sh` and `skills/show-diff/show-diff.sh`.
 - **Skills reach their code through `bin/claude-annotate`**; annotate-doctor alone uses a plain-`sh` `MARKER=` locator.
-- **Tests run** with the command in `CLAUDE.md`; browser and daemon tests start a private daemon per worker (`skills/conftest.py`, `skills/tests/harness.py`).
+- **Tests run** with the command in `CLAUDE.md`; no test drives a browser or starts a daemon.
 
 ## The rules
 

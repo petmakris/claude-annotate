@@ -6,11 +6,9 @@
 
 `changed` plants one small bug at a time in the lines changed since REV (default: the commit in
 .claude/skills/audit-tests/last-audit) and runs the tests of that skill against it. A bug no test
-fails on ("survived") is a change that landed without a test that guards it. Each bug is tried on
-the tests without a browser first, which take seconds, and on the browser tests only if it
-survived those.
+fails on ("survived") is a change that landed without a test that guards it.
 
-`redundant` records which tests run which Python lines (the tests without a browser) and lists the
+`redundant` records which tests run which Python lines and lists the
 tests whose lines another test in the same file runs exactly as well, and the tests that run no
 product code at all. These are candidates to read, not to delete blind: two tests can run the same
 lines with different inputs.
@@ -39,9 +37,8 @@ ROOT = Path(subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_outp
 MARKER = ROOT / ".claude" / "skills" / "audit-tests" / "last-audit"
 PYTEST = ["uv", "run", "-q", "--with-requirements", "requirements-test.txt", "python", "-m", "pytest",
           "-q", "-p", "no:cacheprovider"]
-ENV = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "CLAUDE_ANNOTATE_STRICT_TESTS": "1"}
-# The stage is drawn inside talk's call page: talk's browser tests exercise it too.
-ALSO_TESTED_BY = {"stage": ["skills/talk/tests"], "_shared": ["skills"]}
+ENV = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+ALSO_TESTED_BY = {"_shared": ["skills"]}
 
 
 # ---- the worktree ----------------------------------------------------------------------------
@@ -56,9 +53,9 @@ def worktree():
         subprocess.run(["git", "worktree", "remove", "--force", str(where)], cwd=ROOT, check=False)
 
 
-def run_tests(tree: Path, dirs: list[str], marker: str, first_failure: bool = True) -> tuple[str, list[str], str]:
+def run_tests(tree: Path, dirs: list[str], first_failure: bool = True) -> tuple[str, list[str], str]:
     """('pass' | 'fail' | 'none', failed test ids, last line)."""
-    cmd = PYTEST + dirs + ["-m", marker, "-rf"] + (["-x"] if first_failure else [])
+    cmd = PYTEST + dirs + ["-rf"] + (["-x"] if first_failure else [])
     r = subprocess.run(cmd, cwd=tree, env=ENV, capture_output=True, text=True, timeout=1800)
     out = r.stdout + r.stderr
     failed = sorted(set(re.findall(r"^(?:FAILED|ERROR) (\S+)", out, re.M)))
@@ -286,12 +283,10 @@ def changed(args) -> int:
         return 0
     results = []
     with worktree() as tree:
-        # Every tier a bug may meet must pass untouched first, or a failure would prove nothing.
-        tiers = {(tuple(tests_for(m["file"])), "not browser") for m in picked if m["file"].endswith(".py")}
-        tiers |= {(tuple(tests_for(m["file"])), "browser") for m in picked}
-        for dirs, marker in sorted(tiers):
-            status, failed, last = run_tests(tree, list(dirs), marker, first_failure=False)
-            print(f"baseline {' '.join(dirs)} -m '{marker}': {last}", flush=True)
+        # Every set of tests a bug may meet must pass untouched first, or a failure would prove nothing.
+        for dirs in sorted({tuple(tests_for(m["file"])) for m in picked}):
+            status, failed, last = run_tests(tree, list(dirs), first_failure=False)
+            print(f"baseline {' '.join(dirs)}: {last}", flush=True)
             if status == "fail":
                 print(f"the tests fail before any bug is planted: {failed[:5]}. Fix them first.", file=sys.stderr)
                 return 2
@@ -301,12 +296,9 @@ def changed(args) -> int:
             f.write_text(mutated(orig, m))
             t0, verdict, by = time.time(), "survived", []
             try:
-                dirs = tests_for(m["file"])
-                for marker in (["not browser"] if m["file"].endswith(".py") else []) + ["browser"]:
-                    status, failed, last = run_tests(tree, dirs, marker)
-                    if status == "fail":
-                        verdict, by = "killed", failed[:3] or [last]
-                        break
+                status, failed, last = run_tests(tree, tests_for(m["file"]))
+                if status == "fail":
+                    verdict, by = "killed", failed[:3] or [last]
             finally:
                 f.write_text(orig)
             row = {"id": i, **{k: m[k] for k in ("file", "line", "kind", "old", "new")}, "status": verdict,
@@ -331,7 +323,7 @@ def redundant(args) -> int:
     with worktree() as tree:
         env = {**ENV, "COVERAGE_FILE": str(out / ".coverage")}
         cmd = ["uv", "run", "-q", "--with-requirements", "requirements-test.txt", "--with", "pytest-cov",
-               "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", *paths, "-m", "not browser",
+               "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", *paths,
                "--cov=skills", "--cov-context=test", "--cov-report="]
         r = subprocess.run(cmd, cwd=tree, env=env, capture_output=True, text=True, timeout=3600)
         print((r.stdout.strip().splitlines() or [""])[-1], flush=True)

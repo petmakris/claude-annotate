@@ -4,10 +4,5 @@
 # Every version here supports Python 3.9, the declared floor CI also runs.
 pytest==8.4.2
 pytest-xdist==3.8.0
-playwright==1.60.0
-# The daemon the browser and push suites start privately (skills/tests/harness.py).
-# PyPI's 1.0.0 predates the asset routes annotate's page needs, so it is pinned
-# to a commit; bump it when annotate starts relying on a newer daemon.
-webcompanion @ git+https://github.com/petmakris/webcompanion@914161e17f789348f4dd625aee57db58ed0b0f04
 # talk's server; its suite skips where Python is older than talk's 3.11 floor.
 aiohttp==3.14.3; python_version >= "3.11"

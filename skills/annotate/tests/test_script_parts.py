@@ -73,14 +73,6 @@ def test_each_part_parses_on_its_own():
         assert proc.returncode == 0, f"{name}: {proc.stderr}"
 
 
-def test_no_part_name_shadows_a_browser_global(browser):
-    mine = sorted({n for text in _parts().values() for n in _declared(text)})
-    page = browser.new_page()
-    page.set_content("<!doctype html><title>x</title>")
-    taken = page.evaluate("""(names) => names.filter((n) => n in window)""", mine)
-    assert not taken, f"names the browser already defines on window: {taken}"
-
-
 def test_every_part_on_disk_is_loaded():
     """A part entry.js does not list never runs, and nothing on the page says so."""
     on_disk = sorted(p.name for p in STATIC.glob("script*.js"))

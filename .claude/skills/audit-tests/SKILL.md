@@ -24,9 +24,9 @@ Run, from the repository root:
 
     python3 tools/audit_tests.py changed --out <scratchpad>/audit-tests
 
-It diffs the product files (`skills/**/*.py` and `*.js`, not tests) from the commit in `.claude/skills/audit-tests/last-audit` (or `HEAD~20` when there is none, or `--base REV`) to HEAD. It samples up to 30 bugs on the changed lines, one per line and spread over the files: a flipped comparison, a negated condition, `and`/`or` swapped, a deleted call, a return emptied, a constant moved. It runs each against the tests of that skill (the stage's are also run against talk's, which embed it) in a throwaway worktree of HEAD. First come the tests without a browser, then the browser tests if the bug survived those. It refuses to plant anything when the tests fail untouched.
+It diffs the product files (`skills/**/*.py` and `*.js`, not tests) from the commit in `.claude/skills/audit-tests/last-audit` (or `HEAD~20` when there is none, or `--base REV`) to HEAD. It samples up to 30 bugs on the changed lines, one per line and spread over the files: a flipped comparison, a negated condition, `and`/`or` swapped, a deleted call, a return emptied, a constant moved. It runs each against the tests of that skill in a throwaway worktree of HEAD. It refuses to plant anything when the tests fail untouched.
 
-Expect about a second per Python bug that dies in the fast tests, and one to two minutes per JavaScript bug or Python bug that reaches the browser tests. Tell the user the count before it runs; run it in the background when it is over ten minutes. It works in its own worktree, so the user's checkout is never touched; say so once.
+Expect a few seconds per bug. No test drives a browser, so a JavaScript bug is caught only by the tests that run the page's code under node, and most will survive. Tell the user the count before it runs. It works in its own worktree, so the user's checkout is never touched; say so once.
 
 ## Step 2 — judge every survivor
 
@@ -44,7 +44,7 @@ Run:
 
     python3 tools/audit_tests.py redundant skills/talk/tests skills/stage/tests --out <scratchpad>/audit-tests
 
-(or the folders the changed files belong to; no folder means all of `skills`). It measures which Python lines each test without a browser runs. It lists groups of tests in one file that run exactly the same lines, and tests that run no product code at all. JavaScript coverage is not measured, so browser tests never appear here; say so in the report.
+(or the folders the changed files belong to; no folder means all of `skills`). It measures which Python lines each test runs. It lists groups of tests in one file that run exactly the same lines, and tests that run no product code at all. JavaScript coverage is not measured; say so in the report.
 
 Read each group's tests. Report a group as a **Decision** only when two of its tests assert the same behaviour with inputs that take the same path. Ask whether to merge them, and name the one to keep. Tests that run the same lines but check different inputs, values or outcomes (four `dir_rev` cases, a boundary and its general case) are not candidates; skip them. A test that runs no product code is a Decision when it checks nothing the product depends on. It is not one when it checks a data file the product reads (`demo.md`, the token CSS, a SKILL.md table); skip those.
 
@@ -59,7 +59,6 @@ Read each group's tests. Report a group as a **Decision** only when two of its t
 1. A survivor in logging, a message's wording, a timing constant whose only effect is speed (a poll interval, a retry delay), or a busy-wait's sleep.
 2. A survivor in code only a real outside service reaches (Azure speech, launchd itself, the system microphone), when a test double stands in for it at the boundary. Report the boundary's own logic, not the service.
 3. A survivor on a line the base commit already had, when the diff only re-indented or moved it.
-4. Browser tests in Step 3: their coverage is not measured.
 
 ## Step 4 — the fix loop
 
