@@ -1078,12 +1078,13 @@ function setFollow(on) {
 const fold = (t) => String(t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
 // Centre `el` in each box around it that scrolls, inside the pane only: never the page around the stage.
-function centre(el) {
+// `room`: the foot of the board kept for the subtitles, which the element is centred above.
+function centre(el, room = 0) {
   const behavior = reduced() ? "auto" : "smooth";
   for (let box = el.parentElement; box && box !== panesEl; box = box.parentElement) {
     if (box.scrollHeight <= box.clientHeight + 1 || !/auto|scroll/.test(getComputedStyle(box).overflowY)) continue;
     const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
-    box.scrollTo({ top: box.scrollTop + (r.top + r.height / 2) - (b.top + b.height / 2), behavior });
+    box.scrollTo({ top: box.scrollTop + (r.top + r.height / 2) - (b.top + Math.max(b.height - room, r.height) / 2), behavior });
   }
 }
 
@@ -1208,7 +1209,8 @@ function paintFrame(v, box, animate = false) {
   const done = applyFrame(scene, box, n, animate && v.applied === n - 1 ? v.applied : null);
   if (!done) return;
   if (box.classList.contains("lanes")) { layoutLanes(box, scene, n); done.focused = null; }  // lanes scroll themselves
-  if (box.classList.contains("map")) { layoutMap(box, scene, n, animate && v.applied === n - 1); done.focused = null; }  // the map is placed to fit
+  // the map is placed to fit; on one taller than its board, the card being said is kept in view
+  if (box.classList.contains("map")) done.focused = layoutMap(box, scene, n, animate && v.applied === n - 1);
   if (box.classList.contains("grid")) {
     const cur = new Set(beingSaid(scene, n).filter((k) => k.startsWith("row#")));
     for (const tr of box.querySelectorAll("tbody tr")) tr.classList.toggle("g-cur", cur.has(tr.dataset.key));
@@ -1218,7 +1220,8 @@ function paintFrame(v, box, animate = false) {
   }
   v.applied = n;
   // Checked a frame later: a pane filled as it is fronted is still hidden while it paints.
-  if (done.focused) requestAnimationFrame(() => { if (done.focused.isConnected && !v.pane.hidden) centre(done.focused); });
+  const room = box.classList.contains("map") ? +box.dataset.room || 0 : 0;
+  if (done.focused) requestAnimationFrame(() => { if (done.focused.isConnected && !v.pane.hidden) centre(done.focused, room); });
   const step = v.pane.querySelector(".vstep");
   if (step) step.textContent = stepLabel(scene, n);
   const back = v.pane.querySelector(".stepback"), next = v.pane.querySelector(".stepnext");

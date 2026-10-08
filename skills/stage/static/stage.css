@@ -459,7 +459,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .map .m-node b{font:600 15px/1.25 var(--sans);color:var(--ink);overflow-wrap:anywhere}
 .map .m-node code,.map .m-node .m-sub{display:none}
 .map .m-node.m-decision{border-radius:14px 14px 14px 14px;border-width:2px;border-style:double}
-.map .m-node.m-cur{width:260px;padding:14px 18px;background:var(--tb);z-index:2;
+.map .m-node.m-cur{width:var(--mc,260px);padding:14px 18px;background:var(--tb);z-index:2;
   box-shadow:0 0 0 5px color-mix(in srgb,var(--tc) 18%,transparent),0 18px 40px -18px rgba(15,23,42,.45)}
 .map .m-node.m-cur b{font-size:19px}
 /* the detail is dim text on the card's tone: muted drawn a little towards the ink reaches 4.5:1 on every tone */
@@ -477,7 +477,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .map .m-edge.k-focus .m-line{stroke-width:3.5}
 @media (prefers-reduced-motion:reduce){.map .m-line.m-draw{animation:none;stroke-dasharray:none}}
 /* the ring: a state machine's states round its loop; a bigger, glowing card for the state being said */
-.map.m-ring .m-node.m-cur{width:270px;padding:16px 20px}
+.map.m-ring .m-node.m-cur{width:var(--mc,270px);padding:16px 20px}
 .map.m-ring .m-node.m-cur b{font-size:21px}
 .map.m-ring .m-edge.m-cur .m-line{stroke-width:4}
 .map.m-ring .m-edge.m-cur .m-elabel rect{fill:var(--tb, var(--panel));stroke:var(--tc);stroke-width:1.5}

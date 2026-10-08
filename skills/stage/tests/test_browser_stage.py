@@ -1867,3 +1867,82 @@ def test_a_map_cards_long_names_break_inside_the_card_and_its_detail_reads_at_4_
             ("dark", "node:catch"): [7.88], ("dark", "node:guard"): [7.88], ("dark", "node:state"): [5.95], ("dark", "node:err"): [6.81]}
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+# -- the map's layout: every card, label and head clear of the others and on the board ----------------
+
+# "How a change lands", from workspace 261006-163450, with the product's name taken out
+CHANGE_LANDS = {"nodes": [{"id": "pr", "role": "entry", "label": "Contract PR 288 opened", "sub": "13 Jan"},
+                          {"id": "dev", "role": "code", "label": "Dev build published", "method": "2026-R1-dev-…-139 / -140"},
+                          {"id": "merged", "role": "decision", "label": "Merged?"},
+                          {"id": "pin", "role": "call", "label": "The service pins the dev build"},
+                          {"id": "rel", "role": "code", "label": "Master publishes", "method": "2026-R1-20260126.132852-16"},
+                          {"id": "done", "role": "success", "label": "The service and core banking on build 16", "sub": "26 Jan and 2 Feb"}],
+                "edges": [{"from": "pr", "to": "dev"}, {"from": "dev", "to": "merged"}, {"from": "merged", "to": "pin", "label": "not yet"},
+                          {"from": "merged", "to": "rel", "label": "yes"}, {"from": "rel", "to": "done"}]}
+# "How talk's parts connect", from workspaces 261007-021400 and 261007-073115, verbatim
+TALK_PARTS = {"nodes": [{"id": "page", "role": "entry", "label": "Call page", "ref": "call.html · call.js", "sub": "your microphone, the subtitles, the controls"},
+                        {"id": "launchd", "role": "code", "label": "launchd", "ref": "dev.talk", "sub": "keeps the server running, with the speech settings"},
+                        {"id": "talk", "role": "code", "label": "Talk server", "ref": "talk.py", "sub": "holds every call, one server per machine"},
+                        {"id": "azure", "role": "call", "label": "Azure speech", "method": "speech to text · text to speech"},
+                        {"id": "claude", "role": "code", "label": "Claude session", "ref": "talk_client.py", "sub": "answers with its full history and tools"},
+                        {"id": "stage", "role": "success", "label": "Stage", "ref": "webcompanion · stage.js", "sub": "code, tables and diagrams"}],
+              "edges": [{"from": "page", "to": "talk", "label": "your words · polls"}, {"from": "launchd", "to": "talk", "label": "starts it"},
+                        {"from": "talk", "to": "azure", "label": "text ⇄ speech"}, {"from": "talk", "to": "claude", "label": "turns"},
+                        {"from": "talk", "to": "stage", "label": "boards"}]}
+# made up, for what no real map has had yet: two arrows between one pair, an arrow to itself, a pipeline
+# with one retry, a part feeding twelve
+TWO_WAYS = {"nodes": [{"id": "a", "role": "entry", "label": "Client"}, {"id": "b", "label": "Server"}, {"id": "c", "role": "success", "label": "Stored"}],
+            "edges": [{"from": "a", "to": "b", "label": "first try"}, {"from": "a", "to": "b", "label": "retry"}, {"from": "b", "to": "c"}]}
+POLL = {"nodes": [{"id": "a", "role": "entry", "label": "Poll"}, {"id": "b", "role": "success", "label": "Done"}],
+        "edges": [{"from": "a", "to": "a", "label": "not yet"}, {"from": "a", "to": "b", "label": "ready"}]}
+RETRY = {"nodes": [{"id": f"p{i}", "label": f"Phase {i}"} for i in range(8)],
+         "edges": [{"from": f"p{i}", "to": f"p{i + 1}"} for i in range(7)] + [{"from": "p7", "to": "p0", "label": "retry"}]}
+FAN = {"nodes": [{"id": "hub", "role": "entry", "label": "Hub"}] + [{"id": f"t{i}", "label": f"Target {i}"} for i in range(12)],
+       "edges": [{"from": "hub", "to": f"t{i}"} for i in range(12)]}
+
+@pytest.mark.parametrize("spec,size,layout", [
+    (CHANGE_LANDS, (1300, 850), "across"), (CHANGE_LANDS, (1000, 700), "across"), (CHANGE_LANDS, (420, 860), "down"),
+    (TALK_PARTS, (1300, 850), "across"), (TALK_PARTS, (420, 860), "down"),
+    (LIVE_SPEC, (1300, 850), "ring"), (LIVE_SPEC, (1000, 700), "ring"), (LIVE_SPEC, (420, 860), "down"),
+    (TWO_WAYS, (1300, 850), "across"), (POLL, (1300, 850), "across"), (RETRY, (1300, 850), "across"), (FAN, (1300, 850), "across"),
+], ids=["lands-1300", "lands-1000", "lands-420", "parts-1300", "parts-420", "live-1300", "live-1000", "live-420",
+        "two-ways", "poll", "retry", "fan"])
+def test_a_map_keeps_every_card_label_and_head_clear_of_the_others_and_on_the_board_at_every_frame(
+        spec, size, layout, tmp_path, wc_config, browser):
+    built = _each_part_said(spec, "Map")
+    res = stage.show(str(tmp_path), "m", _visual("flowchart", spec), title="Map", extra={"scene": built})
+    try:
+        page, frame, send = _still(browser, res["url"], *size)
+        pane = frame.locator('section.pane[data-view="m"]')
+        pane.locator(".m-node").first.wait_for(state="attached", timeout=5000)
+        faults = {}
+        for n in range(built["rest"] + 1):
+            _show_frame(page, send, "m", n, n > 0)
+            got = pane.evaluate(MAP_FAULTS)
+            if got:
+                faults[n] = got
+        assert faults == {}
+        box = pane.locator(".map")
+        assert (box.get_attribute("data-layout"), "m-ring" in box.get_attribute("class")) == (layout, layout == "ring")
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def test_a_map_taller_than_its_board_keeps_the_card_being_said_in_view_above_the_subtitles(tmp_path, wc_config, browser):
+    chain = {"nodes": [{"id": f"s{i}", "label": f"Stage {i}"} for i in range(1, 13)],
+             "edges": [{"from": f"s{i}", "to": f"s{i + 1}"} for i in range(1, 12)]}
+    built = _each_part_said(chain, "Chain")
+    res = stage.show(str(tmp_path), "m", _visual("flowchart", chain), title="Chain", extra={"scene": built})
+    try:
+        page, frame, send = _still(browser, res["url"], 1300, 850)
+        pane = frame.locator('section.pane[data-view="m"]')
+        pane.locator(".m-node").first.wait_for(state="attached", timeout=5000)
+        seen = []
+        for n in (1, 6, 12):
+            _show_frame(page, send, "m", n, True)
+            seen.append(pane.evaluate("""(pane) => { const b = pane.querySelector('.pbody'), r = pane.querySelector('.m-node.m-cur').getBoundingClientRect(),
+                at = b.getBoundingClientRect(); return [r.top >= at.top && r.bottom <= at.bottom - 210, b.scrollTop > 0]; }"""))
+        assert seen == [[True, False], [True, True], [True, True]]  # the first is in view unscrolled; the rest scroll to it
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
