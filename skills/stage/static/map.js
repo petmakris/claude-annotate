@@ -53,6 +53,7 @@ export function renderMap(box, spec, embedded) {
   if (!box._mapObserved) {
     box._mapObserved = true;
     new ResizeObserver(() => place(box)).observe(box);
+    document.fonts?.ready.then(() => place(box));  // the cards are measured: again once the stage's fonts are in
   }
 }
 
