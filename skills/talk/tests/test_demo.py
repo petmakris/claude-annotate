@@ -98,3 +98,11 @@ def test_every_demo_board_keeps_what_the_stage_keeps_true(tmp_path):
         for item in call.board.items:
             item.pop("scene", None)  # a scene belongs to the answer that compiled it
     assert breaks == []
+
+
+def test_the_demos_change_board_points_at_the_lines_it_talks_about():
+    """The change board's points are line numbers in today's scene.js, so an edit above them moves them."""
+    text = talk.DEMO_FILE.read_text()
+    lines = (talk.SKILL_DIR.parents[1] / "skills/stage/static/scene.js").read_text().split("\n")
+    a, b = map(int, re.search(r"\[\[point: lines (\d+)-(\d+)\]\] And this new function reads which thing is being said", text).groups())
+    assert (lines[a - 1].split("(")[0], lines[b - 1].strip()) == ("export function beingSaid", "if (Array.isArray(frame.cur)) return frame.cur;")
