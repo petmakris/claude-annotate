@@ -332,7 +332,7 @@ function header(v) {
     const set = (actual) => {
       v.actual = actual;
       fit.setAttribute("aria-pressed", String(!actual)); real.setAttribute("aria-pressed", String(actual));
-      const box = v.pane.querySelector(".diagram, .visual");
+      const box = v.pane.querySelector(".diagram");
       if (box) { box.classList.toggle("fit", !actual); box.classList.toggle("actual", actual); }
     };
     const fit = button("Fit", () => set(false)), real = button("Actual size", () => set(true));
@@ -674,13 +674,6 @@ function renderInline(v, seq) {
     box.className = "visual map";
     renderMap(box, src.spec, embedded);
     requestAnimationFrame(() => { if (current()) { paintFrame(v, box); if (!hasScene(v)) layoutMap(box, null); } });
-  } else if (src.format === "visual") {
-    box.className = `visual visual-${src.tool} ` + (v.actual ? "actual" : "fit");
-    box.innerHTML = `<div class="vinner"><div class="vgrid">${src.html}</div>` +
-      (src.key ? `<div class="vkey">${src.key}</div>` : "") + "</div>";
-    ownMarkers(box);
-    sizeSvg(box);
-    requestAnimationFrame(() => { if (current()) paintFrame(v, box); });
   } else if (src.format === "diagram") {
     box.className = "diagram drawing";
     box.innerHTML = `<div class="spin"></div><span>Drawing the diagram…</span>`;
@@ -1145,19 +1138,6 @@ function startFrame(v) {
   }
   v.answer = null;
   v.frame = body.scene && embedded && live ? 0 : null;
-}
-
-// Every flowchart names its arrowhead fc-arrow, and url(#fc-arrow) finds the first in the page, which
-// may sit in a hidden pane and draw nothing; each drawing gets markers of its own.
-let markerSeq = 0;
-function ownMarkers(box) {
-  for (const m of box.querySelectorAll("marker[id]")) {
-    const was = `url(#${m.id})`;
-    m.id = `${m.id}-${++markerSeq}`;
-    for (const el of box.querySelectorAll("[marker-end], [marker-start], [marker-mid]")) {
-      for (const a of ["marker-end", "marker-start", "marker-mid"]) if (el.getAttribute(a) === was) el.setAttribute(a, `url(#${m.id})`);
-    }
-  }
 }
 
 function paintFrame(v, box, animate = false) {

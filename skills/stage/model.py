@@ -238,8 +238,8 @@ def check_flowchart(spec: dict) -> None:
 
 
 def visual_source(tool: str, text: str) -> dict:
-    """A sequence or flowchart spec (JSON), drawn by the shared tools in the stage's face and keyed for
-    frames: the grid as `html`, a sequence's numbered key as `key`."""
+    """A sequence or flowchart spec (JSON), checked and kept as its spec: the stage draws a sequence as its lanes
+    (lanes.js) and a flowchart as its map (map.js), so no drawing of the shared tools is stored with it."""
     try:
         spec = json.loads(text)
     except ValueError as e:
@@ -252,18 +252,15 @@ def visual_source(tool: str, text: str) -> dict:
     spec = _plain(tool, spec)
     try:
         if tool == "sequence":
-            html = sequence.render(spec, "v", keyed=True, face="stage")
-            key = sequence.render_key(spec, "v", keyed=True, face="stage")
+            sequence.validate(spec)
         else:
-            # The stage draws a flowchart as its map (map.js) and checks it here: loops are allowed, since a
-            # state machine has them, so annotate's renderer (which wants a DAG) is not used.
+            # Loops are allowed, since a state machine has them, so annotate's checks (which want a DAG) are not used.
             check_flowchart(spec)
-            html, key = "", ""
     except (sequence.ValidationError, flowchart.ValidationError) as e:
         raise SourceError(f"{tool}:-: {e}") from None
     except Exception as e:
-        raise SourceError(f"{tool}:-: the tool could not draw this spec ({type(e).__name__}: {e})") from None
-    return {"type": "inline", "format": "visual", "tool": tool, "spec": spec, "html": html, "key": key}
+        raise SourceError(f"{tool}:-: the tool could not read this spec ({type(e).__name__}: {e})") from None
+    return {"type": "inline", "format": "visual", "tool": tool, "spec": spec}
 
 
 def mount_name(directory: Path, cwd: Path) -> str:

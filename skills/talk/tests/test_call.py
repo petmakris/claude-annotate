@@ -929,13 +929,13 @@ def _call(tmp_path):
     return talk.Call(make_args(), "T", tmp_path / "out")
 
 
-def test_a_sequence_spec_is_drawn_by_the_shared_tool_and_steps_one_sentence_at_a_time(tmp_path):
+def test_a_sequence_spec_goes_to_the_stage_as_its_spec_and_steps_one_sentence_at_a_time(tmp_path):
     call = _call(tmp_path)
     call.split_reply(f"[[show sequence | Turn]] {SEQ} [[/show]] The page sends. It queues. It answers. It plays.")
     item = call.board.items[0]
     name, source, title = talk.stage_view(item)
     assert (item["kind"], source["format"], source["tool"], title) == ("sequence", "visual", "sequence", "Turn")
-    assert 'data-key="step:s1"' in source["html"] and 'data-key="step:s1"' in source["key"]
+    assert sorted(source) == ["format", "spec", "tool", "type"]  # the lanes draw it: no SVG or numbered key rides along
     shown = [set(f["show"]) for f in item["scene"]["frames"]]
     assert "step:s1" in shown[1] and "step:s2" not in shown[1] and "step:s4" in shown[4]
     assert not [p for p in call.board.problems if "(dump)" in p]

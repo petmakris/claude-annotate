@@ -297,33 +297,9 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
   --t-plain:#adb7c2;--t-edge:#6cb0e8;--t-internal:#e0a458;--t-service:#4cc6b8;--t-cheap:#9a9a9a;--t-hot:#f2848f;--t-good:#63c98d;
   --t-dropped:#767f8b;--t-internal-bg:#3b2f1e;--t-hot-bg:#3d2429;--t-good-bg:#1f3a2a;--t-edge-bg:#1e3347;--t-service-bg:#17393a;--t-cheap-bg:#313131}
 
-/* A visual: the grid, and a sequence's key beside it on a wide pane, under it on a narrow one. Fit draws the
-   grid as wide as its column allows, up to one and a half times its size, so its labels stay in step with the
-   key beside it, and never smaller than laid out: a narrow pane scrolls it sideways. Actual size draws it as laid out. */
+/* A visual: a sequence drawn as lanes or a flowchart as a map, both by the stage itself (lanes.js, map.js). */
 .visual{position:relative;flex:1 0 auto;align-self:stretch;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);
   border-radius:12px;padding:20px;container-type:inline-size;font-family:var(--sans);color:var(--ink)}
-.visual .vinner{display:flex;flex-direction:column;gap:20px}
-.visual .vgrid{min-width:0;overflow-x:auto}
-.visual.fit .vgrid svg{display:block;margin:0 auto;width:max(var(--w), min(100%, calc(var(--w) * 1.5)));height:auto;max-width:none}
-.visual.actual .vgrid svg{display:block;width:var(--w);height:var(--h);max-width:none}
-/* A flowchart has no key, so Fit sizes it to the pane both ways, as a Mermaid diagram is. */
-.visual-flowchart.fit{flex:1 1 auto;min-height:260px;padding:0}
-.visual-flowchart.fit :is(.vinner,.vgrid){position:absolute;inset:16px;overflow:hidden}
-.visual-flowchart.fit .vgrid svg{position:absolute;inset:0;margin:auto;width:100%;height:100%;
-  max-width:calc(var(--w) * 1.5);max-height:calc(var(--h) * 1.5)}
-.visual .vkey .seq-key{margin:0;border-top:0;padding-top:0}
-@container (min-width:1000px){
-  .visual-sequence .vinner{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,380px);align-items:start}
-  .visual-sequence .vkey{border-left:1px solid var(--line);padding-left:20px}
-}
-.visual .seq-key-row{border-radius:8px;transition:opacity .3s ease-out,background-color .2s}
-.visual .seq-key-row.k-focus{background:var(--hl-soft);box-shadow:inset 3px 0 0 var(--claude)}
-.visual .step-row.k-focus .row-bg{fill:var(--spot-bg)}
-.visual .step-row.k-focus .arr{stroke-width:2.6}
-.visual g.node.k-focus .node-shape{stroke:var(--claude)!important;stroke-width:3px!important}
-.visual path.flow-edge.k-focus{stroke:var(--claude)!important;stroke-width:2.6px}
-.visual:not(.lanes):not(.map).k-dim .k-key:not(.k-focus):not([data-key^="actor:"]){opacity:.35}
-
 
 /* Lanes: the sequence diagram of a talk call (lanes.js). The actors keep their columns, every arrow
    carries its sentence, and the step being said is the large one; earlier steps fold to one line. */
