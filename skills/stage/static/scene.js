@@ -114,3 +114,28 @@ export function beingSaid(scene, n) {
   }
   return cur;
 }
+
+// A scene saved before its frames named what is being said (no `cur`) may come from before the compiler
+// showed an arrow as soon as both its ends show (a saved call replayed from then lit its arrows a frame or
+// more late). Such a scene gets that rule here, as the compiler now writes it; a scene with `cur` is drawn
+// exactly as it is.
+export function settled(scene) {
+  if (!scene || !Array.isArray(scene.frames) || scene.frames.every((f) => Array.isArray(f.cur))) return scene;
+  const keys = new Set(scene.keys || []), ends = new Map();
+  const end = (id) => ["node:" + id, "group:" + id].find((k) => keys.has(k));
+  for (const k of keys) {
+    if (!k.startsWith("edge:")) continue;
+    const pair = k.slice(5).replace(/#\d+$/, "");
+    for (let i = pair.indexOf("->"); i > 0; i = pair.indexOf("->", i + 1)) {  // an id may hold "->" itself
+      const a = end(pair.slice(0, i)), b = end(pair.slice(i + 2));
+      if (a && b) { ends.set(k, [a, b]); break; }
+    }
+  }
+  if (!ends.size) return scene;
+  const frames = scene.frames.map((f) => {
+    const show = new Set(f.show);
+    for (const [k, [a, b]] of ends) if (show.has(a) && show.has(b)) show.add(k);
+    return { ...f, show: scene.keys.filter((k) => show.has(k)) };
+  });
+  return { ...scene, frames };
+}

@@ -24,7 +24,7 @@ A green suite does not show that the tests guard the code. `/audit-tests` (`tool
 
     git config core.hooksPath .githooks
 
-The stage's rules (`skills/stage/SKILL.md`, "What the stage keeps true") are checked on compiled frames by `stage_rule_breaks` in `skills/talk/tests/helpers.py`: call it on any reply a new test compiles. The scene compiler names what is being said in every frame (`cur`); the page draws that and never works it out itself.
+The stage's rules (`skills/stage/SKILL.md`, "What the stage keeps true") are checked on compiled frames by `stage_rule_breaks` in `skills/talk/tests/helpers.py`: call it on any reply a new test compiles. The scene compiler names what is being said in every frame (`cur`); the page draws that and never works it out itself. A saved scene from before `cur` is the one exception: `settled()` in `skills/stage/static/scene.js` gives its frames today's arrow rule as the view arrives, and `beingSaid()` guesses its part being said.
 
 A board keeps one scene per answer that stepped it (`scenes`, keyed by the answer number as a string; `scene` is the one of the answer that last put the board up, absent when that answer had none). In `stage.js` read a view's scene through `sceneOf(v)` or `painted(v)`, never `v.body.scene`, so a replayed answer steps its own frames. Talk numbers an answer by the Claude entries before it, so a test that splits two replies must `call.add("claude", ...)` between them, or both get the same number.
 

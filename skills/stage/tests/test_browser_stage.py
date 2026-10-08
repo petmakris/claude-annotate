@@ -975,6 +975,32 @@ def test_a_flowchart_scene_draws_its_frames_on_the_one_layout_and_a_theme_switch
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
 
+# "Turn path" as saved in workspace 261006-154701, compiled before an arrow came in with its second end
+TURN_PATH_SAVED = {"kind": "flowchart", "keys": ["node:P", "node:Q", "node:S", "edge:P->Q#0", "edge:Q->S#0"],
+                   "frames": [{"show": [], "focus": []}, {"show": ["node:P"], "focus": []},
+                              {"show": ["node:P", "node:Q"], "focus": []}, {"show": ["node:P", "node:Q", "node:S"], "focus": []},
+                              {"show": ["node:P", "node:Q", "node:S", "edge:P->Q#0", "edge:Q->S#0"], "focus": []}],
+                   "steps": 3, "rest": 4, "start": "empty", "title": "Turn path", "repairs": 0}
+
+
+def test_a_saved_scene_from_before_arrows_came_with_their_ends_lights_each_arrow_with_its_second_end(
+        tmp_path, wc_config, browser):
+    body = "graph LR; P[Page] --> Q[Queue]; Q --> S[Session]"
+    res = stage.show(str(tmp_path), "turn", {"type": "inline", "format": "diagram", "body": body}, title="Turn path",
+                     extra={"scene": TURN_PATH_SAVED})
+    try:
+        page, frame, send = _embedded(browser, res["url"])
+        frame.locator('section.pane[data-view="turn"] .diagram > svg g.node').first.wait_for(timeout=20000)
+        lit = []
+        for n in range(5):
+            send({"type": "stage:frame", "view": "turn", "n": n})
+            _until_frame(page, "turn", n)
+            lit.append([k for k in ("edge:P->Q#0", "edge:Q->S#0") if not _all_hidden(frame, "turn", k)])
+        assert lit == [[], [], ["edge:P->Q#0"], ["edge:P->Q#0", "edge:Q->S#0"], ["edge:P->Q#0", "edge:Q->S#0"]]
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
 def test_a_scene_on_a_diagram_that_cannot_be_drawn_leaves_the_error_card_alone(tmp_path, wc_config, browser):
     body = "graph TD; A-->B-->C-->D; B-->"
     steps = _scene(scene.flowchart_model(body), [["+ A"], ["all"]], "Bad")

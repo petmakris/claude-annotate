@@ -50,7 +50,7 @@
 //                                         session board) also gets data-theme on its <html> straight away.
 // Unknown types are ignored.
 import { flowchartKeys } from "./svg_keys.js";
-import { applyFrame, beingSaid, stepLabel } from "./scene.js";
+import { applyFrame, beingSaid, settled, stepLabel } from "./scene.js";
 import { layoutLanes, renderLanes } from "./lanes.js";
 import { layoutMap, renderMap } from "./map.js";
 
@@ -976,6 +976,9 @@ function afterViewChange(removedName) {
 
 function upsert(body) {
   if (isDiagram(body)) warmMermaid();
+  // a scene saved before frames named what is said gets the arrow rule of today's scenes (scene.js settled)
+  if (body.scene) body.scene = settled(body.scene);
+  for (const n of Object.keys(body.scenes || {})) body.scenes[n] = settled(body.scenes[n]);
   let v = views.get(body.name);
   if (!v) {
     const tab = document.createElement("button");
