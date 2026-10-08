@@ -12,7 +12,7 @@ While developing, run the fast loop first: every test that does not drive a brow
 
     uv run -q --with-requirements requirements-test.txt python -m pytest skills -q -m "not browser"
 
-The whole suite still runs before every push (below). Nearly all of its time is the browser tests, and a third of that is the live-microphone scenes, which run in real time and in two queues (`LIVE_QUEUES` in `skills/conftest.py`).
+The whole suite still runs before every push (below). Nearly all of its time is the browser tests.
 
 `pytest.ini` runs them in parallel on 4 workers (`-n 4`), not `-n auto`: each worker drives its own Chromium, and one Chromium per core on a many-core laptop once coincided with a hard system freeze. Do not raise it on a laptop, and do not run the suite alongside other heavy jobs (local speech models, other browser suites). For one file, name it instead of `skills`. Add `-n 0` to run serially.
 
