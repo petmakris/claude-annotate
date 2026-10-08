@@ -2101,6 +2101,27 @@ def test_the_lanes_keep_every_chip_label_and_note_on_the_board_and_clear_of_the_
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
 
+@pytest.mark.parametrize("spec", [RELEASE_NOTED, PORTFOLIO], ids=["release", "portfolio"])
+def test_the_lanes_keep_every_chip_label_and_note_clear_through_a_resize(spec, tmp_path, wc_config, browser):
+    built = _scene(scene.sequence_model(spec), [[f"+ step {s['id']}"] for s in spec["steps"]], "Lanes")
+    res = stage.show(str(tmp_path), "l", _visual("sequence", spec), title="Lanes", extra={"scene": built})
+    try:
+        page, frame, send = _still(browser, res["url"], 1300, 844)
+        pane = frame.locator('section.pane[data-view="l"]')
+        pane.locator(".ln-row").first.wait_for(state="attached", timeout=5000)
+        _show_frame(page, send, "l", built["rest"])
+        faults = {}
+        for width in (390, 800, 1300, 390):  # the frame stays; only the board's size changes
+            page.set_viewport_size({"width": width, "height": 844})
+            _settled(page)
+            got = pane.evaluate(LANES_FAULTS)
+            if got:
+                faults[width] = got
+        assert faults == {}
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
 CHIPS = """(pane) => [...pane.querySelectorAll('.ln-chip')].map((c) => [c.dataset.actor, Math.round(c.getBoundingClientRect().top
   - pane.querySelector('.ln-actors').getBoundingClientRect().top), getComputedStyle(c.querySelector('i')).display])"""
 BAND = "(pane) => Math.round(pane.querySelector('.ln-row[data-step=\"s0\"] .ln-bar').getBoundingClientRect().height)"
