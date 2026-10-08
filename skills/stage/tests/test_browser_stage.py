@@ -2109,6 +2109,9 @@ CELLS = {"type": "inline", "format": "change", "path": "skills/stage/static/scen
 LIT = """(pane) => Object.fromEntries([...pane.querySelectorAll('.ln[data-key]')].map((e) => { const s = getComputedStyle(e);
   return [e.dataset.key, [s.opacity, s.backgroundColor, s.boxShadow]]; }))"""
 SPOT = ["1", "rgba(255, 175, 95, 0.2)", "rgb(255, 175, 95) 3px 0px 0px 0px inset"]  # a line pointed at, on the dark code board
+IN_VIEW = """(pane) => { const box = pane.querySelector('.code').getBoundingClientRect();
+  return [...pane.querySelectorAll('.ln.k-focus')].map((e) => { const r = e.getBoundingClientRect();
+    return [e.dataset.key, r.top >= box.top && r.bottom <= box.bottom, Math.round(r.top - box.top)]; }); }"""
 
 
 def test_a_line_pointed_at_is_drawn_alike_over_a_highlight_and_on_an_added_or_removed_line(tmp_path, wc_config, browser):
@@ -2135,5 +2138,31 @@ def test_a_line_pointed_at_is_drawn_alike_over_a_highlight_and_on_an_added_or_re
         _show_frame(page, send, "c", 2, True)
         lit = pane.evaluate(LIT)
         assert [k for k, v in lit.items() if v == SPOT] == ["old:18"] and lit["line:18"][0] == "0.45"
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def test_a_range_pointed_at_is_in_view_whole_and_one_taller_than_the_board_starts_at_its_top(tmp_path, wc_config, browser):
+    waits = _scene(scene.lines_model(range(33, 54)), [["focus 33-41"], ["focus 43-53"]], "How a turn waits")
+    cells = _scene(scene.change_model(CELLS["hunks"]), [["focus 18-21"], ["focus 93-107"]], "Cells and the current one")
+    tall = {"type": "inline", "format": "code", "path": "long.py", "start": 1, "highlight": None, "lang": "python",
+            "lines": [f"line_{i} = {i}" for i in range(1, 61)]}
+    deep = _scene(scene.lines_model(range(1, 61)), [["focus 20-50"]], "Long")
+    res = stage.show(str(tmp_path), "w", WAITS, title="How a turn waits", extra={"scene": waits})
+    stage.show(str(tmp_path), "c", CELLS, title="Cells and the current one", extra={"scene": cells}, background=True)
+    stage.show(str(tmp_path), "l", tall, title="Long", extra={"scene": deep}, background=True)
+    try:
+        page, frame, send = _still(browser, res["url"], 1300, 500)
+        seen = {}
+        for view, n in (("w", 2), ("c", 2), ("l", 1)):
+            send({"type": "stage:state", "front": view, "frames": {view: n}})
+            pane = frame.locator(f'section.pane[data-view="{view}"]')
+            pane.locator(".ln").first.wait_for(timeout=5000)
+            _until_frame(page, view, n)
+            _settled(page)
+            got = pane.evaluate(IN_VIEW)
+            seen[view] = (len(got), sum(inside for _, inside, _ in got), got[0][2])
+        # the 11 lines of 43-53 and the 15 of 93-107 all in view; of 31 lines, the first 12px under the board's top
+        assert (seen["w"][:2], seen["c"][:2], seen["l"][2]) == ((11, 11), (15, 15), 12)
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])

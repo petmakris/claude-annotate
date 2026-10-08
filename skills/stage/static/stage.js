@@ -1078,14 +1078,18 @@ function setFollow(on) {
 
 const fold = (t) => String(t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
-// Centre `el` in each box around it that scrolls, inside the pane only: never the page around the stage.
-// `room`: the foot of the board kept for the subtitles, which the element is centred above.
+// Centre `el` (an element, or several taken together, such as the lines of a range) in each box around it
+// that scrolls, inside the pane only: never the page around the stage. What is taller than the box starts at
+// its top instead. `room`: the foot of the board kept for the subtitles, which the element is centred above.
 function centre(el, room = 0) {
+  const els = (Array.isArray(el) ? el : [el]).filter((e) => e && e.isConnected);
+  if (!els.length) return;
   const behavior = reduced() ? "auto" : "smooth";
-  for (let box = el.parentElement; box && box !== panesEl; box = box.parentElement) {
+  for (let box = els[0].parentElement; box && box !== panesEl; box = box.parentElement) {
     if (box.scrollHeight <= box.clientHeight + 1 || !/auto|scroll/.test(getComputedStyle(box).overflowY)) continue;
-    const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
-    box.scrollTo({ top: box.scrollTop + (r.top + r.height / 2) - (b.top + Math.max(b.height - room, r.height) / 2), behavior });
+    const rs = els.map((e) => e.getBoundingClientRect()), b = box.getBoundingClientRect();
+    const top = Math.min(...rs.map((r) => r.top)), height = Math.max(...rs.map((r) => r.bottom)) - top, view = b.height - room;
+    box.scrollTo({ top: box.scrollTop + (height <= view ? top + height / 2 - (b.top + view / 2) : top - b.top - 12), behavior });
   }
 }
 
@@ -1216,13 +1220,14 @@ function paintFrame(v, box, animate = false) {
     const cur = new Set(beingSaid(scene, n).filter((k) => k.startsWith("row#")));
     for (const tr of box.querySelectorAll("tbody tr")) tr.classList.toggle("g-cur", cur.has(tr.dataset.key));
     box.classList.toggle("g-on", cur.size > 0);
-    const row = box.querySelector("tbody tr.g-cur");
-    if (row) done.focused = row;  // keep the row being said in view
+    const said = [...box.querySelectorAll("tbody tr.g-cur")];
+    if (said.length) done.focused = said;  // keep the rows being said in view
   }
   v.applied = n;
   // Checked a frame later: a pane filled as it is fronted is still hidden while it paints.
   const room = box.classList.contains("map") ? +box.dataset.room || 0 : 0;
-  if (done.focused) requestAnimationFrame(() => { if (done.focused.isConnected && !v.pane.hidden) centre(done.focused, room); });
+  const keep = [done.focused].flat().filter(Boolean);
+  if (keep.length) requestAnimationFrame(() => { if (!v.pane.hidden) centre(keep, room); });
   const step = v.pane.querySelector(".vstep");
   if (step) step.textContent = stepLabel(scene, n);
   const back = v.pane.querySelector(".stepback"), next = v.pane.querySelector(".stepnext");

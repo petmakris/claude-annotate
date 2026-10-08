@@ -64,12 +64,12 @@ export function applyFrame(scene, box, n, from = null) {
   const show = new Set(at(n).show), focus = new Set(at(n).focus);
   const before = from === null ? null : new Set(at(from).show);
   const mine = String(++seq), entering = [];
-  let focused = null;
+  const focused = [];  // every element lit, kept in view together
   for (const key of scene.keys) {
     for (const el of found.get(key) || []) {
       el.classList.add("k-key");
       el.classList.toggle("k-focus", focus.has(key));
-      if (focus.has(key) && !focused) focused = el;
+      if (focus.has(key)) focused.push(el);
       el.dataset.kSeq = mine;
       el.style.transitionDelay = "";
       if (isEdgePath(key, el)) resetDraw(el);
