@@ -673,7 +673,23 @@ def compile_scene(model: SceneModel, groups: list[list[Verb]], title: str) -> tu
     if not groups:
         return None, []
     notes, repairs = [], 0
-    empty = model.can_hide and any(v.name in ("+", "next", "all") for g in groups for v in g)
+    # every target is resolved first, so the board starts empty only when a reveal really reveals something:
+    # a board whose every [[+ X]] named nothing starts whole, rather than staying blank through the answer
+    named: dict[int, list[str]] = {}
+    for verb in (v for g in groups for v in g):
+        if verb.name in ("next", "all") or (verb.name == "focus" and verb.keys is None
+                                            and [t.lower() for t in verb.targets] == ["none"]):
+            continue
+        named[id(verb)] = list(verb.keys or [])
+        if verb.keys is None:
+            for raw in verb.targets:
+                got, note = resolve(model, raw, title)
+                if note:
+                    notes.append(note)
+                    repairs += 1
+                named[id(verb)] += got
+    empty = model.can_hide and any(v.name in ("next", "all") or (v.name == "+" and named[id(v)])
+                                   for g in groups for v in g)
     shown = set() if empty else set(model.keys)
     focus: set = set()
     frames = [_snap(model, shown, focus)]
@@ -697,14 +713,7 @@ def compile_scene(model: SceneModel, groups: list[list[Verb]], title: str) -> tu
             if verb.name == "focus" and verb.keys is None and [t.lower() for t in verb.targets] == ["none"]:
                 focus, pointed = set(), None
                 continue
-            keys = list(verb.keys or [])
-            if verb.keys is None:
-                for raw in verb.targets:
-                    got, note = resolve(model, raw, title)
-                    if note:
-                        notes.append(note)
-                        repairs += 1
-                    keys += got
+            keys = named[id(verb)]
             for k in keys:
                 _reveal(model, k, shown)
             if verb.name == "focus":

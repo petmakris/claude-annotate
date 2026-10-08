@@ -114,7 +114,7 @@ On the stage a sequence unfolds as **lanes**: the actors keep their columns, eac
 | `[[all]]` | reveal everything still hidden |
 | `[[focus api->db]]`, `[[focus 42-45]]`, `[[focus rows 2-3]]`, `[[focus none]]` | light these and dim the rest; `point` does the same. The next reveal with no point of its own turns the light off |
 
-Targets are node and subgraph ids, edges as `a->b`, sequence step and actor ids, code lines and table rows, or their labels. Name another board by its title first: `[[+ Turn path: Q]]`. At most three things before the first verb. A table or diagram of more than three things with no verbs comes in with the sentences that name each thing, and a `board:` line says so. A target that names nothing exactly is read as the nearest id or label, or dropped; each such repair is a `board:` line and is counted on the board's header. During a call a page (a file, an address or a session) opens behind the board in front and never comes forward by itself: say that it is there.
+Targets are node and subgraph ids, edges as `a->b`, sequence step and actor ids, code lines and table rows, or their labels. Name another board by its title first: `[[+ Turn path: Q]]`. At most three things before the first verb. A table or diagram of more than three things with no verbs comes in with the sentences that name each thing, and a `board:` line says so. A target that names nothing exactly is read as the nearest id or label, or dropped; each such repair is a `board:` line and is counted on the board's header. A board none of whose reveals names anything shows whole from the start. During a call a page (a file, an address or a session) opens behind the board in front and never comes forward by itself: say that it is there.
 
 **Rules.**
 

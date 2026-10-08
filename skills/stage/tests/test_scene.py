@@ -163,6 +163,17 @@ def test_repairs_are_counted_and_what_is_never_revealed_comes_in_with_the_rest_f
     assert built["frames"][-1]["show"] == model.keys
 
 
+def test_a_board_whose_every_reveal_names_nothing_starts_whole_instead_of_blank():
+    table = scene.rows_model(["Speed", "Cost", "Needs"], ["", "Azure", "VoiceStudio"])
+    built, notes = scene.compile_scene(table, [verbs("+ row 7"), verbs("focus row 2")], "Engines")
+    assert built["start"] == "full" and notes == ['"Engines" has 3 rows, not row 7; dropped']
+    assert [len(f["show"]) for f in built["frames"]] == [12, 12, 12, 12]
+    assert built["frames"][2]["focus"] == ["row#2"] and built["frames"][2]["cur"] == ["row#2"]
+    # one reveal that does name a part: the board starts empty, and that part comes in with it
+    built, _ = scene.compile_scene(table, [verbs("+ row 7"), verbs("+ row 2")], "Engines")
+    assert built["start"] == "empty" and [f["show"][:1] for f in built["frames"]] == [[], [], ["row#2"], ["row#1"]]
+
+
 def test_next_reveals_in_declaration_order_and_says_when_nothing_is_left():
     model = scene.flowchart_model("graph TD; P[Page]-->Q[Queue]")
     built, notes = scene.compile_scene(model, [verbs("next"), verbs("next 2"), verbs("next")], "F")
