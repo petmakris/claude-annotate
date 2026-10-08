@@ -493,7 +493,7 @@ def test_a_point_lights_up_lines_of_the_last_board_and_a_bad_point_is_reported(t
     _, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point Nope: row 1]] There.", code)
     assert problems == ['point not shown: no board titled "Nope" in this call']
     entry, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point: wibble]] There.", code)
-    assert problems == ['point not shown: expected line N, lines A-B, row N, rows A-B, row "text", cell "row" / "column", node ID or step ID']
+    assert problems == ['point not shown: expected line N, lines A-B, old line N, row N, rows A-B, row "text", cell "row" / "column", node ID or step ID']
     assert [c["kind"] for c in entry["cues"]] == ["front"] and "wibble" not in entry["text"]
 
 
@@ -561,6 +561,12 @@ def test_a_change_tag_shows_what_changed_from_git(tmp_path):
     assert problems == [] and focus == [("edit", ["line:1"])]
     _, problems = cues_of(tmp_path, "[[show change: a.py | Edit]] Renamed. [[point: line 9]] No.", code)
     assert problems == ['point not shown: line 9 is not in the new lines shown in "Edit" (1-2)']
+    entry, problems, focus = focus_cues(tmp_path, "[[show change: a.py | Edit]] Renamed. [[point: old line 1]] Was this.", code)
+    assert problems == [] and focus == [("edit", ["old:1"])]  # a removed line, by its old number
+    _, problems = cues_of(tmp_path, "[[show change: a.py | Edit]] Renamed. [[point: old line 2]] No.", code)
+    assert problems == ['point not shown: old line 2 is not removed in "Edit" (removed: 1)']
+    _, problems = cues_of(tmp_path, "[[show code: a.py:1-2 | Now]] The file. [[point: old line 1]] No.", code)
+    assert problems == ['point not shown: "Now" is a code; use line N or lines A-B']
 
 
 def split_in(tmp_path, text, code):

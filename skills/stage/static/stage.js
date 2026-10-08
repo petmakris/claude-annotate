@@ -494,6 +494,7 @@ function paintChange(v, box, src) {
       const row = document.createElement("div");
       row.className = "ln " + (r.op === "+" ? "add" : r.op === "-" ? "del" : "ctx");
       if (r.new != null) row.dataset.line = r.new;
+      else if (r.old != null) row.dataset.old = r.old;  // a removed line, keyed old:<n>
       row.style.setProperty("--ind", indentOf(r.text));
       const span = spans.get(i);
       const code = span ? markRange(html[i] ?? "", span[0], span[1]) : (html[i] ?? "");

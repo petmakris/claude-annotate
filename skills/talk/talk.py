@@ -595,11 +595,11 @@ def cut_words(text: str, limit: int) -> str:
 
 _POINT_HEAD = re.compile(r"point(?![a-z0-9])\s*(?P<rest>.*)\Z", re.IGNORECASE | re.DOTALL)
 _POINT_TARGET = re.compile(
-    r"(?:(?P<line>lines?)\s+(?P<a>\d+)(?:\s*[-–]\s*(?P<b>\d+))?"
+    r"(?:(?:(?P<old>old)\s+)?(?P<line>lines?)\s+(?P<a>\d+)(?:\s*[-–]\s*(?P<b>\d+))?"
     r"|rows?\s+(?:(?P<n>\d+)(?:\s*[-–]\s*(?P<n2>\d+))?|\"(?P<text>[^\"]+)\"|“(?P<curly>[^”]+)”|'(?P<single>[^']+)')"
     r"|cells?\s+(?P<cell>[^\[\]]+?/[^\[\]]+?)"
     r"|nodes?\s+(?P<node>[^\s:\[\]][^:\[\]]*?)|steps?\s+(?P<step>[^\s:\[\]][^:\[\]]*?))\s*\Z", re.IGNORECASE)
-POINT_FORMS = 'expected line N, lines A-B, row N, rows A-B, row "text", cell "row" / "column", node ID or step ID'
+POINT_FORMS = 'expected line N, lines A-B, old line N, row N, rows A-B, row "text", cell "row" / "column", node ID or step ID'
 
 
 def parse_point(marker: str) -> tuple[str, str] | None:
@@ -692,7 +692,7 @@ def scene_model(item: dict) -> stage_scene.SceneModel | None:
     if kind == "code":
         return stage_scene.lines_model(range(item["start"], item["start"] + len(item["lines"])))
     if kind == "change":
-        return stage_scene.lines_model(sorted({r["new"] for h in item["hunks"] for r in h["lines"] if r["new"] is not None}))
+        return stage_scene.change_model(item["hunks"])
     if kind == "table":
         return stage_scene.rows_model([cell_text(c) for c in table_first_cells(item["body"])],
                                       [cell_text(c) for c in table_header(item["body"])])
@@ -969,15 +969,25 @@ class Board:
         if kind in VISUAL_KINDS:
             self.point_visual(item, name, m)
             return
-        use = {"code": "line N or lines A-B", "change": "line N or lines A-B (new line numbers)",
+        use = {"code": "line N or lines A-B", "change": "line N or lines A-B (new line numbers), or old line N",
                "table": 'row N, rows A-B, row "text" or cell "row" / "column"', "diagram": "node ID"}[kind]
         if m["step"]:
             self.problem(f'point not shown: "{name}" is a {kind}; use {use}')
             return
-        if (kind if kind not in LINE_KINDS else "code") != wanted:
+        if (kind if kind not in LINE_KINDS else "code") != wanted or (m["old"] and kind != "change"):
             self.problem(f'point not shown: "{name}" is a {kind}; use {use}')
             return
-        if kind == "change":
+        if kind == "change" and m["old"]:
+            # A removed line, by its number before the change.
+            a, b = sorted((int(m["a"]), int(m["b"] or m["a"])))
+            gone = [r["old"] for h in item["hunks"] for r in h["lines"] if r["op"] == "-"]
+            if not all(n in gone for n in range(a, b + 1)):
+                said = f"old line {a} is" if a == b else f"old lines {a}-{b} are"
+                self.problem(f'point not shown: {said} not removed in "{name}"'
+                             + (f" (removed: {', '.join(map(str, gone))})" if gone else " (it removes no line)"))
+                return
+            target = {"type": "keys", "keys": [f"old:{n}" for n in range(a, b + 1)]}
+        elif kind == "change":
             a = int(m["a"])
             b = int(m["b"]) if m["b"] else a
             a, b = min(a, b), max(a, b)
@@ -988,7 +998,8 @@ class Board:
                 shown = ", ".join(f"{lo}-{hi}" for lo, hi in spans)
                 self.problem(f'point not shown: {said} not in the new lines shown in "{name}" ({shown})')
                 return
-            target = {"type": "lines", "a": a, "b": b}
+            # the lines as they are shown, with any line removed between them
+            target = {"type": "keys", "keys": stage_scene.resolve(scene_model(item), f"{a}-{b}", name)[0]}
         elif kind == "code":
             a = int(m["a"])
             b = int(m["b"]) if m["b"] else a
@@ -1053,6 +1064,8 @@ class Board:
     def target_keys(item: dict, target: dict) -> list[str]:
         if target["type"] == "lines":
             return [f"line:{n}" for n in range(target["a"], target["b"] + 1)]
+        if target["type"] == "keys":
+            return target["keys"]
         if target["type"] == "row":
             if "n" in target:
                 return [f"row#{n}" for n in range(target["n"], target.get("b", target["n"]) + 1)]

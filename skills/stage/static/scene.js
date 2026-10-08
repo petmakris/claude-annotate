@@ -10,7 +10,7 @@ function stampKeys(kind, box) {
   if (box.querySelector("[data-key]")) return true;
   if (kind === "lines") {
     const lines = box.querySelectorAll(".ln[data-line]");
-    for (const ln of lines) ln.dataset.key = "line:" + ln.dataset.line;
+    for (const ln of box.querySelectorAll(".ln[data-line], .ln[data-old]")) ln.dataset.key = ln.dataset.line ? "line:" + ln.dataset.line : "old:" + ln.dataset.old;
     return lines.length > 0;
   }
   if (kind === "rows") {

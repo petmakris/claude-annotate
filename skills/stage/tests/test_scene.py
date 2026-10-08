@@ -383,3 +383,20 @@ def test_rows_take_a_range_as_lines_do():
     assert scene.resolve(TIMELINE, "rows 4-6", "T") == ([], '"T" has 5 rows, not rows 4-6; dropped')
     built, _ = scene.compile_scene(TIMELINE, [verbs("focus rows 1-2")], "T")
     assert built["frames"][1]["focus"][:2] == ["row#1", "row#2"] and _cur(built)[1] == ["row#1", "row#2"]
+
+
+# the first hunk of "Cells and the current one", the stage demo's change board: one line removed for four
+CELLS_HUNK = [{"lines": [{"op": " ", "old": 16, "new": 16}, {"op": " ", "old": 17, "new": 17}, {"op": "-", "old": 18, "new": None},
+                         {"op": "+", "old": None, "new": 18}, {"op": "+", "old": None, "new": 19}, {"op": "+", "old": None, "new": 20},
+                         {"op": "+", "old": None, "new": 21}, {"op": " ", "old": 19, "new": 22}]}]
+
+
+def test_a_change_board_keys_its_removed_lines_and_a_range_takes_the_ones_inside_it():
+    change = scene.change_model(CELLS_HUNK)
+    assert change.keys == ["line:16", "line:17", "old:18", "line:18", "line:19", "line:20", "line:21", "line:22"]
+    assert scene.resolve(change, "17-18", "C") == (["line:17", "old:18", "line:18"], None)
+    assert scene.resolve(change, "lines 18-21", "C") == (["line:18", "line:19", "line:20", "line:21"], None)
+    assert scene.resolve(change, "old line 18", "C") == (["old:18"], None)
+    assert scene.resolve(change, "old 19", "C") == ([], '"old 19" is not a removed line of "C"; dropped')
+    built, notes = scene.compile_scene(change, [verbs("focus old 18")], "C")
+    assert (built["frames"][1]["focus"], built["frames"][1]["cur"], notes) == (["old:18"], ["old:18"], [])

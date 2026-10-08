@@ -1,6 +1,7 @@
 """A scene: one board, the keys of what the eye can land on in it, and the frames its verbs make.
 
-Keys: node:<id>, edge:<a>-><b>#<n> (the n-th edge from a to b), group:<subgraph id>, line:<n>, row#<n>,
+Keys: node:<id>, edge:<a>-><b>#<n> (the n-th edge from a to b), group:<subgraph id>, line:<n>, old:<n> (a line a
+change removed, by its old number), row#<n>,
 and for a sequence spec actor:<id> and step:<id>. An edge shows as soon as both its ends do.
 Verbs ([[+ k]], [[next]], [[all]], [[focus k]]) compile into full snapshot frames: frame 0 is the
 opening state, one frame follows per place in the speech, and the rest frame shows everything with
@@ -23,9 +24,9 @@ FUZZY_RATIO = 0.8
 
 _VERB = re.compile(r"(?:(?P<sym>[+-])|(?P<word>next|all|focus|mark|strike|callout|morph)(?![\w-]))\s*(?P<rest>.*)\Z",
                    re.IGNORECASE | re.DOTALL)
-_TARGET = re.compile(r"none|(?:lines?\s+)?\d+(?:\s*[-–]\s*\d+)?|rows?\s+\S.*|nodes?\s+[\w.-]+"
+_TARGET = re.compile(r"none|(?:old\s+)?(?:lines?\s+)?\d+(?:\s*[-–]\s*\d+)?|rows?\s+\S.*|nodes?\s+[\w.-]+"
                      r"|[\w.-]+?\s*-+>\s*[\w.-]+|[\w.-]+", re.IGNORECASE)
-_LINES = re.compile(r"(?:lines?\s+)?(?P<a>\d+)(?:\s*[-–]\s*(?P<b>\d+))?", re.IGNORECASE)
+_LINES = re.compile(r"(?:(?P<old>old)\s+)?(?:lines?\s+)?(?P<a>\d+)(?:\s*[-–]\s*(?P<b>\d+))?", re.IGNORECASE)
 _CELL = re.compile(r"cells?\s+(?P<r>.+?)\s*(?:/|,|×)\s*(?P<c>.+)", re.IGNORECASE)
 
 
@@ -70,6 +71,13 @@ def fold(text: str) -> str:
 
 def lines_model(numbers) -> SceneModel:
     return SceneModel("lines", [f"line:{n}" for n in numbers])
+
+
+def change_model(hunks: list[dict]) -> SceneModel:
+    """A change board's lines in the order they are shown: line:<n> by its new number, and old:<n> for a removed
+    line by its old one, so a range of new lines takes the removed lines inside it."""
+    keys = [f"line:{r['new']}" if r.get("new") is not None else f"old:{r['old']}" for h in hunks for r in h["lines"]]
+    return SceneModel("lines", list(dict.fromkeys(keys)))
 
 
 def rows_model(cells: list[str], header: list[str] | None = None) -> SceneModel:
@@ -458,7 +466,12 @@ def resolve(model: SceneModel, raw: str, title: str) -> tuple[list[str], str | N
         if not m:
             return [], dropped
         a, b = sorted((int(m["a"]), int(m["b"] or m["a"])))
-        keys = [f"line:{n}" for n in range(a, b + 1) if f"line:{n}" in model.keys]
+        if m["old"]:
+            keys = [f"old:{n}" for n in range(a, b + 1) if f"old:{n}" in model.keys]
+            return (keys, None) if keys else ([], f'"{raw}" is not a removed line of "{title}"; dropped')
+        # from the first line of the range to its last as they are shown, with any removed line between them
+        inside = [i for i, k in enumerate(model.keys) if k.startswith("line:") and a <= int(k[5:]) <= b]
+        keys = model.keys[inside[0]:inside[-1] + 1] if inside else []
         return (keys, None) if keys else ([], f'"{raw}" is outside the lines of "{title}"; dropped')
     if model.kind == "rows" and (cell := _CELL.fullmatch(raw)):
         row, _ = resolve(model, "row " + cell["r"].strip(), title)

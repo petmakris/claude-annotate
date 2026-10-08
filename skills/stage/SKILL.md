@@ -61,7 +61,8 @@ Rules:
   as a background board and never takes the front; `stage.py` says so on stderr. Tell the user it is there.
 - **Inside a talk call the stage follows the voice.** /talk embeds the stage and steers it over
   postMessage (the protocol is at the top of `static/stage.js`): it fronts each board as the
-  spoken answer reaches it and lights up the lines, row or node a `[[point ...]]` tag names. The call
+  spoken answer reaches it and lights up the lines, row or node a `[[point ...]]` tag names (on a change board a
+  removed line too). The call
   page's gear has a **Stage follows the voice** switch for it. Picking a board by hand (its tab, its chip
   in the conversation, or Back and Next on its steps) turns it off; pressing Play, or the next answer, turns
   it on again and puts the board back where the voice is. A board the voice reaches before it has come up
