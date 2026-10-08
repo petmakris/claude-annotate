@@ -555,6 +555,8 @@ def test_an_answer_that_could_not_be_read_aloud_puts_its_scenes_on_their_last_fr
                                   "The page. [[+ P->Q]] The queue."))
         stage.wait_for_function("got.some(m => m.type === 'stage:state')", timeout=10000)
         assert stage.evaluate("got.find(m => m.type === 'stage:state').frames") == {"flow": 2}
+        # with no voice to wait for, its boards then show whole at once
+        assert stage.evaluate("got.filter(m => m.type === 'stage:rest')") == [{"type": "stage:rest", "views": ["flow"], "answer": 1}]
 
 
 def test_a_key_point_lights_once_even_when_the_view_changes_during_the_answer(tmp_path, pw):
@@ -897,3 +899,28 @@ def test_a_play_the_reader_starts_takes_the_board_back_to_the_voice(tmp_path, pw
         finally:
             browser.close()
 
+
+def test_an_answer_played_to_its_end_holds_its_last_frame_then_shows_its_boards_whole(tmp_path, pw):
+    with served(tmp_path, stage_url=STAGE) as (url, call, loop, fake):
+        fake.seconds = 3.0
+        browser = pw.chromium.launch(args=FAKE_MIC)
+        try:
+            page = browser.new_page()
+            stage_page(page, STAGE_PROBE)
+            page.goto(url)
+            page.wait_for_function("stageUp === true", timeout=5000)
+            stage = page.frame(url=STAGE)
+            rests = "got.filter(m => m.type === 'stage:rest')"
+            on_loop(loop, call.answer(FLOW_ANSWER))
+            page.wait_for_function("document.getElementById('audio').ended", timeout=15000)
+            page.wait_for_timeout(1000)  # the hold: the last frame stays
+            assert stage.evaluate(rests) == []
+            page.click("#playpause")  # played again within the hold: no rest under the voice
+            page.wait_for_function(PLAYING, timeout=5000)
+            page.wait_for_timeout(1500)
+            assert stage.evaluate(rests) == []
+            page.wait_for_function("document.getElementById('audio').ended", timeout=10000)
+            stage.wait_for_function(f"{rests}.length === 1", timeout=3000)
+            assert stage.evaluate(rests) == [{"type": "stage:rest", "views": ["flow"], "answer": 1}]
+        finally:
+            browser.close()

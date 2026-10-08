@@ -23,6 +23,9 @@
 //                                         | {type:'node', id}; null clears every spot
 //     {type:'stage:answer', n}            answer n started playing: following turns on again, and a frame
 //                                         or front another answer sent for a view not here yet is dropped
+//     {type:'stage:rest', views, answer}  answer `answer` has ended: each of these views still on its scene goes
+//                                         to the rest frame (the whole board, nothing dimmed); never the view in
+//                                         front while following is off
 //     {type:'stage:key', view, index}     key point number index (from 1) was just said: it gets the bar
 //                                         and a short glow; the Key points tab is never fronted for it
 //     {type:'stage:theme', theme}         'light' or 'dark', chosen on the call page
@@ -1258,6 +1261,17 @@ function toRest(v) {
   if (v.filled && !v.stale) paintFrame(v);
 }
 
+// An answer that has ended leaves each board it stepped whole: one a later answer has taken, or the one in
+// front that the reader took in hand, stays as it is.
+function restAfter(names, answer) {
+  for (const name of names) {
+    const v = views.get(String(name));
+    if (!v || (!follow && selectedName() === v.body.name)) continue;
+    if (v.body.scenes && answerKey(answer) !== null && v.answer !== answerKey(answer)) continue;
+    toRest(v);
+  }
+}
+
 function onMessage(m) {
   if (m.type === "stage:front") front(String(m.view), !!m.manual, m.answer);
   else if (m.type === "stage:key") {
@@ -1272,6 +1286,7 @@ function onMessage(m) {
     for (const [name, late] of lateFrames) if (late.answer !== answerKey(m.n)) lateFrames.delete(name);
     if (lateFront && lateFront.answer !== answerKey(m.n)) lateFront = null;
   }
+  else if (m.type === "stage:rest") restAfter(Array.isArray(m.views) ? m.views : [], m.answer);
   else if (m.type === "stage:zoom") {
     const z = Number(m.zoom);
     if (z >= 0.5 && z <= 3) document.documentElement.style.zoom = z === 1 ? "" : String(z);

@@ -1598,6 +1598,12 @@ def test_a_frame_past_the_rest_is_the_rest_and_never_stops_the_front(tmp_path, w
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
 
+# What the reader sees of a lanes board: the frame, the step bar, and how faded the first row is.
+FADE = """p => ({frame: window.__stageTest.frames()[p.dataset.view], step: p.querySelector('.vstep')?.textContent,
+  dim: p.querySelector('.visual').classList.contains('k-dim'),
+  s0: getComputedStyle(p.querySelector('.ln-row[data-step="s0"]')).opacity})"""
+
+
 def _follows(page):
     return page.evaluate("got.filter(m => m.type === 'stage:follow').map(m => m.on)")
 
@@ -1662,3 +1668,43 @@ def test_a_board_the_voice_fronts_before_it_arrives_comes_forward_when_it_does(t
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
+
+def test_when_an_answer_ends_each_board_it_stepped_shows_whole_and_undimmed(tmp_path, wc_config, browser):
+    # call 9BH6, answer 1: it ended on a focus of the last step, which left the rest of the board faded
+    one, two = _release_scenes()
+    res = stage.show(str(tmp_path), "rp", _visual("sequence", RELEASE), title="Release path",
+                     extra={"scene": one, "scenes": {"1": one}, "answer": 1})
+    stage.show(str(tmp_path), "rp2", _visual("sequence", RELEASE), title="Release path 2", background=True,
+               extra={"scene": one, "scenes": {"1": one}, "answer": 1})
+    try:
+        page, frame, send = _embedded(browser, res["url"], width=1400)
+        pane, pane2 = (frame.locator(f'section.pane[data-view="{n}"]') for n in ("rp", "rp2"))
+        pane.locator(".ln-row").first.wait_for(state="attached", timeout=5000)
+        send({"type": "stage:answer", "n": 1})
+        send({"type": "stage:state", "front": "rp", "frames": {"rp": 1, "rp2": 1}, "keys": 0, "answer": 1})
+        _settled(page)
+        assert pane.evaluate(FADE) == {"frame": 1, "step": "Step 1 of 1", "dim": True, "s0": "0.5"}
+        send({"type": "stage:rest", "views": ["rp", "rp2"], "answer": 1})
+        _settled(page)
+        page.wait_for_timeout(400)  # the fade's own transition
+        assert pane.evaluate(FADE) == {"frame": 2, "step": "All shown", "dim": False, "s0": "1"}
+        send({"type": "stage:front", "view": "rp2", "answer": 1})  # the board behind went whole too
+        _settled(page)
+        assert pane2.evaluate(FADE) == {"frame": 2, "step": "All shown", "dim": False, "s0": "1"}
+        send({"type": "stage:front", "view": "rp", "answer": 1})
+        # a rest for another answer, or for the board in front that the reader stepped, changes nothing
+        send({"type": "stage:state", "front": "rp", "frames": {"rp": 1, "rp2": 1}, "keys": 0, "answer": 1})
+        _settled(page)
+        send({"type": "stage:rest", "views": ["rp", "rp2"], "answer": 3})
+        _settled(page)
+        assert pane.evaluate(FADE)["frame"] == 1 and pane2.evaluate(FADE)["frame"] == 1
+        send({"type": "stage:front", "view": "rp", "answer": 1})
+        _settled(page)
+        pane.locator(".stepback").click()
+        _settled(page)
+        send({"type": "stage:rest", "views": ["rp", "rp2"], "answer": 1})
+        _settled(page)
+        assert pane.evaluate(FADE) == {"frame": 0, "step": "1 step", "dim": False, "s0": "1"}
+        assert pane2.evaluate(FADE)["frame"] == 2  # behind, it still goes whole
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])

@@ -51,6 +51,7 @@ if (CFG.stageUrl) {
 //   {type:'stage:state', front, frames, keys, answer}  after a jump: the board in front, every scene's frame
 //                                       (of that answer's scenes), the key point lit
 //   {type:'stage:answer', n}            answer n started playing
+//   {type:'stage:rest', views, answer}  that answer ended a moment ago: these boards, still on its scenes, show whole
 //   {type:'stage:key', view, index}     key point number index (from 1) was just said: light it up
 //   {type:'stage:theme', theme}         'light' or 'dark': the theme chosen here
 //   {type:'stage:follow', on}           the gear's switch turned following on or off
@@ -698,11 +699,18 @@ function toVoice() {
   cueSync = true;
   if (!follow) { follow = true; toStage({type: "stage:follow", on: true}); paintSettings(); }
 }
+// An answer played to its end holds its last frame a moment, then each of its boards shows whole, undimmed.
+const REST_HOLD_MS = 1500;
+let restTimer = 0;
+function restBoards(e) {
+  const views = [...new Set((e.cues || []).filter(c => c.kind === "frame").map(c => c.view))];
+  if (views.length) toStage({type: "stage:rest", views, answer: e.n || null});
+}
 let failedShown = null;
 function showFailedAnswer() {
   const e = lastAnswer();
   if (!e || e.speech !== "failed" || failedShown === e.id) return;
-  failedShown = e.id; cueSync = true; syncStage(e, Infinity);
+  failedShown = e.id; cueSync = true; syncStage(e, Infinity); restBoards(e);  // no voice to hold for
 }
 let answerSent = null;
 audio.addEventListener("play", () => {
@@ -713,7 +721,13 @@ let raf = 0;
 function frame() { raf = 0; highlight(); if (!audio.paused) raf = requestAnimationFrame(frame); }
 function startHighlight() { if (!raf) raf = requestAnimationFrame(frame); }
 function stopHighlight() { if (raf) cancelAnimationFrame(raf); raf = 0; highlight(); }
-audio.addEventListener("ended", () => { if (current) syncStage(view.entries.find(x => x.id === current.id) || current, Infinity); });
+audio.addEventListener("ended", () => {
+  if (!current) return;
+  const e = view.entries.find(x => x.id === current.id) || current;
+  syncStage(e, Infinity);
+  clearTimeout(restTimer);
+  restTimer = setTimeout(() => { if (current && current.id === e.id && audio.ended) restBoards(e); }, REST_HOLD_MS);
+});
 audio.addEventListener("seeking", () => { cueSync = true; });
 function skip(by) { audio.currentTime = Math.min(Math.max(0, audio.currentTime + by), audio.duration || 0); paintPill(); }
 // Play plays the board in front. When the voice is not on it (it came from an earlier answer, or this

@@ -65,7 +65,8 @@ Rules:
   page's gear has a **Stage follows the voice** switch for it. Picking a board by hand (its tab, its chip
   in the conversation, or Back and Next on its steps) turns it off; pressing Play, or the next answer, turns
   it on again and puts the board back where the voice is. A board the voice reaches before it has come up
-  is fronted when it arrives. The call page also sets the stage's light or dark theme. The answer that showed a view is
+  is fronted when it arrives. When an answer has ended, after a short hold, each board it stepped shows
+  whole, nothing dimmed. The call page also sets the stage's light or dark theme. The answer that showed a view is
   marked on its row in the list (`A3`). Every answer that steps a view keeps its own scene on it (`scenes`, by answer number), and
   the call page names the answer with each frame, so replaying an earlier answer steps the board as that answer did; an answer
   that showed the board with no steps of its own shows it whole. A stage opened on its own ignores all of this. Code, change, table and diagram views
