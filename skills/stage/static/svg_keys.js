@@ -4,15 +4,6 @@ export function isEdgePath(el) {
   return el.tagName.toLowerCase() === "path" && /^L_/.test(el.dataset.id || "");
 }
 
-export function nodeElements(svg, id) {
-  if (!svg) return [];
-  const want = String(id);
-  return [...svg.querySelectorAll("g.node")].filter((g) => {
-    const m = NODE_ID.exec(g.id);
-    return (m && m[1] === want) || g.id === want || g.dataset.id === want;
-  });
-}
-
 function splitEdge(dataId, ids) {
   const body = dataId.replace(/^L_/, "").replace(/_\d+$/, "");
   for (let i = body.indexOf("_"); i > 0; i = body.indexOf("_", i + 1)) {

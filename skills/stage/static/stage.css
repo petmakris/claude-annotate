@@ -123,8 +123,6 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .code .ln.marked{background:var(--mark-bg);box-shadow:inset 3px 0 0 var(--claude)}
 .code.marks:not(.k-dim) .ln:not(.marked){opacity:.6}  /* while lines are pointed at, the focus alone dims */
 .code .ln.marked>i{color:var(--mark-bar)}
-.code .ln.spot{background:var(--spot-bg);box-shadow:inset 3px 0 0 var(--mark-bar);opacity:1}
-.code.dimmed .ln:not(.spot){opacity:.45}
 .code .ln.changed{animation:changed 1.5s ease-out}
 @keyframes changed{from{background-color:rgba(255,175,95,.28)}}
 .hljs-keyword,.hljs-built_in,.hljs-selector-tag{color:var(--syn-kw)}
@@ -148,7 +146,6 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .code.change .ln.del{background:var(--del-bg);box-shadow:inset 3px 0 0 var(--bad)}
 .code.change .ln.add>b{color:var(--good)}
 .code.change .ln.del>b{color:var(--bad)}
-.code.change .ln.spot{background:var(--spot-bg);box-shadow:inset 3px 0 0 var(--mark-bar)}
 .code.change mark.chg{color:inherit;border-radius:0;padding:1px 0;margin:0;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .code.change mark.chg.s{border-top-left-radius:3px;border-bottom-left-radius:3px}
 .code.change mark.chg.e{border-top-right-radius:3px;border-bottom-right-radius:3px}
@@ -191,8 +188,6 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .diagram.actual svg{display:block;width:var(--w);height:var(--h);max-width:none!important}
 .diagram .node rect{rx:10px;ry:10px}
 .diagram g.node{transition:opacity .2s}
-.diagram g.node.spot rect{stroke:var(--claude);stroke-width:3}
-.diagram.dimmed g.node:not(.spot){opacity:.45}
 .diagram.drawing{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--muted);font-size:13px;max-height:240px}
 .diagram.failed{display:flex;flex-direction:column;gap:12px;padding:16px;background:var(--bad-soft);border-color:var(--bad-line);flex:none;min-height:0}
 .failcard{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
@@ -221,8 +216,6 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .tablewrap tbody tr:nth-child(even){background:var(--row-alt)}
 .tablewrap tbody tr:hover{background:var(--acc-soft)}
 .tablewrap tbody tr.changed{animation:changed-row 1.5s ease-out}
-.tablewrap tbody tr.spot,.tablewrap tbody tr.spot:nth-child(even){background:var(--hl-soft);box-shadow:inset 3px 0 0 var(--claude)}
-.tablewrap table.dimmed tbody tr:not(.spot){opacity:.45}
 .tablewrap tbody tr{transition:background-color .15s,opacity .2s}
 @keyframes changed-row{from{background-color:var(--hl-soft)}}
 .tablewrap .key{width:1%;white-space:nowrap;font-weight:500;color:var(--ink)}

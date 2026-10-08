@@ -492,41 +492,19 @@ def test_the_stage_follows_the_voice_until_a_tab_is_tapped(tmp_path, wc_config, 
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
 
-def test_a_point_lights_up_lines_a_row_and_a_node(tmp_path, wc_config, browser):
+def test_only_a_scene_frame_lights_a_part_and_the_old_point_message_does_nothing(tmp_path, wc_config, browser):
+    # stage:point had its own highlight (.spot, .dimmed) beside the frames' k-focus; nothing sent it, so it is gone
     res = stage.show(str(tmp_path), "c", CODE5, title="Five steps")
     stage.show(str(tmp_path), "t", {"type": "inline", "format": "table", "body": AREAS}, title="Areas", background=True)
-    stage.show(str(tmp_path), "d", {"type": "inline", "format": "diagram", "body": "graph TD; P[Page]-->Q[Queue]"},
-               title="Flow", background=True)
     try:
         page, frame, send = _embedded(browser, res["url"])
         frame.locator('section.pane[data-view="c"] .ln').first.wait_for(timeout=5000)
         send({"type": "stage:point", "view": "c", "target": {"type": "lines", "a": 2, "b": 3}})
-        code = frame.locator('section.pane[data-view="c"] .code')
-        frame.locator('section.pane[data-view="c"] .code.dimmed').wait_for(timeout=3000)
-        assert frame.locator('section.pane[data-view="c"] .ln.spot').evaluate_all(
-            "els => els.map(e => e.dataset.line)") == ["2", "3"]
-        page.wait_for_timeout(400)  # the dimming fades in
-        assert abs(float(frame.locator('.ln[data-line="1"]').evaluate("e => getComputedStyle(e).opacity")) - 0.45) < 0.05
-        send({"type": "stage:point", "view": None, "target": None})
-        frame.locator('section.pane[data-view="c"] .code:not(.dimmed)').wait_for(timeout=3000)
-        assert frame.locator(".spot").count() == 0 and "dimmed" not in code.get_attribute("class")
-        # A row, by its first cell (case and accents aside), in a pane not filled until now.
-        send({"type": "stage:point", "view": "t", "target": {"type": "row", "text": "PERSONAL/"}})
-        row = frame.locator('section.pane[data-view="t"] tbody tr.spot')
-        row.wait_for(timeout=3000)
-        assert row.count() == 1 and "Αρχεία ζωής" in row.inner_text()
-        assert _selected(frame, "t")
-        assert "dimmed" in frame.locator('section.pane[data-view="t"] table').get_attribute("class")
         send({"type": "stage:point", "view": "t", "target": {"type": "row", "n": 2}})
-        frame.locator('section.pane[data-view="t"] tbody tr.spot', has_text="bin/").wait_for(timeout=3000)
-        assert frame.locator('section.pane[data-view="t"] tbody tr.spot').count() == 1
-        # A node of a diagram drawn after the point arrived.
-        send({"type": "stage:point", "view": "d", "target": {"type": "node", "id": "Q"}})
-        node = frame.locator('section.pane[data-view="d"] svg g.node.spot')
-        node.wait_for(timeout=20000)
-        assert "Queue" in node.text_content()
-        assert "dimmed" in frame.locator('section.pane[data-view="d"] .diagram').get_attribute("class")
-        assert frame.locator("svg g.node.spot").count() == 1
+        page.wait_for_timeout(400)
+        assert _selected(frame, "c") and not _selected(frame, "t")
+        assert frame.locator(".spot, .dimmed").count() == 0
+        assert frame.locator('.ln[data-line="1"]').evaluate("e => getComputedStyle(e).opacity") == "1"
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 

@@ -18,9 +18,6 @@
 //                                         in front stays as it is. Fronted by the voice of an answer with no
 //                                         scene of its own for the view, the view shows whole. A view not here
 //                                         yet is fronted when it arrives, unless another front came first
-//     {type:'stage:point', view, target}  when following: front the view and light up part of it.
-//                                         target {type:'lines', a, b} | {type:'row', n} | {type:'row', text}
-//                                         | {type:'node', id}; null clears every spot
 //     {type:'stage:answer', n}            answer n started playing: following turns on again, and a frame
 //                                         or front another answer sent for a view not here yet is dropped
 //     {type:'stage:rest', views, answer}  answer `answer` has ended: each of these views still on its scene goes
@@ -53,7 +50,7 @@
 //     {type:'stage:theme', theme}         on each load and each change. A page from this daemon (a file or
 //                                         session board) also gets data-theme on its <html> straight away.
 // Unknown types are ignored.
-import { flowchartKeys, nodeElements } from "./svg_keys.js";
+import { flowchartKeys } from "./svg_keys.js";
 import { applyFrame, beingSaid, stepLabel } from "./scene.js";
 import { layoutLanes, renderLanes } from "./lanes.js";
 import { layoutMap, renderMap } from "./map.js";
@@ -398,7 +395,6 @@ function paintCode(v, box, src) {
   box.classList.toggle("marks", !!src.highlight && src.lines.some((_, i) => src.start + i >= ha && src.start + i <= hb));
   box.replaceChildren(inner);
   pulseDiff(v, box, "code", src.lines);
-  paintSpot(v, box);
   paintFrame(v, box);
 }
 
@@ -411,7 +407,7 @@ function indentOf(line) {
 
 // On first show, the first marked line sits about a third of the way down.
 function scrollToMark(box) {
-  if (box.querySelector(".ln.spot, .ln.k-focus")) return;  // the lines being spoken about win
+  if (box.querySelector(".ln.k-focus")) return;  // the lines being spoken about win
   const first = box.querySelector(".ln.marked");
   if (first) box.scrollTop = Math.max(0, first.offsetTop - box.clientHeight / 3);
 }
@@ -506,7 +502,6 @@ function paintChange(v, box, src) {
   inner.replaceChildren(...rows);
   box.replaceChildren(inner);
   pulseDiff(v, box, "code", texts);
-  paintSpot(v, box);
   paintFrame(v, box);
 }
 
@@ -616,7 +611,6 @@ function paintTable(v, box, src) {
   shapeTables(box);
   box.classList.add("grid");  // a table board: the wide grid, its row being said the large one
   pulseDiff(v, box, "rows", [...box.querySelectorAll("tbody tr")].map((tr) => tr.textContent));
-  paintSpot(v, box);
   paintFrame(v, box);
 }
 
@@ -687,7 +681,6 @@ function renderInline(v, seq) {
       (src.key ? `<div class="vkey">${src.key}</div>` : "") + "</div>";
     ownMarkers(box);
     sizeSvg(box);
-    paintSpot(v, box);
     requestAnimationFrame(() => { if (current()) paintFrame(v, box); });
   } else if (src.format === "diagram") {
     box.className = "diagram drawing";
@@ -738,7 +731,6 @@ async function drawDiagram(v, seq, box, current) {
     const vb = box.querySelector("svg")?.viewBox?.baseVal;
     if (vb && vb.width <= 16) v.stale = true;
     if (pulse) restart(box, "pulse");
-    paintSpot(v, box);
     paintFrame(v, box);
   } catch (e) {
     document.getElementById("d" + id)?.remove();
@@ -1064,10 +1056,6 @@ async function onItem(anchor, version) {
 
 // ---- Following the voice (embedded in a talk call) ------------------------------------------
 
-// The spot: what the voice is talking about, {name, target}. Kept here so a pane filled later
-// (lazily, or after mermaid draws) lights it up too.
-let spot = null;
-
 // Following lives on the call page's gear; the stage keeps the state and tells the page when it
 // changes here.
 function setFollow(on) {
@@ -1075,8 +1063,6 @@ function setFollow(on) {
   follow = on;
   post({ type: "stage:follow", on });
 }
-
-const fold = (t) => String(t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
 // Centre `el` (an element, or several taken together, such as the lines of a range) in each box around it
 // that scrolls, inside the pane only: never the page around the stage. What is taller than the box starts at
@@ -1091,37 +1077,6 @@ function centre(el, room = 0) {
     const top = Math.min(...rs.map((r) => r.top)), height = Math.max(...rs.map((r) => r.bottom)) - top, view = b.height - room;
     box.scrollTo({ top: box.scrollTop + (height <= view ? top + height / 2 - (b.top + view / 2) : top - b.top - 12), behavior });
   }
-}
-
-function clearSpots(scope = panesEl) {
-  for (const el of scope.querySelectorAll(".spot")) el.classList.remove("spot");
-  for (const el of scope.querySelectorAll(".dimmed")) el.classList.remove("dimmed");
-}
-
-// Lights up the spot in this view's painted box, if the spot is on this view. `box` is the box just
-// painted (it may not be in the pane yet); without it, the pane's own.
-function paintSpot(v, box) {
-  box = box || v.pane.querySelector(".code, .md, .diagram, .visual");
-  if (!box) return;
-  clearSpots(box.parentElement || box);
-  box.classList.remove("dimmed");
-  if (!spot || spot.name !== v.body.name || !spot.target) return;
-  const t = spot.target;
-  let hits = [], holder = box;
-  if (t.type === "lines") {
-    hits = [...box.querySelectorAll(".ln")].filter((ln) => +ln.dataset.line >= t.a && +ln.dataset.line <= t.b);
-  } else if (t.type === "row") {
-    const rows = [...box.querySelectorAll("tbody tr")];
-    const row = t.text != null ? rows.find((tr) => fold(tr.children[0]?.textContent || "") === fold(t.text)) : rows[t.n - 1];
-    if (row) hits = [row];
-    holder = row?.closest("table") || box;
-  } else if (t.type === "node") {
-    hits = nodeElements(box.querySelector("svg"), t.id).slice(0, 1);
-  }
-  if (!hits.length) return;
-  for (const h of hits) h.classList.add("spot");
-  holder.classList.add("dimmed");
-  requestAnimationFrame(() => { if (hits[0].isConnected) centre(hits[0]); });
 }
 
 // The board the voice fronted before it reached the stage, {name, answer}: fronted when it arrives.
@@ -1291,7 +1246,7 @@ function onMessage(m) {
     if (v && selectedName() !== v.body.name) markUpdated(v, true);
   }
   else if (m.type === "stage:answer") {
-    setFollow(true); spot = null; clearSpots();
+    setFollow(true);
     for (const [name, late] of lateFrames) if (late.answer !== answerKey(m.n)) lateFrames.delete(name);
     if (lateFront && lateFront.answer !== answerKey(m.n)) lateFront = null;
   }
@@ -1316,14 +1271,6 @@ function onMessage(m) {
     }
     if (m.front) front(String(m.front), false, m.answer);
     lightKey(Number(m.keys) || 0, false);
-  }
-  else if (m.type === "stage:point") {
-    if (!m.target) { spot = null; clearSpots(); return; }
-    if (!follow || !views.has(String(m.view))) return;
-    spot = { name: String(m.view), target: m.target };
-    clearSpots();
-    front(spot.name, false);
-    paintSpot(views.get(spot.name));
   }
 }
 
