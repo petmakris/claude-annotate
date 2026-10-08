@@ -2106,6 +2106,17 @@ CELLS = {"type": "inline", "format": "change", "path": "skills/stage/static/scen
         ]},
     ]}
 
+# "PMP-314, step by step" (workspace 261006-144416) and "What the pass found" (261006-222924), a call's tables, the
+# private names, the client and the ticket put in other words
+STEPS_TABLE = {"type": "inline", "format": "table", "body": "| Step | Contract repo | Platform's pin |\n|---|---|---|\n"
+               "| Today on master | latest build M1 | M1 |\n| Now, on your laptop | built locally as L | L |\n"
+               "| Contract PR opens | CI builds D-a | draft PR, pin D-a |\n| Review fixes pushed | CI builds D-b | re-pin D-b |\n"
+               "| Contract PR merges | master builds M2 | pin M2, Platform merges |\n| Later, when the bank asks | | the bank's layer moves to M2 |"}
+PASS_TABLE = {"type": "inline", "format": "table", "body": "| Leftover | Files | Example |\n|---|---|---|\n"
+              "| Import in the wrong block | many | WorkflowsRepository import among the java util imports |\n"
+              "| Import of a class from its own package | 8 | WorkflowsRepository, Task, CommonParameters |\n"
+              "| Unused import | 11 | WorkflowsRepository and ConditionalOnProperty in ExternalEventController |\n"
+              "| Empty folders left by the move | 2 | com/acmebank/proposals/infra/workflows inside workflows |"}
 LIT = """(pane) => Object.fromEntries([...pane.querySelectorAll('.ln[data-key]')].map((e) => { const s = getComputedStyle(e);
   return [e.dataset.key, [s.opacity, s.backgroundColor, s.boxShadow]]; }))"""
 SPOT = ["1", "rgba(255, 175, 95, 0.2)", "rgb(255, 175, 95) 3px 0px 0px 0px inset"]  # a line pointed at, on the dark code board
@@ -2181,5 +2192,33 @@ def test_a_range_pointed_at_is_in_view_whole_and_one_taller_than_the_board_start
             seen[view] = (len(got), sum(inside for _, inside, _ in got), got[0][2])
         # the 11 lines of 43-53 and the 15 of 93-107 all in view; of 31 lines, the first 12px under the board's top
         assert (seen["w"][:2], seen["c"][:2], seen["l"][2]) == ((11, 11), (15, 15), 12)
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+CARDS = """(pane) => { const wrap = pane.querySelector('.tablewrap'), cur = pane.querySelector('tr.g-cur');
+  return {sideways: wrap.scrollWidth - wrap.clientWidth, cols: [...new Set([...pane.querySelectorAll('tbody td')].map((td) => getComputedStyle(td).gridTemplateColumns))],
+    over: [...pane.querySelectorAll('tbody td')].filter((td) => td.scrollWidth > td.clientWidth + 1).map((td) => td.dataset.key),
+    bar: [getComputedStyle(cur).boxShadow, getComputedStyle(cur.children[0]).boxShadow]}; }"""
+
+
+def test_a_table_card_on_a_phone_lines_up_its_first_cell_with_the_others_and_never_scrolls_sideways(tmp_path, wc_config, browser):
+    model = lambda body: scene.rows_model([ln.split("|")[1].strip() for ln in body.split("\n")[2:]])  # noqa: E731
+    res = stage.show(str(tmp_path), "s", STEPS_TABLE, title="Step by step",
+                     extra={"scene": _scene(model(STEPS_TABLE["body"]), [["focus row 1"]], "Step by step")})
+    stage.show(str(tmp_path), "p", PASS_TABLE, title="What the pass found", background=True,
+               extra={"scene": _scene(model(PASS_TABLE["body"]), [["focus row 4"]], "What the pass found")})
+    try:
+        page, frame, send = _still(browser, res["url"], 390, 844)
+        seen = {}
+        for view in ("s", "p"):
+            send({"type": "stage:state", "front": view, "frames": {view: 1}})
+            pane = frame.locator(f'section.pane[data-view="{view}"]')
+            pane.locator("tbody tr").first.wait_for(timeout=5000)
+            _until_frame(page, view, 1)
+            seen[view] = pane.evaluate(CARDS)
+        bar = ["rgb(166, 82, 11) 4px 0px 0px 0px inset", "none"]  # down the whole card, not its first cell alone
+        assert seen == {"s": {"sideways": 0, "cols": ["114.234px 211.766px"], "over": [], "bar": bar},
+                        "p": {"sideways": 0, "cols": ["114.234px 211.766px"], "over": [], "bar": bar}}
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])

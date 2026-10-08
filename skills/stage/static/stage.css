@@ -261,10 +261,10 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
   .tablewrap table.cards,.tablewrap table.cards tbody,.tablewrap table.cards tr,.tablewrap table.cards td{display:block}
   .tablewrap table.cards tr{padding:10px 14px;border-bottom:1px solid var(--line)}
   .tablewrap table.cards tbody tr:last-child{border-bottom:0}
-  .tablewrap table.cards td{display:grid;grid-template-columns:minmax(5.5em,34%) 1fr;gap:10px;padding:3px 0;border:0;max-width:none;
-    width:auto;white-space:normal;text-align:left}
+  .tablewrap table.cards td{display:grid;grid-template-columns:minmax(5.5em,34%) minmax(0,1fr);gap:10px;padding:3px 0;border:0;max-width:none;
+    width:auto;white-space:normal;text-align:left;overflow-wrap:anywhere}  /* a long path breaks inside its card */
   .tablewrap table.cards td::before{content:attr(data-label);font:600 12px/1.6 var(--sans);color:var(--muted)}
-  .tablewrap table.cards td.key{font-weight:600}
+  .tablewrap table.cards td.key{font-weight:600;width:auto}  /* its label and value line up with the card's other cells */
   .tiles{grid-template-columns:repeat(2,1fr)}
   .code.change .ln{grid-template-columns:2.4em 2.4em 1.3em 1fr;padding-right:12px}
   .code.change .ln>i{padding-right:8px}
@@ -438,7 +438,10 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .md.grid.k-dim tbody tr:not(.k-focus){opacity:1}
 .md.grid tbody tr td.k-focus,.md.grid tbody tr.g-cur td.k-focus{background:var(--word);color:var(--ink);font-weight:600}  /* over the row's band */
 .md.grid code{font-size:.86em}
-@media (max-width:600px){.md.grid tbody tr.g-cur td{font-size:17px}}
+@media (max-width:600px){.md.grid tbody tr.g-cur td{font-size:17px}
+  /* a row being said, as a card: the band and the bar run down the whole card */
+  .md.grid table.cards tbody tr.g-cur{background:var(--hl-soft);box-shadow:inset 4px 0 0 var(--claude)}
+  .md.grid table.cards tbody tr.g-cur td:first-child{box-shadow:none}}
 
 /* The map: a flowchart the stage draws itself (map.js). Parts not said yet are faint dashed ghosts;
    the part being said is a large card with its detail; the arrow that just arrived draws in. */
