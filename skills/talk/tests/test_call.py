@@ -527,7 +527,7 @@ def test_an_untagged_table_gets_its_cue_in_order(tmp_path):
     entry, _ = cues_of(tmp_path, "[[show diagram | D]] graph TD; A-->B [[/show]] First. Then this.\n"
                                  "| k | v |\n|---|---|\n| a | 1 |\nAfter the table.")
     said = entry["text"]
-    assert [(c["view"], c["at"]) for c in entry["cues"]] == [("d", 0), ("k-v", said.index("\n") + 1)]
+    assert [(c["view"], c["at"]) for c in entry["cues"]] == [("d", 0), ("k-v", said.index("After"))]
 
 
 # -- what changed, and key points ------------------------------------------------
@@ -1041,6 +1041,18 @@ CALLS_BOTH = (  # its subs left out
     "hands it the Flowable implementation, AdvisoryWorkflowsRepository, which now sits inside the workflows module. "
     "[[point: step s3]] The other way round, when a BPMN step must send orders, Flowable calls the SendOrdersDelegate "
     "interface. [[point: step s4]] The application implements that one, in OrdersSyncService.\n\n")
+FIVE_COMMENTS = (  # the reviewer's name and the file names left out
+    "Splitting principle 29 into four narrow ones was the wrong move.\n[[show table | Five review comments]]\n"
+    "| Comment | Where | Caught by |\n|---|---|---|\n"
+    "| Why not use the same logic as the cloud mapper? | Mapper.java:302 | Do it the way the neighbours do |\n"
+    "| We call it asset in every other domain model | api.yml:1319 | Do it the way the neighbours do |\n"
+    "| Shorten to: Assets contributing to the breach of a rule | api.yml:1315 | Say what it is, in one line |\n"
+    "| No need to say it can be null if it is optional | api.yml:1277 | Say what it is, in one line |\n"
+    "| Shorten the changelog by a lot | changelog.md:15 | Say what it is, in one line |\n[[/show]]\n"
+    "I read the reviewer's five comments on the two pull requests. Two general principles cover all five. [[point: rows 1-2]] "
+    "The first is: when the codebase already does or names something, new code does and names it the same way. "
+    "[[point: rows 3-5]] The second is: a description says in one line what the thing is, and leaves out the cases and "
+    "anything its declaration already says.")
 
 
 def _frames_said(call, shown):
@@ -1094,3 +1106,15 @@ def test_the_demo_sequence_brings_each_step_with_the_sentence_that_names_it(tmp_
         (4, "Your Claude session", ["step:s4"]), (5, "It reads the", ["step:s5"]), (6, "Then it sends", ["step:s6"]),
         (7, "The server has", ["step:s7"]), (8, "And the answer", ["step:s8"]), (9, "The slow part", [])]
     assert call.board.problems == [] and stage_rule_breaks(call, shown) == []
+
+
+def test_a_board_tag_on_its_own_line_fires_its_first_frame_on_the_first_word_after_it(tmp_path):
+    from helpers import make_args, stage_rule_breaks
+    # the reply as call fuKjbRHGdvkbRbAC2mECXg first heard it: its two range points were dropped then
+    text = FIVE_COMMENTS.replace("[[point: rows 1-2]] ", "").replace("[[point: rows 3-5]] ", "")
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    shown = call.split_reply(text)
+    assert [(n, words, arrived) for n, words, arrived, _ in _frames_said(call, shown)] == [
+        (1, "I read the", ["row#1"]), (2, "Two general principles", ["row#2"]), (3, "The first is:", ["row#3"]),
+        (4, "The second is:", ["row#4", "row#5"])]
+    assert stage_rule_breaks(call, shown) == []

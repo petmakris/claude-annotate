@@ -749,7 +749,10 @@ def place_cues(shown: str) -> tuple[str, list[int]]:
     text, marks = _sub_tracked(r"[ \t]+\n", "\n", text, marks)
     lead = len(text) - len(text.lstrip())
     text = text.strip()
-    return text, [min(max(0, p - lead), len(text)) for p in marks]
+    # A cue fires on the word after it: one left on the space or the line break before that word moves
+    # onto it, so two cues meant for one word never stand at two places.
+    marks = [min(max(0, p - lead), len(text)) for p in marks]
+    return text, [p + len(text[p:]) - len(text[p:].lstrip()) for p in marks]
 
 
 BLOCK_TAG = re.compile(r"\[\[([^\[\]]*)\]\]")
