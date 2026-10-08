@@ -411,7 +411,7 @@ function indentOf(line) {
 
 // On first show, the first marked line sits about a third of the way down.
 function scrollToMark(box) {
-  if (box.querySelector(".ln.spot")) return;  // a spot being spoken about wins
+  if (box.querySelector(".ln.spot, .ln.k-focus")) return;  // the lines being spoken about win
   const first = box.querySelector(".ln.marked");
   if (first) box.scrollTop = Math.max(0, first.offsetTop - box.clientHeight / 3);
 }

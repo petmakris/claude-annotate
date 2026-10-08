@@ -2142,6 +2142,23 @@ def test_a_line_pointed_at_is_drawn_alike_over_a_highlight_and_on_an_added_or_re
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
 
+def test_a_seek_onto_a_highlighted_board_not_drawn_yet_keeps_the_line_pointed_at_in_view(tmp_path, wc_config, browser):
+    code = {"type": "inline", "format": "code", "path": "long.py", "start": 1, "highlight": [3, 4], "lang": "python",
+            "lines": [f"line_{i} = {i}" for i in range(1, 61)]}
+    built = _scene(scene.lines_model(range(1, 61)), [["focus 55"]], "Long")
+    res = stage.show(str(tmp_path), "t", TABLE, title="Areas")
+    stage.show(str(tmp_path), "c", code, title="Long", extra={"scene": built}, background=True)
+    try:
+        page, frame, send = _still(browser, res["url"], 1300, 700)
+        frame.locator('section.pane[data-view="t"] table').wait_for(timeout=5000)
+        send({"type": "stage:state", "front": "c", "frames": {"c": 1}})
+        _until_frame(page, "c", 1)
+        _settled(page)
+        assert [k for k, inside, _ in frame.locator('section.pane[data-view="c"]').evaluate(IN_VIEW) if inside] == ["line:55"]
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
 def test_a_range_pointed_at_is_in_view_whole_and_one_taller_than_the_board_starts_at_its_top(tmp_path, wc_config, browser):
     waits = _scene(scene.lines_model(range(33, 54)), [["focus 33-41"], ["focus 43-53"]], "How a turn waits")
     cells = _scene(scene.change_model(CELLS["hunks"]), [["focus 18-21"], ["focus 93-107"]], "Cells and the current one")
