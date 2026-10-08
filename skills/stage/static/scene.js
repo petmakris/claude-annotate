@@ -89,7 +89,7 @@ export function applyFrame(scene, box, n, from = null) {
     requestAnimationFrame(() => { if (el.dataset.kSeq === mine) el.classList.remove("k-hidden"); });
   }
   paintCard(scene, box, n);
-  return { missing: scene.keys.filter((k) => !found.has(k)), focused };
+  return { focused };  // a key with nothing drawn for it lights nothing: the keys come from the drawing's own spec
 }
 
 // What is being said in frame n: what the frame names (`cur`, written by the scene compiler), so the page

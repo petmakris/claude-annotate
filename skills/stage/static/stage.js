@@ -45,7 +45,6 @@
 //     {type:'stage:key', key}                                    Space, ArrowLeft or ArrowRight pressed here, on nothing
 //                                                                that takes keys: the call page pauses or moves the answer
 //     {type:'stage:missing', view}                               a chip asked for a view this stage does not hold
-//     {type:'stage:keymiss', view, keys}                         keys of a scene its drawing does not hold; they stay shown
 //   Stage to the page in a page board (to '*'), once the call page has set a theme:
 //     {type:'stage:theme', theme}         on each load and each change. A page from this daemon (a file or
 //                                         session board) also gets data-theme on its <html> straight away.
@@ -1013,7 +1012,7 @@ function upsert(body) {
   const sceneChanged = !same(before.scene, body.scene) || !same(before.scenes, body.scenes);
   // A later answer's scene never takes the board from the answer whose voice is on it: only a change to the
   // scene the board is on starts it again.
-  if (!same(was, sceneOf(v))) { startFrame(v); v.missReported = false; }
+  if (!same(was, sceneOf(v))) startFrame(v);
   const changed = !same(before.source, body.source) || before.title !== body.title ||
     before.rev !== body.rev || before.caption !== body.caption || sceneChanged;
   if (changed) v.changedAt = Date.now();
@@ -1188,10 +1187,6 @@ function paintFrame(v, box, animate = false) {
   const back = v.pane.querySelector(".stepback"), next = v.pane.querySelector(".stepnext");
   if (back) back.disabled = n <= 0;
   if (next) next.disabled = n >= scene.rest;
-  if (done.missing.length && !v.missReported) {
-    v.missReported = true;
-    post({ type: "stage:keymiss", view: v.body.name, keys: done.missing });
-  }
 }
 
 // Back and Next move one frame, from the empty start to the rest frame. Stepping by hand takes the

@@ -1153,6 +1153,23 @@ LINKS = """(pane) => [...pane.querySelectorAll('.m-edge')].map(g => {
   return [g.dataset.key, getComputedStyle(g.querySelector('.m-line')).strokeDasharray, tips]; })"""
 
 
+def test_a_scene_key_the_drawing_lacks_lights_nothing_and_posts_nothing(tmp_path, wc_config, browser):
+    spec = scene.mermaid_spec("graph LR; P[Page] --> Q[Queue]")
+    built = _scene(scene.flowchart_spec_model(scene.mermaid_spec("graph LR; P[Page] --> Q[Queue] --> S[Session]")),
+                   [["+ P"], ["+ S"]], "Turn path")
+    res = stage.show(str(tmp_path), "m", _visual("flowchart", spec), title="Turn path", extra={"scene": built})
+    try:
+        page, frame, send = _still(browser, res["url"], 1300, 850)
+        pane = frame.locator('section.pane[data-view="m"]')
+        pane.locator(".m-node").first.wait_for(state="attached", timeout=5000)
+        for n in (0, 1, 2):
+            _show_frame(page, send, "m", n)
+        assert pane.locator(".m-node:not(.k-hidden)").evaluate_all("els => els.map(e => e.dataset.key)") == ["node:P"]
+        assert page.evaluate("got.map(m => m.type).filter(t => !['stage:ready', 'stage:views', 'stage:changed', 'stage:shown', 'stage:follow'].includes(t))") == []
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
 def test_a_mermaid_link_keeps_its_look_on_the_map_dashed_or_with_a_head_at_both_ends_or_none(tmp_path, wc_config, browser):
     spec = scene.mermaid_spec("graph LR; A[Page] <--> B[Server]; B -.-> C[Queue]; C --- D[Store]; D ~~~ E[Log]")
     assert [(e["from"], e["to"], e.get("line"), e.get("heads")) for e in spec["edges"]] == [
