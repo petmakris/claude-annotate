@@ -194,6 +194,21 @@ def test_an_ended_call_disables_talking_and_keeps_replay(tmp_path, pw):
             browser.close()
 
 
+def test_play_on_a_page_opened_after_the_answer_plays_the_last_answer(tmp_path, pw):
+    with served(tmp_path) as (url, call, loop, fake):
+        browser = pw.chromium.launch(args=FAKE_MIC)
+        try:
+            on_loop(loop, call.answer("Said before you came back."))
+            page = browser.new_page()
+            page.goto(url)  # an answer that was there when the page loaded is never played by itself
+            page.wait_for_selector("#playpause")
+            assert page.evaluate(PAUSED)
+            page.click("#playpause")
+            page.wait_for_function(PLAYING, timeout=5000)
+        finally:
+            browser.close()
+
+
 def test_an_answer_shows_a_progress_bar_until_its_whole_audio_is_ready(tmp_path, pw):
     with served(tmp_path) as (url, call, loop, fake):
         fake.hold = threading.Semaphore(0)

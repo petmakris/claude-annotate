@@ -2101,6 +2101,43 @@ def test_the_lanes_keep_every_chip_label_and_note_on_the_board_and_clear_of_the_
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
 
+CHIPS = """(pane) => [...pane.querySelectorAll('.ln-chip')].map((c) => [c.dataset.actor, Math.round(c.getBoundingClientRect().top
+  - pane.querySelector('.ln-actors').getBoundingClientRect().top), getComputedStyle(c.querySelector('i')).display])"""
+BAND = "(pane) => Math.round(pane.querySelector('.ln-row[data-step=\"s0\"] .ln-bar').getBoundingClientRect().height)"
+
+
+def test_the_lanes_measure_their_chips_afresh_at_every_size_and_a_band_said_and_left_returns_to_its_size(
+        tmp_path, wc_config, browser):
+    built = _scene(scene.sequence_model(RELEASE_NOTED), [[f"+ step {s['id']}"] for s in RELEASE_NOTED["steps"]], "Lanes")
+    res = stage.show(str(tmp_path), "l", _visual("sequence", RELEASE_NOTED), title="Lanes", extra={"scene": built})
+    try:
+        page, frame, send = _still(browser, res["url"], 390, 844)
+        pane = frame.locator('section.pane[data-view="l"]')
+        pane.locator(".ln-row").first.wait_for(state="attached", timeout=5000)
+        seen = {}
+        for n in range(3):  # the band is said, then the step after it
+            _show_frame(page, send, "l", n, n > 0)
+            seen[n] = pane.evaluate(BAND)
+        # on a phone the band grows round its wrapped sentence while it is said, and goes back to its bar after
+        assert seen == {0: 0, 1: seen[1], 2: 30} and seen[1] > 56
+        narrow = pane.evaluate(CHIPS)
+        page.set_viewport_size({"width": 1300, "height": 844})
+        _settled(page)
+        # on a phone the chips wrap their names and give up their dots; three fit a desktop's width on one line,
+        # each with its dot, as if the board had opened there
+        assert (narrow, pane.evaluate(CHIPS)) == ([["c", 2, "none"], ["m", 2, "none"], ["k", 2, "none"]],
+                                                  [["c", 2, "block"], ["m", 2, "block"], ["k", 2, "block"]])
+        # at 620px the chips just fail to fit: measured afresh, whichever size the board came from
+        for width in (1300, 390):
+            page.set_viewport_size({"width": width, "height": 844})
+            _settled(page)
+            page.set_viewport_size({"width": 620, "height": 844})
+            _settled(page)
+            assert [d for _, _, d in pane.evaluate(CHIPS)] == ["none", "none", "none"], width
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
 # -- code, change and table boards: the part being said is lit alike, and in view ----------------------------
 
 # Real boards, from the stage demo (call workspaces 261005-105449 and 261007-073115): this repository's own code.

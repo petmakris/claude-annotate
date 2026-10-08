@@ -503,3 +503,9 @@ def test_a_scene_saved_before_frames_named_what_is_said_draws_the_new_part_with_
     # b arrives with the arrow into it; c with only an arrow out of it; nothing at frame 0 or at rest
     assert _being_said(saved, [0, 1, 2, 3, 4]) == [
         [], ["node:a"], ["node:b", "edge:a->b#0"], ["node:c", "edge:c->a#0"], []]
+
+
+def test_a_word_names_a_part_by_any_form_of_it_but_not_by_a_word_it_merely_starts_like():
+    same = [("share", "sharing"), ("sends", "send"), ("implement", "implementation"), ("queue", "queued"),
+            ("list", "last"), ("stage", "stack"), ("cat", "category")]
+    assert [scene._same(a, b) for a, b in same] == [True, True, True, True, False, False, False]
