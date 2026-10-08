@@ -372,7 +372,7 @@ def test_a_phone_shows_stage_subtitles_and_controls_without_sideways_scroll(tmp_
         page.wait_for_selector("#playpause")
         page.click("#gear")
         assert page.evaluate("document.documentElement.scrollWidth") <= 390
-        for sel in ("#stage", "#cap", "#talk", "#gear", "#pGear"):
+        for sel in ("#stage", "#cap", "#talk", "#fullscreen", "#gear", "#pGear"):
             box = page.locator(sel).bounding_box()
             assert box and box["x"] >= 0 and box["x"] + box["width"] <= 390 and box["y"] + box["height"] <= 844, sel
         assert page.is_hidden(".left")
@@ -614,6 +614,22 @@ def test_the_subtitles_hide_and_come_back_and_stay_hidden_across_a_reload(tmp_pa
         assert page.is_hidden("#subs") and page.is_visible("#subsbtn")
         page.click("#subsbtn")
         assert page.inner_text("#cap") == "An answer to hide." and page.is_hidden("#subsbtn")
+
+
+def test_the_fullscreen_button_takes_the_page_full_screen_and_back(tmp_path, browser):
+    with served(tmp_path) as (url, call, loop, fake):
+        page = browser.new_page()
+        page.goto(url)
+        page.wait_for_selector("#fullscreen")
+        assert page.get_attribute("#fullscreen", "aria-pressed") == "false"
+        page.click("#fullscreen")
+        page.wait_for_function("document.fullscreenElement === document.documentElement", timeout=5000)
+        assert page.get_attribute("#fullscreen", "aria-pressed") == "true"
+        assert page.get_attribute("#fullscreen", "aria-label") == "Leave full screen"
+        page.click("#fullscreen")
+        page.wait_for_function("document.fullscreenElement === null", timeout=5000)
+        assert page.get_attribute("#fullscreen", "aria-pressed") == "false"
+        assert page.get_attribute("#fullscreen", "aria-label") == "Full screen"
 
 
 def test_a_hidden_answer_still_shows_what_claude_is_doing(tmp_path, browser):

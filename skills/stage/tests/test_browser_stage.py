@@ -696,6 +696,52 @@ def test_the_call_page_sets_the_stage_theme(tmp_path, wc_config, browser):
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
 
+THEMED_PAGE = """<!doctype html><style>:root{--bg:#ffffff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#000000}}
+:root[data-theme="dark"]{--bg:#000000}
+body{background:var(--bg)}</style><body><h1 id="v">%s</h1>"""
+LISTENING_PAGE = THEMED_PAGE % "away" + """<script>addEventListener("message", e => {
+  if (e.data && e.data.type === "stage:theme") document.documentElement.dataset.theme = e.data.theme; });</script>"""
+
+
+def test_a_page_board_takes_the_call_page_theme_as_it_loads_and_as_it_changes(tmp_path, wc_config, browser):
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    page_file = proj / "page.html"
+    page_file.write_text(THEMED_PAGE % "one")
+    no_watch = patch.object(stage, "start_watch", lambda cwd, sid: None)
+    no_watch.start()
+    res = stage.show(str(proj), "page", model.parse_source("page.html", proj), title="Page")
+    stage.show(str(proj), "away", model.parse_source("https://page.test/", proj), title="Away", background=True)
+    try:
+        page, frame, send = _embedded(browser, res["url"])
+        page.route("https://page.test/", lambda r: r.fulfill(content_type="text/html", body=LISTENING_PAGE))
+        bg = "document.body && getComputedStyle(document.body).backgroundColor"
+        inner = lambda name: page.frame_locator("#s").frame_locator(f'section.pane[data-view="{name}"] iframe.frame:not(.incoming)')
+        send({"type": "stage:theme", "theme": "dark"})
+        inner("page").locator("html[data-theme='dark']").wait_for(state="attached", timeout=5000)
+        assert inner("page").locator("body").evaluate("b => getComputedStyle(b).backgroundColor") == "rgb(0, 0, 0)"
+        # A save loads the page again: the new copy is dark before it takes the old one's place.
+        page_file.write_text(THEMED_PAGE % "two")
+        t = time.time() + 5
+        os.utime(page_file, (t, t))
+        assert stage.tick(str(proj), res["sid"]) == ["page"]
+        inner("page").locator("#v:has-text('two')").wait_for(timeout=5000)
+        assert inner("page").locator("html").get_attribute("data-theme") == "dark"
+        send({"type": "stage:theme", "theme": "light"})
+        inner("page").locator("html[data-theme='light']").wait_for(state="attached", timeout=5000)
+        assert inner("page").locator("body").evaluate("b => getComputedStyle(b).backgroundColor") == "rgb(255, 255, 255)"
+        # A page from another origin gets the theme as a message, on load and on change.
+        send({"type": "stage:front", "view": "away", "manual": True})
+        inner("away").locator("html[data-theme='light']").wait_for(state="attached", timeout=5000)
+        send({"type": "stage:theme", "theme": "dark"})
+        inner("away").locator("html[data-theme='dark']").wait_for(state="attached", timeout=5000)
+        assert inner("away").locator("body").evaluate("b => getComputedStyle(b).backgroundColor") == "rgb(0, 0, 0)"
+    finally:
+        no_watch.stop()
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
 def test_a_diagram_drawn_before_the_theme_changes_is_redrawn_in_the_new_one(tmp_path, wc_config, browser):
     res = stage.show(str(tmp_path), "flow", {"type": "inline", "format": "diagram", "body": "graph TD; A[Ask] --> B[Answer]"},
                      title="Flow")

@@ -69,7 +69,6 @@ from skills.stage import scene as stage_scene  # noqa: E402
 DATA_DIR = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "talk"
 SESSIONS_DIR = DATA_DIR / "sessions"
 DEFAULT_PORT = 8766
-OPEN_TIMEOUT_MIN = 15  # end the call if the page is never opened within this long
 LINGER_S = 30 * 60  # after the call ends, the page can still replay its answers for this long
 PAGE_GONE_S = 30.0  # an ended call whose page has not polled for this long shuts down
 STAGE_SETTLE_S = 5.0  # how long a reply waits for its stage shows, so their problems reach it
@@ -2345,15 +2344,13 @@ def build_app(server: Server):
 
 
 async def watch(call: Call) -> None:
-    """End a call nobody opened or nobody talks in; close an ended one once its page is gone."""
+    """End a call nobody talks in; close an ended one once its page is gone."""
     while not call.closed.is_set():
         await asyncio.sleep(1)
         now = time.time()
         if not call.ended:
-            if not call.last_seen and now - call.started > OPEN_TIMEOUT_MIN * 60:
-                call.end(f"the page was not opened within {OPEN_TIMEOUT_MIN} minutes")
-            elif (call.demo is None and now - call.last_turn > call.args.idle_minutes * 60
-                  and not call.busy(call.args.idle_minutes * 60)):  # a demo stays ready: it never goes idle
+            if (call.demo is None and now - call.last_turn > call.args.idle_minutes * 60
+                and not call.busy(call.args.idle_minutes * 60)):  # a demo stays ready: it never goes idle
                 call.end(f"nothing was said for {call.args.idle_minutes} minutes")
         elif now - call.ended_at > LINGER_S or now - call.last_seen > PAGE_GONE_S:
             call.closed.set()

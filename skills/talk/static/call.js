@@ -127,6 +127,22 @@ darkMq.addEventListener("change", () => { if (theme === "system") applyTheme(); 
 let follow = true;
 $("follow").onclick = () => { follow = !follow; toStage({type: "stage:follow", on: follow}); paintSettings(); if (follow) resync(); };
 
+// ---- full screen: the whole page, stage and pill, for a TV or a call that needs the room ----
+function paintFullscreen() {
+  const on = !!document.fullscreenElement;
+  $("fullscreen").setAttribute("aria-pressed", String(on));
+  $("fullscreen").setAttribute("aria-label", on ? "Leave full screen" : "Full screen");
+  $("fullscreen").dataset.tip = on ? "Leave full screen" : "Full screen";
+}
+// A browser that cannot take the page full screen (an iPhone, a frame without the permission) shows no button.
+$("fullscreen").hidden = !document.fullscreenEnabled;
+$("fullscreen").onclick = () => {
+  const go = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  go.catch(err => showError("Full screen failed: " + err.message));
+};
+// Esc and the browser's own controls leave full screen too: the button follows whatever happened.
+document.addEventListener("fullscreenchange", paintFullscreen);
+
 // ---- popovers: one open at a time ---------------------------------------------
 const POPS = {hist: "pHist", callsbtn: "pCalls", gear: "pGear"};
 let openPop = null;

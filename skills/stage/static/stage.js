@@ -37,6 +37,9 @@
 //                                                                that takes keys: the call page pauses or moves the answer
 //     {type:'stage:missing', view}                               a chip asked for a view this stage does not hold
 //     {type:'stage:keymiss', view, keys}                         keys of a scene its drawing does not hold; they stay shown
+//   Stage to the page in a page board (to '*'), once the call page has set a theme:
+//     {type:'stage:theme', theme}         on each load and each change. A page from this daemon (a file or
+//                                         session board) also gets data-theme on its <html> straight away.
 // Unknown types are ignored.
 import { flowchartKeys, nodeElements } from "./svg_keys.js";
 import { applyFrame, currentKey, stepLabel } from "./scene.js";
@@ -747,6 +750,17 @@ async function redrawDiagrams() {
 }
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redrawDiagrams);
 
+// A page board takes the theme the call page set. A page from this daemon's origin gets data-theme
+// on its <html>, which a page written with the shared rules (:root[data-theme="dark"] beside the
+// prefers-color-scheme query) follows as it is. A page from another origin cannot be reached, so it
+// gets the theme as a message and follows only if it listens. A stage opened on its own sets no theme.
+function themeFrame(frame) {
+  const theme = document.documentElement.dataset.theme;
+  if (!theme) return;
+  try { frame.contentDocument.documentElement.dataset.theme = theme; } catch {}
+  try { frame.contentWindow.postMessage({ type: "stage:theme", theme }, "*"); } catch {}
+}
+
 // The stage got a size back: draw what waited for one, in the pane on show.
 new ResizeObserver(() => {
   if (!document.documentElement.clientWidth) return;
@@ -784,6 +798,7 @@ function fillPane(v, update = false) {
   const wrap = document.createElement("div"); wrap.className = "framewrap";
   const frame = document.createElement("iframe");
   frame.className = "frame"; frame.title = title; frame.src = frameUrl(src, rev);
+  frame.addEventListener("load", () => themeFrame(frame));
   wrap.append(frame);
   body.append(wrap);
   if (update) restart(wrap, "pulse");
@@ -838,7 +853,7 @@ function reloadFrame(v) {
     for (const f of wrap.querySelectorAll("iframe.frame")) if (f !== next) f.remove();
     if (!v.pane.hidden) restart(wrap, "pulse");
   };
-  next.addEventListener("load", () => { try { next.contentWindow.scrollTo(x, y); } catch {} swap(); }, { once: true });
+  next.addEventListener("load", () => { themeFrame(next); try { next.contentWindow.scrollTo(x, y); } catch {} swap(); }, { once: true });
   timer = setTimeout(swap, 10000);  // never loaded: fall back to a plain swap
   next.src = frameUrl(v.body.source, v.body.rev, hash);
   wrap.append(next);
@@ -1187,6 +1202,7 @@ function onMessage(m) {
     const theme = m.theme === "dark" ? "dark" : "light";
     if (document.documentElement.dataset.theme === theme) return;
     document.documentElement.dataset.theme = theme;
+    for (const f of document.querySelectorAll("iframe.frame")) themeFrame(f);
     redrawDiagrams();
   }
   else if (m.type === "stage:follow") setFollow(!!m.on);

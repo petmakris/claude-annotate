@@ -50,6 +50,13 @@ Rules:
 - Give the user the printed URL once per session; later views appear on the same page.
 - A view's body may also carry the number of the answer that showed it (`answer`), with its
   `kind`; /talk sets these itself through `stage.show(..., extra=...)`, with no CLI flag.
+- **A page you write for the stage follows the call's theme.** Give it both dark rules,
+  `@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){...}}` and
+  `:root[data-theme="dark"]{...}`. A file board gets `data-theme` on its `<html>` from the stage.
+  A page on another address (`https://...`) cannot be reached that way: it gets
+  `{type:'stage:theme', theme}` as a message instead, so it also needs
+  `addEventListener("message", e => { if (e.data?.type === "stage:theme") document.documentElement.dataset.theme = e.data.theme; })`.
+  Prefer a file in the project over an address.
 - **During a talk call a page waits behind.** On a call's stage a file, address or session view opens
   as a background board and never takes the front; `stage.py` says so on stderr. Tell the user it is there.
 - **Inside a talk call the stage follows the voice.** /talk embeds the stage and steers it over

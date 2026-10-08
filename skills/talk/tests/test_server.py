@@ -506,6 +506,21 @@ def test_a_turn_being_worked_on_is_not_ended_as_idle(tmp_path):
     assert run(go(False)) == "nothing was said for 0.05 minutes"
 
 
+def test_a_call_whose_page_was_never_opened_stays_open(tmp_path):
+    from helpers import make_args
+
+    async def go():
+        call = talk.Call(make_args(), "T", tmp_path / "out")
+        call.started = time.time() - 20 * 60
+        task = asyncio.ensure_future(talk.watch(call))
+        await asyncio.sleep(1.3)
+        task.cancel()
+        return call.ended
+
+    import asyncio
+    assert run(go()) is None
+
+
 def test_any_failure_while_speaking_leaves_the_answer_failed_not_making(tmp_path):
     import wave
 
