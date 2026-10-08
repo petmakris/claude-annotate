@@ -1946,3 +1946,87 @@ def test_a_map_taller_than_its_board_keeps_the_card_being_said_in_view_above_the
         assert seen == [[True, False], [True, True], [True, True]]  # the first is in view unscrolled; the rest scroll to it
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+# -- the lanes keep every chip, label and note on the board and clear of the others ------------------------
+
+# "Release path" as RELEASE, with the notes, subs and legend it was drawn with (the build refs put in others of the
+# same shape); and "Portfolio to bank", call workspace 261007-184923, the private name and the ticket put in other words.
+RELEASE_NOTED = {**RELEASE,
+                 "legend": [{"tone": "service", "label": "a build is published"}, {"tone": "internal", "label": "Platform pins a build"},
+                            {"tone": "good", "label": "the release everyone lands on"}],
+                 "steps": [RELEASE["steps"][0]] + [
+                     {**s, "sub": sub, "note": note} for s, sub, note in zip(RELEASE["steps"][1:], [
+                         "2026-R1-dev-20260113.080426-139", "2026-R1-dev-20260113.080426-139", "2026-R1-dev-20260121.122929-140",
+                         "2026-R1-dev-20260121.122929-140", "2026-R1-20260126.132852-16", "2026-R1-20260126.132852-16",
+                         "2026-R1-20260126.132852-16"], ["13 Jan", "13 Jan", "21 Jan", "21 Jan", "26 Jan", "26 Jan +2h", "2 Feb"])]}
+PORTFOLIO = {"actors": [{"id": "adv", "label": "Advisor, in the browser"}, {"id": "mb", "label": "The service"},
+                        {"id": "rules", "label": "Rules engine"}, {"id": "cloud", "label": "Cloud reporting"},
+                        {"id": "il", "label": "Integration layer"}, {"id": "bank", "label": "Bank core banking"}],
+             "steps": [{"id": "s1", "from": "adv", "to": "mb", "arrow": "request", "label": "opens the client's portfolio", "sub": "positions: Nestle, Novartis, Apple…"},
+                       {"id": "s2", "from": "adv", "to": "mb", "arrow": "request", "label": "simulates a change: buy Bitcoin ETF", "sub": "the proposal draft"},
+                       {"id": "s3", "from": "mb", "to": "rules", "arrow": "request", "label": "asks to check every rule", "sub": "allocation, exposure, universe…"},
+                       {"id": "s4", "from": "rules", "to": "mb", "arrow": "event", "label": "pass or fail per asset", "sub": "EvaluatedConstraint.observedValuesByAsset"},
+                       {"id": "s5", "from": "mb", "to": "adv", "arrow": "event", "label": "shows the broken rules", "sub": "USD 35%, Bitcoin ETF not Gold…"},
+                       {"id": "s6", "from": "adv", "to": "mb", "arrow": "request", "label": "justifies each broken rule", "sub": "PUT /proposals/{id}"},
+                       {"id": "s7", "from": "adv", "to": "mb", "arrow": "request", "label": "sends the proposal", "sub": "PUT /proposals/tasks/{id}/completion"},
+                       {"id": "s8", "from": "mb", "to": "mb", "arrow": "self", "label": "builds the report data", "sub": "one Constraint row per rule result"},
+                       {"id": "s9", "from": "mb", "to": "cloud", "arrow": "request", "label": "asks for the client's PDF", "sub": "ReportDataMapper: only broken rules shown"},
+                       {"id": "s10", "from": "mb", "to": "il", "arrow": "request", "label": "posts the proposal file", "sub": "POST /{bankId}/clients/investment-proposals"},
+                       {"id": "s11", "from": "il", "to": "bank", "arrow": "request", "label": "passes it to the bank", "sub": "every rule, breached and assets[]", "tone": "internal"}],
+             "legend": [{"tone": "internal", "label": "the change adds assets and comments here"}]}
+LANES_FAULTS = """(pane) => {
+  const box = pane.querySelector('.lanes'), bb = box.getBoundingClientRect();
+  const R = (r) => [r.left, r.top, r.right, r.bottom].map(Math.round);
+  const text = (e) => {  // the words' own box; a line folded with an ellipsis shows only what is inside its box
+    const g = document.createRange(); g.selectNodeContents(e); const t = R(g.getBoundingClientRect()), r = R(e.getBoundingClientRect());
+    return getComputedStyle(e).overflowX === 'hidden' ? [Math.max(t[0], r[0]), t[1], Math.min(t[2], r[2]), t[3]] : t;
+  };
+  const cut = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+  const off = (r) => r[0] < bb.left - 1 || r[2] > bb.right + 1;
+  const shown = (e) => getComputedStyle(e).display !== 'none';
+  const out = [];
+  const chips = [...box.querySelectorAll('.ln-chip:not(.k-hidden)')].map((c) => [c.dataset.actor, R(c.getBoundingClientRect()), c]);
+  for (const [k, r, c] of chips) {
+    if (off(r)) out.push(['chip off the board', k]);
+    const t = text(c);
+    if (t[0] < r[0] - 1 || t[2] > r[2] + 1 || t[1] < r[1] - 1 || t[3] > r[3] + 1) out.push(['text out of chip', k]);
+  }
+  chips.forEach(([k, r], i) => chips.slice(i + 1).forEach(([k2, r2]) => { if (cut(r, r2) > 1) out.push(['chips', k, k2]); }));
+  for (const row of box.querySelectorAll('.ln-row[data-on]')) {
+    const k = row.dataset.step, parts = [...row.querySelectorAll('.ln-lbl b, .ln-lbl code, .ln-note, .ln-bar')].filter(shown);
+    if (getComputedStyle(row).position !== 'relative') out.push(['row out of the flow', k]);
+    for (const p of parts) {
+      const r = p.classList.contains('ln-bar') ? R(p.getBoundingClientRect()) : text(p);
+      if (off(r)) out.push(['off the board', k, p.className || p.tagName.toLowerCase()]);
+      if (row.classList.contains('ln-cur') && p.scrollWidth > p.clientWidth + 1) out.push(['cut', k, p.tagName.toLowerCase()]);
+    }
+    const words = parts.filter((p) => !p.classList.contains('ln-bar')).map((p) => [p.className || p.tagName.toLowerCase(), text(p)]);
+    words.forEach(([a, r], i) => words.slice(i + 1).forEach(([b, r2]) => { if (cut(r, r2) > 1) out.push(['overlap', k, a, b]); }));
+  }
+  return out;
+}"""
+
+
+@pytest.mark.parametrize("spec,width", [(RELEASE_NOTED, 1300), (RELEASE_NOTED, 800), (RELEASE_NOTED, 390),
+                                        (PORTFOLIO, 1300), (PORTFOLIO, 800), (PORTFOLIO, 390),
+                                        (CALLS_SPEC, 1300), (CALLS_SPEC, 390)],
+                         ids=["release-1300", "release-800", "release-390", "portfolio-1300", "portfolio-800",
+                              "portfolio-390", "calls-1300", "calls-390"])
+def test_the_lanes_keep_every_chip_label_and_note_on_the_board_and_clear_of_the_others_at_every_step(
+        spec, width, tmp_path, wc_config, browser):
+    built = _scene(scene.sequence_model(spec), [[f"+ step {s['id']}"] for s in spec["steps"]], "Lanes")
+    res = stage.show(str(tmp_path), "l", _visual("sequence", spec), title="Lanes", extra={"scene": built})
+    try:
+        page, frame, send = _still(browser, res["url"], width, 844)
+        pane = frame.locator('section.pane[data-view="l"]')
+        pane.locator(".ln-row").first.wait_for(state="attached", timeout=5000)
+        faults = {}
+        for n in range(built["rest"] + 1):
+            _show_frame(page, send, "l", n, n > 0)
+            got = pane.evaluate(LANES_FAULTS)
+            if got:
+                faults[n] = got
+        assert faults == {}
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])

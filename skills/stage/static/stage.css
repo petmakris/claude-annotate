@@ -342,9 +342,12 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .ln-head{position:sticky;top:-16px;z-index:4;background:var(--bg);border-bottom:1px solid var(--line);margin:-16px -20px 0;padding:12px 20px 10px}
 .ln-actors{position:relative;height:40px}
 .ln-chip{position:absolute;top:2px;transform:translateX(-50%);display:flex;align-items:center;gap:7px;padding:6px 13px;border-radius:10px;
-  border:1.5px solid var(--tc);background:var(--panel);font:600 13.5px/1.2 var(--sans);color:var(--ink);white-space:nowrap;
+  box-sizing:border-box;width:max-content;text-align:center;overflow-wrap:break-word;  /* lanes.js sets its max-width: the room it has */
+  border:1.5px solid var(--tc);background:var(--panel);font:600 13.5px/1.2 var(--sans);color:var(--ink);
   transition:background-color .3s,box-shadow .3s,opacity .3s}
-.ln-chip i{width:8px;height:8px;border-radius:50%;background:var(--tc)}
+.ln-chip i{flex:none;width:8px;height:8px;border-radius:50%;background:var(--tc)}
+.ln-tight .ln-chip{padding-inline:8px}
+.ln-tight .ln-chip i{display:none}
 .ln-chip.ln-on{background:var(--tb);box-shadow:0 0 0 4px color-mix(in srgb,var(--tc) 18%,transparent)}
 .ln-chip.ln-off{opacity:.55}
 .ln-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 16px;margin-top:6px;font:400 12px var(--sans);color:var(--muted)}
@@ -357,8 +360,8 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .ln-phase::after{content:"";flex:1;height:1px;background:var(--line)}
 .ln-row{--y:32px;position:relative;display:none;height:46px;border-radius:14px;transition:background-color .3s,height .35s}
 .ln-row[data-on]{display:block}
-.ln-row.ln-cur{--y:74px;height:112px;background:var(--hl-soft);box-shadow:inset 3px 0 0 var(--claude)}
-.ln-row.ln-cur:has(code){height:124px}
+.ln-row.ln-cur{--y:74px;--h:112px;height:var(--h);background:var(--hl-soft);box-shadow:inset 3px 0 0 var(--claude)}
+.ln-row.ln-cur:has(code){--h:124px}  /* lanes.js makes it taller when its words take more lines */
 .ln-num{position:absolute;right:10px;top:calc(var(--y) - 9px);font:500 11.5px var(--sans);color:var(--faint);font-variant-numeric:tabular-nums}
 .ln-cur .ln-num{color:var(--claude)}
 .ln-note{position:absolute;right:34px;top:calc(var(--y) - 10px);font:500 12px var(--sans);color:var(--muted);white-space:nowrap}
@@ -367,8 +370,8 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .ln-lbl b{display:block;font:500 13.5px/1.3 var(--sans);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ln-lbl code{display:none;font:400 12px/1.4 var(--mono);color:var(--faint);white-space:nowrap}
 .ln-cur .ln-lbl b{font:600 19px/1.3 var(--sans);color:var(--ink);white-space:normal;text-wrap:balance}
-.ln-cur .ln-lbl code{display:block}
-.ln-request .ln-lbl,.ln-event .ln-lbl{left:var(--mid);transform:translateX(-50%);bottom:calc(100% - var(--y) + 8px);width:max(220px,calc(var(--hi) - var(--lo) + 40px))}
+.ln-cur .ln-lbl code{display:block;white-space:normal;overflow-wrap:anywhere}
+.ln-request .ln-lbl,.ln-event .ln-lbl{left:var(--lc);transform:translate(-50%,-100%);top:calc(var(--y) - 8px);width:var(--lw)}
 .ln-request .ln-lbl code,.ln-event .ln-lbl code{position:absolute;left:0;right:0;top:calc(100% + 14px)}
 .ln-cur.ln-request .ln-lbl code,.ln-cur.ln-event .ln-lbl code{display:block}
 /* an arrow: a line from column to column, a head at the receiver, a dot that travels on arrival */
@@ -396,18 +399,18 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .ln-flip .ln-loop{left:calc(var(--lo) - 34px);border:2px solid var(--tc);border-right:0;border-radius:10px 0 0 10px}
 .ln-cur.ln-flip .ln-loop{border-width:3px;border-right:0}
 .ln-flip .ln-loop::after{left:auto;right:-2px;border-right:0;border-left:10px solid var(--tc)}
-.ln-self .ln-lbl{left:calc(var(--lo) + 50px);top:calc(var(--y) - 12px);text-align:left;max-width:min(420px,calc(100% - var(--lo) - 90px))}
+.ln-self .ln-lbl{left:calc(var(--lo) + 50px);top:calc(var(--y) - 12px);text-align:left;max-width:min(420px,calc(100% - var(--lo) - 50px - 34px - max(6px,var(--nw,0px))))}
 .ln-cur.ln-self .ln-lbl{top:calc(var(--y) - 26px)}
 .ln-flip .ln-lbl{left:auto;right:calc(100% - var(--lo) + 50px);text-align:right;max-width:min(420px,calc(var(--lo) - 70px))}
 .ln-enter .ln-loop{animation:ln-fade .5s ease-out both}
 @keyframes ln-fade{from{opacity:0;transform:translateX(-6px)}}
 /* a band: a sentence laid across the actors it spans */
-.ln-band{position:absolute;left:calc(var(--lo) - 40px);width:calc(var(--hi) - var(--lo) + 80px);top:calc(var(--y) - 16px);height:30px;border-radius:9px;
+.ln-bar{position:absolute;left:var(--bl);width:var(--bw);top:calc(var(--y) - 16px);height:30px;border-radius:9px;box-sizing:border-box;
   background:var(--tb);border:1px solid color-mix(in srgb,var(--tc) 40%,transparent)}
-.ln-band ~ .ln-lbl{left:var(--mid);transform:translateX(-50%);top:calc(var(--y) - 10px);width:calc(var(--hi) - var(--lo) + 60px)}
-.ln-cur .ln-band{top:calc(var(--y) - 30px);height:56px}
-.ln-cur .ln-band ~ .ln-lbl{top:calc(var(--y) - 20px)}
-.ln-band ~ .ln-lbl b{color:var(--ink)}
+.ln-band .ln-lbl{left:calc(var(--bl) + 10px);top:calc(var(--y) - 10px);width:calc(var(--bw) - 20px)}
+.ln-cur .ln-bar{top:calc(var(--y) - 30px);height:56px}
+.ln-cur.ln-band .ln-lbl{top:calc(var(--y) - 20px)}
+.ln-band .ln-lbl b{color:var(--ink)}
 .ln-dropped .ln-lbl b{text-decoration:line-through}
 /* a point dims the other steps, never the step being said, nor the steps of an actor pointed at, whose chip gets the ring */
 .lanes.k-dim .ln-row:not(.k-focus):not(.ln-cur):not(.ln-mine){opacity:.5}
