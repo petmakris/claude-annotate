@@ -516,8 +516,8 @@ def test_frames_follow_the_voice_and_every_jump_sends_the_whole_state(tmp_path, 
                                       f"[[+ Q->R]] {six('reply')}."))
             stage.wait_for_function("got.some(m => m.type === 'stage:frame' && m.n === 3)", timeout=15000)
             sent = stage.evaluate("got.filter(m => m.type === 'stage:state' || m.type === 'stage:frame')")
-            assert sent[0] == {"type": "stage:state", "front": "flow", "frames": {"flow": 0}, "keys": 0}
-            assert [(m["n"], m["animate"]) for m in sent[1:]] == [(1, True), (2, True), (3, True)]
+            assert sent[0] == {"type": "stage:state", "front": "flow", "frames": {"flow": 0}, "keys": 0, "answer": 1}
+            assert [(m["n"], m["animate"], m["answer"]) for m in sent[1:]] == [(1, True, 1), (2, True, 1), (3, True, 1)]
             page.wait_for_function("document.getElementById('audio').ended", timeout=10000)
             stage.evaluate("got.length = 0")
             page.click("#playpause")

@@ -1130,3 +1130,61 @@ def test_a_point_takes_a_range_of_rows(tmp_path):
     assert stage_rule_breaks(call, shown) == []
     _, problems = cues_of(tmp_path, "[[show table | T]]| a |\n|---|\n| 1 |\n| 2 |[[/show]] One. [[point: rows 2-3]] No.")
     assert problems == ['point not shown: "T" has 2 rows, not rows 2-3']
+
+
+# "Release path", from call 9BH6YJ7jN5n3mTCVyQWotg, the private name changed and the build refs dropped. Answer 1
+# showed it and pointed at its last step; answer 2 showed it again and stepped it a sentence at a time.
+RELEASE = json.dumps({
+    "actors": [{"id": "c", "label": "Contract"}, {"id": "m", "label": "Platform"}, {"id": "k", "label": "Core banking"}],
+    "steps": [{"id": "s0", "from": "m", "to": "k", "arrow": "band", "label": "Before: Platform on build 14"},
+              {"id": "s1", "from": "c", "to": "c", "arrow": "self", "label": "PR 288 opened, dev build published"},
+              {"id": "s2", "from": "c", "to": "m", "arrow": "request", "label": "draft pins build 139"},
+              {"id": "s3", "from": "c", "to": "c", "arrow": "self", "label": "new push, dev build published"},
+              {"id": "s4", "from": "c", "to": "m", "arrow": "request", "label": "re-pins build 140"},
+              {"id": "s5", "from": "c", "to": "c", "arrow": "self", "label": "merged, master publishes build 16"},
+              {"id": "s6", "from": "c", "to": "m", "arrow": "request", "label": "pins build 16 and merges"},
+              {"id": "s7", "from": "c", "to": "k", "arrow": "request", "label": "jumps from 2025-R3-1 to build 16"}]})
+RELEASE_SAID = ["Before anything moved, Platform sat on build 14.", "On the thirteenth, PR 288 published dev build 139.",
+                "Platform pinned it the same day.", "On the twenty-first a new push made build 140.",
+                "Platform re-pinned to it.", "On the twenty-sixth the contract merged and master published build 16.",
+                "Platform switched within two hours.", "A week later core banking jumped to the same build."]
+
+
+def _said(call, text, shows):
+    """One answer, split and listed as the call lists it, so the next one gets the next number."""
+    shown = call.split_reply(text)
+    for fut in call.stage_pending:
+        fut.result(timeout=5)
+    call.stage_pending = []
+    call.add("claude", shown, cues=call.reply_cues)
+    return [s for s in shows if s.args[1] == "release-path"][-1].kwargs["extra"]
+
+
+def test_each_answer_keeps_its_own_scene_on_a_board_and_the_stage_gets_them_all(tmp_path, monkeypatch):
+    import copy
+    from unittest.mock import MagicMock
+    call = _call(tmp_path)
+    call.stage_cwd = str(tmp_path)
+    show = MagicMock()
+    monkeypatch.setattr(talk.stage_mod, "show", show)
+    one = _said(call, f"[[show sequence | Release path]] {RELEASE} [[/show]] " + " ".join(RELEASE_SAID[:-1])
+                + f" [[point: step s7]] {RELEASE_SAID[-1]}", show.call_args_list)
+    first = copy.deepcopy(call.board.items[-1]["scene"])
+    last = call.entries[-1]["cues"][-1]
+    assert (last["kind"], first["frames"][last["n"]]["cur"]) == ("frame", ["step:s7"])
+    assert one["scenes"] == {"1": first} and one["answer"] == 1
+    two = _said(call, f"[[show sequence | Release path]] {RELEASE} [[/show]] "
+                + " ".join(f"[[+ step s{i}]] {s}" for i, s in enumerate(RELEASE_SAID)), show.call_args_list)
+    item = call.board.items[-1]
+    assert item["scene"]["steps"] == 8 and item["scene"]["start"] == "empty" and item["scene"] != first
+    assert item["scenes"] == {"1": first, "2": item["scene"]}
+    assert two["scenes"] == {"1": first, "2": item["scene"]} and two["scene"] == item["scene"] and two["answer"] == 2
+    # a later answer that only points at the board adds its scene beside theirs, on the same board
+    _said(call, "[[point Release path: step s2]] Platform pinned it the same day.", show.call_args_list)
+    assert sorted(item["scenes"]) == ["1", "2", "3"] and item["scenes"]["2"]["steps"] == 8
+    assert item["scenes"]["3"]["frames"][-2]["cur"] == ["step:s2"]
+    # one shown again changed starts over: the frames before name parts of another drawing
+    changed = RELEASE.replace("build 140", "build 141")
+    _said(call, f"[[show sequence | Release path]] {changed} [[/show]] [[point: step s4]] {RELEASE_SAID[4]}",
+          show.call_args_list)
+    assert list(call.board.items[-1]["scenes"]) == ["4"]

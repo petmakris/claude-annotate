@@ -26,4 +26,6 @@ A green suite does not show that the tests guard the code. `/audit-tests` (`tool
 
 The stage's rules (`skills/stage/SKILL.md`, "What the stage keeps true") are checked on compiled frames by `stage_rule_breaks` in `skills/talk/tests/helpers.py`: call it on any reply a new test compiles. The scene compiler names what is being said in every frame (`cur`); the page draws that and never works it out itself.
 
+A board keeps one scene per answer that stepped it (`scenes`, keyed by the answer number as a string; `scene` is the one of the answer that last put the board up, absent when that answer had none). In `stage.js` read a view's scene through `sceneOf(v)` or `painted(v)`, never `v.body.scene`, so a replayed answer steps its own frames. Talk numbers an answer by the Claude entries before it, so a test that splits two replies must `call.add("claude", ...)` between them, or both get the same number.
+
 The stage demo's change board (`skills/talk/demo.md`, "Cells and the current one") points at line numbers of `skills/stage/static/scene.js` against an old revision. An edit to that file above those lines moves them: re-point the demo in the same change (`/audit-demo` checks it).

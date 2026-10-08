@@ -45,9 +45,11 @@ if (CFG.stageUrl) {
 
 // ---- talk and stage talk to each other -----------------------------------
 // The protocol, also described at the top of stage.js. Talk to stage, posted to the stage's origin:
-//   {type:'stage:front', view, manual}  bring a board to the front; manual: a chip was pressed
-//   {type:'stage:frame', view, n, animate}  show frame n of a scene, animated when it is the next one
-//   {type:'stage:state', front, frames, keys}  after a jump: the board in front, every scene's frame, the key point lit
+//   {type:'stage:front', view, manual, answer}  bring a board to the front; manual: a chip was pressed
+//   {type:'stage:frame', view, n, animate, answer}  show frame n of the scene answer number `answer` said the
+//                                       board with (each answer keeps its own), animated when it is the next one
+//   {type:'stage:state', front, frames, keys, answer}  after a jump: the board in front, every scene's frame
+//                                       (of that answer's scenes), the key point lit
 //   {type:'stage:answer', n}            answer n started playing
 //   {type:'stage:key', view, index}     key point number index (from 1) was just said: light it up
 //   {type:'stage:theme', theme}         'light' or 'dark': the theme chosen here
@@ -676,11 +678,11 @@ function stateAt(e, pos) {
 function syncStage(e, pos) {
   const st = stateAt(e, pos);
   if (cueSync || !sent || sent.id !== e.id) {
-    toStage({type: "stage:state", front: st.front, frames: st.frames, keys: st.key ? st.key.index : 0});
+    toStage({type: "stage:state", front: st.front, frames: st.frames, keys: st.key ? st.key.index : 0, answer: e.n || null});
   } else {
-    if (st.front && st.front !== sent.front) toStage({type: "stage:front", view: st.front, manual: false});
+    if (st.front && st.front !== sent.front) toStage({type: "stage:front", view: st.front, manual: false, answer: e.n || null});
     for (const [view, n] of Object.entries(st.frames)) {
-      if (sent.frames[view] !== n) toStage({type: "stage:frame", view, n, animate: n === sent.frames[view] + 1});
+      if (sent.frames[view] !== n) toStage({type: "stage:frame", view, n, animate: n === sent.frames[view] + 1, answer: e.n || null});
     }
     if (st.key && (!sent.key || st.key.at !== sent.key.at || st.key.index !== sent.key.index)) toStage({type: "stage:key", view: st.key.view, index: st.key.index});
   }

@@ -1190,6 +1190,11 @@ class Board:
         ident = item.pop("ident", item.get("path", ""))
         item["id"] = len(self.items)
         item["view"] = self.log.view_name(item.get("title") or "", item["kind"], ident)
+        # A board shown again just as it was keeps the scenes the answers before said it with; one that
+        # changed starts over, since their frames name parts of the old drawing.
+        before = self.item_for(item["view"])
+        if before and before.get("scenes") and stage_view(before)[1] == stage_view(item)[1]:
+            item["scenes"] = dict(before["scenes"])
         if cue is not None:
             cue["view"] = item["view"]
         self.items.append(item)
@@ -1701,7 +1706,10 @@ class Call:
                     cue.pop("verb")
                     cue["n"] = n if built and k == 0 else None
             if built:
+                # Each answer keeps its own scene on the board, under its number: its cues count frames in
+                # that scene, so a replay of an earlier answer steps the scene it was said with.
                 item["scene"] = {**built, "auto": True} if view in auto else built
+                item.setdefault("scenes", {})[str(self.answer_no)] = item["scene"]
                 if not any(i is item for i in self.reply_items):
                     self.reply_items.append(item)
         timed = [(at, cue) for at, cue in timed if cue["kind"] != "frame" or cue.get("n")]
@@ -1795,6 +1803,8 @@ class Call:
         extra = {"answer": item.get("answer", self.answer_no), "kind": item["kind"]}
         if item.get("scene"):
             extra["scene"] = item["scene"]
+        if item.get("scenes"):
+            extra["scenes"] = item["scenes"]
         # Only a reply's first board comes to the front now; its cues front the others as the voice
         # reaches them.
         more = {"background": True} if self.reply_shows else {}

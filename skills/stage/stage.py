@@ -32,7 +32,7 @@ LAYOUT = "__layout__"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 ENTRY = "entry.js"
 DAEMON_ERRORS = (wc.DaemonError,)
-VIEW_EXTRAS = ("answer", "kind", "caption", "pinned", "scene")  # what a caller may add to a view's body
+VIEW_EXTRAS = ("answer", "kind", "caption", "pinned", "scene", "scenes")  # what a caller may add to a view's body
 PRIVATE_SLUG_PREFIX = "talk-"
 PAGE_TYPES = ("file", "url", "session")
 
@@ -113,7 +113,7 @@ def show(cwd: str, name: str, source: dict, *, title: str | None = None,
          background: bool = False, slug: str | None = None, extra: dict | None = None,
          owner: str | None = None) -> dict:
     """Put a view on the stage. `extra` adds metadata to the view's body (answer, kind, caption,
-    pinned, scene); any other key is ignored. `owner` names the writer: a view put there by another writer
+    pinned, scene, scenes); any other key is ignored. `owner` names the writer: a view put there by another writer
     is never replaced, it raises ViewTaken. On a talk call's stage a page (a file, an address or a
     session) opens behind what is in front and never takes the front: the result says so with `behind`."""
     if not model.NAME_RE.match(name):

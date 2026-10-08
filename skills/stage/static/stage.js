@@ -12,21 +12,27 @@
 // Embedded in a talk call, the stage and the call page talk over postMessage. The stage reads only
 // messages from its parent window, and only when it has one; a stage opened on its own ignores them all.
 //   Talk to stage:
-//     {type:'stage:front', view, manual}  bring a view to the front: when following is on, or
-//                                         always when manual (a chip was pressed); manual never changes follow
+//     {type:'stage:front', view, manual, answer}  bring a view to the front: when following is on, or
+//                                         always when manual (a chip was pressed); manual never changes follow.
+//                                         Fronted by the voice of an answer with no scene of its own for the
+//                                         view, the view shows whole
 //     {type:'stage:point', view, target}  when following: front the view and light up part of it.
 //                                         target {type:'lines', a, b} | {type:'row', n} | {type:'row', text}
 //                                         | {type:'node', id}; null clears every spot
-//     {type:'stage:answer', n}            answer n started playing: following turns on again
+//     {type:'stage:answer', n}            answer n started playing: following turns on again, and a frame
+//                                         another answer sent for a view not here yet is dropped
 //     {type:'stage:key', view, index}     key point number index (from 1) was just said: it gets the bar
 //                                         and a short glow; the Key points tab is never fronted for it
 //     {type:'stage:theme', theme}         'light' or 'dark', chosen on the call page
 //     {type:'stage:zoom', zoom}           how large everything draws: 1 at a desk, more on a TV across the room
 //     {type:'stage:follow', on}           the call page's switch turned following on or off
-//     {type:'stage:frame', view, n, animate}  show frame n of the view's scene, animated only as the next one;
-//                                         never for the view in front while following is off
-//     {type:'stage:state', front, frames, keys}  after a jump: every scene's frame as a snap, then the front
-//                                         and the key point lit (0: none)
+//     {type:'stage:frame', view, n, animate, answer}  show frame n of the scene answer number `answer` said
+//                                         the view with (body.scenes[answer]; without an answer, body.scene),
+//                                         clamped to its rest frame, animated only as the next one; never for
+//                                         the view in front while following is off
+//     {type:'stage:state', front, frames, keys, answer}  after a jump: every scene's frame as a snap, then the
+//                                         front and the key point lit (0: none). It replaces the whole picture:
+//                                         frames waiting for a view not here yet are dropped first
 //   Stage to talk (to '*': nothing secret in them):
 //     {type:'stage:ready'}                once, after the first render
 //     {type:'stage:views', list:[{name, title, kind, answer}]}   after every change to the tabs
@@ -277,8 +283,8 @@ function header(v) {
       (src.rev ? ` · since ${esc(src.rev)}` : "");
   } else meta.textContent = metaText(src);
   if (v.body.answer && !(src.type === "inline" && src.format === "points")) meta.append(` · from answer ${+v.body.answer}`);
-  if (v.body.scene) {
-    const repairs = +v.body.scene.repairs || 0;
+  if (hasScene(v)) {
+    const repairs = +(painted(v)?.scene.repairs) || 0;
     if (repairs) meta.append(` · ${repairs} ${repairs === 1 ? "repair" : "repairs"}`);
     const bar = document.createElement("span"); bar.className = "stepbar";
     const back = button("", () => stepBy(v, -1), "stepback"), next = button("", () => stepBy(v, 1), "stepnext");
@@ -667,7 +673,7 @@ function renderInline(v, seq) {
     // A flowchart is a map the stage draws itself: ghosts first, lit part by part with the voice.
     box.className = "visual map";
     renderMap(box, src.spec, embedded);
-    requestAnimationFrame(() => { if (current()) { paintFrame(v, box); if (!v.body.scene) layoutMap(box, null); } });
+    requestAnimationFrame(() => { if (current()) { paintFrame(v, box); if (!hasScene(v)) layoutMap(box, null); } });
   } else if (src.format === "visual") {
     box.className = `visual visual-${src.tool} ` + (v.actual ? "actual" : "fit");
     box.innerHTML = `<div class="vinner"><div class="vgrid">${src.html}</div>` +
@@ -989,7 +995,8 @@ function upsert(body) {
     pane.className = "pane"; pane.dataset.view = body.name; pane.hidden = true;
     panesEl.append(pane);
     v = { body, tab, pane, filled: false, stale: false, renderSeq: 0, changedAt: Date.now(), snap: null,
-      frame: firstFrame(body), applied: null };
+      frame: null, answer: null, applied: null };
+    startFrame(v);
     views.set(body.name, v);
     setTabTitle(v);
     if (live) markUpdated(v, true);  // select() clears it if this view is the one fronted
@@ -1000,10 +1007,12 @@ function upsert(body) {
     if (live) post({ type: "stage:changed", name: body.name, title: body.title, isNew: true });
     return;
   }
-  const before = v.body;
+  const before = v.body, was = sceneOf(v);
   v.body = body;
-  const sceneChanged = !same(before.scene, body.scene);
-  if (sceneChanged) { v.frame = firstFrame(body); v.missReported = false; }
+  const sceneChanged = !same(before.scene, body.scene) || !same(before.scenes, body.scenes);
+  // A later answer's scene never takes the board from the answer whose voice is on it: only a change to the
+  // scene the board is on starts it again.
+  if (!same(was, sceneOf(v))) { startFrame(v); v.missReported = false; }
   const changed = !same(before.source, body.source) || before.title !== body.title ||
     before.rev !== body.rev || before.caption !== body.caption || sceneChanged;
   if (changed) v.changedAt = Date.now();
@@ -1101,19 +1110,63 @@ function paintSpot(v, box) {
   requestAnimationFrame(() => { if (hits[0].isConnected) centre(hits[0]); });
 }
 
-function front(name, manual) {
+function front(name, manual, answer = null) {
   if (!views.has(name) && manual) post({ type: "stage:missing", view: name });
   if (!views.has(name) || (!follow && !manual)) return false;
+  // fronted by the voice of an answer that did not step this board: its picture is that answer's, from the start
+  const v = views.get(name);
+  if (!manual && hasScene(v) && onAnswer(v, answer)) {
+    v.frame = sceneOf(v) ? 0 : null;
+    if (v.filled && !v.stale) paintFrame(v);
+  }
   if (selectedName() !== name) select(name, true);
   if (manual) toRest(views.get(name));
   return true;
 }
 
+// Each answer that stepped a board keeps its own scene on it, in body.scenes under the answer's number, and
+// body.scene is the scene of the answer that last put the board up (none when it showed the board whole).
+// The board is on the scene of the answer whose voice drove it last (v.answer, from stage:frame, stage:state
+// and stage:front), else on body.scene. A board saved before scenes were kept per answer has only
+// body.scene, and is always on it.
+function sceneOf(v) {
+  const all = v.body.scenes;
+  if (v.answer != null && all) return all[v.answer] || null;
+  return v.body.scene || null;
+}
+const hasScene = (v) => !!(v.body.scene || Object.keys(v.body.scenes || {}).length);
+// What the board paints: its scene at its frame, clamped to the rest frame. On an answer that showed the
+// board without steps of its own, any of its scenes at rest: the whole board, which every rest frame is.
+function painted(v) {
+  const own = sceneOf(v);
+  if (own) return { scene: own, n: Math.min(v.frame ?? own.rest, own.rest) };
+  const any = v.body.scene || Object.values(v.body.scenes || {}).pop();
+  return any ? { scene: any, n: any.rest } : null;
+}
+const answerKey = (a) => (a == null || a === "" ? null : String(a));
+function onAnswer(v, answer) {
+  const a = answerKey(answer);
+  if (a === null || a === v.answer) return false;
+  v.answer = a; v.applied = null;
+  return true;
+}
+
+// A frame the voice sent for a board not here yet waits for it, with the answer it was for; another answer
+// starting, or the next whole picture (stage:state), drops it.
 const lateFrames = new Map();
-const firstFrame = (body) => {
-  if (lateFrames.has(body.name)) { const n = lateFrames.get(body.name); lateFrames.delete(body.name); return n; }
-  return body.scene && embedded && live ? 0 : null;
-};
+// A board arriving, or one whose scene changed under it: a late frame for a scene it holds is applied now;
+// else a scene shown during a call starts empty, for the voice to fill.
+function startFrame(v) {
+  const body = v.body, late = lateFrames.get(body.name);
+  lateFrames.delete(body.name);
+  v.applied = null;
+  if (late && (late.answer === null || !body.scenes || body.scenes[late.answer])) {
+    v.answer = late.answer; v.frame = late.n;
+    return;
+  }
+  v.answer = null;
+  v.frame = body.scene && embedded && live ? 0 : null;
+}
 
 // Every flowchart names its arrowhead fc-arrow, and url(#fc-arrow) finds the first in the page, which
 // may sit in a hidden pane and draw nothing; each drawing gets markers of its own.
@@ -1129,10 +1182,10 @@ function ownMarkers(box) {
 }
 
 function paintFrame(v, box, animate = false) {
-  const scene = v.body.scene;
+  const on = painted(v);
   box = box || v.pane.querySelector(".code, .md, .diagram, .visual");
-  if (!scene || !box) return;
-  const n = v.frame ?? scene.rest;
+  if (!on || !box) return;
+  const { scene, n } = on;
   const done = applyFrame(scene, box, n, animate && v.applied === n - 1 ? v.applied : null);
   if (!done) return;
   if (box.classList.contains("lanes")) { layoutLanes(box, scene, n); done.focused = null; }  // lanes scroll themselves
@@ -1161,31 +1214,36 @@ function paintFrame(v, box, animate = false) {
 // Back and Next move one frame, from the empty start to the rest frame. Stepping by hand takes the
 // stage off the voice, as a tapped tab does, until the next answer.
 function stepBy(v, delta) {
-  const scene = v.body.scene;
-  if (!scene) return;
+  if (!hasScene(v)) return;
+  // on a board its answer showed whole, the steps are the newest scene's, from the rest frame
+  if (!sceneOf(v)) { v.answer = Object.keys(v.body.scenes || {}).pop() ?? null; v.frame = null; v.applied = null; }
+  const scene = sceneOf(v) || painted(v).scene;
   const n = Math.max(0, Math.min((v.frame ?? scene.rest) + delta, scene.rest));
   if (embedded && follow) setFollow(false);
   v.frame = n;
   if (v.filled && !v.stale) paintFrame(v, null, delta > 0);
 }
 
-function setFrame(name, n, animate) {
+// Frame n of the scene `answer` said the board with (no answer: the board's own scene), clamped to its rest.
+function setFrame(name, n, animate, answer = null) {
   const v = views.get(name);
   if (!Number.isInteger(n) || n < 0) return;
-  if (!v) { lateFrames.set(name, n); return; }
-  if (!v.body.scene || (!follow && selectedName() === name)) return;
-  v.frame = n;
+  if (!v) { lateFrames.set(name, { n, answer: answerKey(answer) }); return; }
+  if (!hasScene(v) || (!follow && selectedName() === name)) return;
+  if (onAnswer(v, answer)) animate = false;
+  const scene = sceneOf(v);
+  v.frame = scene ? Math.min(n, scene.rest) : null;
   if (v.filled && !v.stale) paintFrame(v, null, animate);
 }
 
 function toRest(v) {
-  if (!v || !v.body.scene || v.frame === null) return;
+  if (!v || !hasScene(v) || v.frame === null) return;
   v.frame = null;
   if (v.filled && !v.stale) paintFrame(v);
 }
 
 function onMessage(m) {
-  if (m.type === "stage:front") front(String(m.view), !!m.manual);
+  if (m.type === "stage:front") front(String(m.view), !!m.manual, m.answer);
   else if (m.type === "stage:key") {
     // Never fronted: the board in front stays on the explanation. Its tab gets the 'updated' dot.
     const n = Number(m.index), v = views.get(String(m.view));
@@ -1193,7 +1251,10 @@ function onMessage(m) {
     lightKey(n);
     if (v && selectedName() !== v.body.name) markUpdated(v, true);
   }
-  else if (m.type === "stage:answer") { setFollow(true); spot = null; clearSpots(); }
+  else if (m.type === "stage:answer") {
+    setFollow(true); spot = null; clearSpots();
+    for (const [name, late] of lateFrames) if (late.answer !== answerKey(m.n)) lateFrames.delete(name);
+  }
   else if (m.type === "stage:zoom") {
     const z = Number(m.zoom);
     if (z >= 0.5 && z <= 3) document.documentElement.style.zoom = z === 1 ? "" : String(z);
@@ -1206,10 +1267,13 @@ function onMessage(m) {
     redrawDiagrams();
   }
   else if (m.type === "stage:follow") setFollow(!!m.on);
-  else if (m.type === "stage:frame") setFrame(String(m.view), Number(m.n), !!m.animate);
+  else if (m.type === "stage:frame") setFrame(String(m.view), Number(m.n), !!m.animate, m.answer);
   else if (m.type === "stage:state") {
-    for (const [name, n] of Object.entries(m.frames || {})) setFrame(name, Number(n), false);
-    if (m.front) front(String(m.front), false);
+    lateFrames.clear();  // the whole picture: a late frame it still wants is in it again
+    for (const [name, n] of Object.entries(m.frames || {})) {
+      try { setFrame(name, Number(n), false, m.answer); } catch (e) { console.error("stage:", e); }  // one board never stops the rest
+    }
+    if (m.front) front(String(m.front), false, m.answer);
     lightKey(Number(m.keys) || 0, false);
   }
   else if (m.type === "stage:point") {

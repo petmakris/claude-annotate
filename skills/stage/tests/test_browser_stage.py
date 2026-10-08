@@ -849,7 +849,7 @@ def test_a_code_scene_steps_its_focus_and_a_tapped_tab_opens_on_the_rest_frame(t
         assert _frames(frame)["c"] == 3
         send({"type": "stage:follow", "on": True})
         send({"type": "stage:frame", "view": "c", "n": 99})
-        _until_frame(page, "c", 99)
+        _until_frame(page, "c", 3)  # clamped to the rest frame
         assert frame.locator(".ln.k-focus").count() == 0
         assert frame.locator('section.pane[data-view="c"] .vstep').inner_text() == "All shown"
     finally:
@@ -1461,5 +1461,138 @@ def test_a_table_draws_no_row_as_being_said_before_one_is_pointed_at_and_a_range
         page.wait_for_timeout(450)
         assert [k for k, r in size(pane).items() if r["cur"]] == ["row#2"]
         assert pane.locator(".k-focus").count() == 0  # the Speed cell pointed at before is not left lit
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+# -- each answer keeps its own scene on a board ---------------------------------------------------------
+
+# "Release path", from call 9BH6YJ7jN5n3mTCVyQWotg (workspace 261006-163450), the private name changed and the
+# build refs dropped. Answer 1 showed it whole and pointed at s7 as its last sentence was said; answer 2 showed
+# it again and stepped it from empty, a step a sentence.
+RELEASE = {"title": "Service check, real versions",
+           "actors": [{"id": "c", "label": "Contract\nPR 288 → master", "tone": "service"},
+                      {"id": "m", "label": "Platform", "tone": "internal"}, {"id": "k", "label": "Core banking", "tone": "edge"}],
+           "phases": [{"id": "p1", "label": "Draft", "start_at": "s1"}, {"id": "p2", "label": "Release", "start_at": "s5"}],
+           "steps": [{"id": "s0", "from": "m", "to": "k", "arrow": "band", "label": "Before: Platform on build 14, core banking on 2025-R3-1"},
+                     {"id": "s1", "from": "c", "to": "c", "arrow": "self", "tone": "service", "label": "PR 288 opened, dev build published"},
+                     {"id": "s2", "from": "c", "to": "m", "arrow": "request", "tone": "internal", "label": "draft pins build 139"},
+                     {"id": "s3", "from": "c", "to": "c", "arrow": "self", "tone": "service", "label": "new push, dev build published"},
+                     {"id": "s4", "from": "c", "to": "m", "arrow": "request", "tone": "internal", "label": "re-pins build 140"},
+                     {"id": "s5", "from": "c", "to": "c", "arrow": "self", "tone": "good", "label": "merged, master publishes build 16"},
+                     {"id": "s6", "from": "c", "to": "m", "arrow": "request", "tone": "good", "label": "pins build 16 and merges"},
+                     {"id": "s7", "from": "c", "to": "k", "arrow": "request", "tone": "good", "label": "jumps from 2025-R3-1 to build 16"}]}
+LANES = """p => ({frame: window.__stageTest.frames()[p.dataset.view], step: p.querySelector('.vstep')?.textContent,
+  on: [...p.querySelectorAll('.ln-row[data-on]')].map(r => r.dataset.step),
+  cur: [...p.querySelectorAll('.ln-row.ln-cur')].map(r => r.dataset.step), card: p.querySelector('.k-card')?.textContent ?? null})"""
+ALL8 = [f"s{i}" for i in range(8)]
+
+
+def _release_scenes():
+    model = scene.sequence_model(RELEASE)
+    one = _scene(model, [["focus step s7"]], "Release path")
+    two = _scene(model, [[f"+ step s{i}"] for i in range(8)], "Release path")
+    return one, two
+
+
+def _settled(page):
+    next(f for f in page.frames if f is not page.main_frame).evaluate(
+        "() => new Promise(r => setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(r)), 80))")
+
+
+def test_replaying_an_earlier_answer_steps_the_scene_it_was_said_with(tmp_path, wc_config, browser):
+    one, two = _release_scenes()
+    res = stage.show(str(tmp_path), "rp", _visual("sequence", RELEASE), title="Release path",
+                     extra={"scene": two, "scenes": {"1": one, "2": two}, "answer": 1})
+    try:
+        page, frame, send = _embedded(browser, res["url"], width=1400)
+        pane = frame.locator('section.pane[data-view="rp"]')
+        pane.locator(".ln-row").first.wait_for(state="attached", timeout=5000)
+        # answer 1 played again, as call.js sends it: frame 0 until char 317, then frame 1
+        send({"type": "stage:answer", "n": 1})
+        send({"type": "stage:state", "front": "rp", "frames": {"rp": 0}, "keys": 0, "answer": 1})
+        _settled(page)
+        assert pane.evaluate(LANES) == {"frame": 0, "step": "1 step", "on": ALL8, "cur": [], "card": None}
+        send({"type": "stage:frame", "view": "rp", "n": 1, "animate": True, "answer": 1})
+        _settled(page)
+        assert pane.evaluate(LANES) == {"frame": 1, "step": "Step 1 of 1", "on": ALL8, "cur": ["s7"], "card": None}
+        # answer 2 played again: its own scene, from empty
+        send({"type": "stage:answer", "n": 2})
+        send({"type": "stage:state", "front": "rp", "frames": {"rp": 1}, "keys": 0, "answer": 2})
+        _settled(page)
+        assert pane.evaluate(LANES) == {"frame": 1, "step": "Step 1 of 8", "on": ["s0"], "cur": ["s0"], "card": None}
+        # an answer that fronts the board with no steps of its own shows it whole
+        send({"type": "stage:answer", "n": 3})
+        send({"type": "stage:state", "front": "rp", "frames": {}, "keys": 0, "answer": 3})
+        _settled(page)
+        assert pane.evaluate(LANES) == {"frame": 9, "step": "All shown", "on": ALL8, "cur": [], "card": None}
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def test_a_later_answers_scene_never_takes_the_board_from_the_voice_on_it(tmp_path, wc_config, browser):
+    one, two = _release_scenes()
+    res = stage.show(str(tmp_path), "rp", _visual("sequence", RELEASE), title="Release path",
+                     extra={"scene": two, "scenes": {"2": two}, "answer": 2})
+    try:
+        page, frame, send = _embedded(browser, res["url"], width=1400)
+        pane = frame.locator('section.pane[data-view="rp"]')
+        pane.locator(".ln-row").first.wait_for(state="attached", timeout=5000)
+        send({"type": "stage:state", "front": "rp", "frames": {"rp": 5}, "keys": 0, "answer": 2})
+        _settled(page)
+        before = pane.evaluate(LANES)
+        assert before == {"frame": 5, "step": "Step 5 of 8", "on": ALL8[:5], "cur": ["s4"], "card": None}
+        stage.show(str(tmp_path), "rp", _visual("sequence", RELEASE), title="Release path", background=True,
+                   extra={"scene": one, "scenes": {"2": two, "3": one}, "answer": 2})
+        frame.locator("body").evaluate("() => new Promise(r => setTimeout(r, 600))")
+        assert pane.evaluate(LANES) == before
+        send({"type": "stage:frame", "view": "rp", "n": 6, "animate": True, "answer": 2})
+        _settled(page)
+        assert pane.evaluate(LANES) == {"frame": 6, "step": "Step 6 of 8", "on": ALL8[:6], "cur": ["s5"], "card": None}
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def test_a_frame_another_answer_sent_before_a_board_came_is_not_applied_to_it(tmp_path, wc_config, browser):
+    one, two = _release_scenes()
+    res = stage.show(str(tmp_path), "first", TABLE, title="First")
+    try:
+        page, frame, send = _embedded(browser, res["url"], width=1400)
+        frame.locator('button[role=tab][data-view="first"]').wait_for(state="attached", timeout=5000)
+        # answer 3 framed "rp", whose show failed; answer 4 shows a board of that name before its voice starts
+        send({"type": "stage:state", "front": "rp", "frames": {"rp": 7}, "keys": 0, "answer": 3})
+        stage.show(str(tmp_path), "rp", _visual("sequence", RELEASE), title="Release path",
+                   extra={"scene": two, "scenes": {"4": two}, "answer": 4})
+        pane = frame.locator('section.pane[data-view="rp"]')
+        pane.locator(".ln-row").first.wait_for(state="attached", timeout=5000)
+        _settled(page)
+        assert pane.evaluate(LANES) == {"frame": 0, "step": "8 steps", "on": [], "cur": [], "card": "Release path"}
+        # a frame of its own answer sent early still waits for it
+        send({"type": "stage:frame", "view": "rp2", "n": 2, "answer": 4})
+        stage.show(str(tmp_path), "rp2", _visual("sequence", RELEASE), title="Release path 2",
+                   extra={"scene": two, "scenes": {"4": two}, "answer": 4})
+        pane = frame.locator('section.pane[data-view="rp2"]')
+        pane.locator(".ln-row").first.wait_for(state="attached", timeout=5000)
+        _settled(page)
+        assert pane.evaluate(LANES) == {"frame": 2, "step": "Step 2 of 8", "on": ALL8[:2], "cur": ["s1"], "card": None}
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def test_a_frame_past_the_rest_is_the_rest_and_never_stops_the_front(tmp_path, wc_config, browser):
+    paths = _scene(scene.flowchart_spec_model(THREE_PATHS), [["+ open"], ["+ batch"], ["+ share"]], "Three paths changed")
+    res = stage.show(str(tmp_path), "map", _visual("flowchart", THREE_PATHS), title="Three paths changed",
+                     extra={"scene": paths})
+    stage.show(str(tmp_path), "other", TABLE, title="Other", background=True)
+    try:
+        page, frame, send = _embedded(browser, res["url"], width=1400)
+        errors = []
+        page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+        frame.locator('section.pane[data-view="map"] .m-node').first.wait_for(state="attached", timeout=5000)
+        assert paths["rest"] == 4
+        send({"type": "stage:state", "front": "other", "frames": {"map": 6}, "keys": 0})
+        frame.locator('button[role=tab][data-view="other"][aria-selected="true"]').wait_for(state="attached", timeout=3000)
+        assert _frames(frame)["map"] == 4 and errors == []
+        assert frame.locator('section.pane[data-view="map"] .vstep').inner_text() == "All shown"
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])

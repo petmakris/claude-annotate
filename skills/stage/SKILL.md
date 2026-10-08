@@ -64,7 +64,9 @@ Rules:
   spoken answer reaches it and lights up the lines, row or node a `[[point ...]]` tag names. The call
   page's gear has a **Stage follows the voice** switch for it; picking a board by hand turns it off,
   and the next answer turns it on again. The call page also sets the stage's light or dark theme. The answer that showed a view is
-  marked on its row in the list (`A3`). A stage opened on its own ignores all of this. Code, change, table and diagram views
+  marked on its row in the list (`A3`). Every answer that steps a view keeps its own scene on it (`scenes`, by answer number), and
+  the call page names the answer with each frame, so replaying an earlier answer steps the board as that answer did; an answer
+  that showed the board with no steps of its own shows it whole. A stage opened on its own ignores all of this. Code, change, table and diagram views
   can be pointed at from /talk only; /talk also keeps a pinned **Key points** board of the call's
   `[[key: ...]]` tags.
 
