@@ -2003,6 +2003,8 @@ LANES_FAULTS = """(pane) => {
     }
     const words = parts.filter((p) => !p.classList.contains('ln-bar')).map((p) => [p.className || p.tagName.toLowerCase(), text(p)]);
     words.forEach(([a, r], i) => words.slice(i + 1).forEach(([b, r2]) => { if (cut(r, r2) > 1) out.push(['overlap', k, a, b]); }));
+    const note = row.querySelector('.ln-note'), arrow = [...row.querySelectorAll('.ln-line, .ln-head-tip, .ln-loop')];
+    if (note) for (const e of arrow) if (cut(text(note), R(e.getBoundingClientRect())) > 1) out.push(['note on the arrow', k]);
   }
   return out;
 }"""

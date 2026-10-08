@@ -145,16 +145,19 @@ function words(r, w) {
   r.style.setProperty("--lc", lc + "px");
 }
 
-// A note sits at the right of its row, and the step's words stop short of it. Measured on the rows shown, as
-// a hidden row has no width to measure.
+// A note sits at the right of its row, and the step's words stop short of it; over an arrow that reaches under
+// it, it rises above the line. Measured on the rows shown, as a hidden row has no width to measure.
 function notes(box) {
   const st = box._lanes;
   for (const note of box.querySelectorAll(".ln-row[data-on] > .ln-note")) {
     const r = note.parentElement;
-    if (!note.offsetWidth || r._nw === note.offsetWidth + 10) continue;
+    if (!note.offsetWidth || !st.w) continue;
+    r.classList.toggle("ln-up", !r.classList.contains("ln-self") && !r.classList.contains("ln-band")
+      && r._span && r._span[1] + 6 > st.w - 34 - note.offsetWidth);
+    if (r._nw === note.offsetWidth + 10) continue;
     r._nw = note.offsetWidth + 10;
     r.style.setProperty("--nw", r._nw + "px");
-    if (r._span && st.w) words(r, st.w);
+    if (r._span) words(r, st.w);
   }
 }
 
