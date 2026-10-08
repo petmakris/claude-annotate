@@ -456,14 +456,15 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .map .m-node{position:absolute;transform:translate(-50%,-50%);width:var(--mw,180px);min-height:52px;box-sizing:border-box;padding:9px 14px;border-radius:14px;
   background:var(--panel);border:1.5px solid var(--tc);text-align:center;display:flex;flex-direction:column;justify-content:center;
   transition:width .4s cubic-bezier(.2,.7,.2,1),padding .4s,background-color .3s,box-shadow .3s,opacity .4s;z-index:1}
-.map .m-node b{font:600 15px/1.25 var(--sans);color:var(--ink)}
+.map .m-node b{font:600 15px/1.25 var(--sans);color:var(--ink);overflow-wrap:anywhere}
 .map .m-node code,.map .m-node .m-sub{display:none}
 .map .m-node.m-decision{border-radius:14px 14px 14px 14px;border-width:2px;border-style:double}
 .map .m-node.m-cur{width:260px;padding:14px 18px;background:var(--tb);z-index:2;
   box-shadow:0 0 0 5px color-mix(in srgb,var(--tc) 18%,transparent),0 18px 40px -18px rgba(15,23,42,.45)}
 .map .m-node.m-cur b{font-size:19px}
-.map .m-node.m-cur code{display:block;margin-top:4px;font:400 12px/1.4 var(--mono);color:var(--faint);overflow-wrap:anywhere}
-.map .m-node.m-cur .m-sub{display:block;margin-top:4px;font:400 13px/1.35 var(--sans);color:var(--muted)}
+/* the detail is dim text on the card's tone: muted drawn a little towards the ink reaches 4.5:1 on every tone */
+.map .m-node.m-cur code{display:block;margin-top:4px;font:400 12px/1.4 var(--mono);color:color-mix(in srgb,var(--muted) 85%,var(--ink));overflow-wrap:anywhere}
+.map .m-node.m-cur .m-sub{display:block;margin-top:4px;font:400 13px/1.35 var(--sans);color:color-mix(in srgb,var(--muted) 85%,var(--ink));overflow-wrap:anywhere}
 /* a ghost: there, faint and dashed, until it is said */
 .map .k-hidden{opacity:.28!important;pointer-events:auto}
 .map .m-node.k-hidden{border-style:dashed;background:none}

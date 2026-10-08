@@ -1780,3 +1780,90 @@ def test_an_arriving_arrow_draws_in_with_its_dot_on_a_step_forward_only(tmp_path
         assert pane.locator(".m-edge.m-cur").evaluate_all("gs => gs.map(g => g.dataset.key)") == ["edge:sending->working#0"]
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+# What a reader would see wrong on the map now: cards on cards, a label on a card or on a label, a card or
+# label past the board's side, an arrow's head under a card, a card's text out of its card.
+MAP_FAULTS = """(pane) => {
+  const pb = pane.querySelector('.pbody').getBoundingClientRect();
+  const R = (r) => [r.left, r.top, r.right, r.bottom].map(Math.round);
+  const cut = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+  const nodes = [...pane.querySelectorAll('.m-node')].map((e) => [e.dataset.key, R(e.getBoundingClientRect()), e]);
+  const labels = [...pane.querySelectorAll('.m-edge:not(.k-hidden) .m-elabel rect')].map((r) => [r.closest('.m-edge').dataset.key, R(r.getBoundingClientRect())]);
+  const out = [];
+  nodes.forEach(([k, r], i) => nodes.slice(i + 1).forEach(([k2, r2]) => { if (cut(r, r2) > 4) out.push(['cards', k, k2]); }));
+  for (const [k, r] of labels) for (const [n, nr] of nodes) if (cut(r, nr) > 4) out.push(['label on card', k, n]);
+  labels.forEach(([k, r], i) => labels.slice(i + 1).forEach(([k2, r2]) => { if (cut(r, r2) > 4) out.push(['labels', k, k2]); }));
+  for (const [k, r] of [...nodes, ...labels]) if (r[0] < pb.left - 1 || r[2] > pb.right + 1) out.push(['off the board', k]);
+  for (const g of pane.querySelectorAll('.m-edge')) {
+    const t = g.querySelector('.m-tip').getBoundingClientRect(), top = document.elementFromPoint(t.x + t.width / 2, t.y + t.height / 2);
+    if (top && top.closest('.m-node')) out.push(['head under', g.dataset.key, top.closest('.m-node').dataset.key]);
+  }
+  for (const [k, r, e] of nodes) for (const c of e.children) {
+    if (getComputedStyle(c).display === 'none') continue;
+    const g = document.createRange(); g.selectNodeContents(c); const t = g.getBoundingClientRect();
+    if (t.left < r[0] - 1 || t.right > r[2] + 1 || t.top < r[1] - 1 || t.bottom > r[3] + 1) out.push(['text out of card', k, c.tagName.toLowerCase()]);
+  }
+  return out;
+}"""
+
+
+# "Three paths changed", call ggkmNhBaEfGrkcZvshLyxQ (workspace 261008-175505), with its subs; the refs, and
+# the one sub that named a method, are put in other words of the same shape
+THREE_PATHS_SUBS = {"nodes": [{"id": "open", "role": "entry", "label": "Open a proposal", "ref": "Controller.retrieveOne", "sub": "GET /proposals/{id}"},
+                              {"id": "batch", "role": "entry", "label": "Nightly batch", "ref": "EnrichedRecordBatchService", "sub": "refreshPendingTurnsAndEnrichedRecordSet"},
+                              {"id": "share", "role": "entry", "label": "Share task", "ref": "InternalTaskService.completeTask", "sub": "refresh before sharing"},
+                              {"id": "catch", "role": "code", "label": "Catch every error", "sub": "falls back to empty constraints"},
+                              {"id": "guard", "role": "code", "label": "Broken guard first", "sub": "stops before any simulation"},
+                              {"id": "state", "role": "success", "label": "Return latest state", "sub": "proposal stays Pending, 200"},
+                              {"id": "err", "role": "error", "label": "Put in error", "sub": "enriched proposal flagged"}],
+                    "edges": THREE_PATHS["edges"]}
+DETAIL_CONTRAST = """(pane) => { const card = pane.querySelector('.m-node.m-cur');
+  return [card.dataset.key, getComputedStyle(card).backgroundColor,
+          ...[...card.querySelectorAll('code, .m-sub')].map((e) => getComputedStyle(e).color)]; }"""
+
+
+def _rgb(css):
+    nums = [float(x) for x in css.replace("color(srgb", "").strip("rgba() ").replace(",", " ").split()[:3]]
+    return [x * 255 for x in nums] if css.startswith("color(") else nums
+
+
+def _contrast(a, b):
+    def lum(c):
+        c = [x / 255 for x in c]
+        c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    hi, lo = sorted([lum(_rgb(a)), lum(_rgb(b))], reverse=True)
+    return round((hi + 0.05) / (lo + 0.05), 2)
+
+
+def test_a_map_cards_long_names_break_inside_the_card_and_its_detail_reads_at_4_5_to_1_in_both_themes(tmp_path, wc_config, browser):
+    long = {"nodes": [{"id": "a", "role": "entry", "label": "refreshPendingTurnsAndEnrichedRecordSet"}, {"id": "b", "label": "Short"}],
+            "edges": [{"from": "a", "to": "b", "label": "refreshPending"}]}
+    paths = _each_part_said(THREE_PATHS_SUBS, "Three paths changed")
+    res = stage.show(str(tmp_path), "m", _visual("flowchart", THREE_PATHS_SUBS), title="Three paths changed", extra={"scene": paths})
+    stage.show(str(tmp_path), "long", _visual("flowchart", long), title="Long", background=True)
+    try:
+        ratios = {}
+        for scheme in ("light", "dark"):
+            page, frame, send = _still(browser, res["url"], 1300, 850, scheme)
+            pane = frame.locator('section.pane[data-view="m"]')
+            pane.locator(".m-node").first.wait_for(state="attached", timeout=5000)
+            for n in range(1, paths["rest"]):
+                _show_frame(page, send, "m", n, True)
+                spills = [f for f in pane.evaluate(MAP_FAULTS) if f[0] == "text out of card"]
+                assert spills == [], n  # neither the sub nor the label runs out of its card
+                key, bg, *dim = pane.evaluate(DETAIL_CONTRAST)
+                ratios[scheme, key] = [_contrast(c, bg) for c in dim]
+            send({"type": "stage:state", "front": "long", "frames": {}})
+            other = frame.locator('section.pane[data-view="long"]')
+            other.locator(".m-node").first.wait_for(timeout=5000)
+            assert [f for f in other.evaluate(MAP_FAULTS) if f[0] == "text out of card"] == []  # a long name at rest too
+            page.close()
+        assert ratios == {
+            ("light", "node:open"): [5.0, 5.0], ("light", "node:batch"): [5.0, 5.0], ("light", "node:share"): [5.0, 5.0],
+            ("light", "node:catch"): [5.66], ("light", "node:guard"): [5.66], ("light", "node:state"): [5.03], ("light", "node:err"): [4.93],
+            ("dark", "node:open"): [6.24, 6.24], ("dark", "node:batch"): [6.24, 6.24], ("dark", "node:share"): [6.24, 6.24],
+            ("dark", "node:catch"): [7.88], ("dark", "node:guard"): [7.88], ("dark", "node:state"): [5.95], ("dark", "node:err"): [6.81]}
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])

@@ -10,6 +10,8 @@
 import { beingSaid } from "./scene.js";
 
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+// a long name breaks between its words: before a capital that follows a small letter, after . _ / -
+const breakable = (t) => esc(t).replace(/([a-z0-9])(?=[A-Z])|([._/-])(?=\w)/g, "$1$2<wbr>");
 const TONE = { entry: "edge", code: "plain", call: "plain", decision: "internal", success: "good", error: "hot" };
 const W = 180, H = 52;         // a part at rest; the one being said grows to a card over it
 const GAP_X = 70, GAP_Y = 34;  // between columns, between parts in a column
@@ -34,7 +36,7 @@ export function renderMap(box, spec, embedded) {
     ${nodes.map((n) => {
       const detail = n.method || n.ref;
       return `<div class="m-node t-${TONE[n.role] || "plain"} m-${esc(n.role || "code")}" data-key="node:${esc(n.id)}" data-node="${esc(n.id)}">
-        <b>${esc(n.label || n.id)}</b>${detail ? `<code>${esc(detail)}</code>` : ""}${n.sub ? `<span class="m-sub">${esc(n.sub)}</span>` : ""}</div>`;
+        <b>${breakable(n.label || n.id)}</b>${detail ? `<code>${breakable(detail)}</code>` : ""}${n.sub ? `<span class="m-sub">${breakable(n.sub)}</span>` : ""}</div>`;
     }).join("")}`;
   place(box);
   if (!box._mapObserved) {
