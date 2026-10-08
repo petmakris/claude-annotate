@@ -4,7 +4,10 @@ Keys: node:<id>, edge:<a>-><b>#<n> (the n-th edge from a to b), group:<subgraph 
 and for a sequence spec actor:<id> and step:<id>. An edge shows as soon as both its ends do.
 Verbs ([[+ k]], [[next]], [[all]], [[focus k]]) compile into full snapshot frames: frame 0 is the
 opening state, one frame follows per place in the speech, and the rest frame shows everything with
-no focus. A target that names nothing exactly is repaired or dropped, and every repair is reported.
+no focus. Every frame also names what is being said in it (`cur`), so the page draws that and guesses
+nothing: what the frame points at, else what it revealed, with the arrow that arrived into it; frame 0
+and the rest frame name nothing. A reveal with no point of its own clears the focus. A target that
+names nothing exactly is repaired or dropped, and every repair is reported.
 Shared by talk and stage.py; no I/O.
 """
 from __future__ import annotations
@@ -514,17 +517,138 @@ def _arrows(model: SceneModel, shown: set) -> None:
             shown.add(k)
 
 
-def _snap(model: SceneModel, shown: set, focus: set) -> dict:
+def _snap(model: SceneModel, shown: set, focus: set, cur: list | None = None) -> dict:
     _arrows(model, shown)
-    return {"show": [k for k in model.keys if k in shown], "focus": [k for k in model.keys if k in focus]}
+    return {"show": [k for k in model.keys if k in shown], "focus": [k for k in model.keys if k in focus],
+            "cur": list(cur or [])}
 
 
-def auto_steps(model: SceneModel, sentences: int) -> list[list[Verb]]:
-    if not model.can_hide or len(model.order) <= AUTO_STEP_OVER or sentences < 1:
-        return []
-    n = len(model.order)
-    k = min(sentences, n)
-    return [[Verb("next", count=(i + 1) * n // k - i * n // k)] for i in range(k)]
+def _said(model: SceneModel, keys: list[str], before: set, shown: set) -> list[str]:
+    """What a frame draws as being said: these parts (a cell as its row, an arrow with the end it brought
+    in), and on a flowchart the arrow that arrived with this frame into the last node of them, else one
+    that arrived out of it."""
+    _arrows(model, shown)
+    new = [k for k in model.keys if k in shown and k not in before]
+    cur: list[str] = []
+    for k in keys:
+        if k.startswith("cell#"):
+            k = model.up[k][0]
+        if k.startswith("edge:"):
+            cur += [end for end in model.up[k] if end in new]
+        cur.append(k)
+    cur = list(dict.fromkeys(cur))
+    node = next((k for k in reversed(cur) if k.startswith("node:")), None)
+    if model.kind == "flowchart" and node and not any(k.startswith("edge:") for k in cur):
+        edges = [k for k in new if k.startswith("edge:")]
+        edge = next((e for e in edges if model.up[e][1] == node), None) or next((e for e in edges if model.up[e][0] == node), None)
+        if edge:
+            cur.append(edge)
+    return cur
+
+
+# Words too common to name a part by.
+_STOP = frozenset("""a an and are as at be but by can did does for from had has have her his how into its just not now
+off once one only our out over she than that the their them then there these they this those too two very was way
+were what when where which who why will with you your yours it's is it of on or so to in up we us he if do no all
+any each few more most other some such own same both here""".split())
+
+
+def _words(text: str) -> list[str]:
+    return [w for w in re.findall(r"[^\W_]+", fold(text)) if len(w) >= 3 and w not in _STOP]
+
+
+def _same(a: str, b: str) -> bool:
+    """One word said for another: the same word, or a form of it (send, sends; share, sharing;
+    implement, implementation)."""
+    a, b = sorted((a, b), key=len)
+    stem = a[:-1] if len(a) > 4 and a[-1] in "se" else a
+    return a == b or (len(stem) >= 4 and b.startswith(stem))
+
+
+def part_names(model: SceneModel) -> dict[str, list[list[str]]]:
+    """Each part's names as words: its labels (and a node's ref or method), and an id that is a word."""
+    out: dict[str, list[list[str]]] = {}
+    for name, key in model.names.items():
+        if not name.startswith("col:") and _words(name):
+            out.setdefault(key, []).append(_words(name))
+    for key in model.order:
+        ident = key.split(":", 1)[1] if key.startswith(("node:", "step:", "group:")) else ""
+        if len(ident) >= 3 and not re.fullmatch(r"[a-z]?\d+", ident, re.IGNORECASE) and _words(ident):
+            out.setdefault(key, []).append(_words(ident))
+    return out
+
+
+def names_part(sentence: list[str], names: list[list[str]]) -> bool:
+    """A sentence names a part when it says more than half of the words of one of its names."""
+    return any(sum(any(_same(w, s) for s in sentence) for w in name) > len(name) // 2 for name in names)
+
+
+def auto_steps(model: SceneModel, sentences: list[str], pointed: dict[int, list[str]] | None = None
+               ) -> tuple[dict[int, list[list[str]]], list[str]]:
+    """A board with no reveals of its own, brought in over the sentences said about it.
+
+    Each part arrives with the first sentence that names it (a sequence's steps keep their order), or with
+    the sentence that points at it when that comes first. The parts no sentence names fill the sentences
+    that name nothing, in order and spread evenly, between the named parts around them; with no sentence
+    left there, they come in with the next named part. A first sentence that names nothing is the board's
+    introduction and brings nothing, unless no sentence names anything and there are no more sentences
+    than parts. `pointed` holds, per sentence index, the parts the board's own points light there.
+    Returns, per sentence index, the reveals for it (each a list of keys; the last is what the sentence
+    is about), and the parts that came in by order rather than by name."""
+    parts, m = model.order, len(sentences)
+    if not model.can_hide or len(parts) <= AUTO_STEP_OVER or m < 1:
+        return {}, []
+    words, names = [_words(s) for s in sentences], part_names(model)
+    point_at: dict[str, int] = {}
+    for i in sorted(pointed or {}):
+        for k in (pointed or {})[i]:
+            part = model.up.get(k, [k])[0] if k.startswith("cell#") else k
+            if part in parts:
+                point_at.setdefault(part, i)
+    anchor: dict[str, int] = {}
+    by_name: set[str] = set()
+    floor = 0
+    for p in parts:
+        lo = floor if model.kind == "sequence" else 0
+        hit = next((i for i in range(lo, min(m, point_at.get(p, m))) if names_part(words[i], names.get(p, []))), None)
+        if hit is not None:
+            anchor[p] = hit
+            by_name.add(p)
+        elif p in point_at:
+            anchor[p] = point_at[p]
+        if p in anchor and model.kind == "sequence":
+            floor = max(floor, anchor[p])
+    busy = set(anchor.values()) | set(point_at.values())
+    intro = 0 not in busy and (bool(anchor) or m > len(parts))
+    free = [i for i in range(m) if i not in busy and not (i == 0 and intro)]
+    fills: dict[int, list[list[str]]] = {}
+    rides: dict[int, list[str]] = {}
+    later: list[str] = []
+    run: list[str] = []
+    for j, p in enumerate([*parts, None]):
+        if p is not None and p not in anchor:
+            run.append(p)
+            continue
+        if run:
+            before = [anchor[q] for q in parts[:j] if q in anchor]
+            lo, hi = (before[-1] if before else -1), (anchor[p] if p is not None else m)
+            window = [i for i in free if lo < i < hi]
+            if window:
+                k = min(len(window), len(run))
+                for i in range(k):
+                    fills[window[i]] = [run[i * len(run) // k:(i + 1) * len(run) // k]]
+                free = [i for i in free if i not in window[:k]]
+            else:
+                rides.setdefault(hi if p is not None else max(lo, 0), []).extend(run)
+            later += run
+            run = []
+    plan: dict[int, list[list[str]]] = {}
+    for i in range(m):
+        own = [p for p in parts if anchor.get(p) == i]  # a pointed part too: the board still starts empty
+        steps = [s for s in ([rides.get(i, [])] + fills.get(i, []) + [own]) if s]
+        if steps:
+            plan[i] = steps
+    return plan, later
 
 
 def compile_scene(model: SceneModel, groups: list[list[Verb]], title: str) -> tuple[dict | None, list[str]]:
@@ -536,6 +660,9 @@ def compile_scene(model: SceneModel, groups: list[list[Verb]], title: str) -> tu
     focus: set = set()
     frames = [_snap(model, shown, focus)]
     for group in groups:
+        before = set(shown)
+        revealed: list[str] | None = None  # what the group's last reveal named
+        pointed: list[str] | None = None   # what its last focus named
         for verb in group:
             if verb.name == "next":
                 left = [k for k in model.order if k not in shown]
@@ -543,12 +670,14 @@ def compile_scene(model: SceneModel, groups: list[list[Verb]], title: str) -> tu
                     notes.append(f'next in "{title}": everything is shown already')
                 for k in left[:verb.count]:
                     _reveal(model, k, shown)
+                revealed = left[:verb.count]
                 continue
             if verb.name == "all":
                 shown |= set(model.keys)
+                revealed = []
                 continue
             if verb.name == "focus" and verb.keys is None and [t.lower() for t in verb.targets] == ["none"]:
-                focus = set()
+                focus, pointed = set(), None
                 continue
             keys = list(verb.keys or [])
             if verb.keys is None:
@@ -562,7 +691,15 @@ def compile_scene(model: SceneModel, groups: list[list[Verb]], title: str) -> tu
                 _reveal(model, k, shown)
             if verb.name == "focus":
                 focus = {d for k in keys for d in [k, *(model.down.get(k, []) if k.startswith("group:") else [])]}
-        frames.append(_snap(model, shown, focus))
+                pointed = keys
+            else:
+                revealed = keys
+        # A point is what is being said, whatever the group also revealed. A reveal with no point of its
+        # own clears the old focus, so nothing lit is left behind on a part the voice has left.
+        if pointed is None and revealed is not None:
+            focus = set()
+        said = pointed if pointed is not None else revealed or []
+        frames.append(_snap(model, shown, focus, _said(model, said, before, shown)))
     never = [k for k in model.order if k not in shown]
     if empty and never:
         notes.append(f'{len(never)} of {len(model.order)} elements of "{title}" are never revealed; '

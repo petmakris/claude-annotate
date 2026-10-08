@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import bisect
 import concurrent.futures
 import datetime as dt
 import difflib
@@ -1635,32 +1636,52 @@ class Call:
                     view_runs.append([at, [cue]])
         fronts = [(at, cue["view"]) for at, cue in timed if cue["kind"] == "front"]
         starts = sentence_starts(shown)
+        auto: set[str] = set()  # the boards that came in with the sentences said about them
         for i, (at, view) in enumerate(fronts):
             item = self.board.item_for(view)
             own = runs.get(view, [])
             reveals = any(c["verb"].name in ("+", "next", "all") for _, cues in own for c in cues)
-            # A sequence or flowchart comes in a sentence at a time unless its verbs reveal it themselves:
-            # a point or a focus only lights what the sentences bring in.
+            # A sequence or flowchart comes in with the sentences that name its parts unless its verbs reveal
+            # it themselves: a point brings in what it lights, and the sentences bring in the rest.
             stepped = item is not None and (view not in runs or (item["kind"] in VISUAL_KINDS and not reveals))
             model = scene_model(item) if stepped else None
             if model is None or at >= len(shown):
                 continue
             end = fronts[i + 1][0] if i + 1 < len(fronts) else len(shown)
-            said = sorted({at} | {s for s in starts if at < s < end})
-            steps = stage_scene.auto_steps(model, len(said))
-            if not steps:
-                continue
-            if item["kind"] not in VISUAL_KINDS:
-                self.board.problem(f'"{item.get("title") or item["kind"]}" has {len(model.order)} elements and no verbs, '
-                                   "so it was stepped one sentence at a time (dump); tag the word that names each thing")
-            merged: dict[int, list] = {}
+            bounds = [at] + [s for s in starts if at < s < end]
+            sentences = [shown[a:b] for a, b in zip(bounds, bounds[1:] + [end])]
+            title = item.get("title") or item["kind"]
+            # The board's own points, by the sentence they stand in: each is the reveal for its sentence.
+            pointed: dict[int, list[str]] = {}
+            first_run: dict[int, tuple] = {}
             for pos, cues in own:
-                merged.setdefault(pos, []).extend(cues)
-            for pos, group in zip(said, steps):
-                cue = {"kind": "frame", "view": view, "verb": group[0]}
-                merged.setdefault(pos, []).insert(0, cue)
-                timed.append((pos, cue))
-            runs[view] = [[pos, merged[pos]] for pos in sorted(merged)]
+                if at <= pos < end:
+                    n = bisect.bisect_right(bounds, pos) - 1
+                    first_run.setdefault(n, (pos, cues))
+                    for c in cues:
+                        v = c["verb"]
+                        keys = v.keys if v.keys is not None else [
+                            k for t in v.targets if t.lower() != "none" for k in stage_scene.resolve(model, t, title)[0]]
+                        pointed.setdefault(n, []).extend(keys)
+            plan, by_order = stage_scene.auto_steps(model, sentences, pointed)
+            if not plan:
+                continue
+            auto.add(view)
+            if item["kind"] not in VISUAL_KINDS:
+                self.board.problem(f'"{title}" has {len(model.order)} elements and no verbs, '
+                                   "so it came in with the sentences said about it (dump); tag the word that names each thing")
+            elif by_order:
+                self.board.problem(f'{len(by_order)} of {len(model.order)} parts of "{title}" are named by no sentence, '
+                                   "so they came in by order; point at each where it is said")
+            for n, reveals in plan.items():
+                auto = [{"kind": "frame", "view": view, "verb": stage_scene.Verb("+", keys=keys)} for keys in reveals]
+                pos, cues = first_run.get(n, (bounds[n], None))
+                if cues is not None:  # with the point, before it: the point is what is said
+                    cues[:0] = auto
+                else:
+                    own.append([pos, auto])
+                timed.extend((pos, cue) for cue in auto)
+            runs[view] = sorted(own, key=lambda run: run[0])
         for view, view_runs in runs.items():
             item = self.board.item_for(view)
             title = item.get("title") or item["kind"]
@@ -1676,7 +1697,7 @@ class Call:
                     cue.pop("verb")
                     cue["n"] = n if built and k == 0 else None
             if built:
-                item["scene"] = built
+                item["scene"] = {**built, "auto": True} if view in auto else built
                 if not any(i is item for i in self.reply_items):
                     self.reply_items.append(item)
         timed = [(at, cue) for at, cue in timed if cue["kind"] != "frame" or cue.get("n")]

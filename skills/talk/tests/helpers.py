@@ -154,3 +154,58 @@ def served_server(fake: FakeSpeech | None = None):
             asyncio.run_coroutine_threadsafe(stop(), loop).result(15)
             loop.call_soon_threadsafe(loop.stop)
             thread.join(10)
+
+
+def stage_rule_breaks(call, shown: str) -> list[str]:
+    """The rules a reply's scenes break (skills/stage/SKILL.md, "What the stage keeps true"), as far as
+    the compiled frames and cues decide them; the page's share is tested in the browser. Call it right
+    after call.split_reply(text) returned `shown`."""
+    scene_mod, out = talk.stage_scene, []
+    cues = call.reply_cues
+    fronts = sorted((c["at"], c["view"]) for c in cues if c["kind"] == "front")
+    starts = talk.sentence_starts(shown)
+    for item in call.board.items:
+        built, view = item.get("scene"), item["view"]
+        if not built or view not in [v for _, v in fronts]:
+            continue
+        model, frames = talk.scene_model(item), built["frames"]
+        name = item.get("title") or view
+        at = {c["n"]: c["at"] for c in cues if c["view"] == view and c["kind"] == "frame"}
+        front = next(a for a, v in fronts if v == view)
+        end = next((a for a, v in fronts if a > front), len(shown))
+        part = {k: (model.up[k][0] if k.startswith("cell#") else k) for k in model.keys}
+        for n, f in enumerate(frames):
+            focus = {part[k] for k in f["focus"]}
+            parts = [k for k in f["cur"] if not k.startswith("edge:")]
+            if n in (0, built["rest"]) and f["cur"]:
+                out.append(f"R1 {name} frame {n} names {f['cur']} as being said")
+            if focus and not set(parts) <= focus:
+                out.append(f"R1/R3 {name} frame {n} says {parts} while it points at {sorted(focus)}")
+            nodes = [k for k in parts if k.startswith("node:")]
+            for e in (k for k in f["cur"] if k.startswith("edge:")):
+                if not set(model.up[e]) <= set(f["show"]):
+                    out.append(f"R4 {name} frame {n} says {e} without both its ends")
+                if nodes and nodes[-1] not in model.up[e]:
+                    out.append(f"R4 {name} frame {n} says {e}, which does not touch {nodes[-1]}")
+        positions = [at[n] for n in sorted(at)]
+        for p in positions:
+            if p < len(shown) and shown[p].isspace():
+                out.append(f"R8 {name}: a frame cue stands on a space at {p}")
+        for p, q in zip(positions, positions[1:]):
+            if not shown[p:q].strip():
+                out.append(f"R8 {name}: two frames fire on the word at {q}")
+        if not built.get("auto"):  # a board revealed by its own verbs comes in where its author put them
+            continue
+        bounds = [front] + [s for s in starts if front < s < end]
+        spans = list(zip(bounds, bounds[1:] + [end]))
+        names = scene_mod.part_names(model)
+        for k in model.order:
+            first = next((n for n, f in enumerate(frames) if k in f["show"]), None)
+            said = next(((a, b) for a, b in spans if scene_mod.names_part(scene_mod._words(shown[a:b]), names.get(k, []))), None)
+            if first is None or first == built["rest"] or said is None:
+                continue
+            if at.get(first, -1) < said[0]:
+                out.append(f"R2 {name}: {k} arrives before the sentence that names it")
+            elif at[first] >= said[1]:
+                out.append(f"R2 {name}: {k} is named before it is shown")
+    return out

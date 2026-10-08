@@ -1307,3 +1307,159 @@ def test_at_all_shown_nothing_is_lit_as_being_said_and_next_is_off(tmp_path, wc_
             assert pane.locator(".stepnext").is_disabled(), view
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+# -- the page draws what each frame says is being said (scene.py's `cur`) ----------------------------
+
+from skills.stage.tests.test_scene import CALLS_SPEC, ENGINES as ENGINES_MODEL, LIVE_SPEC, TIMELINE  # noqa: E402
+
+# "Three paths changed", from call ggkmNhBaEfGrkcZvshLyxQ (workspace 261008-175505)
+THREE_PATHS = {"nodes": [{"id": "open", "role": "entry", "label": "Open a proposal"},
+                         {"id": "batch", "role": "entry", "label": "Nightly batch"},
+                         {"id": "share", "role": "entry", "label": "Share task"},
+                         {"id": "catch", "role": "code", "label": "Catch every error"}, {"id": "guard", "role": "code", "label": "Broken guard first"},
+                         {"id": "state", "role": "success", "label": "Return latest state"}, {"id": "err", "role": "error", "label": "Put in error"}],
+               "edges": [{"from": "open", "to": "catch"}, {"from": "batch", "to": "guard"}, {"from": "guard", "to": "err"},
+                         {"from": "share", "to": "state", "label": "if broken"}]}
+TIMELINE_BODY = {"type": "inline", "format": "table", "body": "| When | Contract repo | Service |\n|---|---|---|\n"
+                 "| before | | pins M14 |\n| 13 Jan | PR opened, builds D139 | draft pins D139 |\n"
+                 "| 21 Jan | new push, builds D140 | draft re-pins D140 |\n| 26 Jan | PR merges, builds M16 | pins M16 and merges |\n"
+                 "| 2 Feb | | core banking moves to M16 |"}
+ENGINES5 = {"type": "inline", "format": "table", "body": "| | Azure | VoiceStudio |\n|---|---|---|\n"  # the demo's
+            "| Speed | a second or two per answer | about as long to make as to play |\n| Cost | billed per character | free |\n"
+            "| Runs on | Microsoft's servers | this Mac |\n| Needs | `TALK_AZURE_KEY_COMMAND` | the VoiceStudio app open |\n"
+            "| Picked | when a key is found | when no key is found |"}
+ACCENT = """(pane) => { const i = document.createElement('i'); i.style.color = 'var(--claude)'; pane.append(i);
+                        const c = getComputedStyle(i).color; i.remove(); return c; }"""
+LOOK = """(pane, sel) => [...pane.querySelectorAll(sel)].map(e => { const s = getComputedStyle(e), r = e.getBoundingClientRect();
+            return {key: e.dataset.key, opacity: s.opacity, shadow: s.boxShadow, width: Math.round(r.width)}; })"""
+
+
+def _saved_before_cur(built):
+    """The scene as it was saved before frames named what is being said."""
+    return {**built, "frames": [{"show": f["show"], "focus": f["focus"]} for f in built["frames"]]}
+
+
+def _show_frame(page, send, view, n, animate=False):
+    send({"type": "stage:frame", "view": view, "n": n, "animate": animate})
+    _until_frame(page, view, n)
+
+
+def test_the_map_draws_the_part_being_said_lit_and_undimmed_with_a_ring_and_its_arrow(tmp_path, wc_config, browser):
+    model = scene.flowchart_spec_model(THREE_PATHS)
+    now = _scene(model, [["+ open", "focus open"], ["+ batch", "focus batch"],
+                         ["+ share, catch, guard, state, err", "focus share"]], "Three paths changed")
+    # as call ggkmNh saved it: the automatic steps ran a node ahead of the points
+    then = _saved_before_cur(_scene(model, [["next 2", "focus open"], ["next 2", "focus batch"], ["next 3", "focus share"]],
+                                    "Three paths changed"))
+    res = stage.show(str(tmp_path), "now", _visual("flowchart", THREE_PATHS), title="Three paths changed", extra={"scene": now})
+    stage.show(str(tmp_path), "then", _visual("flowchart", THREE_PATHS), title="Three paths then", extra={"scene": then})
+    try:
+        page, frame, send = _embedded(browser, res["url"], width=1300)
+        for view in ("now", "then"):
+            pane = frame.locator(f'section.pane[data-view="{view}"]')
+            pane.wait_for(state="attached", timeout=5000)
+            send({"type": "stage:state", "front": view, "frames": {}})
+            pane.locator(".m-node").first.wait_for(state="attached", timeout=5000)
+            _show_frame(page, send, view, 0)
+            assert pane.locator(".m-cur").count() == 0, view  # nothing is said before the first sentence
+            _show_frame(page, send, view, 1, True)
+            page.wait_for_timeout(600)
+            cur = pane.evaluate(LOOK, ".m-node.m-cur")
+            assert [(c["key"], c["opacity"]) for c in cur] == [("node:open", "1")], view
+            assert pane.evaluate(ACCENT) in cur[0]["shadow"], view  # the pointed card has the accent ring
+        pane = frame.locator('section.pane[data-view="now"]')
+        _show_frame(page, send, "now", 3, True)
+        page.wait_for_timeout(600)
+        assert [(c["key"], c["opacity"]) for c in pane.evaluate(LOOK, ".m-node.m-cur")] == [("node:share", "1")]
+        # the arrow into nothing said is not lit; the one out of the card being said is, and is not dimmed
+        assert [(c["key"], c["opacity"]) for c in pane.evaluate(LOOK, ".m-edge.m-cur")] == [("edge:share->state#0", "1")]
+        assert {c["key"]: c["opacity"] for c in pane.evaluate(LOOK, ".m-node")}["node:open"] == "0.6"
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def test_every_arrow_arriving_draws_in_and_the_dot_runs_on_the_one_into_the_card_being_said(tmp_path, wc_config, browser):
+    model = scene.flowchart_spec_model(LIVE_SPEC)
+    built = _scene(model, [["+ listening"], ["+ hearing"], ["+ sending"], ["+ working"], ["+ speaking"]], "Live mode's states")
+    res = stage.show(str(tmp_path), "live", _visual("flowchart", LIVE_SPEC), title="Live mode's states", extra={"scene": built})
+    try:
+        page, frame, send = _embedded(browser, res["url"], width=1300)
+        pane = frame.locator('section.pane[data-view="live"]')
+        pane.locator(".m-node").first.wait_for(state="attached", timeout=5000)
+        for n in range(5):
+            _show_frame(page, send, "live", n, n > 0)
+        page.wait_for_timeout(900)  # the arrows of frame 4 have drawn in
+        send({"type": "stage:frame", "view": "live", "n": 5, "animate": True})
+        _until_frame(page, "live", 5)
+        drawing = pane.locator(".m-edge").evaluate_all("gs => gs.filter(g => g.querySelector('.m-line.m-draw')).map(g => g.dataset.key)")
+        assert sorted(drawing) == ["edge:speaking->hearing#0", "edge:speaking->listening#0", "edge:working->speaking#0"]
+        dots = pane.locator(".m-dot").evaluate_all("ds => ds.map(d => d.parentElement.dataset.key)")
+        assert dots == ["edge:working->speaking#0"]  # not along "it ends", the last arrow declared
+        assert pane.locator(".m-edge.m-cur").evaluate_all("gs => gs.map(g => g.dataset.key)") == ["edge:working->speaking#0"]
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def test_the_lanes_never_dim_the_step_being_said_and_an_actor_pointed_at_lights_its_chip_and_steps(tmp_path, wc_config, browser):
+    m = scene.sequence_model(CALLS_SPEC)
+    # as call WM4mN6 compiled it: each sentence brought a step in and pointed at the one before
+    built = _scene(m, [["next"], ["next", "focus s1"], ["next", "focus s2"], ["focus actor fl"]], "Calls in both directions")
+    res = stage.show(str(tmp_path), "calls", _visual("sequence", CALLS_SPEC), title="Calls in both directions",
+                     extra={"scene": built})
+    try:
+        page, frame, send = _embedded(browser, res["url"], width=1300)
+        pane = frame.locator('section.pane[data-view="calls"]')
+        pane.locator(".ln-row").first.wait_for(state="attached", timeout=5000)
+        rows = lambda: {c["key"]: c["opacity"] for c in pane.evaluate(LOOK, ".ln-row[data-on]")}  # noqa: E731
+        for n in (0, 1):
+            _show_frame(page, send, "calls", n, n > 0)
+        _show_frame(page, send, "calls", 2, True)
+        page.wait_for_timeout(450)
+        assert pane.locator(".ln-row.ln-cur").evaluate_all("rs => rs.map(r => r.dataset.step)") == ["s1"]
+        assert rows() == {"step:s1": "1", "step:s2": "0.5"}  # the pointed step is the large one, and lit
+        _show_frame(page, send, "calls", 4)
+        page.wait_for_timeout(450)
+        assert pane.locator(".ln-row.ln-cur").count() == 0
+        assert rows() == {"step:s1": "0.5", "step:s2": "1", "step:s3": "1"}  # the steps the Flowable module takes part in
+        chips = {c["key"]: c for c in pane.evaluate(LOOK, ".ln-chip")}
+        assert pane.evaluate(ACCENT) in chips["actor:fl"]["shadow"] and chips["actor:app"]["opacity"] == "0.55"
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def test_a_table_draws_no_row_as_being_said_before_one_is_pointed_at(tmp_path, wc_config, browser):
+    now = _scene(TIMELINE, [["focus row 1"], ["focus row 3"]], "Timeline, simply")
+    then = _saved_before_cur(_scene(TIMELINE, [[f"focus row {n}"] for n in range(1, 6)], "Timeline, simply"))
+    engines = _scene(ENGINES_MODEL, [["next", 'focus cell "Speed" / "Azure"'], ["next"]], "Two speech engines")
+    res = stage.show(str(tmp_path), "now", TIMELINE_BODY, title="Timeline, simply", extra={"scene": now})
+    stage.show(str(tmp_path), "then", TIMELINE_BODY, title="Timeline then", extra={"scene": then})
+    stage.show(str(tmp_path), "eng", ENGINES5, title="Two speech engines", extra={"scene": engines})
+    try:
+        page, frame, send = _embedded(browser, res["url"], width=1300)
+        size = lambda pane: {c["key"]: c for c in pane.evaluate(  # noqa: E731
+            "p => [...p.querySelectorAll('tbody tr')].map(r => ({key: r.dataset.key, cur: r.classList.contains('g-cur'),"
+            " size: getComputedStyle(r.querySelector('td:nth-child(2)')).fontSize, top: Math.round(r.getBoundingClientRect().top)}))")}
+        for view in ("now", "then"):
+            pane = frame.locator(f'section.pane[data-view="{view}"]')
+            pane.wait_for(state="attached", timeout=5000)
+            send({"type": "stage:state", "front": view, "frames": {}})
+            pane.locator("tbody tr").first.wait_for(state="attached", timeout=5000)
+            _show_frame(page, send, view, 0)
+            page.wait_for_timeout(450)
+            assert [k for k, r in size(pane).items() if r["cur"]] == [], view  # not the last row, drawn large
+            assert {r["size"] for r in size(pane).values()} == {"16px"}, view
+        pane = frame.locator('section.pane[data-view="now"]')
+        send({"type": "stage:state", "front": "now", "frames": {"now": 1}})
+        _until_frame(page, "now", 1)
+        page.wait_for_timeout(450)
+        assert {k: r["size"] for k, r in size(pane).items() if r["cur"]} == {"row#1": "21px"}
+        pane = frame.locator('section.pane[data-view="eng"]')
+        send({"type": "stage:state", "front": "eng", "frames": {"eng": 1}})
+        pane.locator("tbody tr").first.wait_for(state="attached", timeout=5000)
+        _show_frame(page, send, "eng", 2, True)
+        page.wait_for_timeout(450)
+        assert [k for k, r in size(pane).items() if r["cur"]] == ["row#2"]
+        assert pane.locator(".k-focus").count() == 0  # the Speed cell pointed at before is not left lit
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])

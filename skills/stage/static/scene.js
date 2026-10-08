@@ -90,18 +90,25 @@ export function applyFrame(scene, box, n, from = null) {
   return { missing: scene.keys.filter((k) => !found.has(k)), focused };
 }
 
-// The one that is being said: what arrived with this frame, else what is pointed at. `kind` picks the
-// keys that count (row# for a table, step: for a sequence); a pointed cell counts as its row.
-export function currentKey(scene, n, prefix) {
-  if (!scene) return null;
-  const last = scene.frames.length - 1, at = (i) => scene.frames[Math.max(0, Math.min(i, last))];
-  if (n >= scene.rest) return null;
-  const mine = (k) => k.startsWith(prefix) ? k : prefix === "row#" && k.startsWith("cell#") ? "row#" + k.slice(5).split(".")[0] : null;
-  const before = n > 0 ? new Set(at(n - 1).show) : new Set();
-  const arrived = at(n).show.filter((k) => k.startsWith(prefix) && !before.has(k));
-  if (arrived.length) return arrived[arrived.length - 1];
-  const pointed = at(n).focus.map(mine).filter(Boolean);
-  if (pointed.length) return pointed[pointed.length - 1];
-  const shown = at(n).show.filter((k) => k.startsWith(prefix));
-  return shown.length ? shown[shown.length - 1] : null;
+// What is being said in frame n: what the frame names (`cur`, written by the scene compiler), so the page
+// draws that and guesses nothing. Nothing is being said in frame 0 or at rest. A scene saved before frames
+// named it gets a guess: what is pointed at (a cell as its row), else the newest thing that arrived, with
+// the arrow that arrived into it.
+export function beingSaid(scene, n) {
+  if (!scene || !(n > 0) || n >= scene.rest) return [];
+  const last = scene.frames.length - 1, frame = scene.frames[Math.min(n, last)];
+  if (Array.isArray(frame.cur)) return frame.cur;
+  const before = new Set(scene.frames[Math.min(n, last) - 1].show);
+  const part = (k) => (k.startsWith("cell#") ? "row#" + k.slice(5).split(".")[0] : k);
+  const arrived = frame.show.filter((k) => !before.has(k));
+  const pointed = [...new Set(frame.focus.map(part))];
+  const cur = pointed.length ? pointed : arrived.filter((k) => !/^(edge:|actor:|cell#|group:)/.test(k)).slice(-1);
+  const node = cur.filter((k) => k.startsWith("node:")).pop();
+  if (node) {
+    const ends = (e) => e.slice(5).replace(/#\d+$/, "").split("->");
+    const edges = arrived.filter((k) => k.startsWith("edge:"));
+    const edge = edges.find((e) => "node:" + ends(e)[1] === node) || edges.find((e) => "node:" + ends(e)[0] === node);
+    if (edge) cur.push(edge);
+  }
+  return cur;
 }

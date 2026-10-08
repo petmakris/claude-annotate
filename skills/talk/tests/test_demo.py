@@ -3,7 +3,7 @@ board can be seen moving with the voice without a Claude session."""
 import asyncio
 import re
 
-from helpers import AUTH, make_args, run, running_app, talk
+from helpers import AUTH, make_args, run, running_app, stage_rule_breaks, talk
 
 
 def test_every_demo_answer_goes_through_the_reply_parser_without_a_board_problem(tmp_path):
@@ -86,3 +86,15 @@ def test_the_demo_shows_every_board_kind_and_every_way_to_steer_one():
     assert not missing, f"no demo answer points at a {missing}"
     for tag in ("[[next]]", "[[+ ", "[[key:", "\npage:"):
         assert tag in text, f"the demo never uses {tag.strip()}"
+
+
+def test_every_demo_board_keeps_what_the_stage_keeps_true(tmp_path):
+    call = talk.Call(make_args(code=talk.SKILL_DIR.parents[1]), "Stage demo", tmp_path / "out")
+    breaks = []
+    for text in talk.load_demo():
+        first, _, rest = text.partition("\n")
+        shown = call.split_reply(rest if first.startswith("page:") else text)
+        breaks += stage_rule_breaks(call, shown)
+        for item in call.board.items:
+            item.pop("scene", None)  # a scene belongs to the answer that compiled it
+    assert breaks == []

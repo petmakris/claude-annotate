@@ -67,3 +67,17 @@ Rules:
   marked on its row in the list (`A3`). A stage opened on its own ignores all of this. Code, change, table and diagram views
   can be pointed at from /talk only; /talk also keeps a pinned **Key points** board of the call's
   `[[key: ...]]` tags.
+
+## What the stage keeps true
+
+A board that steps with the voice keeps these, and the tests check them (`stage_rule_breaks` in
+`skills/talk/tests/helpers.py` for the compiled frames, `test_browser_stage.py` for the page):
+
+1. The part drawn as being said is the part the voice is on: each frame names it (`cur`), and the page draws only that.
+2. A part appears no earlier than the sentence that names it, and is visible when it is named.
+3. The pointed highlight and the being-said emphasis never disagree; nothing is emphasised and dimmed at once.
+4. An arrow is lit only with both its ends; an arriving arrow animates once, on a forward step only.
+5. Back, seek and replay give the same picture as playing straight through.
+6. Updates, resizing and a theme change keep the current picture correct.
+7. Text fits its box, and nothing overlaps.
+8. Cues fire on the right word.

@@ -4,9 +4,9 @@
 //
 // The scene engine (scene.js) shows and lights keys as frames go by; this file only draws the keys
 // (`actor:<id>` on the chips, `step:<id>` on the rows) and, after each frame, lays the rows out
-// around the current step: the step pointed at, else the newest one shown.
+// around the step the frame names as being said. An actor pointed at lights its chip and its steps.
 
-import { currentKey } from "./scene.js";
+import { beingSaid } from "./scene.js";
 
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const TONES = new Set(["plain", "edge", "internal", "service", "cheap", "hot", "good", "dropped"]);
@@ -75,22 +75,24 @@ export function layoutLanes(box, scene, n = null) {
   const steps = st.spec.steps || [];
   const last = scene ? scene.frames.length - 1 : 0;
   const frame = scene ? scene.frames[Math.max(0, Math.min(n ?? last, last))] : null;
-  const show = frame ? new Set(frame.show) : null, focus = frame ? new Set(frame.focus) : new Set();
+  const show = frame ? new Set(frame.show) : null;
   const shown = steps.filter((s) => !show || show.has("step:" + s.id));
-  // the step that just arrived, else the one pointed at, else the newest; none at rest
-  const curKey = scene && n != null ? currentKey(scene, n, "step:") : null;
+  const said = scene && n != null ? beingSaid(scene, n) : [];
+  const curKey = said.filter((k) => k.startsWith("step:")).pop();
   const cur = curKey ? steps.find((s) => "step:" + s.id === curKey) || null : null;
   const curId = cur ? cur.id : null;
+  const lit = new Set(said.filter((k) => k.startsWith("actor:")).map((k) => k.slice(6)));
   const on = new Set(shown.map((s) => s.id));
   for (const r of box.querySelectorAll(".ln-row")) {
     r.toggleAttribute("data-on", on.has(r.dataset.step));
     r.classList.toggle("ln-cur", r.dataset.step === curId);
+    r.classList.toggle("ln-mine", lit.has(r.dataset.from) || lit.has(r.dataset.to));
     // the arrow draws in and the dot travels only when a step becomes the current one
     if (r.dataset.step === curId && st.cur !== curId) { r.classList.remove("ln-enter"); void r.offsetWidth; r.classList.add("ln-enter"); }
     else if (r.dataset.step !== curId) r.classList.remove("ln-enter");
   }
   for (const p of box.querySelectorAll(".ln-phase")) p.toggleAttribute("data-on", on.has(p.dataset.at));
-  const involved = cur ? new Set([cur.from, cur.to]) : null;
+  const involved = lit.size ? lit : cur ? new Set([cur.from, cur.to]) : null;
   for (const c of box.querySelectorAll(".ln-chip")) {
     c.classList.toggle("ln-on", !!involved && involved.has(c.dataset.actor));
     c.classList.toggle("ln-off", !!involved && !involved.has(c.dataset.actor));

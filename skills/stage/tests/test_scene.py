@@ -115,15 +115,16 @@ def test_the_worked_example_compiles_to_frames_a0_to_a6_and_a_rest_frame():
     assert notes == []
     frames = built["frames"]
     assert (built["steps"], built["rest"], built["start"], built["repairs"]) == (6, 7, "empty", 0)
-    assert frames[0] == {"show": [], "focus": []}
-    assert frames[1] == {"show": ["group:adv", "node:pws"], "focus": []}
+    assert frames[0] == {"show": [], "focus": [], "cur": []}
+    assert frames[1] == {"show": ["group:adv", "node:pws"], "focus": [], "cur": ["node:pws"]}
     assert frames[2]["show"] == ["group:adv", "node:pws", "node:wf", "edge:pws->wf#0"]
+    assert frames[2]["cur"] == ["node:wf", "edge:pws->wf#0"]  # an arrow said with the end it brought in
     assert frames[3]["show"] == ["group:adv", "node:pws", "node:wf", "node:engine", "edge:pws->wf#0",
                                  "edge:wf->engine#0"]
-    assert frames[4] == {"show": frames[3]["show"], "focus": ["edge:pws->wf#0"]}
-    assert frames[5] == {"show": frames[3]["show"], "focus": []}
-    assert frames[6] == {"show": model.keys, "focus": ["node:legacy"]}
-    assert frames[7] == {"show": model.keys, "focus": []}
+    assert frames[4] == {"show": frames[3]["show"], "focus": ["edge:pws->wf#0"], "cur": ["edge:pws->wf#0"]}
+    assert frames[5] == {"show": frames[3]["show"], "focus": [], "cur": []}
+    assert frames[6] == {"show": model.keys, "focus": ["node:legacy"], "cur": ["node:legacy", "edge:pws->legacy#0"]}
+    assert frames[7] == {"show": model.keys, "focus": [], "cur": []}
 
 
 def test_a_scene_that_only_focuses_starts_with_everything_shown():
@@ -163,11 +164,14 @@ def test_next_reveals_in_declaration_order_and_says_when_nothing_is_left():
 
 def test_a_board_with_more_than_three_elements_and_no_verbs_is_stepped_per_sentence():
     model = scene.flowchart_model(EXAMPLE)
-    assert [[v.count for v in g] for g in scene.auto_steps(model, 3)] == [[1], [1], [2]]
-    assert len(scene.auto_steps(model, 20)) == 4
-    assert scene.auto_steps(scene.flowchart_model("graph TD; P-->Q"), 5) == []
-    assert scene.auto_steps(scene.lines_model(range(1, 30)), 5) == []
-    assert scene.auto_steps(model, 0) == []
+    plan, later = scene.auto_steps(model, ["One.", "Two.", "Three."])
+    assert plan == {0: [["node:pws"]], 1: [["node:legacy"]], 2: [["node:wf", "node:engine"]]} and later == model.order
+    # more sentences than parts, none naming one: the first is the board's introduction and brings nothing
+    plan, _ = scene.auto_steps(model, [f"S{i}." for i in range(20)])
+    assert plan == {1: [["node:pws"]], 2: [["node:legacy"]], 3: [["node:wf"]], 4: [["node:engine"]]}
+    assert scene.auto_steps(scene.flowchart_model("graph TD; P-->Q"), ["a."] * 5) == ({}, [])
+    assert scene.auto_steps(scene.lines_model(range(1, 30)), ["a."] * 5) == ({}, [])
+    assert scene.auto_steps(model, []) == ({}, [])
     assert scene.compile_scene(model, [], "T") == (None, [])
 
 
@@ -224,8 +228,10 @@ def test_steps_actors_and_nodes_are_found_by_id_by_word_or_by_label():
 
 def test_auto_steps_spread_evenly_and_never_end_on_an_empty_sentence():
     model = scene.flowchart_model("graph TD; A-->B; B-->C; C-->D; D-->E")
-    assert [g[0].count for g in scene.auto_steps(model, 4)] == [1, 1, 1, 2]
-    built, notes = scene.compile_scene(model, scene.auto_steps(model, 4), "T")
+    plan, _ = scene.auto_steps(model, ["One.", "Two.", "Three.", "Four."])
+    assert [len(steps[0]) for _, steps in sorted(plan.items())] == [1, 1, 1, 2]
+    groups = [[scene.Verb("+", keys=keys) for keys in steps] for _, steps in sorted(plan.items())]
+    built, notes = scene.compile_scene(model, groups, "T")
     assert notes == [] and built["frames"][4]["show"] == model.keys
 
 
@@ -251,3 +257,122 @@ def test_mermaid_graphs_and_state_diagrams_become_map_specs():
     assert [(n["id"], n["label"], n["role"]) for n in graph["nodes"]] == [("P", "Page", "entry"), ("Q", "Queue?", "decision"), ("R", "Run", "code")]
     assert [e.get("label") for e in graph["edges"]] == ["words", "yes"]
     assert sc.mermaid_spec("sequenceDiagram\n  A->>B: hi") is None
+
+
+# -- what each frame says is being said (cur) -------------------------------------------------------
+# The boards below are real: the stage demo's (skills/talk/demo.md) and boards from saved calls, with
+# the verbs their tags compiled to.
+
+TIMELINE = scene.rows_model(["before", "13 Jan", "21 Jan", "26 Jan", "2 Feb"], ["When", "Contract repo", "Service"])
+ENGINES = scene.rows_model(["Speed", "Cost", "Runs on", "Needs", "Picked"], ["", "Azure", "VoiceStudio"])
+LIVE_SPEC = {"nodes": [{"id": "listening", "role": "entry", "label": "Listening"}, {"id": "hearing", "label": "Hearing you"},
+                       {"id": "sending", "label": "Sending"}, {"id": "working", "label": "Working"},
+                       {"id": "speaking", "role": "success", "label": "Speaking"}],
+             "edges": [{"from": "listening", "to": "hearing", "label": "you speak"}, {"from": "hearing", "to": "sending", "label": "you pause"},
+                       {"from": "sending", "to": "working", "label": "a turn went"}, {"from": "working", "to": "speaking", "label": "it is ready"},
+                       {"from": "sending", "to": "listening", "label": "nothing said"}, {"from": "speaking", "to": "hearing", "label": "you cut in"},
+                       {"from": "speaking", "to": "listening", "label": "it ends"}]}
+CALLS_SPEC = {"actors": [{"id": "app", "label": "Application (advisory)"}, {"id": "port", "label": "Interfaces in advisory legacy"},
+                         {"id": "fl", "label": "Flowable module (workflows)"}],
+              "steps": [{"id": "s1", "from": "app", "to": "port", "arrow": "request", "label": "asks for tasks"},
+                        {"id": "s2", "from": "port", "to": "fl", "arrow": "request", "label": "Spring injects the Flowable implementation"},
+                        {"id": "s3", "from": "fl", "to": "port", "arrow": "event", "label": "BPMN step needs orders sent"},
+                        {"id": "s4", "from": "port", "to": "app", "arrow": "event", "label": "Spring injects the app implementation"}]}
+
+
+def _cur(built):
+    return [f["cur"] for f in built["frames"]]
+
+
+def test_frame_0_and_the_rest_frame_of_a_full_board_name_nothing_as_being_said():
+    # "Timeline, simply" (saved call IzwEEFZT6): a table that starts full and is pointed at row by row
+    built, _ = scene.compile_scene(TIMELINE, [verbs(f"focus row {n}") for n in range(1, 6)] + [verbs("focus none")],
+                                   "Timeline, simply")
+    assert built["start"] == "full"
+    assert _cur(built) == [[], ["row#1"], ["row#2"], ["row#3"], ["row#4"], ["row#5"], [], []]
+    # a frame that brings nothing and points at nothing names nothing either
+    built, _ = scene.compile_scene(TIMELINE, [verbs("next 5"), verbs("next")], "T")
+    assert _cur(built)[2] == []
+
+
+def test_a_reveal_with_no_point_of_its_own_clears_the_focus_and_is_what_is_said():
+    # the demo's "Two speech engines": a cell pointed at, then the rows that follow with [[next]]
+    tags = [["next", 'focus cell "Speed" / "Azure"'], ['focus cell "Speed" / "VoiceStudio"'], ["next"], ["next"], ["next"],
+            ["next", 'focus cell "Picked" / "Azure"']]
+    built, notes = scene.compile_scene(ENGINES, [verbs(*g) for g in tags], "Two speech engines")
+    assert notes == []
+    assert [f["focus"] for f in built["frames"]] == [[], ["cell#1.2"], ["cell#1.3"], [], [], [], ["cell#5.2"], []]
+    assert _cur(built) == [[], ["row#1"], ["row#1"], ["row#2"], ["row#3"], ["row#4"], ["row#5"], []]
+
+
+def test_a_point_wins_over_a_reveal_in_its_own_frame():
+    # "Calls in both directions" (saved call WM4mN6) as the old automatic steps compiled it: each sentence
+    # brought the next step in and pointed at the one before
+    m = scene.sequence_model(CALLS_SPEC)
+    built, _ = scene.compile_scene(m, [[scene.Verb("next")]] + [[scene.Verb("next"), scene.Verb("focus", keys=[f"step:s{i}"])]
+                                                               for i in range(1, 4)], "Calls in both directions")
+    assert _cur(built) == [[], ["step:s1"], ["step:s1"], ["step:s2"], ["step:s3"], []]
+    assert built["frames"][2]["focus"] == ["step:s1"]
+    built, _ = scene.compile_scene(m, [verbs("focus actor port")], "Calls")
+    assert _cur(built)[1] == ["actor:port"]  # an actor pointed at is what is said; the lanes light its chip
+
+
+def test_the_arrow_said_is_the_one_that_arrived_into_the_part_being_said():
+    # the demo's "Live mode's states": a node can bring an arrow in and an arrow back at once
+    m = scene.flowchart_spec_model(LIVE_SPEC)
+    tags = [["+ listening"], ["+ hearing"], ["+ sending"], ["+ working"], ["+ speaking"],
+            ["+ sending->listening, speaking->hearing, speaking->listening"]]
+    built, notes = scene.compile_scene(m, [verbs(*g) for g in tags], "Live mode's states")
+    assert notes == []
+    assert _cur(built) == [
+        [], ["node:listening"], ["node:hearing", "edge:listening->hearing#0"],
+        ["node:sending", "edge:hearing->sending#0"],  # not sending->listening, which arrived with it
+        ["node:working", "edge:sending->working#0"],
+        ["node:speaking", "edge:working->speaking#0"],  # not the two arrows back that arrived with it
+        ["edge:sending->listening#0", "edge:speaking->hearing#0", "edge:speaking->listening#0"], []]
+
+
+ONE_TURN_SPEC = {"actors": [{"id": "p", "label": "Call page"}, {"id": "t", "label": "Talk server"}, {"id": "a", "label": "Azure speech"},
+                            {"id": "c", "label": "Claude session"}],
+                 "steps": [{"id": "s1", "from": "p", "to": "t", "label": "sends what you said as a WAV"},
+                           {"id": "s2", "from": "t", "to": "a", "label": "turns the recording into words"},
+                           {"id": "s3", "from": "a", "to": "t", "label": "returns the words it heard"},
+                           {"id": "s4", "from": "c", "to": "t", "label": "the doorbell collects the turn"},
+                           {"id": "s5", "from": "c", "to": "c", "label": "reads the code and writes the answer"},
+                           {"id": "s6", "from": "c", "to": "t", "label": "sends the answer and its boards"},
+                           {"id": "s7", "from": "t", "to": "a", "label": "reads the whole answer aloud"},
+                           {"id": "s8", "from": "t", "to": "p", "label": "the answer is ready on the next poll"}]}
+# the sentences said over it in call NtQA_iUv88X6oZvdr_zCxw (entry 21), the demo as it was then
+ONE_TURN_SAID = ["A sequence comes in a step at a time, here the path of one turn.",
+                 "When you stop talking, the call page sends what you said to the talk server.",
+                 "The server hands the recording to Azure.", "Azure sends back the words it heard.",
+                 "Your Claude session collects the turn on its doorbell.", "It reads the code and writes the answer.",
+                 "Then it sends the answer and its boards back.", "The server has Azure read the whole answer aloud.",
+                 "And the page picks it up on its next poll.", "The slow part is always this one: Claude reading and writing.",
+                 "Next is a map."]
+
+
+def test_each_part_arrives_with_the_sentence_that_names_it_and_an_introduction_brings_nothing():
+    m = scene.sequence_model(ONE_TURN_SPEC)
+    plan, later = scene.auto_steps(m, ONE_TURN_SAID, {9: ["step:s5"]})
+    # s2 and s8 are named by no sentence: they fill the sentences between the named steps around them
+    assert plan == {1: [["step:s1"]], 2: [["step:s2"]], 3: [["step:s3"]], 4: [["step:s4"]], 5: [["step:s5"]],
+                    6: [["step:s6"]], 7: [["step:s7"]], 8: [["step:s8"]]}
+    assert later == ["step:s2", "step:s8"]
+    assert scene.names_part(scene._words("Then it sends the answer and its boards back."),
+                            scene.part_names(m)["step:s6"])
+
+
+def test_a_point_is_the_reveal_for_its_sentence_and_parts_named_nowhere_ride_with_a_named_one():
+    m = scene.sequence_model(CALLS_SPEC)
+    said = ["The two engines still talk in both directions, and that is why the interfaces live in advisory.",
+            "When the application wants a proposal's Flowable tasks, it calls the WorkflowsRepository interface.",
+            "At runtime Spring hands it the Flowable implementation, AdvisoryWorkflowsRepository, which now sits inside the workflows module.",
+            "The other way round, when a BPMN step must send orders, Flowable calls the SendOrdersDelegate interface.",
+            "The application implements that one, in OrdersSyncService."]
+    plan, later = scene.auto_steps(m, said, {1: ["step:s1"], 2: ["step:s2"], 3: ["step:s3"], 4: ["step:s4"]})
+    assert plan == {1: [["step:s1"]], 2: [["step:s2"]], 3: [["step:s3"]], 4: [["step:s4"]]} and later == []
+    # with fewer sentences: s1 fills the sentence before the named ones, and s4, named nowhere and with no
+    # sentence left after them, comes in with them (before them, so they are what is said)
+    plan, later = scene.auto_steps(m, said[:3], {2: ["step:s3"]})
+    assert plan == {1: [["step:s1"]], 2: [["step:s4"], ["step:s2", "step:s3"]]} and later == ["step:s1", "step:s4"]

@@ -42,7 +42,7 @@
 //                                         session board) also gets data-theme on its <html> straight away.
 // Unknown types are ignored.
 import { flowchartKeys, nodeElements } from "./svg_keys.js";
-import { applyFrame, currentKey, stepLabel } from "./scene.js";
+import { applyFrame, beingSaid, stepLabel } from "./scene.js";
 import { layoutLanes, renderLanes } from "./lanes.js";
 import { layoutMap, renderMap } from "./map.js";
 
@@ -1138,10 +1138,10 @@ function paintFrame(v, box, animate = false) {
   if (box.classList.contains("lanes")) { layoutLanes(box, scene, n); done.focused = null; }  // lanes scroll themselves
   if (box.classList.contains("map")) { layoutMap(box, scene, n); done.focused = null; }  // the map is placed to fit
   if (box.classList.contains("grid")) {
-    const cur = currentKey(scene, n, "row#");
-    for (const tr of box.querySelectorAll("tbody tr")) tr.classList.toggle("g-cur", tr.dataset.key === cur);
-    box.classList.toggle("g-on", !!cur);
-    const row = cur && box.querySelector(`tbody tr[data-key="${cur}"]`);
+    const cur = new Set(beingSaid(scene, n).filter((k) => k.startsWith("row#")));
+    for (const tr of box.querySelectorAll("tbody tr")) tr.classList.toggle("g-cur", cur.has(tr.dataset.key));
+    box.classList.toggle("g-on", cur.size > 0);
+    const row = box.querySelector("tbody tr.g-cur");
     if (row) done.focused = row;  // keep the row being said in view
   }
   v.applied = n;

@@ -23,3 +23,7 @@ A green suite does not show that the tests guard the code. `/audit-tests` (`tool
 `.githooks/pre-push` runs the suite as CI does, strict and with an empty `HOME` so no daemon config of yours is reachable, after compiling and collecting it under Python 3.9, and blocks the push if anything fails. A fresh clone enables it with:
 
     git config core.hooksPath .githooks
+
+The stage's rules (`skills/stage/SKILL.md`, "What the stage keeps true") are checked on compiled frames by `stage_rule_breaks` in `skills/talk/tests/helpers.py`: call it on any reply a new test compiles. The scene compiler names what is being said in every frame (`cur`); the page draws that and never works it out itself.
+
+The stage demo's change board (`skills/talk/demo.md`, "Cells and the current one") points at line numbers of `skills/stage/static/scene.js` against an old revision. An edit to that file above those lines moves them: re-point the demo in the same change (`/audit-demo` checks it).

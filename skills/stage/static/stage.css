@@ -329,7 +329,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .visual .step-row.k-focus .arr{stroke-width:2.6}
 .visual g.node.k-focus .node-shape{stroke:var(--claude)!important;stroke-width:3px!important}
 .visual path.flow-edge.k-focus{stroke:var(--claude)!important;stroke-width:2.6px}
-.visual.k-dim .k-key:not(.k-focus):not([data-key^="actor:"]){opacity:.35}
+.visual:not(.lanes):not(.map).k-dim .k-key:not(.k-focus):not([data-key^="actor:"]){opacity:.35}
 
 
 /* Lanes: the sequence diagram of a talk call (lanes.js). The actors keep their columns, every arrow
@@ -409,7 +409,9 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .ln-cur .ln-band ~ .ln-lbl{top:calc(var(--y) - 20px)}
 .ln-band ~ .ln-lbl b{color:var(--ink)}
 .ln-dropped .ln-lbl b{text-decoration:line-through}
-.lanes.k-dim .ln-row:not(.k-focus){opacity:.5}
+/* a point dims the other steps, never the step being said, nor the steps of an actor pointed at, whose chip gets the ring */
+.lanes.k-dim .ln-row:not(.k-focus):not(.ln-cur):not(.ln-mine){opacity:.5}
+.ln-chip.k-focus{box-shadow:0 0 0 2px var(--bg),0 0 0 4.5px var(--claude)}
 @media (max-width:600px){
   .ln-chip{font-size:12px;padding:5px 9px}
   .ln-cur .ln-lbl b{font-size:16px}
@@ -468,7 +470,10 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .map .m-node.k-hidden b{color:var(--muted)}
 .map .m-edge.k-hidden{opacity:.16!important}
 .map .m-edge.k-hidden .m-elabel{opacity:0}
-.map.k-dim .k-key:not(.k-focus):not(.k-hidden){opacity:.6}
+.map.k-dim .k-key:not(.k-focus):not(.k-hidden):not(.m-cur){opacity:.6}  /* the part being said is never dimmed */
+.map .m-node.k-focus{box-shadow:0 0 0 3px var(--claude)}
+.map .m-node.m-cur.k-focus{box-shadow:0 0 0 3px var(--claude),0 18px 40px -18px rgba(15,23,42,.45)}
+.map .m-edge.k-focus .m-line{stroke-width:3.5}
 @media (prefers-reduced-motion:reduce){.map .m-line.m-draw{animation:none;stroke-dasharray:none}}
 /* the ring: a state machine's states round its loop; a bigger, glowing card for the state being said */
 .map.m-ring .m-node.m-cur{width:270px;padding:16px 20px}

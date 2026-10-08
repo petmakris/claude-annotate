@@ -879,8 +879,8 @@ def test_a_board_of_more_than_three_things_and_no_verbs_comes_in_one_sentence_at
     built = call.board.items[0]["scene"]
     rows = [[k for k in f["show"] if k.startswith("row#")] for f in built["frames"]]  # each row brings its cells
     assert built["start"] == "empty" and [len(r) for r in rows] == [0, 1, 2, 3, 4, 4]
-    assert call.board.problems == ['"Clouds" has 4 elements and no verbs, so it was stepped one sentence at a time '
-                                   "(dump); tag the word that names each thing"]
+    assert call.board.problems == ['"Clouds" has 4 elements and no verbs, so it came in with the sentences said '
+                                   "about it (dump); tag the word that names each thing"]
 
 
 def test_fewer_sentences_than_things_bring_several_in_at_once(tmp_path):
@@ -932,7 +932,7 @@ def test_a_sequence_spec_is_drawn_by_the_shared_tool_and_steps_one_sentence_at_a
     assert 'data-key="step:s1"' in source["html"] and 'data-key="step:s1"' in source["key"]
     shown = [set(f["show"]) for f in item["scene"]["frames"]]
     assert "step:s1" in shown[1] and "step:s2" not in shown[1] and "step:s4" in shown[4]
-    assert not [p for p in call.board.problems if "stepped one sentence at a time" in p]
+    assert not [p for p in call.board.problems if "(dump)" in p]
 
 
 def test_a_bad_spec_never_reaches_the_stage_and_the_board_says_why(tmp_path):
@@ -1015,3 +1015,82 @@ def test_a_point_at_one_cell_lights_that_cell(tmp_path):
     frames = call.board.items[0]["scene"]["frames"]
     lit = [f["focus"] for f in frames if f["focus"]]
     assert call.board.problems == [] and lit[:2] == [["cell#1.2"], ["cell#1.3"]]
+
+
+# -- boards that come in with the sentences said about them: real replies from saved calls ------------
+
+THREE_PATHS = (  # its refs and subs left out
+    '[[show flowchart | Three paths changed]] {"nodes": [{"id": "open", "role": "entry", "label": "Open a proposal"}, '
+    '{"id": "batch", "role": "entry", "label": "Nightly batch"}, {"id": "share", "role": "entry", "label": "Share task"}, '
+    '{"id": "catch", "role": "code", "label": "Catch every error"}, {"id": "guard", "role": "code", "label": "Broken guard '
+    'first"}, {"id": "state", "role": "success", "label": "Return latest state"}, {"id": "err", "role": "error", "label": '
+    '"Put in error"}], "edges": [{"from": "open", "to": "catch"}, {"from": "batch", "to": "guard"}, {"from": "guard", '
+    '"to": "err"}, {"from": "share", "to": "state", "label": "if broken"}]} [[/show]]\n\n[[point: node open]] First, '
+    "opening a proposal. [[point: node batch]] Second, the nightly batch. [[point: node share]] Third, sharing a proposal "
+    "that broke on refresh.\n\n")
+CALLS_BOTH = (  # its subs left out
+    'So the application code cannot even see Flowable. Only Flowable can see the application.\n\n[[show sequence | Calls in '
+    'both directions]] {"actors": [{"id": "app", "label": "Application (advisory)"}, {"id": "port", "label": "Interfaces '
+    'in advisory legacy"}, {"id": "fl", "label": "Flowable module (workflows)"}],\n "steps": [{"id": "s1", "from": "app", '
+    '"to": "port", "arrow": "request", "label": "asks for tasks"},\n           {"id": "s2", "from": "port", "to": "fl", '
+    '"arrow": "request", "label": "Spring injects the Flowable implementation"},\n           {"id": "s3", "from": "fl", '
+    '"to": "port", "arrow": "event", "label": "BPMN step needs orders sent"},\n           {"id": "s4", "from": "port", '
+    '"to": "app", "arrow": "event", "label": "Spring injects the app implementation"}]} [[/show]]\nThe two engines still '
+    "talk in both directions, and that is why the interfaces live in advisory. [[point: step s1]] When the application "
+    "wants a proposal's Flowable tasks, it calls the WorkflowsRepository interface. [[point: step s2]] At runtime Spring "
+    "hands it the Flowable implementation, AdvisoryWorkflowsRepository, which now sits inside the workflows module. "
+    "[[point: step s3]] The other way round, when a BPMN step must send orders, Flowable calls the SendOrdersDelegate "
+    "interface. [[point: step s4]] The application implements that one, in OrdersSyncService.\n\n")
+
+
+def _frames_said(call, shown):
+    """(frame n, the words its cue fires on, what arrived, what is said) for the reply's only scene."""
+    built = next(i["scene"] for i in call.board.items if i.get("scene"))
+    out = []
+    for c in (c for c in call.reply_cues if c["kind"] == "frame"):
+        f, before = built["frames"][c["n"]], set(built["frames"][c["n"] - 1]["show"])
+        out.append((c["n"], " ".join(shown[c["at"]:].split()[:3]),
+                    [k for k in f["show"] if k not in before and not k.startswith(("edge:", "actor:", "cell#"))], f["cur"]))
+    return out
+
+
+def test_a_point_on_a_map_is_the_reveal_for_its_sentence_and_the_part_it_names_is_what_is_said(tmp_path):
+    from helpers import make_args, stage_rule_breaks
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    shown = call.split_reply(THREE_PATHS)
+    assert _frames_said(call, shown) == [
+        (1, "First, opening a", ["node:open"], ["node:open"]),
+        (2, "Second, the nightly", ["node:batch"], ["node:batch"]),
+        # the four parts no sentence names come in with the last one named, which stays the one said
+        (3, "Third, sharing a", ["node:share", "node:catch", "node:guard", "node:state", "node:err"],
+         ["node:share", "edge:share->state#0"])]
+    assert call.board.problems == ['4 of 7 parts of "Three paths changed" are named by no sentence, so they came in by '
+                                   "order; point at each where it is said"]
+    assert stage_rule_breaks(call, shown) == []
+
+
+def test_an_introduction_brings_no_step_and_each_pointed_step_arrives_on_its_own_sentence(tmp_path):
+    from helpers import make_args, stage_rule_breaks
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    shown = call.split_reply(CALLS_BOTH)
+    assert _frames_said(call, shown) == [
+        (1, "When the application", ["step:s1"], ["step:s1"]), (2, "At runtime Spring", ["step:s2"], ["step:s2"]),
+        (3, "The other way", ["step:s3"], ["step:s3"]), (4, "The application implements", ["step:s4"], ["step:s4"])]
+    assert call.board.problems == [] and stage_rule_breaks(call, shown) == []
+    # a point brings in what it lights on its own sentence, though that sentence names nothing
+    head = CALLS_BOTH[:CALLS_BOTH.index("The two engines")]
+    call = talk.Call(make_args(), "T", tmp_path / "again")
+    shown = call.split_reply(head + "It goes both ways. Here is how. [[point: step s3]] This one is the callback. Done.")
+    assert [(n, words, arrived) for n, words, arrived, _ in _frames_said(call, shown)] == [
+        (1, "Here is how.", ["step:s1", "step:s2"]), (2, "This one is", ["step:s3"]), (3, "Done.", ["step:s4"])]
+
+
+def test_the_demo_sequence_brings_each_step_with_the_sentence_that_names_it(tmp_path):
+    from helpers import make_args, stage_rule_breaks
+    call = talk.Call(make_args(code=talk.SKILL_DIR.parents[1]), "T", tmp_path / "out")
+    shown = call.split_reply(next(t for t in talk.load_demo() if "One turn, end to end" in t))
+    assert [(n, words, arrived) for n, words, arrived, _ in _frames_said(call, shown)] == [
+        (1, "When you stop", ["step:s1"]), (2, "The server hands", ["step:s2"]), (3, "Azure sends back", ["step:s3"]),
+        (4, "Your Claude session", ["step:s4"]), (5, "It reads the", ["step:s5"]), (6, "Then it sends", ["step:s6"]),
+        (7, "The server has", ["step:s7"]), (8, "And the answer", ["step:s8"]), (9, "The slow part", [])]
+    assert call.board.problems == [] and stage_rule_breaks(call, shown) == []
