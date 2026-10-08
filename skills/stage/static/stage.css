@@ -121,7 +121,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .code.wrap .ln span{white-space:pre-wrap;overflow-wrap:anywhere}
 .code.wrap .ln>span{padding-left:calc((var(--ind,0) + 2) * 1ch);text-indent:calc((var(--ind,0) + 2) * -1ch)}
 .code .ln.marked{background:var(--mark-bg);box-shadow:inset 3px 0 0 var(--claude)}
-.code.marks .ln:not(.marked){opacity:.6}
+.code.marks:not(.k-dim) .ln:not(.marked){opacity:.6}  /* while lines are pointed at, the focus alone dims */
 .code .ln.marked>i{color:var(--mark-bar)}
 .code .ln.spot{background:var(--spot-bg);box-shadow:inset 3px 0 0 var(--mark-bar);opacity:1}
 .code.dimmed .ln:not(.spot){opacity:.45}
@@ -274,7 +274,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .k-key{transition:opacity .3s ease-out}
 .k-hidden{opacity:0!important;pointer-events:none}
 .code.k-dim .ln:not(.k-focus){opacity:.45}
-.code .ln.k-focus{background:var(--spot-bg);box-shadow:inset 3px 0 0 var(--mark-bar);opacity:1}
+.code .ln.k-focus,.code.change .ln.k-focus{background:var(--spot-bg);box-shadow:inset 3px 0 0 var(--mark-bar);opacity:1}  /* over a highlight, an added or a removed line alike */
 .md.k-dim tbody tr:not(.k-focus){opacity:.45}
 .tablewrap tbody tr.k-focus,.tablewrap tbody tr.k-focus:nth-child(even){background:var(--hl-soft);box-shadow:inset 3px 0 0 var(--claude)}
 .diagram.k-dim svg .k-key:not(.k-focus){opacity:.3}

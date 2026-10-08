@@ -2030,3 +2030,110 @@ def test_the_lanes_keep_every_chip_label_and_note_on_the_board_and_clear_of_the_
         assert faults == {}
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+# -- code, change and table boards: the part being said is lit alike, and in view ----------------------------
+
+# Real boards, from the stage demo (call workspaces 261005-105449 and 261007-073115): this repository's own code.
+OFFER = {"type": "inline", "format": "code", "path": "skills/talk/live_turns.py", "start": 30, "highlight": [31, 33], "lang": "py",
+    "lines": [
+        "    def offer(self, turn_id: str, lines: list[dict]) -> None:",
+        "        \"\"\"A new turn. One still waiting to be collected is merged into it under the new id.\"\"\"",
+        "        if self.pending_id:",
+        "            self.offered_ids.discard(self.pending_id)",
+        "        self.pending_id = turn_id",
+        "        self.offered_ids.add(turn_id)",
+        "        self.lines.extend(lines)",
+        "        self.offered_at = self.clock()",
+        "        self._changed.set()",
+    ]}
+WAITS = {"type": "inline", "format": "code", "path": "skills/talk/live_turns.py", "start": 33, "highlight": None, "lang": "py",
+    "lines": [
+        "    def offer(self, turn_id: str, lines: list[dict]) -> None:",
+        "        \"\"\"A new turn. One still waiting to be collected is merged into it under the new id.\"\"\"",
+        "        if self.pending_id:",
+        "            self.offered_ids.discard(self.pending_id)",
+        "        self.pending_id = turn_id",
+        "        self.offered_ids.add(turn_id)",
+        "        self.lines.extend(lines)",
+        "        self.offered_at = self.clock()",
+        "        self._changed.set()",
+        "",
+        "    def withdraw(self, line: dict) -> bool:",
+        "        \"\"\"Take back a line no doorbell has collected yet; False once one has.\"\"\"",
+        "        for i, held in enumerate(self.lines):",
+        "            if held is line or held == line:",
+        "                del self.lines[i]",
+        "                if not self.lines and self.pending_id:",
+        "                    self.offered_ids.discard(self.pending_id)",
+        "                    self.pending_id = None",
+        "                self._changed.set()",
+        "                return True",
+        "        return False",
+    ]}
+CELLS = {"type": "inline", "format": "change", "path": "skills/stage/static/scene.js", "rev": "7e355e8", "added": 20, "removed": 1, "more": 0, "lang": "js",
+    "hunks": [
+        {"header": "@@ -16,5 +16,8 @@ function stampKeys(kind, box) {", "start_old": 16, "start_new": 16, "lines": [
+            {"op": " ", "old": 16, "new": 16, "text": "  if (kind === \"rows\") {"},
+            {"op": " ", "old": 17, "new": 17, "text": "    const rows = [...(box.querySelector(\"table\")?.querySelectorAll(\"tbody tr\") || [])];"},
+            {"op": "-", "old": 18, "new": None, "text": "    rows.forEach((tr, i) => { tr.dataset.key = \"row#\" + (i + 1); });"},
+            {"op": "+", "old": None, "new": 18, "text": "    rows.forEach((tr, i) => {"},
+            {"op": "+", "old": None, "new": 19, "text": "      tr.dataset.key = \"row#\" + (i + 1);"},
+            {"op": "+", "old": None, "new": 20, "text": "      [...tr.children].forEach((td, j) => { td.dataset.key = `cell#${i + 1}.${j + 1}`; });"},
+            {"op": "+", "old": None, "new": 21, "text": "    });"},
+            {"op": " ", "old": 19, "new": 22, "text": "    return rows.length > 0;"},
+            {"op": " ", "old": 20, "new": 23, "text": "  }"},
+        ]},
+        {"header": "@@ -87,2 +90,18 @@ export function applyFrame(scene, box, n, from = null) {", "start_old": 87, "start_new": 90, "lines": [
+            {"op": " ", "old": 87, "new": 90, "text": "  return { missing: scene.keys.filter((k) => !found.has(k)), focused };"},
+            {"op": " ", "old": 88, "new": 91, "text": "}"},
+            {"op": "+", "old": None, "new": 92, "text": ""},
+            {"op": "+", "old": None, "new": 93, "text": "// The one that is being said: what arrived with this frame, else what is pointed at. `kind` picks the"},
+            {"op": "+", "old": None, "new": 94, "text": "// keys that count (row# for a table, step: for a sequence); a pointed cell counts as its row."},
+            {"op": "+", "old": None, "new": 95, "text": "export function currentKey(scene, n, prefix) {"},
+            {"op": "+", "old": None, "new": 96, "text": "  if (!scene) return null;"},
+            {"op": "+", "old": None, "new": 97, "text": "  const last = scene.frames.length - 1, at = (i) => scene.frames[Math.max(0, Math.min(i, last))];"},
+            {"op": "+", "old": None, "new": 98, "text": "  if (n >= scene.rest) return null;"},
+            {"op": "+", "old": None, "new": 99, "text": "  const mine = (k) => k.startsWith(prefix) ? k : prefix === \"row#\" && k.startsWith(\"cell#\") ? \"row#\" + k.slice(5).split(\".\")[0] : null;"},
+            {"op": "+", "old": None, "new": 100, "text": "  const before = n > 0 ? new Set(at(n - 1).show) : new Set();"},
+            {"op": "+", "old": None, "new": 101, "text": "  const arrived = at(n).show.filter((k) => k.startsWith(prefix) && !before.has(k));"},
+            {"op": "+", "old": None, "new": 102, "text": "  if (arrived.length) return arrived[arrived.length - 1];"},
+            {"op": "+", "old": None, "new": 103, "text": "  const pointed = at(n).focus.map(mine).filter(Boolean);"},
+            {"op": "+", "old": None, "new": 104, "text": "  if (pointed.length) return pointed[pointed.length - 1];"},
+            {"op": "+", "old": None, "new": 105, "text": "  const shown = at(n).show.filter((k) => k.startsWith(prefix));"},
+            {"op": "+", "old": None, "new": 106, "text": "  return shown.length ? shown[shown.length - 1] : null;"},
+            {"op": "+", "old": None, "new": 107, "text": "}"},
+        ]},
+    ]}
+
+LIT = """(pane) => Object.fromEntries([...pane.querySelectorAll('.ln[data-key]')].map((e) => { const s = getComputedStyle(e);
+  return [e.dataset.key, [s.opacity, s.backgroundColor, s.boxShadow]]; }))"""
+SPOT = ["1", "rgba(255, 175, 95, 0.2)", "rgb(255, 175, 95) 3px 0px 0px 0px inset"]  # a line pointed at, on the dark code board
+
+
+def test_a_line_pointed_at_is_drawn_alike_over_a_highlight_and_on_an_added_or_removed_line(tmp_path, wc_config, browser):
+    offer = _scene(scene.lines_model(range(30, 39)), [["focus 36"], ["focus 32"]], "Offer merges waiting turns")
+    cells = _scene(scene.change_model(CELLS["hunks"]), [["focus 17-18"], ["focus old 18"]], "Cells and the current one")
+    res = stage.show(str(tmp_path), "o", OFFER, title="Offer merges waiting turns", extra={"scene": offer})
+    stage.show(str(tmp_path), "c", CELLS, title="Cells and the current one", extra={"scene": cells}, background=True)
+    try:
+        page, frame, send = _still(browser, res["url"], 1300, 850)
+        pane = frame.locator('section.pane[data-view="o"]')
+        pane.locator(".ln").first.wait_for(timeout=5000)
+        _show_frame(page, send, "o", 1, True)
+        lit = pane.evaluate(LIT)
+        assert (lit["line:36"], lit["line:32"][0], lit["line:37"][0]) == (SPOT, "0.45", "0.45")  # outside the highlight, and lit
+        _show_frame(page, send, "o", 2, True)
+        assert pane.evaluate(LIT)["line:32"] == SPOT
+        send({"type": "stage:state", "front": "c", "frames": {"c": 1}})
+        pane = frame.locator('section.pane[data-view="c"]')
+        pane.locator(".ln").first.wait_for(timeout=5000)
+        _until_frame(page, "c", 1)
+        lit = pane.evaluate(LIT)
+        assert [k for k, v in lit.items() if v == SPOT] == ["line:17", "old:18", "line:18"]  # a context, a removed and an added line
+        assert {lit[k][0] for k in lit if k not in ("line:17", "old:18", "line:18")} == {"0.45"}
+        _show_frame(page, send, "c", 2, True)
+        lit = pane.evaluate(LIT)
+        assert [k for k, v in lit.items() if v == SPOT] == ["old:18"] and lit["line:18"][0] == "0.45"
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
