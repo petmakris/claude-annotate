@@ -1,3 +1,10 @@
+import json
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
 from skills.stage import scene
 
 EXAMPLE = """flowchart LR
@@ -285,6 +292,8 @@ def test_a_mermaid_label_becomes_the_words_it_shows_not_its_markup():
                             '  d -->|"yes<br>no &amp; #35;1"| e@{ shape: circle }\n  e --> f["List<String> R&D"]')
     assert [(n["id"], n["label"]) for n in graph["nodes"]] == [
         ("a", "first second"), ("b", "Store"), ("c", 'a "quoted" word'), ("d", "bold text"), ("e", "e"), ("f", "List<String> R&D")]
+    quoted = sc.mermaid_spec("graph LR\n  a@{ label: 'Queue' } --> b@{ shape: rect, label: Store }")
+    assert [n["label"] for n in quoted["nodes"]] == ["Queue", "Store"]  # a v11 label in single quotes, or bare
     assert [e.get("label") for e in graph["edges"]] == [None, None, None, "yes no & #1", None]
     states = sc.mermaid_spec('stateDiagram-v2\n  [*] --> A\n  state "Wait<br/>here" as A\n  A --> B: go #amp; see\n  B: does #quot;x#quot;')
     assert states["nodes"] == [{"id": "A", "role": "entry", "label": "Wait here"}, {"id": "B", "role": "code", "label": "B", "sub": 'does "x"'}]
@@ -469,3 +478,28 @@ def test_a_change_board_keys_its_removed_lines_and_a_range_takes_the_ones_inside
     assert scene.resolve(change, "old 19", "C") == ([], '"old 19" is not a removed line of "C"; dropped')
     built, notes = scene.compile_scene(change, [verbs("focus old 18")], "C")
     assert (built["frames"][1]["focus"], built["frames"][1]["cur"], notes) == (["old:18"], ["old:18"], [])
+
+
+SCENE_JS = Path(__file__).resolve().parents[1] / "static" / "scene.js"
+
+
+def _being_said(scene_, frames):
+    """What the page's scene.js draws as being said in each of `frames`, run under node."""
+    js = (f"import {{ beingSaid }} from {json.dumps(SCENE_JS.as_uri())};\n"
+          f"const s = {json.dumps(scene_)};\n"
+          f"process.stdout.write(JSON.stringify({json.dumps(frames)}.map((n) => beingSaid(s, n))));")
+    out = subprocess.run(["node", "--input-type=module", "-e", js], capture_output=True, text=True, check=True)
+    return json.loads(out.stdout)
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_a_scene_saved_before_frames_named_what_is_said_draws_the_new_part_with_the_arrow_into_it_else_out_of_it():
+    keys = ["node:a", "node:b", "node:c", "edge:a->b#0", "edge:c->a#0"]
+    saved = {"kind": "flowchart", "keys": keys, "steps": 3, "rest": 4, "start": "empty",
+             "frames": [{"show": [], "focus": []}, {"show": ["node:a"], "focus": []},
+                        {"show": ["node:a", "node:b", "edge:a->b#0"], "focus": []},
+                        {"show": ["node:a", "node:b", "node:c", "edge:a->b#0", "edge:c->a#0"], "focus": []},
+                        {"show": keys, "focus": []}]}
+    # b arrives with the arrow into it; c with only an arrow out of it; nothing at frame 0 or at rest
+    assert _being_said(saved, [0, 1, 2, 3, 4]) == [
+        [], ["node:a"], ["node:b", "edge:a->b#0"], ["node:c", "edge:c->a#0"], []]

@@ -1852,6 +1852,8 @@ MAP_FAULTS = """(pane) => {
   labels.forEach(([k, r], i) => labels.slice(i + 1).forEach(([k2, r2]) => { if (cut(r, r2) > 4) out.push(['labels', k, k2]); }));
   for (const [k, r] of [...nodes, ...labels]) if (r[0] < pb.left - 1 || r[2] > pb.right + 1) out.push(['off the board', k]);
   for (const g of pane.querySelectorAll('.m-edge')) {
+    const d = g.querySelector('.m-line').getAttribute('d') || '';  // every arrow has a path, a loop to itself too
+    if (!d || /NaN|undefined/.test(d)) out.push(['arrow not drawn', g.dataset.key]);
     const t = g.querySelector('.m-tip').getBoundingClientRect(), top = document.elementFromPoint(t.x + t.width / 2, t.y + t.height / 2);
     if (top && top.closest('.m-node')) out.push(['head under', g.dataset.key, top.closest('.m-node').dataset.key]);
   }
@@ -2049,13 +2051,22 @@ LANES_FAULTS = """(pane) => {
     if (t[0] < r[0] - 1 || t[2] > r[2] + 1 || t[1] < r[1] - 1 || t[3] > r[3] + 1) out.push(['text out of chip', k]);
   }
   chips.forEach(([k, r], i) => chips.slice(i + 1).forEach(([k2, r2]) => { if (cut(r, r2) > 1) out.push(['chips', k, k2]); }));
+  // the head holds the chips and the legend, and no words of its own
+  const walk = document.createTreeWalker(box.querySelector('.ln-head'), NodeFilter.SHOW_TEXT);
+  for (let t; (t = walk.nextNode());) if (t.textContent.trim() && !t.parentElement.closest('.ln-chip, .ln-legend')) out.push(['words in the head', t.textContent.trim()]);
   for (const row of box.querySelectorAll('.ln-row[data-on]')) {
     const k = row.dataset.step, parts = [...row.querySelectorAll('.ln-lbl b, .ln-lbl code, .ln-note, .ln-bar')].filter(shown);
     if (getComputedStyle(row).position !== 'relative') out.push(['row out of the flow', k]);
+    // a band is a bar across its lanes; every other step is an arrow or a loop, never a bar
+    const bar = row.querySelector('.ln-bar'), band = row.classList.contains('ln-band');
+    if (band ? !bar || bar.getBoundingClientRect().width < 40 || row.querySelector('.ln-arrow') : bar) out.push(['wrong shape', k]);
+    const rr = R(row.getBoundingClientRect());
     for (const p of parts) {
       const r = p.classList.contains('ln-bar') ? R(p.getBoundingClientRect()) : text(p);
       if (off(r)) out.push(['off the board', k, p.className || p.tagName.toLowerCase()]);
       if (row.classList.contains('ln-cur') && p.scrollWidth > p.clientWidth + 1) out.push(['cut', k, p.tagName.toLowerCase()]);
+      // the step being said grows to hold its words: none hangs below its row into the next
+      if (row.classList.contains('ln-cur') && r[3] > rr[3] + 1) out.push(['below its row', k, p.className || p.tagName.toLowerCase()]);
     }
     const words = parts.filter((p) => !p.classList.contains('ln-bar')).map((p) => [p.className || p.tagName.toLowerCase(), text(p)]);
     words.forEach(([a, r], i) => words.slice(i + 1).forEach(([b, r2]) => { if (cut(r, r2) > 1) out.push(['overlap', k, a, b]); }));

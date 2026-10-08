@@ -260,6 +260,15 @@ def test_numbers_where_the_tools_want_text_are_drawn_and_a_wrong_shape_is_refuse
         model.parse_source("flowchart:-", tmp_path, json.dumps({"id": "s", "kind": "flowchart", "spec": FLOW}))
 
 
+def test_a_group_must_name_an_id_and_only_the_specs_nodes(tmp_path):
+    nodes = [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}]
+    ok = {"nodes": nodes, "edges": [], "groups": [{"id": "g", "label": "G", "nodes": ["a", "b"]}]}
+    assert model.parse_source("flowchart:-", tmp_path, json.dumps(ok))["spec"]["groups"] == ok["groups"]
+    for bad in ({"id": "g", "nodes": ["a", "z"]}, {"id": "", "nodes": ["a"]}, {"id": "g", "nodes": "a"}, {"nodes": ["a"]}):
+        with pytest.raises(model.SourceError, match="needs an id and a list of the spec's node ids"):
+            model.parse_source("flowchart:-", tmp_path, json.dumps({"nodes": nodes, "edges": [], "groups": [bad]}))
+
+
 def test_a_spec_the_tool_cannot_read_is_refused_not_raised(tmp_path, monkeypatch):
     monkeypatch.setattr(model.sequence, "validate", lambda *a, **k: 1 / 0)
     with pytest.raises(model.SourceError, match="could not read this spec"):

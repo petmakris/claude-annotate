@@ -1112,6 +1112,11 @@ def test_an_introduction_brings_no_step_and_each_pointed_step_arrives_on_its_own
     shown = call.split_reply(head + "It goes both ways. Here is how. [[point: step s3]] This one is the callback. Done.")
     assert [(n, words, arrived) for n, words, arrived, _ in _frames_said(call, shown)] == [
         (1, "Here is how.", ["step:s1", "step:s2"]), (2, "This one is", ["step:s3"]), (3, "Done.", ["step:s4"])]
+    # a focus tag does the same: it is resolved here, by its target's words, and `focus none` lights nothing
+    call = talk.Call(make_args(), "T", tmp_path / "focus")
+    shown = call.split_reply(head + "It goes both ways. Here is how. [[focus s3]] This one is the callback. [[focus none]] Done.")
+    assert [(n, words, arrived) for n, words, arrived, _ in _frames_said(call, shown)] == [
+        (1, "Here is how.", ["step:s1", "step:s2"]), (2, "This one is", ["step:s3"]), (3, "Done.", ["step:s4"])]
 
 
 def test_the_demo_sequence_brings_each_step_with_the_sentence_that_names_it(tmp_path):
