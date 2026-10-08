@@ -516,6 +516,26 @@ def six(name):
     return " ".join(f"{name}{i}" for i in range(6))
 
 
+def test_the_voice_fronts_each_board_once_as_it_reaches_it(tmp_path, pw):
+    with served(tmp_path, stage_url=STAGE) as (url, call, loop, fake):
+        fake.seconds = 4.0
+        browser = pw.chromium.launch(args=FAKE_MIC)
+        try:
+            page = browser.new_page()
+            stage_page(page, STAGE_PROBE)
+            page.goto(url)
+            page.wait_for_function("stageUp === true", timeout=5000)
+            stage = page.frame(url=STAGE)
+            on_loop(loop, call.answer(f"[[show table | One]]| a | b |\n|---|---|\n| 1 | 2 |[[/show]] {six('first')} "
+                                      f"[[show table | Two]]| c | d |\n|---|---|\n| 3 | 4 |[[/show]] {six('second')}."))
+            page.wait_for_function("document.getElementById('audio').ended", timeout=15000)
+            sent = stage.evaluate("got.filter(m => m.type === 'stage:state' || m.type === 'stage:front')")
+            assert [(m["type"], m.get("front") or m.get("view")) for m in sent] == [("stage:state", "one"), ("stage:front", "two")]
+            assert sent[1] == {"type": "stage:front", "view": "two", "manual": False, "answer": 1}
+        finally:
+            browser.close()
+
+
 def test_frames_follow_the_voice_and_every_jump_sends_the_whole_state(tmp_path, pw):
     with served(tmp_path, stage_url=STAGE) as (url, call, loop, fake):
         fake.seconds = 6.0

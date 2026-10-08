@@ -1718,6 +1718,22 @@ def test_a_board_the_voice_fronts_before_it_arrives_comes_forward_when_it_does(t
         frame.locator('button[role=tab][data-view="late"]').wait_for(state="attached", timeout=5000)
         _settled(page)
         assert _selected(frame, "first") and not _selected(frame, "late")
+        # a frame sent before its board arrives is applied when it does: one for an answer, to a board that
+        # carries only its own scene; one for no answer, to a board that carries its answers' scenes
+        send({"type": "stage:frame", "view": "own", "n": 3, "animate": True, "answer": 2})
+        send({"type": "stage:frame", "view": "kept", "n": 4, "animate": True})
+        _settled(page)
+        stage.show(str(tmp_path), "own", _visual("sequence", RELEASE), title="Own scene", background=True, extra={"scene": two})
+        stage.show(str(tmp_path), "kept", _visual("sequence", RELEASE), title="Kept scenes", background=True,
+                   extra={"scene": two, "scenes": {"2": two}, "answer": 2})
+        for view in ("own", "kept"):
+            frame.locator(f'button[role=tab][data-view="{view}"]').wait_for(state="attached", timeout=5000)
+        drawn = []
+        for view, answer in (("own", 2), ("kept", None)):  # each drawn as the voice fronts it
+            send({"type": "stage:front", "view": view, "manual": False, "answer": answer})
+            _until_frame(page, view, 3 if view == "own" else 4)
+            drawn.append(frame.locator(f'section.pane[data-view="{view}"]').evaluate(LANES)["step"])
+        assert drawn == ["Step 3 of 8", "Step 4 of 8"]
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
@@ -1854,6 +1870,14 @@ MAP_FAULTS = """(pane) => {
   for (const g of pane.querySelectorAll('.m-edge')) {
     const d = g.querySelector('.m-line').getAttribute('d') || '';  // every arrow has a path, a loop to itself too
     if (!d || /NaN|undefined/.test(d)) out.push(['arrow not drawn', g.dataset.key]);
+    const [from, to] = g.dataset.key.slice(5).replace(/#\\d+$/, '').split('->');
+    if (from === to && d && !/NaN/.test(d)) {  // a loop to itself leaves its card and comes back to it
+      const line = g.querySelector('.m-line'), m = line.getScreenCTM(), card = nodes.find(([k]) => k === 'node:' + from)[1];
+      for (const at of [0, line.getTotalLength()]) {
+        const q = line.getPointAtLength(at).matrixTransform(m);
+        if (q.x < card[0] - 10 || q.x > card[2] + 10 || q.y < card[1] - 10 || q.y > card[3] + 10) out.push(['loop off its card', g.dataset.key, Math.round(Math.max(card[0] - q.x, q.x - card[2], card[1] - q.y, q.y - card[3]))]);
+      }
+    }
     const t = g.querySelector('.m-tip').getBoundingClientRect(), top = document.elementFromPoint(t.x + t.width / 2, t.y + t.height / 2);
     if (top && top.closest('.m-node')) out.push(['head under', g.dataset.key, top.closest('.m-node').dataset.key]);
   }
@@ -1956,6 +1980,7 @@ POLL = {"nodes": [{"id": "a", "role": "entry", "label": "Poll"}, {"id": "b", "ro
         "edges": [{"from": "a", "to": "a", "label": "not yet"}, {"from": "a", "to": "b", "label": "ready"}]}
 RETRY = {"nodes": [{"id": f"p{i}", "label": f"Phase {i}"} for i in range(8)],
          "edges": [{"from": f"p{i}", "to": f"p{i + 1}"} for i in range(7)] + [{"from": "p7", "to": "p0", "label": "retry"}]}
+LIVE_LOOP = {**LIVE_SPEC, "edges": LIVE_SPEC["edges"] + [{"from": "working", "to": "working", "label": "still thinking"}]}
 FAN = {"nodes": [{"id": "hub", "role": "entry", "label": "Hub"}] + [{"id": f"t{i}", "label": f"Target {i}"} for i in range(12)],
        "edges": [{"from": "hub", "to": f"t{i}"} for i in range(12)]}
 
@@ -1964,8 +1989,9 @@ FAN = {"nodes": [{"id": "hub", "role": "entry", "label": "Hub"}] + [{"id": f"t{i
     (TALK_PARTS, (1300, 850), "across"), (TALK_PARTS, (420, 860), "down"),
     (LIVE_SPEC, (1300, 850), "ring"), (LIVE_SPEC, (1000, 700), "ring"), (LIVE_SPEC, (420, 860), "down"),
     (TWO_WAYS, (1300, 850), "across"), (POLL, (1300, 850), "across"), (RETRY, (1300, 850), "across"), (FAN, (1300, 850), "across"),
+    (LIVE_LOOP, (1300, 850), "ring"),
 ], ids=["lands-1300", "lands-1000", "lands-420", "parts-1300", "parts-420", "live-1300", "live-1000", "live-420",
-        "two-ways", "poll", "retry", "fan"])
+        "two-ways", "poll", "retry", "fan", "live-loop"])
 def test_a_map_keeps_every_card_label_and_head_clear_of_the_others_and_on_the_board_at_every_frame(
         spec, size, layout, tmp_path, wc_config, browser):
     built = _each_part_said(spec, "Map")
@@ -2058,8 +2084,10 @@ LANES_FAULTS = """(pane) => {
   const shown = (e) => getComputedStyle(e).display !== 'none';
   const out = [];
   const chips = [...box.querySelectorAll('.ln-chip:not(.k-hidden)')].map((c) => [c.dataset.actor, R(c.getBoundingClientRect()), c]);
+  const head = box.querySelector('.ln-actors').getBoundingClientRect().bottom;
   for (const [k, r, c] of chips) {
     if (off(r)) out.push(['chip off the board', k]);
+    if (r[3] > head + 1) out.push(['chip below the head', k]);  // the head is as tall as its chips, so none hangs over a step
     const t = text(c);
     if (t[0] < r[0] - 1 || t[2] > r[2] + 1 || t[1] < r[1] - 1 || t[3] > r[3] + 1) out.push(['text out of chip', k]);
   }

@@ -378,14 +378,17 @@ function backArrow(P, e, half, k) {
 }
 
 // An arrow from a part to itself: a small loop over its card (on the ring, on its outer side), its label
-// beyond the loop.
+// beyond the loop. Both its ends sit on the card's rim: on the ring the loop leaves a corner aslant, and an
+// end set off along the slant is brought back onto the card.
 function selfLoop(P, id, half, spread) {
   const [x, y] = P.xy.get(id), [hw, hh] = half(id);
   let ux = 0, uy = -1;
   if (P.mode === "ring") { const dx = x - P.cx, dy = y - P.cy, n = Math.hypot(dx, dy) || 1; ux = dx / n; uy = dy / n; }
   const t = Math.min(hw / Math.abs(ux || 1e-6), hh / Math.abs(uy || 1e-6));
   const reach = 44 + 16 * Math.abs(spread), px = x + ux * t, py = y + uy * t, vx = -uy, vy = ux;
-  const s = [px + vx * 16, py + vy * 16], end = [px - vx * 16 + ux * 5, py - vy * 16 + uy * 5];
+  const onCard = ([qx, qy]) => [Math.min(Math.max(qx, x - hw), x + hw), Math.min(Math.max(qy, y - hh), y + hh)];
+  const s = onCard([px + vx * 16, py + vy * 16]), back = onCard([px - vx * 16, py - vy * 16]);
+  const end = [back[0] + ux * 5, back[1] + uy * 5];
   const c1 = [s[0] + ux * reach + vx * 26, s[1] + uy * reach + vy * 26], c2 = [end[0] + ux * reach - vx * 26, end[1] + uy * reach - vy * 26];
   const tip = [px + ux * (reach * 0.75 + 14), py + uy * (reach * 0.75 + 14)];
   return [{ d: path(s, c1, c2, end), end, toward: c2, start: s, away: c1 },
