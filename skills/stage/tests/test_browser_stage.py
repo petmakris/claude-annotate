@@ -10,6 +10,8 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from skills.stage import model, scene, stage
 
 
@@ -1706,5 +1708,31 @@ def test_when_an_answer_ends_each_board_it_stepped_shows_whole_and_undimmed(tmp_
         _settled(page)
         assert pane.evaluate(FADE) == {"frame": 0, "step": "1 step", "dim": False, "s0": "1"}
         assert pane2.evaluate(FADE)["frame"] == 2  # behind, it still goes whole
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+# -- the map ----------------------------------------------------------------------------------------------
+
+def _still(browser, url, width, height, scheme="light"):
+    """The stage embedded as a call embeds it, with motion off, so every frame is measured as it settles."""
+    page = browser.new_page(viewport={"width": width, "height": height}, color_scheme=scheme, reduced_motion="reduce")
+    page.set_content("<body style='margin:0'><script>window.got = [];addEventListener('message', e => got.push(e.data))</script>"
+                     f"<iframe id='s' src='{url}' style='border:0;width:100vw;height:100vh'></iframe></body>")
+    page.wait_for_function("got.some(m => m.type === 'stage:ready')", timeout=10000)
+    return page, page.frame_locator("#s"), lambda msg: page.evaluate("m => document.getElementById('s').contentWindow.postMessage(m, '*')", msg)
+
+
+def test_a_map_shows_no_title_over_its_ghosts_before_the_first_sentence(tmp_path, wc_config, browser):
+    spec = scene.mermaid_spec("graph LR; P[Page] --> Q[Queue]; Q --> S[Session]")  # "Turn path", workspace 261006-154701
+    built = _scene(scene.flowchart_spec_model(spec), [["next"], ["next"], ["next"]], "Turn path")
+    res = stage.show(str(tmp_path), "m", _visual("flowchart", spec), title="Turn path", extra={"scene": built})
+    try:
+        page, frame, send = _still(browser, res["url"], 1300, 850)
+        pane = frame.locator('section.pane[data-view="m"]')
+        pane.locator(".m-node").first.wait_for(state="attached", timeout=5000)
+        _show_frame(page, send, "m", 0)
+        ghosts = pane.locator(".m-node.k-hidden").evaluate_all("els => els.map(e => e.dataset.key)")
+        assert (ghosts, pane.locator(".k-card").count()) == (["node:P", "node:Q", "node:S"], 0)
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])

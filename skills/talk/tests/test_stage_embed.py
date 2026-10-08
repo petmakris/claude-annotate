@@ -317,11 +317,12 @@ def test_the_worked_example_steps_with_the_voice_and_lands_right_after_every_jum
             page.wait_for_selector("#veil", state="hidden", timeout=10000)
             stage = page.frame_locator("#stage")
             asyncio.run_coroutine_threadsafe(call.answer(WORKED), loop).result(10)
-            card = stage.locator(f'section.pane[data-view="{view}"] .map .k-card')  # a Mermaid graph is drawn as a map
-            card.wait_for(timeout=20000)
-            assert card.inner_text() == "advisory drops :workflows"
+            # a Mermaid graph is drawn as a map, its ghosts there from the start with no title over them
+            stage.locator(f'section.pane[data-view="{view}"] .map .m-node').first.wait_for(state="attached", timeout=20000)
+            card = stage.locator(f'section.pane[data-view="{view}"] .k-card')
             inner = _stage_frame(page)
-            assert _applied(inner, view) == 0
+            inner.wait_for_function(f"window.__stageTest.frames()[{view!r}] === 0", timeout=5000)
+            assert card.count() == 0
             page.wait_for_selector("#playpause:not([hidden])", timeout=10000)
             page.click("#playpause")
             seen = {}
@@ -346,7 +347,7 @@ def test_the_worked_example_steps_with_the_voice_and_lands_right_after_every_jum
             page.click("#gear")
             page.click("#back")
             inner.wait_for_function(f"window.__stageTest.frames()[{view!r}] === 0", timeout=5000)
-            card.wait_for(timeout=3000)
+            assert card.count() == 0
             page.evaluate(f"audio.currentTime = {cues[6] + 0.05}")
             inner.wait_for_function(f"window.__stageTest.frames()[{view!r}] === 6", timeout=5000)
             page.evaluate("audio.currentTime = audio.duration")

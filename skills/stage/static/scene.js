@@ -41,9 +41,11 @@ const isEdgePath = (key, el) => key.startsWith("edge:") && el.tagName.toLowerCas
 const rank = (key) => (key.startsWith("group:") || key.startsWith("actor:") ? 0 : key.startsWith("edge:") ? 2 : 1);
 const DIAGRAMS = new Set(["flowchart", "sequence"]);
 
+// The board's title, over a diagram that starts empty. Not on the map, which is never empty: its ghosts
+// already show what is coming, and a title in the middle of the board would sit on one of them.
 function paintCard(scene, box, n) {
   let card = box.querySelector(":scope > .k-card");
-  if (!DIAGRAMS.has(scene.kind) || scene.start !== "empty" || n !== 0) { card?.remove(); return; }
+  if (!DIAGRAMS.has(scene.kind) || scene.start !== "empty" || n !== 0 || box.classList.contains("map")) { card?.remove(); return; }
   if (!card) { card = document.createElement("div"); card.className = "k-card"; box.append(card); }
   card.textContent = scene.title;
 }
