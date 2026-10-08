@@ -889,6 +889,21 @@ def test_a_board_of_more_than_three_things_and_no_verbs_comes_in_one_sentence_at
                                    "about it (dump); tag the word that names each thing"]
 
 
+def test_two_boards_with_no_verbs_in_one_answer_each_come_in_with_their_own_sentences(tmp_path):
+    from helpers import make_args, stage_rule_breaks
+    fruit = "| Name | Kind |\n|---|---|\n| Apple | fruit |\n| Brick | block |\n| Cloud | sky |\n| Drum | noise |"
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    shown = call.split_reply(f"[[show table | Clouds]]{CLOUDS}[[/show]] Azure first. AWS is next. GCP follows. OVH closes it. "
+                             f"[[show table | Things]]{fruit}[[/show]] Apple is red. Brick is hard. Cloud is white. Drum is loud.")
+    assert [(c["view"], c["n"], shown[c["at"]:c["at"] + 5]) for c in call.reply_cues if c["kind"] == "frame"] == [
+        ("clouds", 1, "Azure"), ("clouds", 2, "AWS i"), ("clouds", 3, "GCP f"), ("clouds", 4, "OVH c"),
+        ("things", 1, "Apple"), ("things", 2, "Brick"), ("things", 3, "Cloud"), ("things", 4, "Drum ")]
+    # each scene says it came in with the sentences, so the rules hold it to arriving where it is named
+    assert [(i["view"], i["scene"]["start"], i["scene"].get("auto")) for i in call.board.items] == [
+        ("clouds", "empty", True), ("things", "empty", True)]
+    assert stage_rule_breaks(call, shown) == []
+
+
 def test_fewer_sentences_than_things_bring_several_in_at_once(tmp_path):
     from helpers import make_args
     call = talk.Call(make_args(), "T", tmp_path / "out")

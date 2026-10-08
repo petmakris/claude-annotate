@@ -1698,13 +1698,13 @@ class Call:
                 self.board.problem(f'{len(by_order)} of {len(model.order)} parts of "{title}" are named by no sentence, '
                                    "so they came in by order; point at each where it is said")
             for n, reveals in plan.items():
-                auto = [{"kind": "frame", "view": view, "verb": stage_scene.Verb("+", keys=keys)} for keys in reveals]
+                brought = [{"kind": "frame", "view": view, "verb": stage_scene.Verb("+", keys=keys)} for keys in reveals]
                 pos, cues = first_run.get(n, (bounds[n], None))
                 if cues is not None:  # with the point, before it: the point is what is said
-                    cues[:0] = auto
+                    cues[:0] = brought
                 else:
-                    own.append([pos, auto])
-                timed.extend((pos, cue) for cue in auto)
+                    own.append([pos, brought])
+                timed.extend((pos, cue) for cue in brought)
             runs[view] = sorted(own, key=lambda run: run[0])
         for view, view_runs in runs.items():
             item = self.board.item_for(view)
