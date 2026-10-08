@@ -1170,6 +1170,36 @@ def test_every_arrow_on_every_map_draws_its_own_head(tmp_path, wc_config, browse
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
 
+LINKS = """(pane) => [...pane.querySelectorAll('.m-edge')].map(g => {
+  const tips = [...g.querySelectorAll('.m-tip')].map(t => t.getAttribute('d').split(' ').slice(1, 3).map(Number));
+  return [g.dataset.key, getComputedStyle(g.querySelector('.m-line')).strokeDasharray, tips]; })"""
+
+
+def test_a_mermaid_link_keeps_its_look_on_the_map_dashed_or_with_a_head_at_both_ends_or_none(tmp_path, wc_config, browser):
+    spec = scene.mermaid_spec("graph LR; A[Page] <--> B[Server]; B -.-> C[Queue]; C --- D[Store]; D ~~~ E[Log]")
+    assert [(e["from"], e["to"], e.get("line"), e.get("heads")) for e in spec["edges"]] == [
+        ("A", "B", None, "both"), ("B", "C", "dashed", None), ("C", "D", None, "none")]
+    res = stage.show(str(tmp_path), "m", _visual("flowchart", spec), title="Links")
+    try:
+        page = _page(browser, res["url"], width=1400)
+        pane = page.locator('section.pane[data-view="m"]')
+        pane.locator(".m-edge").first.wait_for(timeout=5000)
+        page.wait_for_function("document.querySelector('.m-edge .m-tip')?.getAttribute('d')", timeout=5000)
+        cards = {k: b for k, b in pane.evaluate("p => [...p.querySelectorAll('.m-node')].map(e => [e.dataset.key, e.getBoundingClientRect().toJSON()])")}
+        links = pane.evaluate(LINKS)
+        assert [(k, dash, len(tips)) for k, dash, tips in links] == [
+            ("edge:A->B#0", "none", 2), ("edge:B->C#0", "7px, 6px", 1), ("edge:C->D#0", "none", 0)]
+        # the head at the start of the two-way arrow stands off the card it leaves as the other stands off the card
+        # it enters (less the 5px of air an arrow keeps before its end), level with each card
+        svg = pane.locator(".m-edges").bounding_box()
+        (hx, hy), (tx, ty) = [(svg["x"] + x, svg["y"] + y) for x, y in links[0][2]]
+        a, b = cards["node:A"], cards["node:B"]
+        assert abs((tx - a["right"]) - (b["left"] - hx - 5)) <= 1, (tx, a, hx, b)
+        assert a["top"] <= ty <= a["bottom"] and b["top"] <= hy <= b["bottom"] and tx < hx
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
 def test_a_markdown_documents_links_open_apart_and_its_images_resolve_beside_it(tmp_path, wc_config, browser):
     proj = tmp_path / "proj"
     (proj / "docs").mkdir(parents=True)

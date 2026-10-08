@@ -291,6 +291,18 @@ def test_a_mermaid_label_becomes_the_words_it_shows_not_its_markup():
     assert states["edges"] == [{"from": "A", "to": "B", "label": "go & see"}]
 
 
+def test_a_mermaid_choice_is_a_decision_and_each_link_keeps_its_direction_and_line():
+    from skills.stage import scene as sc
+    states = sc.mermaid_spec("stateDiagram-v2\n  [*] --> c\n  state c <<choice>>\n  c --> A: yes\n  c --> B: no\n"
+                             "  state f <<fork>>\n  A --> f\n  f --> B")
+    assert [(n["id"], n["role"], n.get("sub")) for n in states["nodes"]] == [
+        ("c", "decision", None), ("A", "code", None), ("B", "code", None), ("f", "code", "splits into paths that run at once")]
+    graph = sc.mermaid_spec("graph LR; A <--> B; B -.-> C; C ==> D; D --x E; F --- G; G ~~~ H; H -. maybe .-> I; I <-- both --> J")
+    assert [(e["from"], e["to"], e.get("line"), e.get("heads")) for e in graph["edges"]] == [
+        ("A", "B", None, "both"), ("B", "C", "dashed", None), ("C", "D", None, None), ("D", "E", None, None),
+        ("F", "G", None, "none"), ("H", "I", "dashed", None), ("I", "J", None, "both")]  # ~~~ is no arrow at all
+
+
 HEAR_PATH = ("graph LR; subgraph speech [Azure speech]\n stt[Speech to text] --> tts[Text to speech]\n end\n"
              " page[Call page] --> speech; speech --> claude[Claude session]")
 

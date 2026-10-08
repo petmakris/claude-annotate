@@ -457,6 +457,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .map .m-elabel text{font:500 12.5px var(--sans);fill:var(--muted);text-anchor:middle}
 .map .m-edge.m-cur .m-line{stroke-width:3.5}
 .map .m-edge.m-cur .m-elabel text{font-weight:600;fill:var(--ink)}
+.map .m-edge.m-dashed .m-line{stroke-dasharray:7 6}  /* a dotted Mermaid link; it draws in solid, then dashes */
 .map .m-line.m-draw{stroke-dasharray:var(--len);stroke-dashoffset:var(--len);animation:m-draw .7s cubic-bezier(.4,0,.2,1) forwards}
 @keyframes m-draw{to{stroke-dashoffset:0}}
 .map .m-dot{fill:var(--tc)}
@@ -482,7 +483,8 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .map .m-node.k-focus{box-shadow:0 0 0 3px var(--claude)}
 .map .m-node.m-cur.k-focus{box-shadow:0 0 0 3px var(--claude),0 18px 40px -18px rgba(15,23,42,.45)}
 .map .m-edge.k-focus .m-line{stroke-width:3.5}
-@media (prefers-reduced-motion:reduce){.map .m-line.m-draw{animation:none;stroke-dasharray:none}}
+@media (prefers-reduced-motion:reduce){.map .m-line.m-draw{animation:none;stroke-dasharray:none}
+  .map .m-edge.m-dashed .m-line.m-draw{stroke-dasharray:7 6;stroke-dashoffset:0}}
 /* the ring: a state machine's states round its loop; a bigger, glowing card for the state being said */
 .map.m-ring .m-node.m-cur{width:var(--mc,270px);padding:16px 20px}
 .map.m-ring .m-node.m-cur b{font-size:21px}

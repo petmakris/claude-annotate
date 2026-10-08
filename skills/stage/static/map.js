@@ -38,8 +38,10 @@ export function renderMap(box, spec, embedded) {
   box._map.ekeys = ekeys;
   box._map.pairs = seen;
   box.innerHTML = `<svg class="m-edges" aria-hidden="true"><defs></defs>${edges.map((e, i) => {
+      // a Mermaid link keeps its look: dashed for a dotted one, a head at both ends or at neither
       const tone = TONE[(nodes.find((n) => n.id === e.from) || {}).role] || "plain";
-      return `<g class="m-edge t-${tone}" data-key="${esc(ekeys[i])}"><path class="m-line"/><path class="m-tip"/>
+      const heads = e.heads === "none" ? "" : `<path class="m-tip"/>${e.heads === "both" ? '<path class="m-tip m-tail"/>' : ""}`;
+      return `<g class="m-edge t-${tone}${e.line === "dashed" ? " m-dashed" : ""}" data-key="${esc(ekeys[i])}"><path class="m-line"/>${heads}
         ${e.label ? `<g class="m-elabel"><rect rx="8"/><text>${esc(e.label)}</text></g>` : ""}</g>`;
     }).join("")}</svg>
     ${nodes.map((n) => {
@@ -300,11 +302,14 @@ function draw(box) {
     const line = g.querySelector(".m-line");
     line.setAttribute("d", curve.d);
     if (line.classList.contains("m-draw")) line.style.setProperty("--len", Math.ceil(line.getTotalLength ? line.getTotalLength() : 600));
-    // the head points along the curve's last stretch, into the card
-    const [tx, ty] = curve.end, [qx, qy] = curve.toward;
-    const ang = Math.atan2(ty - qy, tx - qx), c = Math.cos(ang), s = Math.sin(ang);
-    const pt = (u, v) => `${tx - c * u + s * v} ${ty - s * u - c * v}`;
-    g.querySelector(".m-tip").setAttribute("d", `M ${tx} ${ty} L ${pt(12, 6)} L ${pt(12, -6)} Z`);
+    // the head points along the curve's last stretch, into the card; a head at the start along its first
+    const tip = ([tx, ty], [qx, qy]) => {
+      const ang = Math.atan2(ty - qy, tx - qx), c = Math.cos(ang), s = Math.sin(ang);
+      const pt = (u, v) => `${tx - c * u + s * v} ${ty - s * u - c * v}`;
+      return `M ${tx} ${ty} L ${pt(12, 6)} L ${pt(12, -6)} Z`;
+    };
+    g.querySelector(".m-tip:not(.m-tail)")?.setAttribute("d", tip(curve.end, curve.toward));
+    g.querySelector(".m-tail")?.setAttribute("d", tip(curve.start, curve.away));
     g.classList.toggle("m-back", P.mode === "ring" ? !curve.next : P.back.has(i));
     const label = g.querySelector(".m-elabel");
     // last, the same spots a little off the arrow
@@ -353,7 +358,7 @@ function forward(P, e, half, spread) {
   const at = bezier(p0, p1, p2, p3);
   const top = Math.min(a[1] - ah, b[1] - bh) - 14, foot = Math.max(a[1] + ah, b[1] + bh) + 14, mx = (a[0] + b[0]) / 2;
   const beside = P.mode === "across" ? [[mx, top], [mx, foot]] : [[Math.max(a[0] + aw, b[0] + bw) + 60, (a[1] + b[1]) / 2]];
-  return [{ d: path(p0, p1, p2, p3), end: p3, toward: p2 }, [...ALONG.map(at), ...beside]];
+  return [{ d: path(p0, p1, p2, p3), end: p3, toward: p2, start: p0, away: p1 }, [...ALONG.map(at), ...beside]];
 }
 
 // A way back: across, out of the foot of one card, under the map and up into the foot of the other; top to
@@ -368,7 +373,7 @@ function backArrow(P, e, half, k) {
     const side = P.lane + 14 + 22 * k;
     p0 = [a[0] + aw, a[1]]; p3 = [b[0] + bw + 5, b[1]]; p1 = [side, a[1]]; p2 = [side, b[1]];
   }
-  return [{ d: path(p0, p1, p2, p3), end: p3, toward: p2 }, ALONG.map(bezier(p0, p1, p2, p3))];
+  return [{ d: path(p0, p1, p2, p3), end: p3, toward: p2, start: p0, away: p1 }, ALONG.map(bezier(p0, p1, p2, p3))];
 }
 
 // An arrow from a part to itself: a small loop over its card (on the ring, on its outer side), its label
@@ -382,7 +387,7 @@ function selfLoop(P, id, half, spread) {
   const s = [px + vx * 16, py + vy * 16], end = [px - vx * 16 + ux * 5, py - vy * 16 + uy * 5];
   const c1 = [s[0] + ux * reach + vx * 26, s[1] + uy * reach + vy * 26], c2 = [end[0] + ux * reach - vx * 26, end[1] + uy * reach - vy * 26];
   const tip = [px + ux * (reach * 0.75 + 14), py + uy * (reach * 0.75 + 14)];
-  return [{ d: path(s, c1, c2, end), end, toward: c2 },
+  return [{ d: path(s, c1, c2, end), end, toward: c2, start: s, away: c1 },
     [tip, [tip[0] + 60, tip[1]], [tip[0] - 60, tip[1]]]];
 }
 
@@ -407,7 +412,8 @@ function ringArrow(P, e, rim, under, spread) {
   let [sx, sy] = rim(e.from, qx, qy), [tx, ty] = rim(e.to, qx, qy);
   if (under(e.from, qx, qy) || under(e.to, qx, qy)) { [sx, sy] = rim(e.from, b[0], b[1]); [tx, ty] = rim(e.to, a[0], a[1]); qx = (sx + tx) / 2; qy = (sy + ty) / 2; }
   const at = (t) => [(1 - t) ** 2 * sx + 2 * (1 - t) * t * qx + t ** 2 * tx, (1 - t) ** 2 * sy + 2 * (1 - t) * t * qy + t ** 2 * ty];
-  return [{ d: `M ${sx} ${sy} Q ${qx} ${qy} ${tx} ${ty}`, end: [tx, ty], toward: [qx, qy], next }, ALONG.map(at)];
+  return [{ d: `M ${sx} ${sy} Q ${qx} ${qy} ${tx} ${ty}`, end: [tx, ty], toward: [qx, qy], start: [sx, sy], away: [qx, qy], next },
+    ALONG.map(at)];
 }
 
 // After a frame: the part being said and the arrow into it, as the frame names them (beingSaid). On a step

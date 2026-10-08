@@ -110,8 +110,19 @@ _HEADER = re.compile(r"\A\s*(?:graph|flowchart)\b(?:[ \t]+(?:TB|TD|BT|RL|LR)\b)?
 _ID = re.compile(r"\w+(?:[-.]\w+)*")
 _AMP = re.compile(r"\s*&\s*")
 _CLASS = re.compile(r":::[\w-]+")
-_LINK = re.compile(r"\s*(?:<?(?:--|==|-\.)\s+(?P<text>[^\n]+?)\s+(?:-{2,}>|-{3,}|={2,}>|={3,}|\.-+>|\.-+)"
-                   r"|<?(?:-{2,}|={2,}|-\.+-|~{3,})[->ox]?)\s*(?:\|(?P<label>[^|]*)\|)?\s*")
+_LINK = re.compile(r"\s*(?:(?P<open><?(?:--|==|-\.))\s+(?P<text>[^\n]+?)\s+(?P<close>-{2,}>|-{3,}|={2,}>|={3,}|\.-+>|\.-+)"
+                   r"|(?P<arrow><?(?:-{2,}|={2,}|-\.+-|~{3,})[->ox]?))\s*(?:\|(?P<label>[^|]*)\|)?\s*")
+
+
+def _link_style(link: re.Match) -> dict | None:
+    """How a Mermaid link is drawn on the map: dashed for a dotted one (`-.->`), a head at both ends for
+    `<-->`, none for an open line (`---`); None for an invisible link (`~~~`), which is no arrow at all."""
+    token = link["open"] + link["close"] if link["open"] else link["arrow"]
+    if "~" in token:
+        return None
+    head = token[-1] in ">xo"
+    return {**({"line": "dashed"} if "." in token else {}),
+            **({"heads": "both"} if head and token.startswith("<") else {} if head else {"heads": "none"})}
 _SKIP = re.compile(r"(?:direction|classDef|class|style|linkStyle|click|accTitle|accDescr)\b", re.IGNORECASE)
 _CLOSE = {"[": "]", "(": ")", "{": "}", ">": "]"}
 
@@ -219,13 +230,15 @@ def _subgraph(rest: str) -> tuple[str, str]:
 _STATE_HEAD = re.compile(r"\A\s*stateDiagram(?:-v2)?\b", re.IGNORECASE)
 _STATE_EDGE = re.compile(r"(?P<a>\[\*\]|[\w.-]+)\s*-->\s*(?P<b>\[\*\]|[\w.-]+)\s*(?::\s*(?P<label>.+))?\Z")
 _STATE_AS = re.compile(r'state\s+"(?P<label>[^"]+)"\s+as\s+(?P<id>[\w.-]+)\Z', re.IGNORECASE)
+_STATE_KIND = re.compile(r"state\s+(?P<id>[\w.-]+)\s*<<(?P<kind>choice|fork|join)>>\Z", re.IGNORECASE)
 _STATE_DESC = re.compile(r"(?P<id>[\w.-]+)\s*:\s*(?P<label>.+)\Z")
 
 
 def mermaid_spec(body: str) -> dict | None:
     """A Mermaid graph, flowchart or state diagram as a flowchart spec, for the stage to draw as its map;
     None for any other kind of Mermaid. Every label is the words it shows (`_text`, no markup); a subgraph is a
-    group of its parts, with no box (`_ungroup`); `{...}` shapes are decisions; in a state
+    group of its parts, with no box (`_ungroup`); a link keeps its look (`_link_style`); `{...}` shapes and a
+    state's `<<choice>>` are decisions; in a state
     diagram `[*] --> X` makes X where it starts and `X --> [*]` makes X an end."""
     text = "\n".join(ln for ln in body.splitlines() if not ln.strip().startswith("%%")).strip()
     nodes: dict[str, dict] = {}
@@ -238,13 +251,16 @@ def mermaid_spec(body: str) -> dict | None:
         return n
 
     if _STATE_HEAD.match(text):
-        starts, ends = set(), set()
+        starts, ends, kinds = set(), set(), {}
         for raw in text.splitlines()[1:]:
             st = raw.strip()
             if not st or _SKIP.match(st) or st in ("{", "}") or st.lower().startswith(("note", "end note")):
                 continue
             if m := _STATE_AS.match(st):
                 node(m["id"], _text(m["label"]))
+            elif m := _STATE_KIND.match(st):
+                kinds[m["id"]] = m["kind"].lower()
+                node(m["id"])
             elif m := _STATE_EDGE.match(st):
                 a, b = m["a"], m["b"]
                 if a == "[*]" and b != "[*]":
@@ -260,6 +276,11 @@ def mermaid_spec(body: str) -> dict | None:
             nodes[ident]["role"] = "entry"
         for ident in ends - starts:
             nodes[ident]["role"] = "success"
+        for ident, kind in kinds.items():  # a choice is a decision, wherever it stands; a fork or join says what it does
+            if kind == "choice":
+                nodes[ident]["role"] = "decision"
+            else:
+                nodes[ident].setdefault("sub", "splits into paths that run at once" if kind == "fork" else "waits for every path")
     else:
         statements = _statements(body)
         if statements is None:
@@ -284,7 +305,7 @@ def mermaid_spec(body: str) -> dict | None:
             if _SKIP.match(st):
                 continue
             decisions |= {d[1] for d in re.finditer(r"([\w][\w.-]*)\s*\{(?!\{)", st)}
-            chain, labels, i = [], [], 0
+            chain, links, i = [], [], 0
             while True:
                 found, i = _node_group(st, i)
                 if not found:
@@ -297,12 +318,13 @@ def mermaid_spec(body: str) -> dict | None:
                 link = _LINK.match(st, i)
                 if not link or link.end() == i:
                     break
-                labels.append(_text(link["text"] or link["label"] or ""))
+                links.append((_text(link["text"] or link["label"] or ""), _link_style(link)))
                 i = link.end()
-            for (left, right), label in zip(zip(chain, chain[1:]), labels):
+            for (left, right), (label, style) in zip(zip(chain, chain[1:]), links):
                 for a, _ in left:
                     for b, _ in right:
-                        edges.append({"from": a, "to": b, **({"label": label} if label else {})})
+                        if style is not None:
+                            edges.append({"from": a, "to": b, **({"label": label} if label else {}), **style})
         edges, kept = _ungroup(nodes, edges, groups, member)
         for ident in decisions & set(nodes):
             nodes[ident]["role"] = "decision"
