@@ -13,14 +13,16 @@
 // messages from its parent window, and only when it has one; a stage opened on its own ignores them all.
 //   Talk to stage:
 //     {type:'stage:front', view, manual, answer}  bring a view to the front: when following is on, or
-//                                         always when manual (a chip was pressed); manual never changes follow.
-//                                         Fronted by the voice of an answer with no scene of its own for the
-//                                         view, the view shows whole
+//                                         always when manual (a chip was pressed). A chip works as a tab tap:
+//                                         another board opens whole and following turns off; the board already
+//                                         in front stays as it is. Fronted by the voice of an answer with no
+//                                         scene of its own for the view, the view shows whole. A view not here
+//                                         yet is fronted when it arrives, unless another front came first
 //     {type:'stage:point', view, target}  when following: front the view and light up part of it.
 //                                         target {type:'lines', a, b} | {type:'row', n} | {type:'row', text}
 //                                         | {type:'node', id}; null clears every spot
 //     {type:'stage:answer', n}            answer n started playing: following turns on again, and a frame
-//                                         another answer sent for a view not here yet is dropped
+//                                         or front another answer sent for a view not here yet is dropped
 //     {type:'stage:key', view, index}     key point number index (from 1) was just said: it gets the bar
 //                                         and a short glow; the Key points tab is never fronted for it
 //     {type:'stage:theme', theme}         'light' or 'dark', chosen on the call page
@@ -37,7 +39,8 @@
 //     {type:'stage:ready'}                once, after the first render
 //     {type:'stage:views', list:[{name, title, kind, answer}]}   after every change to the tabs
 //     {type:'stage:changed', name, title, isNew}                 a view was created or its source changed
-//     {type:'stage:follow', on}                                  following changed here (a tab tap, a new answer)
+//     {type:'stage:follow', on}                                  following changed here (a tab tap, a chip, a step
+//                                                                by hand, a new answer)
 //     {type:'stage:shown', view}                                 this board is in front now, by the voice or by hand
 //     {type:'stage:key', key}                                    Space, ArrowLeft or ArrowRight pressed here, on nothing
 //                                                                that takes keys: the call page pauses or moves the answer
@@ -1004,6 +1007,8 @@ function upsert(body) {
     // after the layout that fronts it: bring it forward now. Only on creation — an update to
     // a view that already exists never moves the selection.
     if (body.name === layout.front) select(body.name, true);
+    // A board the voice fronted before it got here comes forward now, as it would have then.
+    else if (lateFront && lateFront.name === body.name) { const { answer } = lateFront; lateFront = null; front(body.name, false, answer); }
     if (live) post({ type: "stage:changed", name: body.name, title: body.title, isNew: true });
     return;
   }
@@ -1110,17 +1115,28 @@ function paintSpot(v, box) {
   requestAnimationFrame(() => { if (hits[0].isConnected) centre(hits[0]); });
 }
 
+// The board the voice fronted before it reached the stage, {name, answer}: fronted when it arrives.
+let lateFront = null;
 function front(name, manual, answer = null) {
   if (!views.has(name) && manual) post({ type: "stage:missing", view: name });
-  if (!views.has(name) || (!follow && !manual)) return false;
+  if (!follow && !manual) return false;
+  lateFront = !views.has(name) && !manual ? { name, answer: answerKey(answer) } : null;
+  if (!views.has(name)) return false;
+  // A chip works as a tab tap: another board opens whole and the stage stops following the voice; the
+  // board already in front keeps its frame and the following.
+  if (manual) {
+    if (selectedName() === name) return true;
+    select(name, true); toRest(views.get(name));
+    if (embedded) setFollow(false);
+    return true;
+  }
   // fronted by the voice of an answer that did not step this board: its picture is that answer's, from the start
   const v = views.get(name);
-  if (!manual && hasScene(v) && onAnswer(v, answer)) {
+  if (hasScene(v) && onAnswer(v, answer)) {
     v.frame = sceneOf(v) ? 0 : null;
     if (v.filled && !v.stale) paintFrame(v);
   }
   if (selectedName() !== name) select(name, true);
-  if (manual) toRest(views.get(name));
   return true;
 }
 
@@ -1212,7 +1228,7 @@ function paintFrame(v, box, animate = false) {
 }
 
 // Back and Next move one frame, from the empty start to the rest frame. Stepping by hand takes the
-// stage off the voice, as a tapped tab does, until the next answer.
+// stage off the voice, as a tapped tab does, until the reader presses Play or the next answer starts.
 function stepBy(v, delta) {
   if (!hasScene(v)) return;
   // on a board its answer showed whole, the steps are the newest scene's, from the rest frame
@@ -1254,6 +1270,7 @@ function onMessage(m) {
   else if (m.type === "stage:answer") {
     setFollow(true); spot = null; clearSpots();
     for (const [name, late] of lateFrames) if (late.answer !== answerKey(m.n)) lateFrames.delete(name);
+    if (lateFront && lateFront.answer !== answerKey(m.n)) lateFront = null;
   }
   else if (m.type === "stage:zoom") {
     const z = Number(m.zoom);
@@ -1269,7 +1286,7 @@ function onMessage(m) {
   else if (m.type === "stage:follow") setFollow(!!m.on);
   else if (m.type === "stage:frame") setFrame(String(m.view), Number(m.n), !!m.animate, m.answer);
   else if (m.type === "stage:state") {
-    lateFrames.clear();  // the whole picture: a late frame it still wants is in it again
+    lateFrames.clear(); lateFront = null;  // the whole picture: a late frame or front it still wants is in it again
     for (const [name, n] of Object.entries(m.frames || {})) {
       try { setFrame(name, Number(n), false, m.answer); } catch (e) { console.error("stage:", e); }  // one board never stops the rest
     }

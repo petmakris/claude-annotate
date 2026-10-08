@@ -1596,3 +1596,69 @@ def test_a_frame_past_the_rest_is_the_rest_and_never_stops_the_front(tmp_path, w
         assert frame.locator('section.pane[data-view="map"] .vstep').inner_text() == "All shown"
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def _follows(page):
+    return page.evaluate("got.filter(m => m.type === 'stage:follow').map(m => m.on)")
+
+
+def test_a_chip_works_as_a_tab_tap_and_never_jumps_the_board_the_voice_is_on(tmp_path, wc_config, browser):
+    one, two = _release_scenes()
+    res = stage.show(str(tmp_path), "rp", _visual("sequence", RELEASE), title="Release path",
+                     extra={"scene": two, "scenes": {"2": two}, "answer": 2})
+    stage.show(str(tmp_path), "other", TABLE, title="Other", background=True)
+    try:
+        page, frame, send = _embedded(browser, res["url"], width=1400)
+        pane = frame.locator('section.pane[data-view="rp"]')
+        pane.locator(".ln-row").first.wait_for(state="attached", timeout=5000)
+        send({"type": "stage:state", "front": "rp", "frames": {"rp": 3}, "keys": 0, "answer": 2})
+        _settled(page)
+        on3 = {"frame": 3, "step": "Step 3 of 8", "on": ALL8[:3], "cur": ["s2"], "card": None}
+        assert pane.evaluate(LANES) == on3
+        # the chip of the board in front: it stays on the voice's frame, and the voice keeps it
+        send({"type": "stage:front", "view": "rp", "manual": True})
+        _settled(page)
+        assert pane.evaluate(LANES) == on3 and _follows(page) == []
+        send({"type": "stage:frame", "view": "rp", "n": 4, "animate": True, "answer": 2})
+        _settled(page)
+        assert pane.evaluate(LANES) == {"frame": 4, "step": "Step 4 of 8", "on": ALL8[:4], "cur": ["s3"], "card": None}
+        # the chip of another board opens it and takes the stage off the voice, which the call page is told
+        send({"type": "stage:front", "view": "other", "manual": True})
+        _settled(page)
+        assert _selected(frame, "other") and _follows(page) == [False]
+        send({"type": "stage:front", "view": "rp", "answer": 2})
+        _settled(page)
+        assert _selected(frame, "other")
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def test_a_board_the_voice_fronts_before_it_arrives_comes_forward_when_it_does(tmp_path, wc_config, browser):
+    one, two = _release_scenes()
+    res = stage.show(str(tmp_path), "first", TABLE, title="First")
+    try:
+        page, frame, send = _embedded(browser, res["url"], width=1400)
+        frame.locator('button[role=tab][data-view="first"]').wait_for(state="attached", timeout=5000)
+        send({"type": "stage:front", "view": "rp", "manual": False, "answer": 2})
+        send({"type": "stage:frame", "view": "rp", "n": 2, "animate": True, "answer": 2})
+        _settled(page)
+        stage.show(str(tmp_path), "rp", _visual("sequence", RELEASE), title="Release path", background=True,
+                   extra={"scene": two, "scenes": {"2": two}, "answer": 2})
+        frame.locator('button[role=tab][data-view="rp"]').wait_for(state="attached", timeout=5000)
+        _settled(page)
+        assert (_selected(frame, "rp"), _selected(frame, "first")) == (True, False)
+        pane = frame.locator('section.pane[data-view="rp"]')
+        pane.locator(".ln-row").first.wait_for(state="attached", timeout=5000)
+        _settled(page)
+        assert pane.evaluate(LANES) == {"frame": 2, "step": "Step 2 of 8", "on": ALL8[:2], "cur": ["s1"], "card": None}
+        # a board fronted early stays behind when the voice has fronted another since
+        send({"type": "stage:front", "view": "late", "manual": False, "answer": 2})
+        send({"type": "stage:front", "view": "first", "manual": False, "answer": 2})
+        _settled(page)
+        stage.show(str(tmp_path), "late", TABLE, title="Late", background=True)
+        frame.locator('button[role=tab][data-view="late"]').wait_for(state="attached", timeout=5000)
+        _settled(page)
+        assert _selected(frame, "first") and not _selected(frame, "late")
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+

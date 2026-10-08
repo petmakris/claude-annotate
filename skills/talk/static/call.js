@@ -56,7 +56,8 @@ if (CFG.stageUrl) {
 //   {type:'stage:follow', on}           the gear's switch turned following on or off
 // Stage to talk: {type:'stage:ready'}, {type:'stage:views', list:[{name, title, kind, answer}]} on every
 // change, {type:'stage:changed', name, title, isNew}, and {type:'stage:follow', on} when following
-// changes inside the stage (a tab tap turns it off, a new answer on), {type:'stage:key', key} for Space, ← or →
+// changes inside the stage (a tab tap, a chip or a step by hand turns it off, a new answer on; a play the
+// reader starts turns it on from here), {type:'stage:key', key} for Space, ← or →
 // pressed on the stage with nothing there taking them, and {type:'stage:missing', view} when a chip
 // asked for a view it does not hold: such chips are struck through. Only messages from the embedded stage's own
 // window and origin are read. Until the stage says it is ready, what talk sends waits in a short queue.
@@ -229,7 +230,7 @@ function buildEntry(e) {
     if (e.who === "claude") {
       if (e.speech === "ready") {
         const b = document.createElement("button"); b.className = "btn play"; b.type = "button";
-        b.onclick = () => (current && current.id === e.id && !audio.paused) ? audio.pause() : load(view.entries.find(x => x.id === e.id) || e, true);
+        b.onclick = () => { if (current && current.id === e.id && !audio.paused) { audio.pause(); return; } toVoice(); load(view.entries.find(x => x.id === e.id) || e, true); };
         el.append(b);
       } else {
         const s = document.createElement("div"); s.className = "speech" + (e.speech === "failed" ? " bad" : "");
@@ -619,7 +620,7 @@ function playFrom(e, t) {
   // Play the answer from time `t` seconds in.
   e = view.entries.find(x => x.id === e.id) || e;
   if (e.speech !== "ready") return;
-  cueSync = true;
+  toVoice();
   load(e, false); audio.currentTime = t;
   audio.playbackRate = speed; audio.play().catch(() => {});
 }
@@ -665,7 +666,8 @@ function highlight() {
 const LEAD_S = 0.12;
 let cueSync = true, sent = null;
 function stateAt(e, pos) {
-  const cues = e.cues || [], st = {front: null, frames: {}, key: null};
+  // Before its first cue the answer's first board is in front: the one it put up as it arrived.
+  const cues = e.cues || [], st = {front: cues.find(c => c.kind === "front")?.view ?? null, frames: {}, key: null};
   for (const c of cues) if (c.kind === "frame") st.frames[c.view] = 0;
   let lo = 0, hi = cues.length;
   while (lo < hi) { const m = (lo + hi) >> 1; if (cues[m].at <= pos) lo = m + 1; else hi = m; }
@@ -690,6 +692,12 @@ function syncStage(e, pos) {
   sent = {id: e.id, ...st};
 }
 function resync() { cueSync = true; highlight(); }
+// A play the reader starts takes the board back to the voice: following turns on (a tab, a chip or a step
+// by hand turned it off), and the next frame sends the whole picture.
+function toVoice() {
+  cueSync = true;
+  if (!follow) { follow = true; toStage({type: "stage:follow", on: true}); paintSettings(); }
+}
 let failedShown = null;
 function showFailedAnswer() {
   const e = lastAnswer();
@@ -728,12 +736,9 @@ function wordCharAt(e, t) { const k = wordAt(e, t); return k < 0 ? -1 : e.words[
 function togglePlay() {
   release();
   const b = boardStart();
-  if (b) {
-    if (!follow) { follow = true; toStage({type: "stage:follow", on: true}); paintSettings(); }
-    playFrom(b.e, b.t); return;
-  }
-  if (!current) { const e = lastAnswer(); if (e) load(e, true); return; }
-  if (audio.paused) audio.play().catch(() => {}); else audio.pause();
+  if (b) { playFrom(b.e, b.t); return; }
+  if (!current) { const e = lastAnswer(); if (e) { toVoice(); load(e, true); } return; }
+  if (audio.paused) { toVoice(); audio.play().catch(() => {}); } else audio.pause();
 }
 $("playpause").onclick = togglePlay;
 $("back").onclick = () => skip(-10);
@@ -800,7 +805,7 @@ document.addEventListener("keydown", ev => {
 });
 if ("mediaSession" in navigator) {
   const ms = navigator.mediaSession;
-  ms.setActionHandler("play", () => audio.play()); ms.setActionHandler("pause", () => audio.pause());
+  ms.setActionHandler("play", () => { toVoice(); audio.play(); }); ms.setActionHandler("pause", () => audio.pause());
   ms.setActionHandler("seekbackward", d => skip(-(d.seekOffset || 10))); ms.setActionHandler("seekforward", d => skip(d.seekOffset || 10));
 }
 
@@ -1181,6 +1186,7 @@ function runCommand(cmd, body) {
   const h = held;
   release();
   if (cmd === "pause") { audio.pause(); return; }
+  toVoice();  // resume, repeat and back all play
   if (!current) { const e = lastAnswer(); if (e && e.speech === "ready") load(e, true); return; }
   if (cmd === "resume") { if (h && h.paused) audio.currentTime = h.from; audio.play().catch(() => {}); return; }
   if (cmd === "repeat") { audio.currentTime = h ? h.from : sentenceStart(); audio.play().catch(() => {}); return; }

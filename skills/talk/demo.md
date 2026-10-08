@@ -6,7 +6,7 @@ tags, scenes, voice and stage. Answers are separated by a line holding only `---
 `page: <path> | <title>` puts that file on the stage, behind the boards, as a page opens in a call.
 Paths are relative to the repository root.
 -->
-Welcome to the stage demo. Every board the stage can show comes past in turn, explained the way a call explains it, so you can see each one move with the voice. [[key: say next for the next board, again to replay one, back to go back]] Say next, or type it, whenever you are ready for the next board. [[key: the stage follows the voice until you take it in hand]] If you pick a board yourself, the stage stops following the voice until the next answer.
+Welcome to the stage demo. Every board the stage can show comes past in turn, explained the way a call explains it, so you can see each one move with the voice. [[key: say next for the next board, again to replay one, back to go back]] Say next, or type it, whenever you are ready for the next board. [[key: the stage follows the voice until you take it in hand]] If you pick a board yourself, the stage stops following the voice until you press Play or the next answer starts.
 ---
 [[show code: skills/talk/live_turns.py:33-53 | How a turn waits]] This is real code from talk: the turn queue. [[point: lines 33-41]] When you send something, offer puts it in the queue, and a turn sent before Claude collects the last one is merged into it. [[point: lines 43-53]] Withdraw takes a line back again, but only while no doorbell has collected it. [[key: a code board lights the lines being talked about]] Say next to see a change.
 ---

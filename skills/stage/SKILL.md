@@ -62,8 +62,10 @@ Rules:
 - **Inside a talk call the stage follows the voice.** /talk embeds the stage and steers it over
   postMessage (the protocol is at the top of `static/stage.js`): it fronts each board as the
   spoken answer reaches it and lights up the lines, row or node a `[[point ...]]` tag names. The call
-  page's gear has a **Stage follows the voice** switch for it; picking a board by hand turns it off,
-  and the next answer turns it on again. The call page also sets the stage's light or dark theme. The answer that showed a view is
+  page's gear has a **Stage follows the voice** switch for it. Picking a board by hand (its tab, its chip
+  in the conversation, or Back and Next on its steps) turns it off; pressing Play, or the next answer, turns
+  it on again and puts the board back where the voice is. A board the voice reaches before it has come up
+  is fronted when it arrives. The call page also sets the stage's light or dark theme. The answer that showed a view is
   marked on its row in the list (`A3`). Every answer that steps a view keeps its own scene on it (`scenes`, by answer number), and
   the call page names the answer with each frame, so replaying an earlier answer steps the board as that answer did; an answer
   that showed the board with no steps of its own shows it whole. A stage opened on its own ignores all of this. Code, change, table and diagram views

@@ -829,3 +829,71 @@ def test_a_spoken_go_on_with_no_voice_ready_plays_nothing_and_breaks_nothing(tmp
         page.wait_for_timeout(200)
         fake.hold.release()
         assert errors == [] and page.evaluate("!current && !audio.getAttribute('src')"), errors
+
+
+FLOW_ANSWER = (f"[[show diagram | Flow]]graph TD; P[Page]-->Q[Queue]-->R[Reply][[/show]] "
+               f"{six('lead')} [[+ P]] {six('page')} [[+ P->Q]] {six('queue')}.")
+
+
+def test_a_replay_from_the_first_word_fronts_the_board_the_answer_came_in_with(tmp_path, pw):
+    # call ggkm: the answer opens with words before its first board, which it put up in front as it arrived
+    with served(tmp_path, stage_url=STAGE) as (url, call, loop, fake):
+        browser = pw.chromium.launch(args=FAKE_MIC)
+        try:
+            page = browser.new_page()
+            stage_page(page, STAGE_PROBE)
+            no_autoplay(page)
+            page.goto(url)
+            page.wait_for_function("stageUp === true", timeout=5000)
+            stage = page.frame(url=STAGE)
+            table = "| a | b |\n|---|---|\n| 1 | 2 |"
+            on_loop(loop, call.answer(f"{six('intro')}. [[show table | Three paths changed]]{table}[[/show]] "
+                                      f"{six('paths')}. [[show table | Nightly batch guard]]{table}[[/show]] {six('guard')}."))
+            page.wait_for_function("view.entries.some(e => e.who === 'claude' && e.speech === 'ready')", timeout=10000)
+            stage.evaluate("got.length = 0")
+            page.click("#cap .w[data-i='0']")
+            stage.wait_for_function("got.some(m => m.type === 'stage:state')", timeout=5000)
+            assert stage.evaluate("got.find(m => m.type === 'stage:state')") == {
+                "type": "stage:state", "front": "three-paths-changed", "frames": {}, "keys": 0, "answer": 1}
+        finally:
+            browser.close()
+
+
+def test_a_play_the_reader_starts_takes_the_board_back_to_the_voice(tmp_path, pw):
+    with served(tmp_path, stage_url=STAGE) as (url, call, loop, fake):
+        fake.seconds = 3.0
+        browser = pw.chromium.launch(args=FAKE_MIC)
+        try:
+            page = browser.new_page()
+            stage_page(page, STAGE_PROBE)
+            page.goto(url)
+            page.wait_for_function("stageUp === true", timeout=5000)
+            stage = page.frame(url=STAGE)
+            on_loop(loop, call.answer(FLOW_ANSWER))
+            stage.wait_for_function("got.some(m => m.type === 'stage:frame' && m.n === 1)", timeout=15000)
+            seen = ("got.filter(m => m.type === 'stage:follow' || m.type === 'stage:state')"
+                    ".map(m => m.type === 'stage:follow' ? 'follow:' + m.on : 'state')")
+            for how in ["Play", "conversation Play", "word tap", "Space"]:
+                if not page.evaluate("audio.paused"):
+                    page.click("#playpause")
+                # the reader stepped the board by hand: the stage turned following off and said so
+                stage.evaluate("parent.postMessage({type: 'stage:follow', on: false}, '*')")
+                page.wait_for_function("follow === false", timeout=3000)
+                stage.evaluate("got.length = 0")
+                if how == "Play":
+                    page.click("#playpause")
+                elif how == "conversation Play":
+                    page.click("#hist")
+                    page.locator("#convo .turn.claude button.play").first.click()
+                    page.keyboard.press("Escape")
+                elif how == "word tap":
+                    page.click("#cap .w[data-i='3']")
+                else:
+                    page.locator("body").focus()
+                    page.keyboard.press(" ")
+                page.wait_for_function(PLAYING, timeout=5000)
+                stage.wait_for_function("got.some(m => m.type === 'stage:state')", timeout=5000)
+                assert (how, page.evaluate("follow"), stage.evaluate(seen)) == (how, True, ["follow:true", "state"])
+        finally:
+            browser.close()
+
