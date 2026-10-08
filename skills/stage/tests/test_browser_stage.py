@@ -1811,8 +1811,13 @@ def test_an_arriving_arrow_draws_in_with_its_dot_on_a_step_forward_only(tmp_path
         stage_frame.evaluate(DRAWS)
         counts = lambda: (page.wait_for_timeout(150), stage_frame.evaluate("[window.__dots, window.__draws]"))[1]  # noqa: E731
         seen = []
-        for n in range(4):  # listening, hearing, sending: an arrow arrives into each of the last two
+        # listening, hearing, sending: an arrow arrives into each of the last two. Each step waits for its arrows
+        # to finish drawing in, as the voice would: a step sent before the last one's animation started would
+        # repaint that arrow still, and the count would race the browser's next animation frame.
+        drawn = "() => !document.querySelector('.m-line.m-draw')"
+        for n in range(4):
             _show_frame(page, send, "live", n, n > 0)
+            stage_frame.wait_for_function(drawn, timeout=5000)
         seen.append(counts())
         pane.locator(".stepback").click()  # Back to hearing
         _until_frame(page, "live", 2)
