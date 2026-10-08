@@ -1055,6 +1055,8 @@ class Board:
             self.problem(f'point not shown: "{name}" is a {item["kind"]}; use {use}')
             return
         key = f"{want[0]}:{want[1].strip()}"
+        if want[0] == "node" and key not in scene_model(item).keys:
+            key = f"group:{want[1].strip()}"  # a subgraph of a Mermaid graph drawn as a map
         if key not in scene_model(item).keys:
             self.problem(f'point not shown: no {want[0]} {want[1]} in "{name}"')
             return

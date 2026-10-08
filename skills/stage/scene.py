@@ -224,8 +224,8 @@ _STATE_DESC = re.compile(r"(?P<id>[\w.-]+)\s*:\s*(?P<label>.+)\Z")
 
 def mermaid_spec(body: str) -> dict | None:
     """A Mermaid graph, flowchart or state diagram as a flowchart spec, for the stage to draw as its map;
-    None for any other kind of Mermaid. Every label is the words it shows (`_text`, no markup); subgraphs are
-    flattened; `{...}` shapes are decisions; in a state
+    None for any other kind of Mermaid. Every label is the words it shows (`_text`, no markup); a subgraph is a
+    group of its parts, with no box (`_ungroup`); `{...}` shapes are decisions; in a state
     diagram `[*] --> X` makes X where it starts and `X --> [*]` makes X an end."""
     text = "\n".join(ln for ln in body.splitlines() if not ln.strip().startswith("%%")).strip()
     nodes: dict[str, dict] = {}
@@ -265,9 +265,23 @@ def mermaid_spec(body: str) -> dict | None:
         if statements is None:
             return None
         decisions = set()
+        groups: dict[str, str] = {}  # a subgraph's id and its label
+        member: dict[str, str] = {}  # a node or subgraph and the subgraph it was first written in
+        stack: list[str] = []
         for st in statements:
             low = st.lower()
-            if low == "end" or low.startswith("subgraph") or _SKIP.match(st):
+            if low == "end":
+                if stack:
+                    stack.pop()
+                continue
+            if low.startswith("subgraph"):
+                ident, label = _subgraph(st[len("subgraph"):].strip())
+                groups.setdefault(ident, label)
+                if stack and ident not in member:
+                    member[ident] = stack[-1]
+                stack.append(ident)
+                continue
+            if _SKIP.match(st):
                 continue
             decisions |= {d[1] for d in re.finditer(r"([\w][\w.-]*)\s*\{(?!\{)", st)}
             chain, labels, i = [], [], 0
@@ -277,7 +291,9 @@ def mermaid_spec(body: str) -> dict | None:
                     break
                 chain.append(found)
                 for ident, label in found:
-                    n = node(ident, label)
+                    node(ident, label)
+                    if stack and ident not in member and ident not in groups:
+                        member[ident] = stack[-1]
                 link = _LINK.match(st, i)
                 if not link or link.end() == i:
                     break
@@ -287,6 +303,7 @@ def mermaid_spec(body: str) -> dict | None:
                 for a, _ in left:
                     for b, _ in right:
                         edges.append({"from": a, "to": b, **({"label": label} if label else {})})
+        edges, kept = _ungroup(nodes, edges, groups, member)
         for ident in decisions & set(nodes):
             nodes[ident]["role"] = "decision"
         has_in = {e["to"] for e in edges}
@@ -296,7 +313,55 @@ def mermaid_spec(body: str) -> dict | None:
                 nodes[ident]["role"] = "entry"
     if not nodes:
         return None
-    return {"nodes": list(nodes.values()), "edges": edges}
+    spec = {"nodes": list(nodes.values()), "edges": edges}
+    if not _STATE_HEAD.match(text) and kept:
+        spec["groups"] = kept
+    return spec
+
+
+def _ungroup(nodes: dict[str, dict], edges: list[dict], groups: dict[str, str], member: dict[str, str]
+             ) -> tuple[list[dict], list[dict]]:
+    """Mermaid subgraphs on a map, which draws no boxes: an arrow into a subgraph goes to each of its parts
+    that nothing inside it leads to, and one out of it leaves each part that leads nowhere inside it (the
+    innermost subgraph first), so no part is cut off and none is made up from the subgraph's id. Each part
+    says which subgraph it is in under its label, and the subgraphs are kept (`groups`, with their parts) so
+    a verb can name one. A subgraph with no parts stays one part, named by its label."""
+    inside: dict[str, list[str]] = {g: [] for g in groups}
+    for ident in nodes:
+        if ident in groups:
+            continue
+        g = member.get(ident)
+        while g is not None:
+            inside[g].append(ident)
+            g = member.get(g)
+    def depth(g: str) -> int:
+        n = 0
+        while g in member:
+            g, n = member[g], n + 1
+        return n
+
+    for g in sorted(groups, key=depth, reverse=True):
+        parts = inside[g]
+        if not parts:
+            node = nodes.setdefault(g, {"id": g, "role": "code", "label": groups[g]})
+            if node["label"] == g:
+                node["label"] = groups[g]
+            continue
+        nodes.pop(g, None)
+        within = [e for e in edges if e["from"] in parts and e["to"] in parts]
+        heads = [p for p in parts if not any(e["to"] == p for e in within)] or parts[:1]
+        tails = [p for p in parts if not any(e["from"] == p for e in within)] or parts[-1:]
+        out: list[dict] = []
+        for e in edges:
+            for a in (tails if e["from"] == g else [e["from"]]):
+                for b in (heads if e["to"] == g else [e["to"]]):
+                    out.append({**e, "from": a, "to": b})
+        edges = out
+    for ident, g in member.items():
+        if ident in nodes and ident not in groups and "sub" not in nodes[ident]:
+            nodes[ident]["sub"] = "in " + groups[g]
+    kept = [{"id": g, "label": groups[g], "nodes": inside[g]} for g in groups if inside[g]]
+    return edges, kept
 
 
 def flowchart_model(body: str) -> SceneModel | None:
@@ -439,8 +504,10 @@ def sequence_model(spec: dict) -> SceneModel:
 
 
 def flowchart_spec_model(spec: dict) -> SceneModel:
-    """A flowchart spec: its nodes in order; its edges follow their ends."""
+    """A flowchart spec: its nodes in order; its edges follow their ends. A group (a Mermaid subgraph, which
+    the map draws no box for) is a key that brings and lights its nodes."""
     nodes = [f"node:{n['id']}" for n in spec["nodes"]]
+    groups = [g for g in spec.get("groups") or [] if g.get("id")]
     seen: dict[tuple[str, str], int] = {}
     edge_map: dict[tuple[str, str], list[str]] = {}
     up: dict[str, list[str]] = {}
@@ -455,7 +522,12 @@ def flowchart_spec_model(spec: dict) -> SceneModel:
         for text in (n.get("label"), n.get("method"), n.get("ref")):
             if text:
                 names.setdefault(fold(str(text)), f"node:{n['id']}")
-    return SceneModel("flowchart", nodes + list(up), order=nodes, up=up, names=names, edges=edge_map, can_hide=True)
+    down = {f"group:{g['id']}": [f"node:{i}" for i in g.get("nodes") or [] if f"node:{i}" in nodes] for g in groups}
+    for g in groups:
+        if g.get("label"):
+            names.setdefault(fold(str(g["label"])), f"group:{g['id']}")
+    return SceneModel("flowchart", list(down) + nodes + list(up), order=nodes, up=up, down=down, names=names,
+                      edges=edge_map, can_hide=True)
 
 
 ENTITY_PREFIXES = {"sequence": ("step:", "actor:")}

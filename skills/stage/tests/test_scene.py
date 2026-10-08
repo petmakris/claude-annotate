@@ -291,6 +291,31 @@ def test_a_mermaid_label_becomes_the_words_it_shows_not_its_markup():
     assert states["edges"] == [{"from": "A", "to": "B", "label": "go & see"}]
 
 
+HEAR_PATH = ("graph LR; subgraph speech [Azure speech]\n stt[Speech to text] --> tts[Text to speech]\n end\n"
+             " page[Call page] --> speech; speech --> claude[Claude session]")
+
+
+def test_a_mermaid_subgraph_on_a_map_joins_its_parts_and_names_them_rather_than_making_up_a_part():
+    from skills.stage import scene as sc
+    spec = sc.mermaid_spec(HEAR_PATH)
+    assert [(n["id"], n["label"], n["role"], n.get("sub")) for n in spec["nodes"]] == [
+        ("stt", "Speech to text", "code", "in Azure speech"), ("tts", "Text to speech", "code", "in Azure speech"),
+        ("page", "Call page", "entry", None), ("claude", "Claude session", "code", None)]
+    assert [(e["from"], e["to"]) for e in spec["edges"]] == [("stt", "tts"), ("page", "stt"), ("tts", "claude")]
+    assert spec["groups"] == [{"id": "speech", "label": "Azure speech", "nodes": ["stt", "tts"]}]
+    # nested: an arrow into the outer box reaches each part nothing inside leads to; an empty box stays a part
+    nested = sc.mermaid_spec("graph TD\n subgraph outer [Outer]\n subgraph inner [Inner]\n a --> b\n end\n c\n end\n"
+                             " x --> outer\n inner --> y\n subgraph later [Not built]\n end\n y --> later")
+    assert [(e["from"], e["to"]) for e in nested["edges"]] == [("a", "b"), ("x", "a"), ("x", "c"), ("b", "y"), ("y", "later")]
+    assert [(n["id"], n["label"]) for n in nested["nodes"]][-1] == ("later", "Not built")
+    # a verb names the subgraph by its id or its label, and it brings and lights its parts
+    model = sc.flowchart_spec_model(spec)
+    assert sc.resolve(model, "speech", "T") == (["group:speech"], None) == sc.resolve(model, "Azure speech", "T")
+    built, _ = sc.compile_scene(model, [verbs("+ page"), verbs("+ speech"), verbs("focus speech")], "T")
+    assert built["frames"][2]["show"] == ["group:speech", "node:stt", "node:tts", "node:page", "edge:stt->tts#0", "edge:page->stt#0"]
+    assert built["frames"][3]["focus"] == ["group:speech", "node:stt", "node:tts"]
+
+
 # -- what each frame says is being said (cur) -------------------------------------------------------
 # The boards below are real: the stage demo's (skills/talk/demo.md) and boards from saved calls, with
 # the verbs their tags compiled to.

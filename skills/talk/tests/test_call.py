@@ -956,6 +956,17 @@ def test_a_flowchart_written_in_mermaid_and_a_spec_both_become_maps(tmp_path):
     assert new["kind"] == "flowchart" and talk.stage_view(new)[1]["tool"] == "flowchart"
 
 
+def test_a_mermaid_subgraph_drawn_as_a_map_can_be_pointed_at_and_needs_no_board_line(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply("[[show diagram | Hear path]] graph LR; subgraph speech [Azure speech]\n stt[Speech to text] --> "
+                     "tts[Text to speech]\n end\n page[Call page] --> speech; speech --> claude[Claude session] [[/show]] "
+                     "[[+ page]] The page records. [[point: node speech]] Azure turns it into words. [[+ claude]] Claude answers.")
+    item = call.board.items[0]
+    assert [n["id"] for n in talk.stage_view(item)[1]["spec"]["nodes"]] == ["stt", "tts", "page", "claude"]
+    assert item["scene"]["frames"][2]["focus"] == ["group:speech", "node:stt", "node:tts"]
+    assert call.board.problems == []
+
+
 def test_a_point_lights_a_step_or_a_node_of_a_visual(tmp_path):
     call = _call(tmp_path)
     call.split_reply(f"[[show sequence | Turn]] {SEQ} [[/show]] [[+ s1]] It sends. [[point: step s3]] It answers.")

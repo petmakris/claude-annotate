@@ -200,7 +200,7 @@ def parse_source(raw: str, cwd: Path, stdin_text: str | None = None) -> dict:
     return {"type": "file", "path": path.relative_to(cwd.resolve()).as_posix(), "fragment": fragment or None}
 
 
-_PARTS = {"sequence": "actors, steps, phases, legend", "flowchart": "nodes, edges"}
+_PARTS = {"sequence": "actors, steps, phases, legend", "flowchart": "nodes, edges, groups"}
 
 
 def _plain(tool: str, spec: dict) -> dict:
@@ -231,6 +231,10 @@ def check_flowchart(spec: dict) -> None:
     for e in spec.get("edges") or []:
         if not isinstance(e, dict) or e.get("from") not in ids or e.get("to") not in ids:
             raise flowchart.ValidationError(f"edge {e!r} names a node the spec does not have")
+    for g in spec.get("groups") or []:  # a Mermaid subgraph: no box on the map, a name for its nodes
+        if not isinstance(g.get("id"), str) or not g["id"] or not isinstance(g.get("nodes"), list) \
+                or not all(i in ids for i in g["nodes"]):
+            raise flowchart.ValidationError(f"group {g!r} needs an id and a list of the spec's node ids")
 
 
 def visual_source(tool: str, text: str) -> dict:
