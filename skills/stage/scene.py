@@ -14,9 +14,11 @@ Shared by talk and stage.py; no I/O.
 from __future__ import annotations
 
 import difflib
+import html
 import re
 import unicodedata
 from dataclasses import dataclass, field
+from html.entities import html5
 
 LATER = ("-", "mark", "strike", "callout", "morph")
 AUTO_STEP_OVER = 3
@@ -152,11 +154,36 @@ def _shape_end(s: str, i: int) -> int:
     return j
 
 
+_BR = re.compile(r"<br\s*/?>", re.IGNORECASE)
+_CODE = re.compile(r"#(?:(?P<n>\d+)|(?P<name>[a-zA-Z]\w*));")
+_STRONG = re.compile(r"\*\*(.+?)\*\*|__(.+?)__")
+_EM = re.compile(r"(?<![\w*])[*_](?=\S)(.+?)(?<=\S)[*_](?![\w*])")
+_FIELD = re.compile(r"""\blabel\s*:\s*(?:"(?P<d>(?:[^"\\]|\\.)*)"|'(?P<s>(?:[^'\\]|\\.)*)'|(?P<bare>[^,}]*))""")
+
+
+def _text(raw: str) -> str:
+    """A Mermaid label as the words it shows: a `<br>` is a space (the map wraps a long name itself), an
+    entity code (`#quot;`, `#9829;`) or an HTML entity is its character, and a markdown string ("`...`") is
+    its text without the backticks and the ** and * of its emphasis. Any other `<` or `>` is text, as the
+    stage draws it in a Mermaid diagram."""
+    text = raw.strip()
+    if len(text) >= 2 and text[0] == text[-1] == '"':
+        text = text[1:-1].strip()
+    if len(text) >= 2 and text[0] == text[-1] == "`":
+        text = _EM.sub(r"\1", _STRONG.sub(lambda m: m[1] or m[2], text[1:-1].replace("\n", " ")))
+    text = _BR.sub(" ", text)
+    text = _CODE.sub(lambda m: f"&#{m['n']};" if m["n"] else f"&{m['name']};" if m["name"] + ";" in html5 else m[0], text)
+    return re.sub(r"\s+", " ", html.unescape(text)).strip()
+
+
 def _label(shape: str) -> str:
     inner = shape.strip()
+    if inner.startswith("@{"):  # Mermaid 11's `id@{ shape: rect, label: "Store" }`: its label field, or none
+        m = _FIELD.search(inner)
+        return _text(m["d"] if m["d"] is not None else m["s"] if m["s"] is not None else m["bare"]) if m else ""
     while len(inner) >= 2 and inner[0] in "[({>/\\" and inner[-1] in "])}/\\":
         inner = inner[1:-1].strip()
-    return inner.strip('"').strip()
+    return _text(inner)
 
 
 def _node_group(s: str, i: int) -> tuple[list[tuple[str, str]], int]:
@@ -185,7 +212,7 @@ def _subgraph(rest: str) -> tuple[str, str]:
     m = _ID.match(rest)
     if m and (m.end() == len(rest) or rest[m.end()] in " \t["):
         return m.group(), _label(rest[m.end():]) or m.group()
-    title = rest.strip().strip('"')
+    title = _text(rest)
     return title, title
 
 
@@ -197,7 +224,8 @@ _STATE_DESC = re.compile(r"(?P<id>[\w.-]+)\s*:\s*(?P<label>.+)\Z")
 
 def mermaid_spec(body: str) -> dict | None:
     """A Mermaid graph, flowchart or state diagram as a flowchart spec, for the stage to draw as its map;
-    None for any other kind of Mermaid. Subgraphs are flattened; `{...}` shapes are decisions; in a state
+    None for any other kind of Mermaid. Every label is the words it shows (`_text`, no markup); subgraphs are
+    flattened; `{...}` shapes are decisions; in a state
     diagram `[*] --> X` makes X where it starts and `X --> [*]` makes X an end."""
     text = "\n".join(ln for ln in body.splitlines() if not ln.strip().startswith("%%")).strip()
     nodes: dict[str, dict] = {}
@@ -216,7 +244,7 @@ def mermaid_spec(body: str) -> dict | None:
             if not st or _SKIP.match(st) or st in ("{", "}") or st.lower().startswith(("note", "end note")):
                 continue
             if m := _STATE_AS.match(st):
-                node(m["id"], m["label"].strip())
+                node(m["id"], _text(m["label"]))
             elif m := _STATE_EDGE.match(st):
                 a, b = m["a"], m["b"]
                 if a == "[*]" and b != "[*]":
@@ -225,9 +253,9 @@ def mermaid_spec(body: str) -> dict | None:
                     ends.add(a); node(a)
                 elif a != "[*]":
                     node(a); node(b)
-                    edges.append({"from": a, "to": b, **({"label": m["label"].strip()} if m["label"] else {})})
+                    edges.append({"from": a, "to": b, **({"label": _text(m["label"])} if m["label"] else {})})
             elif m := _STATE_DESC.match(st):
-                node(m["id"])["sub"] = m["label"].strip()
+                node(m["id"])["sub"] = _text(m["label"])
         for ident in starts:
             nodes[ident]["role"] = "entry"
         for ident in ends - starts:
@@ -253,7 +281,7 @@ def mermaid_spec(body: str) -> dict | None:
                 link = _LINK.match(st, i)
                 if not link or link.end() == i:
                     break
-                labels.append((link["text"] or link["label"] or "").strip().strip('"'))
+                labels.append(_text(link["text"] or link["label"] or ""))
                 i = link.end()
             for (left, right), label in zip(zip(chain, chain[1:]), labels):
                 for a, _ in left:

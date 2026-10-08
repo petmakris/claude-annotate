@@ -278,6 +278,19 @@ def test_mermaid_graphs_and_state_diagrams_become_map_specs():
     assert sc.mermaid_spec("sequenceDiagram\n  A->>B: hi") is None
 
 
+def test_a_mermaid_label_becomes_the_words_it_shows_not_its_markup():
+    from skills.stage import scene as sc
+    graph = sc.mermaid_spec('graph LR\n  a[first<br/>second] --> b@{ shape: rect, label: "Store" }\n'
+                            '  b --> c["a #quot;quoted#quot; word"]\n  c --> d["`**bold** text`"]\n'
+                            '  d -->|"yes<br>no &amp; #35;1"| e@{ shape: circle }\n  e --> f["List<String> R&D"]')
+    assert [(n["id"], n["label"]) for n in graph["nodes"]] == [
+        ("a", "first second"), ("b", "Store"), ("c", 'a "quoted" word'), ("d", "bold text"), ("e", "e"), ("f", "List<String> R&D")]
+    assert [e.get("label") for e in graph["edges"]] == [None, None, None, "yes no & #1", None]
+    states = sc.mermaid_spec('stateDiagram-v2\n  [*] --> A\n  state "Wait<br/>here" as A\n  A --> B: go #amp; see\n  B: does #quot;x#quot;')
+    assert states["nodes"] == [{"id": "A", "role": "entry", "label": "Wait here"}, {"id": "B", "role": "code", "label": "B", "sub": 'does "x"'}]
+    assert states["edges"] == [{"from": "A", "to": "B", "label": "go & see"}]
+
+
 # -- what each frame says is being said (cur) -------------------------------------------------------
 # The boards below are real: the stage demo's (skills/talk/demo.md) and boards from saved calls, with
 # the verbs their tags compiled to.
