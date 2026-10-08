@@ -1983,6 +1983,16 @@ def test_a_map_keeps_every_card_label_and_head_clear_of_the_others_and_on_the_bo
         assert faults == {}
         box = pane.locator(".map")
         assert (box.get_attribute("data-layout"), "m-ring" in box.get_attribute("class")) == (layout, layout == "ring")
+        # each card shows its part's label, and a resize there and back, made while a card is said, puts every
+        # card back where it was
+        assert pane.locator(".m-node > b").all_inner_texts() == [n.get("label") or n["id"] for n in spec["nodes"]]
+        _show_frame(page, send, "m", built["rest"] - 1)
+        cards = "(pane) => [...pane.querySelectorAll('.m-node')].map((e) => { const r = e.getBoundingClientRect(); return [r.x, r.y].map(Math.round); })"
+        here = pane.evaluate(cards)
+        for width in (size[0] - 200, size[0]):
+            page.set_viewport_size({"width": width, "height": size[1]})
+            _settled(page)
+        assert pane.evaluate(cards) == here
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
@@ -2000,8 +2010,11 @@ def test_a_map_taller_than_its_board_keeps_the_card_being_said_in_view_above_the
         for n in (1, 6, 12):
             _show_frame(page, send, "m", n, True)
             seen.append(pane.evaluate("""(pane) => { const b = pane.querySelector('.pbody'), r = pane.querySelector('.m-node.m-cur').getBoundingClientRect(),
-                at = b.getBoundingClientRect(); return [r.top >= at.top && r.bottom <= at.bottom - 210, b.scrollTop > 0]; }"""))
-        assert seen == [[True, False], [True, True], [True, True]]  # the first is in view unscrolled; the rest scroll to it
+                at = b.getBoundingClientRect(); return [r.top >= at.top && r.bottom <= at.bottom - 210, b.scrollTop > 0,
+                Math.round(r.top + r.height / 2 - (at.top + (at.height - 210) / 2))]; }"""))
+        # the first is in view unscrolled, at the top; the middle one is centred in the board above the subtitles'
+        # 210px; the last stops where the map ends, below that middle
+        assert seen == [[True, False, -245], [True, True, 0], [True, True, 229]]
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
@@ -2117,6 +2130,17 @@ def test_the_lanes_keep_every_chip_label_and_note_clear_through_a_resize(spec, t
             got = pane.evaluate(LANES_FAULTS)
             if got:
                 faults[width] = got
+        # resized while most steps are hidden, each step is laid out for the new size as it arrives
+        page.set_viewport_size({"width": 1300, "height": 844})
+        _settled(page)
+        _show_frame(page, send, "l", 1)
+        page.set_viewport_size({"width": 390, "height": 844})
+        _settled(page)
+        for n in range(2, built["rest"] + 1):
+            _show_frame(page, send, "l", n, True)
+            got = pane.evaluate(LANES_FAULTS)
+            if got:
+                faults[n] = got
         assert faults == {}
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])

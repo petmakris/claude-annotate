@@ -328,6 +328,9 @@ def test_a_mermaid_subgraph_on_a_map_joins_its_parts_and_names_them_rather_than_
     nested = sc.mermaid_spec("graph TD\n subgraph outer [Outer]\n subgraph inner [Inner]\n a --> b\n end\n c\n end\n"
                              " x --> outer\n inner --> y\n subgraph later [Not built]\n end\n y --> later")
     assert [(e["from"], e["to"]) for e in nested["edges"]] == [("a", "b"), ("x", "a"), ("x", "c"), ("b", "y"), ("y", "later")]
+    # only the box's own arrows decide where an arrow into the box lands: one from outside to a part does not
+    side = sc.mermaid_spec("graph LR\n subgraph s [Pair]\n a\n b\n end\n x --> a\n w --> s")
+    assert [(e["from"], e["to"]) for e in side["edges"]] == [("x", "a"), ("w", "a"), ("w", "b")]
     assert [(n["id"], n["label"]) for n in nested["nodes"]][-1] == ("later", "Not built")
     # a verb names the subgraph by its id or its label, and it brings and lights its parts
     model = sc.flowchart_spec_model(spec)
@@ -483,13 +486,18 @@ def test_a_change_board_keys_its_removed_lines_and_a_range_takes_the_ones_inside
 SCENE_JS = Path(__file__).resolve().parents[1] / "static" / "scene.js"
 
 
-def _being_said(scene_, frames):
-    """What the page's scene.js draws as being said in each of `frames`, run under node."""
-    js = (f"import {{ beingSaid }} from {json.dumps(SCENE_JS.as_uri())};\n"
+def _scene_js(expr, scene_):
+    """`expr` over `s`, the scene, with the page's scene.js imported, run under node."""
+    js = (f"import * as S from {json.dumps(SCENE_JS.as_uri())};\n"
           f"const s = {json.dumps(scene_)};\n"
-          f"process.stdout.write(JSON.stringify({json.dumps(frames)}.map((n) => beingSaid(s, n))));")
+          f"process.stdout.write(JSON.stringify({expr}));")
     out = subprocess.run(["node", "--input-type=module", "-e", js], capture_output=True, text=True, check=True)
     return json.loads(out.stdout)
+
+
+def _being_said(scene_, frames):
+    """What the page's scene.js draws as being said in each of `frames`."""
+    return _scene_js(f"{json.dumps(frames)}.map((n) => S.beingSaid(s, n))", scene_)
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
@@ -509,3 +517,14 @@ def test_a_word_names_a_part_by_any_form_of_it_but_not_by_a_word_it_merely_start
     same = [("share", "sharing"), ("sends", "send"), ("implement", "implementation"), ("queue", "queued"),
             ("list", "last"), ("stage", "stack"), ("cat", "category")]
     assert [scene._same(a, b) for a, b in same] == [True, True, True, True, False, False, False]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_a_saved_scene_lights_an_arrow_between_ids_that_hold_an_arrow_once_both_its_ends_show():
+    # the edge from "a->b" to "c": its first split names a part ("a") but not the other end ("b->c")
+    keys = ["node:a", "node:a->b", "node:c", "edge:a->b->c#0"]
+    saved = {"kind": "flowchart", "keys": keys, "steps": 2, "rest": 3, "start": "empty",
+             "frames": [{"show": [], "focus": []}, {"show": ["node:a->b"], "focus": []},
+                        {"show": ["node:a->b", "node:c"], "focus": []}, {"show": keys, "focus": []}]}
+    assert _scene_js("S.settled(s).frames.map((f) => f.show)", saved) == [
+        [], ["node:a->b"], ["node:a->b", "node:c", "edge:a->b->c#0"], keys]
