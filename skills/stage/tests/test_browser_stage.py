@@ -1736,3 +1736,47 @@ def test_a_map_shows_no_title_over_its_ghosts_before_the_first_sentence(tmp_path
         assert (ghosts, pane.locator(".k-card").count()) == (["node:P", "node:Q", "node:S"], 0)
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+def _each_part_said(spec, title):
+    model = scene.flowchart_spec_model(spec)
+    return _scene(model, [[f"+ {k[5:]}"] for k in model.order], title)
+
+
+DRAWS = """() => { window.__dots = 0; window.__draws = 0;
+  document.addEventListener('animationstart', (e) => { if (e.animationName === 'm-draw') window.__draws++; }, true);
+  new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.classList && n.classList.contains('m-dot')) window.__dots++; })
+    .observe(document.body, { subtree: true, childList: true }); }"""
+
+
+def test_an_arriving_arrow_draws_in_with_its_dot_on_a_step_forward_only(tmp_path, wc_config, browser):
+    built = _each_part_said(LIVE_SPEC, "Live mode's states")
+    res = stage.show(str(tmp_path), "live", _visual("flowchart", LIVE_SPEC), title="Live mode's states", extra={"scene": built})
+    try:
+        page, frame, send = _embedded(browser, res["url"], width=1300)
+        pane = frame.locator('section.pane[data-view="live"]')
+        pane.locator(".m-node").first.wait_for(state="attached", timeout=5000)
+        stage_frame = next(f for f in page.frames if f is not page.main_frame)
+        stage_frame.evaluate(DRAWS)
+        counts = lambda: (page.wait_for_timeout(150), stage_frame.evaluate("[window.__dots, window.__draws]"))[1]  # noqa: E731
+        seen = []
+        for n in range(4):  # listening, hearing, sending: an arrow arrives into each of the last two
+            _show_frame(page, send, "live", n, n > 0)
+        seen.append(counts())
+        pane.locator(".stepback").click()  # Back to hearing
+        _until_frame(page, "live", 2)
+        seen.append(counts())
+        send({"type": "stage:follow", "on": True})
+        send({"type": "stage:state", "front": "live", "frames": {"live": 3}})  # a seek to sending
+        _until_frame(page, "live", 3)
+        seen.append(counts())
+        send({"type": "stage:frame", "view": "live", "n": 3, "animate": True})  # sending again
+        seen.append(counts())
+        pane.locator(".stepnext").click()  # on to working: its arrow arrives
+        _until_frame(page, "live", 4)
+        seen.append(counts())
+        # [dots, arrows drawing in]: three arrows arrive by sending, the dot runs on the two into the card said
+        assert seen == [[2, 3], [2, 3], [2, 3], [2, 3], [3, 4]]
+        assert pane.locator(".m-edge.m-cur").evaluate_all("gs => gs.map(g => g.dataset.key)") == ["edge:sending->working#0"]
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])

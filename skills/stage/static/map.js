@@ -1,7 +1,7 @@
 // The map: a flowchart drawn by the stage itself, for a talk call. The whole map is there from the
 // start as faint dashed ghosts, so the reader sees the size of what is coming; the voice lights it
-// part by part. The part being said is a large card with its detail; every arrow that arrives draws
-// in, and a dot travels along the one into that card.
+// part by part. The part being said is a large card with its detail; every arrow that arrives on a step
+// forward draws in, and a dot travels along the one into that card.
 //
 // The scene engine (scene.js) shows and lights the keys (`node:<id>`, `edge:<a>-><b>#<n>`); on this
 // board a key not shown yet is a ghost rather than hidden (stage.css), and after each frame
@@ -187,9 +187,11 @@ function place(box) {
   });
 }
 
-// After a frame: the part being said and the arrow into it, as the frame names them (beingSaid). Every
-// arrow that arrived with the frame draws in; the dot travels only along the one being said.
-export function layoutMap(box, scene, n) {
+// After a frame: the part being said and the arrow into it, as the frame names them (beingSaid). On a step
+// forward (`stepped`: the frame before this one was the one on the board), every arrow that arrived with
+// the frame draws in and the dot travels along the one being said; Back, a jump and a repaint draw the
+// same picture still.
+export function layoutMap(box, scene, n, stepped = false) {
   const st = box._map;
   if (!st) return;
   const said = scene && n != null ? beingSaid(scene, n) : [];
@@ -199,16 +201,16 @@ export function layoutMap(box, scene, n) {
   const named = said.filter((k) => k.startsWith("edge:")), id = node && node.slice(5);
   const edge = named.find((k) => node && k.endsWith("->" + id + k.slice(k.lastIndexOf("#"))))
     || named.find((k) => node && k.startsWith("edge:" + id + "->")) || named.pop() || null;
-  const frame = scene && n != null ? scene.frames[Math.max(0, Math.min(n, scene.frames.length - 1))] : null;
-  const before = frame && n > 0 ? new Set(scene.frames[Math.min(n, scene.frames.length - 1) - 1].show) : null;
-  const arrived = new Set(before ? frame.show.filter((k) => k.startsWith("edge:") && !before.has(k)) : []);
+  const last = scene ? Math.min(n ?? 0, scene.frames.length - 1) : 0;
+  const before = stepped && last > 0 ? new Set(scene.frames[last - 1].show) : null;
+  const arrived = new Set(before ? scene.frames[last].show.filter((k) => k.startsWith("edge:") && !before.has(k)) : []);
   for (const el of box.querySelectorAll(".m-node")) el.classList.toggle("m-cur", el.dataset.key === node);
   for (const g of box.querySelectorAll(".m-edge")) {
     const key = g.dataset.key, on = key === edge;
     g.classList.toggle("m-cur", on);
     g.querySelector(".m-dot")?.remove();
-    if (!arrived.has(key) || (st.drawn && st.drawn.has(key))) continue;
     const line = g.querySelector(".m-line");
+    if (!arrived.has(key)) { line.classList.remove("m-draw"); continue; }
     line.classList.remove("m-draw"); void line.getBBox(); line.classList.add("m-draw");
     line.addEventListener("animationend", () => line.classList.remove("m-draw"), { once: true });
     line.style.setProperty("--len", Math.ceil(line.getTotalLength ? line.getTotalLength() : 600));
@@ -220,7 +222,6 @@ export function layoutMap(box, scene, n) {
       dot.firstElementChild.beginElement();
     }
   }
-  st.drawn = arrived;
 }
 
 // A map with loops (a state machine) is a ring: the states round an ellipse in the order the flow reaches

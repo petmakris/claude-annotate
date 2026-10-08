@@ -1208,7 +1208,7 @@ function paintFrame(v, box, animate = false) {
   const done = applyFrame(scene, box, n, animate && v.applied === n - 1 ? v.applied : null);
   if (!done) return;
   if (box.classList.contains("lanes")) { layoutLanes(box, scene, n); done.focused = null; }  // lanes scroll themselves
-  if (box.classList.contains("map")) { layoutMap(box, scene, n); done.focused = null; }  // the map is placed to fit
+  if (box.classList.contains("map")) { layoutMap(box, scene, n, animate && v.applied === n - 1); done.focused = null; }  // the map is placed to fit
   if (box.classList.contains("grid")) {
     const cur = new Set(beingSaid(scene, n).filter((k) => k.startsWith("row#")));
     for (const tr of box.querySelectorAll("tbody tr")) tr.classList.toggle("g-cur", cur.has(tr.dataset.key));
