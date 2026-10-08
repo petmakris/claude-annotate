@@ -1428,8 +1428,8 @@ def test_the_lanes_never_dim_the_step_being_said_and_an_actor_pointed_at_lights_
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
 
-def test_a_table_draws_no_row_as_being_said_before_one_is_pointed_at(tmp_path, wc_config, browser):
-    now = _scene(TIMELINE, [["focus row 1"], ["focus row 3"]], "Timeline, simply")
+def test_a_table_draws_no_row_as_being_said_before_one_is_pointed_at_and_a_range_of_rows_together(tmp_path, wc_config, browser):
+    now = _scene(TIMELINE, [["focus rows 1-2"], ["focus row 3"]], "Timeline, simply")
     then = _saved_before_cur(_scene(TIMELINE, [[f"focus row {n}"] for n in range(1, 6)], "Timeline, simply"))
     engines = _scene(ENGINES_MODEL, [["next", 'focus cell "Speed" / "Azure"'], ["next"]], "Two speech engines")
     res = stage.show(str(tmp_path), "now", TIMELINE_BODY, title="Timeline, simply", extra={"scene": now})
@@ -1453,7 +1453,7 @@ def test_a_table_draws_no_row_as_being_said_before_one_is_pointed_at(tmp_path, w
         send({"type": "stage:state", "front": "now", "frames": {"now": 1}})
         _until_frame(page, "now", 1)
         page.wait_for_timeout(450)
-        assert {k: r["size"] for k, r in size(pane).items() if r["cur"]} == {"row#1": "21px"}
+        assert {k: r["size"] for k, r in size(pane).items() if r["cur"]} == {"row#1": "21px", "row#2": "21px"}
         pane = frame.locator('section.pane[data-view="eng"]')
         send({"type": "stage:state", "front": "eng", "frames": {"eng": 1}})
         pane.locator("tbody tr").first.wait_for(state="attached", timeout=5000)

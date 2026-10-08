@@ -596,10 +596,10 @@ def cut_words(text: str, limit: int) -> str:
 _POINT_HEAD = re.compile(r"point(?![a-z0-9])\s*(?P<rest>.*)\Z", re.IGNORECASE | re.DOTALL)
 _POINT_TARGET = re.compile(
     r"(?:(?P<line>lines?)\s+(?P<a>\d+)(?:\s*[-–]\s*(?P<b>\d+))?"
-    r"|rows?\s+(?:(?P<n>\d+)|\"(?P<text>[^\"]+)\"|“(?P<curly>[^”]+)”|'(?P<single>[^']+)')"
+    r"|rows?\s+(?:(?P<n>\d+)(?:\s*[-–]\s*(?P<n2>\d+))?|\"(?P<text>[^\"]+)\"|“(?P<curly>[^”]+)”|'(?P<single>[^']+)')"
     r"|cells?\s+(?P<cell>[^\[\]]+?/[^\[\]]+?)"
     r"|nodes?\s+(?P<node>[^\s:\[\]][^:\[\]]*?)|steps?\s+(?P<step>[^\s:\[\]][^:\[\]]*?))\s*\Z", re.IGNORECASE)
-POINT_FORMS = 'expected line N, lines A-B, row N, row "text", cell "row" / "column", node ID or step ID'
+POINT_FORMS = 'expected line N, lines A-B, row N, rows A-B, row "text", cell "row" / "column", node ID or step ID'
 
 
 def parse_point(marker: str) -> tuple[str, str] | None:
@@ -970,7 +970,7 @@ class Board:
             self.point_visual(item, name, m)
             return
         use = {"code": "line N or lines A-B", "change": "line N or lines A-B (new line numbers)",
-               "table": 'row N, row "text" or cell "row" / "column"', "diagram": "node ID"}[kind]
+               "table": 'row N, rows A-B, row "text" or cell "row" / "column"', "diagram": "node ID"}[kind]
         if m["step"]:
             self.problem(f'point not shown: "{name}" is a {kind}; use {use}')
             return
@@ -1009,11 +1009,12 @@ class Board:
         elif kind == "table":
             cells = table_first_cells(item["body"])
             if m["n"]:
-                n = int(m["n"])
-                if not 1 <= n <= len(cells):
-                    self.problem(f'point not shown: "{name}" has {len(cells)} rows, not row {n}')
+                a, b = sorted((int(m["n"]), int(m["n2"] or m["n"])))
+                if not 1 <= a <= b <= len(cells):
+                    said = f"row {a}" if a == b else f"rows {a}-{b}"
+                    self.problem(f'point not shown: "{name}" has {len(cells)} rows, not {said}')
                     return
-                target = {"type": "row", "n": n}
+                target = {"type": "row", "n": a, "b": b}
             else:
                 # Matched as the stage sees the row: by its first cell's text, not its markdown.
                 said = cell_text(row_text)
@@ -1054,7 +1055,7 @@ class Board:
             return [f"line:{n}" for n in range(target["a"], target["b"] + 1)]
         if target["type"] == "row":
             if "n" in target:
-                return [f"row#{target['n']}"]
+                return [f"row#{n}" for n in range(target["n"], target.get("b", target["n"]) + 1)]
             cells = [fold_like_stage(cell_text(c)) for c in table_first_cells(item["body"])]
             return [f"row#{cells.index(fold_like_stage(target['text'])) + 1}"]
         return [target["key"]]

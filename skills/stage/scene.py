@@ -38,7 +38,7 @@ def _column(model: "SceneModel", raw: str) -> int | None:
     return int(hit) if hit else None
 
 
-_ROW = re.compile(r"rows?\s+(?:(?P<n>\d+)|\"(?P<q>[^\"]+)\"|“(?P<c>[^”]+)”|'(?P<s>[^']+)'|(?P<bare>\S.*))",
+_ROW = re.compile(r"rows?\s+(?:(?P<n>\d+)(?:\s*[-–]\s*(?P<n2>\d+))?|\"(?P<q>[^\"]+)\"|“(?P<c>[^”]+)”|'(?P<s>[^']+)'|(?P<bare>\S.*))",
                   re.IGNORECASE)
 _EDGE = re.compile(r"(?P<a>[\w.-]+?)\s*-+>\s*(?P<b>[\w.-]+)")
 
@@ -468,10 +468,12 @@ def resolve(model: SceneModel, raw: str, title: str) -> tuple[list[str], str | N
     if model.kind == "rows":
         m = _ROW.fullmatch(raw)
         if m and m["n"]:
-            key = f"row#{m['n']}"
-            if key in model.keys:
-                return [key], None
-            return [], f'"{title}" has {len(model.keys)} rows, not row {m["n"]}; dropped'
+            a, b = sorted((int(m["n"]), int(m["n2"] or m["n"])))
+            keys = [f"row#{n}" for n in range(a, b + 1)]
+            if all(k in model.keys for k in keys):
+                return keys, None
+            said = f"row {a}" if a == b else f"rows {a}-{b}"
+            return [], f'"{title}" has {len(model.order)} rows, not {said}; dropped'
         text = (m["q"] or m["c"] or m["s"] or m["bare"]) if m else raw
         if fold(text) in model.names:
             return [model.names[fold(text)]], None

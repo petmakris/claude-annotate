@@ -493,7 +493,7 @@ def test_a_point_lights_up_lines_of_the_last_board_and_a_bad_point_is_reported(t
     _, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point Nope: row 1]] There.", code)
     assert problems == ['point not shown: no board titled "Nope" in this call']
     entry, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point: wibble]] There.", code)
-    assert problems == ['point not shown: expected line N, lines A-B, row N, row "text", cell "row" / "column", node ID or step ID']
+    assert problems == ['point not shown: expected line N, lines A-B, row N, rows A-B, row "text", cell "row" / "column", node ID or step ID']
     assert [c["kind"] for c in entry["cues"]] == ["front"] and "wibble" not in entry["text"]
 
 
@@ -510,7 +510,7 @@ def test_points_name_rows_and_nodes_and_a_titled_board(tmp_path):
     _, problems = cues_of(tmp_path, "[[show table | T]]| a |\n|---|\n| 1 |[[/show]] One. [[point: row 4]] No.")
     assert problems == ['point not shown: "T" has 1 rows, not row 4']
     _, problems = cues_of(tmp_path, "[[show table | T]]| a |\n|---|\n| 1 |[[/show]] One. [[point: line 1]] No.")
-    assert problems == ['point not shown: "T" is a table; use row N, row "text" or cell "row" / "column"']
+    assert problems == ['point not shown: "T" is a table; use row N, rows A-B, row "text" or cell "row" / "column"']
 
 
 def test_boards_all_placed_at_the_end_are_reported(tmp_path):
@@ -1118,3 +1118,15 @@ def test_a_board_tag_on_its_own_line_fires_its_first_frame_on_the_first_word_aft
         (1, "I read the", ["row#1"]), (2, "Two general principles", ["row#2"]), (3, "The first is:", ["row#3"]),
         (4, "The second is:", ["row#4", "row#5"])]
     assert stage_rule_breaks(call, shown) == []
+
+
+def test_a_point_takes_a_range_of_rows(tmp_path):
+    from helpers import make_args, stage_rule_breaks
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    shown = call.split_reply(FIVE_COMMENTS)
+    assert call.board.problems == []
+    assert _frames_said(call, shown) == [(1, "The first is:", [], ["row#1", "row#2"]),
+                                         (2, "The second is:", [], ["row#3", "row#4", "row#5"])]
+    assert stage_rule_breaks(call, shown) == []
+    _, problems = cues_of(tmp_path, "[[show table | T]]| a |\n|---|\n| 1 |\n| 2 |[[/show]] One. [[point: rows 2-3]] No.")
+    assert problems == ['point not shown: "T" has 2 rows, not rows 2-3']

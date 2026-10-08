@@ -376,3 +376,10 @@ def test_a_point_is_the_reveal_for_its_sentence_and_parts_named_nowhere_ride_wit
     # sentence left after them, comes in with them (before them, so they are what is said)
     plan, later = scene.auto_steps(m, said[:3], {2: ["step:s3"]})
     assert plan == {1: [["step:s1"]], 2: [["step:s4"], ["step:s2", "step:s3"]]} and later == ["step:s1", "step:s4"]
+
+
+def test_rows_take_a_range_as_lines_do():
+    assert scene.resolve(TIMELINE, "rows 2-4", "T") == (["row#2", "row#3", "row#4"], None)
+    assert scene.resolve(TIMELINE, "rows 4-6", "T") == ([], '"T" has 5 rows, not rows 4-6; dropped')
+    built, _ = scene.compile_scene(TIMELINE, [verbs("focus rows 1-2")], "T")
+    assert built["frames"][1]["focus"][:2] == ["row#1", "row#2"] and _cur(built)[1] == ["row#1", "row#2"]
