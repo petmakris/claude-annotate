@@ -35,8 +35,7 @@ def _column(model: "SceneModel", raw: str) -> int | None:
     text = raw.strip().strip("\"'“”‘’").strip()
     if text.isdigit():
         return int(text)
-    hit = model.names.get("col:" + fold(text))
-    return int(hit) if hit else None
+    return model.columns.get(fold(text))
 
 
 _ROW = re.compile(r"rows?\s+(?:(?P<n>\d+)(?:\s*[-–]\s*(?P<n2>\d+))?|\"(?P<q>[^\"]+)\"|“(?P<c>[^”]+)”|'(?P<s>[^']+)'|(?P<bare>\S.*))",
@@ -63,6 +62,7 @@ class SceneModel:
     names: dict[str, str] = field(default_factory=dict)
     edges: dict[tuple[str, str], list[str]] = field(default_factory=dict)
     can_hide: bool = False
+    columns: dict[str, int] = field(default_factory=dict)  # a table's columns by header, apart from its parts' names
 
 
 def fold(text: str) -> str:
@@ -83,22 +83,25 @@ def change_model(hunks: list[dict]) -> SceneModel:
 def rows_model(cells: list[str], header: list[str] | None = None) -> SceneModel:
     """A table's rows, named by their first cell. With its header, every cell is a key too
     (`cell#<row>.<column>`, both counted from 1), so one cell can be the one being said; a cell
-    brings its row, and a column is named by its header (kept in `names` as `col:<header>`)."""
+    brings its row, and a column is named by its header (kept in `columns`, never among the parts' names, so
+    a row named in words never matches a column)."""
     keys = [f"row#{i}" for i in range(1, len(cells) + 1)]
     names: dict[str, str] = {}
     for key, cell in zip(keys, cells):
         names.setdefault(fold(cell), key)
     up: dict[str, list[str]] = {}
     cols = len(header or [])
+    columns: dict[str, int] = {}
     for c, head in enumerate(header or [], 1):
         if fold(head):
-            names.setdefault("col:" + fold(head), str(c))
+            columns.setdefault(fold(head), c)
     down: dict[str, list[str]] = {}
     for r in range(1, len(cells) + 1):
         for c in range(1, cols + 1):
             up[f"cell#{r}.{c}"] = [f"row#{r}"]
             down.setdefault(f"row#{r}", []).append(f"cell#{r}.{c}")  # a row shown shows its cells
-    return SceneModel("rows", keys + list(up), order=list(keys), up=up, down=down, names=names, can_hide=True)
+    return SceneModel("rows", keys + list(up), order=list(keys), up=up, down=down, names=names, can_hide=True,
+                      columns=columns)
 
 
 _HEADER = re.compile(r"\A\s*(?:graph|flowchart)\b(?:[ \t]+(?:TB|TD|BT|RL|LR)\b)?", re.IGNORECASE)
@@ -584,7 +587,7 @@ def part_names(model: SceneModel) -> dict[str, list[list[str]]]:
     """Each part's names as words: its labels (and a node's ref or method), and an id that is a word."""
     out: dict[str, list[list[str]]] = {}
     for name, key in model.names.items():
-        if not name.startswith("col:") and _words(name):
+        if _words(name):
             out.setdefault(key, []).append(_words(name))
     for key in model.order:
         ident = key.split(":", 1)[1] if key.startswith(("node:", "step:", "group:")) else ""

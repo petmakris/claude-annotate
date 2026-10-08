@@ -105,6 +105,14 @@ def test_a_target_that_names_nothing_exactly_is_repaired_and_said():
     assert scene.resolve(rows, "row 3", "P") == ([], '"P" has 2 rows, not row 3; dropped')
 
 
+def test_a_row_named_in_words_never_matches_a_column_header():
+    table = scene.rows_model(["statement", "breach question", "examples"], ["Field", "Description"])
+    assert scene.resolve(table, "row description", "T") == ([], '"row description" in "T" matches nothing; dropped')
+    assert scene.resolve(table, "descriptio", "T") == ([], '"descriptio" in "T" matches nothing; dropped')
+    assert scene.resolve(table, "row example", "T") == (["row#3"], '"row example" in "T" read as row#3')
+    assert scene.resolve(table, "cell examples / Description", "T") == (["cell#3.2"], None)  # a header still names its column
+
+
 WORKED = [["+ pws"], ["+ pws->wf"], ["+ wf->engine"], ["focus pws->wf"], ["focus none"],
           ["+ legacy, pws->legacy", "focus legacy"]]
 
