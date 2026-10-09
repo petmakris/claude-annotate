@@ -1870,6 +1870,8 @@ MAP_FAULTS = """(pane) => {
   for (const g of pane.querySelectorAll('.m-edge')) {
     const d = g.querySelector('.m-line').getAttribute('d') || '';  // every arrow has a path, a loop to itself too
     if (!d || /NaN|undefined/.test(d)) out.push(['arrow not drawn', g.dataset.key]);
+    const lr = g.querySelector('.m-line').getBoundingClientRect();
+    if (d && (lr.left < pb.left - 1 || lr.right > pb.right + 1)) out.push(['arrow off the board', g.dataset.key]);
     const [from, to] = g.dataset.key.slice(5).replace(/#\\d+$/, '').split('->');
     if (from === to && d && !/NaN/.test(d)) {  // a loop to itself leaves its card and comes back to it
       const line = g.querySelector('.m-line'), m = line.getScreenCTM(), card = nodes.find(([k]) => k === 'node:' + from)[1];
@@ -2166,6 +2168,9 @@ def test_the_lanes_keep_every_chip_label_and_note_clear_through_a_resize(spec, t
         _show_frame(page, send, "l", 1)
         page.set_viewport_size({"width": 390, "height": 844})
         _settled(page)
+        got = pane.evaluate(LANES_FAULTS)  # the step being said grows to its words at the new size too
+        if got:
+            faults["resized at 1"] = got
         for n in range(2, built["rest"] + 1):
             _show_frame(page, send, "l", n, True)
             got = pane.evaluate(LANES_FAULTS)
