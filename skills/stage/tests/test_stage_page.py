@@ -435,3 +435,26 @@ def test_only_a_scene_frame_lights_a_part_and_the_old_point_message_does_nothing
     page.check("[selected('c'), selected('t'), document.querySelectorAll('.spot, .dimmed, .k-focus, .k-dim').length]")
     assert page.run() == [[True, False, 0]]
 
+
+
+DRAWN_SPEC = {"actors": [{"id": "pg", "label": "Call page", "sub": "call.js"}, {"id": "sv", "label": "Talk server"},
+                         {"id": "az", "label": "Azure", "tone": "hot"}],
+              "steps": [{"id": "s1", "from": "pg", "to": "sv", "arrow": "request", "label": "sends the choice", "sub": "POST /api/voice"},
+                        {"id": "s2", "from": "sv", "to": "az", "arrow": "request", "label": "reads the next answer in it"}]}
+DRAWN = ("(n => { const b = pane(n).querySelector('.visual.lanes'), cur = b.querySelector('.ln-row.ln-cur');"
+         " return {subs: b.classList.contains('ln-subs'),"
+         " colours: [...b.querySelectorAll('.ln-chip')].map((c) => c.style.getPropertyValue('--ac')),"
+         " names: [...b.querySelectorAll('.ln-chip')].map((c) => c.textContent),"
+         " bar: cur && [cur.dataset.step, cur.style.getPropertyValue('--rx'), cur.style.getPropertyValue('--rc')]}; })")
+
+
+def test_the_lanes_give_each_actor_its_colour_and_file_and_mark_the_receiver_of_the_step_being_said(tmp_path):
+    m = scene.sequence_model(DRAWN_SPEC)
+    built = _scene(m, [["next"], ["next"]], "Picking a voice")
+    page = StagePage(tmp_path).show("pick", visual("sequence", DRAWN_SPEC), title="Picking a voice", extra={"scene": built}).open()
+    for n in (0, 1, 2):
+        page.send({"type": "stage:frame", "view": "pick", "n": n, "animate": n > 0})
+    page.check(DRAWN + "('pick')")
+    # unmeasured, the board is placed as 900px wide: the columns stand at 72, 450 and 828
+    assert page.run() == [{"subs": True, "colours": ["var(--a1)", "var(--a2)", "var(--t-hot)"],
+                           "names": ["Call pagecall.js", "Talk server", "Azure"], "bar": ["s2", "828px", "var(--t-hot)"]}]

@@ -1,6 +1,6 @@
-// Lanes: a sequence diagram that unfolds with the voice. The actors keep their columns, every arrow
-// carries its own sentence, and the step being said is the large one: its arrow draws in and a dot
-// travels from sender to receiver, while the steps before it fold to one quiet line each.
+// Lanes: a sequence diagram that unfolds with the voice. Each actor is a card in its own colour over its
+// lifeline, every arrow carries its sentence above it and its call under it, and the step being said lies
+// on an accent band: its arrow draws in, a dot travels from sender to receiver, and a bar marks the receiver.
 //
 // The scene engine (scene.js) shows and lights keys as frames go by; this file only draws the keys
 // (`actor:<id>` on the chips, `step:<id>` on the rows) and, after each frame, lays the rows out
@@ -12,10 +12,14 @@ const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const TONES = new Set(["plain", "edge", "internal", "service", "cheap", "hot", "good", "dropped"]);
 const tone = (t) => "t-" + (TONES.has(t) ? t : "plain");
 const MARGIN = 72;    // the columns' least inset from the board's edges, leaving the step numbers room
-const NARROW = 40;    // that inset on a phone, where every pixel of the span goes to the chips
+const NARROW = 52;    // that inset on a phone, where every pixel of the span goes to the chips
 const EDGE = 4;       // nothing comes nearer the board's edge than this
 const GAP = 10;       // between two chips on one line
 const CHIP = 96;      // narrower than this, the chips take two lines, every other one on the lower
+const NOTE_RIGHT = 16;  // a note's inset from the board's right edge
+const BADGE = 38;       // the step numbers' column at the left: no words come nearer the edge than this
+// An actor's colour: its tone's, or the next of six in turn, so neighbours never share one.
+const actorColour = (a, i) => (a.tone && TONES.has(a.tone) && a.tone !== "plain" ? `var(--t-${a.tone})` : `var(--a${(i % 6) + 1})`);
 
 export function renderLanes(box, spec, embedded) {
   const steps = spec.steps || [], actors = spec.actors || [];
@@ -23,12 +27,13 @@ export function renderLanes(box, spec, embedded) {
   box.dataset.room = 24;   // the current step stays this far above the bottom of the board
   const legend = (spec.legend || []).length
     ? `<div class="ln-legend">${spec.legend.map((l) => `<span class="${tone(l.tone)}"><i></i>${esc(l.label)}</span>`).join("")}</div>` : "";
-  box.innerHTML = `<div class="ln-head"><div class="ln-actors">${actors.map((a) =>
-      `<span class="ln-chip ${tone(a.tone)}" data-key="actor:${esc(a.id)}" data-actor="${esc(a.id)}"><i></i><span>${esc(String(a.label || a.id).replace(/\n/g, " "))}</span></span>`).join("")}</div>${legend}</div>
+  box.innerHTML = `<div class="ln-head"><div class="ln-actors">${actors.map((a, i) =>
+      `<span class="ln-chip" style="--ac:${actorColour(a, i)}" data-key="actor:${esc(a.id)}" data-actor="${esc(a.id)}"><span>${esc(String(a.label || a.id).replace(/\n/g, " "))}</span>${a.sub ? `<small>${esc(a.sub)}</small>` : ""}</span>`).join("")}</div>${legend}</div>
     <div class="ln-body">${actors.map((a) => `<div class="ln-life" data-actor="${esc(a.id)}"></div>`).join("")}
     ${steps.map((s, i) => (phases.has(s.id) ? `<div class="ln-phase" data-at="${esc(s.id)}">${esc(phases.get(s.id))}</div>` : "") + row(s, i)).join("")}
     </div>`;
   box._lanes = { spec, cur: null };
+  box.classList.toggle("ln-subs", steps.some((s) => s.sub));  // every row keeps room for a call under its arrow
   box.querySelector(".ln-body").style.paddingBottom = box.dataset.room + "px";
   place(box);
   if (!box._lanesObserved) {
@@ -46,7 +51,7 @@ function row(s, i) {
     : self ? `<div class="ln-loop"></div>`
     : `<div class="ln-arrow"><div class="ln-line"></div><div class="ln-head-tip"></div><div class="ln-dot"></div></div>`;
   return `<div class="ln-row ${tone(s.tone)} ln-${self ? "self" : kind}" data-key="step:${esc(s.id)}" data-step="${esc(s.id)}"
-      data-from="${esc(s.from)}" data-to="${esc(s.to)}">${shape}
+      data-from="${esc(s.from)}" data-to="${esc(s.to)}">${kind === "band" ? "" : `<span class="ln-act"></span>`}${shape}
     <div class="ln-lbl"><b>${esc(s.label)}</b>${s.sub ? `<code>${esc(s.sub)}</code>` : ""}</div>
     ${s.note ? `<span class="ln-note">${esc(s.note)}</span>` : ""}<span class="ln-num">${i + 1}</span></div>`;
 }
@@ -93,6 +98,10 @@ function place(box) {
     r.style.setProperty("--lo", lo + "px");
     r.style.setProperty("--hi", hi + "px");
     r.style.setProperty("--mid", (lo + hi) / 2 + "px");
+    // the receiver's bar, in the receiver's colour, while the step is being said
+    const ri = actors.findIndex((x) => String(x.id) === r.dataset.to);
+    r.style.setProperty("--rx", b + "px");
+    if (ri >= 0) r.style.setProperty("--rc", actorColour(actors[ri], ri));
     r._span = [lo, hi];
     words(r, w);
     // a band reaches past its two columns, never past the board
@@ -132,14 +141,14 @@ function grow(box) {
   }
 }
 
-// An arrow's words centre over it, as wide as it is and at least 220px, and stop short of the board's edge and
-// of the row's note: narrowed about the arrow's middle while that leaves them 160px, else slid aside.
+// An arrow's words centre over it, as wide as it is and at least 220px, and stop short of the step numbers, of
+// the board's edge and of the row's note: narrowed about the arrow's middle while that leaves them 160px, else slid aside.
 function words(r, w) {
-  const [lo, hi] = r._span, mid = (lo + hi) / 2, right = w - (r._nw ? 34 + r._nw : EDGE);
-  let lw = Math.min(Math.max(220, hi - lo + 40), w - 2 * EDGE), lc = mid;
-  const half = Math.min(lw / 2, mid - EDGE, right - mid);
+  const [lo, hi] = r._span, mid = (lo + hi) / 2, right = w - (r._nw ? NOTE_RIGHT + r._nw : EDGE);
+  let lw = Math.min(Math.max(220, hi - lo + 40), w - BADGE - EDGE), lc = mid;
+  const half = Math.min(lw / 2, mid - BADGE, right - mid);
   if (2 * half >= Math.min(lw, 160)) lw = 2 * half;
-  else { lw = Math.min(lw, right - EDGE); lc = Math.min(Math.max(mid, lw / 2 + EDGE), right - lw / 2); }
+  else { lw = Math.min(lw, right - BADGE); lc = Math.min(Math.max(mid, lw / 2 + BADGE), right - lw / 2); }
   r.style.setProperty("--lw", lw + "px");
   r.style.setProperty("--lc", lc + "px");
 }
@@ -152,7 +161,7 @@ function notes(box) {
     const r = note.parentElement;
     if (!note.offsetWidth || !st.w) continue;
     r.classList.toggle("ln-up", !r.classList.contains("ln-self") && !r.classList.contains("ln-band")
-      && r._span && r._span[1] + 6 > st.w - 34 - note.offsetWidth);
+      && r._span && r._span[1] + 6 > st.w - NOTE_RIGHT - note.offsetWidth);
     if (r._nw === note.offsetWidth + 10) continue;
     r._nw = note.offsetWidth + 10;
     r.style.setProperty("--nw", r._nw + "px");
