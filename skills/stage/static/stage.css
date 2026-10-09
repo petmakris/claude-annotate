@@ -297,10 +297,10 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
   --t-dropped:#80868B;--t-internal-bg:#FEF7E0;--t-hot-bg:#FCE8E6;--t-good-bg:#E6F4EA;--t-edge-bg:#E8F0FE;--t-service-bg:#E4F7FB;--t-cheap-bg:#F1F3F4}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --t-plain:#BDC1C6;--t-edge:#8AB4F8;--t-internal:#FDD663;--t-service:#78D9EC;--t-cheap:#A8ABB0;--t-hot:#F28B82;--t-good:#81C995;
-  --t-dropped:#80868B;--t-internal-bg:rgba(253,214,99,.12);--t-hot-bg:rgba(242,139,130,.14);--t-good-bg:rgba(129,201,149,.14);--t-edge-bg:rgba(138,180,248,.14);--t-service-bg:rgba(120,217,236,.12);--t-cheap-bg:#303134}}}
+  --t-dropped:#80868B;--t-internal-bg:rgba(253,214,99,.12);--t-hot-bg:rgba(242,139,130,.14);--t-good-bg:rgba(129,201,149,.14);--t-edge-bg:rgba(138,180,248,.14);--t-service-bg:rgba(120,217,236,.12);--t-cheap-bg:#303134}}
 :root[data-theme="dark"]{
   --t-plain:#BDC1C6;--t-edge:#8AB4F8;--t-internal:#FDD663;--t-service:#78D9EC;--t-cheap:#A8ABB0;--t-hot:#F28B82;--t-good:#81C995;
-  --t-dropped:#80868B;--t-internal-bg:rgba(253,214,99,.12);--t-hot-bg:rgba(242,139,130,.14);--t-good-bg:rgba(129,201,149,.14);--t-edge-bg:rgba(138,180,248,.14);--t-service-bg:rgba(120,217,236,.12);--t-cheap-bg:#303134}}
+  --t-dropped:#80868B;--t-internal-bg:rgba(253,214,99,.12);--t-hot-bg:rgba(242,139,130,.14);--t-good-bg:rgba(129,201,149,.14);--t-edge-bg:rgba(138,180,248,.14);--t-service-bg:rgba(120,217,236,.12);--t-cheap-bg:#303134}
 
 /* A visual: a sequence drawn as lanes or a flowchart as a map, both by the stage itself (lanes.js, map.js). */
 .visual{position:relative;flex:1 0 auto;align-self:stretch;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);
