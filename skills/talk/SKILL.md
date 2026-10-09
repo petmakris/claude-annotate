@@ -66,7 +66,7 @@ For every turn:
 - **Teach with the board** (next section): what hearing cannot carry goes on the stage.
 - `[[note: ...]]` saves a note to the transcript and shows it on the page.
 - **Anything the user is working on goes on the stage by name**: `python3 "$SKILL_DIR/../stage/stage.py" show deck path/to/deck.html#slide-3 --cwd "<folder>" --slug "<sid>"`, both from the Stage line. Pass both on every `stage.py` call during the call: without them it lands on a different stage the call page does not show, and with a wrong one `stage.py` fails instead of making a new stage. A name a board of the call already holds is refused: pick another. Do it in the same message as the status and the first work call, so it is on screen while you work. A file view reloads by itself on every save, so after editing the deck you only say what changed.
-- **Stopping.** When the user wants to stop, send a two or three sentence wrap-up with `reply <id> --call="<call id>" --end` (never together with `--status`), and re-arm once, in the same message, to collect the `TALK_END` for the recap. The page keeps the answers playable after the end.
+- **Stopping.** When the user wants to stop, send a two or three sentence wrap-up with `reply <id> --call="<call id>" --end` (never together with `--status`), and re-arm once, in the same message, to collect the `TALK_END` for the recap. When they ask in the terminal instead, with no turn left to answer, send the wrap-up with `python3 "$SKILL_DIR/talk_client.py" end --call="<call id>"` (the wrap-up on stdin, as for a reply) and re-arm the same way; it exits 4 when the call was already over. The page keeps the answers playable after the end.
 
 ### Teaching with the board
 

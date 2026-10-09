@@ -398,3 +398,35 @@ def test_a_reply_to_a_call_that_closed_mid_reply_exits_2(monkeypatch, capsys):
     monkeypatch.setattr(talk_client, "send_reply", gone)
     assert talk_client.reply("c", "t1", "working on it", False) == 2
     assert "not reachable" in capsys.readouterr().err
+
+
+def test_end_closes_the_call_with_no_turn_to_answer_and_says_the_wrap_up_first(tmp_path):
+    state = tmp_path / "state.json"
+
+    async def go():
+        async with running_app(tmp_path) as (client, ctl, log):
+            write_state(state, client.server.port)
+            ctl.turns.offer("d1", [{"who": "you", "text": "one"}])
+            await ctl.turns.next(timeout=1)
+            await ctl.answer("The answer to d1.")  # answered already: nothing is left to reply to
+            proc = await client_proc(state, "end", f"--call={CALL}")
+            return await finish(proc, "That is all for today."), spoken(ctl), ctl.ended
+
+    (code, out, _), said, ended = run(go())
+    assert (code, out.strip()) == (0, "ended: re-arm once to collect the TALK_END")
+    assert said == ["The answer to d1.", "That is all for today."]
+    assert ended == "wrapped up by Claude"
+
+
+def test_end_on_a_call_already_over_exits_4(tmp_path):
+    state = tmp_path / "state.json"
+
+    async def go():
+        async with running_app(tmp_path) as (client, ctl, log):
+            write_state(state, client.server.port)
+            ctl.end("test")
+            proc = await client_proc(state, "end", f"--call={CALL}")
+            return await finish(proc, "Bye.")
+
+    code, out, _ = run(go())
+    assert code == 4 and out.startswith("call ended")

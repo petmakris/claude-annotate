@@ -7,6 +7,9 @@ holds the calls of every session on this machine. With exactly one call open, --
 reply exit codes: 0 sent (or a status for a turn already answered, ignored), 2 refused, unreachable or no
 such turn, 4 the call has ended.
 
+end closes the call when no turn is left to answer (the user asked in the terminal): a wrap-up on stdin is
+said first. Its exit codes are reply's.
+
 While the server is being replaced, both commands wait for the next one to carry the call on, for up to
 TALK_RECONNECT_S seconds. When nothing has taken the port after a few seconds, the doorbell starts a
 server itself (TALK_REVIVE=0 turns that off), which picks up every call the last one left open. With
@@ -193,11 +196,11 @@ def reply(call_id: str | None, turn_id: str, status_text: str | None, end: bool)
     if not state:
         print(f"talk is not reachable: {no_call_text(call_id)}", file=sys.stderr)
         return 2
-    body: dict = {"id": turn_id, "end": end}
+    body: dict = {"id": turn_id or "", "end": end}
     if status_text:
         body["status"] = status_text
     else:
-        body["text"] = sys.stdin.read()
+        body["text"] = "" if turn_id is None and sys.stdin.isatty() else sys.stdin.read()
     try:
         _, raw = send_reply(call_id, body)
     except LookupError as err:
@@ -229,7 +232,7 @@ def reply(call_id: str | None, turn_id: str, status_text: str | None, end: bool)
     if result.get("ignored"):
         print(f"ignored: {result['ignored']}")
         return 0
-    print("sent")
+    print("ended: re-arm once to collect the TALK_END" if turn_id is None else "sent")
     for problem in result.get("board_problems", []):
         print(f"board: {problem}")
     return 0
@@ -247,11 +250,15 @@ def main() -> int:
     rep.add_argument("--call", help="the call id, from the call's link; write --call=<id>")
     rep.add_argument("--status", help="a few words shown while working, instead of a reply")
     rep.add_argument("--end", action="store_true", help="this reply wraps up the call")
+    fin = sub.add_parser("end", help="end the call with no turn to answer; a wrap-up on stdin is said first")
+    fin.add_argument("--call", help="the call id, from the call's link; write --call=<id>")
     args = parser.parse_args()
     if args.command == "reply" and args.status and args.end:
         parser.error("--status cannot be combined with --end: send the wrap-up as a reply with --end")
     if args.command == "doorbell":
         return doorbell(args.call, args.wait)
+    if args.command == "end":
+        return reply(args.call, None, None, True)
     return reply(args.call, args.id, args.status, args.end)
 
 

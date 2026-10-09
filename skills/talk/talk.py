@@ -2367,6 +2367,13 @@ def build_app(server: Server):
             return web.json_response({"error": "the call has ended", "transcript": str(call.transcript)}, status=410)
         if not status and not text.strip() and not end:
             return web.json_response({"error": "nothing to say: the reply is empty"}, status=400)
+        if end and not str(body.get("id", "")).strip():
+            # The session ends the call with no turn to answer: the user asked for it in the terminal.
+            if text.strip():
+                await call.answer(text)
+                await call.stage_settled()
+            call.end("wrapped up by Claude")
+            return web.json_response({"ok": True})
         result = call.turns.accept_reply(str(body.get("id", "")), final=not status)
         if result == "unknown":
             return web.json_response({"error": "no such turn in this call"}, status=404)
