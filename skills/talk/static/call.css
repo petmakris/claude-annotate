@@ -1,24 +1,25 @@
-/* The call page: the stage fills the window; Claude's last answer floats over its foot as subtitles,
-   above a pill where the text field and the mic sit side by side.
+/* The call page: the stage on one side, the call's panel on the other. The panel holds the whole
+   conversation as a chat, the word being said lit in the answer being played, and under it the player,
+   the text field and the mic. It collapses to a rail that keeps the mic and the player. A side panel costs
+   width, which a board can spare; the stage keeps the window's full height, which code needs.
    The shared tokens are in tokens.css. These are the page's own, set for both themes; <html>
    always carries data-theme, so they need no media query. */
 :root{--page:#E9EDF2;--glass:rgba(255,255,255,.74);--glass-line:rgba(15,23,42,.09);--ring-idle:rgba(15,23,42,.08);
-  --shade:rgba(15,23,42,.06);--lift:0 18px 50px -18px rgba(15,23,42,.45);--rec:#E0263C;--glow:rgba(15,110,116,.08);
-  /* the subtitles are white on a dark film in both themes, like subtitles over a picture */
-  --sub-bg:rgba(15,23,32,.86);--sub-ink:#F3F5F8;--sub-muted:#A3ABB9;--sub-faint:#7C8696;--sub-you:#8AA7F0;--sub-claude:#FFAF5F;
-  --sub-warn:#FDB022;--sub-bad:#F97066;--sub-line:rgba(255,255,255,.16);--sub-shade:rgba(255,255,255,.10)}
+  --shade:rgba(15,23,42,.06);--lift:0 18px 50px -18px rgba(15,23,42,.45);--rec:#E0263C;--glow:rgba(15,110,116,.08);--pw:380px}
 :root[data-theme="dark"]{--page:#06080C;--glass:rgba(22,28,38,.66);--glass-line:rgba(255,255,255,.08);--ring-idle:rgba(255,255,255,.07);
   --shade:rgba(255,255,255,.07);--lift:0 30px 80px -20px rgba(0,0,0,.7);--rec:#FF5C6C;--glow:rgba(95,175,175,.10)}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
-body{background:radial-gradient(1200px 600px at 50% 110%,var(--glow),transparent 70%),var(--page);color:var(--ink);
-  font:400 14px/1.5 var(--sans);-webkit-font-smoothing:antialiased;overflow:hidden}
+body{background:var(--page);color:var(--ink);font:400 14px/1.5 var(--sans);-webkit-font-smoothing:antialiased;overflow:hidden}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 button:disabled{cursor:default;opacity:.45}
-button:focus-visible,a:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+button:focus-visible,a:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 svg{display:block;flex:none}
 [hidden]{display:none!important}
-.app{position:relative;height:100dvh;display:grid;grid-template-rows:minmax(0,1fr);grid-template-columns:minmax(0,1fr)}
+.app{position:relative;height:100dvh;display:grid;grid-template-rows:minmax(0,1fr);grid-template-columns:minmax(0,1fr) var(--pw)}
+.app[data-side="left"]{grid-template-columns:var(--pw) minmax(0,1fr)}
+.app[data-side="left"] .panel{order:-1;border-left:0;border-right:1px solid var(--line)}
+.app[data-rail]{--pw:60px}
 
 /* ---- the stage, in a frame whose ring shows who is talking ---- */
 @property --a{syntax:"<angle>";initial-value:0deg;inherits:false}
@@ -53,107 +54,153 @@ svg{display:block;flex:none}
 .btn:hover{background:var(--bg)}
 .nostage{margin:auto;color:var(--faint);font-size:14px}
 
-/* ---- the dock: the subtitles over the pill, floating at the stage's foot ---- */
-.dock{position:absolute;z-index:5;left:50%;bottom:16px;transform:translateX(-50%);width:min(780px,calc(100% - 32px));
-  display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none}
-.dock>*{pointer-events:auto}
-/* ---- subtitles: Claude's last answer, word by word ---- */
-.subs{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;max-width:100%;min-width:min(360px,100%);
-  padding:10px 44px 12px;border-radius:14px;background:var(--sub-bg);color:var(--sub-ink);box-shadow:var(--lift);border:1px solid var(--sub-line);
-  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
-.subs .x{position:absolute;top:6px;right:6px;width:28px;height:28px;color:var(--sub-muted)}
-.subs .x:hover:not(:disabled){background:var(--sub-shade);color:var(--sub-ink)}
-.asked{max-width:100%;font-size:12.5px;color:var(--sub-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
-.asked b{font-weight:500;color:var(--sub-you)}
-.cap{position:relative;max-width:100%;max-height:calc(1.5em * 3);overflow:hidden;scroll-behavior:smooth;text-align:center;
-  font:400 18px/1.5 var(--sans);letter-spacing:-.005em;color:var(--sub-ink);overflow-wrap:anywhere}
-.cap.scrolled{-webkit-mask:linear-gradient(to bottom,transparent 0,#000 1.2em);mask:linear-gradient(to bottom,transparent 0,#000 1.2em)}
-.cap .w{border-radius:4px;cursor:pointer;transition:color .25s}
-.cap .w:hover{background:var(--sub-shade)}
-.cap.reading .w{color:var(--sub-faint)}
-.cap.reading .w.said{color:var(--sub-ink)}
-.cap .w.now-word{color:var(--sub-claude)}
-.capnote{font-size:12.5px;color:var(--sub-muted)}
-.capnote.bad{color:var(--sub-bad)}
-.prep{display:flex;flex-direction:column;align-items:center;gap:6px}
-.preplbl{font-size:12.5px;color:var(--sub-muted)}
-.preptrack{display:block;width:min(420px,60vw);height:3px;border-radius:2px;background:var(--sub-line);overflow:hidden}
-.preptrack i{display:block;height:100%;width:0;border-radius:2px;background:var(--sub-claude);transition:width .2s linear}
-.preptrack.queued i{width:30%!important;opacity:.5;animation:prepwait 1.4s ease-in-out infinite alternate}
-@keyframes prepwait{from{transform:translateX(-100%)}to{transform:translateX(330%)}}
-@media (prefers-reduced-motion:reduce){.preptrack.queued i{animation:none}}
-.status{max-width:100%;text-align:center;font-size:14px;color:var(--sub-muted)}
-.status.warn{color:var(--sub-warn)}
-.status.shimmer{background:linear-gradient(90deg,var(--sub-muted) 0%,var(--sub-ink) 50%,var(--sub-muted) 100%);background-size:200% 100%;
+/* ---- the panel ---- */
+.panel{position:relative;min-width:0;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);background:var(--panel);border-left:1px solid var(--line)}
+.panel>.open{min-width:0;min-height:0;display:flex;flex-direction:column}
+.app[data-rail] .panel>.open,.app:not([data-rail]) .rail{display:none}
+.grip{position:absolute;z-index:4;top:0;bottom:0;left:-4px;width:8px;cursor:col-resize;touch-action:none}
+.app[data-side="left"] .grip{left:auto;right:-4px}
+.grip:hover,.grip.on{background:linear-gradient(90deg,transparent 3px,var(--acc-mid) 3px 5px,transparent 5px)}
+.app[data-rail] .grip{display:none}
+.app[data-side="left"] .flip{transform:scaleX(-1)}
+.phead{flex:none;height:48px;display:flex;align-items:center;gap:6px;padding:0 6px 0 14px;border-bottom:1px solid var(--line)}
+.topic{flex:1;min-width:0;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mode{flex:none;padding:1px 7px;border-radius:999px;font:500 11px var(--sans);color:var(--muted);white-space:nowrap;background:var(--shade)}
+.engine{margin:0;font-size:13px;color:var(--ink)}
+.mode.on{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good)}
+.live{width:8px;height:8px;border-radius:50%;background:var(--acc);box-shadow:0 0 8px var(--acc);flex:none}
+.live.off{background:var(--faint);box-shadow:none}
+
+/* the conversation: your turns on the right, Claude's answers as text with their boards above them */
+.convo{flex:1;min-height:0;overflow:auto;padding:14px 14px 10px;display:flex;flex-direction:column;gap:12px}
+.empty{margin:12px 0;color:var(--faint);text-align:center}
+.turn.you{align-self:flex-end;max-width:88%;background:var(--you-soft);border-radius:14px 14px 4px 14px;padding:8px 12px}
+.turn.claude{padding:2px 0 2px 12px;border-left:2px solid var(--line)}
+.turn.claude.now{border-left-color:var(--claude)}
+.turn .who{display:flex;align-items:center;gap:8px;font:600 11px var(--sans);margin-bottom:3px}
+.turn .who small{font:400 11px var(--sans);color:var(--faint)}
+.turn.you .who{color:var(--you)}
+.turn.claude .who{color:var(--claude)}
+.turn .text{font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.turn.you .text{font-size:13.5px}
+.turn .w{border-radius:4px;cursor:pointer;transition:color .25s}
+.turn .w:hover{background:var(--shade)}
+.turn.reading .w{color:var(--faint)}
+.turn.reading .w.said{color:var(--ink)}
+.turn .w.now-word{background:var(--word);color:var(--ink)}
+.turn .play{margin-left:auto;display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:7px;font:500 11.5px var(--sans);color:var(--muted)}
+.turn .play:hover{background:var(--shade);color:var(--ink)}
+.turn.claude.now .play{color:var(--claude)}
+.turn .speech{margin-top:6px;font-size:12.5px;color:var(--muted)}
+.turn .speech.bad{color:var(--bad)}
+.turn.withdrawn .text{text-decoration:line-through;opacity:.55}
+.line.status{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--faint)}
+.line.status::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.line.system{text-align:center;color:var(--faint);font-size:12.5px}
+.chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-left:14px}
+.chips .clbl{display:none}
+.chip{font-size:12px;padding:3px 10px;border-radius:8px;background:var(--acc-soft);color:var(--acc);overflow-wrap:anywhere}
+.chip.note{align-self:flex-start;background:var(--warn-soft);color:var(--warn)}
+button.chip.board{display:inline-flex;gap:6px;align-items:center;font:500 12px/1.4 var(--sans);background:var(--panel);color:var(--ink);border:1px solid var(--line)}
+button.chip.board svg{color:var(--muted)}
+button.chip.board.front{border-color:var(--acc);background:var(--acc-soft)}
+button.chip.board.front svg{color:var(--acc)}
+button.chip.board.missing{opacity:.6;text-decoration:line-through;border-style:dashed}
+button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:var(--acc-soft)}
+
+/* the foot: what Claude is doing, the player, then typing and talking */
+.foot{position:relative;flex:none;border-top:1px solid var(--line);padding:8px 12px 12px;display:flex;flex-direction:column;gap:8px}
+.jump{position:absolute;z-index:2;left:50%;bottom:calc(100% + 10px);transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:6px 12px;
+  border-radius:999px;background:var(--ink);color:var(--panel);font:500 12.5px var(--sans);box-shadow:var(--lift);white-space:nowrap}
+.info{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.info:not(:has(>:not([hidden]))){display:none}
+.status{flex:1;min-width:0;font-size:13px;color:var(--muted)}
+.status.warn{color:var(--warn)}
+.status.shimmer{background:linear-gradient(90deg,var(--muted) 0%,var(--ink) 50%,var(--muted) 100%);background-size:200% 100%;
   -webkit-background-clip:text;background-clip:text;color:transparent;animation:shim 1.8s linear infinite}
 @keyframes shim{from{background-position:100% 0}to{background-position:-100% 0}}
-#seek{-webkit-appearance:none;appearance:none;width:min(420px,60vw);height:3px;margin:4px 0 0;border-radius:2px;cursor:pointer;
-  background:linear-gradient(var(--sub-claude),var(--sub-claude)) 0/var(--p,0%) 100% no-repeat,var(--sub-line)}
-#seek::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:var(--sub-claude);opacity:0;transition:opacity .15s}
+.undo{padding:1px 9px;border-radius:999px;border:1px solid var(--line);font:500 12px var(--sans)}
+.undo:hover{background:var(--shade)}
+.prep{flex-basis:100%;display:flex;flex-direction:column;gap:5px}
+.preplbl{font-size:12.5px;color:var(--muted)}
+.preptrack{display:block;height:3px;border-radius:2px;background:var(--line);overflow:hidden}
+.preptrack i{display:block;height:100%;width:0;border-radius:2px;background:var(--claude);transition:width .2s linear}
+.preptrack.queued i{width:30%!important;opacity:.5;animation:prepwait 1.4s ease-in-out infinite alternate}
+@keyframes prepwait{from{transform:translateX(-100%)}to{transform:translateX(330%)}}
+.player{display:flex;align-items:center;gap:4px}
+.ib.pp{background:var(--claude-soft);color:var(--claude);border-radius:50%}
+.ib.pp:hover:not(:disabled){background:var(--claude-soft);color:var(--claude);filter:brightness(.96)}
+#seek{-webkit-appearance:none;appearance:none;flex:1;min-width:40px;height:4px;margin:0 8px;border-radius:2px;cursor:pointer;
+  background:linear-gradient(var(--claude),var(--claude)) 0/var(--p,0%) 100% no-repeat,var(--line)}
+#seek::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--claude);opacity:0;transition:opacity .15s}
 #seek:hover::-webkit-slider-thumb{opacity:1}
-#seek::-moz-range-thumb{width:10px;height:10px;border:0;border-radius:50%;background:var(--sub-claude)}
-
-/* ---- the pill: typing and talking side by side; the topic and the gear in the corners ---- */
-.corner{position:absolute;z-index:5;bottom:22px;display:flex;align-items:center;gap:8px;min-width:0;border-radius:999px;
-  background:var(--glass);border:1px solid var(--glass-line);box-shadow:var(--lift);
-  -webkit-backdrop-filter:blur(18px) saturate(1.4);backdrop-filter:blur(18px) saturate(1.4)}
-.left{left:16px;padding:6px 12px;max-width:calc((100% - min(640px,100% - 32px)) / 2 - 32px);font-size:12.5px;color:var(--muted)}
-.right{right:16px;padding:3px;flex-direction:column;gap:2px;border-radius:21px}
-.topic{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.engine{flex:none;padding:1px 7px;border:1px solid var(--glass-line);border-radius:999px;font-size:11px;color:var(--muted);white-space:nowrap}
-.live{width:7px;height:7px;border-radius:50%;background:var(--acc);box-shadow:0 0 10px var(--acc);flex:none}
-.live.off{background:var(--faint);box-shadow:none}
-.pill{display:flex;align-items:flex-end;gap:6px;width:min(640px,100%);padding:6px;border-radius:30px;background:var(--glass);
-  border:1px solid var(--glass-line);box-shadow:var(--lift);-webkit-backdrop-filter:blur(18px) saturate(1.4);backdrop-filter:blur(18px) saturate(1.4)}
-.pill>.ib:not(.mic){margin-bottom:6px}
-.compose{flex:1;min-width:0;display:flex;align-self:center}
-.compose textarea{flex:1;min-width:0;resize:none;border:0;outline:0;background:transparent;color:var(--ink);
-  font:400 15px/1.45 var(--sans);padding:8px 6px;max-height:120px}
+#seek::-moz-range-thumb{width:12px;height:12px;border:0;border-radius:50%;background:var(--claude)}
+.time{font:500 12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.compose{display:flex;align-items:flex-end;gap:4px;border:1px solid var(--line);border-radius:24px;padding:4px;background:var(--bg)}
+.compose:has(textarea:focus-visible){border-color:var(--acc)}
+.compose textarea{flex:1;min-width:0;resize:none;border:0;outline:0;background:transparent;color:var(--ink);font:400 14px/1.45 var(--sans);padding:9px 4px 9px 10px;max-height:120px;align-self:center}
 .compose textarea::placeholder{color:var(--faint)}
-.pill:has(textarea:focus-visible){border-color:color-mix(in srgb,var(--acc) 45%,var(--glass-line))}
 .compose textarea:focus-visible{outline:0}
-.wave{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:10px;align-self:center;overflow:hidden}
-.bars{display:flex;align-items:center;gap:3px;height:34px}
+.compose>.ib:not(.mic){margin-bottom:2px}
+.wave{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:10px;align-self:center;overflow:hidden;height:40px}
+.bars{display:flex;align-items:center;gap:3px;height:32px}
 .bars i{width:3px;height:4px;border-radius:2px;background:var(--rec);transition:height .08s}
 .rectime{font:500 13px var(--mono);color:var(--rec)}
-.ib{position:relative;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--muted);
+
+/* ---- the rail: the panel collapsed, the mic and the player still in reach ---- */
+.rail{min-height:0;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0}
+.rail .sp{flex:1}
+.nowline{writing-mode:vertical-rl;transform:rotate(180deg);font-size:12px;color:var(--muted);max-height:40vh;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app[data-side="left"] .nowline{transform:none}
+.ring{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--claude) var(--p,0%),var(--line) 0)}
+.ring .ib.pp{width:38px;height:38px;background:var(--panel)}
+.rail .ib.mic{width:44px;height:44px}
+
+/* ---- buttons ---- */
+.ib{position:relative;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:var(--muted);flex:none;
   transition:background-color .15s,color .15s,transform .15s}
 .ib:hover:not(:disabled){background:var(--shade);color:var(--ink)}
 .ib:active:not(:disabled){transform:scale(.94)}
 .ib[aria-expanded="true"]{color:var(--acc)}
-.ib .dot{position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--claude);box-shadow:0 0 0 2px var(--panel)}
-.ib.mic{width:48px;height:48px;color:var(--on-acc);background:var(--acc);box-shadow:0 6px 22px -6px color-mix(in srgb,var(--acc) 70%,transparent)}
+.ib .dot{position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--claude);box-shadow:0 0 0 2px var(--panel)}
+.ib.mic{width:40px;height:40px;border-radius:50%;color:var(--on-acc);background:var(--acc);box-shadow:0 6px 22px -8px color-mix(in srgb,var(--acc) 70%,transparent)}
 .ib.mic:hover:not(:disabled){color:var(--on-acc);background:color-mix(in srgb,var(--acc) 85%,white)}
 .app[data-state="listening"] .ib.mic{background:var(--rec);box-shadow:0 0 0 calc(4px + var(--lvl,0) * 10px) color-mix(in srgb,var(--rec) 25%,transparent)}
 .ib.mic .spin{display:none}
 .ib.mic.busy svg{display:none}
 .ib.mic.busy .spin{display:block}
+.ib.mic.live{background:var(--good);box-shadow:0 0 0 calc(3px + var(--lvl,0) * 9px) color-mix(in srgb,var(--good) 22%,transparent)}
+.ib.mic.live.muted{background:var(--faint);box-shadow:none}
 .ib.send{color:var(--acc)}
-#playpause .i-pause,#playpause.playing .i-play{display:none}
-#playpause.playing .i-pause{display:block}
+.ib.go{border-radius:50%;background:var(--acc);color:var(--on-acc)}
+.ib.go:hover:not(:disabled){background:color-mix(in srgb,var(--acc) 85%,white);color:var(--on-acc)}
+.ib.go:disabled{background:var(--shade);color:var(--faint);opacity:1}
+.pp .i-pause,.pp.playing .i-play{display:none}
+.pp.playing .i-pause{display:block}
 #fullscreen .i-exit,#fullscreen[aria-pressed="true"] .i-enter{display:none}
 #fullscreen[aria-pressed="true"] .i-exit{display:block}
-.sep{width:1px;height:20px;background:var(--glass-line)}
-/* tooltips, where there is a pointer that hovers; the corner buttons' own open inwards */
+/* tooltips, where there is a pointer that hovers: under the header's buttons, beside the rail's */
 @media (hover:hover){
-  .ib[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);white-space:nowrap;
-    font:500 12px var(--sans);color:var(--ink);background:var(--panel);border:1px solid var(--glass-line);padding:4px 8px;border-radius:7px;
-    pointer-events:none;z-index:20}
-  .right .ib[data-tip]:hover::after{left:auto;right:0;transform:none}
+  .ib[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);white-space:nowrap;
+    font:500 12px var(--sans);color:var(--ink);background:var(--panel);border:1px solid var(--line);padding:4px 8px;border-radius:7px;
+    pointer-events:none;z-index:20;box-shadow:var(--lift)}
+  .phead .ib[data-tip]:hover::after{bottom:auto;top:calc(100% + 8px);left:auto;right:0;transform:none}
+  .rail .ib[data-tip]:hover::after{bottom:auto;top:50%;left:auto;right:calc(100% + 8px);transform:translateY(-50%)}
+  .app[data-side="left"] .rail .ib[data-tip]:hover::after{right:auto;left:calc(100% + 8px)}
   .ib[aria-expanded="true"]:hover::after{display:none}
-  .subs .ib[data-tip]:hover::after{bottom:auto;top:calc(100% + 6px);left:auto;right:0;transform:none}
-  .sheet .ib[data-tip]:hover::after{bottom:auto;top:calc(100% + 6px);left:auto;right:0;transform:none}
 }
 .spin{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* ---- glass layers: popovers, the conversation sheet, the type bar, the toast ---- */
-.pop,.sheet,.toast{position:absolute;z-index:10;background:var(--glass);border:1px solid var(--glass-line);box-shadow:var(--lift);
+/* ---- glass layers: the popovers and the toast ---- */
+.pop,.toast{position:absolute;z-index:10;background:var(--glass);border:1px solid var(--glass-line);box-shadow:var(--lift);
   -webkit-backdrop-filter:blur(24px) saturate(1.5);backdrop-filter:blur(24px) saturate(1.5);animation:up .18s ease-out}
 @keyframes up{from{opacity:0;transform:translateY(6px)}}
-.pop{bottom:84px;width:300px;padding:14px;border-radius:18px;display:flex;flex-direction:column;gap:14px}
-.gearpop{right:16px}
-.callspop{left:50%;width:320px;margin-left:-160px;gap:4px}
+/* a popover opens over the stage, beside the panel, under the header (or level with the rail's gear) */
+.pop{top:56px;right:calc(var(--pw) + 12px);width:300px;max-height:calc(100% - 68px);overflow:auto;padding:14px;border-radius:18px;display:flex;flex-direction:column;gap:14px}
+.app[data-side="left"] .pop{right:auto;left:calc(var(--pw) + 12px)}
+.app[data-rail] .gearpop{top:auto;bottom:12px}
+.callspop{width:320px;gap:4px}
 .pop h4{margin:0 0 6px;font:500 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .callspop h4{padding:2px 10px 0}
 .segc{display:flex;gap:3px;padding:3px;border-radius:11px;background:var(--shade)}
@@ -165,29 +212,6 @@ svg{display:block;flex:none}
 .row[aria-pressed="true"] .sw{background:var(--acc)}
 .row[aria-pressed="true"] .sw::after{transform:translateX(14px)}
 .liveopts{display:flex;flex-direction:column;gap:14px}
-.undo{margin-left:8px;padding:1px 9px;border-radius:999px;border:1px solid var(--sub-line);color:var(--sub-ink);font:500 12px var(--sans)}
-.undo:hover{background:var(--sub-shade)}
-.mode{flex:none;padding:1px 8px;border-radius:999px;font:500 11px var(--sans);white-space:nowrap;background:var(--shade);color:var(--muted)}
-.mode.on{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good)}
-.turn.withdrawn .text{text-decoration:line-through;opacity:.55}
-/* TV: read from across the room. Everything the user watches grows; the stage zooms itself (stage:zoom). */
-.app[data-tv] .subs{padding:14px 56px 16px;max-width:min(1100px,100%)}
-.app[data-tv] .cap{font-size:30px}
-.app[data-tv] .asked,.app[data-tv] .capnote,.app[data-tv] .preplbl{font-size:17px}
-.app[data-tv] .status{font-size:22px}
-.app[data-tv] .dock{width:min(1100px,calc(100% - 32px))}
-.app[data-tv] .pill{width:min(820px,100%);padding:8px;gap:10px}
-.app[data-tv] .pill>.ib:not(.mic){width:48px;height:48px;margin-bottom:12px}
-.app[data-tv] .ib.mic{width:72px;height:72px}
-.app[data-tv] .ib svg{transform:scale(1.35)}
-.app[data-tv] .compose textarea{font-size:20px}
-.app[data-tv] .corner{bottom:30px}
-.app[data-tv] .left{font-size:15px}
-.app[data-tv] .mode{font-size:14px;padding:3px 12px}
-.app[data-tv] .frame::before{padding:5px}
-/* Live: the mic button is the switch for listening; it breathes with the room while it listens */
-.ib.mic.live{background:var(--good);box-shadow:0 0 0 calc(3px + var(--lvl,0) * 9px) color-mix(in srgb,var(--good) 22%,transparent)}
-.ib.mic.live.muted{background:var(--faint);box-shadow:none}
 .demobtn{display:flex;gap:10px;align-items:center;padding:9px 12px;border-radius:11px;text-align:left;background:var(--acc-soft);color:var(--acc)}
 .demobtn span{display:flex;flex-direction:column}
 .demobtn b{font:600 13.5px var(--sans)}
@@ -203,55 +227,35 @@ svg{display:block;flex:none}
 .callrow.new .live{background:var(--claude);box-shadow:0 0 10px var(--claude)}
 .callrow.ended .live{background:var(--faint);box-shadow:none}
 .callrow.all{justify-content:center;color:var(--acc);font-size:13px}
-.sheet{bottom:84px;left:50%;width:min(760px,calc(100vw - 40px));margin-left:calc(min(760px,calc(100vw - 40px)) / -2);max-height:68%;
-  border-radius:20px;display:flex;flex-direction:column}
-.sheet .x{position:absolute;top:10px;right:10px;z-index:1}
-.convo{overflow:auto;padding:22px 26px;display:flex;flex-direction:column;gap:14px;min-height:0}
-.empty{margin:12px 0;color:var(--faint);text-align:center}
-.turn .who{font:500 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px;display:flex;gap:8px;align-items:baseline}
-.turn .who small{font:400 11px var(--sans);letter-spacing:0;text-transform:none;color:var(--faint)}
-.turn.you .who{color:var(--you)}
-.turn.claude .who{color:var(--claude)}
-.turn .text{font-size:15px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
-.turn .play{margin-top:6px;display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;font:500 12px var(--sans);background:var(--shade)}
-.turn.claude.now .play{background:var(--claude-soft);color:var(--claude)}
-.turn .speech{margin-top:6px;font-size:12.5px;color:var(--muted)}
-.turn .speech.bad{color:var(--bad)}
-.chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.chips .clbl{font:500 10.5px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-right:2px}
-.chip{font-size:12px;padding:3px 10px;border-radius:999px;background:var(--acc-soft);color:var(--acc);overflow-wrap:anywhere}
-.chip.note{align-self:flex-start;background:var(--warn-soft);color:var(--warn)}
-button.chip.board{display:inline-flex;gap:6px;align-items:center;font:500 12px/1.4 var(--sans)}
-button.chip.board.missing{opacity:.6;text-decoration:line-through;border-style:dashed}
-button.chip.board:hover:not(:disabled){background:color-mix(in srgb,var(--acc-soft) 60%,var(--acc-mid))}
-.line.system{text-align:center;color:var(--faint);font-size:12.5px}
-.ib.go{background:var(--acc);color:var(--on-acc)}
-.ib.go:hover:not(:disabled){background:color-mix(in srgb,var(--acc) 85%,white);color:var(--on-acc)}
-.ib.go:disabled{background:var(--shade);color:var(--faint);opacity:1}
-.toast{z-index:11;top:16px;left:50%;transform:translateX(-50%);animation:none;display:flex;align-items:center;gap:10px;
-  max-width:calc(100vw - 40px);padding:8px 16px;border-radius:999px;font-size:13px}
+.toast{z-index:11;top:16px;left:calc((100% - var(--pw)) / 2);transform:translateX(-50%);animation:none;display:flex;align-items:center;gap:10px;
+  max-width:calc(100% - var(--pw) - 40px);padding:8px 16px;border-radius:999px;font-size:13px}
+.app[data-side="left"] .toast{left:calc(var(--pw) + (100% - var(--pw)) / 2)}
 .toast:has(#retry:not([hidden])){padding-right:8px}
 .tbtn{padding:4px 12px;border-radius:999px;background:var(--shade);font:500 12.5px var(--sans)}
 
-/* narrower: the topic gives way, and the dock leaves room for the gear */
-@media (max-width:900px){
-  .left{display:none}
-  .dock{left:16px;transform:none;width:calc(100% - 84px)}
-  .pill{width:100%}
-}
-@media (max-width:700px){
-  .dock{left:10px;bottom:10px;width:calc(100% - 70px)}
-  .right{right:10px;bottom:14px}
-  .subs{padding:8px 36px 10px;min-width:0}
-  .cap{font-size:16px}
-  .pill{gap:2px;padding:4px}
-  .pill>.ib:not(.mic){margin-bottom:6px;width:32px;height:32px}
-  .pop,.sheet{bottom:76px}
-  .gearpop,.callspop{left:10px;right:10px;width:auto;margin-left:0}
+/* TV: read from across the room. The panel grows and its words with it; the stage zooms itself (stage:zoom). */
+.app[data-tv]:not([data-rail]){--pw:520px}
+.app[data-tv] .turn .text{font-size:20px}
+.app[data-tv] .turn.you .text{font-size:18px}
+.app[data-tv] .topic,.app[data-tv] .status{font-size:17px}
+.app[data-tv] .compose textarea{font-size:19px}
+.app[data-tv] .ib{width:44px;height:44px}
+.app[data-tv] .ib.mic{width:56px;height:56px}
+.app[data-tv] .frame::before{padding:5px}
+
+/* a phone: the stage on top, the panel under it; the rail becomes a bar */
+@media (max-width:760px){
+  .app,.app[data-side="left"]{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) 46%}
+  .app[data-rail]{grid-template-rows:minmax(0,1fr) 60px}
+  .app[data-side="left"] .panel,.panel{order:0;border:0;border-top:1px solid var(--line)}
+  .grip,.nowline{display:none}
+  .rail{flex-direction:row;justify-content:center;padding:0 8px}
+  .pop,.app[data-side="left"] .pop{top:auto;bottom:calc(46% + 10px);left:10px;right:10px;width:auto}
+  .app[data-rail] .pop{bottom:70px}
+  .toast,.app[data-side="left"] .toast{left:50%;max-width:calc(100vw - 40px)}
 }
 @media (prefers-reduced-motion:reduce){
-  .app:not([data-state="idle"]) .frame::before,.status.shimmer,.spin,.pop,.sheet{animation:none!important}
-  .status.shimmer{background:none;color:var(--sub-muted)}
-  .bars i,.cap .w{transition:none}
-  .cap{scroll-behavior:auto}
+  .app:not([data-state="idle"]) .frame::before,.status.shimmer,.spin,.pop,.preptrack.queued i{animation:none!important}
+  .status.shimmer{background:none;color:var(--muted)}
+  .bars i,.turn .w{transition:none}
 }

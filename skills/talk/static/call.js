@@ -1,5 +1,5 @@
-// The call page: the stage fills the window, and Claude's last answer floats over its foot as
-// subtitles, above a pill where typing and talking sit side by side; a gear holds the settings. talk.py serves it with window.CFG filled in for one call.
+// The call page: the stage beside a panel that holds the conversation, the player, the text field and
+// the mic; the panel collapses to a rail; a gear holds the settings. talk.py serves it with window.CFG filled in for one call.
 const CFG = window.CFG;
 const $ = id => document.getElementById(id);
 const SPEEDS = [0.75, 0.85, 1, 1.25, 1.5];
@@ -10,12 +10,11 @@ const fmt = s => { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 
 $("topic").textContent = CFG.topic; $("topic").title = CFG.topic; document.title = "Talk · " + CFG.topic;
-// Which engine reads the answers aloud, always in view: Azure is fast and billed, VoiceStudio is local and slow.
+// Which engine reads the answers aloud, in the settings: Azure is fast and billed, VoiceStudio is local and slow.
 if (CFG.engine) {
   const ava = /^[a-z]{2}-[A-Z]{2}-([A-Z][a-z]+)/.exec(CFG.voice || "");
-  $("engine").textContent = CFG.engine + (CFG.engine === "Azure" && ava ? " · " + ava[1] : "");
-  $("engine").title = CFG.engine === "Azure" ? "Speech by Azure, voice " + CFG.voice
-    : "Speech by VoiceStudio on this Mac, voice profile " + CFG.voice;
+  $("engine").textContent = CFG.engine === "Azure" ? "Azure · " + (ava ? ava[1] : CFG.voice) + ": fast, billed per character"
+    : "VoiceStudio on this Mac, profile " + CFG.voice + ": free, slower";
   $("engine").hidden = false;
 }
 const audio = $("audio");
@@ -90,7 +89,7 @@ window.addEventListener("message", ev => {
     boardAnswer = new Map((m.list || []).map(v => [String(v.name), v.answer]));
     paintMissing();
   }
-  else if (m.type === "stage:shown") frontBoard = String(m.view || "");
+  else if (m.type === "stage:shown") { frontBoard = String(m.view || ""); paintFront(); }
   else if (m.type === "stage:missing") paintMissing(String(m.view));
   else if (m.type === "stage:key" && MEDIA_KEYS.has(m.key)) mediaKey(m.key);
 });
@@ -113,6 +112,10 @@ function paintMissing(gone) {
   }
 }
 setInterval(() => { if (stageViews) paintMissing(); }, MISSING_AFTER_MS / 2);
+// The chip of the board in front of the stage is drawn as chosen, wherever it is in the conversation.
+function paintFront() {
+  for (const el of document.querySelectorAll("button.chip.board[data-view]")) el.classList.toggle("front", !!frontBoard && el.dataset.view === frontBoard);
+}
 
 // ---- the theme: light, dark, or the system's ------------------------------
 // <html> always carries data-theme; the head script set it before the first paint.
@@ -148,23 +151,48 @@ $("fullscreen").onclick = () => {
 document.addEventListener("fullscreenchange", paintFullscreen);
 
 // ---- popovers: one open at a time ---------------------------------------------
-const POPS = {hist: "pHist", callsbtn: "pCalls", gear: "pGear"};
+const POPS = {callsbtn: "pCalls", gear: "pGear", railgear: "pGear"};
 let openPop = null;
 function showPop(pop) {
   openPop = pop && openPop !== pop ? pop : null;
-  for (const [btn, id] of Object.entries(POPS)) {
-    $(id).hidden = id !== openPop;
-    $(btn).setAttribute("aria-expanded", String(id === openPop));
-  }
-  if (openPop === "pHist") $("convo").scrollTop = $("convo").scrollHeight;
+  for (const id of new Set(Object.values(POPS))) $(id).hidden = id !== openPop;
+  for (const [btn, id] of Object.entries(POPS)) $(btn).setAttribute("aria-expanded", String(id === openPop));
 }
 for (const [btn, id] of Object.entries(POPS)) $(btn).onclick = ev => { ev.stopPropagation(); showPop(id); };
-$("histx").onclick = () => showPop(null);
 document.addEventListener("keydown", ev => { if (ev.key === "Escape" && openPop) showPop(null); });
 // A click anywhere else closes the open layer: the buttons that open layers stop their own click.
 document.addEventListener("click", ev => {
-  if (openPop && !ev.target.closest(".pop, .sheet, .toast")) showPop(null);
+  if (openPop && !ev.target.closest(".pop, .toast")) showPop(null);
 });
+
+// ---- the panel: on the left or the right, as wide as dragged, or collapsed to a rail ----
+const PANEL_W = [300, 640];
+let side = store.get("side", "right") === "left" ? "left" : "right";
+let rail = store.get("panel", "open") === "rail";
+let panelW = Math.min(PANEL_W[1], Math.max(PANEL_W[0], Number(store.get("panelW", 380)) || 380));
+function paintPanel() {
+  $("app").dataset.side = side;
+  $("app").toggleAttribute("data-rail", rail);
+  document.documentElement.style.setProperty("--pw", panelW + "px");
+  for (const b of $("side").children) b.setAttribute("aria-pressed", String(b.dataset.choice === side));
+}
+function setRail(on) {
+  rail = on; store.set("panel", on ? "rail" : "open"); showPop(null); paintPanel();
+  if (!on) { convoFollow = true; followVoice(true); }
+}
+$("collapse").onclick = () => setRail(true);
+$("expand").onclick = () => setRail(false);
+for (const b of $("side").children) b.onclick = () => { side = b.dataset.choice; store.set("side", side); paintPanel(); };
+$("grip").onpointerdown = ev => {
+  const grip = $("grip"); grip.setPointerCapture(ev.pointerId); grip.classList.add("on");
+  grip.onpointermove = m => {
+    const w = side === "left" ? m.clientX : innerWidth - m.clientX;
+    panelW = Math.round(Math.min(PANEL_W[1], Math.max(PANEL_W[0], w)));
+    paintPanel();
+  };
+  grip.onpointerup = grip.onpointercancel = () => { grip.onpointermove = null; grip.classList.remove("on"); store.set("panelW", panelW); };
+};
+paintPanel();
 // A click on the stage lands in its own page, which takes the focus away from this one.
 window.addEventListener("blur", () => {
   setTimeout(() => { if (openPop && document.activeElement === $("stage")) showPop(null); }, 0);
@@ -196,7 +224,6 @@ let recorder = null;
 let starting = false;       // the microphone is being asked for: a second press must not open a second one
 let busy = false;           // the recording is being turned into text
 let closed = false;         // the ended call was closed from here
-let subsOff = store.get("subsOff", false);
 let talkMode = store.get("talkMode", "manual") === "live" ? "live" : "manual";  // live: the microphone stays open
 let barge = store.get("barge", "talk") === "keyword" ? "keyword" : "talk";    // how live speech interrupts an answer
 let endPause = [800, 1200, 2000].includes(store.get("endPause", 1200)) ? store.get("endPause", 1200) : 1200;
@@ -208,7 +235,7 @@ let liveFlash = null;       // a short-lived line: {text, until}
 let screenMode = store.get("screen", "desk") === "tv" ? "tv" : "desk";  // tv: everything read from across the room
 const TV_ZOOM = 1.35;
 let undoable = null;        // {entry, until}: the live turn the Undo button can still take back
-let fillerFor = null, turnSentAt = 0;  // "One moment." is said once per turn, when Claude takes a while  // the subtitles were hidden: the pill's captions button brings them back
+let fillerFor = null, turnSentAt = 0;  // "One moment." is said once per turn, when Claude takes a while
 
 // ---- the conversation --------------------------------------------------
 // Keyed: each entry keeps its element until what it shows changes, so a new entry leaves the others
@@ -225,22 +252,23 @@ function buildEntry(e) {
     if (e.who === "claude") { const s = document.createElement("small"); s.textContent = "answer " + e.n; who.append(s); }
     if (e.typed) { const s = document.createElement("small"); s.textContent = "typed"; who.append(s); }
     const text = document.createElement("div"); text.className = "text";
-    text.textContent = e.text;
+    // An answer's timed words are spans: the one being said is lit, and a tap plays from there.
+    if (e.who === "claude") text.replaceChildren(...wordSpans(e)); else text.textContent = e.text;
     el.dataset.id = e.id;
     el.append(who, text);
     if (e.who === "claude") {
       if (e.speech === "ready") {
-        const b = document.createElement("button"); b.className = "btn play"; b.type = "button";
+        const b = document.createElement("button"); b.className = "play"; b.type = "button";
         b.onclick = () => { if (current && current.id === e.id && !audio.paused) { audio.pause(); return; } toVoice(); load(view.entries.find(x => x.id === e.id) || e, true); };
-        el.append(b);
-      } else {
-        const s = document.createElement("div"); s.className = "speech" + (e.speech === "failed" ? " bad" : "");
-        s.textContent = e.speech === "failed" ? "Not read aloud: " + (e.speech_error || "speech failed") : "Preparing the audio…"; el.append(s);
+        who.append(b);
+      } else if (e.speech === "failed") {   // the voice being made shows in the foot, with its progress
+        const s = document.createElement("div"); s.className = "speech bad";
+        s.textContent = "Not read aloud: " + (e.speech_error || "speech failed"); el.append(s);
       }
       paintTurn(el, e.id);
     }
   } else if (e.who === "status") {
-    el = document.createElement("div"); el.className = "line status"; el.textContent = "Claude: " + e.text;
+    el = document.createElement("div"); el.className = "line status"; el.textContent = e.text;
   } else if (e.who === "board") {
     // A button: it brings its board to the front of the stage, and the sheet steps aside to show it.
     el = document.createElement("button"); el.type = "button"; el.className = "chip board"; el.dataset.view = e.view || "";
@@ -248,7 +276,7 @@ function buildEntry(e) {
     const t = document.createElement("span"); t.textContent = e.text; el.append(t);
     el.setAttribute("aria-label", e.kind === "points" ? e.text : "On the stage: " + e.text);
     if (!CFG.stageUrl || !e.view) { el.disabled = true; el.title = "The stage is not available"; }
-    else el.onclick = () => { toStage({type: "stage:front", view: e.view, manual: true}); showPop(null); };
+    else el.onclick = () => toStage({type: "stage:front", view: e.view, manual: true});
   } else if (e.who === "note") {
     el = document.createElement("div"); el.className = "chip note"; el.textContent = "Noted: " + e.text;
   } else {
@@ -299,7 +327,9 @@ function render() {
   }
   for (const [id, rec] of nodes) if (!live.has(id)) { rec.el.remove(); nodes.delete(id); }
   for (const [id, r] of chipRows) if (!rows.has(id)) { r.remove(); chipRows.delete(id); }
-  if (atEnd) box.scrollTop = box.scrollHeight;
+  // New lines land at the end: a reader already there sees them, unless the voice is being followed elsewhere.
+  if (atEnd && !(current && !audio.paused && convoFollow)) box.scrollTop = box.scrollHeight;
+  paintFront();
   paintCalls();
   paintAll();
   rendered = true;
@@ -321,15 +351,12 @@ function paintNow() {
   nowId = current ? current.id : null;
 }
 
-// ---- the subtitles: the answer in the player, else the last one ---------------
-const capEl = $("cap");
-let capFor = null, capSig = "", capSpans = [];
+// ---- the answer being read: the one in the player, else the last one -------------
 function lastAnswer() {
   for (let i = view.entries.length - 1; i >= 0; i--) if (view.entries[i].who === "claude") return view.entries[i];
   return null;
 }
 function shownAnswer() { return current ? (view.entries.find(e => e.id === current.id) || current) : lastAnswer(); }
-// Every timed word is a span: lit as it is said, and a tap plays from there.
 function wordSpans(e) {
   if (!e.words || !e.words.length) return [document.createTextNode(e.text)];
   const out = [];
@@ -343,41 +370,62 @@ function wordSpans(e) {
   out.push(document.createTextNode(e.text.slice(pos)));
   return out;
 }
-function paintSubs() {
-  const you = view.entries.findLast(e => e.who === "you" && !e.withdrawn);
-  $("askedtext").textContent = you ? you.text : "";
-  const e = shownAnswer(), sig = e ? e.id + "|" + sigOf(e) : (view.ended ? "ended" : "none");
-  if (sig !== capSig) {
-    // The answer gets its word timings once its audio is made: it is rebuilt in place, keeping
-    // its marks and its scroll, and the word being said is lit again at once.
-    const same = !!e && e.id === capFor, top = capEl.scrollTop;
-    capSig = sig; lastWord = null; lastK = -2;
-    if (e) { if (!same) capEl.className = "cap"; capEl.replaceChildren(...wordSpans(e)); }
-    else { capEl.className = "cap"; capEl.textContent = ""; }
-    capSpans = [...capEl.querySelectorAll(".w")]; capFor = e ? e.id : null;
-    capEl.scrollTo({top: same ? top : 0, behavior: "instant"});
-    if (same) highlight();
-  }
-  let note = "", bad = false;
-  if (e && e.speech === "failed") { note = "Not read aloud: " + (e.speech_error || "speech failed"); bad = true; }
-  $("capnote").textContent = note; $("capnote").classList.toggle("bad", bad);
-  // Hidden subtitles hide the answer and keep the status: what Claude is doing still shows.
-  const s = statusText(), covered = !!recorder || busy || (!!view.working && !view.ended), off = subsOff;
-  $("asked").hidden = !you || !!recorder || off;
-  capEl.hidden = covered || !e || off; $("capnote").hidden = covered || !note || off;
-  paintPrep(covered || off ? null : e);
-  $("wave").hidden = !recorder;
+// The turn in the player and its word spans; the turn is built again when its words arrive.
+let readEl = null, readSpans = [];
+function readingTurn() {
+  const el = current ? nodes.get(current.id)?.el || null : null;
+  if (el !== readEl) { readEl = el; readSpans = el ? [...el.querySelectorAll(".text .w")] : []; lastWord = null; lastK = -2; }
+  return el;
+}
+// The foot's line: what Claude is doing, the voice being made, Undo; the rail's line: the sentence being said.
+function paintInfo() {
+  const s = statusText(), e = shownAnswer();
   $("status").hidden = !s;
   if (s) { $("status").textContent = s.text; $("status").className = "status" + (s.shimmer ? " shimmer" : "") + (s.warn ? " warn" : ""); }
-  $("seek").hidden = covered || !current || off;
-  const answer = !($("asked").hidden && capEl.hidden && $("capnote").hidden && $("prep").hidden && $("seek").hidden);
-  $("subs").hidden = !answer && !s;
-  $("subsx").hidden = !answer;
-  $("subsbtn").hidden = !off || !!recorder;
+  paintPrep(recorder ? null : e);
+  $("wave").hidden = !recorder;
 }
-function setSubs(on) { subsOff = !on; store.set("subsOff", subsOff); paintSubs(); if (on && current) { lastK = -2; highlight(); } }
-$("subsx").onclick = () => setSubs(false);
-$("subsbtn").onclick = () => setSubs(true);
+function paintNowLine() {
+  const e = current && (view.entries.find(x => x.id === current.id) || current);
+  let text = "";
+  if (e && e.words && e.words.length && !audio.paused) {
+    const starts = sentenceTimes(e), t = audio.currentTime || 0;
+    const i = Math.max(0, starts.findLastIndex(x => x <= t + 0.05));
+    const from = e.words.findIndex(w => w[2] >= starts[i]);
+    const to = i + 1 < starts.length ? e.words.findIndex(w => w[2] >= starts[i + 1]) : e.words.length;
+    text = e.text.slice(e.words[from][0], e.words[Math.max(from, to - 1)][1]);
+  }
+  if ($("nowline").textContent !== text) { $("nowline").textContent = text; $("nowline").title = text; }
+}
+// The conversation follows the voice: the word being said stays in view, until the reader scrolls
+// away from it. Then "Back to the voice" brings it back, and following goes on.
+let convoFollow = true, ownScroll = 0;
+function scrollConvo(top) {
+  const box = $("convo");
+  if (Math.abs(box.scrollTop - top) < 2) return;
+  ownScroll = performance.now();
+  box.scrollTo({top, behavior: reduced.matches ? "auto" : "smooth"});
+}
+function inView(el) {
+  const box = $("convo").getBoundingClientRect(), r = el.getBoundingClientRect();
+  return r.bottom > box.top + 8 && r.top < box.bottom - 8;
+}
+function followVoice(force) {
+  if (rail || !(convoFollow || force)) return;
+  const box = $("convo"), word = lastWord, turn = readEl;
+  if (word) {
+    const top = word.offsetTop - box.offsetTop, h = box.clientHeight;
+    if (force || top < box.scrollTop + 24 || top > box.scrollTop + h - 48) scrollConvo(Math.max(0, top - h * 0.6));
+  } else if (turn && force) scrollConvo(Math.max(0, turn.offsetTop - box.offsetTop - 12));
+}
+$("convo").addEventListener("scroll", () => {
+  if (performance.now() - ownScroll < 900) return;   // a scroll this page made
+  const reading = !!current && !audio.paused && !!lastWord;
+  convoFollow = !reading || inView(lastWord);
+  paintJump();
+}, {passive: true});
+function paintJump() { $("jump").hidden = convoFollow || rail || !current || audio.paused; }
+$("jump").onclick = () => { convoFollow = true; followVoice(true); paintJump(); };
 // The line under the stage while there is no answer to read: the first that applies.
 function statusText() {
   if (recorder) return null;
@@ -408,26 +456,33 @@ function appState() {
 function paintPill() {
   const rec = !!recorder, ended = !!view.ended, shown = shownAnswer();
   const liveMode = talkMode === "live";
-  $("talk").hidden = ended; $("talk").disabled = busy && !liveMode; $("talk").classList.toggle("busy", busy && !liveMode);
   const liveLabel = !live ? "Listen" : live.suspended ? "Start listening" : live.parked ? "Listen here" : "Stop listening";
-  $("talk").setAttribute("aria-label", rec ? "Send" : talkMode === "live" ? liveLabel : "Talk");
-  $("talk").dataset.tip = rec ? "Send" : talkMode === "live" ? liveLabel : "Talk";
-  $("talk").classList.toggle("live", liveMode); $("talk").classList.toggle("muted", liveMode && !listening());
+  const talkLabel = rec ? "Send" : liveMode ? liveLabel : "Talk";
+  // The rail's mic is the panel's: the same label, the same look.
+  for (const id of ["talk", "railtalk"]) {
+    const b = $(id);
+    b.hidden = ended; b.disabled = busy && !liveMode; b.classList.toggle("busy", busy && !liveMode);
+    b.setAttribute("aria-label", talkLabel); b.dataset.tip = talkLabel;
+    b.classList.toggle("live", liveMode); b.classList.toggle("muted", liveMode && !listening());
+  }
   $("cancel").hidden = !rec; $("send").hidden = !rec;
-  $("hist").hidden = rec; $("compose").hidden = rec || ended; $("sendtext").hidden = rec || ended;
-  $("back").hidden = rec || !current;
-  $("playpause").hidden = rec || !shown || shown.speech !== "ready";
+  $("text").hidden = rec || ended; $("sendtext").hidden = rec || ended; $("pill").hidden = ended && !rec;
+  const playable = !rec && !!shown && shown.speech === "ready";
+  $("player").hidden = !playable; $("ring").hidden = !playable;
+  $("back").disabled = !current; $("railback").hidden = !playable || !current;
   const label = !audio.paused ? "Pause" : (current && (audio.ended || audio.currentTime >= (audio.duration || 1)) ? "Play again" : "Play");
-  $("playpause").setAttribute("aria-label", label); $("playpause").dataset.tip = label + " · Space";
-  $("playpause").classList.toggle("playing", !audio.paused);
+  for (const id of ["playpause", "railpp"]) {
+    $(id).setAttribute("aria-label", label); $(id).dataset.tip = label + " · Space"; $(id).classList.toggle("playing", !audio.paused);
+  }
   const calls = view.calls || [];
-  $("callsbtn").hidden = rec || !calls.length; $("sep").hidden = $("callsbtn").hidden;
-  $("callsdot").hidden = !calls.some(c => c.unheard);
-  const d = audio.duration || 0;
+  $("callsbtn").hidden = !calls.length;
+  $("callsdot").hidden = $("raildot").hidden = !calls.some(c => c.unheard);
+  const d = audio.duration || 0, p = d ? 100 * audio.currentTime / d : 0;
   $("seek").max = d; $("seek").value = audio.currentTime || 0;
-  $("seek").style.setProperty("--p", (d ? 100 * audio.currentTime / d : 0) + "%");
-  $("seek").title = fmt(audio.currentTime) + " / " + fmt(d);
-  $("live").classList.toggle("off", ended);
+  $("seek").style.setProperty("--p", p + "%"); $("ring").style.setProperty("--p", p + "%");
+  $("time").textContent = current ? fmt(audio.currentTime) + " / " + fmt(d) : "";
+  $("live").classList.toggle("off", ended); $("raillive").classList.toggle("off", ended);
+  paintNowLine(); paintJump();
 }
 function paintSettings() {
   for (const b of $("speeds").children) b.setAttribute("aria-pressed", String(Number(b.dataset.speed) === speed));
@@ -443,7 +498,7 @@ function paintSettings() {
 }
 function paintAll() {
   if (view.ended && live) { stopLive(); return; }  // stopLive paints again
-  paintSubs(); paintPill(); paintSettings();
+  paintInfo(); paintPill(); paintSettings();
   $("app").dataset.state = appState(); $("app").toggleAttribute("data-ended", !!view.ended);
   $("app").toggleAttribute("data-live", listening());
   $("app").toggleAttribute("data-tv", screenMode === "tv");
@@ -568,7 +623,7 @@ function paintCalls() {
 
 // ---- the audio being made -----------------------------------------------
 // An answer is read aloud in one piece, so it plays without a pause between sentences. Until its
-// audio is ready, a bar under the subtitles fills toward the server's estimate of how long it takes,
+// audio is ready, a bar in the panel's foot fills toward the server's estimate of how long it takes,
 // and holds short of the end until the audio is there.
 let clockSkew = 0, prepTimer = 0;
 function prepShare(e) {
@@ -643,14 +698,9 @@ function wordAt(e, t) {
   while (lo <= hi) { const m = (lo + hi) >> 1; if (e.words[m][2] <= t) { k = m; lo = m + 1; } else hi = m - 1; }
   return k;
 }
-// The word being said is lit, the words before it are full ink, and its line stays on the bottom
-// row of the subtitles. A paused answer keeps its place; one played to its end reads in full.
-let lastWord = null, lastK = -2;
-function keepInView(el) {
-  const want = Math.max(0, el.offsetTop + el.offsetHeight - capEl.clientHeight);
-  if (Math.abs(capEl.scrollTop - want) > 2) capEl.scrollTo({top: want, behavior: reduced.matches ? "auto" : "smooth"});
-  capEl.classList.toggle("scrolled", want > 0);
-}
+// The word being said is lit in the answer being read, the words before it are full ink, and the
+// conversation keeps it in view. A paused answer keeps its place; one played to its end reads in full.
+let lastWord = null, lastK = -2, lastTurn = null;
 function highlight() {
   const e = current;
   let k = -1;
@@ -662,17 +712,22 @@ function highlight() {
       syncStage(e, lead >= 0 ? e.words[lead][0] : -1);
     }
   }
-  const onCap = !!e && capFor === e.id;
-  const reading = onCap && k >= 0;
-  capEl.classList.toggle("reading", reading);
+  const turn = readingTurn();
+  if (lastTurn && lastTurn !== turn) {
+    lastTurn.classList.remove("reading");
+    for (const w of lastTurn.querySelectorAll(".w.said, .w.now-word")) w.classList.remove("said", "now-word");
+  }
+  lastTurn = turn;
+  const reading = !!turn && k >= 0;
+  if (turn) turn.classList.toggle("reading", reading);
   if (!reading) k = -1;
   if (k === lastK) return;
-  const was = lastK; lastK = k;
-  for (let i = 0; i < capSpans.length; i++) capSpans[i].classList.toggle("said", i < k);
+  lastK = k;
+  for (let i = 0; i < readSpans.length; i++) readSpans[i].classList.toggle("said", i < k);
   if (lastWord) lastWord.classList.remove("now-word");
-  lastWord = k >= 0 ? capSpans[k] || null : null;
-  if (lastWord) { lastWord.classList.add("now-word"); keepInView(lastWord); }
-  else if (was >= 0) { capEl.scrollTo({top: 0}); capEl.classList.remove("scrolled"); }
+  lastWord = k >= 0 ? readSpans[k] || null : null;
+  if (lastWord) { lastWord.classList.add("now-word"); followVoice(false); }
+  if (!audio.paused) paintNowLine();
 }
 
 // ---- the board follows the voice ------------------------------------------
@@ -766,8 +821,8 @@ function togglePlay() {
   if (!current) { const e = lastAnswer(); if (e) { toVoice(); load(e, true); } return; }
   if (audio.paused) { toVoice(); audio.play().catch(() => {}); } else audio.pause();
 }
-$("playpause").onclick = togglePlay;
-$("back").onclick = () => skip(-10);
+$("playpause").onclick = $("railpp").onclick = togglePlay;
+$("back").onclick = $("railback").onclick = () => skip(-10);
 $("seek").oninput = () => { audio.currentTime = Number($("seek").value); paintPill(); };
 for (const s of SPEEDS) {
   const b = document.createElement("button"); b.type = "button"; b.dataset.speed = s; b.textContent = s + "×";
@@ -824,7 +879,7 @@ document.addEventListener("keydown", ev => {
   if (!MEDIA_KEYS.has(ev.key) || ev.ctrlKey || ev.metaKey || ev.altKey || ev.shiftKey) return;
   const at = document.activeElement;
   const free = !at || at === document.body || (at === $("text") && !$("text").value)
-    || (at.tagName === "BUTTON" && !!at.closest("#pill, #subs"));
+    || (at.tagName === "BUTTON" && !!at.closest("#panel"));
   if (!free) return;
   if (ev.key === " " && ev.repeat) { ev.preventDefault(); return; }
   if (mediaKey(ev.key)) ev.preventDefault();
@@ -963,9 +1018,7 @@ function fitText() {
   $("sendtext").disabled = !t.value.trim();
 }
 $("text").addEventListener("input", fitText);
-const narrow = matchMedia("(max-width: 700px)");
-function placeholder() { $("text").placeholder = narrow.matches ? "Type or talk" : "Type to Claude, or press the mic to talk"; }
-narrow.addEventListener("change", placeholder); placeholder();
+$("text").placeholder = "Type, or press the mic";
 // Typing is as direct as talking: a key pressed anywhere on the page goes to the text field.
 document.addEventListener("keydown", ev => {
   if (ev.defaultPrevented || ev.ctrlKey || ev.metaKey || ev.altKey || ev.key.length !== 1 || openPop || recorder || view.ended) return;
@@ -1257,7 +1310,7 @@ function liveButton() {
   if (live && live.parked) { claimLive(); return; }
   if (live) stopLive(); else startLive();
 }
-$("talk").onclick = () => talkMode === "live" ? liveButton() : recorder ? sendRecording() : startRecording();
+$("talk").onclick = $("railtalk").onclick = () => talkMode === "live" ? liveButton() : recorder ? sendRecording() : startRecording();
 $("send").onclick = sendRecording;
 $("cancel").onclick = () => { stopRecording(); setMode("idle"); };
 $("sendtext").onclick = sendText;
