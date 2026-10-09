@@ -67,3 +67,24 @@ def test_an_answer_played_to_its_end_holds_its_last_frame_then_shows_its_boards_
     page.js("$('playpause').click(); await playTo(0.5); await advance(600);").check(RESTS)  # played again within the hold
     page.js("await end(); await advance(1600);").check(RESTS)
     assert page.run() == [[], [], [{"type": "stage:rest", "views": ["flow"], "answer": 1}]]
+
+
+def test_an_answer_that_comes_while_the_tab_is_hidden_waits_and_plays_when_the_tab_is_seen(tmp_path):
+    html, states = served(tmp_path, ["Said while you were in another tab."])
+    page = CallPage(html, states)
+    page.js("document.visibilityState = 'hidden'; await serve(1);").check("[audio.paused, audio.getAttribute('src')]")
+    page.js("document.visibilityState = 'visible'; document.dispatchEvent(new ShimEvent('visibilitychange'));")
+    page.check("audio.paused")
+    assert page.run() == [[True, "/c/test-call-id/audio/0000.wav"], False]
+
+
+def test_an_answer_held_for_a_hidden_tab_stays_put_once_the_reader_played_something_else(tmp_path):
+    html, states = served(tmp_path, ["The first answer.", "The second answer."])
+    page = CallPage(html, states, start=1)
+    page.js("document.visibilityState = 'hidden'; await serve(2);")
+    # back in the tab, the reader plays the first answer from its Play, then pauses it
+    page.js("document.querySelector('#convo .turn.claude button.play').click(); audio.pause();")
+    page.js("document.visibilityState = 'visible'; document.dispatchEvent(new ShimEvent('visibilitychange'));")
+    page.check("[audio.paused, audio.getAttribute('src')]")
+    assert page.run() == [[True, "/c/test-call-id/audio/0000.wav"]]
+

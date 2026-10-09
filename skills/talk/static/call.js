@@ -614,8 +614,20 @@ function maybeAutoplay() {
   // Only the call the user is talking in reads new answers aloud; another call's wait, marked new.
   const mine = !view.floor_call || view.floor_call === CFG.call;
   if (userBusy()) { if (mine && autoplay) deferred = last; return; }  // played once they are done (settle)
-  if (!current || audio.paused || audio.ended) load(last, autoplay && !recorder && mine);
+  if (current && !audio.paused && !audio.ended) return;
+  // A tab out of sight never starts talking: the answer waits in the player and plays when the tab is back.
+  const away = document.visibilityState === "hidden";
+  hiddenHeld = away && autoplay && !recorder && mine ? last.id : null;
+  load(last, autoplay && !recorder && mine && !away);
 }
+let hiddenHeld = null;      // the id of a new answer that came while the tab was hidden: it plays when the tab is seen
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible" || hiddenHeld === null) return;
+  const id = hiddenHeld; hiddenHeld = null;
+  if (current && current.id === id && audio.paused && !audio.ended && audio.currentTime === 0 && !userBusy() && !recorder) {
+    audio.play().catch(() => {});
+  }
+});
 // ---- the word being said ------------------------------------------------
 function playFrom(e, t) {
   // Play the answer from time `t` seconds in.
