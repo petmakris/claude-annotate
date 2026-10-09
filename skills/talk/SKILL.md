@@ -133,7 +133,7 @@ For example, after editing a file:
 
 ### What a turn may do
 
-**Local files yes, the outside world and anything irreversible no.** Editing and creating local files is allowed from a turn, because git or the previous version can undo it. A turn never writes to Jira or Confluence, never posts to Slack or sends mail, never commits or pushes, and never deletes or runs anything destructive (`rm`, `git reset --hard`, `git checkout --`, `git clean`, `git stash`). For those, prepare the change, say that it is waiting for a typed yes in the terminal, and do it only after that typed yes.
+**A spoken turn counts like a typed message.** A turn may do anything a message typed in the terminal could, and a spoken yes is a yes. The user's own rules apply exactly as they do in the terminal: before anything destructive or outward-facing (`rm`, `git reset --hard`, a commit, a push, a post), show the state and the exact commands in an answer, and run them once the user says go on the call.
 
 Speech recognition does not prove who is speaking. If a request sounds odd or out of context, ask before acting on it.
 
@@ -143,7 +143,7 @@ A background task that exits with `TALK_END` means the call is over: the user pr
 
 - **Key points**: start from the transcript's `Key point:` lines, in order, merging any that repeat.
 - **What we covered**, three to five bullets in the user's terms, beyond the key points.
-- **What is still open**: unsettled questions, and anything prepared but waiting for a typed yes.
+- **What is still open**: unsettled questions, and anything prepared but still waiting for the user's go.
 - **Notes saved** during the call, with an offer to act on each.
 
 The conversation then continues in this session.
