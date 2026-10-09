@@ -1980,6 +1980,8 @@ POLL = {"nodes": [{"id": "a", "role": "entry", "label": "Poll"}, {"id": "b", "ro
         "edges": [{"from": "a", "to": "a", "label": "not yet"}, {"from": "a", "to": "b", "label": "ready"}]}
 RETRY = {"nodes": [{"id": f"p{i}", "label": f"Phase {i}"} for i in range(8)],
          "edges": [{"from": f"p{i}", "to": f"p{i + 1}"} for i in range(7)] + [{"from": "p7", "to": "p0", "label": "retry"}]}
+CYCLE = {"nodes": [{"id": "idle", "role": "entry", "label": "Idle"}, {"id": "busy", "label": "Busy"}, {"id": "done", "label": "Done"}],
+         "edges": [{"from": "idle", "to": "busy"}, {"from": "busy", "to": "done"}, {"from": "done", "to": "idle", "label": "again"}]}
 LIVE_LOOP = {**LIVE_SPEC, "edges": LIVE_SPEC["edges"] + [{"from": "working", "to": "working", "label": "still thinking"}]}
 FAN = {"nodes": [{"id": "hub", "role": "entry", "label": "Hub"}] + [{"id": f"t{i}", "label": f"Target {i}"} for i in range(12)],
        "edges": [{"from": "hub", "to": f"t{i}"} for i in range(12)]}
@@ -1989,9 +1991,9 @@ FAN = {"nodes": [{"id": "hub", "role": "entry", "label": "Hub"}] + [{"id": f"t{i
     (TALK_PARTS, (1300, 850), "across"), (TALK_PARTS, (420, 860), "down"),
     (LIVE_SPEC, (1300, 850), "ring"), (LIVE_SPEC, (1000, 700), "ring"), (LIVE_SPEC, (420, 860), "down"),
     (TWO_WAYS, (1300, 850), "across"), (POLL, (1300, 850), "across"), (RETRY, (1300, 850), "across"), (FAN, (1300, 850), "across"),
-    (LIVE_LOOP, (1300, 850), "ring"),
+    (LIVE_LOOP, (1300, 850), "ring"), (CYCLE, (1300, 850), "ring"),
 ], ids=["lands-1300", "lands-1000", "lands-420", "parts-1300", "parts-420", "live-1300", "live-1000", "live-420",
-        "two-ways", "poll", "retry", "fan", "live-loop"])
+        "two-ways", "poll", "retry", "fan", "live-loop", "cycle"])
 def test_a_map_keeps_every_card_label_and_head_clear_of_the_others_and_on_the_board_at_every_frame(
         spec, size, layout, tmp_path, wc_config, browser):
     built = _each_part_said(spec, "Map")
@@ -2170,6 +2172,30 @@ def test_the_lanes_keep_every_chip_label_and_note_clear_through_a_resize(spec, t
             if got:
                 faults[n] = got
         assert faults == {}
+    finally:
+        wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
+
+
+OVER = """(pane) => [...pane.querySelectorAll('.ln-row.ln-request[data-on]')].map((r) => {
+  const l = r.querySelector('.ln-lbl').getBoundingClientRect(), a = r.querySelector('.ln-line').getBoundingClientRect();
+  return [r.dataset.step, Math.round(l.left + l.width / 2 - (a.left + a.width / 2)), Math.round(l.width)]; })"""
+
+
+def test_an_arrows_words_centre_over_it_and_narrow_before_they_slide_aside(tmp_path, wc_config, browser):
+    res = stage.show(str(tmp_path), "l", _visual("sequence", RELEASE_NOTED), title="Lanes")
+    try:
+        page, frame, send = _still(browser, res["url"], 1300, 844)
+        pane = frame.locator('section.pane[data-view="l"]')
+        pane.locator(".ln-row").first.wait_for(state="attached", timeout=5000)
+        _settled(page)
+        seen = {1300: pane.evaluate(OVER)}
+        page.set_viewport_size({"width": 800, "height": 844})
+        _settled(page)
+        seen[800] = pane.evaluate(OVER)
+        # [step, words' centre less the arrow's, words' width]: each is centred over its arrow; the long arrow to
+        # the last lane narrows its words about its middle rather than sliding them off it
+        assert seen == {1300: [["s2", 0, 578], ["s4", 0, 578], ["s6", 0, 578], ["s7", 0, 1070]],
+                        800: [["s2", 0, 328], ["s4", 0, 328], ["s6", 0, 328], ["s7", 0, 570]]}
     finally:
         wc_config.call("DELETE", "/s/%s/?kind=stage&force=1" % res["sid"])
 
