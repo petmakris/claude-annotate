@@ -1061,7 +1061,7 @@ function setFollow(on) {
 
 // Centre `el` (an element, or several taken together, such as the lines of a range) in each box around it
 // that scrolls, inside the pane only: never the page around the stage. What is taller than the box starts at
-// its top instead. `room`: the foot of the board kept for the subtitles, which the element is centred above.
+// its top instead. `room`: the foot of the board kept clear, which the element is centred above.
 function centre(el, room = 0) {
   const els = (Array.isArray(el) ? el : [el]).filter((e) => e && e.isConnected);
   if (!els.length) return;

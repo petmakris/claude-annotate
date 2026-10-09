@@ -16,12 +16,11 @@ const NARROW = 40;    // that inset on a phone, where every pixel of the span go
 const EDGE = 4;       // nothing comes nearer the board's edge than this
 const GAP = 10;       // between two chips on one line
 const CHIP = 96;      // narrower than this, the chips take two lines, every other one on the lower
-const ROOM = 230;     // in a call, the current step stays this far above the bottom: clear of the subtitles
 
 export function renderLanes(box, spec, embedded) {
   const steps = spec.steps || [], actors = spec.actors || [];
   const phases = new Map((spec.phases || []).map((p) => [p.start_at, p.label]));
-  box.dataset.room = embedded ? ROOM : 24;
+  box.dataset.room = 24;   // the current step stays this far above the bottom of the board
   const legend = (spec.legend || []).length
     ? `<div class="ln-legend">${spec.legend.map((l) => `<span class="${tone(l.tone)}"><i></i>${esc(l.label)}</span>`).join("")}</div>` : "";
   box.innerHTML = `<div class="ln-head"><div class="ln-actors">${actors.map((a) =>
@@ -196,7 +195,7 @@ export function layoutLanes(box, scene, n = null) {
   if (cur) requestAnimationFrame(() => follow(box));
 }
 
-// Keep the current step just above the bottom of the board (above the subtitles, in a call), with
+// Keep the current step just above the bottom of the board, with
 // the story so far stacked over it. Scrolls the pane's own scroller, never the page around it.
 function follow(box) {
   const r = box.querySelector(".ln-row.ln-cur");

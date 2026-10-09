@@ -22,11 +22,9 @@ const GAP_X = 70, GAP_Y = 34;  // between columns, between parts in a column, wh
 const AIR_X = 26, AIR_Y = 30;  // the least room between two cards: an arrow and its head still show in it
 const SIDE = 12;               // the board's margin, which no card crosses
 const LOOP = 58;               // above a part with an arrow to itself: the loop and its label
-const ROOM = 210;              // in a call, the map stays clear of the subtitles below it
 
 export function renderMap(box, spec, embedded) {
-  box.dataset.room = embedded ? ROOM : 16;
-  box.style.marginBottom = embedded ? ROOM + "px" : "";  // the board centres the map with its room, so the room is all below it
+  box.dataset.room = 16;   // the foot of the board the map keeps clear: the call's panel sits beside the stage, not over it
   box._map = { spec, embedded, cur: null };
   const nodes = spec.nodes || [], edges = spec.edges || [];
   const seen = new Map();
