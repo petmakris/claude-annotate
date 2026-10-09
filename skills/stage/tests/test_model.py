@@ -280,3 +280,23 @@ def test_stdin_kinds_take_talks_names_and_an_unknown_one_is_refused(tmp_path):
     assert model.parse_source("grid:-", tmp_path, "| a |\n|---|\n| 1 |")["format"] == "table"
     with pytest.raises(model.SourceError, match="unknown chart:-"):
         model.parse_source("chart:-", tmp_path, "x")
+
+
+def test_a_sequences_refs_keep_the_lines_round_them_and_a_ref_to_nothing_is_a_problem(tmp_path):
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "talk.py").write_text("".join(f"line {i}\n" for i in range(1, 11)))
+    spec = {"actors": [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}],
+            "steps": [{"id": "s1", "from": "a", "to": "b", "arrow": "request", "label": "near the top", "ref": "pkg/talk.py:2"},
+                      {"id": "s2", "from": "a", "to": "b", "arrow": "request", "label": "at the end", "ref": "pkg/talk.py:10"},
+                      {"id": "s3", "from": "a", "to": "b", "arrow": "request", "label": "past it", "ref": "pkg/talk.py:11"},
+                      {"id": "s4", "from": "a", "to": "b", "arrow": "request", "label": "no file", "ref": "pkg/gone.py:1"},
+                      {"id": "s5", "from": "a", "to": "b", "arrow": "request", "label": "outside", "ref": "../x.py:1"}]}
+    refs, problems = model.step_refs(spec, tmp_path)
+    assert refs == {"s1": {"path": "pkg/talk.py", "start": 1, "at": 2, "lines": [f"line {i}" for i in range(1, 8)], "lang": "py"},
+                    "s2": {"path": "pkg/talk.py", "start": 8, "at": 10, "lines": ["line 8", "line 9", "line 10"], "lang": "py"}}
+    assert problems == ["step s3: ref pkg/talk.py:11 is past the end of pkg/talk.py, which has 10 lines",
+                        "step s4: ref pkg/gone.py:1 names no file in the code folder",
+                        "step s5: ref ../x.py:1 names no file in the code folder"]
+    # a sequence put up from stdin keeps them, read from the folder it is put up in
+    source = model.parse_source("sequence:-", tmp_path, json.dumps({**spec, "steps": spec["steps"][:1]}))
+    assert source["refs"] == {"s1": refs["s1"]}

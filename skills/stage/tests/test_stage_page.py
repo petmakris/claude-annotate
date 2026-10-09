@@ -2,6 +2,8 @@
 on, and what each frame lights. Run on the page's own JavaScript under node (stage_page.py), with no browser."""
 from __future__ import annotations
 
+import json
+
 from skills.stage import scene
 from skills.stage.tests.stage_page import StagePage, needs_node, visual
 from skills.stage.tests.test_scene import CALLS_SPEC, ENGINES as ENGINES_MODEL, LIVE_SPEC, TIMELINE
@@ -98,7 +100,8 @@ def test_a_frame_another_answer_sent_before_a_board_came_is_not_applied_to_it(tm
     page.send({"type": "stage:frame", "view": "rp2", "n": 2, "answer": 4})
     page.show("rp2", visual("sequence", RELEASE), title="Release path 2", extra={"scene": two, "scenes": {"4": two}, "answer": 4})
     page.check("lanes('rp2')")
-    assert page.run() == [{"frame": 0, "step": "8 steps", "on": [], "cur": [], "card": "Release path"},
+    # frame 0 shows every step faint, so it needs no title card over it
+    assert page.run() == [{"frame": 0, "step": "8 steps", "on": [], "cur": [], "card": None},
                           {"frame": 2, "step": "Step 2 of 8", "on": ALL8[:2], "cur": ["s1"], "card": None}]
 
 
@@ -440,21 +443,130 @@ def test_only_a_scene_frame_lights_a_part_and_the_old_point_message_does_nothing
 DRAWN_SPEC = {"actors": [{"id": "pg", "label": "Call page", "sub": "call.js"}, {"id": "sv", "label": "Talk server"},
                          {"id": "az", "label": "Azure", "tone": "hot"}],
               "steps": [{"id": "s1", "from": "pg", "to": "sv", "arrow": "request", "label": "sends the choice", "sub": "POST /api/voice"},
-                        {"id": "s2", "from": "sv", "to": "az", "arrow": "request", "label": "reads the next answer in it"}]}
-DRAWN = ("(n => { const b = pane(n).querySelector('.visual.lanes'), cur = b.querySelector('.ln-row.ln-cur');"
+                        {"id": "s2", "from": "sv", "to": "az", "arrow": "request", "label": "reads the next answer in it"},
+                        {"id": "s3", "from": "az", "to": "sv", "arrow": "event", "reply_to": "s2", "label": "the audio"}]}
+DRAWN = ("(n => { const b = pane(n).querySelector('.visual.lanes');"
          " return {subs: b.classList.contains('ln-subs'),"
          " colours: [...b.querySelectorAll('.ln-chip')].map((c) => c.style.getPropertyValue('--ac')),"
-         " names: [...b.querySelectorAll('.ln-chip')].map((c) => c.textContent),"
-         " bar: cur && [cur.dataset.step, cur.style.getPropertyValue('--rx'), cur.style.getPropertyValue('--rc')]}; })")
+         " names: [...b.querySelectorAll('.ln-chip')].map((c) => c.textContent.trim()),"
+         " live: [...b.querySelectorAll('.ln-actbar.ln-live')].map((r) => [r.dataset.actor, r.style.getPropertyValue('--bc')])}; })")
 
 
-def test_the_lanes_give_each_actor_its_colour_and_file_and_mark_the_receiver_of_the_step_being_said(tmp_path):
+def test_the_lanes_give_each_actor_its_colour_and_file_and_light_the_bar_of_the_call_being_answered(tmp_path):
     m = scene.sequence_model(DRAWN_SPEC)
-    built = _scene(m, [["next"], ["next"]], "Picking a voice")
+    built = _scene(m, [["next"], ["next"], ["next"]], "Picking a voice")
     page = StagePage(tmp_path).show("pick", visual("sequence", DRAWN_SPEC), title="Picking a voice", extra={"scene": built}).open()
-    for n in (0, 1, 2):
+    for n in (0, 1, 2, 3):
         page.send({"type": "stage:frame", "view": "pick", "n": n, "animate": n > 0})
     page.check(DRAWN + "('pick')")
-    # unmeasured, the board is placed as 900px wide: the columns stand at 72, 450 and 828
+    # the reply being said: the bar its call opened on Azure is lit, in Azure's colour
     assert page.run() == [{"subs": True, "colours": ["var(--a1)", "var(--a2)", "var(--t-hot)"],
-                           "names": ["Call pagecall.js", "Talk server", "Azure"], "bar": ["s2", "828px", "var(--t-hot)"]}]
+                           "names": ["Call pagecall.js", "Talk server", "Azure"], "live": [["az", "var(--t-hot)"]]}]
+
+
+# A spoken turn's path through talk (the stage mockups' flow, cut to three actors), its first step's ref in a
+# file of the test's own.
+TURN = {"actors": [{"id": "page", "label": "Call page", "sub": "call.js"}, {"id": "srv", "label": "Talk server"},
+                   {"id": "az", "label": "Azure Speech"}],
+        "phases": [{"id": "p1", "label": "Hear", "start_at": "s1"}, {"id": "p2", "label": "Answer", "start_at": "s6"}],
+        "groups": [{"id": "g1", "kind": "alt", "branches": ["live, its own voice heard back", "otherwise"]}],
+        "steps": [{"id": "s1", "from": "page", "to": "srv", "arrow": "request", "label": "sends the recording", "ref": "talk.py:3"},
+                  {"id": "s2", "from": "srv", "to": "az", "arrow": "request", "label": "turns it into words"},
+                  {"id": "s3", "from": "az", "to": "srv", "arrow": "event", "reply_to": "s2", "label": "the words it heard"},
+                  {"id": "s4", "from": "srv", "to": "srv", "arrow": "self", "group": "g1", "branch": 0, "label": "drops them as an echo"},
+                  {"id": "s5", "from": "srv", "to": "srv", "arrow": "self", "group": "g1", "branch": 1, "label": "queues the words as a turn"},
+                  {"id": "s6", "from": "srv", "to": "page", "arrow": "event", "reply_to": "s1", "label": "returns what it heard"},
+                  {"id": "s7", "from": "page", "to": "page", "arrow": "self", "label": "plays it"}]}
+TURN_LINES = [f"line {i}" for i in range(1, 13)]
+
+
+def _turn(tmp_path, page=None, **kw):
+    (tmp_path / "talk.py").write_text("\n".join(TURN_LINES) + "\n")
+    from skills.stage import model
+    return (page or StagePage(tmp_path)).show("turn", model.parse_source("sequence:-", tmp_path, json.dumps(TURN)),
+                                              title="A spoken turn", **kw)
+
+
+TURN_DRAWN = ("(() => { const b = pane('turn').querySelector('.visual.lanes'), at = (s) => b.querySelector(`.ln-row[data-step=\"${s}\"]`);"
+              " const line = at('s2').querySelector('line');"
+              " return {rows: [...b.querySelectorAll('.ln-row')].map((r) => r.dataset.step),"
+              " faint: [...b.querySelectorAll('.ln-row.k-hidden')].map((r) => r.dataset.step),"
+              " cur: [...b.querySelectorAll('.ln-row.ln-cur')].map((r) => r.dataset.step),"
+              " bars: [...b.querySelectorAll('.ln-actbar')].map((r) => [r.dataset.actor, r.dataset.from, +r.dataset.depth]),"
+              " live: [...b.querySelectorAll('.ln-actbar.ln-live')].map((r) => r.dataset.from),"
+              " ghostPhases: [...b.querySelectorAll('.ln-phase.ln-ghost')].map((p) => p.textContent.trim().split('steps')[0]),"
+              " s2: [line.getAttribute('x1'), line.getAttribute('x2')],"
+              " cols: [...b.querySelectorAll('.ln-chip')].map((c) => c.style.left)}; })()")
+
+
+def test_the_lanes_draw_every_step_from_the_start_and_open_a_bar_from_each_call_to_its_reply(tmp_path):
+    built = _scene(scene.sequence_model(TURN), [[f"+ step s{i}"] for i in range(1, 8)], "A spoken turn")
+    page = _turn(tmp_path, extra={"scene": built}).open()
+    page.send({"type": "stage:frame", "view": "turn", "n": 3}).check(TURN_DRAWN)
+    # unmeasured, the board is 900px wide: the columns stand at 88, 467 and 846. The words being heard back:
+    # the steps to come are drawn faint, as is the phase they start; the call to Azure and the recording's
+    # call hold their bars open; the calls to itself nest a bar inside the server's; the arrow to Azure runs
+    # from the edge of the server's bar to the edge of Azure's
+    assert page.run() == [{"rows": [f"s{i}" for i in range(1, 8)], "faint": ["s4", "s5", "s6", "s7"], "cur": ["s3"],
+                           "bars": [["srv", "s1", 0], ["az", "s2", 0], ["srv", "s4", 1], ["srv", "s5", 1], ["page", "s7", 0]],
+                           "live": ["s1", "s2"], "ghostPhases": ["Answer"], "s2": ["472", "839"], "cols": ["88px", "467px", "846px"]}]
+
+
+BOXES = ("(() => { const b = pane('turn').querySelector('.visual.lanes');"
+         " return {kinds: [...b.querySelectorAll('.ln-kind')].map((k) => k.textContent.trim()),"
+         " guards: [...b.querySelectorAll('.ln-guard')].map((g) => g.textContent.trim()),"
+         " rows: [...b.querySelectorAll('.ln-row')].map((r) => r.dataset.step)}; })()")
+CLICK = "pane('turn').querySelector(%s).click();"
+
+
+def test_a_box_shows_its_kind_and_whole_condition_and_folds_on_its_kind_unless_it_holds_the_step_being_said(tmp_path):
+    built = _scene(scene.sequence_model(TURN), [[f"+ step s{i}"] for i in range(1, 8)], "A spoken turn")
+    page = _turn(tmp_path, extra={"scene": built}).open()
+    page.check(BOXES).js(CLICK % "'.ln-kind'").check(BOXES)
+    page.send({"type": "stage:frame", "view": "turn", "n": 4}).check(BOXES)
+    assert page.run() == [
+        {"kinds": ["▾ alt"], "guards": ["live, its own voice heard back", "else"], "rows": [f"s{i}" for i in range(1, 8)]},
+        {"kinds": ["▸ alt"], "guards": ["live, its own voice heard back", "2 steps folded · open"], "rows": ["s1", "s2", "s3", "s6", "s7"]},
+        # the voice reaches a step inside it: the box opens to show it
+        {"kinds": ["▾ alt"], "guards": ["live, its own voice heard back", "else"], "rows": [f"s{i}" for i in range(1, 8)]}]
+
+
+POP = ("(() => { const p = pane('turn').querySelector('.ln-pop');"
+       " return p && {title: p.querySelector('h3').textContent, lines: [...p.querySelectorAll('.ln-cl')].map((l) => l.textContent),"
+       " at: [...p.querySelectorAll('.ln-cl.ln-at')].map((l) => l.textContent), src: p.querySelector('.ln-srchead')?.textContent ?? null,"
+       " meta: [...p.querySelectorAll('.ln-meta div')].map((d) => d.textContent.trim().replace(/\\s+/g, ' ')),"
+       " play: !!p.querySelector('[data-playfrom]')}; })()")
+
+
+def test_a_click_on_a_step_opens_its_popup_with_the_source_lines_round_its_ref_and_the_step_that_answers_it(tmp_path):
+    page = _turn(tmp_path).open()
+    page.js(CLICK % "'.ln-row[data-step=\"s1\"]'").check(POP)
+    page.js(CLICK % "'.ln-pop .ln-link'").check(POP)
+    page.js(CLICK % "'.ln-pop [data-close]'").check(POP)
+    # line 3 and two before it and five after it; a board shown with no answer has nothing to play from
+    assert page.run() == [
+        {"title": "Sends the recording", "lines": [f"{i}line {i}" for i in range(1, 9)], "at": ["3line 3"], "src": "talk.py:3",
+         "meta": ["Answered by step 6: returns what it heard"], "play": False},
+        {"title": "Returns what it heard", "lines": [], "at": [], "src": None, "meta": ["Answers step 1: sends the recording"], "play": False},
+        None]
+
+
+def test_play_from_here_asks_the_call_page_for_the_frame_that_says_the_step(tmp_path):
+    built = _scene(scene.sequence_model(TURN), [[f"+ step s{i}"] for i in range(1, 8)], "A spoken turn")
+    page = _turn(tmp_path, extra={"scene": built, "scenes": {"2": built}, "answer": 2}).open()
+    page.send({"type": "stage:state", "front": "turn", "frames": {"turn": 7}, "keys": 0, "answer": 2})
+    page.js(CLICK % "'.ln-row[data-step=\"s5\"]'").js(CLICK % "'.ln-pop [data-playfrom]'").check(POP)
+    out = page.run()
+    assert [m for m in page.posted if m["type"] == "stage:play"] == [{"type": "stage:play", "view": "turn", "answer": 2, "n": 5}]
+    assert out == [None]  # the popup closes as the voice goes there
+
+
+FOLLOWED = ("(() => { const b = pane('turn').querySelector('.visual.lanes');"
+            " return {dim: [...b.querySelectorAll('.ln-row.ln-dim')].map((r) => r.dataset.step),"
+            " followed: [...b.querySelectorAll('.ln-chip.ln-followed')].map((c) => c.dataset.actor)}; })()")
+
+
+def test_a_click_on_an_actor_card_follows_it_and_another_click_lets_it_go(tmp_path):
+    page = _turn(tmp_path).open()
+    page.js(CLICK % "'.ln-chip[data-actor=\"az\"]'").check(FOLLOWED).js(CLICK % "'.ln-chip[data-actor=\"az\"]'").check(FOLLOWED)
+    assert page.run() == [{"dim": ["s1", "s4", "s5", "s6", "s7"], "followed": ["az"]}, {"dim": [], "followed": []}]

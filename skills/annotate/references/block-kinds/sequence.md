@@ -59,6 +59,22 @@ monochrome diagram — nothing below is required.
   condition (`the task carries Action.REFRESH, so the refresh closure runs`).
   `from === to` is allowed.
 
+## Replies, boxes and refs — for the stage
+
+Three optional fields are checked here and drawn only by the talk stage's lanes; this
+renderer ignores them, so a block that carries them still renders as before.
+
+- `reply_to` on an `event` names the `request` it answers, going back the way the
+  call came (`from` and `to` swapped). The stage holds a bar open on the receiver
+  from the call to its reply.
+- `groups` puts UML boxes round runs of steps: `{"id", "kind": "alt" | "par",
+  "branches": ["<condition>", ...]}` or `{"id", "kind": "loop" | "opt", "label":
+  "<condition>"}`. A step joins one with `"group"`, plus `"branch": 0, 1, ...` in
+  an `alt` or `par`. A box's steps follow one another, its branches come in order
+  from 0, each branch has a step, and a phase never starts inside a box.
+- `ref` on a step, `path:line`, gives the step's popup on the stage the source
+  lines round that line.
+
 ## Tones — colour carries the finding, not the mechanism
 
 A tone says **what the reader should conclude** from an edge. It does not

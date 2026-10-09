@@ -122,3 +122,22 @@ def test_a_voice_picked_in_the_settings_is_sent_and_kept(tmp_path):
     page.check("[sentTo.filter(([path]) => path === '/api/voice'), localStorage.getItem('talk.voice')]").check(PICKED)
     assert page.run() == [0, [[["/api/voice", {"voice": "el-GR-AthinaNeural"}]], '"el-GR-AthinaNeural"'],
                           ["en-US-AvaMultilingualNeural:false", "el-GR-AthinaNeural:true"]]
+
+
+SEQ_ANSWER = ('[[show sequence | Turn]] {"actors": [{"id": "p", "label": "Page"}, {"id": "s", "label": "Server"}], "steps": ['
+              '{"id": "s1", "from": "p", "to": "s", "arrow": "request", "label": "send"},'
+              '{"id": "s2", "from": "s", "to": "p", "arrow": "event", "label": "answer", "reply_to": "s1"}]} [[/show]] '
+              f"{six('first')}. [[+ s1]] {six('second')}. [[+ s2]] {six('third')}.")
+CUE_TIME = ("(() => { const e = served.entries.find((x) => x.who === 'claude'), c = e.cues.find((c) => c.kind === 'frame' && c.n === 2);"
+            " return e.words.find((w) => w[0] >= c.at)[2]; })()")
+
+
+def test_play_from_here_on_a_stage_step_plays_the_answer_from_the_sentence_that_says_it(tmp_path):
+    html, states = served(tmp_path, [SEQ_ANSWER], seconds=6.0)
+    page = CallPage(html, states, seconds=6.0, autoplay=False).js("await serve(1);")
+    page.js("fromStage({ type: 'stage:follow', on: false });")
+    page.js("fromStage({ type: 'stage:play', view: 'turn', answer: 1, n: 2 });")
+    page.check(f"[!audio.paused, follow, audio.currentTime > 0 && audio.currentTime === {CUE_TIME}]")
+    # a frame no answer has does nothing
+    page.js("audio.pause(); fromStage({ type: 'stage:play', view: 'turn', answer: 1, n: 9 });").check("audio.paused")
+    assert page.run() == [[True, True, True], True]

@@ -182,7 +182,7 @@ def parse_source(raw: str, cwd: Path, stdin_text: str | None = None) -> dict:
         kind = raw[:-2].lower()
         kind = {"mermaid": "diagram", "graph": "diagram", "flow": "diagram", "grid": "table"}.get(kind, kind)
         if kind in ("sequence", "flowchart"):
-            return visual_source(kind, stdin_text or "")
+            return visual_source(kind, stdin_text or "", root=cwd)
         if kind not in ("diagram", "table"):
             raise SourceError(f"unknown {raw}: stdin takes sequence:-, flowchart:-, diagram:- or table:-")
         body = (stdin_text or "").strip()
@@ -200,7 +200,7 @@ def parse_source(raw: str, cwd: Path, stdin_text: str | None = None) -> dict:
     return {"type": "file", "path": path.relative_to(cwd.resolve()).as_posix(), "fragment": fragment or None}
 
 
-_PARTS = {"sequence": "actors, steps, phases, legend", "flowchart": "nodes, edges, groups"}
+_PARTS = {"sequence": "actors, steps, phases, legend, groups", "flowchart": "nodes, edges, groups"}
 
 
 def _plain(tool: str, spec: dict) -> dict:
@@ -237,9 +237,10 @@ def check_flowchart(spec: dict) -> None:
             raise flowchart.ValidationError(f"group {g!r} needs an id and a list of the spec's node ids")
 
 
-def visual_source(tool: str, text: str) -> dict:
+def visual_source(tool: str, text: str, root: Path | None = None) -> dict:
     """A sequence or flowchart spec (JSON), checked and kept as its spec: the stage draws a sequence as its lanes
-    (lanes.js) and a flowchart as its map (map.js), so no drawing of the shared tools is stored with it."""
+    (lanes.js) and a flowchart as its map (map.js), so no drawing of the shared tools is stored with it.
+    With `root`, a sequence also keeps the lines round each step's `ref` (see step_refs), for its popups."""
     try:
         spec = json.loads(text)
     except ValueError as e:
@@ -260,7 +261,40 @@ def visual_source(tool: str, text: str) -> dict:
         raise SourceError(f"{tool}:-: {e}") from None
     except Exception as e:
         raise SourceError(f"{tool}:-: the tool could not read this spec ({type(e).__name__}: {e})") from None
-    return {"type": "inline", "format": "visual", "tool": tool, "spec": spec}
+    source = {"type": "inline", "format": "visual", "tool": tool, "spec": spec}
+    if tool == "sequence" and root is not None:
+        refs, _ = step_refs(spec, root)
+        if refs:
+            source["refs"] = refs
+    return source
+
+
+REF_BEFORE, REF_AFTER = 2, 5   # a step's popup shows its line with this many before and after it
+
+
+def step_refs(spec: dict, root: Path) -> tuple[dict, list[str]]:
+    """The source lines round each step's `ref` (path:line, under root), keyed by step id, and a problem
+    for each ref that names no line there. A step's popup on the stage shows them."""
+    refs, problems = {}, []
+    base = root.resolve()
+    for s in spec.get("steps") or []:
+        ref = s.get("ref")
+        if not ref:
+            continue
+        rel, _, line = ref.strip().rpartition(":")
+        path = (base / rel).resolve()
+        if not path.is_relative_to(base) or not path.is_file():
+            problems.append(f"step {s['id']}: ref {ref} names no file in the code folder")
+            continue
+        lines = path.read_text(errors="replace").splitlines()
+        at = int(line)
+        if at > len(lines):
+            problems.append(f"step {s['id']}: ref {ref} is past the end of {rel}, which has {len(lines)} lines")
+            continue
+        a, b = max(1, at - REF_BEFORE), min(len(lines), at + REF_AFTER)
+        refs[s["id"]] = {"path": path.relative_to(base).as_posix(), "start": a, "at": at, "lines": lines[a - 1:b],
+                         "lang": path.suffix.lstrip(".") or "text"}
+    return refs, problems
 
 
 def mount_name(directory: Path, cwd: Path) -> str:

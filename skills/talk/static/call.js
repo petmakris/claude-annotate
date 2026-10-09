@@ -129,7 +129,18 @@ window.addEventListener("message", ev => {
   else if (m.type === "stage:shown") { frontBoard = String(m.view || ""); paintFront(); }
   else if (m.type === "stage:missing") paintMissing(String(m.view));
   else if (m.type === "stage:key" && MEDIA_KEYS.has(m.key)) mediaKey(m.key);
+  else if (m.type === "stage:play") playFrame(String(m.view || ""), Number(m.answer), Number(m.n));
 });
+// Play from here, in a sequence step's popup on the stage: the answer plays from the word where that frame begins.
+function playFrame(board, n, frameNo) {
+  const e = view.entries.find(x => x.who === "claude" && x.n === n);
+  if (!e || e.speech !== "ready" || !e.words || !e.words.length) return;
+  const cue = (e.cues || []).find(c => c.kind === "frame" && c.view === board && c.n === frameNo);
+  if (!cue) return;
+  release();
+  const w = e.words.find(w => w[0] >= cue.at) || e.words[e.words.length - 1];
+  playFrom(e, w[2]);
+}
 
 let stageViews = null;
 let boardAnswer = new Map();   // board -> the number of the answer that showed it

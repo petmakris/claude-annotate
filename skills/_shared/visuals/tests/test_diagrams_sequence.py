@@ -285,3 +285,63 @@ def test_render_labelless_actor_raises_validation_not_keyerror():
     del spec["actors"][0]["label"]
     with pytest.raises(ValidationError):
         render(spec, block_id="b-0")
+
+
+# -- replies, boxes and refs: drawn by the stage, checked here for annotate and the stage alike ------------
+
+def _turn():
+    return {"actors": [{"id": "p", "label": "Page"}, {"id": "s", "label": "Server"}, {"id": "a", "label": "Azure"}],
+            "phases": [{"id": "p1", "label": "Hear", "start_at": "s1"}, {"id": "p2", "label": "Answer", "start_at": "s6"}],
+            "groups": [{"id": "g1", "kind": "alt", "branches": ["an echo", "otherwise"]},
+                       {"id": "g2", "kind": "loop", "label": "until a turn arrives"}],
+            "steps": [{"id": "s1", "from": "p", "to": "s", "arrow": "request", "label": "sends", "ref": "talk.py:2213"},
+                      {"id": "s2", "from": "s", "to": "a", "arrow": "request", "label": "transcribes"},
+                      {"id": "s3", "from": "a", "to": "s", "arrow": "event", "label": "words", "reply_to": "s2"},
+                      {"id": "s4", "from": "s", "to": "s", "arrow": "self", "label": "drops it", "group": "g1", "branch": 0},
+                      {"id": "s5", "from": "s", "to": "s", "arrow": "self", "label": "queues it", "group": "g1", "branch": "1"},
+                      {"id": "s6", "from": "s", "to": "p", "arrow": "event", "label": "heard", "reply_to": "s1", "group": "g2"},
+                      {"id": "s7", "from": "p", "to": "p", "arrow": "self", "label": "plays"}]}
+
+
+def test_validate_replies_boxes_and_refs_ok():
+    validate(_turn())  # no raise
+
+
+def _with(edit):
+    spec = _turn()
+    edit(spec)
+    return spec
+
+
+def _step(spec, sid):
+    return next(s for s in spec["steps"] if s["id"] == sid)
+
+
+@pytest.mark.parametrize("edit, match", [
+    (lambda s: _step(s, "s3").update(reply_to="s9"), "not an earlier step"),
+    (lambda s: _step(s, "s3").update(reply_to="s4"), "not an earlier step"),
+    (lambda s: _step(s, "s3").update(reply_to="s3"), "not an earlier step"),
+    (lambda s: _step(s, "s6").update(reply_to="s2"), "goes back from 'a' to 's'"),
+    (lambda s: _step(s, "s6").update(reply_to="s3"), "joins an event to the request"),
+    (lambda s: s["steps"].insert(3, {"id": "s3b", "from": "a", "to": "s", "arrow": "event", "label": "again", "reply_to": "s2"}),
+     "already answered"),
+    (lambda s: _step(s, "s1").update(ref="talk.py"), "not path:line"),
+    (lambda s: _step(s, "s1").update(ref="talk.py:0"), "not path:line"),
+    (lambda s: s["groups"][0].pop("branches"), "alt needs branches"),
+    (lambda s: s["groups"][0].update(branches=["only one"]), "alt needs branches"),
+    (lambda s: s["groups"][1].pop("label"), "loop needs a label"),
+    (lambda s: s["groups"][1].update(kind="while"), "kind must be one of"),
+    (lambda s: s["groups"].append({"id": "g1", "kind": "opt", "label": "x"}), "duplicate"),
+    (lambda s: _step(s, "s7").update(group="g9"), "unknown group"),
+    (lambda s: _step(s, "s7").update(group="g1", branch=1), "must follow one another"),
+    (lambda s: _step(s, "s4").update(branch=1), "come in order, from 0"),
+    (lambda s: _step(s, "s5").update(branch=0), "every branch needs a step"),
+    (lambda s: _step(s, "s5").update(branch=2), "from 0 to 1"),
+    (lambda s: _step(s, "s6").update(branch=0), "a loop has no branches"),
+    (lambda s: _step(s, "s7").update(branch=0), "in no group"),
+    (lambda s: s["groups"].append({"id": "g3", "kind": "opt", "label": "never"}), "holds no step"),
+    (lambda s: s["phases"][1].update(start_at="s5"), "starts inside group 'g1'"),
+])
+def test_validate_refuses_a_bad_reply_box_or_ref(edit, match):
+    with pytest.raises(ValidationError, match=match):
+        validate(_with(edit))

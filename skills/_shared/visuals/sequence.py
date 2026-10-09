@@ -27,6 +27,12 @@ ARROW_TYPES = ("request", "event", "self", "band")
 # mechanism that carried it. `plain` is the default and needs no legend entry.
 TONES = ("plain", "edge", "internal", "service", "cheap", "hot", "good", "dropped")
 
+# A box round a run of steps, as in UML: `alt` and `par` split it into branches, `loop` and `opt` carry a
+# condition. The stage draws them; this renderer ignores them.
+GROUP_KINDS = ("alt", "par", "loop", "opt")
+BRANCHED = ("alt", "par")
+REF_RE = re.compile(r"[^\s:][^:]*:[1-9]\d*")  # path:line, the line a step's popup on the stage shows
+
 
 class ValidationError(ValueError):
     """Raised when a sequence spec violates a structural rule."""
@@ -85,6 +91,12 @@ def validate(spec: dict[str, Any]) -> None:
         tone = s.get("tone", "plain")
         if tone not in TONES:
             raise ValidationError(f"step {sid}: unknown tone {tone!r}")
+        ref = s.get("ref")
+        if ref is not None and not (isinstance(ref, str) and REF_RE.fullmatch(ref.strip())):
+            raise ValidationError(f"step {sid}: ref {ref!r} is not path:line")
+
+    _validate_replies(steps)
+    _validate_groups(spec.get("groups") or [], steps)
 
     for item in legend:
         if item.get("tone") not in TONES:
@@ -103,6 +115,82 @@ def validate(spec: dict[str, Any]) -> None:
         if idx <= last_step_idx:
             raise ValidationError(f"phase {p.get('id')!r}: phase order violates step order")
         last_step_idx = idx
+        # a box never runs across the start of a phase
+        before, at = steps[idx - 1] if idx else {}, steps[idx]
+        if at.get("group") is not None and before.get("group") == at.get("group"):
+            raise ValidationError(f"phase {p.get('id')!r}: starts inside group {at['group']!r}")
+
+
+def _validate_replies(steps: list[dict]) -> None:
+    """A reply (`reply_to`) is an event that answers an earlier request, going back the way it came."""
+    seen: dict[str, dict] = {}
+    answered: set[str] = set()
+    for s in steps:
+        rid = s.get("reply_to")
+        if rid is not None:
+            call = seen.get(rid)
+            if call is None:
+                raise ValidationError(f"step {s['id']}: reply_to {rid!r} is not an earlier step")
+            if s.get("arrow") != "event" or call.get("arrow") != "request":
+                raise ValidationError(f"step {s['id']}: reply_to joins an event to the request it answers")
+            if (s["from"], s["to"]) != (call["to"], call["from"]):
+                raise ValidationError(f"step {s['id']}: a reply goes back from {call['to']!r} to {call['from']!r}")
+            if rid in answered:
+                raise ValidationError(f"step {s['id']}: step {rid!r} is already answered")
+            answered.add(rid)
+        seen[s["id"]] = s
+
+
+def _validate_groups(groups: list[dict], steps: list[dict]) -> None:
+    """Each group holds one unbroken run of steps; a branched one's branches come in order, from the first."""
+    kinds: dict[str, dict] = {}
+    for g in groups:
+        gid, kind = g.get("id"), g.get("kind")
+        if not gid or gid in kinds:
+            raise ValidationError(f"group id missing or duplicate: {gid!r}")
+        if kind not in GROUP_KINDS:
+            raise ValidationError(f"group {gid!r}: kind must be one of {', '.join(GROUP_KINDS)}")
+        branches = g.get("branches")
+        if kind in BRANCHED:
+            if not isinstance(branches, list) or len(branches) < 2 or not all(isinstance(b, str) and b.strip() for b in branches):
+                raise ValidationError(f"group {gid!r}: {kind} needs branches, a list of two or more conditions")
+        elif not str(g.get("label") or "").strip():
+            raise ValidationError(f"group {gid!r}: {kind} needs a label, its condition")
+        kinds[gid] = g
+    runs: dict[str, list[int]] = {}
+    last = None
+    for s in steps:
+        gid = s.get("group")
+        if gid is None:
+            if s.get("branch") is not None:
+                raise ValidationError(f"step {s['id']}: branch is set but the step is in no group")
+            last = None
+            continue
+        g = kinds.get(gid)
+        if g is None:
+            raise ValidationError(f"step {s['id']}: unknown group {gid!r}")
+        if gid in runs and last != gid:
+            raise ValidationError(f"group {gid!r}: its steps must follow one another")
+        branch = s.get("branch", 0)
+        if g["kind"] in BRANCHED:
+            if isinstance(branch, str) and branch.isdigit():
+                branch = int(branch)
+            if not isinstance(branch, int) or isinstance(branch, bool) or not 0 <= branch < len(g["branches"]):
+                raise ValidationError(f"step {s['id']}: branch must be a number from 0 to {len(g['branches']) - 1}")
+            done = runs.setdefault(gid, [])
+            if (not done and branch != 0) or (done and branch not in (done[-1], done[-1] + 1)):
+                raise ValidationError(f"step {s['id']}: the branches of {gid!r} come in order, from 0")
+            done.append(branch)
+        else:
+            if s.get("branch") is not None:
+                raise ValidationError(f"step {s['id']}: a {g['kind']} has no branches")
+            runs.setdefault(gid, []).append(0)
+        last = gid
+    for gid, g in kinds.items():
+        if gid not in runs:
+            raise ValidationError(f"group {gid!r} holds no step")
+        if g["kind"] in BRANCHED and runs[gid][-1] != len(g["branches"]) - 1:
+            raise ValidationError(f"group {gid!r}: every branch needs a step")
 
 
 # ── layout constants ──────────────────────────────────────────────

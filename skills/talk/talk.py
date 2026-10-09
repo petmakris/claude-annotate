@@ -1129,11 +1129,27 @@ class Board:
                 hint = f"; this looks like a {other} spec, write [[show {other} | ...]]" if other not in (None, kind) else ""
                 self.problem(f'{kind} "{title}" not shown: {str(e).split(": ", 1)[-1]}{hint}')
                 return rest
+            if kind == "sequence":
+                self.add_refs(item, title)
         if kind == "diagram":
             for problem in diagram_problems(item["body"], title):
                 self.problem(problem)
         self.add(item)
         return rest
+
+    def add_refs(self, item: dict, title: str) -> None:
+        """A sequence's steps with a `ref` keep the lines round it, from the code folder, for their popups."""
+        spec = item["visual"]["spec"]
+        if not any(s.get("ref") for s in spec.get("steps") or []):
+            return
+        if not self.code_dir:
+            self.problem(f'sequence "{title}": its refs show no code, talk was started without --code')
+            return
+        refs, problems = stage_model.step_refs(spec, self.code_dir)
+        if refs:
+            item["visual"]["refs"] = refs
+        for p in problems:
+            self.problem(f'sequence "{title}": {p}')
 
     def problem(self, text: str) -> None:
         self.problems.append(text)

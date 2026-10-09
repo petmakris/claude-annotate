@@ -45,6 +45,9 @@
 //     {type:'stage:key', key}                                    Space, ArrowLeft or ArrowRight pressed here, on nothing
 //                                                                that takes keys: the call page pauses or moves the answer
 //     {type:'stage:missing', view}                               a chip asked for a view this stage does not hold
+//     {type:'stage:play', view, answer, n}                       Play from here, in a sequence step's popup: the call
+//                                                                page plays answer `answer` from the sentence where frame
+//                                                                n of its scene for the view begins
 //   Stage to the page in a page board (to '*'), once the call page has set a theme:
 //     {type:'stage:theme', theme}         on each load and each change. A page from this daemon (a file or
 //                                         session board) also gets data-theme on its <html> straight away.
@@ -667,7 +670,7 @@ function renderInline(v, seq) {
   } else if (src.format === "visual" && src.tool === "sequence") {
     // A sequence unfolds with the voice as lanes: every arrow carries its sentence, no numbered key.
     box.className = "visual lanes";
-    renderLanes(box, src.spec, embedded);
+    renderLanes(box, src.spec, embedded, { refs: src.refs, play: (step, dry) => playStep(v, step, dry) });
     requestAnimationFrame(() => { if (current()) paintFrame(v, box); });
   } else if (src.format === "visual" && src.tool === "flowchart") {
     // A flowchart is a map the stage draws itself: ghosts first, lit part by part with the voice.
@@ -1253,6 +1256,21 @@ function onMessage(m) {
 }
 
 function post(msg) { if (embedded) window.parent.postMessage(msg, "*"); }
+// Play from here, on a sequence step: the first frame that says the step, in the scene on the board, else in
+// the latest answer's scene that says it. False when no answer says it; `dry` only asks.
+function playStep(v, step, dry = false) {
+  const key = "step:" + step, scenes = v.body.scenes || {};
+  const own = v.answer != null ? [[String(v.answer), scenes[v.answer]]] : [];
+  const tries = [...own, ...Object.entries(scenes).sort((a, b) => Number(b[0]) - Number(a[0]))];
+  if (v.body.scene && v.body.answer != null) tries.push([String(v.body.answer), v.body.scene]);
+  for (const [answer, scene] of tries) {
+    if (!scene) continue;
+    for (let n = 1; n < scene.frames.length && n < scene.rest; n++) {
+      if (beingSaid(scene, n).includes(key)) { if (!dry) post({ type: "stage:play", view: v.body.name, answer: Number(answer), n }); return true; }
+    }
+  }
+  return false;
+}
 function postViews() {
   post({ type: "stage:views", list: [...views.values()].map((v) => ({
     name: v.body.name, title: v.body.title, kind: v.body.kind || kindOf(v.body.source), answer: v.body.answer ?? null })) });

@@ -956,6 +956,27 @@ def test_a_sequence_spec_goes_to_the_stage_as_its_spec_and_steps_one_sentence_at
     assert not [p for p in call.board.problems if "(dump)" in p]
 
 
+REF_SEQ = ('{"actors": [{"id": "p", "label": "Page"}, {"id": "s", "label": "Server"}], "steps": ['
+           '{"id": "s1", "from": "p", "to": "s", "arrow": "request", "label": "send", "ref": "srv.py:2"},'
+           '{"id": "s2", "from": "s", "to": "p", "arrow": "event", "label": "answer", "reply_to": "s1", "ref": "srv.py:40"}]}')
+
+
+def test_a_sequences_refs_go_to_the_stage_with_their_lines_and_a_ref_to_nothing_is_a_board_line(tmp_path):
+    from helpers import make_args
+    (tmp_path / "code").mkdir()
+    (tmp_path / "code" / "srv.py").write_text("def listen():\n    return heard()\n")
+    call = talk.Call(make_args(code=tmp_path / "code"), "T", tmp_path / "out")
+    call.split_reply(f"[[show sequence | Turn]] {REF_SEQ} [[/show]] The page sends. The server answers.")
+    source = talk.stage_view(call.board.items[0])[1]
+    assert source["refs"] == {"s1": {"path": "srv.py", "start": 1, "at": 2, "lines": ["def listen():", "    return heard()"], "lang": "py"}}
+    assert call.board.problems == ['sequence "Turn": step s2: ref srv.py:40 is past the end of srv.py, which has 2 lines']
+    # started without --code, a ref has nothing to read from
+    bare = _call(tmp_path)
+    bare.split_reply(f"[[show sequence | Turn]] {REF_SEQ} [[/show]] The page sends. The server answers.")
+    assert "refs" not in talk.stage_view(bare.board.items[0])[1]
+    assert bare.board.problems == ['sequence "Turn": its refs show no code, talk was started without --code']
+
+
 def test_a_bad_spec_never_reaches_the_stage_and_the_board_says_why(tmp_path):
     call = _call(tmp_path)
     call.split_reply('[[show sequence | Turn]] {"actors": [], "steps": []} [[/show]] Nothing to see.')
