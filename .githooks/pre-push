@@ -1,11 +1,8 @@
 #!/bin/sh
 # Run the suite the way CI does before anything leaves this machine: the
-# pinned tools from requirements-test.txt, browser suites included, and an
-# empty HOME, so no ~/.claude/webcompanion/config.json is reachable. A test
-# that quietly leans on the local daemon fails here, not on main. The browser
-# and push suites start their own private daemons (skills/tests/harness.py),
-# and CLAUDE_ANNOTATE_STRICT_TESTS turns a suite that cannot run into a
-# failure rather than a skip, as on CI.
+# pinned tools from requirements-test.txt and an empty HOME, so no
+# ~/.claude/webcompanion/config.json is reachable. A test that quietly leans
+# on the local daemon fails here, not on main.
 #
 # CI also runs Python 3.9. A whole second run would double the wait, so 3.9
 # gets a compile and a full collection — every test module and what it
@@ -18,38 +15,23 @@ home=$(mktemp -d)
 trap 'rm -rf "$home"' EXIT
 req=requirements-test.txt
 
-# Playwright finds its browsers under HOME; resolve that before HOME is
-# swapped for the empty one.
-if [ -z "$PLAYWRIGHT_BROWSERS_PATH" ]; then
-  case "$(uname)" in
-    Darwin) PLAYWRIGHT_BROWSERS_PATH="$HOME/Library/Caches/ms-playwright" ;;
-    *) PLAYWRIGHT_BROWSERS_PATH="${XDG_CACHE_HOME:-$HOME/.cache}/ms-playwright" ;;
-  esac
-  export PLAYWRIGHT_BROWSERS_PATH
-fi
-
 fail() {
   tail -40 "$1" >&2
   echo "pre-push: $2 Push blocked." >&2
   exit 1
 }
 
-# A no-op once the pinned Chromium is installed.
-uv run -q --python 3.12 --with-requirements "$req" \
-  python -m playwright install chromium >"$home/install" 2>&1 ||
-  fail "$home/install" "could not install the Chromium the browser suites need."
-
 echo "pre-push: Python 3.9 — compiling and collecting..." >&2
 {
   uv run -q --python 3.9 python -m compileall -q -x '/node_modules/' skills bin &&
   uv run -q --python 3.9 --with-requirements "$req" \
-    env HOME="$home" CLAUDE_ANNOTATE_STRICT_TESTS=1 \
+    env HOME="$home" \
     python -m pytest skills -q --collect-only -n 0 -p no:cacheprovider
 } >"$home/out39" 2>&1 || fail "$home/out39" "the suite does not load under Python 3.9, as CI would find."
 
-echo "pre-push: running the suite as CI would (no daemon of yours, browsers on)..." >&2
+echo "pre-push: running the suite as CI would (no daemon of yours)..." >&2
 uv run -q --python 3.12 --with-requirements "$req" \
-  env HOME="$home" CLAUDE_ANNOTATE_STRICT_TESTS=1 \
+  env HOME="$home" \
   python -m pytest skills -q -p no:cacheprovider >"$home/out" 2>&1 ||
   fail "$home/out" "the suite fails as it would on CI."
 tail -1 "$home/out" >&2

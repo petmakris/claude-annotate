@@ -46,7 +46,7 @@ Report only what these do not enforce, plus anywhere one has gone stale (for exa
 3. `urllib.parse` used only to build or encode a URL or query string, with no request sent — e.g. `skills/show-diff/show-diff.sh` building the `vscode://` URI.
 4. Browser page code under `skills/*/static/` (and `skills/_shared/static/`) fetching routes from the daemon that served the page, including `skills/annotate/static/daemon-http.js`, which holds the page's one copy of the contract and token headers. The page runs in the browser; it cannot import Python.
 5. The IDE clients — `ide-plugin/` (`DaemonSessionClient`, `WebCompanionHttp`, `ServerDiscovery`) and `vscode-plugin/src/` (`webcompanionClient.js`, `webcompanionConfig.js`) — are separate clients by necessity, in other languages. Their agreement with the daemon is `/audit-http-surface`'s job.
-6. Every `tests/` directory, `skills/conftest.py` and `skills/tests/harness.py` — they start per-worker private daemons and fake servers on purpose; the rule is about shipped code.
+6. Every `tests/` directory — tests start fake servers on purpose; the rule is about shipped code.
 7. Prose that names `~/.claude/webcompanion/config.json` or a header to describe it — `README.md`, skill READMEs, `SKILL.md` files and their `references/`. Describing the config is not reading it.
 8. `skills/slides/bin/decks` inserting its own `skills/slides/framework` on `sys.path` — it reaches its own skill's code, not the shared layer.
 9. `skills/slides/SKILL.md`'s `python3 -m http.server` deck-preview snippet. Slides does not use the daemon, and the user starts and kills that preview server themselves. If it is ever moved into code that runs unattended, Rule 5 applies.

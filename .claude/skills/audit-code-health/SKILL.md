@@ -45,8 +45,7 @@ under Rule 6, check all of them for a covering file:
 
 Search for the module or class name across every test file in all five
 locations, not just the test directory next to it, since a test can
-exercise a module it does not sit beside (many skill tests drive a module
-end to end through a private daemon started by `skills/tests/harness.py`).
+exercise a module it does not sit beside.
 "No test beside it" means no test file exercises that module anywhere, not
 that a specific function lacks a direct unit test.
 
@@ -137,8 +136,7 @@ that a specific function lacks a direct unit test.
 3. `FakeReviewServer.java` — a test double; its simplifications are its
    purpose. Route drift there belongs to `/audit-http-surface`, not here.
 4. Test files' own duplication — repetitive tests are usually clearer than
-   abstracted ones. This includes `skills/tests/harness.py` and
-   `skills/conftest.py` starting private daemons and browsers.
+   abstracted ones.
 5. Per-skill copies of `skills/_shared/static/` assets — duplicated on
    purpose because the daemon serves one folder per session, and held
    byte-identical by `skills/tests/test_shared_static_copies.py`. Any

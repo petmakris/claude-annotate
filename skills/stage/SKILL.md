@@ -76,8 +76,8 @@ Rules:
 
 ## What the stage keeps true
 
-A board that steps with the voice keeps these, and the tests check them (`stage_rule_breaks` in
-`skills/talk/tests/helpers.py` for the compiled frames, `test_browser_stage.py` for the page):
+A board that steps with the voice keeps these, and the tests check them on the compiled frames
+(`stage_rule_breaks` in `skills/talk/tests/helpers.py`):
 
 1. The part drawn as being said is the part the voice is on: each frame names it (`cur`), and the page draws only that.
 2. A part appears no earlier than the sentence that names it, and is visible when it is named.

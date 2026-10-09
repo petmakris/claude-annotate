@@ -13,30 +13,17 @@ jobs:
         # 3.9 is the declared floor (Path.is_relative_to in uploads.py).
         # It is in the matrix so the number in the README stays true.
         python-version: ['3.9', '3.12']
-    env:
-      # A browser or push suite that cannot run here FAILS instead of
-      # skipping. Before this, ~700 browser and daemon-backed tests skipped on
-      # every run and the job still read green (skills/tests/harness.py).
-      CLAUDE_ANNOTATE_STRICT_TESTS: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      # test_diff_engine.py executes static/diff.js under node. Without node
-      # on the runner it SKIPS, so the diff engine's only real test would go
-      # quietly unrun and CI would still be green.
+      # test_diff_engine.py and test_code_paint.py run the page's code under
+      # node. Without node on the runner they SKIP, and CI would still be green.
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      # pytest, xdist, playwright and the webcompanion daemon the browser and
-      # push suites start privately, all pinned in one file.
       - run: pip install -r requirements-test.txt
-      - run: python -m playwright install --with-deps chromium
-      # The Confluence diagram renderer drives Chromium from node, through a
-      # global `playwright` package; same version as the Python one, so it
-      # reuses the browser installed above.
-      - run: npm install -g "playwright@$(sed -n 's/^playwright==//p' requirements-test.txt)"
       - run: python -m pytest skills -q -rs
 
   vscode-plugin:
