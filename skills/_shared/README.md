@@ -8,7 +8,7 @@ and nothing here starts one: every skill pushes to the separately installed
 |---|---|
 | `webcompanion_client.py` | The one Python client for the daemon, with the `DaemonError` hierarchy and the `run_cli` wrapper every push command uses. |
 | `visuals/` | The drawing tools: sequence diagrams and flowcharts, their layout (ELK through Node, with a Python fallback) and font metrics. Annotate draws them in its answers; stage and talk draw them on the stage, keyed for frames. |
-| `static/` | The canonical page assets (`core.css`, `visuals.css`, fonts with Geist and Geist Mono for the stage, `markdown-it.min.js`, `wc-threads.js`, `wc-boot.js`, `wc-open.js`). Each skill keeps a checked-in copy in its own `static/`, because the daemon serves one folder per session; `skills/tests/test_shared_static_copies.py` fails when a copy differs from its source here. |
+| `static/` | The canonical page assets (`core.css`, `visuals.css`, fonts with Geist and JetBrains Mono for the stage, `markdown-it.min.js`, `wc-threads.js`, `wc-boot.js`, `wc-open.js`). Each skill keeps a checked-in copy in its own `static/`, because the daemon serves one folder per session; `skills/tests/test_shared_static_copies.py` fails when a copy differs from its source here. |
 
 ## The rule
 

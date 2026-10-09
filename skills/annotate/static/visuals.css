@@ -9,7 +9,7 @@
    Monospace text names --vis-mono, defaulting to Monaspace Radon. The SVGs are
    laid out on the server, measured by visuals/text_metrics.py in the face the
    page draws: a page that sets --vis-mono to another font must render with the
-   matching face (Geist Mono is the "stage" face). Changing a font means
+   matching face (JetBrains Mono is the "stage" face). Changing a font means
    regenerating the metrics (tools/gen_font_metrics.py), not editing these rules.
    Sizes here must stay in sync with text_metrics._styles. */
 .annotate-seq { display: block; width: auto; max-width: none; height: auto; }
