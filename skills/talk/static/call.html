@@ -83,7 +83,7 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"light"');
       <div><h4>Send after a pause of</h4><div class="segc" id="endpause" role="group" aria-label="Send after a pause of">
         <button type="button" data-choice="800">0.8 s</button><button type="button" data-choice="1200">1.2 s</button><button type="button" data-choice="2000">2 s</button></div></div>
     </div>
-    <div><h4>Voice</h4><p class="engine" id="engine" hidden></p></div>
+    <div><h4>Voice</h4><p class="engine" id="engine" hidden></p><div class="voices" id="voices" role="radiogroup" aria-label="Voice" hidden></div></div>
     <div><h4>I speak</h4><div class="segc" id="lang" role="group" aria-label="Language I speak"></div></div>
     <div><h4>Voice speed</h4><div class="segc" id="speeds" role="group" aria-label="Voice speed"></div></div>
     <button class="row" id="autoplay" type="button" aria-pressed="true">Play new answers by themselves<span class="sw" aria-hidden="true"></span></button>

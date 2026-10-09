@@ -13,11 +13,48 @@ $("topic").textContent = CFG.topic; $("topic").title = CFG.topic; document.title
 // Which engine reads the answers aloud, in the settings: Azure is fast and billed, VoiceStudio is local and slow.
 if (CFG.engine) {
   const ava = /^[a-z]{2}-[A-Z]{2}-([A-Z][a-z]+)/.exec(CFG.voice || "");
-  $("engine").textContent = CFG.engine === "Azure" ? "Azure · " + (ava ? ava[1] : CFG.voice) + ": fast, billed per character"
+  $("engine").textContent = CFG.engine === "Azure" ? "Azure" + ((CFG.voices || []).length ? "" : " · " + (ava ? ava[1] : CFG.voice)) + ": fast, billed per character"
     : "VoiceStudio on this Mac, profile " + CFG.voice + ": free, slower";
   $("engine").hidden = false;
 }
 const audio = $("audio");
+
+// ---- the voice: the engine's voices to pick from, the choice kept on this origin ------------------
+// The server makes each answer's audio as the answer arrives, so the choice is sent to it: when the page
+// opens and whenever it changes. Answers already made keep the voice they were made in. A voice's sample
+// is a few words, made once by the server and kept.
+const VOICES = CFG.voices || [];
+let voice = CFG.voice;
+const sample = new Audio();
+function paintVoices() {
+  for (const b of $("voices").querySelectorAll(".vpick")) b.setAttribute("aria-checked", String(b.dataset.voice === voice));
+}
+function chooseVoice(id, send = true) {
+  voice = id; store.set("voice", id); paintVoices();
+  if (send) api("/api/voice", {method: "POST", body: JSON.stringify({voice: id}), headers: {"Content-Type": "application/json"}})
+    .then(r => { if (!r.ok) showError("The voice was not changed."); }).catch(() => showError("The voice was not changed."));
+}
+if (VOICES.length) {
+  for (const v of VOICES) {
+    const row = document.createElement("div"); row.className = "vrow";
+    const pick = document.createElement("button"); pick.type = "button"; pick.className = "vpick"; pick.dataset.voice = v.id;
+    pick.setAttribute("role", "radio"); pick.append(v.name);
+    const note = document.createElement("small"); note.textContent = v.note; pick.append(note);
+    pick.onclick = () => chooseVoice(v.id);
+    const hear = document.createElement("button"); hear.type = "button"; hear.className = "ib";
+    hear.setAttribute("aria-label", "Hear " + v.name); hear.title = "Hear " + v.name;
+    hear.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5v14l12-7z"/></svg>';
+    hear.onclick = () => {
+      sample.src = location.pathname.replace(/\/$/, "") + "/voice/" + encodeURIComponent(v.id);
+      sample.play().catch(() => showError("The sample did not play."));
+    };
+    row.append(pick, hear); $("voices").append(row);
+  }
+  $("voices").hidden = false;
+  const kept = store.get("voice", null);
+  if (kept && kept !== voice && VOICES.some(v => v.id === kept)) chooseVoice(kept);
+  paintVoices();
+}
 
 // ---- the stage ---------------------------------------------------------
 // A veil covers the stage until it has loaded; one that does not load in time says so and offers buttons.

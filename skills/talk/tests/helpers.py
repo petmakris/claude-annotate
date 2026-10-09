@@ -44,6 +44,7 @@ class FakeSpeech:
     def __init__(self):
         self.heard = "hello there"
         self.spoken: list[str] = []
+        self.voices: list[str] = []  # the voice of each answer spoken
         self.languages: list = []
         self.fail: str | None = None
         self.hold = None  # a threading.Semaphore: when set, every answer waits for a release
@@ -61,6 +62,7 @@ class FakeSpeech:
         if self.hold is not None:
             self.hold.acquire(timeout=10)
         self.spoken.append(text)
+        self.voices.append(voice)
         words = text.split()
         step = self.seconds / max(len(words), 1)
         return talk.speech.Spoken(audio=silent_wav(self.seconds), ext="wav", duration=self.seconds,

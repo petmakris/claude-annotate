@@ -17,6 +17,18 @@ from speech import SpeechError, Spoken, azure_key, forget_key
 
 NAME = "Azure"
 DEFAULT_VOICE = "en-US-AvaMultilingualNeural"  # speaks Greek text in Greek too
+# The voices the call page offers: (name, what the page calls it, a note). A multilingual voice reads Greek
+# text in Greek too; a Greek voice reads only Greek well.
+VOICES = (
+    ("en-US-AvaMultilingualNeural", "Ava", "American, reads Greek too"),
+    ("en-US-AndrewMultilingualNeural", "Andrew", "American, reads Greek too"),
+    ("en-US-EmmaMultilingualNeural", "Emma", "American, reads Greek too"),
+    ("en-US-BrianMultilingualNeural", "Brian", "American, reads Greek too"),
+    ("en-GB-AdaMultilingualNeural", "Ada", "British, reads Greek too"),
+    ("en-GB-OllieMultilingualNeural", "Ollie", "British, reads Greek too"),
+    ("el-GR-AthinaNeural", "Athina", "Greek only"),
+    ("el-GR-NestorasNeural", "Nestoras", "Greek only"),
+)
 LOCALES = {"en": "en-US", "el": "el-GR"}
 BASE_S = 0.8  # a request's own cost, before the text's length counts
 PER_CHAR_S = 0.006  # measured: 260 characters in about 2.2 s, from Switzerland West

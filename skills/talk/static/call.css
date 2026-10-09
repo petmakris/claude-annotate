@@ -66,7 +66,15 @@ svg{display:block;flex:none}
 .phead{flex:none;height:48px;display:flex;align-items:center;gap:6px;padding:0 6px 0 14px;border-bottom:1px solid var(--line)}
 .topic{flex:1;min-width:0;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mode{flex:none;padding:1px 7px;border-radius:999px;font:500 11px var(--sans);color:var(--muted);white-space:nowrap;background:var(--shade)}
-.engine{margin:0;font-size:13px;color:var(--ink)}
+.engine{margin:0;font-size:12.5px;color:var(--muted)}
+.voices{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+.vrow{display:flex;align-items:center;gap:4px}
+.vpick{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;padding:6px 10px;border-radius:9px;text-align:left;font:500 13px var(--sans)}
+.vpick small{font:400 12px var(--sans);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vpick:hover{background:var(--shade)}
+.vpick[aria-checked="true"]{background:var(--acc-soft);color:var(--acc)}
+.vrow .ib{width:30px;height:30px}
+.vrow .ib.on{color:var(--claude)}
 .mode.on{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good)}
 .live{width:8px;height:8px;border-radius:50%;background:var(--acc);box-shadow:0 0 8px var(--acc);flex:none}
 .live.off{background:var(--faint);box-shadow:none}

@@ -99,3 +99,26 @@ def test_the_panel_collapses_to_a_rail_and_moves_sides_and_both_are_remembered(t
     page.js("$('expand').click();").check(state)
     assert page.run() == [[False, "right", None, None], [True, "right", '"rail"', None],
                           [True, "left", '"rail"', '"left"'], [False, "left", '"open"', '"left"']]
+
+
+VOICES = [{"id": "en-US-AvaMultilingualNeural", "name": "Ava", "note": "American, reads Greek too"},
+          {"id": "el-GR-AthinaNeural", "name": "Athina", "note": "Greek only"}]
+PICKED = "[...document.querySelectorAll('#voices .vpick')].map((b) => b.dataset.voice + ':' + b.getAttribute('aria-checked'))"
+
+
+def test_the_voice_kept_on_this_origin_is_sent_to_the_call_when_the_page_opens(tmp_path):
+    html, states = served(tmp_path, [], voices=VOICES)
+    page = CallPage(html, states, stored={"voice": "el-GR-AthinaNeural"})
+    page.check("sentTo.filter(([path]) => path === '/api/voice')").check(PICKED)
+    assert page.run() == [[["/api/voice", {"voice": "el-GR-AthinaNeural"}]],
+                          ["en-US-AvaMultilingualNeural:false", "el-GR-AthinaNeural:true"]]
+
+
+def test_a_voice_picked_in_the_settings_is_sent_and_kept(tmp_path):
+    html, states = served(tmp_path, [], voices=VOICES)
+    page = CallPage(html, states)
+    page.check("sentTo.filter(([path]) => path === '/api/voice').length")
+    page.js("document.querySelector('#voices .vpick[data-voice=el-GR-AthinaNeural]').click();")
+    page.check("[sentTo.filter(([path]) => path === '/api/voice'), localStorage.getItem('talk.voice')]").check(PICKED)
+    assert page.run() == [0, [[["/api/voice", {"voice": "el-GR-AthinaNeural"}]], '"el-GR-AthinaNeural"'],
+                          ["en-US-AvaMultilingualNeural:false", "el-GR-AthinaNeural:true"]]

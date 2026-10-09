@@ -124,6 +124,15 @@ def ensure_running(say=print) -> dict:
     return engine().ensure_running(say=say)
 
 
+def voices() -> list[dict]:
+    """The voices a call can switch to, for the page's picker: none when the engine offers no choice."""
+    try:
+        offered = getattr(engine(), "VOICES", ())
+    except SpeechError:
+        return []
+    return [{"id": v, "name": n, "note": note} for v, n, note in offered]
+
+
 def fix() -> str:
     """What the user does when the engine is not ready."""
     try:

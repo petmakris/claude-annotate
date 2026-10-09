@@ -1456,6 +1456,14 @@ class Call:
         if held and not self.ended:
             self.offer(held["text"], typed=False, interrupted=held["interrupted"], live=True)
 
+    def set_voice(self, voice: str) -> None:
+        """Read the next answers in `voice`. Answers already made keep theirs; "One moment." is made again."""
+        if voice == self.voice:
+            return
+        self.voice = voice
+        self.filler = None
+        self.changed()
+
     def want_filler(self) -> None:
         """Make "One moment." once, in this call's voice, for the page to say while Claude works."""
         if self.filler or self.filler_making:
@@ -2116,7 +2124,7 @@ def build_app(server: Server):
             return await gone(request)
         config = {"topic": call.topic, "token": call.token, "call": call.id, "stageUrl": call.stage_url, "demo": call.demo is not None,
                   "language": call.args.language, "languages": list(speech.LANGUAGES),
-                  "engine": speech.name(), "voice": call.voice}
+                  "engine": speech.name(), "voice": call.voice, "voices": speech.voices()}
         html = PAGE.replace("__PRECONNECT__", stage_preconnect(call.stage_url)).replace(
             "__CONFIG__", json.dumps(config).replace("</", "<\\/"))
         resp = web.Response(text=html, content_type="text/html", headers={"Cache-Control": "no-store"})
@@ -2131,6 +2139,42 @@ def build_app(server: Server):
         if not path.is_file():
             return web.Response(status=404)
         return web.FileResponse(path, headers={"Cache-Control": "no-store"})
+
+    async def voice_sample(request):
+        """A few words in one of the offered voices, made once and kept: each one made is billed."""
+        call = by_link(request)
+        offered = {v["id"]: v for v in speech.voices()}
+        voice = request.match_info["voice"]
+        if call is None or voice not in offered:
+            return web.Response(status=404)
+        folder = DATA_DIR / "voices"
+        found = sorted(folder.glob(f"{voice}.*")) if folder.is_dir() else []
+        if not found:
+            name = offered[voice]["name"]
+            try:
+                made = await asyncio.get_running_loop().run_in_executor(
+                    call.speech_pool, speech.speak, f"Hi, I am {name}. Γεια σας, με λένε {name}.", voice)
+            except speech.SpeechError as err:
+                return web.json_response({"error": str(err)}, status=502)
+            folder.mkdir(parents=True, exist_ok=True)
+            found = [folder / f"{voice}.{made.ext}"]
+            found[0].write_bytes(made.audio)
+        return web.FileResponse(found[0], headers={"Cache-Control": "max-age=86400"})
+
+    async def set_voice(request):
+        """The page's voice picker: the next answers are read in the voice chosen."""
+        call = call_of(request)
+        if call is None:
+            return refused(request)
+        try:
+            body = await request.json()
+        except ValueError:
+            body = {}
+        voice = body.get("voice") if isinstance(body, dict) else None
+        if voice not in {v["id"] for v in speech.voices()}:
+            return web.json_response({"error": "not a voice this engine offers"}, status=400)
+        call.set_voice(voice)
+        return web.json_response({"voice": call.voice})
 
     async def static(request):
         body = STATIC.get(request.match_info["name"])
@@ -2377,6 +2421,7 @@ def build_app(server: Server):
         web.post("/api/quit", quit_server),
         web.get("/c/{call}", page),
         web.get("/c/{call}/audio/{name}", audio),
+        web.get("/c/{call}/voice/{voice}", voice_sample),
         web.get("/static/{name}", static),
         web.get("/api/state", state),
         web.post("/api/listen", listen),
@@ -2384,6 +2429,7 @@ def build_app(server: Server):
         web.post("/api/withdraw", withdraw),
         web.post("/api/demo", demo),
         web.post("/api/floor", floor),
+        web.post("/api/voice", set_voice),
         web.post("/api/stop", stop),
         web.post("/api/close", close),
         web.get("/api/turn", next_turn),

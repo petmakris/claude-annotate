@@ -1,5 +1,6 @@
 """One talk server holds every call of the machine: a launch opens a call on it, each session reaches
 its own call, and the user talks in one call at a time (the floor)."""
+import asyncio
 import threading
 import time
 from types import SimpleNamespace
@@ -543,3 +544,37 @@ def test_any_failure_while_speaking_leaves_the_answer_failed_not_making(tmp_path
     import asyncio
     entry = run(go())
     assert entry["speech"] == "failed" and "RIFF" in entry["speech_error"]
+
+
+OFFERED = [{"id": "en-US-AvaMultilingualNeural", "name": "Ava", "note": "American"},
+           {"id": "el-GR-AthinaNeural", "name": "Athina", "note": "Greek only"}]
+
+
+def test_the_page_picks_a_voice_and_the_next_answers_are_read_in_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(talk.speech, "voices", lambda: OFFERED)
+
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            await call.answer("Before the change.")
+            wrong = await client.post("/api/voice", json={"voice": "en-US-Nobody"}, headers=AUTH)
+            right = await client.post("/api/voice", json={"voice": "el-GR-AthinaNeural"}, headers=AUTH)
+            await call.answer("After the change.")
+            for _ in range(100):  # its audio is made off the loop
+                if len(fake.voices) == 2:
+                    break
+                await asyncio.sleep(0.02)
+            return wrong.status, await right.json(), fake.voices, call.voice
+    assert run(go()) == (400, {"voice": "el-GR-AthinaNeural"}, ["test-voice", "el-GR-AthinaNeural"], "el-GR-AthinaNeural")
+
+
+def test_a_voice_sample_is_made_once_and_kept(tmp_path, monkeypatch):
+    monkeypatch.setattr(talk.speech, "voices", lambda: OFFERED)
+    monkeypatch.setattr(talk, "DATA_DIR", tmp_path / "data")
+
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            first = await client.get(f"/c/{CALL}/voice/el-GR-AthinaNeural")
+            again = await client.get(f"/c/{CALL}/voice/el-GR-AthinaNeural")
+            other = await client.get(f"/c/{CALL}/voice/en-US-Nobody")
+            return first.status, again.status, other.status, fake.spoken, sorted(p.name for p in (tmp_path / "data" / "voices").iterdir())
+    assert run(go()) == (200, 200, 404, ["Hi, I am Athina. Γεια σας, με λένε Athina."], ["el-GR-AthinaNeural.wav"])

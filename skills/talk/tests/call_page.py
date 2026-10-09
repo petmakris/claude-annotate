@@ -37,8 +37,13 @@ async def _settle(call):
         await asyncio.sleep(0.02)
 
 
-def served(tmp_path, answers, seconds=4.0):
-    """The call page's HTML and its /api/state before any answer and after each of `answers`."""
+def served(tmp_path, answers, seconds=4.0, voices=()):
+    """The call page's HTML and its /api/state before any answer and after each of `answers`. `voices`: the
+    engine's voices offered to the page's picker, as speech.voices() gives them."""
+    from unittest.mock import patch
+
+    import talk
+
     async def go():
         async with running_app(tmp_path, stage_url=STAGE) as (client, call, fake):
             fake.seconds = seconds
@@ -48,7 +53,8 @@ def served(tmp_path, answers, seconds=4.0):
                 await _settle(call)
                 states.append(await (await client.get("/api/state", headers=AUTH)).json())
             return await (await client.get(f"/c/{CALL}")).text(), states
-    return run_async(go())
+    with patch.object(talk.speech, "voices", lambda: list(voices)):
+        return run_async(go())
 
 
 PRELUDE = """
@@ -59,7 +65,9 @@ install({ width: 1300, url: %(url)s });
 const HTML = %(html)s, STATES = %(states)s;
 let served = STATES[%(start)d];
 const respond = (body) => ({ ok: true, status: 200, json: async () => JSON.parse(JSON.stringify(body)), text: async () => JSON.stringify(body) });
-globalThis.fetch = async (path) => {
+const sentTo = [];  // what the page sent the server besides its polls: [path, body]
+globalThis.fetch = async (path, opts = {}) => {
+  if (!String(path).startsWith("/api/state")) sentTo.push([String(path), opts.body ? JSON.parse(opts.body) : null]);
   if (String(path).startsWith("/api/state")) {
     const v = new URL(path, location.href).searchParams.get("v");
     return respond(v === served.v ? { v, same: true } : served);
@@ -94,8 +102,10 @@ await settle();
 
 
 class CallPage:
-    def __init__(self, html: str, states: list, *, start: int = 0, seconds: float = 4.0, autoplay: bool = True):
+    def __init__(self, html: str, states: list, *, start: int = 0, seconds: float = 4.0, autoplay: bool = True,
+                 stored: dict | None = None):
         self.html, self.states, self.start, self.seconds, self.autoplay = html, states, start, seconds, autoplay
+        self.stored = stored or {}  # what this origin's localStorage holds when the page opens, by key after "talk."
         self.steps: list = []
 
     def js(self, code):
@@ -112,7 +122,8 @@ class CallPage:
             "shim": json.dumps(SHIM.as_uri()), "url": json.dumps(PAGE), "html": json.dumps(self.html),
             "states": json.dumps(self.states), "start": self.start, "cfg": json.dumps(cfg),
             "call": json.dumps(str(STATIC / "call.js")), "seconds": self.seconds,
-            "storage": "" if self.autoplay else 'localStorage.setItem("talk.autoplay", "false");',
+            "storage": ("" if self.autoplay else 'localStorage.setItem("talk.autoplay", "false");')
+                       + "".join(f"localStorage.setItem({json.dumps('talk.' + k)}, {json.dumps(json.dumps(v))});" for k, v in self.stored.items()),
         }
         code = prelude + "\n".join(self.steps) + "\nprocess.stdout.write(JSON.stringify(out));\nprocess.exit(0);\n"
         done = subprocess.run(["node", "--input-type=module", "-e", code], capture_output=True, text=True, timeout=60)
