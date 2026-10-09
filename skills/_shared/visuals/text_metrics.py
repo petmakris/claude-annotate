@@ -12,7 +12,7 @@ Styles are keyed by the CSS class the renderer emits, so a font-size change in
 decision follows.
 
 A face is the set of fonts a page draws diagrams in: ``annotate`` (Bricolage
-Grotesque and Monaspace Radon, the default) or ``stage`` (Geist and JetBrains Mono).
+Grotesque and Monaspace Radon, the default) or ``stage`` (Inter and JetBrains Mono).
 ``with face("stage"):`` measures everything inside it in that face.
 """
 from __future__ import annotations

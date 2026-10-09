@@ -1,30 +1,33 @@
 /* tokens:start */
-/* One token set for talk and stage, kept byte-identical in talk.py and stage.css (talk/tests/test_tokens.py). */
+/* One token set for talk and stage, kept byte-identical in talk.py and stage.css (talk/tests/test_tokens.py).
+   Material's colours: every text colour reads at 4.5:1 or more on its card, ink at 12:1 or more. */
 :root{color-scheme:light dark;
-  --bg:#F5F6F8;--panel:#FFFFFF;--ink:#1B2230;--muted:#667085;--faint:#98A2B3;--line:#E1E5EA;--row-alt:#F9FAFB;
-  --acc:#0F6E74;--on-acc:#FFFFFF;--acc-soft:#EAF4F4;--acc-mid:#B7DADB;--you:#2F5BD3;--you-soft:#EEF2FD;--claude:#A6520B;--claude-soft:#FDF3EA;
-  --hl-soft:#FDF3EA;--word:#F7D9BC;--bad:#B42318;--bad-soft:#FEF3F2;--bad-line:#F3C5C0;--warn:#B54708;--warn-soft:#FEF6EE;
-  --good:#1A7F37;--add-bg:#E6F4EA;--del-bg:#FCE8E8;--code-bg:#0F1720;--code-ink:#D6DEEB;--code-faint:#56657A;--code-line:#1E2A38;
-  --sans:"Geist",system-ui,-apple-system,sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace}
+  --bg:#E9EBEE;--panel:#FFFFFF;--ink:#202124;--muted:#5F6368;--faint:#80868B;--line:#DADCE0;--row-alt:#F1F3F4;
+  --acc:#1967D2;--on-acc:#FFFFFF;--acc-soft:#E8F0FE;--acc-mid:#AECBFA;--you:#1967D2;--you-soft:#E8F0FE;--claude:#1967D2;--claude-soft:#E8F0FE;
+  --hl-soft:#E8F0FE;--word:#C6DAFC;--bad:#C5221F;--bad-soft:#FCE8E6;--bad-line:#F6AEA9;--warn:#B06000;--warn-soft:#FEF7E0;
+  --good:#188038;--add-bg:#E6F4EA;--del-bg:#FCE8E6;--code-bg:#F8F9FA;--code-ink:#202124;--code-faint:#80868B;--code-line:#DADCE0;
+  --sans:"Inter",system-ui,-apple-system,sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#0F1318;--panel:#161B22;--ink:#E6E9EF;--muted:#A3ABB9;--faint:#6F7888;--line:#262D39;--row-alt:#1A2029;
-  --acc:#5FAFAF;--on-acc:#0F1318;--acc-soft:rgba(95,175,175,.14);--acc-mid:rgba(95,175,175,.35);--you:#8AA7F0;--you-soft:rgba(138,167,240,.12);
-  --claude:#FFAF5F;--claude-soft:rgba(255,175,95,.08);--hl-soft:rgba(255,175,95,.12);--word:rgba(255,175,95,.35);
-  --bad:#F97066;--bad-soft:rgba(249,112,102,.12);--bad-line:rgba(249,112,102,.4);--warn:#FDB022;--warn-soft:rgba(253,176,34,.10);
-  --good:#56D364;--add-bg:rgba(46,160,67,.15);--del-bg:rgba(248,81,73,.15);--code-bg:#0B0F14;--code-ink:#D6DEEB;--code-faint:#56657A;--code-line:#262D39}}
+  --bg:#121212;--panel:#262626;--ink:#E8EAED;--muted:#A8ABB0;--faint:#80868B;--line:#3C4043;--row-alt:#303134;
+  --acc:#8AB4F8;--on-acc:#0B1A33;--acc-soft:rgba(138,180,248,.14);--acc-mid:rgba(138,180,248,.40);--you:#8AB4F8;--you-soft:rgba(138,180,248,.16);
+  --claude:#8AB4F8;--claude-soft:rgba(138,180,248,.10);--hl-soft:rgba(138,180,248,.12);--word:rgba(138,180,248,.32);
+  --bad:#F28B82;--bad-soft:rgba(242,139,130,.12);--bad-line:rgba(242,139,130,.4);--warn:#FDD663;--warn-soft:rgba(253,214,99,.10);
+  --good:#81C995;--add-bg:rgba(129,201,149,.15);--del-bg:rgba(242,139,130,.15);--code-bg:#1B1B1B;--code-ink:#E8EAED;--code-faint:#80868B;--code-line:#3C4043}}
 :root[data-theme="dark"]{
-  --bg:#0F1318;--panel:#161B22;--ink:#E6E9EF;--muted:#A3ABB9;--faint:#6F7888;--line:#262D39;--row-alt:#1A2029;
-  --acc:#5FAFAF;--on-acc:#0F1318;--acc-soft:rgba(95,175,175,.14);--acc-mid:rgba(95,175,175,.35);--you:#8AA7F0;--you-soft:rgba(138,167,240,.12);
-  --claude:#FFAF5F;--claude-soft:rgba(255,175,95,.08);--hl-soft:rgba(255,175,95,.12);--word:rgba(255,175,95,.35);
-  --bad:#F97066;--bad-soft:rgba(249,112,102,.12);--bad-line:rgba(249,112,102,.4);--warn:#FDB022;--warn-soft:rgba(253,176,34,.10);
-  --good:#56D364;--add-bg:rgba(46,160,67,.15);--del-bg:rgba(248,81,73,.15);--code-bg:#0B0F14;--code-ink:#D6DEEB;--code-faint:#56657A;--code-line:#262D39}
+  --bg:#121212;--panel:#262626;--ink:#E8EAED;--muted:#A8ABB0;--faint:#80868B;--line:#3C4043;--row-alt:#303134;
+  --acc:#8AB4F8;--on-acc:#0B1A33;--acc-soft:rgba(138,180,248,.14);--acc-mid:rgba(138,180,248,.40);--you:#8AB4F8;--you-soft:rgba(138,180,248,.16);
+  --claude:#8AB4F8;--claude-soft:rgba(138,180,248,.10);--hl-soft:rgba(138,180,248,.12);--word:rgba(138,180,248,.32);
+  --bad:#F28B82;--bad-soft:rgba(242,139,130,.12);--bad-line:rgba(242,139,130,.4);--warn:#FDD663;--warn-soft:rgba(253,214,99,.10);
+  --good:#81C995;--add-bg:rgba(129,201,149,.15);--del-bg:rgba(242,139,130,.15);--code-bg:#1B1B1B;--code-ink:#E8EAED;--code-faint:#80868B;--code-line:#3C4043}
 /* tokens:end */
-/* Stage-only values, derived from the tokens. Code sits on --code-bg (dark in both modes), so its
-   syntax colours are tuned for a dark ground and only shift a little with the mode. */
-:root{--mark-bg:rgba(255,175,95,.10);--spot-bg:rgba(255,175,95,.20);--mark-bar:#FFAF5F;
-  --syn-kw:#C9A2F2;--syn-str:#A9D98B;--syn-com:#6F8197;--syn-title:#7FCBCB;--syn-num:#FFB877;--syn-meta:#8AA7F0;--syn-attr:#E6C07B}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--syn-kw:#C3A3EE;--syn-str:#9CCF7E;--syn-com:#64758A;--syn-title:#5FAFAF;--syn-num:#FFAF5F;--syn-meta:#8AA7F0}}
-:root[data-theme="dark"]{--syn-kw:#C3A3EE;--syn-str:#9CCF7E;--syn-com:#64758A;--syn-title:#5FAFAF;--syn-num:#FFAF5F;--syn-meta:#8AA7F0}
+/* Stage-only values, derived from the tokens. Code sits on --code-bg, light in light mode and dark in
+   dark mode, so the syntax colours change with the mode. */
+:root{--mark-bg:rgba(26,115,232,.09);--spot-bg:rgba(26,115,232,.16);--mark-bar:#1967D2;
+  --syn-kw:#C5221F;--syn-str:#137333;--syn-com:#80868B;--syn-title:#9334E6;--syn-num:#1967D2;--syn-meta:#9334E6;--syn-attr:#B06000}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--mark-bg:rgba(138,180,248,.12);--spot-bg:rgba(138,180,248,.20);--mark-bar:#8AB4F8;
+  --syn-kw:#F28B82;--syn-str:#81C995;--syn-com:#9AA0A6;--syn-title:#C58AF9;--syn-num:#8AB4F8;--syn-meta:#C58AF9;--syn-attr:#FDD663}}
+:root[data-theme="dark"]{--mark-bg:rgba(138,180,248,.12);--spot-bg:rgba(138,180,248,.20);--mark-bar:#8AB4F8;
+  --syn-kw:#F28B82;--syn-str:#81C995;--syn-com:#9AA0A6;--syn-title:#C58AF9;--syn-num:#8AB4F8;--syn-meta:#C58AF9;--syn-attr:#FDD663}
 
 html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
 .stage{display:grid;grid-template-rows:auto minmax(0,1fr);grid-template-columns:minmax(0,1fr);height:100vh;height:100dvh}
@@ -111,7 +114,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 @keyframes pulse{from{outline:2px solid var(--claude);outline-offset:2px}to{outline:2px solid transparent;outline-offset:6px}}
 
 /* Code */
-.code{flex:0 1 auto;min-height:0;align-self:stretch;overflow:auto;font:13px/1.65 var(--mono);tab-size:4;background:var(--code-bg);color:var(--code-ink);
+.code{flex:0 1 auto;min-height:0;align-self:stretch;overflow:auto;font:13px/1.65 var(--mono);tab-size:4;font-variant-ligatures:none;background:var(--code-bg);color:var(--code-ink);
   border:1px solid var(--code-line);border-radius:12px;padding:12px 0}
 .code .lines{display:grid;min-width:100%;width:max-content}
 .code.wrap .lines{width:auto}
@@ -133,7 +136,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .hljs-meta,.hljs-doctag{color:var(--syn-meta)}
 .hljs-attr,.hljs-attribute,.hljs-variable,.hljs-template-variable,.hljs-params{color:var(--syn-attr)}
 .hljs-deletion{color:#F97066}
-.srcframe{margin:0;padding:12px 16px;font:12.5px/1.6 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--code-ink);
+.srcframe{margin:0;padding:12px 16px;font:12.5px/1.6 var(--mono);font-variant-ligatures:none;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--code-ink);
   background:var(--code-bg);border:1px solid var(--code-line);border-radius:12px;align-self:stretch}
 
 /* What changed: old and new line numbers, a +/− mark and the code, on the dark code ground in both
@@ -282,20 +285,22 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 
 /* Fonts ship beside this file: the stage's diagrams are measured in them (visuals/text_metrics.py, face "stage"). */
-@font-face{font-family:"Geist";src:url("fonts/Geist-Variable.woff2") format("woff2");font-weight:100 900;font-display:swap}
+@font-face{font-family:"Inter";src:url("fonts/Inter-Variable.woff2") format("woff2");font-weight:100 900;font-display:swap}
+@font-face{font-family:"Inter";src:url("fonts/Inter-Greek-Variable.woff2") format("woff2");font-weight:100 900;font-display:swap;
+  unicode-range:U+0370-0377,U+037A-037F,U+0384-038A,U+038C,U+038E-03A1,U+03A3-03FF}
 @font-face{font-family:"JetBrains Mono";src:url("fonts/JetBrainsMono-Variable.woff2") format("woff2");font-weight:100 800;font-display:swap}
 
 /* The shared sequence and flowchart tools (visuals.css) draw with the page's colours: these are the stage's. */
 :root{--text:var(--ink);--text-strong:var(--ink);--text-dim:var(--muted);--border:var(--line);--surface-soft:var(--row-alt);
   --diagram-ground:var(--panel);--link:var(--acc);--accent:var(--claude);--vis-mono:var(--mono);
-  --t-plain:#3c4c5b;--t-edge:#3a6d99;--t-internal:#a2560a;--t-service:#0c6d63;--t-cheap:#7c8a97;--t-hot:#a3364f;--t-good:#2c6b4c;
-  --t-dropped:#98a2ad;--t-internal-bg:#f8ecdd;--t-hot-bg:#f8e6ea;--t-good-bg:#e2f0e8;--t-edge-bg:#e4edf5;--t-service-bg:#dff0ed;--t-cheap-bg:#eef0f4}
+  --t-plain:#3C4043;--t-edge:#1967D2;--t-internal:#B06000;--t-service:#007B83;--t-cheap:#5F6368;--t-hot:#C5221F;--t-good:#188038;
+  --t-dropped:#80868B;--t-internal-bg:#FEF7E0;--t-hot-bg:#FCE8E6;--t-good-bg:#E6F4EA;--t-edge-bg:#E8F0FE;--t-service-bg:#E4F7FB;--t-cheap-bg:#F1F3F4}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --t-plain:#adb7c2;--t-edge:#6cb0e8;--t-internal:#e0a458;--t-service:#4cc6b8;--t-cheap:#9a9a9a;--t-hot:#f2848f;--t-good:#63c98d;
-  --t-dropped:#767f8b;--t-internal-bg:#3b2f1e;--t-hot-bg:#3d2429;--t-good-bg:#1f3a2a;--t-edge-bg:#1e3347;--t-service-bg:#17393a;--t-cheap-bg:#313131}}
+  --t-plain:#BDC1C6;--t-edge:#8AB4F8;--t-internal:#FDD663;--t-service:#78D9EC;--t-cheap:#A8ABB0;--t-hot:#F28B82;--t-good:#81C995;
+  --t-dropped:#80868B;--t-internal-bg:rgba(253,214,99,.12);--t-hot-bg:rgba(242,139,130,.14);--t-good-bg:rgba(129,201,149,.14);--t-edge-bg:rgba(138,180,248,.14);--t-service-bg:rgba(120,217,236,.12);--t-cheap-bg:#303134}}}
 :root[data-theme="dark"]{
-  --t-plain:#adb7c2;--t-edge:#6cb0e8;--t-internal:#e0a458;--t-service:#4cc6b8;--t-cheap:#9a9a9a;--t-hot:#f2848f;--t-good:#63c98d;
-  --t-dropped:#767f8b;--t-internal-bg:#3b2f1e;--t-hot-bg:#3d2429;--t-good-bg:#1f3a2a;--t-edge-bg:#1e3347;--t-service-bg:#17393a;--t-cheap-bg:#313131}
+  --t-plain:#BDC1C6;--t-edge:#8AB4F8;--t-internal:#FDD663;--t-service:#78D9EC;--t-cheap:#A8ABB0;--t-hot:#F28B82;--t-good:#81C995;
+  --t-dropped:#80868B;--t-internal-bg:rgba(253,214,99,.12);--t-hot-bg:rgba(242,139,130,.14);--t-good-bg:rgba(129,201,149,.14);--t-edge-bg:rgba(138,180,248,.14);--t-service-bg:rgba(120,217,236,.12);--t-cheap-bg:#303134}}
 
 /* A visual: a sequence drawn as lanes or a flowchart as a map, both by the stage itself (lanes.js, map.js). */
 .visual{position:relative;flex:1 0 auto;align-self:stretch;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);

@@ -100,7 +100,7 @@ function mermaidConfig() {
   return {
     startOnLoad: false, securityLevel: "strict", theme: "base", deterministicIds: true, htmlLabels: false,
     themeVariables: {
-      fontFamily: "Geist, system-ui, sans-serif", fontSize: "15px",
+      fontFamily: "Inter, system-ui, sans-serif", fontSize: "15px",
       primaryColor: t("--panel"), primaryBorderColor: t("--acc"), primaryTextColor: t("--ink"),
       lineColor: t("--muted"), secondaryColor: t("--hl-soft"), tertiaryColor: t("--row-alt"),
       clusterBkg: t("--row-alt"), clusterBorder: t("--line"), edgeLabelBackground: t("--panel"),

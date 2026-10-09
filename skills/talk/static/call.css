@@ -4,10 +4,10 @@
    width, which a board can spare; the stage keeps the window's full height, which code needs.
    The shared tokens are in tokens.css. These are the page's own, set for both themes; <html>
    always carries data-theme, so they need no media query. */
-:root{--page:#E9EDF2;--glass:rgba(255,255,255,.74);--glass-line:rgba(15,23,42,.09);--ring-idle:rgba(15,23,42,.08);
-  --shade:rgba(15,23,42,.06);--lift:0 18px 50px -18px rgba(15,23,42,.45);--rec:#E0263C;--glow:rgba(15,110,116,.08);--pw:380px}
-:root[data-theme="dark"]{--page:#06080C;--glass:rgba(22,28,38,.66);--glass-line:rgba(255,255,255,.08);--ring-idle:rgba(255,255,255,.07);
-  --shade:rgba(255,255,255,.07);--lift:0 30px 80px -20px rgba(0,0,0,.7);--rec:#FF5C6C;--glow:rgba(95,175,175,.10)}
+:root{--page:#E9EBEE;--glass:rgba(255,255,255,.74);--glass-line:rgba(15,23,42,.09);--ring-idle:rgba(15,23,42,.08);
+  --shade:rgba(15,23,42,.06);--lift:0 18px 50px -18px rgba(15,23,42,.45);--rec:#D93025;--glow:rgba(26,115,232,.08);--pw:380px}
+:root[data-theme="dark"]{--page:#121212;--glass:rgba(22,28,38,.66);--glass-line:rgba(255,255,255,.08);--ring-idle:rgba(255,255,255,.07);
+  --shade:rgba(255,255,255,.07);--lift:0 30px 80px -20px rgba(0,0,0,.7);--rec:#F28B82;--glow:rgba(138,180,248,.10)}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{background:var(--page);color:var(--ink);font:400 14px/1.5 var(--sans);-webkit-font-smoothing:antialiased;overflow:hidden}
@@ -88,7 +88,7 @@ svg{display:block;flex:none}
 .turn .who{display:flex;align-items:center;gap:8px;font:600 11px var(--sans);margin-bottom:3px}
 .turn .who small{font:400 11px var(--sans);color:var(--faint)}
 .turn.you .who{color:var(--you)}
-.turn.claude .who{color:var(--claude)}
+.turn.claude .who{color:var(--ink)}
 .turn .text{font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
 .turn.you .text{font-size:13.5px}
 .turn .w{border-radius:4px;cursor:pointer;transition:color .25s}

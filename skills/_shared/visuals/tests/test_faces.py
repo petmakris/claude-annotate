@@ -1,4 +1,4 @@
-"""Diagrams measure their text in the face their page draws: annotate's fonts by default, Geist on the stage."""
+"""Diagrams measure their text in the face their page draws: annotate's fonts by default, Inter on the stage."""
 import pytest
 
 from skills._shared.visuals import flowchart, font_metrics, sequence, text_metrics

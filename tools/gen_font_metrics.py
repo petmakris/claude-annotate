@@ -46,7 +46,7 @@ def main() -> None:
         "Values are advance width / unitsPerEm, so px width = sum(widths) * font_size.\n"
         'Bricolage Grotesque is variable; regular (400) and semibold (600) instances\n'
         'are extracted separately because the flowchart uses both. The STAGE_ tables\n'
-        'measure Geist and JetBrains Mono, the stage\'s face.\n"""\n\n',
+        'measure Inter and JetBrains Mono, the stage\'s face.\n"""\n\n',
     ]
     sans = FONTS / "BricolageGrotesque-Variable.woff2"
     mono = FONTS / "MonaspaceRadon-Regular.woff2"
@@ -58,8 +58,8 @@ def main() -> None:
     body.append(emit("SANS_700", t, fb))
     t, fb = widths_for(mono, None)
     body.append(emit("MONO", t, fb))
-    # The stage's face: Geist and JetBrains Mono (variable), the type the stage page draws in.
-    stage_sans = FONTS / "Geist-Variable.woff2"
+    # The stage's face: Inter and JetBrains Mono (variable), the type the stage page draws in.
+    stage_sans = FONTS / "Inter-Variable.woff2"
     for w in (400, 600, 700):
         t, fb = widths_for(stage_sans, w)
         body.append(emit(f"STAGE_SANS_{w}", t, fb))

@@ -21,7 +21,7 @@ def test_talk_and_stage_carry_the_same_tokens():
 
 
 def test_a_token_changed_in_one_file_only_is_caught():
-    stage = STAGE_CSS.read_text().replace("--acc:#0F6E74", "--acc:#0F6E75", 1)
+    stage = STAGE_CSS.read_text().replace("--acc:#1967D2", "--acc:#1967D3", 1)
     assert stage != STAGE_CSS.read_text()
     with pytest.raises(AssertionError):
         assert tokens(TALK.read_text()) == tokens(stage)
@@ -32,4 +32,4 @@ def test_the_tokens_cover_light_and_both_dark_guards():
     assert "color-scheme:light dark" in block
     assert '@media (prefers-color-scheme:dark){:root:not([data-theme="light"])' in block
     assert ':root[data-theme="dark"]' in block
-    assert "--bg:#0F1318" in block
+    assert "--bg:#121212" in block
