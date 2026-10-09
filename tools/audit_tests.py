@@ -287,8 +287,7 @@ def changed(args) -> int:
     results = []
     with worktree() as tree:
         # Every tier a bug may meet must pass untouched first, or a failure would prove nothing.
-        tiers = {(tuple(tests_for(m["file"])), "not browser") for m in picked if m["file"].endswith(".py")}
-        tiers |= {(tuple(tests_for(m["file"])), "browser") for m in picked}
+        tiers = {(tuple(tests_for(m["file"])), marker) for m in picked for marker in ("not browser", "browser")}
         for dirs, marker in sorted(tiers):
             status, failed, last = run_tests(tree, list(dirs), marker, first_failure=False)
             print(f"baseline {' '.join(dirs)} -m '{marker}': {last}", flush=True)
@@ -302,7 +301,7 @@ def changed(args) -> int:
             t0, verdict, by = time.time(), "survived", []
             try:
                 dirs = tests_for(m["file"])
-                for marker in (["not browser"] if m["file"].endswith(".py") else []) + ["browser"]:
+                for marker in ("not browser", "browser"):  # a page's JavaScript is also run under node there
                     status, failed, last = run_tests(tree, dirs, marker)
                     if status == "fail":
                         verdict, by = "killed", failed[:3] or [last]

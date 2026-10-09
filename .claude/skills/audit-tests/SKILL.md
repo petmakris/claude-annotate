@@ -26,7 +26,7 @@ Run, from the repository root:
 
 It diffs the product files (`skills/**/*.py` and `*.js`, not tests) from the commit in `.claude/skills/audit-tests/last-audit` (or `HEAD~20` when there is none, or `--base REV`) to HEAD. It samples up to 30 bugs on the changed lines, one per line and spread over the files: a flipped comparison, a negated condition, `and`/`or` swapped, a deleted call, a return emptied, a constant moved. It runs each against the tests of that skill (the stage's are also run against talk's, which embed it) in a throwaway worktree of HEAD. First come the tests without a browser, then the browser tests if the bug survived those. It refuses to plant anything when the tests fail untouched.
 
-Expect about a second per Python bug that dies in the fast tests, and one to two minutes per JavaScript bug or Python bug that reaches the browser tests. Tell the user the count before it runs; run it in the background when it is over ten minutes. It works in its own worktree, so the user's checkout is never touched; say so once.
+Expect about a second per bug that dies in the fast tests (a JavaScript bug meets them too: some of them run the page's JavaScript under node), and one to two minutes per bug that reaches the browser tests. Tell the user the count before it runs; run it in the background when it is over ten minutes. It works in its own worktree, so the user's checkout is never touched; say so once.
 
 ## Step 2 — judge every survivor
 
