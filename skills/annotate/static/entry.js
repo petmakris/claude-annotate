@@ -39,6 +39,7 @@ const CSS = [
   "style-narration.css",
   "style-choice-queue.css",
   "style-selection.css",
+  "style-comment-window.css",
   "style-read-aloud.css",
   "style-edit.css",
   "visuals.css",
@@ -76,6 +77,9 @@ const JS = [
   // Before script.js: the selection menu and the highlighter both count prose
   // through its one walker.
   "anchors.js",
+  // Before script.js and selection.js: both open comments in this window.
+  "window-place.js",
+  "comment-window.js",
   // Pure word diff; no DOM, so any later script may use it.
   "edit-diff.js",
   // The page code, one program in nine parts and in this order (script.js's

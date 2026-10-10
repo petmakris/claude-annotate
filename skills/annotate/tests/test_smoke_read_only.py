@@ -50,8 +50,8 @@ def test_feedback_controls_are_hidden_for_a_guest():
     css = STYLE_CSS.read_text()
     assert "body.read-only .sel-menu," in css, \
         "the selection menu is still offered on a read-only link"
-    assert "body.read-only .sel-composer," in css, \
-        "the selection composer is still offered on a read-only link"
+    assert "body.read-only .comment-window," in css, \
+        "the comment window is still offered on a read-only link"
     assert "body.read-only #round-dock" in css, \
         "the submit dock is still shown on a read-only link"
 

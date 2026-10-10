@@ -79,8 +79,8 @@ def test_no_control_survives_a_read_only_link():
     css = STYLE_CSS.read_text()
     assert "body.read-only .sel-menu," in css, \
         "read-only no longer hides the selection menu"
-    assert "body.read-only .sel-composer," in css, \
-        "read-only no longer hides the span comment box"
+    assert "body.read-only .comment-window," in css, \
+        "read-only no longer hides the comment window"
     assert ":not(.hover-read)" not in css and ":not(.unit-read)" not in css, \
         "a read-only carve-out for the deleted fold survived"
 

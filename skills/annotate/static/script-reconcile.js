@@ -155,7 +155,7 @@ function reconcile(doc) {
   const serverIds = new Set(serverBlocks.map(b => b.id));
   refreshPageState();
 
-  // Remove sections (and their inline-comments wrapper) for deleted blocks,
+  // Remove sections for deleted blocks,
   // clearing any running updating-timer so it can't leak.
   let orphanedDraft = false;
   let removedAny = false;
@@ -172,8 +172,6 @@ function reconcile(doc) {
       }
       clearUpdatingOverlay(section);
       untrackMockupFrames(section);
-      const ic = section.nextElementSibling;
-      if (ic && ic.classList.contains("inline-comments")) ic.remove();
       section.remove();
       removedAny = true;
       for (const a of Object.values(annotations)) {
@@ -191,16 +189,15 @@ function reconcile(doc) {
   // Submit: the dock must stop listing them, and a comment among them moves
   // to the general box while the reader can still see it happen.
   if (removedAny) window.AnnotateSubunits?.renderDock();
-  // The card went with its block, but the draft behind it did not, and one
+  // The block is gone, but the draft behind its comment window is not, and one
   // open draft is the page's "someone is editing" lock: every other comment
-  // icon refused to open until a reload. renderComments prunes it. Only
-  // then, because it rebuilds every card, which would take the caret from a
-  // reader typing in some other one.
+  // icon refused to open until a reload. renderComments prunes it, and
+  // closes the window that held it.
   if (orphanedDraft) renderComments();
 
   // Walk server order; insert missing blocks at the right spot, refresh
-  // version-bumped ones. `anchor` trails the last placed section (past its
-  // comment wrapper) so an inserted block lands in document order.
+  // version-bumped ones. `anchor` trails the last placed section so an
+  // inserted block lands in document order.
   let anchor = null;
   for (const blk of serverBlocks) {
     let section = proseEl.querySelector(`section.block[data-block-id="${cssEsc(blk.id)}"]`);
@@ -213,8 +210,7 @@ function reconcile(doc) {
       const srvVer = parseInt(blk.version, 10) || 1;
       if (srvVer > domVer) section = updateBlockContent(section, blk, srvVer);
     }
-    const ic = section.nextElementSibling;
-    anchor = (ic && ic.classList.contains("inline-comments")) ? ic : section;
+    anchor = section;
   }
 
   // Sections inserted above were built detached; paint their block marks.

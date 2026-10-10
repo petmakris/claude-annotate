@@ -21,13 +21,12 @@
     ".max-toggle",          // maximize: a view control with no JS in the export to run it
     ".max-overlay",         // ...and its overlay, if the export ran while one was open
     ".sel-menu",            // the selection menu, if one was open
-    ".sel-composer",        // an open span comment box
     ".sel-chip",            // a span comment's text, rendered in the prose
     ".sp-card",             // a read-aloud card, if one was playing
     ".ed-bar",              // a section open in the editor: its bar...
     ".ed-host",             // ...and the editor, whose text is not yet saved
     ".ed-toast",            // an editing notice
-    ".inline-comments",     // comment cards, mounted after each block
+    ".comment-window",       // the open comment window
     ".card-diff-toggle",    // "what changed"
     ".diff-pane",           // ...and the diff it opens
     ".updating-overlay",    // the spinner on a block being rewritten

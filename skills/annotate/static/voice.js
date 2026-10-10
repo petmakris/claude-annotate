@@ -191,7 +191,7 @@
 
   function attach(row) {
     if (row.querySelector(".voice-mic-btn")) return;
-    const box = row.closest(".comment-card, .sel-composer");
+    const box = row.closest(".comment-window");
     const ta = box && box.querySelector("textarea");
     if (!ta) return;
     const { btn, interim } = makeMic(ta);

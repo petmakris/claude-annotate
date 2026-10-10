@@ -48,9 +48,10 @@ def test_opening_a_comment_clears_a_stale_empty_draft_first():
     # Asserted as the guard rather than as one spelling of it: this read
     # `...length > 0) return;` and broke when the refusal grew a body that
     # tells the reader where the open editor is — a change that left the rule
-    # itself untouched.
-    assert "Object.keys(annotations).length > 0)" in open_fn
-    assert "return;" in open_fn.split("Object.keys(annotations).length > 0)", 1)[1]
+    # itself untouched. It no longer closes after `> 0` either: words in the
+    # comment window (comment-window.js) refuse a second editor too.
+    assert "Object.keys(annotations).length > 0" in open_fn
+    assert "return;" in open_fn.split("Object.keys(annotations).length > 0", 1)[1]
 
 
 def test_empty_drafts_are_pruned_on_load():

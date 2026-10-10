@@ -139,8 +139,6 @@
       if (!q) {
         sections.forEach((s) => {
           s.classList.remove("search-hidden");
-          const ic = s.nextElementSibling;
-          if (ic && ic.classList.contains("inline-comments")) ic.classList.remove("search-hidden");
         });
         removeCountEl();
         return;
@@ -150,8 +148,6 @@
       sections.forEach((s) => {
         const hide = !matched.has(s.dataset.blockId);
         s.classList.toggle("search-hidden", hide);
-        const ic = s.nextElementSibling;
-        if (ic && ic.classList.contains("inline-comments")) ic.classList.toggle("search-hidden", hide);
       });
 
       const el = ensureCountEl();

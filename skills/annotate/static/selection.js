@@ -7,8 +7,9 @@
  *
  * The menu never edits the page's DOM around the words. Marks are text
  * anchors kept in the round (subunits.js) and painted by AnnotateAnchors.
- * The comment box and the comment chips are the only things inserted into
- * a block, and AnnotateAnchors skips them when counting text.
+ * The comment chips are the only thing inserted into a block, and
+ * AnnotateAnchors skips them when counting text. The comment box opens in
+ * the floating comment window (comment-window.js), outside the text.
  */
 (function () {
   "use strict";
@@ -29,11 +30,11 @@
   const KIND_WORD = { delete: "a delete", compact: "a compact", comment: "your comment" };
   // A click on these is theirs, not a request for the menu. A drag that ends
   // on one is still a selection: excluded() judges where it starts and ends.
-  const IGNORE = "button, a, input, textarea, select, label, .sel-menu, .sel-composer, "
-    + ".sel-chip, .page-header, footer, #round-dock, .inline-comments, .code-col";
-  const OWN = ".sel-menu, .sel-composer, .sp-card";
+  const IGNORE = "button, a, input, textarea, select, label, .sel-menu, .comment-window, "
+    + ".sel-chip, .page-header, footer, #round-dock, .code-col";
+  const OWN = ".sel-menu, .comment-window, .sp-card";
   // Focus inside one of these means the keys are the panel's, not the page's.
-  const PANELS = ".page-header, [role='dialog'], .menu-panel, #round-dock, .comment-card";
+  const PANELS = ".page-header, [role='dialog'], .menu-panel, #round-dock, .comment-window";
 
   // A finger has no hover and no reliable mouseup: the menu becomes a sheet
   // at the bottom of the screen, opened from selectionchange.
@@ -323,28 +324,25 @@
   }
 
   // ── the comment box for a span ──────────────────────────────────────────
-  // `draft` is what the box is about, kept beside it so a rewrite that takes
-  // the box away (it lives inside the block) can put the words back.
+  // It opens in the one comment window (comment-window.js), which lives on
+  // <body>: a rewrite of the part cannot take it away. `draft` is what the
+  // box is about, kept so Save knows which words it was written on.
   let composer = null, draft = null;
+  const W = () => window.AnnotateCommentWindow;
   function syncDraftLock() {
-    const ta = composer && document.contains(composer) && composer.querySelector("textarea");
+    const ta = composer && W().owner() === "span" && composer.querySelector("textarea");
     const on = !!(ta && ta.value.trim());
     if (document.body.classList.contains("has-sel-draft") === on) return;
     document.body.classList.toggle("has-sel-draft", on);
-    // Submit sends only the round, and these words are not in it yet.
     S()?.renderDock();
   }
   function closeComposer() {
-    if (composer) composer.remove();
-    composer = null; draft = null;
-    syncDraftLock();
+    W().close("span");
   }
-  // Out of the box, back to the section it was about (as a comment card does).
-  function homeFocus(section) {
-    const home = section && document.contains(section) ? section
-      : document.querySelector(`main.prose section.block[data-block-id="${CSS.escape(draft?.anchor.block_id || "")}"]`);
-    focusHome(home);
+  function homeFor(anchor) {
+    return document.querySelector(`main.prose section.block[data-block-id="${CSS.escape(anchor.block_id)}"]`);
   }
+
   // The comment already on exactly these words, if any.
   function commentOn(section, anchor) {
     const hit = S().overlapping(anchor).find((x) => x.m.kind === "comment" && x.m.text
@@ -352,42 +350,15 @@
     return hit ? hit.m.text : "";
   }
 
-  function hostFor(range, section) {
-    const content = A().contentOf(section);
-    let el = range.endContainer.nodeType === 1 ? range.endContainer : range.endContainer.parentElement;
-    const block = el && el.closest("li, p, pre, blockquote, table, h1, h2, h3, h4, h5, h6");
-    return block && content.contains(block) ? block : content;
-  }
-
   function openComposer(section, anchor, range, initial) {
-    if (composer && !document.contains(composer)) composer = null;
-    const busy = composer && composer.querySelector("textarea");
-    if (busy && busy.value.trim()) {
-      // Half-written words are not thrown away for a new selection: the box
-      // that holds them comes back into view and says so.
-      busy.focus();
-      composer.scrollIntoView({ block: "nearest" });
-      composer.classList.remove("sel-flash");
-      void composer.offsetWidth;
-      composer.classList.add("sel-flash");
-      const c = composer;
-      setTimeout(() => c.classList.remove("sel-flash"), 900);
-      return;
-    }
-    closeComposer();
+    if (W().isOpen() && W().hasWords()) { W().call(); return; }
     const box = document.createElement("div");
     box.className = "sel-composer";
-    const quote = document.createElement("div");
-    quote.className = "sel-quote";
-    quote.textContent = anchor.selected_text.length > 140
-      ? anchor.selected_text.slice(0, 139) + "…" : anchor.selected_text;
     const ta = document.createElement("textarea");
     ta.value = initial != null ? initial : commentOn(section, anchor);
-    ta.rows = 1;
     ta.placeholder = "Ask or push back on this…";
     ta.setAttribute("aria-label", "Comment on the selected words");
-    const grow = () => { ta.style.height = "auto"; ta.style.height = `${ta.scrollHeight + 2}px`; };
-    ta.addEventListener("input", () => { grow(); if (draft) draft.text = ta.value; syncDraftLock(); });
+    ta.addEventListener("input", () => { if (draft) draft.text = ta.value; syncDraftLock(); });
     const row = document.createElement("div");
     row.className = "sel-row";
     row.innerHTML = '<span class="card-submit-hint"><kbd>↩</kbd> to add · '
@@ -396,63 +367,43 @@
     cancel.type = "button"; cancel.className = "sel-cancel"; cancel.textContent = "Cancel";
     const add = document.createElement("button");
     add.type = "button"; add.className = "card-submit-btn"; add.textContent = "Add to round";
+    // The words may have been rewritten while the window was open. Still
+    // there: the comment goes on them. Gone, part still there: it goes on
+    // the part, quoting what it was about. Part gone too: the general box.
     const commit = () => {
       const v = ta.value.trim();
+      const parts = anchor.spans || [anchor];
       closeComposer();
-      if (v) S().setSpanMark(anchor, "comment", v);
-      homeFocus(section);
+      if (!v) return;
+      const home = homeFor(parts[0]);
+      const live = parts.every((p) => { const s = homeFor(p); return s && A().rangeFor(s, p); });
+      if (live) S().setSpanMark(anchor, "comment", v);
+      else if (home) {
+        const q = anchor.selected_text.length > 120 ? anchor.selected_text.slice(0, 117) + "…" : anchor.selected_text;
+        S().pinComment({ block_id: parts[0].block_id, text: `On the passage that read "${q}": ${v}` });
+      } else {
+        document.dispatchEvent(new CustomEvent("annotate:orphan-comment",
+          { detail: { text: v, quote: anchor.selected_text } }));
+      }
+      focusHome(home);
     };
-    const dismiss = () => { closeComposer(); homeFocus(section); };
+    const dismiss = () => { closeComposer(); focusHome(homeFor((anchor.spans || [anchor])[0])); };
     cancel.addEventListener("click", (e) => { e.stopPropagation(); dismiss(); });
     add.addEventListener("click", (e) => { e.stopPropagation(); commit(); });
     ta.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commit(); }
-      if (e.key === "Escape") { e.preventDefault(); dismiss(); }
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); dismiss(); }
     });
     row.append(cancel, add);
-    box.append(quote, ta, row);
-    const host = hostFor(range, section);
-    if (host === A().contentOf(section) || host.tagName === "LI") host.appendChild(box);
-    else host.insertAdjacentElement("afterend", box);
+    box.append(ta, row);
+    window.AnnotateCommentWindow.open({ owner: "span", quote: anchor.selected_text, body: box,
+      near: range.getBoundingClientRect(),
+      onClose: () => { composer = null; draft = null; syncDraftLock(); } });
     composer = box;
     draft = { anchor, text: ta.value };
-    grow();
     ta.focus();
     ta.setSelectionRange(ta.value.length, ta.value.length);
     syncDraftLock();
-  }
-
-  // A rewrite took the box away with its block. Words in it are the reader's
-  // and are never dropped: the box comes back on the same words if they are
-  // still there, else the words go to the section's comment card, quoting
-  // what they were about, and to the general box if even the section is gone.
-  function rescueDraft() {
-    const d = draft;
-    composer = null; draft = null;
-    const text = d && d.text.trim() ? d.text : "";
-    if (!text) return syncDraftLock();
-    const id = d.anchor.block_id;
-    const section = document.querySelector(`main.prose section.block[data-block-id="${CSS.escape(id)}"]`);
-    const range = section && A().rangeFor(section, d.anchor);
-    const fresh = range && A().anchorFor(section, range);
-    if (fresh) {
-      openComposer(section, fresh, range, d.text);
-      return;
-    }
-    syncDraftLock();
-    const quote = d.anchor.selected_text.length > 120
-      ? d.anchor.selected_text.slice(0, 117) + "…" : d.anchor.selected_text;
-    const moved = `On the passage that read "${quote}": ${d.text}`;
-    if (section) window.AnnotatePage?.openComment(id);
-    const ta = section && document.querySelector(
-      `.inline-comments[data-for-block="${CSS.escape(id)}"] .comment-card textarea`);
-    if (ta) {
-      ta.value = ta.value.trim() ? `${ta.value.trimEnd()}\n\n${moved}` : moved;
-      ta.dispatchEvent(new Event("input", { bubbles: true }));
-      return;
-    }
-    document.dispatchEvent(new CustomEvent("annotate:orphan-comment",
-      { detail: { text: d.text, quote: d.anchor.selected_text } }));
   }
 
   // ── events ──────────────────────────────────────────────────────────────
@@ -656,11 +607,9 @@
     if (menu && target && target.fromSel && sameRange(r, target.range)) return;
     openByKeyboard(r);
   });
-  // A rewrite replaces the section the menu points into, and can take the
-  // comment box with it.
+  // A rewrite replaces the section the menu points into.
   document.addEventListener("annotate:rendered", () => {
     if (target && !document.contains(target.section)) close();
-    if (composer && !document.contains(composer)) rescueDraft();
   });
 
   window.AnnotateSelection = {

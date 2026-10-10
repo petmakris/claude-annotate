@@ -206,7 +206,7 @@ main.prose th {
    left the reader's browser, but compact replaced it and compact is an edit,
    which belongs to whoever owns the workspace. */
 body.read-only .sel-menu,
-body.read-only .sel-composer,
+body.read-only .comment-window,
 body.read-only #round-dock,
 body.read-only .comment-card { display: none; }
 

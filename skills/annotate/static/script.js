@@ -285,7 +285,8 @@ function openAnnotation(block, type, opts) {
     for (const [k, v] of Object.entries(annotations)) {
       if (isEmptyDraft(v)) delete annotations[k];
     }
-    if (Object.keys(annotations).length > 0) {
+    if (Object.keys(annotations).length > 0
+        || (window.AnnotateCommentWindow.isOpen() && window.AnnotateCommentWindow.hasWords())) {
       revealOpenDraft();
       return;
     }

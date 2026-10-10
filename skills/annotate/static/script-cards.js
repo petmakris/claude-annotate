@@ -68,21 +68,6 @@ function buildCard(id, a, onSubmitCb) {
   // targets, and wire a focus/hover link that highlights the matching row.
   const stepCtx = a.step_id ? stepContextFor(a.block_id, a.step_id) : null;
 
-  const closeBtn = document.createElement("button");
-  closeBtn.type = "button";
-  closeBtn.className = "card-close";
-  closeBtn.dataset.type = a.type;
-  closeBtn.title = "Remove";
-  closeBtn.setAttribute("aria-label", "Remove annotation");
-  closeBtn.textContent = "×";
-  closeBtn.addEventListener("click", () => {
-    delete annotations[id];
-    saveDrafts();
-    renderComments();
-    applyEngagedStyling();
-  });
-  card.appendChild(closeBtn);
-
   if (a.step_id) {
     const head = document.createElement("div");
     head.className = "card-step-head";
@@ -108,14 +93,6 @@ function buildCard(id, a, onSubmitCb) {
       card.addEventListener("focusin", on);
       card.addEventListener("focusout", off);
     }
-  }
-
-  if (a.selected_text) {
-    const quote = document.createElement("div");
-    quote.className = "quote";
-    quote.dataset.type = a.type;
-    quote.textContent = a.selected_text;
-    card.appendChild(quote);
   }
 
   const wrap = document.createElement("div");
@@ -284,13 +261,13 @@ function buildCard(id, a, onSubmitCb) {
     // still live, which drops the comment the user is mid-way through
     // writing. That window is the bug; a narrower window is not a fix.
     window.AnnotateSubunits?.renderDock();
-    // Removing the card took the focused button with it, and focus fell to
-    // <body>: the next Tab restarted from the top of the page. Hand it to
-    // the section's fold button, and say what happened, since the card
-    // vanishing is all a screen reader would otherwise get.
+    // Closing the window takes the focused button with it, and focus would
+    // fall to <body>: the next Tab restarted from the top of the page. Hand
+    // it to the part, and say what happened, since the window vanishing is
+    // all a screen reader would otherwise get.
     const home = document.querySelector(
       `section.block[data-block-id="${cssEsc(a.block_id)}"]`);
-    card.remove();
+    window.AnnotateCommentWindow.close("card:" + id);
     applyEngagedStyling();
     focusHome(home);
     window.AnnotateA11y?.announce("Comment added to the round");
@@ -371,25 +348,35 @@ function renderComments() {
   }
   if (pruned) saveDrafts();
 
-  document.querySelectorAll(".inline-comments").forEach(el => el.remove());
-
-  const byBlock = {};
-  for (const [id, a] of Object.entries(annotations)) {
-    (byBlock[a.block_id] ||= []).push([id, a]);
+  const W = window.AnnotateCommentWindow;
+  const entries = Object.entries(annotations);
+  if (!entries.length) {
+    if (W.owner() && W.owner().startsWith("card:")) W.close();
+  } else {
+    const [id, a] = entries[0];
+    if (W.owner() !== "card:" + id) {
+      const section = document.querySelector(`section.block[data-block-id="${cssEsc(a.block_id)}"]`);
+      const step = a.step_id ? stepContextFor(a.block_id, a.step_id) : null;
+      const label = (section && section.querySelector(".block-label")) || section;
+      window.AnnotateCommentWindow.open({
+        owner: "card:" + id,
+        quote: a.selected_text || (step && step.label) || (section ? section.getAttribute("aria-label") : ""),
+        body: buildCard(id, a),
+        near: (step && step.node ? step.node : label).getBoundingClientRect(),
+        // The window's × is the old card's ×: the draft goes with it.
+        onClose: () => {
+          if (!annotations[id]) return;
+          delete annotations[id];
+          saveDrafts();
+          document.body.classList.toggle("is-editing", Object.keys(annotations).length > 0);
+          applyEngagedStyling();
+          window.AnnotateSubunits?.renderDock();
+        },
+      });
+    }
   }
 
-  for (const [blockId, items] of Object.entries(byBlock)) {
-    // Insert after the <section.block> that wraps the block.
-    const section = document.querySelector(`section.block[data-block-id="${cssEsc(blockId)}"]`);
-    if (!section) continue;
-    const wrap = document.createElement("div");
-    wrap.className = "inline-comments";
-    wrap.dataset.forBlock = blockId;
-    for (const [id, a] of items) wrap.appendChild(buildCard(id, a));
-    section.insertAdjacentElement("afterend", wrap);
-  }
-
-  // EDITING lock: any open comment card means one editor is active.
+  // EDITING lock: an open comment draft means one editor is active.
   document.body.classList.toggle("is-editing", Object.keys(annotations).length > 0);
   // Same tick, same reason as the submit path above: the dock's disabled
   // state reads `is-editing`, so it has to be repainted the moment the
@@ -398,9 +385,7 @@ function renderComments() {
 }
 
 function focusComment(id) {
-  const card = document.querySelector(`.comment-card[data-id="${id}"]`);
-  if (!card) return;
-  const ta = card.querySelector("textarea");
+  const ta = document.querySelector(".comment-window textarea");
   if (ta) ta.focus({ preventScroll: true });
 }
 
@@ -408,21 +393,8 @@ function focusComment(id) {
 // what had to go: a comment icon that does nothing when clicked is
 // indistinguishable from a broken one — which is exactly what it was
 // mistaken for, and reported as, when renderComments was deleting these
-// drafts at the moment they were created. The open card is usually the
-// reason, and it is usually somewhere off screen.
+// drafts at the moment they were created. The open comment window is the
+// reason: it pulses and takes the caret (comment-window.js call()).
 function revealOpenDraft() {
-  const openId = Object.keys(annotations)[0];
-  if (!openId) return;
-  const card = document.querySelector(`.comment-card[data-id="${cssEsc(openId)}"]`);
-  if (!card) return;
-  card.scrollIntoView({ behavior: "smooth", block: "center" });
-  // Restarted rather than merely added: a second refusal while the class is
-  // still on the element would re-add a class it already has and animate
-  // nothing, so the one signal the user gets would fire only the first time.
-  card.classList.remove("is-calling");
-  void card.offsetWidth;
-  card.classList.add("is-calling");
-  setTimeout(() => card.classList.remove("is-calling"), 1200);
-  const ta = card.querySelector("textarea");
-  if (ta) ta.focus({ preventScroll: true });
+  window.AnnotateCommentWindow.call();
 }

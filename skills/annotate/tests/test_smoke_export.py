@@ -93,9 +93,8 @@ def test_the_export_deletes_every_comment_carrier():
     """Each of these renders comment text or review state inside main.prose,
     which is the subtree the export clones. Missing one ships private notes."""
     selectors = _strip_selectors()
-    for needle in (".inline-comments",  # comment cards, mounted after a block
+    for needle in (".comment-window",   # the open comment window
                    ".sel-menu",         # the selection menu
-                   ".sel-composer",     # an open span comment box
                    ".sel-chip"):        # a span comment's text, in the prose
         assert needle in selectors, f"the export no longer removes {needle!r}"
 

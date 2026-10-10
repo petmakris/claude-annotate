@@ -49,22 +49,8 @@ section.block[data-sel-scope] { box-shadow: 0 0 0 2px var(--accent); }
   text-decoration: underline 2px var(--accent);
 }
 
-.sel-composer {
-  display: block; margin: 8px 0 4px; padding: 10px 12px; border-radius: 10px;
-  background: var(--type-comment-wash);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
-  font-weight: 400; font-style: normal;
-}
 .sel-quote { font-size: 12px; font-style: italic; color: var(--text-dim);
   border-left: 2px solid var(--accent); padding-left: 8px; margin-bottom: 8px; }
-.sel-composer textarea {
-  display: block; width: 100%; box-sizing: border-box; min-height: 40px; max-height: 240px;
-  resize: none; padding: 8px 12px; font: inherit; font-size: 14px; line-height: 1.5;
-  border: 1px solid var(--control-border); border-radius: 7px;
-  background: var(--surface); color: var(--text); caret-color: var(--accent);
-}
-.sel-composer textarea:focus { outline: none; border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
 .sel-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 .sel-cancel { padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 500;
   border: 1px solid var(--control-border); border-radius: 5px; background: transparent;
@@ -79,7 +65,7 @@ section.block[data-sel-scope] { box-shadow: 0 0 0 2px var(--accent); }
   cursor: pointer; opacity: .65; }
 .sel-chip-x:hover, .sel-chip-x:focus-visible { opacity: 1; background: var(--hover-tint); }
 body.read-only .sel-chip-x { display: none; }
-body.read-only .sel-menu, body.read-only .sel-composer { display: none; }
+body.read-only .sel-menu { display: none; }
 
 /* The title is how a whole part is chosen: selecting any of it opens the
    menu on the part. It stays selectable, and only the fold button folds, so
@@ -89,13 +75,6 @@ section.block .block-label { user-select: text; }
 /* Inside a maximised card or a full-screen element, the menu is that
    element's child and must sit above its content. */
 .sel-menu.sel-menu-layered { z-index: 1300; }
-/* A comment box with words in it is not replaced by a new selection; it
-   flashes instead, to say where those words are. */
-.sel-composer.sel-flash { animation: sel-flash .8s ease-out; }
-@keyframes sel-flash {
-  0%, 40% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 55%, transparent); }
-  100%    { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent); }
-}
 
 /* On a phone the menu is a sheet on the bottom edge, with full-size targets. */
 .sel-menu.sel-sheet {

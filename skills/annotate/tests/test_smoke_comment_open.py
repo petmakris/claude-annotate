@@ -23,6 +23,7 @@ from pathlib import Path
 from skills.annotate.tests.page_source import SCRIPT_JS, STYLE_CSS
 
 SCRIPT = SCRIPT_JS.read_text()
+WINDOW = (Path(__file__).resolve().parents[1] / "static" / "comment-window.js").read_text()
 
 
 def _fn(name, src=SCRIPT):
@@ -83,7 +84,7 @@ class TestOpeningAComment(unittest.TestCase):
         # `... .length > 0) return;` and broke the moment the refusal grew a
         # body telling the user where the open editor is — a change that kept
         # the rule exactly as it was.
-        self.assertTrue(re.search(r"if \(Object\.keys\(annotations\)\.length > 0\)", body),
+        self.assertTrue(re.search(r"if \(Object\.keys\(annotations\)\.length > 0\b", body),
                         "the single-flight guard on the comment editor is gone")
         self.assertIn("return;", body[body.index("Object.keys(annotations).length > 0"):])
 
@@ -93,9 +94,9 @@ class TestARefusalIsVisible(unittest.TestCase):
 
     A comment icon that does nothing when clicked is indistinguishable from a
     broken one — which is what it was mistaken for and reported as. The rule
-    stands, but the refusal now scrolls the open card into view, pulses it and
-    puts the caret in it, so the answer to "why did nothing happen" is the
-    card itself.
+    stands, but the refusal now pulses the open comment window and puts the
+    caret in it, so the answer to "why did nothing happen" is the window
+    itself. The window floats on the page, so it is always in view.
     """
 
     def test_the_refusal_points_at_the_open_card(self):
@@ -103,23 +104,24 @@ class TestARefusalIsVisible(unittest.TestCase):
         self.assertIn("revealOpenDraft()", body,
                       "the single-flight guard returns silently again")
         reveal = _code(_fn("revealOpenDraft"))
-        self.assertIn("scrollIntoView", reveal)
-        self.assertIn("is-calling", reveal)
-        self.assertIn("focus(", reveal)
+        self.assertIn("AnnotateCommentWindow.call()", reveal)
+        call = _code(_fn("call", WINDOW))
+        self.assertIn("is-calling", call)
+        self.assertIn("focus(", call)
 
     def test_the_pulse_can_fire_twice_in_a_row(self):
         # Re-adding a class an element already has animates nothing, so a
         # second refusal would be silent again — the exact bug, one layer down.
-        reveal = _code(_fn("revealOpenDraft"))
-        remove_at = reveal.index('classList.remove("is-calling")')
-        reflow_at = reveal.index("offsetWidth")
-        add_at = reveal.index('classList.add("is-calling")')
+        call = _code(_fn("call", WINDOW))
+        remove_at = call.index('classList.remove("is-calling")')
+        reflow_at = call.index("offsetWidth")
+        add_at = call.index('classList.add("is-calling")')
         self.assertTrue(remove_at < reflow_at < add_at,
                         "the animation is not restarted between refusals")
 
     def test_the_pulse_is_styled_and_respects_reduced_motion(self):
         css = STYLE_CSS.read_text()
-        self.assertIn(".comment-card.is-calling", css)
+        self.assertIn(".comment-window.is-calling", css)
         self.assertIn("@keyframes card-calling", css)
         reduced = css[css.index("prefers-reduced-motion"):]
         self.assertIn("is-calling", reduced[:400],

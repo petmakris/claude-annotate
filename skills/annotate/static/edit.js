@@ -1323,8 +1323,6 @@
     const pending = section._pendingBlock;
     delete section._pendingBlock;
     if (section._removed) {
-      const ic = section.nextElementSibling;
-      if (ic && ic.classList.contains("inline-comments")) ic.remove();
       section.remove();
       document.dispatchEvent(new CustomEvent("annotate:rendered"));
       return;

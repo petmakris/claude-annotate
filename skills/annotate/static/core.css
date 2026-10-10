@@ -401,12 +401,6 @@ body {
 .general-send-btn:not(:disabled):hover { opacity: 0.88; }
 
 /* === Comment cards =================================================== */
-.inline-comments {
-  margin: 6px 0 16px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 .comment-card {
   position: relative;
   border: none;
@@ -418,42 +412,6 @@ body {
 }
 .comment-card[data-type="reject"]   { background: var(--type-reject-wash); }
 .comment-card[data-type="comment"]  { background: var(--type-comment-wash); }
-/* Close lives in the right gutter, outside the card body, so it can
-   never overlap the textarea. The card itself remains positioning
-   context (.comment-card { position: relative }). */
-.card-close {
-  position: absolute;
-  top: 6px;
-  right: -32px;
-  width: 24px;
-  height: 24px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-dim);
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: inherit;
-  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
-}
-.card-close:hover {
-  background: var(--surface);
-  color: var(--text-strong);
-}
-.card-close[data-type="reject"]:hover {
-  background: color-mix(in srgb, var(--type-reject-fg) 16%, transparent);
-  color: var(--type-reject-fg);
-  border-color: color-mix(in srgb, var(--type-reject-fg) 30%, transparent);
-}
-.card-close[data-type="comment"]:hover {
-  background: color-mix(in srgb, var(--type-comment-fg) 16%, transparent);
-  color: var(--type-comment-fg);
-  border-color: color-mix(in srgb, var(--type-comment-fg) 30%, transparent);
-}
 .comment-card .quote {
   font-size: 11px;
   font-style: italic;

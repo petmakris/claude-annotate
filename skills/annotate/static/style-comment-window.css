@@ -1,0 +1,40 @@
+/* The one comment window (comment-window.js). */
+.comment-window {
+  position: fixed; z-index: 70; display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(20, 24, 40, .06), 0 18px 48px rgba(20, 24, 40, .22);
+  overflow: hidden; color: var(--text-strong); font-family: var(--font-prose);
+}
+.comment-window[hidden] { display: none; }
+.comment-window-bar { display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 14px;
+  background: var(--surface-soft); border-bottom: 1px solid var(--border); cursor: grab; user-select: none; }
+.comment-window.is-moving, .comment-window.is-moving .comment-window-bar { cursor: grabbing; user-select: none; }
+.comment-window-grip { width: 10px; height: 14px;
+  background: radial-gradient(circle, var(--n-300) 1.3px, transparent 1.6px) 0 0 / 5px 5px; }
+.comment-window-title { font-size: 13px; font-weight: 700; }
+.comment-window-space { flex: 1; }
+.comment-window-close { border: 0; background: none; color: var(--text-dim); font-size: 18px; line-height: 1;
+  width: 28px; height: 28px; border-radius: 7px; cursor: pointer; }
+.comment-window-close:hover { background: var(--surface-hover); color: var(--text-strong); }
+.comment-window-quote { margin: 12px 14px 0; font-size: 13px; line-height: 1.45; color: var(--text);
+  border-left: 3px solid var(--type-comment-fg); background: var(--type-comment-wash);
+  padding: 6px 10px; border-radius: 0 7px 7px 0; max-height: 84px; overflow: auto; white-space: pre-line; }
+.comment-window-quote[hidden] { display: none; }
+.comment-window-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 10px 14px 14px; }
+.comment-window-body > * { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.comment-window-body textarea { flex: 1; min-height: 60px; width: 100%; box-sizing: border-box; resize: none;
+  font: 14.5px/1.5 var(--font-prose); color: var(--text-strong); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; }
+.comment-window-body textarea:focus { outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+/* A part's comment (script-cards.js buildCard) is the window's body, not a
+   card inside it: no wash or padding of its own, and its text box fills the
+   window, which the corner resizes, so the box's own handle goes. */
+.comment-window .comment-card { background: none; padding: 0; box-shadow: none; }
+.comment-window .editor-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.comment-window .editor-resize { display: none; }
+.comment-window-resize { position: absolute; right: 3px; bottom: 3px; width: 16px; height: 16px; cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 0 55%, var(--n-300) 55% 61%, transparent 61% 72%, var(--n-300) 72% 78%, transparent 78%); }
+.comment-window.is-calling { animation: card-calling 1.1s ease; }
+@media (prefers-reduced-motion: reduce) { .comment-window.is-calling { animation: none; outline: 2px solid var(--accent); } }
+body.read-only .comment-window { display: none; }

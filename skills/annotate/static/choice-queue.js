@@ -28,15 +28,15 @@
     return !!window.AnnotateSubunits?.choiceMark(sec.dataset.blockId);
   }
 
-  // Runs of two or more adjacent choice sections with equal data-group. Comment
-  // wrappers and our own bars sit between sections and do not break a run.
+  // Runs of two or more adjacent choice sections with equal data-group. Our
+  // own bars sit between sections and do not break a run.
   function runs() {
     const root = prose();
     if (!root) return [];
     const out = [];
     let cur = null;
     for (const el of root.children) {
-      if (el.classList.contains("inline-comments") || el.classList.contains("cq-bar")) continue;
+      if (el.classList.contains("cq-bar")) continue;
       const g = el.matches("section.block") && el.dataset.kind === "choice" ? el.dataset.group : "";
       if (g && cur && cur.group === g) cur.members.push(el);
       else if (g) { cur = { group: g, members: [el] }; out.push(cur); }
@@ -70,8 +70,6 @@
 
   function setHidden(sec, hide) {
     sec.classList.toggle(HIDDEN, hide);
-    const ic = sec.nextElementSibling;
-    if (ic && ic.classList.contains("inline-comments")) ic.classList.toggle(HIDDEN, hide);
   }
 
   // The bar is deliberately small: a ring for progress, one line saying where
