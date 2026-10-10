@@ -217,8 +217,21 @@
     if (range) h.add(range);
   }
 
+  // One anchor per part the range touches, in page order. anchorFor clips
+  // the range to each part's prose, so a range that starts in one part and
+  // ends in the next gives the tail of the first and the head of the second.
+  function anchorsAcross(range) {
+    const out = [];
+    document.querySelectorAll("main.prose section.block[data-block-id]").forEach((s) => {
+      if (!range.intersectsNode(s)) return;
+      const a = anchorFor(s, range);
+      if (a) out.push(a);
+    });
+    return out;
+  }
+
   window.AnnotateAnchors = {
-    SKIP, supported, contentOf, textOf, offsetsOf, rangeFrom, anchorFor,
+    SKIP, supported, contentOf, textOf, offsetsOf, rangeFrom, anchorFor, anchorsAcross,
     locate, locateText, rangeFor, offsetAt, paint, setScope, CONTEXT,
   };
 })();

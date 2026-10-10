@@ -444,3 +444,9 @@ def test_step_id_still_arrives_for_data_annotate_id_sections():
     para = _paragraph(CONTRACT.read_text(encoding="utf-8"),
                       "`step_id` still arrives for a section that carries")
     assert "`data-annotate-id`" in para
+
+
+def test_a_reaction_across_a_heading_belongs_to_every_block_it_names():
+    doc = CONTRACT.read_text(encoding="utf-8")
+    assert "`spans`, present only when the reader's selection crossed a heading" in doc
+    assert "a reaction with `spans` under every block it names" in doc

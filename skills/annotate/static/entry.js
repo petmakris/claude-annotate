@@ -80,6 +80,8 @@ const JS = [
   // Before script.js and selection.js: both open comments in this window.
   "window-place.js",
   "comment-window.js",
+  // Before selection.js and subunits.js: a mark may cover words in two parts.
+  "spans.js",
   // Pure word diff; no DOM, so any later script may use it.
   "edit-diff.js",
   // The page code, one program in nine parts and in this order (script.js's

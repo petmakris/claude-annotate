@@ -177,33 +177,28 @@
       x.addEventListener("click", (e) => { e.stopPropagation(); close(); });
       menu.appendChild(x);
     }
-    if (opts.refuse) {
-      const m = document.createElement("span");
-      m.className = "sel-state";
-      m.textContent = "Select within one part";
-      menu.appendChild(m);
-    } else {
-      if (opts.state) {
-        const s = document.createElement("span");
-        s.className = "sel-state";
-        s.textContent = opts.state;
-        menu.appendChild(s);
-      }
-      if (opts.removable) menu.appendChild(button("remove", "Remove this mark", "", ICON.remove, sheet));
-      if (opts.state || opts.removable) {
-        const sep = document.createElement("span");
-        sep.className = "sel-sep";
-        menu.appendChild(sep);
-      }
-      for (const [act, label, key] of ACTS) menu.appendChild(button(act, label, key, ICON[act], sheet));
-      if (extras.length && t) {
-        const sep = document.createElement("span");
-        sep.className = "sel-sep";
-        menu.appendChild(sep);
-        for (const fn of extras) { try { fn(t, menu); } catch (_) {} }
-        // A divider with nothing after it is noise: drop it if no extra added a button.
-        if (menu.lastElementChild === sep) sep.remove();
-      }
+    if (opts.state) {
+      const s = document.createElement("span");
+      s.className = "sel-state";
+      s.textContent = opts.state;
+      menu.appendChild(s);
+    }
+    if (opts.removable) menu.appendChild(button("remove", "Remove this mark", "", ICON.remove, sheet));
+    if (opts.state || opts.removable) {
+      const sep = document.createElement("span");
+      sep.className = "sel-sep";
+      menu.appendChild(sep);
+    }
+    for (const [act, label, key] of ACTS) menu.appendChild(button(act, label, key, ICON[act], sheet));
+    // Edit, Explain and Read act on one part's words, so words across a
+    // heading get none of them.
+    if (extras.length && t && !(t.anchor && t.anchor.spans)) {
+      const sep = document.createElement("span");
+      sep.className = "sel-sep";
+      menu.appendChild(sep);
+      for (const fn of extras) { try { fn(t, menu); } catch (_) {} }
+      // A divider with nothing after it is noise: drop it if no extra added a button.
+      if (menu.lastElementChild === sep) sep.remove();
     }
     // One tab stop: the arrows move between the buttons, Tab leaves.
     const buttons = [...menu.querySelectorAll("button")];
@@ -229,51 +224,51 @@
     if (t && t.whole) { t.section.dataset.selScope = ""; A().setScope(t.range); }
   }
 
-  // Chrome's triple-click on a section's last paragraph ends the range at the
-  // very start of the next section. Nothing of that section is selected, so
-  // the end goes back to the end of the first section's content.
-  function trimSpill(range) {
-    const s1 = sectionOf(range.startContainer), s2 = sectionOf(range.endContainer);
-    if (!s1 || !s2 || s1 === s2) return range;
-    const lead = document.createRange();
-    lead.setStart(s2, 0);
-    lead.setEnd(range.endContainer, range.endOffset);
-    const content = A().contentOf(s1);
-    if (lead.toString() !== "" || !content) return range;
-    const r = range.cloneRange();
-    r.setEnd(content, content.childNodes.length);
-    getSelection()?.removeAllRanges();
-    getSelection()?.addRange(r);
-    return r;
+  function kindOf(id) {
+    return document.querySelector(`main.prose section.block[data-block-id="${CSS.escape(id)}"]`)?.dataset.kind || "markdown";
   }
 
   function openForSelection(range) {
-    range = trimSpill(range);
     const s1 = sectionOf(range.startContainer), s2 = sectionOf(range.endContainer);
     if (!s1 && !s2) return close();
-    if (s1 !== s2) return open(null, range.getBoundingClientRect(), { refuse: true });
-    if (excluded(range.startContainer, s1) || excluded(range.endContainer, s1)) return close();
-    if (inTitle(range.startContainer) || inTitle(range.endContainer)) return openWhole(s1);
-    const anchor = A().anchorFor(s1, range);
-    if (!anchor) return close();
+    if (s1 && s1 === s2) {
+      if (inTitle(range.startContainer) && inTitle(range.endContainer)) return openWhole(s1);
+      if (excluded(range.startContainer, s1) && excluded(range.endContainer, s1)) return close();
+    }
+    // Within one part or across a heading: one anchor per part the words
+    // touch, leaving out parts that take no selection (a picture, a question).
+    const parts = window.AnnotateSpans.textOnly(A().anchorsAcross(range), kindOf, WHOLE_ONLY);
+    if (!parts.length) return close();
+    const anchor = window.AnnotateSpans.withSpans(parts);
+    const section = sectionOf(range.startContainer) && parts[0].block_id === sectionOf(range.startContainer).dataset.blockId
+      ? sectionOf(range.startContainer)
+      : document.querySelector(`main.prose section.block[data-block-id="${CSS.escape(parts[0].block_id)}"]`);
     const all = S().overlapping(anchor);
     // The very words of an existing mark are that mark, not something a new
     // one would replace: say what they are marked, and offer to take it back.
-    const same = all.find((x) => sameWords(s1, x.m, anchor));
+    const same = all.find((x) => sameWords(x.m, anchor));
     const over = all.filter((x) => x !== same);
+    const t = { section, anchor, range: range.cloneRange(), whole: false, fromSel: true };
     if (same && !over.length) {
-      return open({ section: s1, anchor, range: range.cloneRange(), whole: false,
-                    fromSel: true, key: same.key },
-                  range.getBoundingClientRect(), { state: `Marked ${same.m.kind}`, removable: true });
+      return open({ ...t, key: same.key }, range.getBoundingClientRect(),
+                  { state: `Marked ${same.m.kind}`, removable: true });
     }
     const state = over.length ? `Replaces ${KIND_WORD[over[0].m.kind] || "a mark"}` : "";
-    open({ section: s1, anchor, range: range.cloneRange(), whole: false, fromSel: true },
-         range.getBoundingClientRect(), { state });
+    open(t, range.getBoundingClientRect(), { state });
   }
 
-  function sameWords(section, a, b) {
-    const x = A().locate(section, a), y = A().locate(section, b);
-    return !!(x && y && x[0] === y[0] && x[1] === y[1]);
+  // Two marks are the same words when they cover the same parts and, in
+  // each, the same stretch of its prose.
+  function sameWords(a, b) {
+    const pa = window.AnnotateSpans.partsOf(a), pb = window.AnnotateSpans.partsOf(b);
+    if (pa.length !== pb.length) return false;
+    return pa.every((p, i) => {
+      const q = pb[i];
+      if (p.block_id !== q.block_id) return false;
+      const s = document.querySelector(`main.prose section.block[data-block-id="${CSS.escape(p.block_id)}"]`);
+      const x = s && A().locate(s, p), y = s && A().locate(s, q);
+      return !!(x && y && x[0] === y[0] && x[1] === y[1]);
+    });
   }
 
   function openWhole(section) {
@@ -291,7 +286,9 @@
   }
 
   function openForMark(section, hit) {
-    const range = A().rangeFor(section, hit.m);
+    // A mark across a heading is found again by its words in this part.
+    const part = window.AnnotateSpans.partsOf(hit.m).find((p) => p.block_id === section.dataset.blockId);
+    const range = part && A().rangeFor(section, part);
     if (!range) return close();
     open({ section, anchor: hit.m, range, whole: false, key: hit.key },
          range.getBoundingClientRect(), { state: `Marked ${hit.m.kind}`, removable: true });
@@ -343,9 +340,9 @@
   }
 
   // The comment already on exactly these words, if any.
-  function commentOn(section, anchor) {
+  function commentOn(anchor) {
     const hit = S().overlapping(anchor).find((x) => x.m.kind === "comment" && x.m.text
-      && sameWords(section, x.m, anchor));
+      && sameWords(x.m, anchor));
     return hit ? hit.m : null;
   }
 
@@ -354,7 +351,7 @@
     const box = document.createElement("div");
     box.className = "sel-body";
     const ta = document.createElement("textarea");
-    const prior = commentOn(section, anchor);
+    const prior = commentOn(anchor);
     ta.value = initial != null ? initial : (prior ? prior.text : "");
     // Pictures pasted here ride on the mark, as a part's comment's do.
     let images = (prior && prior.images) || [];
@@ -527,8 +524,8 @@
       }
       const act = { c: "comment", d: "delete", x: "compact" }[ev.key];
       if (!act) return;
-      // The refusal menu has no target; its keys still must not fall through
-      // to script.js's `c`, which would open a card behind it.
+      // An open menu owns these keys: they must not fall through to
+      // script.js's `c`, which would open a comment behind it.
       ev.preventDefault(); ev.stopImmediatePropagation();
       if (target) run(act);
       return;
@@ -569,14 +566,13 @@
   // is done when Shift comes up: the menu opens on it with focus on its
   // first button. Only if Shift changed the selection, though: Shift+Tab out
   // of the menu, or a Shift press over a selection left from before, is not
-  // a new selection. One across sections opens nothing from here.
+  // a new selection.
   function sameRange(r, t) {
     return !!t && r.startContainer === t.startContainer && r.startOffset === t.startOffset
       && r.endContainer === t.endContainer && r.endOffset === t.endOffset;
   }
   function openByKeyboard(range) {
-    const s1 = sectionOf(range.startContainer);
-    if (!s1 || s1 !== sectionOf(range.endContainer)) return;
+    if (!sectionOf(range.startContainer) && !sectionOf(range.endContainer)) return;
     const origin = document.activeElement;
     lastPoint = null;
     openForSelection(range);

@@ -170,3 +170,18 @@ def test_a_block_write_unlocks_only_a_daemon_without_acks():
     Unlocking on it is kept only for a daemon too old to report acks."""
     body = _body((STATIC / "compat.js").read_text(), "function toOldShape(")
     assert 'ev.kind === "item" && isBusy() && acksReported === false' in body
+
+
+def test_a_crossing_selection_is_marked_not_refused():
+    sel = (STATIC / "selection.js").read_text()
+    assert "Select within one section" not in sel
+    assert "Select within one part" not in sel
+    assert "anchorsAcross(range)" in sel
+
+
+def test_a_round_names_every_block_a_mark_covers():
+    sub = (STATIC / "subunits.js").read_text()
+    i = sub.index("function submitRound(")
+    body = sub[i:sub.index("\n  }\n", i)]
+    assert "r.spans = m.spans" in body
+    assert "r.spans.map((s) => s.block_id)" in body

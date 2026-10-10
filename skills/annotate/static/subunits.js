@@ -47,7 +47,7 @@
   const PENDING_KEY = `annotate.round.pending.${location.pathname}`;
 
   // marks: { [key]: {scope, block_id, kind, selected_text?, prefix?, suffix?,
-  //                  step_id?, text?, images?} }, keyed by spanKey, blockMarkKey,
+  //                  step_id?, text?, images?, spans?} }, keyed by spanKey, blockMarkKey,
   // stepMarkKey, choiceMarkKey or orphanMarkKey below.
   let marks = loadMarks();
   // event_id of the in-flight submitted round, if any. Also doubles as a
@@ -146,9 +146,11 @@
   }
   // A span mark is keyed by the words AND their surroundings, so the same
   // words twice in one block are two marks. U+241F cannot occur in prose a
-  // reader selected, which keeps the three parts unambiguous.
+  // reader selected, which keeps the three parts unambiguous. A mark across a
+  // heading joins the keys of its parts (spans.js); one part keeps its key.
+  const SP = () => window.AnnotateSpans;
   function spanKey(a) {
-    return `${a.block_id}::__span__::${a.prefix || ""}␟${a.selected_text}␟${a.suffix || ""}`;
+    return SP().markKey(SP().partsOf(a));
   }
   function isSpan(m) {
     return m && m.scope === "unit" && !!m.selected_text && m.kind !== "choice";
@@ -156,19 +158,23 @@
   function sectionFor(blockId) {
     return document.querySelector(`main.prose section.block[data-block-id="${CSS.escape(blockId)}"]`);
   }
-  function spanOf(m) {
-    const s = sectionFor(m.block_id);
-    return s && window.AnnotateAnchors ? window.AnnotateAnchors.locate(s, m) : null;
+  // Where one part's words are in its part's prose, as [start, end].
+  function locatePart(p) {
+    const s = sectionFor(p.block_id);
+    return s && window.AnnotateAnchors ? window.AnnotateAnchors.locate(s, p) : null;
   }
+  function spanOf(m) { return locatePart(SP().partsOf(m)[0]); }
 
+  // Marks that share words with the anchor in any part both cover.
   function overlapping(anchor) {
-    const mine = spanOf(anchor);
-    if (!mine) return [];
+    const want = SP().partsOf(anchor).map((p) => ({ p, span: locatePart(p) })).filter((x) => x.span);
+    if (!want.length) return [];
     return Object.entries(marks)
-      .filter(([, m]) => isSpan(m) && m.block_id === anchor.block_id)
-      .map(([key, m]) => ({ key, m, span: spanOf(m) }))
-      .filter((x) => x.span && x.span[0] < mine[1] && mine[0] < x.span[1])
-      .map(({ key, m }) => ({ key, m }));
+      .filter(([, m]) => isSpan(m) && SP().partsOf(m).some((q) => {
+        const qs = locatePart(q);
+        return qs && want.some((w) => w.p.block_id === q.block_id && qs[0] < w.span[1] && w.span[0] < qs[1]);
+      }))
+      .map(([key, m]) => ({ key, m }));
   }
 
   // `images` are pictures pasted into the comment window (attachPaste), sent
@@ -184,6 +190,7 @@
                   selected_text: anchor.selected_text,
                   prefix: anchor.prefix || "", suffix: anchor.suffix || "" };
       if (anchor.step_id) m.step_id = anchor.step_id;
+      if (anchor.spans) m.spans = anchor.spans.map((p) => ({ block_id: p.block_id, selected_text: p.selected_text, prefix: p.prefix || "", suffix: p.suffix || "" }));
       if (text) m.text = text;
       if (images && images.length) m.images = images;
       marks[key] = m;
@@ -198,17 +205,21 @@
     const items = [];
     for (const m of Object.values(marks)) {
       if (!isSpan(m)) continue;
-      const section = sectionFor(m.block_id);
-      if (section) items.push({ section, anchor: m, kind: m.kind });
+      for (const p of SP().partsOf(m)) {
+        const section = sectionFor(p.block_id);
+        if (section) items.push({ section, anchor: p, kind: m.kind });
+      }
     }
     window.AnnotateAnchors.paint(items);
     // A comment's words are shown where it was made: one chip under the
-    // paragraph (or list item) the commented words end in.
+    // paragraph (or list item) the commented words end in, in the last part
+    // they cover.
     document.querySelectorAll(".sel-chip").forEach((c) => c.remove());
     for (const [key, m] of Object.entries(marks)) {
       if (!isSpan(m) || m.kind !== "comment" || !m.text) continue;
-      const section = sectionFor(m.block_id);
-      const r = section && window.AnnotateAnchors.rangeFor(section, m);
+      const last = SP().partsOf(m).slice(-1)[0];
+      const section = sectionFor(last.block_id);
+      const r = section && window.AnnotateAnchors.rangeFor(section, last);
       if (!r) continue;
       const content = window.AnnotateAnchors.contentOf(section);
       const end = r.endContainer.nodeType === 1 ? r.endContainer : r.endContainer.parentElement;
@@ -239,9 +250,12 @@
     const off = window.AnnotateAnchors.offsetAt(root, x, y);
     if (off === null) return null;
     for (const [key, m] of Object.entries(marks)) {
-      if (!isSpan(m) || m.block_id !== section.dataset.blockId) continue;
-      const sp = spanOf(m);
-      if (sp && sp[0] <= off && off < sp[1]) return { key, m };
+      if (!isSpan(m)) continue;
+      for (const p of SP().partsOf(m)) {
+        if (p.block_id !== section.dataset.blockId) continue;
+        const sp = locatePart(p);
+        if (sp && sp[0] <= off && off < sp[1]) return { key, m };
+      }
     }
     return null;
   }
@@ -319,7 +333,7 @@
     for (const [key, m] of Object.entries(marks)) {
       // An edit mark on a section that is gone goes with it, in silence: its
       // words were the section's text, and they went with the section.
-      if (!liveBlockIds.has(m.block_id)) {
+      if (SP().blockIdsOf(m).some((id) => !liveBlockIds.has(id))) {
         // Same rule as a rewritten paragraph below: words the reader wrote are
         // never dropped in silence. With the whole block gone there is nowhere
         // in the round to put them, so script.js moves them to the general box.
@@ -338,7 +352,7 @@
       // step as a per-reaction no-op.)
       if (m.scope && m.scope !== "unit") continue;
       if (!isSpan(m) && m.step_id) continue;
-      if (isSpan(m) && !spanOf(m)) {
+      if (isSpan(m) && !SP().partsOf(m).every(locatePart)) {
         // The words it pointed at were rewritten. A bare delete/compact has
         // nothing left to act on and goes. A comment is words the reader
         // wrote, so it is never dropped in silence: it moves to the whole
@@ -406,7 +420,7 @@
       `section.block[data-block-id="${CSS.escape(m.block_id)}"]`);
     if (!s) return;
     if (isSpan(m) && window.AnnotateAnchors) {
-      const range = window.AnnotateAnchors.rangeFor(s, m);
+      const range = window.AnnotateAnchors.rangeFor(s, SP().partsOf(m)[0]);
       if (range) {
         const rect = range.getBoundingClientRect();
         window.scrollBy({ top: rect.top + rect.height / 2 - window.innerHeight / 2,
@@ -706,6 +720,7 @@
       if (m.kind === "edit") { r.before = m.before || ""; r.after = m.after || ""; }
       if (m.prefix !== undefined) r.prefix = m.prefix;
       if (m.suffix !== undefined) r.suffix = m.suffix;
+      if (m.spans && m.spans.length > 1) r.spans = m.spans;
       return r;
     });
     if (!reactions.length) return;
@@ -719,7 +734,8 @@
     // Captured HERE, not read back later: clearRound() wipes `marks` on ack,
     // so this is the only moment that information exists. Task 4's
     // attribution split depends on it.
-    lastSubmittedBlockIds = [...new Set(reactions.map(r => r.block_id))];
+    // A reaction across a heading puts every part it covers in that list.
+    lastSubmittedBlockIds = [...new Set(reactions.flatMap((r) => r.spans ? r.spans.map((s) => s.block_id) : [r.block_id]))];
     WebCompanion.api.submit({ type: "round", reactions }).then((res) => {
       pendingRound = res && res.event_id ? String(res.event_id) : null;
       savePending();

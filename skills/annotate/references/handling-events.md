@@ -312,10 +312,15 @@ A dismissed `choice` or `sequence` block is removed whole-block the same way —
     cut or change only those words, not the whole element. Pictures no longer
     emit one (see the field note above); a `step_id` on a diagram or flowchart
     reaction is a pre-existing mark from before that rule and still resolves.
+  - `spans`, present only when the reader's selection crossed a heading: a
+    list of `{block_id, selected_text, prefix, suffix}`, one per block the
+    words cover, in page order. `block_id` is the first of them and
+    `selected_text` is all of them joined by a newline. The reaction belongs
+    to every block in `spans`: group it under each, and rewrite each.
 
 Apply the WHOLE round in one pass — this is the entire point of batching:
 
-1. Read your working `blocks.json`. Group reactions by `block_id`.
+1. Read your working `blocks.json`. Group reactions by `block_id`, and a reaction with `spans` under every block it names.
 2. Narrate that you have it: `claude-annotate progress --sid <sid> --text "Read your round of feedback" --event-id "<event_id>"`.
 3. **Narrate before each distinct piece of work below** — a search, a pass
    of reading, a command run, a rewrite — writing the line *before* you
