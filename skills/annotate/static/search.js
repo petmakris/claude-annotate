@@ -151,7 +151,7 @@
       });
 
       const el = ensureCountEl();
-      if (el) el.textContent = "Showing " + matched.size + " of " + sections.length + " blocks";
+      if (el) el.textContent = matched.size + " of " + sections.length + " match";
 
       const terms = q.split(/\s+/).filter(Boolean);
       sections.forEach((s) => { if (matched.has(s.dataset.blockId)) highlight(s, terms); });

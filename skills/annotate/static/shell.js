@@ -17,7 +17,7 @@ export const SHELL_HTML = `\
 <div class="header-actions"><div class="header-search">\
 <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">\
 <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>\
-<input id="block-search" class="search-input" type="text" placeholder="Search blocks…" autocomplete="off" spellcheck="false" aria-label="Search blocks">\
+<input id="block-search" class="search-input" type="text" placeholder="Search…" autocomplete="off" spellcheck="false" aria-label="Search">\
 <span class="search-kbd">/</span>\
 <button id="block-search-clear" type="button" class="search-clear" aria-label="Clear search" tabindex="-1">&times;</button>\
 </div>\
@@ -118,18 +118,18 @@ export const SHELL_HTML = `\
 <p class="legend-entry-tells">&ldquo;I&rsquo;m fine with this &mdash; it just doesn&rsquo;t need the space&rdquo;</p>\
 <p class="legend-entry-does">Taken off the page. What it contributes is folded into the sentences that stay, so the plan gets shorter without losing the thread. Detail that nothing else can carry is lost &mdash; this cannot be undone once the round is submitted</p></div><div class="legend-keys"><h4 class="legend-keys-head">Keyboard</h4>\
 <table class="legend-keytable"><tbody><tr><td><kbd>j</kbd> <kbd>k</kbd></td>\
-<td>Move to the next / previous block</td></tr><tr><td><kbd>c</kbd></td>\
-<td>Comment on the block you are on</td></tr><tr><td><kbd>d</kbd></td><td>Delete the selection, or the chosen section</td></tr><tr><td><kbd>x</kbd></td><td>Compact the selection, or the chosen section</td></tr><tr><td><kbd>r</kbd> <kbd>&#8679;r</kbd></td><td>Explain aloud, or read as written, the selection or the chosen section</td></tr><tr><td><kbd>f</kbd></td><td>Fold or unfold that block</td></tr>\
+<td>Move to the next / previous part</td></tr><tr><td><kbd>c</kbd></td>\
+<td>Comment on the part you are on</td></tr><tr><td><kbd>d</kbd></td><td>Delete the selection, or the chosen part</td></tr><tr><td><kbd>x</kbd></td><td>Compact the selection, or the chosen part</td></tr><tr><td><kbd>r</kbd> <kbd>&#8679;r</kbd></td><td>Explain aloud, or read as written, the selection or the chosen part</td></tr><tr><td><kbd>f</kbd></td><td>Fold or unfold that part</td></tr>\
 <tr><td><kbd>s</kbd></td><td>Go to Submit round</td></tr>\
-<tr><td><kbd>/</kbd></td><td>Search the blocks</td></tr><tr><td><kbd>g</kbd></td>\
+<tr><td><kbd>/</kbd></td><td>Search the parts</td></tr><tr><td><kbd>g</kbd></td>\
 <td>Comment on the whole response</td></tr><tr><td><kbd>&#8984;K</kbd> <kbd>&#8984;0</kbd></td>\
-<td>Fold every block (<kbd>&#8984;K</kbd> <kbd>&#8984;J</kbd> unfolds)</td></tr><tr><td><kbd>Esc</kbd></td>\
+<td>Fold every part (<kbd>&#8984;K</kbd> <kbd>&#8984;J</kbd> unfolds)</td></tr><tr><td><kbd>Esc</kbd></td>\
 <td>Close what is open, then drop the cursor</td></tr></tbody></table></div>\
-<p class="legend-note">Select any words &mdash; or double-click a section&rsquo;s title for the whole section &mdash; and a menu offers Comment, Delete and Compact. All of these are feedback, and none of them does anything until you submit the round. Until then every mark is local and clicking the same button again takes it back.</p>\
+<p class="legend-note">Select any words &mdash; or double-click a part&rsquo;s title for the whole part &mdash; and a menu offers Comment, Delete and Compact. All of these are feedback, and none of them does anything until you submit the round. Until then every mark is local and clicking the same button again takes it back.</p>\
 </div></div>\
 </div></div></span>\
 <button id="done-btn" type="button" class="done-btn">Done</button></div></header>\
-<section id="general-composer" class="general-composer" hidden>  <textarea id="general-input" class="general-input" rows="2"    placeholder="Comment on the whole response (not a specific block)…">\
+<section id="general-composer" class="general-composer" hidden>  <textarea id="general-input" class="general-input" rows="2"    placeholder="Comment on the whole response (not a specific part)…">\
 </textarea>  <div class="general-composer-bar">    <span class="general-hint"><kbd>⌘</kbd>\
 <kbd>↩</kbd> to send      &middot; <kbd>Esc</kbd> to close</span>    <span id="general-status" class="general-status" aria-live="polite">\
 </span>    <button id="general-send" type="button" class="general-send-btn" disabled>Send</button>  </div>\

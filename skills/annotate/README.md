@@ -1,22 +1,22 @@
 # annotate
 
-Render Claude responses as an interactive web page with per-block annotation.
+Render Claude responses as an interactive web page that reads as one document, which the reader marks up part by part.
 
 ## What it does
 
-Long responses (multi-step plans, analyses, lists of findings) get pushed to a browser page where the user clicks any block to leave a comment. Claude updates that block in place when it responds — no page reload, no re-pushing the whole document.
+Long responses (multi-step plans, analyses, lists of findings) get pushed to a browser page where the user selects words in any part to leave a comment. Claude updates that part in place when it responds — no page reload, no re-pushing the whole document.
 
 ### Capabilities
 
-- **Granular review rounds** — hover any list item, paragraph, table row, or code block; give it one of four verdicts — comment, delete, keep as written, or compact — then submit the whole round as one event Claude applies in a single pass.
+- **Granular review rounds** — select words in any list item, paragraph, table row, or code block; give it one of four verdicts — comment, delete, keep as written, or compact — then submit the whole round as one event Claude applies in a single pass.
 
 ## How it works
 
 **User workflow:**
-1. User sees their response split into blocks on a web page.
-2. Click any block, leave a comment, hit Submit.
-3. Claude wakes up, rewrites that block, the page auto-refreshes it in place.
-4. Repeat per block, in any order.
+1. User sees their response as one document on a web page, with a heading where a part starts and a way to fold each part.
+2. Select words, leave a comment in the floating window, hit Submit.
+3. Claude wakes up, rewrites that part, the page auto-refreshes it in place.
+4. Repeat per part, in any order.
 5. Click "Done" to finish the session.
 
 **Technical flow:**

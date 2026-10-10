@@ -116,4 +116,4 @@ filterable by project), or you can run `/annotate resume <slug>` — see
 
 ## Maintainer notes
 
-`docs/` is the maintainer's shelf, never loaded at runtime: `token-budget.md` (cost characteristics), `gallery.html` (every block kind on one page against the real stylesheets — open it after a visual change), `free-html-direction.md` (open discussion on replacing typed kinds with free-form HTML), `richer-block-kinds-plan-archived.md` (the superseded plan, kept as history).
+`docs/` is the maintainer's shelf, never loaded at runtime: `token-budget.md` (cost characteristics), `gallery.html` (every block kind on one page against the real stylesheets — open it after a visual change), `free-html-direction.md` (open discussion on replacing typed kinds with free-form HTML), `richer-block-kinds-plan-archived.md` (the superseded plan, kept as history), `no-sections-design.md` (the decision record for the page without sections), `no-sections-plan.md` (the plan that built it).

@@ -62,3 +62,26 @@ def test_search_css_present():
     for needle in (".header-search", ".search-input", ".search-hidden",
                    "mark.search-hit", ".search-count"):
         assert needle in css, f"style.css missing {needle!r}"
+
+
+def test_search_does_not_name_blocks():
+    static = Path(__file__).resolve().parents[1] / "static"
+    shell = (static / "shell.js").read_text()
+    assert 'placeholder="Search…"' in shell and "Search blocks" not in shell
+    # The count line is the assignment after the call, not the function definition.
+    search = (static / "search.js").read_text()
+    count = search.split("= ensureCountEl()", 1)[1].split("el.textContent =", 1)[1].split("\n", 1)[0]
+    assert "blocks" not in count and "match" in count
+
+
+def test_reader_visible_strings_say_part_not_section_or_block():
+    static = Path(__file__).resolve().parents[1] / "static"
+    shell = (static / "shell.js").read_text()
+    chrome = (static / "script-chrome.js").read_text()
+    edit = (static / "edit.js").read_text()
+    for banned in ("the block you are on", "Fold every block", "chosen section",
+                   "specific block", "Search the blocks"):
+        assert banned not in shell, banned
+    for banned in ("comment on more blocks", "A section you commented on"):
+        assert banned not in chrome, banned
+    assert "This section could not be opened" not in edit

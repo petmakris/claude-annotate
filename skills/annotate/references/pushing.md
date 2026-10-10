@@ -211,12 +211,12 @@ evidence and code quotes inline. Use only when the mode resolved to `detailed`.
    {"response_id": "resp-<unix-timestamp>",
     "title": "<short title>",
     "blocks": [
-      {"id": "section-1", "title": "<short header>", "markdown": "<first block's markdown>"},
-      {"id": "section-2", "title": "<short header>", "markdown": "<second block's markdown>"},
+      {"id": "section-1", "title": "<short heading, optional>", "markdown": "<first block's markdown>"},
+      {"id": "section-2", "title": "<short heading, optional>", "markdown": "<second block's markdown>"},
       ...
     ]}
    ```
-   Block ids are sequential `section-1`, `section-2`, ... from 1. Each block also carries a **`title`** — a 2-5 word header shown on the block's collapsible card (e.g. `"What happens when you comment"`). Keep it a noun phrase, not a sentence. If you omit it, the client derives a header from the block's first heading or sentence, but an authored title is almost always cleaner. **When you author a `title`, do not also repeat it as a leading `#`/`##` heading inside that block's markdown** — the card already shows the title, so a duplicate heading reads twice. **Do not write a `version` field** — the daemon derives every item's version from its content hash, so a version you write is a second source of truth that will disagree.
+   Block ids are sequential `section-1`, `section-2`, ... from 1. Each block may carry a **`title`**, a 2–5 word noun phrase (e.g. `"What happens when you comment"`). A title is shown as a heading in the text, and a heading starts a part the reader can fold. Give one where a reader needs a heading, and leave it out where the text simply continues from the block above. Do not repeat a title as a leading `#`/`##` heading in the block's markdown. **Do not write a `version` field** — the daemon derives every item's version from its content hash, so a version you write is a second source of truth that will disagree.
 
    For non-markdown blocks (`kind: "sequence"|"flowchart"|"choice"|"mockup"`), read the exact spec shape in `references/block-kinds/<kind>.md`.
 
@@ -248,7 +248,7 @@ and the check (step 4b above).
 
 ## Code blocks
 
-Fenced code blocks are syntax-highlighted by Shiki (VS Code's grammars, GitHub Dark theme) and rendered as a dark card. **Tag the opening fence with the language** (```` ```java ````, ```` ```python ````, ```` ```ts ````, ```` ```bash ````): Shiki does not guess, so an untagged fence, or a tag outside `static/code-languages.json`, renders uncoloured. Inline `` `code` `` stays a light chip — don't fence single identifiers.
+Fenced code blocks are syntax-highlighted by Shiki (VS Code's grammars, GitHub Dark theme) and rendered as a dark frame in the text. **Tag the opening fence with the language** (```` ```java ````, ```` ```python ````, ```` ```ts ````, ```` ```bash ````): Shiki does not guess, so an untagged fence, or a tag outside `static/code-languages.json`, renders uncoloured. Inline `` `code` `` stays a light chip — don't fence single identifiers.
 
 ## Markdown first, HTML only where markdown can't say it
 
@@ -375,6 +375,8 @@ sometimes-prose, so there is nothing to guess:
 Choice answers travel inside a round, as `kind: "choice"` reactions (the
 second line). The standalone `type: "choice"` shape (the third line) only
 comes from a browser tab opened before that change.
+
+A reaction may carry `spans` when the reader's selection crossed a heading; the rule for handling it is in `handling-events.md`.
 
 `anchor` is the region the user was looking at — `<block-id>`, or
 `<block-id>#<sub-unit>` for a comment on a row inside a block, or

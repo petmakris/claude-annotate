@@ -910,8 +910,8 @@
       try {
         let r;
         try { r = await request("GET", itemPath(blockId)); }
-        catch (e) { say(`This section could not be opened (${e.message})`); return false; }
-        if (!r.ok || !r.json || !r.json.body) { say(`This section could not be opened (${r.status})`); return false; }
+        catch (e) { say(`This part could not be opened (${e.message})`); return false; }
+        if (!r.ok || !r.json || !r.json.body) { say(`This part could not be opened (${r.status})`); return false; }
         const md = typeof r.json.body.markdown === "string" ? r.json.body.markdown : "";
         let view = "rich";
         if (richNote) view = "source";

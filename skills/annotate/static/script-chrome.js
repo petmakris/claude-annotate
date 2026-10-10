@@ -43,7 +43,7 @@ if (doneBtn) {
     const finished = document.body.classList.contains("session-finished");
     btn.textContent = finished ? "Reopen" : "Done";
     btn.title = finished
-      ? "This round is closed. Reopen it to mark or comment on more blocks."
+      ? "This round is closed. Reopen it to mark or comment on more parts."
       : "Mark this round as done — Claude resumes";
     btn.disabled = false;
   };
@@ -118,7 +118,7 @@ if (doneBtn) {
     sync();
     if (statusEl) {
       statusEl.textContent =
-        "A section you commented on was removed; your comment moved here.";
+        "A part you commented on was removed; your comment moved here.";
     }
   });
   // Same chord as the comment cards: Enter is a newline, ⌘/Ctrl+Enter sends.

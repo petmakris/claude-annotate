@@ -76,7 +76,7 @@ class TestTheFilterWasNotTouched(unittest.TestCase):
         self.assertIn("e.defaultPrevented", JS)
 
     def test_there_is_still_exactly_one_result_count(self):
-        # search.js already renders "Showing N of M blocks" into main.prose.
+        # search.js already renders "N of M match" into main.prose.
         # A second count in the bar would be two answers to one question.
-        self.assertIn('"Showing " + matched.size + " of "', JS)
+        self.assertIn('matched.size + " of " + sections.length + " match"', JS)
         self.assertNotIn("search-count-bar", CSS)
