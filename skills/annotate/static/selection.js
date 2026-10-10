@@ -409,6 +409,9 @@
 
   // ── events ──────────────────────────────────────────────────────────────
   document.addEventListener("mouseup", (ev) => {
+    // On a Mac contextmenu fires on mousedown, and this mouseup would open the
+    // menu a second time on whatever is selected by then.
+    if (ev.button === 2) return;
     if (!enabled()) return;
     const on = ev.target instanceof Element ? ev.target : null;
     if (on && on.closest(OWN)) return;
@@ -427,6 +430,56 @@
       if (hit) return openForMark(section, hit);
       close();
     }, 0);
+  });
+
+  // ── right-click ─────────────────────────────────────────────────────────
+  // A right-click acts without a selection first. Inside a selection it opens
+  // the menu on the selection. On a part's title it opens it on the whole
+  // part. Anywhere else in a part's prose it selects the paragraph under the
+  // pointer and opens on that, so the reader sees what the menu acts on. A
+  // paragraph is what the read-aloud card sits after (speech.js hostFor), or
+  // a heading inside a part. Links, controls, code and the phone keep the
+  // browser's own menu.
+  const UNIT = "li, p, pre, blockquote, table, h1, h2, h3, h4, h5, h6";
+  // Chrome selects the word under the pointer on a right-click, so the
+  // selection the reader made is read here, before Chrome replaces it.
+  let before = null;
+  document.addEventListener("mousedown", (ev) => {
+    if (ev.button !== 2) return;
+    const sel = getSelection();
+    before = sel && !sel.isCollapsed && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+  }, true);
+  function under(range, x, y) {
+    return [...range.getClientRects()].some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
+  }
+  function select(range) {
+    const sel = getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+  document.addEventListener("contextmenu", (ev) => {
+    const kept = before;
+    before = null;
+    if (!enabled() || touch.matches) return;
+    const el = ev.target instanceof Element ? ev.target : null;
+    if (!el || el.closest(OWN) || el.closest(IGNORE)) return;
+    const section = sectionOf(el);
+    if (!section) return;
+    lastPoint = { x: ev.clientX, y: ev.clientY };
+    if (kept && under(kept, ev.clientX, ev.clientY)) {
+      ev.preventDefault();
+      select(kept);
+      return openForSelection(kept);
+    }
+    if (inTitle(el)) { ev.preventDefault(); return openWhole(section); }
+    if (excluded(el, section)) return;
+    const unit = el.closest(UNIT);
+    if (!unit || !A().contentOf(section).contains(unit)) return;
+    ev.preventDefault();
+    const range = document.createRange();
+    range.selectNodeContents(unit);
+    select(range);
+    openForSelection(range);
   });
 
   // The menu belongs to the selection it opened on. Once the reader selects
