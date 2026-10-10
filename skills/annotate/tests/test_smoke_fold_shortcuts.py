@@ -70,3 +70,22 @@ def test_fold_all_is_a_visible_button_that_hides_with_no_headings():
     assert "all.hidden = !heads.length" in src, "Fold all shows on a page with no headings"
     css = STYLE_CSS.read_text()
     assert ".fold-all-btn[hidden]" in css
+
+
+def test_a_search_shows_its_matches_inside_folds():
+    search = (STATIC / "search.js").read_text()
+    assert 'document.body.classList.toggle("searching", active)' in search
+    css = STYLE_CSS.read_text()
+    assert "body.searching section.block.fold-hidden" in css
+    assert "body.searching section.block.collapsed .block-body" in css
+
+
+def test_every_jump_unfolds_the_part_it_jumps_to():
+    src = SCRIPT_JS.read_text()
+    assert "function unfoldFor(" in src
+    i = src.index("const go = (d) =>")
+    assert "unfoldFor(changed[idx].blockId)" in src[i:i + 500], "the change bar scrolls to a folded part"
+    sub = (STATIC / "subunits.js").read_text()
+    i = sub.index("function jumpToMark(")
+    assert "unfoldFor?.(m.block_id)" in sub[i:i + 500], "the dock scrolls to a folded part"
+    assert "unfoldFor(openId)" in (STATIC / "maximize.js").read_text()

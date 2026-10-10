@@ -92,3 +92,21 @@ def test_the_ack_clears_every_part_of_the_round():
     i = src.index("function handleConsumedEvents(")
     body = src[i:src.index("\n}", i)]
     assert "pend.blockIds" in body, "a round's overlays outlive its ack"
+
+
+def test_an_overlay_is_not_a_live_region_and_its_timer_is_silent():
+    """A live overlay on each part read its ticking timer out every second."""
+    src = SCRIPT_JS.read_text()
+    i = src.index("function startUpdatingOverlay(")
+    body = src[i:src.index("\n}", i)]
+    assert 'setAttribute("aria-live"' not in body and 'setAttribute("role", "status")' not in body
+    assert 'timer.setAttribute("aria-hidden", "true")' in body
+
+
+def test_the_page_going_idle_clears_every_overlay():
+    """Finished, cancelled or a dead watcher: no ack comes, so idle clears them."""
+    src = SCRIPT_JS.read_text()
+    i = src.index("function onPollDelta(")
+    body = src[i:src.index("\n}", i)]
+    assert re.search(r"if \(!busyNow\) \{\s*document\.querySelectorAll\(\"main\.prose section\.block\.is-updating\"\)"
+                     r"\.forEach\(clearUpdatingOverlay\)", body), body

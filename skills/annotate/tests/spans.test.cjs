@@ -43,5 +43,34 @@ test("a picture or a question between the words is left out", () => {
   eq(S.textOnly([a, pic, b], (id) => kinds[id], ["choice", "sequence", "diagram", "flowchart"]), [a, b]);
 });
 
+// Parts as overlapping() hands them over: found on the page, [start, end).
+const at = (block_id, start, end) => ({ block_id, span: [start, end] });
+
+test("overlapping words in the same part overlap", () => {
+  eq(S.overlaps([at("section-1", 10, 30)], [at("section-1", 25, 40)]), true);
+  eq(S.overlaps([at("section-1", 10, 30)], [at("section-1", 12, 20)]), true);
+});
+
+test("the same offsets in different parts do not overlap", () => {
+  eq(S.overlaps([at("section-1", 10, 30)], [at("section-2", 10, 30)]), false);
+});
+
+test("a two-part mark overlaps a one-part anchor on either of its parts", () => {
+  const mark = [at("section-1", 80, 120), at("section-2", 0, 15)];
+  eq(S.overlaps(mark, [at("section-1", 100, 110)]), true);
+  eq(S.overlaps(mark, [at("section-2", 5, 9)]), true);
+  eq(S.overlaps([at("section-2", 5, 9)], mark), true);
+  eq(S.overlaps(mark, [at("section-3", 5, 9)]), false);
+});
+
+test("ranges that only touch do not overlap", () => {
+  eq(S.overlaps([at("section-1", 10, 30)], [at("section-1", 30, 40)]), false);
+  eq(S.overlaps([at("section-1", 30, 40)], [at("section-1", 10, 30)]), false);
+});
+
+test("a part whose words are gone overlaps nothing", () => {
+  eq(S.overlaps([{ block_id: "section-1", span: null }], [at("section-1", 0, 99)]), false);
+});
+
 process.stdout.write(`\n${ran - failures}/${ran} passed\n`);
 process.exit(failures ? 1 : 0);

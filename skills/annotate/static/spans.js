@@ -37,5 +37,15 @@
     return parts.filter((p) => !wholeOnly.includes(kindOf(p.block_id)));
   }
 
-  return { partsOf, partKey, markKey, joinQuote, blockIdsOf, withSpans, textOnly };
+  // Whether two marks share words. Each is given as its parts already found
+  // on the page, `{ block_id, span: [start, end] }` (span null when a part's
+  // words are gone). They share words when some part of one and some part of
+  // the other sit in the same block and their character ranges cross; ranges
+  // that only touch do not. A new mark replaces every mark this is true of.
+  function overlaps(a, b) {
+    return a.some((x) => x.span && b.some((y) => y.span && x.block_id === y.block_id
+      && y.span[0] < x.span[1] && x.span[0] < y.span[1]));
+  }
+
+  return { partsOf, partKey, markKey, joinQuote, blockIdsOf, withSpans, textOnly, overlaps };
 });

@@ -6,6 +6,10 @@
   overflow: hidden; color: var(--text-strong); font-family: var(--font-prose);
 }
 .comment-window[hidden] { display: none; }
+/* Over a maximized part, its scrim and its bar (style-maximize.css,
+   1200-1202), so a comment opened there is seen; under the layered
+   selection menu (1300). On the page it stays under the menu panels. */
+body.has-max-overlay .comment-window { z-index: 1250; }
 .comment-window-bar { display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 14px;
   background: var(--surface-soft); border-bottom: 1px solid var(--border); cursor: grab; user-select: none; }
 .comment-window.is-moving, .comment-window.is-moving .comment-window-bar { cursor: grabbing; user-select: none; }

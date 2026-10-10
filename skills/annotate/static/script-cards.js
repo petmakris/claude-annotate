@@ -25,15 +25,17 @@ function stepContextFor(blockId, stepId) {
 
 // Add the "updating" spinner overlay + timer to a block section. Idempotent:
 // a section already overlaid is left alone.
-// Started on every part a submitted round names (registerRoundEvent), cleared by its ack or its new version.
+// Started on every part a submitted round names (registerRoundEvent), cleared by its ack, its new version
+// or the page going idle without one (onPollDelta).
 function startUpdatingOverlay(section) {
   if (!section) return;
   section.classList.add("is-updating");
   if (section.querySelector(".updating-overlay")) return;
   const overlay = document.createElement("div");
   overlay.className = "updating-overlay";
-  overlay.setAttribute("role", "status");
-  overlay.setAttribute("aria-live", "polite");
+  // Not a live region. A round names many parts, and a live overlay on each
+  // read its timer out every second; the round says "updating" once instead
+  // (registerRoundEvent), as progress.js does for its own timer.
   const pill = document.createElement("div");
   pill.className = "updating-pill";
   const spinner = document.createElement("span");
@@ -45,6 +47,7 @@ function startUpdatingOverlay(section) {
   pill.appendChild(label);
   const timer = document.createElement("span");
   timer.className = "updating-timer";
+  timer.setAttribute("aria-hidden", "true");
   timer.textContent = "0:00";
   pill.appendChild(timer);
   overlay.appendChild(pill);
@@ -368,10 +371,19 @@ function renderComments() {
     if (W.owner() !== "card:" + id && !W.hasWords()) {
       const section = document.querySelector(`section.block[data-block-id="${cssEsc(a.block_id)}"]`);
       const step = a.step_id ? stepContextFor(a.block_id, a.step_id) : null;
-      const label = (section && section.querySelector(".block-label")) || section;
+      // An untitled part's label line is empty and display:none, so its box
+      // is all zeros and the window would open at the top of the screen:
+      // place it by the part's first line instead.
+      let label = (section && section.querySelector(".block-label")) || section;
+      if (label && label !== section) {
+        const r = label.getBoundingClientRect();
+        if (!r.width && !r.height) {
+          label = section.querySelector(".block-content > :first-child") || section;
+        }
+      }
       window.AnnotateCommentWindow.open({
         owner: "card:" + id,
-        quote: a.selected_text || (step && step.label) || (section ? section.getAttribute("aria-label") : ""),
+        quote: a.selected_text || (step && step.label) || (section ? section.dataset.label || "" : ""),
         body: buildCard(id, a),
         near: (step && step.node ? step.node : label).getBoundingClientRect(),
         home: () => document.querySelector(`section.block[data-block-id="${cssEsc(a.block_id)}"]`),

@@ -161,7 +161,7 @@
       const q = document.createElement("div");
       q.className = "sel-quote";
       const text = t.anchor ? t.anchor.selected_text
-        : (t.section.getAttribute("aria-label") || "").trim();
+        : (t.section.dataset.label || "").trim();
       q.textContent = text.length > 140 ? text.slice(0, 139) + "…" : text;
       menu.appendChild(q);
     }

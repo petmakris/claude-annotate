@@ -125,13 +125,8 @@
     openId = section.dataset.blockId;
     wantFit = false;
     // A maximized part must not also be folded, or the button fills the
-    // screen with a folded heading and nothing else. The fold is stored, so
-    // unfold its owner: clearing the class would be undone by the next
-    // applyFolds.
-    if (section.classList.contains("collapsed") || section.classList.contains("fold-hidden")) {
-      const owner = window.AnnotateFolds.ownerOf(foldList(), openId);
-      if (owner) setFolded(owner, false);
-    }
+    // screen with a folded heading and nothing else.
+    unfoldFor(openId);
     reapply();
     chrome.hidden = false;
     document.body.classList.add("has-max-overlay");
@@ -171,7 +166,7 @@
     const section = current();
     if (!section) return;
     section.classList.add("is-maximized");
-    titleEl.textContent = section.getAttribute("aria-label") || "Diagram";
+    titleEl.textContent = section.dataset.label || "Diagram";
     applyFit(section, wantFit);
   }
 

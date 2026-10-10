@@ -231,6 +231,9 @@ body.exported .export-foot {
     clone.querySelectorAll("section.block.collapsed").forEach((s) => {
       s.classList.remove("collapsed");
     });
+    // An export taken while Claude rewrites a part must not ship that part
+    // faded: the overlay is stripped above, and its dimming goes with it.
+    clone.querySelectorAll(".is-updating").forEach((s) => s.classList.remove("is-updating"));
 
     clone.querySelectorAll("*").forEach((el) => {
       STATE_ATTRS.forEach((a) => el.removeAttribute(a));

@@ -80,3 +80,16 @@ def test_one_has_words_rule_for_both_openers():
 def test_a_saved_draft_does_not_replace_a_window_with_words():
     assert "!W.hasWords()" in _fn(SCRIPT_JS.read_text(), "renderComments"), \
         "a response switch opens a saved draft over the selection's box and drops its words"
+
+
+def test_the_window_shows_over_a_maximized_part_and_in_full_screen():
+    css = (STATIC / "style-comment-window.css").read_text()
+    assert "body.has-max-overlay .comment-window { z-index: 1250; }" in css
+    assert 'addEventListener("fullscreenchange", mount)' in WIN
+    i = WIN.index("function mount(")
+    assert "document.fullscreenElement" in WIN[i:WIN.index("\n  }", i)]
+
+
+def test_a_response_switch_sends_the_windows_words_to_the_general_box():
+    body = _fn(SCRIPT_JS.read_text(), "startNewResponse")
+    assert body.index("annotate:orphan-comment") < body.index("STORAGE_KEY = ")

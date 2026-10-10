@@ -99,6 +99,18 @@
     window.addEventListener("resize", () => {
       if (win && !win.hidden) apply(window.AnnotateWindowPlace.clamp(box(), view()));
     });
+    document.addEventListener("fullscreenchange", mount);
+  }
+
+  // A full-screen element paints only itself and what it holds, so while one
+  // is up the window goes inside it, as the selection menu does (selection.js
+  // layer()). Today the page only ever makes <html> full screen, which already
+  // holds <body>; this keeps the window visible if an element ever is.
+  function mount() {
+    if (!win) return;
+    const fs = document.fullscreenElement;
+    const host = fs && !fs.contains(document.body) ? fs : document.body;
+    if (win.parentNode !== host) host.appendChild(win);
   }
 
   function contentRect() {
@@ -114,6 +126,7 @@
   function open({ owner, quote, body, near, onClose, home }) {
     if (!win) build();
     if (current && current.owner !== owner) close();
+    mount();
     current = { owner, onClose, home };
     win.querySelector(".comment-window-quote").textContent = quote || "";
     win.querySelector(".comment-window-quote").hidden = !quote;

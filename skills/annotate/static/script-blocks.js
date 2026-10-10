@@ -284,11 +284,13 @@ function createBlockSection(blk) {
   section.dataset.kind = kind;
   // The reader's own words in this block (edit.js paints them).
   section._mine = Array.isArray(blk.mine) ? blk.mine : [];
-  // A part of one document: no box and no header bar. Its name for screen
-  // readers and the round dock is the derived title; what shows is only an
-  // authored one (blockLabel). Focus comes back here when a comment or the
-  // editor closes, so the section itself can take it.
-  section.setAttribute("aria-label", blockTitle(blk));
+  // A part of one document: no box and no header bar. The derived title is
+  // kept for the round dock, the maximized bar and a comment's quote; what
+  // shows is only an authored one (blockLabel). It is not an aria-label: a
+  // named <section> is a region landmark, and a long answer would list one
+  // per part. Focus comes back here when a comment or the editor closes, so
+  // the section itself can take it.
+  section.dataset.label = blockTitle(blk);
   section.tabIndex = -1;
 
   const body = document.createElement("div");
@@ -432,7 +434,7 @@ function setBlockLabel(section, blk) {
     if (had && next) had.textContent = next.textContent;
     else if (had) had.remove();
     else if (next) old.prepend(next);
-    section.setAttribute("aria-label", blockTitle(blk));
+    section.dataset.label = blockTitle(blk);
     return;
   }
   const sameShape = old && !frameHead(old) && !frameHead(fresh)
@@ -442,7 +444,7 @@ function setBlockLabel(section, blk) {
     if (text) text.textContent = fresh.querySelector(".block-heading-text").textContent;
   } else if (old) old.replaceWith(fresh);
   else (section.querySelector(".block-frame") || section).prepend(fresh);
-  section.setAttribute("aria-label", blockTitle(blk));
+  section.dataset.label = blockTitle(blk);
 }
 
 function focusHome(section) {
@@ -466,6 +468,18 @@ function readFolded(blockId) {
 function setFolded(blockId, on) {
   try { localStorage.setItem(collapseKey(blockId), on ? "1" : "0"); } catch (_) {}
   applyFolds();
+}
+
+// A jump to a part a fold keeps hidden scrolls to nothing, so every jump
+// (the change bar, the dock, maximize) unfolds the part's owner first. The
+// fold is stored, so clearing the class alone would be undone by the next
+// applyFolds.
+function unfoldFor(blockId) {
+  const section = document.querySelector(`section.block[data-block-id="${cssEsc(blockId)}"]`);
+  if (!section) return;
+  if (!section.classList.contains("collapsed") && !section.classList.contains("fold-hidden")) return;
+  const owner = window.AnnotateFolds.ownerOf(foldList(), blockId);
+  if (owner) setFolded(owner, false);
 }
 
 // Folding goes by heading (fold-groups.js): a heading folds its own part and

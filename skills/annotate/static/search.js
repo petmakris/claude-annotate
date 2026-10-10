@@ -129,6 +129,10 @@
       const active = !!(query || "").trim();
       if (active !== searchActive) {
         searchActive = active;
+        // Folds step aside while a query is active (style.css), so a match
+        // inside a folded part shows. The stored folds are not touched: when
+        // the query clears, the class goes and the folds are back.
+        document.body.classList.toggle("searching", active);
         document.dispatchEvent(new CustomEvent("annotate:search", { detail: { active } }));
       }
       const root = prose();

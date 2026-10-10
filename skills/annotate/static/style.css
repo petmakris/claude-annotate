@@ -499,6 +499,16 @@ section.block[data-engaged-type][data-kb-focus]::before {
 }
 section.block:focus { outline: none; }
 .block-heading { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* A part's heading wraps at the column edge. The 140px above was room for
+   the hover controls of prose-era headings, and on a phone it left an
+   authored title about 180px to wrap in. */
+main.prose h2.block-heading { padding-right: 0; }
+/* On a phone a title too long for one line would wrap whole under its fold
+   button; given the rest of the line, it wraps its words beside it, and a
+   change chip takes the next line. */
+@media (max-width: 600px) {
+  main.prose h2.block-heading .block-heading-text { flex: 1 1 0; }
+}
 .block-heading-text { min-width: 0; }
 /* An untitled part's label line: there only when a mark or chip needs it. */
 .block-meta { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; }
@@ -524,6 +534,10 @@ main.prose .block-body h4, main.prose .block-body h5, main.prose .block-body h6 
 /* === Folding ========================================================= */
 section.block.collapsed .block-body { display: none; }
 section.block.fold-hidden { display: none; }
+/* A search shows its matches inside folds; search.js sets the class only
+   while a query is active, and parts that do not match stay search-hidden. */
+body.searching section.block.fold-hidden,
+body.searching section.block.collapsed .block-body { display: revert; }
 .fold-all-btn { font: 600 12.5px var(--font-prose); border: 1px solid var(--border); background: var(--surface); border-radius: 7px; padding: 6px 12px; color: var(--text); cursor: pointer; }
 .fold-all-btn[hidden] { display: none; }
 .fold-btn {

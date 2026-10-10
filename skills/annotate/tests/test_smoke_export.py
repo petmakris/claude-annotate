@@ -249,3 +249,8 @@ def test_visuals_css_still_names_its_font_directly():
         "diagram text now follows the reader's code font, but its SVG is still " \
         "measured for Monaspace — regenerate the metrics or revert this"
     assert "var(--font-code)" not in css
+
+
+def test_an_export_mid_round_is_not_faded():
+    src = EXPORT_JS.read_text()
+    assert 'querySelectorAll(".is-updating").forEach((s) => s.classList.remove("is-updating"))' in src

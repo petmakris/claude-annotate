@@ -434,6 +434,10 @@ wireViewControls();
       e.preventDefault();
       const section = document.querySelector(`section.block[data-block-id="${cssEsc(owner)}"]`);
       setFolded(owner, !section.classList.contains("collapsed"));
+      // On an untitled part the fold just hid the cursor's own part, so the
+      // cursor moves to the heading that folded it, or j/k would start from
+      // a part the reader cannot see.
+      if (owner !== focusId) { focusId = owner; paint(); }
       return;
     }
     if (e.key === "Escape" && focusId) {

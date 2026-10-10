@@ -166,14 +166,16 @@
   function spanOf(m) { return locatePart(SP().partsOf(m)[0]); }
 
   // Marks that share words with the anchor in any part both cover.
+  function located(m) {
+    return SP().partsOf(m).map((p) => ({ block_id: p.block_id, span: locatePart(p) }));
+  }
   function overlapping(anchor) {
-    const want = SP().partsOf(anchor).map((p) => ({ p, span: locatePart(p) })).filter((x) => x.span);
-    if (!want.length) return [];
+    const want = located(anchor);
+    if (!want.some((x) => x.span)) return [];
+    const blocks = new Set(want.map((x) => x.block_id));
     return Object.entries(marks)
-      .filter(([, m]) => isSpan(m) && SP().partsOf(m).some((q) => {
-        const qs = locatePart(q);
-        return qs && want.some((w) => w.p.block_id === q.block_id && qs[0] < w.span[1] && w.span[0] < qs[1]);
-      }))
+      .filter(([, m]) => isSpan(m) && SP().partsOf(m).some((q) => blocks.has(q.block_id))
+        && SP().overlaps(want, located(m)))
       .map(([key, m]) => ({ key, m }));
   }
 
@@ -410,12 +412,14 @@
   function blockTitleFor(blockId) {
     const s = document.querySelector(
       `section.block[data-block-id="${CSS.escape(blockId)}"]`);
-    return s?.getAttribute("aria-label") || blockId;
+    return s?.dataset.label || blockId;
   }
 
   function jumpToMark(m) {
     // A queued question off screen is display:none and cannot be scrolled to.
     window.AnnotateChoiceQueue?.show(m.block_id);
+    // Nor can a part a fold keeps hidden (script-blocks.js).
+    window.unfoldFor?.(m.block_id);
     const s = document.querySelector(
       `section.block[data-block-id="${CSS.escape(m.block_id)}"]`);
     if (!s) return;

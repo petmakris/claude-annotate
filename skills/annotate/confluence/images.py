@@ -74,9 +74,11 @@ def standalone_html(svg: str) -> str:
     css = _FONT_FACE_RE.sub("", css)
     width, height = _intrinsic_size(svg)
     wrapped = "<div style='width:%spx;height:%spx'>%s</div>" % (width, height, svg)
-    # The diagram's SVG paints no background of its own on the live page —
-    # what shows through is its card (section.block), --surface (#f8f9fb),
-    # not the page body's --bg (#e4e7ed). core.css carries its own
+    # The diagram's SVG paints no background of its own. On the live page it
+    # now sits in a frame (.block-frame) on --diagram-ground (#ffffff); this
+    # image keeps the old card's --surface (#f8f9fb), which Confluence
+    # publishing has not been moved off. Either way it is not the page
+    # body's --bg (#e4e7ed). core.css carries its own
     # `body { background: var(--bg) }` at the same specificity as a plain
     # `body` rule of ours, so whichever comes LAST in source order wins the
     # cascade. This override is therefore placed AFTER core.css/diagram.css

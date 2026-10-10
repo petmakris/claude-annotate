@@ -78,3 +78,17 @@ def test_pictures_and_questions_get_a_frame_with_their_title_on_it():
 def test_the_maximise_button_sits_on_the_frame():
     src = (STATIC / "maximize.js").read_text()
     assert 'section.querySelector(".block-frame-head")' in src
+
+
+def test_a_part_is_not_a_landmark_and_keeps_its_title_as_data():
+    """A named <section> is a region landmark: one per part, forty in a long answer."""
+    src = SCRIPT_JS.read_text()
+    assert 'section.setAttribute("aria-label"' not in src
+    assert "section.dataset.label = blockTitle(blk)" in src
+    for name in ("selection.js", "subunits.js", "maximize.js"):
+        assert 'section.getAttribute("aria-label")' not in (STATIC / name).read_text(), name
+
+
+def test_a_heading_wraps_at_the_column_edge():
+    css = STYLE_CSS.read_text()
+    assert "main.prose h2.block-heading { padding-right: 0; }" in css

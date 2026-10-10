@@ -39,6 +39,14 @@ function onPollDelta(data, lastVersions) {
   }
   wasBusy = busyNow;
   setBusy(busyNow);
+  // Nothing is in flight any more, so nothing is being rewritten: the ack
+  // came, or the session finished or was cancelled, or its watcher died and
+  // no ack is coming. Without this the last two leave every overlaid part
+  // dimmed, ticking and refused by the editor until a reload. The round
+  // stays in pendingEvents, so a late ack still finds it.
+  if (!busyNow) {
+    document.querySelectorAll("main.prose section.block.is-updating").forEach(clearUpdatingOverlay);
+  }
   setAttachedPill(data.attached);
   // 1. Clear spinners for comments Claude finished processing.
   handleConsumedEvents(data.consumed_events);
@@ -123,6 +131,19 @@ function startNewResponse(doc) {
     document.title = doc.title;
     const t = document.getElementById("hdr-title");
     if (t) t.textContent = doc.title;
+  }
+  // The comment window holds words about the last response's parts, which
+  // are gone. They go to the general box, quoting what they were about, as
+  // a comment on a deleted part does (reconcile), before the window closes.
+  const W = window.AnnotateCommentWindow;
+  if (W?.hasWords()) {
+    const el = W.element();
+    const text = (el.querySelector("textarea")?.value || "").trim();
+    if (text) {
+      document.dispatchEvent(new CustomEvent("annotate:orphan-comment", { detail: {
+        text, quote: el.querySelector(".comment-window-quote")?.textContent || "" } }));
+    }
+    W.close();
   }
   try { localStorage.removeItem(STORAGE_KEY); } catch {}
   STORAGE_KEY = `annotate.drafts.${rid}`;
@@ -363,9 +384,16 @@ window.AnnotatePage = {
     // Every part the round names shows that Claude is rewriting it, until
     // the ack (handleConsumedEvents) or its new version clears it. Parts the
     // sweep rewrites are not known in advance and get none.
-    for (const id of blockIds || []) {
-      startUpdatingOverlay(document.querySelector(`section.block[data-block-id="${cssEsc(id)}"]`));
+    // Only while the page holds the round (compat.js's hold runs first): a
+    // round the page is not waiting on (a finished session) gets no ack and
+    // no idle edge to clear its overlays.
+    let started = 0;
+    for (const id of document.body.classList.contains("is-busy") ? blockIds || [] : []) {
+      const section = document.querySelector(`section.block[data-block-id="${cssEsc(id)}"]`);
+      if (section) { startUpdatingOverlay(section); started++; }
     }
+    // Said once for the round, not by each overlay (startUpdatingOverlay).
+    if (started) window.AnnotateA11y?.announce(`Updating ${started} part${started > 1 ? "s" : ""}`);
     // The submit POST can resolve after the poll that first saw busy, in
     // which case the busy start edge already ran and found no round in
     // pendingEvents. Claim the open window here too.

@@ -95,6 +95,7 @@ function renderChangeBar(changed) {
     idx = (idx + d + changed.length) % changed.length;
     // A queued question off screen is display:none and cannot be scrolled to.
     window.AnnotateChoiceQueue?.show(changed[idx].blockId);
+    unfoldFor(changed[idx].blockId);
     document.querySelector(
       `section.block[data-block-id="${cssEsc(changed[idx].blockId)}"]`
     )?.scrollIntoView({ behavior: "smooth", block: "center" });
