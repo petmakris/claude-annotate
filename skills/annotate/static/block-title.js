@@ -15,7 +15,7 @@
 //      every id app puts on the wire". With one diagram per dimension of
 //      a topic, that is a page of identically-named cards.
 //   3. the first heading or first line of `blk.markdown`.
-//   4. a per-kind fallback — "Diagram", "Decision", "Section" — which is the
+//   4. a per-kind fallback — "Diagram", "Decision", "Text" — which is the
 //      last resort and not, as it was, where every flowchart landed.
 (function (root, factory) {
   const api = factory();
@@ -26,8 +26,8 @@
 
   // Kinds whose content is a spec rather than prose. Each names itself under a
   // different key, and each needs a fallback that says what the card IS —
-  // "Section" is what a card is called when nothing could name it, and a
-  // diagram that failed to name itself is not a section.
+  // "Text" is what a card is called when nothing could name it, and a
+  // diagram that failed to name itself is not text.
   const SPEC_TITLED = {
     sequence:  { keys: ["title"],    fallback: "Diagram" },
     flowchart: { keys: ["title"],    fallback: "Diagram" },
@@ -63,8 +63,27 @@
       : (md.split(/\n/).map((s) => s.replace(/^[#>*\-\s`]+/, "").trim()).find(Boolean) || "");
     t = t.replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();
     if (t.length > MAX_LEN) t = t.slice(0, MAX_LEN - 1).trimEnd() + "…";
-    return t || "Section";
+    return t || "Text";
   }
 
-  return { blockTitle, MAX_LEN };
+  // What the reader sees as a heading: only a name someone authored, either
+  // the block's title or a picture's or question's own. A derived name (the
+  // first line of the text, a kind's fallback) labels the part for screen
+  // readers and the round dock and is never painted, or the first line of
+  // a paragraph would show twice.
+  function visibleTitle(blk) {
+    blk = blk || {};
+    const own = clean(blk.title);
+    if (own) return own;
+    const rule = SPEC_TITLED[blk.kind || "markdown"];
+    if (!rule) return "";
+    const spec = blk.spec || {};
+    for (const key of rule.keys) {
+      const t = clean(spec[key]);
+      if (t) return t;
+    }
+    return "";
+  }
+
+  return { blockTitle, visibleTitle, MAX_LEN };
 });

@@ -17,7 +17,7 @@
  * Run:  node skills/annotate/tests/block_title.test.cjs
  */
 const path = require("path");
-const { blockTitle } = require(path.join(__dirname, "..", "static", "block-title.js"));
+const { blockTitle, visibleTitle } = require(path.join(__dirname, "..", "static", "block-title.js"));
 
 let failures = 0, ran = 0;
 function test(name, fn) {
@@ -81,7 +81,7 @@ test("markdown still takes its first heading", () => {
   eq(blockTitle({ kind: "markdown", markdown: "## Two identities, one column\n\nbody" }),
      "Two identities, one column");
   eq(blockTitle({ kind: "markdown", markdown: "plain first line\n\nmore" }), "plain first line");
-  eq(blockTitle({ kind: "markdown", markdown: "" }), "Section");
+  eq(blockTitle({ kind: "markdown", markdown: "" }), "Text");
 });
 
 test("a long markdown title is still elided at 60 characters", () => {
@@ -94,6 +94,17 @@ test("a long markdown title is still elided at 60 characters", () => {
 test("a title is trimmed of markdown emphasis", () => {
   eq(blockTitle({ kind: "markdown", markdown: "# **Correction** — the `nightly` step" }),
      "Correction — the nightly step");
+});
+
+test("only an authored name is shown as a heading", () => {
+  eq(visibleTitle({ kind: "markdown", title: "Where it runs", markdown: "x" }), "Where it runs");
+  eq(visibleTitle({ kind: "markdown", markdown: "## Heading in the text\n\nbody" }), "");
+  eq(visibleTitle({ kind: "markdown", markdown: "" }), "");
+  eq(visibleTitle({ kind: "flowchart", spec: { title: "Outbound" } }), "Outbound");
+  eq(visibleTitle({ kind: "sequence", spec: {} }), "");
+  eq(visibleTitle({ kind: "choice", spec: { question: "One story or two" } }), "One story or two");
+  eq(visibleTitle({ kind: "mockup" }), "");
+  eq(visibleTitle(null), "");
 });
 
 process.stdout.write(`\n${ran - failures}/${ran} passed\n`);
