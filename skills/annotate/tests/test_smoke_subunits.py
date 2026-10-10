@@ -185,3 +185,11 @@ def test_a_round_names_every_block_a_mark_covers():
     body = sub[i:sub.index("\n  }\n", i)]
     assert "r.spans = m.spans" in body
     assert "r.spans.map((s) => s.block_id)" in body
+
+
+def test_a_crossing_selection_skips_parts_the_reader_cannot_see():
+    """A range covers folded parts and the editor's hidden copy of a part
+    too; their words were never selected, so they give no anchor."""
+    body = _body((STATIC / "anchors.js").read_text(), "function anchorsAcross(")
+    assert 'if (s.hasAttribute("data-editing")) return;' in body
+    assert "if (!root || !root.getClientRects().length) return;" in body

@@ -220,10 +220,18 @@
   // One anchor per part the range touches, in page order. anchorFor clips
   // the range to each part's prose, so a range that starts in one part and
   // ends in the next gives the tail of the first and the head of the second.
+  //
+  // A range also covers text the reader cannot see. A folded or collapsed
+  // part has no boxes, and a part open in the editor hides its rendered text
+  // behind the editor, so neither gives an anchor: its words were never
+  // selected.
   function anchorsAcross(range) {
     const out = [];
     document.querySelectorAll("main.prose section.block[data-block-id]").forEach((s) => {
       if (!range.intersectsNode(s)) return;
+      if (s.hasAttribute("data-editing")) return;
+      const root = contentOf(s);
+      if (!root || !root.getClientRects().length) return;
       const a = anchorFor(s, range);
       if (a) out.push(a);
     });
