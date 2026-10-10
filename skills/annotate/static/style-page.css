@@ -479,18 +479,22 @@ section.block[data-diff="open"] .diff-pane { display: block; }
    about what a click does. Comments come from the card header. */
 
 /* === Page-wide view controls =========================================
-   Two stops. Normal is a 1600px column; Wide has no cap at all, so the
+   Two stops. Normal is a 760px column; Wide has no cap at all, so the
    column is the viewport less main.prose's own side gutters. The bar above
    is full width at both (see the :root note), so it never moves.
 
    script.js writes data-width on every render, chosen or not, so on the
    live page the attribute is never absent. An export may carry none, and
-   then the :root default — Normal's 1600px — applies.
+   then the :root default — Normal's 760px — applies.
+
+   760px is a reading measure: about 90 characters of body text a line.
+   Normal used to be 1600px, wider than most windows, so on a laptop the
+   two stops drew the same column and the setting looked broken.
 
    Nothing else sets --content-max on <body> any more (documents with code
    used to get a wider column of their own), so these rules no longer
    depend on their position in the file. */
-body[data-width="normal"] { --content-max: 1600px; }
+body[data-width="normal"] { --content-max: 760px; }
 body[data-width="wide"]   { --content-max: none; }
 
 /* === Typography, chosen in the settings popover ======================

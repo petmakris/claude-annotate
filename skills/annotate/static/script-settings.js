@@ -11,7 +11,7 @@
 // ── Page-wide view controls ───────────────────────────────────────────
 // How wide the column is, stored per response, because a preference you
 // must re-set on every reload is worse than not having one.
-// Two stops: Normal, a 1600px column, and Wide, which has no cap and runs
+// Two stops: Normal, a 760px reading column, and Wide, which has no cap and runs
 // the full width of the window less the side gutters. Code panes always
 // sit under the prose, so no stop has to make room for a second column.
 const VIEW_WIDTHS = ["normal", "wide"];

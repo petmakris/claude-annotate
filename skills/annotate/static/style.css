@@ -14,11 +14,11 @@
    views; annotate's reading column is set here instead. The prose and the
    sticky bars inside it derive their width from --content-max, and every
    band of chrome derives its inset from --content-gutter.
-   1600px is the Normal stop (see the view controls below). It is also the
+   760px is the Normal stop (see the view controls below). It is also the
    :root default, so a page that carries no data-width at all — an export —
    reads at Normal rather than at some older measure. */
 :root {
-  --content-max: 1600px;
+  --content-max: 760px;
   --content-gutter: 24px;
   /* The page chrome — top bar, composer band, footer actions — is FULL
      WIDTH at every stop, one gutter in from the viewport edge, and never

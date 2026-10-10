@@ -212,14 +212,14 @@ class TestCodePaneReading(unittest.TestCase):
 
 
 class TestPageWidthStops(unittest.TestCase):
-    """Two stops, Normal (1600px) and Wide (the whole viewport less the side
-    gutters), Normal by default. test_browser_review.py measures both on a
-    1920px viewport; these are the source-side guards."""
+    """Two stops, Normal (760px) and Wide (the whole viewport less the side
+    gutters), Normal by default. Normal is a reading measure: at 1600px it
+    was wider than most windows, so the two stops looked the same."""
 
-    def test_normal_is_1600_and_wide_has_no_cap(self):
+    def test_normal_is_760_and_wide_has_no_cap(self):
         self.assertIn('const VIEW_WIDTHS = ["normal", "wide"]', JS)
         self.assertIn('normal: "Normal", wide: "Wide"', JS)
-        self.assertIn('body[data-width="normal"] { --content-max: 1600px; }', CSS)
+        self.assertIn('body[data-width="normal"] { --content-max: 760px; }', CSS)
         self.assertIn('body[data-width="wide"]   { --content-max: none; }', CSS)
         for gone in ("1040px", "1180px"):
             self.assertNotIn(gone, CSS, "%s is still a column in style.css" % gone)
@@ -228,7 +228,7 @@ class TestPageWidthStops(unittest.TestCase):
         # An export can carry no data-width. The :root default is what it
         # gets, and that must be Normal's measure.
         root = CSS[CSS.index(":root {"):CSS.index("}", CSS.index(":root {"))]
-        self.assertIn("--content-max: 1600px;", root)
+        self.assertIn("--content-max: 760px;", root)
 
     def test_the_chrome_is_full_width_at_every_stop(self):
         # A capped bar narrower than Wide's column would sit inset from it,
