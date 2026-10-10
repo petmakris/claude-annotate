@@ -91,4 +91,4 @@ def test_a_part_is_not_a_landmark_and_keeps_its_title_as_data():
 
 def test_a_heading_wraps_at_the_column_edge():
     css = STYLE_CSS.read_text()
-    assert "main.prose h2.block-heading { padding-right: 0; }" in css
+    assert "main.prose h2.block-heading { padding-right: 0; margin-left: -28px; }" in css

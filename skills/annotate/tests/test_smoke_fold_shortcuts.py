@@ -52,15 +52,17 @@ def test_the_chord_pill_is_styled_and_actually_hides():
     )
 
 
-def test_the_fold_button_is_a_round_button_not_a_text_glyph():
-    """The chevron was a bare 14px-wide text glyph — the smallest target in
-    the header. The fold button matches the 26px round control family."""
+def test_the_fold_button_is_a_plain_square_that_hangs_left_of_the_heading():
+    """A 24px target with no outline: the dashed circle read as a placeholder.
+    It sits in the margin, so the heading's text starts where the paragraph's
+    does."""
     css = STYLE_CSS.read_text()
     start = css.index(".fold-btn {")
     rule = css[start:css.index("}", start)]
-    for needle in ("width: 26px", "height: 26px", "border-radius: 50%",
-                   "border: 1px dashed var(--border)"):
+    for needle in ("width: 24px", "height: 24px", "border-radius: 6px", "border: 0"):
         assert needle in rule, f".fold-btn lost {needle!r}"
+    assert "dashed" not in rule
+    assert "main.prose h2.block-heading { padding-right: 0; margin-left: -28px; }" in css
 
 
 def test_fold_all_is_a_visible_button_that_hides_with_no_headings():

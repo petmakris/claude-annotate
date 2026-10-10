@@ -501,13 +501,16 @@ section.block:focus { outline: none; }
 .block-heading { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 /* A part's heading wraps at the column edge. The 140px above was room for
    the hover controls of prose-era headings, and on a phone it left an
-   authored title about 180px to wrap in. */
-main.prose h2.block-heading { padding-right: 0; }
+   authored title about 180px to wrap in. The fold button hangs in the
+   margin: -28px puts the title's first letter over the paragraph's. */
+main.prose h2.block-heading { padding-right: 0; margin-left: -28px; }
 /* On a phone a title too long for one line would wrap whole under its fold
    button; given the rest of the line, it wraps its words beside it, and a
    change chip takes the next line. */
 @media (max-width: 600px) {
   main.prose h2.block-heading .block-heading-text { flex: 1 1 0; }
+  /* The gutter is too narrow to hang the fold button in. */
+  main.prose h2.block-heading { margin-left: 0; }
 }
 .block-heading-text { min-width: 0; }
 /* An untitled part's label line: there only when a mark or chip needs it. */
@@ -540,14 +543,16 @@ body.searching section.block.fold-hidden,
 body.searching section.block.collapsed .block-body { display: revert; }
 .fold-all-btn { font: 600 12.5px var(--font-prose); border: 1px solid var(--border); background: var(--surface); border-radius: 7px; padding: 6px 12px; color: var(--text); cursor: pointer; }
 .fold-all-btn[hidden] { display: none; }
+/* A plain 24px square in the margin left of the heading; a tint on hover
+   says it is a button. The dashed circle it replaced read as a placeholder. */
 .fold-btn {
-  width: 26px; height: 26px; flex: none;
+  width: 24px; height: 24px; flex: none;
   display: inline-flex; align-items: center; justify-content: center; padding: 0;
-  background: var(--surface); border: 1px dashed var(--border); border-radius: 50%;
-  color: var(--text-dim); cursor: pointer; font-size: 12px; line-height: 1;
-  transition: color 120ms ease, border-color 120ms ease;
+  background: transparent; border: 0; border-radius: 6px;
+  color: var(--text-dim); cursor: pointer; font-size: 14px; line-height: 1;
+  transition: color 120ms ease, background-color 120ms ease;
 }
-.fold-btn:hover { color: var(--text-strong); border-color: var(--control-border); }
+.fold-btn:hover, .fold-btn:focus-visible { color: var(--text-strong); background: var(--hover-tint); }
 
 /* === Block updating overlay ========================================= */
 section.block {

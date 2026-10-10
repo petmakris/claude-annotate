@@ -555,13 +555,6 @@
         ev.preventDefault(); ev.stopImmediatePropagation();
         const live = (a) => { const b = menu && menu.querySelector(`button[data-act="${a}"]`); return b && !b.disabled ? b : null; };
         if (!ev.shiftKey) { live("explain")?.click(); return; }
-        // The phone sheet shows Read as written outright; the bar keeps it
-        // behind the chevron.
-        const read = live("read");
-        if (read) { read.click(); return; }
-        const more = live("voice-more");
-        if (!more) return;
-        more.click();
         live("read")?.click();
         return;
       }

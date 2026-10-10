@@ -20,7 +20,11 @@
   const SETUP_HINT = "Read-aloud needs Azure set up — run `webcompanion doctor`";
   const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>';
   const ICON_PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>';
-  const ICON_MORE = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+  // Read is a speaker and Explain a lightbulb, drawn in strokes like the
+  // toolbar's other icons, so the two ways to listen look different.
+  const ICON_READ = '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>';
+  const ICON_EXPLAIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"/></svg>';
+  const ICON_BACK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>';
 
   const C = () => window.AnnotateSpeechClient;
   const A = () => window.AnnotateAnchors;
@@ -45,8 +49,8 @@
   }
 
   // ── the menu buttons ────────────────────────────────────────────────────
-  // On a phone the sheet leads with the two ways to listen, as wide labelled
-  // buttons (spec §3.1); there is no chevron to find Read as written behind.
+  // Read and Explain, side by side, each with its own icon. On a phone the
+  // sheet leads with them as wide labelled buttons (spec §3.1).
   function addButtons(t, menu) {
     const text = selectionText(t);
     const sheet = menu.classList.contains("sel-sheet");
@@ -61,37 +65,21 @@
       b.addEventListener("mousedown", stop);
       return b;
     };
-    const explain = make("explain", ICON_PLAY + `<span>${sheet ? "Explain aloud" : "Explain"}</span>`, "Explain aloud (r)");
+    const read = make("read", ICON_READ + `<span>${sheet ? "Read as written" : "Read"}</span>`, "Read as written (⇧r)");
+    read.addEventListener("click", (e) => { stop(e); window.AnnotateSelection.close(); play(t, "read"); });
+    const explain = make("explain", ICON_EXPLAIN + `<span>${sheet ? "Explain aloud" : "Explain"}</span>`, "Explain aloud (r)");
     explain.addEventListener("click", (e) => { stop(e); window.AnnotateSelection.close(); play(t, "explain"); });
-    const makeRead = () => {
-      const read = make("read", sheet ? "<span>Read as written</span>" : "Read as written", "Read as written (⇧r)");
-      read.addEventListener("click", (ev) => { stop(ev); window.AnnotateSelection.close(); play(t, "read"); });
-      return read;
-    };
-    let others;
     if (sheet) {
-      const read = makeRead();
-      explain.classList.add("sp-wide");
       read.classList.add("sp-wide");
+      explain.classList.add("sp-wide");
       const first = menu.querySelector("button[data-act]");
-      if (first) first.before(explain, read); else menu.append(explain, read);
-      others = [read];
+      if (first) first.before(read, explain); else menu.append(read, explain);
     } else {
-      const more = make("voice-more", ICON_MORE, "More ways to listen");
-      menu.append(explain, more);
-      others = [more];
-      more.addEventListener("click", (e) => {
-        stop(e);
-        if (menu.querySelector('[data-act="read"]')) return;
-        const read = makeRead();
-        read.tabIndex = -1;
-        if (more.disabled) disableOne(read, more.title);
-        more.after(read);
-      });
+      menu.append(read, explain);
     }
 
     const disableOne = (b, why) => { b.disabled = true; b.title = why; b.setAttribute("aria-label", why); };
-    const disable = (why) => { for (const b of [explain, ...others]) disableOne(b, why); };
+    const disable = (why) => { for (const b of [read, explain]) disableOne(b, why); };
     if (inEditor(t)) disable(CLOSE_EDITOR);
     else if (text.length > LIMIT) disable("Select less than about a page");
     else C().status().then((s) => {
@@ -143,14 +131,23 @@
     // Focusable, and focused: Esc and Space reach the card from the moment it
     // opens, before Azure has answered.
     card.tabIndex = -1;
+    // The mode is picked with two tabs in the header. The same selection the
+    // other way, at the same speed. The explanation is cached by the client,
+    // so switching back does not ask Claude again.
     card.innerHTML =
-      `<div class="sp-head"><b>${mode === "explain" ? "Explained aloud" : "Read as written"}</b>`
+      `<div class="sp-head"><div class="sp-tabs" role="group" aria-label="Listen to">`
+      + `<button type="button" data-mode="read">Read as written</button>`
+      + `<button type="button" data-mode="explain">Explain</button></div>`
       + `<span class="sp-voice"></span><button type="button" class="sp-x" aria-label="Stop and close">×</button></div>`
       + `<div class="sp-body"><span class="sp-wait"><i></i><i></i><i></i> `
       + `${mode === "explain" ? "Writing the explanation…" : "Preparing the reading…"}</span></div>`;
     const k = voiceKey();
     card.querySelector(".sp-voice").textContent = "· " + k[0].toUpperCase() + k.slice(1);
     card.querySelector(".sp-x").addEventListener("click", stop);
+    card.querySelectorAll(".sp-tabs button").forEach((b) => {
+      b.setAttribute("aria-pressed", String(b.dataset.mode === mode));
+      b.addEventListener("click", () => { if (b.dataset.mode !== mode) play(t, b.dataset.mode); });
+    });
     const host = hostFor(t);
     if (host === A().contentOf(t.section) || host.tagName === "LI") host.appendChild(card);
     else host.insertAdjacentElement("afterend", card);
@@ -641,15 +638,12 @@
     const rates = ["0.85", "1", "1.2"];
     ctl.innerHTML =
       `<button type="button" class="sp-btn primary" data-sp="toggle"></button>`
-      + `<button type="button" class="sp-btn" data-sp="back" aria-label="Back one sentence" title="Back one sentence">⟲</button>`
+      + `<button type="button" class="sp-btn sp-icon" data-sp="back" aria-label="Back one sentence" title="Back one sentence">${ICON_BACK}</button>`
       + `<div class="sp-bar" data-sp="progress" role="progressbar" aria-label="Elapsed" aria-valuemin="0"><i></i></div>`
       + `<span class="sp-time">0:00 / …</span>`
       + `<div class="sp-seg" data-sp="speed" role="group" aria-label="Speed">`
       + rates.map((r) => `<button type="button" data-rate="${r}" aria-pressed="${Number(r) === m.rate}">${r}×</button>`).join("")
-      + `</div>`
-      + `<div class="sp-seg" data-sp="mode" role="group" aria-label="Listen to">`
-      + `<button type="button" data-mode="explain">Explain</button>`
-      + `<button type="button" data-mode="read">Read as written</button></div>`;
+      + `</div>`;
     ctl.querySelector('[data-sp="toggle"]').addEventListener("click", () => toggle(m));
     ctl.querySelector('[data-sp="back"]').addEventListener("click", () => backOneSentence(m));
     ctl.querySelectorAll('[data-sp="speed"] button').forEach((b) => b.addEventListener("click", () => {
@@ -657,12 +651,6 @@
       m.audio.defaultPlaybackRate = m.audio.playbackRate = m.rate;
       ctl.querySelectorAll('[data-sp="speed"] button').forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
     }));
-    // The same selection the other way, at the same speed. The explanation
-    // is cached by the client, so switching back does not ask Claude again.
-    ctl.querySelectorAll('[data-sp="mode"] button').forEach((b) => {
-      b.setAttribute("aria-pressed", String(b.dataset.mode === m.mode));
-      b.addEventListener("click", () => { if (b.dataset.mode !== m.mode) play(m.t, b.dataset.mode, m.rate); });
-    });
     setToggle(m);
     progress(m);
   }
