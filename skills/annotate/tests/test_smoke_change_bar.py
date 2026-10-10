@@ -20,7 +20,9 @@ DIFF_JS = STATIC / "diff.js"
 def test_a_change_bar_is_rendered():
     src = SCRIPT_JS.read_text()
     assert "change-bar" in src, "no change summary bar"
-    assert "sections changed" in src, "the bar does not say how many moved"
+    assert 'part${changed.length > 1 ? "s" : ""} changed' in src, "the bar does not say how many parts moved"
+    bar = src[src.index("function renderChangeBar"):src.index("function renderDiffPane")]
+    assert "section${" not in bar and "sections changed" not in bar
 
 
 def test_the_bar_splits_asked_from_swept():

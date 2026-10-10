@@ -24,8 +24,8 @@ function stepContextFor(blockId, stepId) {
 }
 
 // Add the "updating" spinner overlay + timer to a block section. Idempotent:
-// a section already overlaid is left alone. Its last caller was the choice
-// block's own Submit, which is gone now that answers ride the round.
+// a section already overlaid is left alone.
+// Started on every part a submitted round names (registerRoundEvent), cleared by its ack or its new version.
 function startUpdatingOverlay(section) {
   if (!section) return;
   section.classList.add("is-updating");

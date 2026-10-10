@@ -26,6 +26,11 @@ function handleConsumedEvents(consumed) {
     if (pend.blockId) {
       const section = document.querySelector(`section.block[data-block-id="${cssEsc(pend.blockId)}"]`);
       if (section) clearUpdatingOverlay(section);
+    } else if (pend.round) {
+      for (const id of pend.blockIds || []) {
+        const section = document.querySelector(`section.block[data-block-id="${cssEsc(id)}"]`);
+        if (section) clearUpdatingOverlay(section);
+      }
     } else if (pend.general) {
       const statusEl = document.getElementById("general-status");
       if (statusEl) statusEl.textContent = "responded";

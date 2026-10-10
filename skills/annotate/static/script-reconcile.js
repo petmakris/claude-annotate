@@ -364,6 +364,12 @@ window.AnnotatePage = {
       round: true,
       blockIds: Array.isArray(blockIds) ? blockIds.slice() : [],
     });
+    // Every part the round names shows that Claude is rewriting it, until
+    // the ack (handleConsumedEvents) or its new version clears it. Parts the
+    // sweep rewrites are not known in advance and get none.
+    for (const id of blockIds || []) {
+      startUpdatingOverlay(document.querySelector(`section.block[data-block-id="${cssEsc(id)}"]`));
+    }
     // The submit POST can resolve after the poll that first saw busy, in
     // which case the busy start edge already ran and found no round in
     // pendingEvents. Claim the open window here too.

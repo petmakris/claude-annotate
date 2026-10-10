@@ -4,7 +4,7 @@
 // ── What changed, and who changed it ───────────────────────────────────────
 //
 // When a round is acked the page grows a bar reading
-//   "<n> sections changed — <a> you marked, <b> by the coherence sweep"
+//   "<n> parts changed — <a> you asked for, <b> by the coherence sweep"
 // and every changed card grows an attribution chip plus a "what changed"
 // word diff against the pre-round snapshot (GET <base>/prev, Task 1).
 //
@@ -83,9 +83,9 @@ function renderChangeBar(changed) {
   dot.className = "cb-dot";
   const txt = document.createElement("span");
   const parts = [];
-  if (asked) parts.push(`${asked} you marked`);
+  if (asked) parts.push(`${asked} you asked for`);
   if (swept) parts.push(`${swept} by the coherence sweep`);
-  txt.innerHTML = `<b>${changed.length} section${changed.length > 1 ? "s" : ""} changed</b>`
+  txt.innerHTML = `<b>${changed.length} part${changed.length > 1 ? "s" : ""} changed</b>`
     + (parts.length ? ` — <span class="cb-split">${parts.join(", ")}</span>` : "");
   const nav = document.createElement("span");
   nav.className = "cb-nav";
@@ -156,7 +156,10 @@ function markChangedCard(section, c) {
     section.dataset.diff = open ? "" : "open";
     toggle.setAttribute("aria-pressed", open ? "false" : "true");
   });
-  head.append(chip, toggle);
+  // By the title, not after the control strip a frame head carries.
+  const title = head.querySelector(".block-heading-text");
+  if (title) title.after(chip, toggle);
+  else head.prepend(chip, toggle);
 }
 
 // ── The pane ──────────────────────────────────────────────────────────────

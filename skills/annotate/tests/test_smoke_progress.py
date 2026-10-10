@@ -78,3 +78,17 @@ def test_marking_clicks_are_not_silently_dropped_while_busy():
     # a precise, low-false-positive check for script.js too.
     assert is_busy_guard not in script, \
         "script.js still has an is-busy early-return guarding a mark/comment click"
+
+
+def test_a_round_puts_the_updating_overlay_on_every_part_it_names():
+    src = SCRIPT_JS.read_text()
+    i = src.index("registerRoundEvent(eventId, blockIds)")
+    body = src[i:src.index("\n  },", i)]
+    assert "startUpdatingOverlay(" in body, "submitting a round shows nothing on the parts"
+
+
+def test_the_ack_clears_every_part_of_the_round():
+    src = SCRIPT_JS.read_text()
+    i = src.index("function handleConsumedEvents(")
+    body = src[i:src.index("\n}", i)]
+    assert "pend.blockIds" in body, "a round's overlays outlive its ack"
