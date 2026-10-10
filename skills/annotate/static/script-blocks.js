@@ -387,10 +387,18 @@ function blockLabel(blk) {
   return el;
 }
 
+// A label of the same shape is updated in place, so the chip and the "what
+// changed" toggle a change put on it (and the fold button) survive a
+// re-render. Only a title gained or lost replaces the element.
 function setBlockLabel(section, blk) {
-  const fresh = blockLabel(blk);
   const old = section.querySelector(".block-label");
-  if (old) old.replaceWith(fresh);
+  const fresh = blockLabel(blk);
+  const sameShape = old && old.classList.contains("block-heading")
+    === fresh.classList.contains("block-heading");
+  if (sameShape) {
+    const text = old.querySelector(".block-heading-text");
+    if (text) text.textContent = fresh.querySelector(".block-heading-text").textContent;
+  } else if (old) old.replaceWith(fresh);
   else section.prepend(fresh);
   section.setAttribute("aria-label", blockTitle(blk));
 }

@@ -485,6 +485,18 @@ footer.actions button:disabled { opacity: 0.5; cursor: not-allowed; }
    An authored title is an h2 (main.prose h2 sizes it); the body follows. */
 body { background: var(--surface); }
 section.block { position: relative; margin: 0; }
+/* The prose-era rules above (hover wash, engaged tint, bar and shift) were
+   written for a bare block. A part has no wash of its own: the only engaged
+   signal is the left border of .block-body. The keyboard-focus rail keeps
+   its ::before. */
+main.prose section.block:hover,
+main.prose section.block[data-engaged-type],
+main.prose section.block[data-engaged-type]:hover { background: transparent; }
+section.block[data-engaged-type] { padding-left: 0; margin-left: 0; border-radius: 0; }
+section.block[data-engaged-type]:not([data-kb-focus])::before { content: none; }
+section.block[data-engaged-type][data-kb-focus]::before {
+  top: 0; bottom: 0; width: 3px; border-radius: 0; background: var(--accent);
+}
 section.block:focus { outline: none; }
 .block-heading { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .block-heading-text { min-width: 0; }

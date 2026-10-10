@@ -46,3 +46,20 @@ def test_the_page_ground_is_the_text_surface():
     css = STYLE_CSS.read_text()
     assert re.search(r"(?m)^body\s*\{[^}]*background:\s*var\(--surface\)", css), \
         "the page still sits on the grey card ground"
+
+
+def test_a_label_of_the_same_shape_is_kept_on_re_render():
+    src = SCRIPT_JS.read_text()
+    i = src.index("function setBlockLabel(")
+    body = src[i:src.index("\n}", i)]
+    assert "sameShape" in body
+    assert 'classList.contains("block-heading")' in body
+    assert body.index("sameShape") < body.index("replaceWith"), \
+        "the label is replaced before the shape is compared, dropping its chips"
+    assert "textContent" in body
+
+
+def test_a_part_has_no_hover_wash_or_engaged_tint():
+    css = STYLE_CSS.read_text()
+    assert "main.prose section.block:hover" in css
+    assert "section.block[data-engaged-type]:not([data-kb-focus])::before { content: none; }" in css
