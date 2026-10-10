@@ -59,7 +59,7 @@
   }
   function inTitle(node) {
     const el = node && (node.nodeType === 1 ? node : node.parentElement);
-    return !!(el && el.closest(".card-head"));
+    return !!(el && el.closest(".block-label"));
   }
   // A choice is answered with its own controls, and a picture is commented
   // whole through its title: neither body takes a selection.
@@ -71,7 +71,7 @@
     // The section's editor (edit.js): its Rich view is a .block-content too.
     if (el.closest(".ed-host, .ed-bar")) return true;
     if (section && WHOLE_ONLY.includes(section.dataset.kind) && el.closest(".block-content")) return true;
-    return !(el.closest(".block-content") || el.closest(".card-head"));
+    return !(el.closest(".block-content") || el.closest(".block-label"));
   }
 
   function typing(a) {
@@ -160,7 +160,7 @@
       const q = document.createElement("div");
       q.className = "sel-quote";
       const text = t.anchor ? t.anchor.selected_text
-        : (t.section.querySelector(".card-title")?.textContent || "").trim();
+        : (t.section.getAttribute("aria-label") || "").trim();
       q.textContent = text.length > 140 ? text.slice(0, 139) + "…" : text;
       menu.appendChild(q);
     }
@@ -179,7 +179,7 @@
     if (opts.refuse) {
       const m = document.createElement("span");
       m.className = "sel-state";
-      m.textContent = "Select within one section";
+      m.textContent = "Select within one part";
       menu.appendChild(m);
     } else {
       if (opts.state) {
@@ -277,11 +277,11 @@
 
   function openWhole(section) {
     getSelection()?.removeAllRanges();
-    const head = section.querySelector(".card-head");
+    const head = section.querySelector(".block-label");
     const range = document.createRange();
     range.selectNodeContents(section);
     const mark = S().blockMark(section.dataset.blockId);
-    const state = mark ? `Section marked ${mark.kind}` : "Whole section";
+    const state = mark ? `Part marked ${mark.kind}` : "Whole part";
     open({ section, anchor: null, range, whole: true },
          (head || section).getBoundingClientRect(), { state, removable: !!mark });
     // A double-click on the title fires two mouseups; the second must not
@@ -343,7 +343,7 @@
   function homeFocus(section) {
     const home = section && document.contains(section) ? section
       : document.querySelector(`main.prose section.block[data-block-id="${CSS.escape(draft?.anchor.block_id || "")}"]`);
-    home?.querySelector(".card-chevron")?.focus({ preventScroll: true });
+    focusHome(home);
   }
   // The comment already on exactly these words, if any.
   function commentOn(section, anchor) {

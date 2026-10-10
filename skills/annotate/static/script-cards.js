@@ -292,7 +292,7 @@ function buildCard(id, a, onSubmitCb) {
       `section.block[data-block-id="${cssEsc(a.block_id)}"]`);
     card.remove();
     applyEngagedStyling();
-    home?.querySelector(".card-chevron")?.focus();
+    focusHome(home);
     window.AnnotateA11y?.announce("Comment added to the round");
   });
   submitRow.appendChild(submitBtn);

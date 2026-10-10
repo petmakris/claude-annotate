@@ -2,14 +2,14 @@
    code anchor panes, and the pane themes. */
 
 /* One column: the prose, then the panes under it, both the full width of the
-   card. The card body is plain block flow — no grid — so there is no display
-   rule here for `.collapsed .card-body { display: none; }` to lose to. Its
+   part. The block body is plain block flow — no grid — so there is no display
+   rule here for `.collapsed .block-body { display: none; }` to lose to. Its
    padding moves onto the prose, so the pane band can run edge to edge under
    it with only its own hairline between them. */
-section.block.card[data-has-code="1"] .card-body {
+section.block[data-has-code="1"] .block-body {
   padding: 0;
 }
-section.block.card[data-has-code="1"] .card-body > .block-content {
+section.block[data-has-code="1"] .block-body > .block-content {
   padding: 2px 18px 16px 18px;
   min-width: 0;
 }

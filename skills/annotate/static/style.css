@@ -251,28 +251,29 @@ body.read-only .comment-card { display: none; }
 }
 
 /* Pending delete: greyed and struck through, NOT removed. Nothing is actually
-   deleted until the round is submitted, so the card has to look reversible —
-   choosing Delete on the title again un-marks it. The header stays legible so the
-   undo affordance is findable. */
-section.block[data-block-mark="delete"] .card-body {
+   deleted until the round is submitted, so the part has to look reversible —
+   choosing Delete on the title again un-marks it. The heading stays legible so
+   the undo affordance is findable. */
+section.block[data-block-mark="delete"] .block-body {
   opacity: .45;
   text-decoration: line-through;
 }
-section.block[data-block-mark="delete"] .card-title {
+section.block[data-block-mark="delete"] .block-heading-text {
   text-decoration: line-through;
   color: var(--text-dim);
 }
 
-/* A card marked compact dims whole, the same reversible-until-submit promise
+/* A part marked compact dims whole, the same reversible-until-submit promise
    the pending delete makes, without the strikethrough that would claim the
    content is being dropped from the plan. */
-section.block[data-block-mark="compact"] .card-body { opacity: .5; }
-section.block[data-block-mark="compact"] .card-title { color: var(--text-dim); }
+section.block[data-block-mark="compact"] .block-body { opacity: .5; }
+section.block[data-block-mark="compact"] .block-heading-text { color: var(--text-dim); }
 
-/* Your words: a section holding words the reader wrote in the editor says so
+/* Your words: a part holding words the reader wrote in the editor says so
    after its title. Quiet, in the rule's green, and outranked by a pending
-   section mark, which is a decision still to send. */
-section.block[data-mine]:not([data-block-mark]) .card-title::after {
+   mark, which is a decision still to send. The descendant selector reaches
+   the label of a framed part too, which sits inside .block-frame. */
+section.block[data-mine]:not([data-block-mark]) .block-label::after {
   content: "✎ your words";
   margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
   display: inline-block; vertical-align: 2px;
@@ -281,17 +282,17 @@ section.block[data-mine]:not([data-block-mark]) .card-title::after {
   box-shadow: inset 0 0 0 1px var(--mine-rule);
 }
 
-/* A section mark is named after the title, since the strip that used to carry
-   it is gone. */
-section.block[data-block-mark] .card-title::after {
+/* A mark is named after the title, since the strip that used to carry it is
+   gone. */
+section.block[data-block-mark] .block-label::after {
   margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
   color: #fff; vertical-align: 2px;
   /* inline-block so a struck-through title does not strike its own badge */
   display: inline-block; text-decoration: none;
 }
-section.block[data-block-mark="delete"] .card-title::after { content: "✕ delete section"; background: var(--type-reject-fg); }
-section.block[data-block-mark="compact"] .card-title::after { content: "⤓ compact section"; background: #7c3aed; }
-section.block[data-block-mark="comment"] .card-title::after { content: "💬 section"; background: var(--accent); }
+section.block[data-block-mark="delete"] .block-label::after { content: "✕ delete"; background: var(--type-reject-fg); }
+section.block[data-block-mark="compact"] .block-label::after { content: "⤓ compact"; background: #7c3aed; }
+section.block[data-block-mark="comment"] .block-label::after { content: "💬 comment"; background: var(--accent); }
 
 /* === The legend's keyboard section ==================================
    The keys existed before this panel documented them — `/` and `g` and the
@@ -329,12 +330,9 @@ section.block[data-block-mark="comment"] .card-title::after { content: "💬 sec
    The strip it reveals is the point: see the four-way reveal above.
 
    Drawn as a ::before and not as the inset box-shadow this repo uses for the
-   code pane's anchor row: on a card that shadow loses. `section.block.card`
-   and `section.block[data-kb-focus]` are both (0,2,1), so the card's own
-   three-layer shadow wins on source order and the rail never paints —
-   measured, not guessed. Out-specifying it would mean restating all three
-   layers here to avoid flattening the card. The section is already
-   position:relative with no ::before of its own, so this costs no layout. */
+   code pane's anchor row: a part has no box of its own to carry a shadow.
+   The section is already position:relative with no ::before of its own, so
+   this costs no layout. */
 section.block[data-kb-focus]::before {
   content: "";
   position: absolute;
@@ -343,7 +341,7 @@ section.block[data-kb-focus]::before {
   background: var(--accent);
   z-index: 1;
 }
-section.block[data-kb-focus] .card-title { color: var(--text-strong); }
+section.block[data-kb-focus] .block-heading-text { color: var(--text-strong); }
 /* Focus is a cursor, not a selection: it must survive the page being busy,
    so unlike the marks it is never dimmed by body.is-busy. */
 
@@ -482,81 +480,38 @@ footer.actions button:disabled { opacity: 0.5; cursor: not-allowed; }
   50%      { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent); }
 }
 
-/* === Card layout ==================================================== */
-section.block.card {
-  position: relative;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 1px 1px rgba(20, 24, 40, .04), 0 4px 14px rgba(20, 24, 40, .08), 0 12px 32px rgba(20, 24, 40, .05);
-  margin: 0 0 12px;
-  overflow: hidden;
-}
-.card-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 13px 18px;
-}
-.card-head:hover { background: var(--hover-tint); }
-.card-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text-strong);
-  letter-spacing: -0.01em;
-  user-select: none;
-}
-.card-head-spacer { flex: 1; }
-/* Phone width: the header is one flex row that never wrapped, so the title
-   got whatever the controls left — 67 to 86px, and a long title 480px tall,
-   one word per line. Below 600px the title takes the whole first row (less
-   the chevron) and the controls and chips wrap under it. */
-@media (max-width: 600px) {
-  .card-head { flex-wrap: wrap; row-gap: 8px; }
-  .card-title { flex: 1 1 calc(100% - 38px); min-width: 0; }
-}
-.card-body {
-  position: relative;
-  padding: 2px 18px 16px 18px;
-  border-top: 1px solid var(--border);
-}
-/* The card owns the surface; neutralize the prose-era per-block tint/bar so
-   the whole card doesn't change colour on hover or when engaged. */
-main.prose section.block.card:hover { background: var(--surface); }
-section.block.card[data-engaged-type] { background: var(--surface); }
-section.block.card[data-engaged-type]::before { display: none; }
-/* Engaged state shows as a left accent bar on the card body instead. */
-.card-body { border-left: 3px solid transparent; }
-section.block.card[data-engaged-type="comment"] .card-body { border-left-color: var(--type-comment-fg); }
-section.block.card[data-engaged-type="reject"]  .card-body { border-left-color: var(--type-reject-fg); }
+/* === One document ====================================================
+   A block is a part of one document: no box, no header bar, no number.
+   An authored title is an h2 (main.prose h2 sizes it); the body follows. */
+body { background: var(--surface); }
+section.block { position: relative; margin: 0; }
+section.block:focus { outline: none; }
+.block-heading { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.block-heading-text { min-width: 0; }
+/* An untitled part's label line: there only when a mark or chip needs it. */
+.block-meta { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; }
+section.block:not([data-block-mark]):not([data-mine]) > .block-meta:empty { display: none; }
+.block-body { position: relative; border-left: 3px solid transparent; padding-left: 12px; margin-left: -15px; }
+section.block[data-engaged-type="comment"] .block-body { border-left-color: var(--type-comment-fg); }
+section.block[data-engaged-type="reject"]  .block-body { border-left-color: var(--type-reject-fg); }
+main.prose .block-body p,
+main.prose .block-body li,
+main.prose .block-body blockquote { padding-right: 12px; }
+main.prose .block-body h1, main.prose .block-body h2, main.prose .block-body h3,
+main.prose .block-body h4, main.prose .block-body h5, main.prose .block-body h6 { padding-right: 12px; }
+.block-body > .block-content { padding: 0 0 4px; }
+.block-body > .block-content > :first-child { margin-top: 4px; }
 
-/* Inside a card the wide right gutter (old hover-action room) is gone; tighten
-   per-element padding so prose fills the card.
-   The `main.prose` prefix is load-bearing, not decoration. `main.prose p` sets
-   `padding: 4px 140px 4px 6px` at specificity (0,1,2); a bare `.card-body p`
-   is (0,1,1) and LOSES, so for as long as that prefix was missing every card
-   paragraph kept reserving 140px for buttons that are not there — measured at
-   140px computed, costing 128px of text width in the two-column code layout.
-   Same specificity trap the code pane hit with its own caption (see the
-   note above `.cp-body` below, which records it). Adding
-   `main.prose` makes these (0,2,2), which wins on class count.
-   Nothing needs the reserve any more: no control sits beside a paragraph;
-   the selection menu floats over the page.
-   e2e item 13 measures the computed padding, because no source check can see
-   which of two rules won. */
-main.prose .card-body p,
-main.prose .card-body li,
-main.prose .card-body blockquote { padding-right: 12px; }
-main.prose .card-body h1, main.prose .card-body h2, main.prose .card-body h3,
-main.prose .card-body h4, main.prose .card-body h5, main.prose .card-body h6 { padding-right: 12px; }
-/* `pre` is deliberately NOT in that list. A `.card-body pre { padding-right:
-   14px }` rule used to sit here and, like the rules above, never won against
-   `main.prose pre { padding: 0 }`. Giving it the prefix that would make it win
-   was tried and rendered: the <pre> is a bare wrapper whose inner <code> is
-   the visible dark surface, so right-only padding pulls that surface 14px off
-   the card's right edge while its left edge stays put — an asymmetric slab.
-   Flush is correct, so the rule is gone rather than fixed. */
-.card-body > .block-content > :first-child { margin-top: 8px; }
+/* === Folding ========================================================= */
+section.block.collapsed .block-body { display: none; }
+.fold-btn {
+  width: 26px; height: 26px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  background: var(--surface); border: 1px dashed var(--border); border-radius: 50%;
+  color: var(--text-dim); cursor: pointer; font-size: 12px; line-height: 1;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.fold-btn:hover { color: var(--text-strong); border-color: var(--control-border); }
 
 /* === Block updating overlay ========================================= */
 section.block {
@@ -578,7 +533,6 @@ section.block.is-updating > *:not(.updating-overlay) {
   position: absolute;
   inset: 0;
   background: rgba(253, 243, 234, 0.55);
-  border-radius: inherit;
   pointer-events: none;
   z-index: 1;
   display: flex;
@@ -624,69 +578,6 @@ section.block.is-updating > *:not(.updating-overlay) {
 
 @keyframes updating-spin {
   to { transform: rotate(360deg); }
-}
-
-/* === Card collapse ================================================== */
-section.block.card.collapsed .card-body { display: none; }
-/* Collapsed cards are header-only; tint that bar gray so it reads as a
-   distinct, closed section against the white expanded cards. */
-section.block.card.collapsed .card-head { background: var(--surface-soft); }
-section.block.card.collapsed .card-head:hover { background: var(--surface-hover); }
-.card-chevron {
-  width: 26px;
-  height: 26px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  /* An easy 26px round
-     target instead of the bare 14px text glyph it used to be. */
-  background: var(--surface);
-  border: 1px dashed var(--border);
-  border-radius: 50%;
-  color: var(--text-dim);
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 1;
-  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
-}
-.card-head:hover .card-chevron { color: var(--text-strong); }
-
-/* === Section · version pill ==========================================
-   Composite chip in the card header. Left segment = section number, right
-   segment = version. The version half lights up accent only once the block
-   has been rewritten (v > 1). */
-.section-pill {
-  flex: none;
-  display: inline-flex;
-  align-items: stretch;
-  height: 18px;
-  font-family: var(--font-code);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-dim);
-  background: var(--surface-soft);
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  overflow: hidden;
-  user-select: none;
-}
-.section-pill .sp-sec,
-.section-pill .sp-ver {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 5px;
-}
-.section-pill .sp-sec { color: var(--text); }
-.section-pill .sp-ver { border-left: 1px solid var(--border); }
-.section-pill.bumped .sp-ver {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border-left-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 /* ── Choice blocks ──────────────────────────────────────────────────────── */

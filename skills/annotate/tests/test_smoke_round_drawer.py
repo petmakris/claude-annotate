@@ -80,8 +80,8 @@ def test_a_block_scope_row_does_not_print_its_title_twice():
     stmt = src[start:src.index(";", start)]
     assert "blockTitleFor(" not in stmt, \
         "the rd-text fallback still echoes the row's own rd-where line"
-    assert "whole section" in stmt, \
-        "a block-scope row does not say that it covers the whole section"
+    assert "whole part" in stmt, \
+        "a block-scope row does not say that it covers the whole part"
 
 
 def test_the_disabled_dock_says_why_on_the_button():

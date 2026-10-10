@@ -11,20 +11,20 @@ REPO = Path(__file__).resolve().parents[3]
 STATIC = REPO / "skills" / "annotate" / "static"
 
 
-def test_the_fold_chord_exists_and_reuses_the_chevron_machinery():
-    """The whole point of the chord going through applyCollapsed +
-    collapseKey is that fold-all state and per-chevron state are ONE state:
-    a fold-all survives reload and a later chevron click toggles one card.
-    A rewrite that folds cards by toggling classList directly would pass a
-    bare existence check and silently fork the state."""
+def test_the_fold_chord_exists_and_reuses_the_fold_machinery():
+    """The whole point of the chord going through applyFolds + collapseKey
+    is that fold-all state and per-heading state are ONE state: a fold-all
+    survives reload and a later fold click toggles one part. A rewrite that
+    folds parts by toggling classList directly would pass a bare existence
+    check and silently fork the state."""
     src = SCRIPT_JS.read_text()
     assert "foldAll" in src, "no fold-all implementation in script.js"
-    assert 'section.querySelector(".card-chevron")' in src, (
-        "fold-all no longer routes through each card's chevron element"
-    )
     assert "collapseKey(section.dataset.blockId)" in src, (
-        "fold-all no longer writes the chevron's own localStorage keys — "
-        "fold state and chevron state have forked"
+        "fold-all no longer writes the fold button's own localStorage keys — "
+        "fold state and button state have forked"
+    )
+    assert "applyFolds()" in src, (
+        "fold-all no longer repaints through applyFolds"
     )
 
 
@@ -52,12 +52,12 @@ def test_the_chord_pill_is_styled_and_actually_hides():
     )
 
 
-def test_the_chevron_is_a_round_button_not_a_text_glyph():
+def test_the_fold_button_is_a_round_button_not_a_text_glyph():
     """The chevron was a bare 14px-wide text glyph — the smallest target in
-    the header. It now matches the 26px round control family."""
+    the header. The fold button matches the 26px round control family."""
     css = STYLE_CSS.read_text()
-    start = css.index(".card-chevron {")
+    start = css.index(".fold-btn {")
     rule = css[start:css.index("}", start)]
     for needle in ("width: 26px", "height: 26px", "border-radius: 50%",
                    "border: 1px dashed var(--border)"):
-        assert needle in rule, f".card-chevron lost {needle!r}"
+        assert needle in rule, f".fold-btn lost {needle!r}"

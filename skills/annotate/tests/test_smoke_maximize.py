@@ -67,7 +67,7 @@ def _strip_comments(js: str) -> str:
 
 
 def test_served_after_script_js():
-    """maximize.js reads section[data-kind] and mounts into .card-head, both
+    """maximize.js reads section[data-kind] and mounts into .block-label, both
     built by script.js. Both tags are `defer`, so document order is execution
     order — the ordering is the dependency."""
     head = SERVER_PY.read_text()
@@ -91,7 +91,7 @@ def test_prose_is_not_maximizable():
 
 
 def test_module_never_reparents_a_block():
-    """The card is promoted in place with position:fixed. Appending or
+    """The part is promoted in place with position:fixed. Appending or
     inserting the <section> anywhere reintroduces the duplicate-block bug."""
     code = _strip_comments(MAXIMIZE_JS.read_text())
     for pattern in (r"appendChild\(\s*section\s*\)",
@@ -104,7 +104,7 @@ def test_module_never_reparents_a_block():
 
 def test_promotion_is_position_fixed():
     css = STYLE_CSS.read_text()
-    m = re.search(r"section\.block\.card\.is-maximized\s*\{(.*?)\}", css, re.S)
+    m = re.search(r"section\.block\.is-maximized\s*\{(.*?)\}", css, re.S)
     assert m, ".is-maximized rule not found in style.css"
     assert "position: fixed" in m.group(1)
 

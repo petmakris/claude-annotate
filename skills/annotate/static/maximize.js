@@ -76,7 +76,7 @@
     chrome.hidden = true;
     chrome.setAttribute("role", "dialog");
     chrome.setAttribute("aria-modal", "true");
-    chrome.setAttribute("aria-label", "Maximized section");
+    chrome.setAttribute("aria-label", "Maximized part");
 
     // Background paint only — deliberately NOT a click-to-close target. The
     // maximized card is inset by 16px, so the scrim is a hairline frame around
@@ -124,11 +124,9 @@
     if (isOpen()) close({ restoreFocus: false });
     openId = section.dataset.blockId;
     wantFit = false;
-    // A maximized card must not also be collapsed, or the button fills the
-    // screen with a folded header and nothing else.
+    // A maximized part must not also be folded, or the button fills the
+    // screen with a folded heading and nothing else.
     section.classList.remove("collapsed");
-    const chev = section.querySelector(".card-chevron");
-    if (chev) { chev.textContent = "▾"; chev.setAttribute("aria-label", "Collapse section"); }
     reapply();
     chrome.hidden = false;
     document.body.classList.add("has-max-overlay");
@@ -168,8 +166,7 @@
     const section = current();
     if (!section) return;
     section.classList.add("is-maximized");
-    titleEl.textContent =
-      (section.querySelector(".card-title") || {}).textContent || "Section";
+    titleEl.textContent = section.getAttribute("aria-label") || "Diagram";
     applyFit(section, wantFit);
   }
 
@@ -263,7 +260,7 @@
         if (stale) stale.remove();
         return;
       }
-      const head = section.querySelector(".card-head");
+      const head = section.querySelector(".block-label");
       if (!head || head.querySelector(".max-toggle")) return;
       const btn = document.createElement("button");
       btn.type = "button";
@@ -273,18 +270,13 @@
       btn.setAttribute("aria-label", btn.title);
       btn.setAttribute("aria-pressed", "false");
       btn.addEventListener("click", function (ev) {
-        // The header row toggles collapse on click; a control click must not
-        // also fold the card away under the cursor.
+        // The click is the button's alone; the part under it must not see it.
         ev.stopPropagation();
         ev.preventDefault();
         if (section.dataset.blockId === openId) close();
         else open(section);
       });
-      // Before the section/version pill, so the pill stays the rightmost thing
-      // in every header and the row keeps one alignment.
-      const pill = head.querySelector(".section-pill");
-      if (pill) head.insertBefore(btn, pill);
-      else head.appendChild(btn);
+      head.appendChild(btn);
     });
     if (isOpen()) reapply();
     updateButtons();

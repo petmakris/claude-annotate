@@ -393,9 +393,7 @@
   function blockTitleFor(blockId) {
     const s = document.querySelector(
       `section.block[data-block-id="${CSS.escape(blockId)}"]`);
-    const n = s?.querySelector(".section-pill .sp-sec")?.textContent || "?";
-    const t = s?.querySelector(".card-title")?.textContent || blockId;
-    return `§${n} · ${t}`;
+    return s?.getAttribute("aria-label") || blockId;
   }
 
   function jumpToMark(m) {
@@ -607,7 +605,7 @@
       else text.textContent = m.kind === "choice"
         ? (m.labels && m.labels.length ? m.labels.join(", ") : "your own answer")
         : m.selected_text
-          || (m.step_id ? `step: ${m.step_id}` : "whole section");
+          || (m.step_id ? `step: ${m.step_id}` : "whole part");
       body.append(where, text);
       if (m.text) {
         const said = document.createElement("div");

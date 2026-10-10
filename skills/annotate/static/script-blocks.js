@@ -1,6 +1,6 @@
-// annotate page code, part 4 of 9 (see script.js): one block's card — the
-// code column, the pflow source pane, diagram layouts and views, and the
-// section itself, with its collapse and version badge.
+// annotate page code, part 4 of 9 (see script.js): one block's part of
+// the document — the code column, the pflow source pane, diagram layouts and
+// views, and the section itself, with its heading and fold.
 
 // The band of panes under one block's prose, or null when the block cites
 // no code. An anchorless block renders exactly as annotate does today:
@@ -272,49 +272,31 @@ function linkSequenceKey(content) {
 
 function createBlockSection(blk) {
   const section = document.createElement("section");
-  section.className = "block card";
+  section.className = "block";
   section.dataset.blockId = blk.id;
   section.dataset.version = String(blk.version ?? 1);
   const kind = blk.kind || "markdown";
   section.dataset.kind = kind;
   // The reader's own words in this block (edit.js paints them).
   section._mine = Array.isArray(blk.mine) ? blk.mine : [];
-
-  // Card header: collapse chevron + title (+ version chip, added by
-  // renderVersionBadge). Clicking the header toggles the body.
-  const head = document.createElement("div");
-  head.className = "card-head";
-  const chev = document.createElement("button");
-  chev.type = "button";
-  chev.className = "card-chevron";
-  chev.setAttribute("aria-label", "Collapse section");
-  chev.setAttribute("aria-describedby", `card-title-${blk.id}`);
-  chev.textContent = "▾";
-  const title = document.createElement("span");
-  title.className = "card-title";
-  title.textContent = blockTitle(blk);
-  // A heading to assistive tech: a 40-block document had no headings at
-  // all, so there was nothing to jump between. The span stays a span so no
-  // prose `h2` rule restyles it. The id is what the header buttons and a
-  // choice's option group name themselves by.
-  title.setAttribute("role", "heading");
-  title.setAttribute("aria-level", "2");
-  title.id = `card-title-${blk.id}`;
-  const spacer = document.createElement("span");
-  spacer.className = "card-head-spacer";
-  head.append(chev, title, spacer);
-  section.appendChild(head);
+  // A part of one document: no box and no header bar. Its name for screen
+  // readers and the round dock is the derived title; what shows is only an
+  // authored one (blockLabel). Focus comes back here when a comment or the
+  // editor closes, so the section itself can take it.
+  section.setAttribute("aria-label", blockTitle(blk));
+  section.tabIndex = -1;
+  section.appendChild(blockLabel(blk));
 
   const body = document.createElement("div");
-  body.className = "card-body";
+  body.className = "block-body";
   const content = document.createElement("div");
   content.className = "block-content";
   if (kind === "sequence") {
     // Server pre-rendered both halves; inject as-is.
     paintSequence(content, blk);
     linkSequenceKey(content);
-    // Still no comment-on-click: a picture is commented as a whole, from the
-    // card header, for the same reason flowchart lost its node handler
+    // Still no comment-on-click: a picture is commented as a whole, from its
+    // heading, for the same reason flowchart lost its node handler
     // below. What linkSequenceKey binds is not a way into the composer — it
     // pairs a badge with its key entry and nothing else. The `data-step-id`
     // hit targets stay on the rows: they anchor comments made before that
@@ -325,7 +307,7 @@ function createBlockSection(blk) {
     // data-node-id, so the one listener below serves either.
     paintFlowchart(content, blk);
     linkPflowHover(content);
-    // A picture is commented as a whole, from the card header — never per
+    // A picture is commented as a whole, from its heading — never per
     // node. The node click handler that used to live here was withdrawn
     // because a node's `ref` line is painted accent-coloured and underlined
     // whether or not the spec gave it an href (`.annotate-flow .flow-ref`),
@@ -375,10 +357,51 @@ function createBlockSection(blk) {
   }
 
   section.appendChild(body);
-
-  renderVersionBadge(section, blk.version ?? 1);
-  setupCollapse(section, head, chev, blk);
   return section;
+}
+
+// The part's visible name. An authored title is an h2 with the fold button
+// before it. A part without one gets an empty line instead, which shows only
+// when a mark or a change chip needs a place to sit.
+function blockLabel(blk) {
+  const title = visibleTitle(blk);
+  const el = document.createElement(title ? "h2" : "div");
+  el.className = title ? "block-label block-heading" : "block-label block-meta";
+  el.id = `block-label-${blk.id}`;
+  if (!title) return el;
+  const fold = document.createElement("button");
+  fold.type = "button";
+  fold.className = "fold-btn";
+  fold.textContent = "▾";
+  fold.setAttribute("aria-label", "Fold");
+  fold.setAttribute("aria-expanded", "true");
+  fold.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    const section = el.closest("section.block");
+    setFolded(blk.id, !section.classList.contains("collapsed"));
+  });
+  const text = document.createElement("span");
+  text.className = "block-heading-text";
+  text.textContent = title;
+  el.append(fold, text);
+  return el;
+}
+
+function setBlockLabel(section, blk) {
+  const fresh = blockLabel(blk);
+  const old = section.querySelector(".block-label");
+  if (old) old.replaceWith(fresh);
+  else section.prepend(fresh);
+  section.setAttribute("aria-label", blockTitle(blk));
+}
+
+function focusHome(section) {
+  if (!section || !document.contains(section)) return;
+  (section.querySelector(".fold-btn") || section).focus({ preventScroll: true });
+}
+
+function visibleTitle(blk) {
+  return window.AnnotateBlockTitle.visibleTitle(blk);
 }
 
 function collapseKey(blockId) {
@@ -386,49 +409,28 @@ function collapseKey(blockId) {
   return `annotate.collapsed:${rid}:${blockId}`;
 }
 
-function setupCollapse(section, head, chev, blk) {
-  let collapsed = false;
-  try { collapsed = localStorage.getItem(collapseKey(blk.id)) === "1"; } catch (_) {}
-  applyCollapsed(section, chev, collapsed);
-  // Only the chevron collapses. The rest of the header carries the title
-  // (a hover trigger) and the control strip, so a click anywhere else used
-  // to fold the card away under the pointer that was reaching for it.
-  chev.addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    const next = !section.classList.contains("collapsed");
-    applyCollapsed(section, chev, next);
-    try { localStorage.setItem(collapseKey(blk.id), next ? "1" : "0"); } catch (_) {}
+function readFolded(blockId) {
+  try { return localStorage.getItem(collapseKey(blockId)) === "1"; } catch (_) { return false; }
+}
+
+function setFolded(blockId, on) {
+  try { localStorage.setItem(collapseKey(blockId), on ? "1" : "0"); } catch (_) {}
+  applyFolds();
+}
+
+// One part at a time for now: a titled part folds its own body. Task 4 makes
+// a heading fold the untitled parts after it too.
+function applyFolds() {
+  document.querySelectorAll("main.prose section.block[data-block-id]").forEach((s) => {
+    const titled = !!s.querySelector(".block-heading");
+    const on = titled && readFolded(s.dataset.blockId);
+    s.classList.toggle("collapsed", on);
+    const b = s.querySelector(".fold-btn");
+    if (b) {
+      b.textContent = on ? "▸" : "▾";
+      b.setAttribute("aria-label", on ? "Unfold" : "Fold");
+      b.setAttribute("aria-expanded", String(!on));
+    }
   });
 }
-
-function applyCollapsed(section, chev, collapsed) {
-  section.classList.toggle("collapsed", collapsed);
-  if (chev) {
-    chev.textContent = collapsed ? "▸" : "▾";
-    chev.setAttribute("aria-label", collapsed ? "Expand section" : "Collapse section");
-  }
-}
-
-function renderVersionBadge(section, version) {
-  // Composite gutter pill: left = section number (parsed from the block id,
-  // e.g. "section-3" → 3), right = version. Always visible; the version half
-  // lights up accent only once the block has been rewritten (v > 1).
-  const v = Math.max(1, parseInt(version, 10) || 1);
-  const idMatch = String(section.dataset.blockId || "").match(/(\d+)$/);
-  const sectionNo = idMatch ? idMatch[1] : "·";
-  let pill = section.querySelector(".section-pill");
-  if (!pill) {
-    pill = document.createElement("span");
-    pill.className = "section-pill";
-    const sec = document.createElement("span");
-    sec.className = "sp-sec";
-    const ver = document.createElement("span");
-    ver.className = "sp-ver";
-    pill.append(sec, ver);
-    (section.querySelector(".card-head") || section).appendChild(pill);
-  }
-  pill.querySelector(".sp-sec").textContent = sectionNo;
-  pill.querySelector(".sp-ver").textContent = `v${v}`;
-  pill.classList.toggle("bumped", v > 1);
-  pill.title = v > 1 ? `Section ${sectionNo} · rewritten (v${v})` : `Section ${sectionNo}`;
-}
+document.addEventListener("annotate:rendered", applyFolds);

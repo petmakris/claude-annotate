@@ -12,8 +12,8 @@
    for the block it found missing, leaving two nodes on one data-block-id. */
 
 /* The header control. Always visible — it is a VIEW control, not one of the
-   feedback verbs of the selection menu, which appears only on a selection. It sits just
-   left of .section-pill so the pill stays the rightmost thing in every header. */
+   feedback verbs of the selection menu, which appears only on a selection.
+   It sits at the end of the part's label line. */
 .max-toggle {
   flex: none;
   display: inline-flex; align-items: center; justify-content: center;
@@ -77,22 +77,23 @@ body.has-max-overlay { overflow: hidden; }
 /* The promoted card. It keeps its place in main.prose — this only changes where
    it paints — so max-width has to beat the reading column's --content-max,
    which it inherits from its real parent. */
-section.block.card.is-maximized {
+section.block.is-maximized {
   position: fixed; top: 49px; left: 0; right: 0; bottom: 0; z-index: 1201;
-  max-width: none; width: auto; margin: 16px;
+  max-width: none; width: auto; margin: 16px; padding: 12px 18px;
+  background: var(--surface); border-radius: 12px;
   overflow: auto;
   box-shadow: 0 18px 50px rgba(20, 30, 60, .16);
 }
-section.block.card.is-maximized .block-content { padding-bottom: 4px; }
+section.block.is-maximized .block-content { padding-bottom: 4px; }
 
 /* Fit-to-width: a transform, never a re-render. transform-origin is the
    top-left corner because a diagram is read from there. */
-section.block.card.is-fit .block-content { overflow: visible; }
-section.block.card.is-fit .block-content > svg {
+section.block.is-fit .block-content { overflow: visible; }
+section.block.is-fit .block-content > svg {
   transform: scale(var(--max-fit-scale, 1));
   transform-origin: top left;
 }
 /* A transform does not shrink the layout box, so a scaled-down picture would
    leave a tall band of empty card below it. maximize.js measures the scaled
    height and writes it here. */
-section.block.card.is-fit .block-content { height: var(--max-fit-h); }
+section.block.is-fit .block-content { height: var(--max-fit-h); }

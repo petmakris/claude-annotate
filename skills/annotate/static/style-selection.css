@@ -25,11 +25,8 @@
 .sel-menu .sel-sep { width: 1px; align-self: stretch; margin: 4px 3px;
   background: color-mix(in srgb, var(--surface) 35%, transparent); }
 
-/* A whole section is the scope: the card says so, not just the menu. */
-/* No --card-shadow variable exists: the card's resting shadow is repeated so
-   the outline does not drop it. Keep in step with section.block.card. */
-section.block[data-sel-scope] { box-shadow: 0 0 0 2px var(--accent),
-  0 1px 1px rgba(20, 24, 40, .04), 0 4px 14px rgba(20, 24, 40, .08), 0 12px 32px rgba(20, 24, 40, .05); }
+/* A whole part is the scope: the part says so, not just the menu. */
+section.block[data-sel-scope] { box-shadow: 0 0 0 2px var(--accent); }
 ::highlight(annotate-scope) { background-color: color-mix(in srgb, var(--accent) 10%, transparent); }
 
 /* Marks on the selected words. The same three meanings as the dock. */
@@ -84,11 +81,10 @@ section.block[data-sel-scope] { box-shadow: 0 0 0 2px var(--accent),
 body.read-only .sel-chip-x { display: none; }
 body.read-only .sel-menu, body.read-only .sel-composer { display: none; }
 
-/* The title is how a whole section is chosen: selecting any of it opens the
-   menu on the section. The card's `user-select: none` above made that
-   impossible (a double-click selected nothing), and only the chevron
-   collapses, so a selectable title folds nothing away. */
-section.block .card-title { user-select: text; }
+/* The title is how a whole part is chosen: selecting any of it opens the
+   menu on the part. It stays selectable, and only the fold button folds, so
+   a selectable title folds nothing away. */
+section.block .block-label { user-select: text; }
 
 /* Inside a maximised card or a full-screen element, the menu is that
    element's child and must sit above its content. */

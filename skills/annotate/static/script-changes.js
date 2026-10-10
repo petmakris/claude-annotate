@@ -133,7 +133,7 @@ function clearChangeAttribution() {
 }
 
 function markChangedCard(section, c) {
-  const head = section.querySelector(".card-head");
+  const head = section.querySelector(".block-label");
   if (!head) return;
   head.querySelector(".attr-chip")?.remove();
   head.querySelector(".card-diff-toggle")?.remove();
@@ -141,7 +141,7 @@ function markChangedCard(section, c) {
   chip.className = "attr-chip " + (c.bySweep ? "a-sweep" : "a-you");
   chip.textContent = c.bySweep ? "sweep" : "you asked";
   chip.title = c.bySweep
-    ? "Rewritten by the coherence sweep — you did not mark this section"
+    ? "Rewritten by the coherence sweep — you did not mark this part"
     : "Rewritten because you marked it in this round";
   const toggle = document.createElement("button");
   toggle.type = "button";
@@ -149,20 +149,14 @@ function markChangedCard(section, c) {
   toggle.textContent = "what changed";
   toggle.setAttribute("aria-pressed", "false");
   toggle.addEventListener("click", (ev) => {
-    // The header carries the collapse chevron and the control strip; don't
-    // let a diff toggle also trip whatever else listens up there.
+    // The label carries the fold button and the control strip; don't let a
+    // diff toggle also trip whatever else listens up there.
     ev.stopPropagation();
     const open = section.dataset.diff === "open";
     section.dataset.diff = open ? "" : "open";
     toggle.setAttribute("aria-pressed", open ? "false" : "true");
   });
-  const pill = head.querySelector(".section-pill");
-  if (pill) {
-    head.insertBefore(chip, pill);
-    head.insertBefore(toggle, pill);
-  } else {
-    head.append(chip, toggle);
-  }
+  head.append(chip, toggle);
 }
 
 // ── The pane ──────────────────────────────────────────────────────────────
@@ -296,7 +290,7 @@ function renderDiffPane(section, c, blk, before) {
   h.className = "diff-h";
   const label = document.createElement("span");
   label.textContent = `changed from v${c.from}`
-    + (c.bySweep ? " — you did not mark this section" : "");
+    + (c.bySweep ? " — you did not mark this part" : "");
   const spacer = document.createElement("span");
   spacer.className = "diff-h-space";
   h.append(label, spacer);
@@ -311,7 +305,7 @@ function renderDiffPane(section, c, blk, before) {
     pane.appendChild(materialize(D.renderUnified(rows)));
   }
 
-  const body = section.querySelector(".card-body");
+  const body = section.querySelector(".block-body");
   if (body) body.insertAdjacentElement("afterend", pane);
   else section.appendChild(pane);
 }

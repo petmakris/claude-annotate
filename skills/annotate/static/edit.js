@@ -37,7 +37,7 @@
   const NOT_TEXT = ["choice", "sequence", "diagram", "flowchart", "mockup"];
   const HINT_SOURCE = "⌘/ rich ⇄ source · ⌘S save · F6 bar · esc done";
   const HINT_RICH = "⌘B bold · ⌘I italic · ⌘E code · ⌘K link · ## heading · - list · F6 bar · esc done";
-  const NO_RICH = "Rich editing isn't available for this section — showing the source";
+  const NO_RICH = "Rich editing isn't available for this part — showing the source";
   const ICON_EDIT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/>'
     + '<path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
 
@@ -352,13 +352,13 @@
   function readOnly() {
     return document.body.classList.contains("read-only") || window.WebCompanion?.writable === false;
   }
-  // Why this section cannot be opened now, or "" when it can.
+  // Why this part cannot be opened now, or "" when it can.
   function refusal(section) {
-    if (!section) return "This section is no longer on the page";
-    if (NOT_TEXT.includes(section.dataset.kind || "markdown")) return "This section can't be edited as text";
+    if (!section) return "This part is no longer on the page";
+    if (NOT_TEXT.includes(section.dataset.kind || "markdown")) return "This part can't be edited as text";
     if (document.body.dataset.highlighter === "on") return "Turn off the highlighter to edit";
     if (window.AnnotatePage?.isBusy?.()) return "Claude is working — edit when it finishes";
-    if (section.classList.contains("is-updating")) return "Claude is rewriting this section";
+    if (section.classList.contains("is-updating")) return "Claude is rewriting this part";
     return "";
   }
 
@@ -466,7 +466,7 @@
       show.addEventListener("click", () => toggleDiff(st));
       theirs.addEventListener("click", () => takeTheirs(st));
       mine.addEventListener("click", () => keepMine(st));
-      lay(dot, msg("This section changed while you were editing. Nothing has been overwritten."), sp, show, theirs, copy, mine);
+      lay(dot, msg("This part changed while you were editing. Nothing has been overwritten."), sp, show, theirs, copy, mine);
       return;
     }
     if (st.phase === "error") {
@@ -485,7 +485,7 @@
       const copy = copyButton(st);
       const closeB = btn("close", "Close", "ed-btn ed-btn--primary");
       closeB.addEventListener("click", () => close(st));
-      lay(dot, msg("This section was removed. Copy your text before closing"), sp, copy, closeB);
+      lay(dot, msg("This part was removed. Copy your text before closing"), sp, copy, closeB);
       return;
     }
 
@@ -513,7 +513,7 @@
       note.className = "ed-msg ed-note";
       note.textContent = text;
     };
-    if (st.holdLost) msgNote("Another tab took this section — your saves still won't overwrite it");
+    if (st.holdLost) msgNote("Another tab took this part — your saves still won't overwrite it");
     else if (st.view === "source" && st.richNote) msgNote(st.richNote);
     if (st.linking) note = linkField(st);
     const check = btn("check", "What will be saved");
@@ -670,7 +670,7 @@
     if (!window.AnnotateRich) return st.richNote || "Rich editing is not loaded";
     try {
       return window.AnnotateRich.canShow(text, window.AnnotateRich.formatOf(text)) || "";
-    } catch (e) { return e.message || "this section couldn't be read"; }
+    } catch (e) { return e.message || "this part couldn't be read"; }
   }
 
   // The page's highlighter, as script.js's highlightFence calls it.
@@ -722,7 +722,7 @@
       h.onLinkRequest = () => askLink(st);
       const el = box.firstElementChild;
       el.classList.add("ed-host");
-      h.view.dom.setAttribute("aria-label", "Section text");
+      h.view.dom.setAttribute("aria-label", "Part text");
       handle = richHandle(h, el);
     } else {
       const el = document.createElement("div");
@@ -740,7 +740,7 @@
         onChange: () => changed(st),
       });
       // CodeMirror's textbox has no name of its own.
-      h.view.contentDOM.setAttribute("aria-label", "Section text (markdown)");
+      h.view.contentDOM.setAttribute("aria-label", "Part text (markdown)");
       handle = sourceHandle(h, el);
     }
     const old = st.handle;
@@ -755,14 +755,14 @@
   }
 
   // The view's element goes where the rendered text is: right after it, in
-  // the card body's flow (or after the view it replaces).
+  // the block body's flow (or after the view it replaces).
   function placeHost(st, el) {
     if (el.isConnected) return;
     if (st.host && st.host.isConnected) { st.host.insertAdjacentElement("afterend", el); return; }
     const content = st.section.querySelector(".block-content");
-    const cardBody = st.section.querySelector(".card-body");
+    const blockBody = st.section.querySelector(".block-body");
     if (content) content.insertAdjacentElement("afterend", el);
-    else (cardBody || st.section).appendChild(el);
+    else (blockBody || st.section).appendChild(el);
   }
 
   // The caret in Source at the place it was in Rich: the shortest start of
@@ -892,7 +892,7 @@
       // One open at a time: the first is saved and closed. If it will not
       // save, it stays open with its reason, and the second does not open.
       if (cur && !(await done(cur))) {
-        say("Finish the section you are editing first");
+        say("Finish the part you are editing first");
         return false;
       }
       // Rich is the default view; when its bundle cannot load, the editor
@@ -953,8 +953,8 @@
     const at = renderedAt(section, opts.cursorAt);
     st.bar = document.createElement("div");
     st.bar.className = "ed-bar";
-    const cardBody = section.querySelector(".card-body");
-    (cardBody || section).insertAdjacentElement(cardBody ? "beforebegin" : "afterbegin", st.bar);
+    const blockBody = section.querySelector(".block-body");
+    (blockBody || section).insertAdjacentElement(blockBody ? "beforebegin" : "afterbegin", st.bar);
 
     cur = st;
     mountView(st, view, body.markdown);
@@ -1342,7 +1342,7 @@
     if (!theirs && pending && pending.version > st.version && P?.renderBlock) {
       live = P.renderBlock(live, pending.block, pending.version);
     }
-    if (hadFocus) live.querySelector(".card-chevron")?.focus({ preventScroll: true });
+    if (hadFocus) focusHome(live);
   }
 
   // ── the conflict ────────────────────────────────────────────────────────

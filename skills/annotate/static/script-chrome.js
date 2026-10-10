@@ -121,7 +121,7 @@ if (doneBtn) {
         "A section you commented on was removed; your comment moved here.";
     }
   });
-  // Same chord as the block cards: Enter is a newline, ⌘/Ctrl+Enter sends.
+  // Same chord as the comment cards: Enter is a newline, ⌘/Ctrl+Enter sends.
   // Plain-Enter-to-send once cost a user a multi-line answer mid-compose.
   input.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); send(); }
@@ -430,11 +430,7 @@ wireViewControls();
       const el = focused();
       if (!el) return;
       e.preventDefault();
-      const chev = el.querySelector(".card-chevron");
-      const next = !el.classList.contains("collapsed");
-      applyCollapsed(el, chev, next);
-      try { localStorage.setItem(collapseKey(el.dataset.blockId), next ? "1" : "0"); }
-      catch (_) {}
+      setFolded(el.dataset.blockId, !el.classList.contains("collapsed"));
       return;
     }
     if (e.key === "Escape" && focusId) {
@@ -461,9 +457,9 @@ wireViewControls();
 // ── Fold-all / unfold-all chords (⌘K ⌘0 / ⌘K ⌘J) ─────────────────────────
 // The user's VS Code fold bindings, verbatim. ⌘K arms a two-step chord —
 // intercepted so the browser's address-bar focus never fires — and the
-// second key acts on every card through the same applyCollapsed +
-// localStorage path the per-card chevron uses, so a fold-all survives
-// reload and a single chevron click afterwards still toggles one card.
+// second key acts on every titled part through the same localStorage
+// keys the fold button uses, so a fold-all survives reload and a single
+// fold click afterwards still toggles one part.
 (function () {
   let armed = null; // timeout id while waiting for the second chord key
   const pill = document.createElement("div");
@@ -478,13 +474,13 @@ wireViewControls();
   }
 
   function foldAll(collapsed) {
-    document.querySelectorAll("section.block.card").forEach((section) => {
-      const chev = section.querySelector(".card-chevron");
-      applyCollapsed(section, chev, collapsed);
+    document.querySelectorAll("main.prose section.block .block-heading").forEach((h) => {
+      const section = h.closest("section.block");
       try {
         localStorage.setItem(collapseKey(section.dataset.blockId), collapsed ? "1" : "0");
       } catch (_) {}
     });
+    applyFolds();
   }
 
   document.addEventListener("keydown", (e) => {

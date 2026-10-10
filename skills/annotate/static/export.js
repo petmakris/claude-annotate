@@ -30,9 +30,8 @@
     ".card-diff-toggle",    // "what changed"
     ".diff-pane",           // ...and the diff it opens
     ".updating-overlay",    // the spinner on a block being rewritten
-    ".card-chevron",        // folding is meaningless once nothing can fold
+    ".fold-btn",            // folding is meaningless once nothing can fold
     ".attr-chip",           // "you asked" attribution
-    ".section-pill",        // section number + version: revision history
     ".cp-jump",             // jetbrains:// IDE link: an absolute author path,
                              // and dead on anyone else's machine besides
     ".flow-flavours",       // flowchart layout-flavour buttons: no JS in the export to run them
@@ -69,7 +68,6 @@
 /* ── exported document ─────────────────────────────────────────────────── */
 body.exported { padding-bottom: 40px; }
 body.exported main.prose [data-block-id]:hover { background: none; }
-body.exported section.block .card-head { cursor: default; }
 body.exported .export-header {
   max-width: var(--content-max); margin: 0 auto; padding: 26px 24px 0;
 }

@@ -471,18 +471,13 @@ async function loadAndRenderBlocks() {
   document.dispatchEvent(new CustomEvent("annotate:rendered"));
 }
 
-// Header title for a block's card. Claude may author a `title`; otherwise we
+// Derived title for a block. Claude may author a `title`; otherwise we
 // derive one from the content (first heading, else first sentence/line).
 // The rule lives in block-title.js so it can be executed by a test; see the
 // header there for why a source-string check could not catch the defect it
 // fixes. entry.js loads that file before this one.
 function blockTitle(blk) {
   return window.AnnotateBlockTitle.blockTitle(blk);
-}
-
-function setCardTitle(section, blk) {
-  const el = section.querySelector(".card-title");
-  if (el) el.textContent = blockTitle(blk);
 }
 
 // Render a choice block's interactive body: selectable option cards and an
@@ -503,13 +498,13 @@ function renderChoice(section, content, blk) {
   const wrap = document.createElement("div");
   wrap.className = "choice-block";
 
-  // The question is shown in the card header (derived from spec.question by
-  // blockTitle) — don't repeat it in the body.
+  // The question is the part's visible title (visibleTitle reads
+  // spec.question) — don't repeat it in the body.
 
   const list = document.createElement("div");
   list.className = "choice-options";
   list.setAttribute("role", multi ? "group" : "radiogroup");
-  const titleId = section.querySelector(".card-title")?.id;
+  const titleId = section.querySelector(".block-label")?.id;
   if (titleId) list.setAttribute("aria-labelledby", titleId);
   const cards = [];
   const selected = new Set();

@@ -14,15 +14,15 @@ class TestCodePaneCss(unittest.TestCase):
 
     def test_card_prose_rules_keep_their_main_prose_prefix(self):
         # `main.prose p` sets padding-right: 140px at specificity (0,1,2) --
-        # room for hover buttons that now live in the card header. A bare
-        # `.card-body p` is (0,1,1) and LOSES to it, which is how the reserve
+        # room for hover buttons that now live in the part heading. A bare
+        # `.block-body p` is (0,1,1) and LOSES to it, which is how the reserve
         # survived unnoticed until it was measured in a browser. The prefix is
         # what makes these rules (0,2,2) and lets them win; "simplifying" it
         # off silently restores 140px of dead gutter inside every card.
         # e2e item 13 catches it for real; this catches it in a second.
         for tag in ("p", "li", "blockquote"):
-            self.assertIn("main.prose .card-body %s" % tag, CSS,
-                          "the .card-body %s padding rule lost its main.prose "
+            self.assertIn("main.prose .block-body %s" % tag, CSS,
+                          "the .block-body %s padding rule lost its main.prose "
                           "prefix and now loses to main.prose %s" % (tag, tag))
 
     def test_the_pane_paints_no_line_numbers_and_no_caption(self):
@@ -56,8 +56,8 @@ class TestCodePaneCss(unittest.TestCase):
                      ".cp-widen", 'body[data-has-code="1"]'):
             self.assertNotIn(gone, CSS, "%s is still in style.css" % gone)
         for selector, body in TestCollapseGuard.RULE_RE.findall(CSS):
-            if ".card-body" in selector and "grid-template-columns" in body:
-                self.fail("a rule still lays .card-body out in columns: %s"
+            if ".block-body" in selector and "grid-template-columns" in body:
+                self.fail("a rule still lays .block-body out in columns: %s"
                           % selector.strip())
 
     def test_the_pane_is_divided_from_the_prose_above_it(self):
@@ -82,8 +82,8 @@ class TestCodePaneCss(unittest.TestCase):
 
 
 class TestCollapseGuard(unittest.TestCase):
-    """Fix round 1: a rule that sets display:grid on .card-body must not
-    win over section.block.card.collapsed .card-body { display: none; } —
+    """Fix round 1: a rule that sets display:grid on .block-body must not
+    win over section.block.collapsed .block-body { display: none; } —
     both selectors tie at specificity (0,4,1), so source order decides,
     and an unguarded grid rule appended later in the file would silently
     break card folding for any block that carries code anchors."""
@@ -93,7 +93,7 @@ class TestCollapseGuard(unittest.TestCase):
     def test_grid_display_rules_on_card_body_respect_collapsed(self):
         offenders = []
         for selector, body in self.RULE_RE.findall(CSS):
-            if ".card-body" not in selector:
+            if ".block-body" not in selector:
                 continue
             if "display: grid" not in body and "display:grid" not in body:
                 continue
@@ -101,7 +101,7 @@ class TestCollapseGuard(unittest.TestCase):
                 offenders.append(selector.strip())
         self.assertEqual(
             offenders, [],
-            "rule(s) set display:grid on .card-body without excluding "
+            "rule(s) set display:grid on .block-body without excluding "
             ".collapsed, so a collapsed code-anchored card would not fold: "
             "%r" % offenders,
         )

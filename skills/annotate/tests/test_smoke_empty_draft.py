@@ -77,5 +77,5 @@ def test_the_engaged_bar_is_still_driven_by_a_draft():
     """The bar itself is correct behaviour — it says which block you are
     commenting on. Only its lingering without a comment was the bug."""
     css = STYLE_CSS.read_text()
-    assert '[data-engaged-type="comment"] .card-body' in css
+    assert '[data-engaged-type="comment"] .block-body' in css
     assert "isEmptyDraft" in _js()

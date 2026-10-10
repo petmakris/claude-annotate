@@ -307,8 +307,7 @@ function updateBlockContent(section, blk, srvVer) {
   }
   section.dataset.kind = newKind;
   section.dataset.version = String(blk.version ?? srvVer);
-  renderVersionBadge(section, blk.version ?? srvVer);
-  setCardTitle(section, blk);
+  setBlockLabel(section, blk);
   section._mine = Array.isArray(blk.mine) ? blk.mine : [];
 
   // A rewrite must not leave a card with stale panes: drop whatever was
@@ -318,7 +317,7 @@ function updateBlockContent(section, blk, srvVer) {
   const freshCol = renderCodeColumn(blk);
   if (freshCol) {
     section.dataset.hasCode = "1";
-    (section.querySelector(".card-body") || section).appendChild(freshCol);
+    (section.querySelector(".block-body") || section).appendChild(freshCol);
   } else {
     delete section.dataset.hasCode;
   }
