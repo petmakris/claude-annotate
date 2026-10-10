@@ -52,7 +52,7 @@ class TestTheBarIsThreeControls(unittest.TestCase):
         # Deliberately an inventory, not a count: a count passes while one
         # control is swapped for another, which is exactly how a bar grows.
         allowed = {"block-search", "block-search-clear", "highlighter-toggle",
-                   "menu-toggle", "done-btn", "hdr-title", "hdr-respid"}
+                   "menu-toggle", "done-btn", "hdr-title", "hdr-respid", "fold-all"}
         found = set(re.findall(r'id="([^"]+)"', bar_html()))
         self.assertEqual(found - allowed, set(),
                          "a control came back into the bar")

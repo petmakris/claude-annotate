@@ -65,6 +65,8 @@ const JS = [
   // Before script.js: it calls blockTitle at module scope the first time a
   // card is painted, and the rule lives here.
   "block-title.js",
+  // Before script.js: applyFolds reads the fold rule.
+  "fold-groups.js",
   // The one door to the highlighter. Shiki itself (shiki.min.js) is not in
   // this list: it loads beside it, and code-paint.js colours code once it is
   // there.

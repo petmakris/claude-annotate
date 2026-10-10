@@ -17,6 +17,7 @@
   // these are deleted rather than styled away.
   const STRIP = [
     ".cq-bar",              // a choice queue's navigation: a view, not content
+    "#fold-all",            // a view control with no JS in the export to run it
     ".max-toggle",          // maximize: a view control with no JS in the export to run it
     ".max-overlay",         // ...and its overlay, if the export ran while one was open
     ".sel-menu",            // the selection menu, if one was open
@@ -68,6 +69,7 @@
 /* ── exported document ─────────────────────────────────────────────────── */
 body.exported { padding-bottom: 40px; }
 body.exported main.prose [data-block-id]:hover { background: none; }
+body.exported section.block.fold-hidden, body.exported section.block.collapsed .block-body { display: revert; }
 body.exported .export-header {
   max-width: var(--content-max); margin: 0 auto; padding: 26px 24px 0;
 }

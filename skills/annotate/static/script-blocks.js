@@ -468,19 +468,39 @@ function setFolded(blockId, on) {
   applyFolds();
 }
 
-// One part at a time for now: a titled part folds its own body. Task 4 makes
-// a heading fold the untitled parts after it too.
+// Folding goes by heading (fold-groups.js): a heading folds its own part and
+// the untitled parts after it. Recomputed whole after every change and every
+// render, so a rewrite that adds or drops a heading regroups at once.
+function foldList() {
+  return [...document.querySelectorAll("main.prose section.block[data-block-id]")].map((s) => ({
+    id: s.dataset.blockId,
+    section: s,
+    heading: !!s.querySelector(".block-heading"),
+    collapsed: readFolded(s.dataset.blockId),
+  }));
+}
+
 function applyFolds() {
-  document.querySelectorAll("main.prose section.block[data-block-id]").forEach((s) => {
-    const titled = !!s.querySelector(".block-heading");
-    const on = titled && readFolded(s.dataset.blockId);
-    s.classList.toggle("collapsed", on);
-    const b = s.querySelector(".fold-btn");
-    if (b) {
-      b.textContent = on ? "▸" : "▾";
-      b.setAttribute("aria-label", on ? "Unfold" : "Fold");
-      b.setAttribute("aria-expanded", String(!on));
+  const list = foldList();
+  const { folded, hidden } = window.AnnotateFolds.foldPlan(list);
+  for (const b of list) {
+    const on = folded.has(b.id);
+    b.section.classList.toggle("collapsed", on);
+    b.section.classList.toggle("fold-hidden", hidden.has(b.id));
+    const btn = b.section.querySelector(".fold-btn");
+    if (btn) {
+      btn.textContent = on ? "▸" : "▾";
+      btn.setAttribute("aria-label", on ? "Unfold" : "Fold");
+      btn.setAttribute("aria-expanded", String(!on));
     }
-  });
+  }
+  const all = document.getElementById("fold-all");
+  if (all) {
+    const heads = list.filter((b) => b.heading);
+    all.hidden = !heads.length;
+    const every = heads.length && heads.every((b) => folded.has(b.id));
+    all.textContent = every ? "Unfold all" : "Fold all";
+    all.dataset.next = every ? "unfold" : "fold";
+  }
 }
 document.addEventListener("annotate:rendered", applyFolds);

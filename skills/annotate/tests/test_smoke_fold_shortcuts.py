@@ -61,3 +61,12 @@ def test_the_fold_button_is_a_round_button_not_a_text_glyph():
     for needle in ("width: 26px", "height: 26px", "border-radius: 50%",
                    "border: 1px dashed var(--border)"):
         assert needle in rule, f".fold-btn lost {needle!r}"
+
+
+def test_fold_all_is_a_visible_button_that_hides_with_no_headings():
+    shell = (STATIC / "shell.js").read_text()
+    assert 'id="fold-all"' in shell
+    src = SCRIPT_JS.read_text()
+    assert "all.hidden = !heads.length" in src, "Fold all shows on a page with no headings"
+    css = STYLE_CSS.read_text()
+    assert ".fold-all-btn[hidden]" in css

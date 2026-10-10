@@ -429,8 +429,11 @@ wireViewControls();
     if (e.key === "f") {
       const el = focused();
       if (!el) return;
+      const owner = window.AnnotateFolds.ownerOf(foldList(), el.dataset.blockId);
+      if (!owner) return;
       e.preventDefault();
-      setFolded(el.dataset.blockId, !el.classList.contains("collapsed"));
+      const section = document.querySelector(`section.block[data-block-id="${cssEsc(owner)}"]`);
+      setFolded(owner, !section.classList.contains("collapsed"));
       return;
     }
     if (e.key === "Escape" && focusId) {
@@ -509,5 +512,9 @@ wireViewControls();
       foldAll(false);
     }
     disarm();
+  });
+
+  document.getElementById("fold-all")?.addEventListener("click", (e) => {
+    foldAll(e.currentTarget.dataset.next !== "unfold");
   });
 })();

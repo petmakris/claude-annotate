@@ -21,6 +21,7 @@ export const SHELL_HTML = `\
 <span class="search-kbd">/</span>\
 <button id="block-search-clear" type="button" class="search-clear" aria-label="Clear search" tabindex="-1">&times;</button>\
 </div>\
+<button id="fold-all" type="button" class="text-btn fold-all-btn" title="Fold every heading (⌘K ⌘0)" hidden>Fold all</button>\
 <button id="highlighter-toggle" type="button" class="icon-btn hl-btn" aria-pressed="false" title="Reading highlighter — drag over text to mark it read" aria-label="Reading highlighter">\
 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 4.5l4 4L10 18H6v-4z"/>\
 <line x1="4" y1="21" x2="20" y2="21"/></svg></button>\
