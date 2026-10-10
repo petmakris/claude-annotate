@@ -504,8 +504,8 @@ function renderChoice(section, content, blk) {
   const list = document.createElement("div");
   list.className = "choice-options";
   list.setAttribute("role", multi ? "group" : "radiogroup");
-  const titleId = section.querySelector(".block-label")?.id;
-  if (titleId) list.setAttribute("aria-labelledby", titleId);
+  // The label is made after the body, so name it by its id rather than find it.
+  if (visibleTitle(blk)) list.setAttribute("aria-labelledby", `block-label-${blk.id}`);
   const cards = [];
   const selected = new Set();
 

@@ -63,3 +63,18 @@ def test_a_part_has_no_hover_wash_or_engaged_tint():
     css = STYLE_CSS.read_text()
     assert "main.prose section.block:hover" in css
     assert "section.block[data-engaged-type]:not([data-kb-focus])::before { content: none; }" in css
+
+
+def test_pictures_and_questions_get_a_frame_with_their_title_on_it():
+    src = SCRIPT_JS.read_text()
+    assert 'const FRAMED = ["sequence", "flowchart", "mockup", "choice", "explain"];' in src
+    i = src.index("function blockLabel(")
+    body = src[i:src.index("\n}", i)]
+    assert "block-frame-head" in body
+    css = STYLE_CSS.read_text()
+    assert ".block-frame {" in css and "var(--diagram-ground)" in css[css.index(".block-frame {"):]
+
+
+def test_the_maximise_button_sits_on_the_frame():
+    src = (STATIC / "maximize.js").read_text()
+    assert 'section.querySelector(".block-frame-head")' in src

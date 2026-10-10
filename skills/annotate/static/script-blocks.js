@@ -270,6 +270,11 @@ function linkSequenceKey(content) {
   });
 }
 
+// Kinds that work differently from prose — a picture you can maximise, a
+// question waiting for a pick, code walked note by note — sit in a light
+// frame with their title on it, so the reader sees where prose stops.
+const FRAMED = ["sequence", "flowchart", "mockup", "choice", "explain"];
+
 function createBlockSection(blk) {
   const section = document.createElement("section");
   section.className = "block";
@@ -285,7 +290,6 @@ function createBlockSection(blk) {
   // editor closes, so the section itself can take it.
   section.setAttribute("aria-label", blockTitle(blk));
   section.tabIndex = -1;
-  section.appendChild(blockLabel(blk));
 
   const body = document.createElement("div");
   body.className = "block-body";
@@ -356,7 +360,15 @@ function createBlockSection(blk) {
     body.appendChild(codeCol);
   }
 
-  section.appendChild(body);
+  const label = blockLabel(blk);
+  if (FRAMED.includes(kind)) {
+    const frame = document.createElement("div");
+    frame.className = "block-frame";
+    frame.append(label, body);
+    section.appendChild(frame);
+  } else {
+    section.append(label, body);
+  }
   return section;
 }
 
@@ -364,6 +376,24 @@ function createBlockSection(blk) {
 // before it. A part without one gets an empty line instead, which shows only
 // when a mark or a change chip needs a place to sit.
 function blockLabel(blk) {
+  if (FRAMED.includes(blk.kind || "markdown")) {
+    const head = document.createElement("div");
+    head.className = "block-label block-frame-head";
+    head.id = `block-label-${blk.id}`;
+    const t = visibleTitle(blk);
+    if (t) {
+      const text = document.createElement("span");
+      text.className = "block-heading-text";
+      text.setAttribute("role", "heading");
+      text.setAttribute("aria-level", "2");
+      text.textContent = t;
+      head.appendChild(text);
+    }
+    const space = document.createElement("span");
+    space.className = "block-frame-space";
+    head.appendChild(space);
+    return head;
+  }
   const title = visibleTitle(blk);
   const el = document.createElement(title ? "h2" : "div");
   el.className = title ? "block-label block-heading" : "block-label block-meta";
@@ -393,13 +423,25 @@ function blockLabel(blk) {
 function setBlockLabel(section, blk) {
   const old = section.querySelector(".block-label");
   const fresh = blockLabel(blk);
-  const sameShape = old && old.classList.contains("block-heading")
-    === fresh.classList.contains("block-heading");
+  const frameHead = (el) => el.classList.contains("block-frame-head");
+  if (old && frameHead(old) && frameHead(fresh)) {
+    // A frame head keeps its maximise button and chips; only the title text
+    // is gained, lost or changed.
+    const had = old.querySelector(".block-heading-text");
+    const next = fresh.querySelector(".block-heading-text");
+    if (had && next) had.textContent = next.textContent;
+    else if (had) had.remove();
+    else if (next) old.prepend(next);
+    section.setAttribute("aria-label", blockTitle(blk));
+    return;
+  }
+  const sameShape = old && !frameHead(old) && !frameHead(fresh)
+    && old.classList.contains("block-heading") === fresh.classList.contains("block-heading");
   if (sameShape) {
     const text = old.querySelector(".block-heading-text");
     if (text) text.textContent = fresh.querySelector(".block-heading-text").textContent;
   } else if (old) old.replaceWith(fresh);
-  else section.prepend(fresh);
+  else (section.querySelector(".block-frame") || section).prepend(fresh);
   section.setAttribute("aria-label", blockTitle(blk));
 }
 

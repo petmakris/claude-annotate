@@ -260,7 +260,7 @@
         if (stale) stale.remove();
         return;
       }
-      const head = section.querySelector(".block-label");
+      const head = section.querySelector(".block-frame-head");
       if (!head || head.querySelector(".max-toggle")) return;
       const btn = document.createElement("button");
       btn.type = "button";
