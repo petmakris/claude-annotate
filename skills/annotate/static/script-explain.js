@@ -360,7 +360,7 @@ function renderExplain(content, blk) {
     const err = document.createElement("div");
     err.className = "cp-status";
     err.dataset.status = "refused";
-    err.textContent = `explain block: ${view.error}`;
+    err.textContent = `explain part: ${view.error}`;
     wrap.appendChild(err);
     content.appendChild(wrap);
     return;

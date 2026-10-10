@@ -233,52 +233,49 @@
 
   <p class="gallery-note">
     Static demo. Stylesheets are the real ones from <code>annotate/static/</code>.
-    Implemented views ({version badge, collapsible block, page-level composer}) reuse production CSS.
-    The comparison / table / callout sections below are <strong>examples of HTML Claude can now
+    Implemented views ({version badge, foldable part, page-level composer}) reuse production CSS.
+    The comparison / table / callout examples below are <strong>examples of HTML Claude can now
     write directly inside a markdown block</strong> — markdown-it runs with <code>html: true</code>,
     a client-side sanitizer scrubs script/handler vectors, and any element tagged with
     <code>data-annotate-id="..."</code> becomes a clickable sub-unit. The styles for the example
     visuals live inline in this file as a starter palette; Claude can reuse them or invent its own.
   </p>
 
-  <div class="gallery-divider">Implemented — markdown block, default state</div>
+  <div class="gallery-divider">Implemented — markdown part, no title</div>
 
   <section class="block" data-block-id="b-0" data-version="1" data-kind="markdown">
-    <button type="button" class="block-collapse-toggle" title="Collapse / expand block" aria-label="Collapse block">▾</button>
-    <div class="block-content">
+    <div class="block-label block-meta" id="block-label-b-0"></div>
+    <div class="block-body"><div class="block-content">
       <p>
-        A vanilla markdown block — same as the bulk of annotate output today.
-        Hover anywhere on the block to see the action icons in the top-right
-        (rendered statically below since this is a non-interactive demo).
+        A vanilla markdown part with no title — it reads as the text above it continues.
+        Select words to comment; this is a non-interactive demo.
       </p>
-    </div>
+    </div></div>
   </section>
 
-  <div class="gallery-divider">Implemented — markdown block with version badge (v2)</div>
+  <div class="gallery-divider">Implemented — titled markdown part with version badge (v2)</div>
 
   <section class="block" data-block-id="b-1" data-version="2" data-kind="markdown">
-    <button type="button" class="block-collapse-toggle" title="Collapse / expand block" aria-label="Collapse block">▾</button>
-    <div class="block-content">
+    <h2 class="block-label block-heading" id="block-label-b-1"><button type="button" class="fold-btn" aria-label="Fold" aria-expanded="true">▾</button><span class="block-heading-text">A part rewritten once</span></h2>
+    <div class="block-body"><div class="block-content">
       <p>
-        This block has been rewritten once after a comment, so the version badge
+        This part has been rewritten once after a comment, so the version badge
         appears in the top-left corner. Before this branch it lived top-right
         and overlapped the action icons.
       </p>
-    </div>
-    <span class="version-badge" title="Block has been rewritten">v2</span>
+    </div></div>
+    <span class="version-badge" title="Part has been rewritten">v2</span>
   </section>
 
-  <div class="gallery-divider">Implemented — markdown block, collapsed</div>
+  <div class="gallery-divider">Implemented — markdown part, folded</div>
 
   <section class="block collapsed" data-block-id="b-2" data-version="1" data-kind="markdown">
-    <button type="button" class="block-collapse-toggle" title="Collapse / expand block" aria-label="Expand block">▸</button>
-    <div class="block-content">
+    <h2 class="block-label block-heading" id="block-label-b-2"><button type="button" class="fold-btn" aria-label="Fold" aria-expanded="false">▸</button><span class="block-heading-text">A folded part</span></h2>
+    <div class="block-body"><div class="block-content">
       <p>
-        This block is collapsed. Its body is hidden; the chevron in the left
-        gutter expands it. State persists per response_id + block_id in
-        localStorage so reloads keep your reading position.
+        This part is folded. The fold button on its heading opens it again, and a heading folds everything under it until the next heading. State persists per response_id + block_id in localStorage so reloads keep your reading position.
       </p>
-    </div>
+    </div></div>
   </section>
 
   <div class="gallery-divider">Example — comparison table (free HTML in a markdown block)</div>
@@ -291,8 +288,8 @@
   </p>
 
   <section class="block" data-block-id="b-3" data-version="1" data-kind="comparison">
-    <button type="button" class="block-collapse-toggle" title="Collapse / expand block" aria-label="Collapse block">▾</button>
-    <div class="block-content">
+    <div class="block-label block-meta" id="block-label-b-3"></div>
+    <div class="block-body"><div class="block-content">
       <table class="annotate-comparison">
         <caption>Migration strategies</caption>
         <thead>
@@ -330,7 +327,7 @@
           </tr>
         </tbody>
       </table>
-    </div>
+    </div></div>
   </section>
 
   <div class="gallery-divider">Example — data table (free HTML in a markdown block)</div>
@@ -341,8 +338,8 @@
   </p>
 
   <section class="block" data-block-id="b-4" data-version="1" data-kind="table">
-    <button type="button" class="block-collapse-toggle" title="Collapse / expand block" aria-label="Collapse block">▾</button>
-    <div class="block-content">
+    <div class="block-label block-meta" id="block-label-b-4"></div>
+    <div class="block-body"><div class="block-content">
       <table class="annotate-table">
         <caption>API endpoints</caption>
         <thead>
@@ -380,7 +377,7 @@
           </tr>
         </tbody>
       </table>
-    </div>
+    </div></div>
   </section>
 
   <div class="gallery-divider">Example — callout boxes (free HTML in a markdown block)</div>
@@ -391,63 +388,63 @@
   </p>
 
   <section class="block" data-block-id="b-5" data-version="1" data-kind="callout">
-    <button type="button" class="block-collapse-toggle" title="Collapse / expand block" aria-label="Collapse block">▾</button>
-    <div class="block-content">
+    <div class="block-label block-meta" id="block-label-b-5"></div>
+    <div class="block-body"><div class="block-content">
       <aside class="annotate-callout variant-warning" data-block-id="b-5">
         <header><span class="callout-icon">⚠</span><span>Snapshot before migrating</span></header>
         <div class="body">
           <p>The migration drops the legacy <code>tokens</code> table. Take a database snapshot before running step 3 — there is no automated rollback.</p>
         </div>
       </aside>
-    </div>
+    </div></div>
   </section>
 
   <section class="block" data-block-id="b-6" data-version="1" data-kind="callout">
-    <button type="button" class="block-collapse-toggle" title="Collapse / expand block" aria-label="Collapse block">▾</button>
-    <div class="block-content">
+    <div class="block-label block-meta" id="block-label-b-6"></div>
+    <div class="block-body"><div class="block-content">
       <aside class="annotate-callout variant-info" data-block-id="b-6">
         <header><span class="callout-icon">ⓘ</span><span>Note</span></header>
         <div class="body">
           <p>The watcher reports back via <code>WEBCOMPANION_EVENT</code> on stdout — the first line of the task notification carries the payload.</p>
         </div>
       </aside>
-    </div>
+    </div></div>
   </section>
 
   <section class="block" data-block-id="b-7" data-version="1" data-kind="callout">
-    <button type="button" class="block-collapse-toggle" title="Collapse / expand block" aria-label="Collapse block">▾</button>
-    <div class="block-content">
+    <div class="block-label block-meta" id="block-label-b-7"></div>
+    <div class="block-body"><div class="block-content">
       <aside class="annotate-callout variant-tip" data-block-id="b-7">
         <header><span class="callout-icon">💡</span><span>Tip</span></header>
         <div class="body">
-          <p>If you want the document to stay short, collapse blocks you've already read — the chevron in the left gutter is persistent and reload-stable.</p>
+          <p>If you want the document to stay short, fold parts you've already read — the fold button on a heading is persistent and reload-stable.</p>
         </div>
       </aside>
-    </div>
+    </div></div>
   </section>
 
   <section class="block" data-block-id="b-8" data-version="1" data-kind="callout">
-    <button type="button" class="block-collapse-toggle" title="Collapse / expand block" aria-label="Collapse block">▾</button>
-    <div class="block-content">
+    <div class="block-label block-meta" id="block-label-b-8"></div>
+    <div class="block-body"><div class="block-content">
       <aside class="annotate-callout variant-danger" data-block-id="b-8">
         <header><span class="callout-icon">⛔</span><span>Danger</span></header>
         <div class="body">
           <p>Do not run <code>blocks.drop_unused_terms</code> on a partially-written document — atomic write order matters (meta first, then blocks).</p>
         </div>
       </aside>
-    </div>
+    </div></div>
   </section>
 
   <section class="block" data-block-id="b-9" data-version="1" data-kind="callout">
-    <button type="button" class="block-collapse-toggle" title="Collapse / expand block" aria-label="Collapse block">▾</button>
-    <div class="block-content">
+    <div class="block-label block-meta" id="block-label-b-9"></div>
+    <div class="block-body"><div class="block-content">
       <aside class="annotate-callout variant-success" data-block-id="b-9">
         <header><span class="callout-icon">✓</span><span>Success</span></header>
         <div class="body">
-          <p>All 107 tests pass after the badge + collapse + submitted-card changes landed on <code>annotate-richer-blocks</code>.</p>
+          <p>All 107 tests pass after the badge + fold + submitted-comment changes landed on <code>annotate-richer-blocks</code>.</p>
         </div>
       </aside>
-    </div>
+    </div></div>
   </section>
 
 </main>
@@ -851,7 +848,8 @@
   </p>
 
   <section class="block" data-block-id="b-explain" data-version="1" data-kind="explain">
-    <div class="block-content">
+    <div class="block-frame"><div class="block-label block-frame-head" id="block-label-b-explain"><span class="block-heading-text" role="heading" aria-level="2">Why the two methods differ</span><span class="block-frame-space"></span></div>
+    <div class="block-body"><div class="block-content">
       <div class="codepane ex"><div class="cp-head"><span class="cp-path"><span class="cp-proj" style="--cp-pill-h: 65;">portfolios</span><span class="cp-loc">ValuedPosition.java:261</span></span></div><div class="cp-body hljs ex-body">
         <div class="cp-row ex-row"><span class="cp-line"><span class="hljs-keyword">private</span> Amount <span class="hljs-title function_">adjustMarketValue</span><span class="hljs-params">(BigDecimal quantity, BigDecimal lotSize)</span> {</span></div>
         <div class="cp-row ex-row"><span class="cp-line">    <span class="hljs-keyword">return</span> ofNullable(<span class="hljs-built_in">this</span>.priceInReferenceCurrency)</span><i class="ex-uline" style="left: calc(11ch + 12px); width: 10ch;"></i><i class="ex-uline" style="left: calc(27ch + 12px); width: 24ch;"></i></div>
@@ -866,7 +864,7 @@
         <div class="cp-row ex-row"><span class="cp-line">        .map(p -&gt; p.multiply(quantity.multiply(lotSize)))</span></div>
         <div class="cp-row ex-row"><span class="cp-line">        .orElse(<span class="hljs-literal">null</span>);</span></div>
         <div class="cp-row ex-row"><span class="cp-line">}</span></div></div></div>
-    </div>
+    </div></div></div>
   </section>
 
 
@@ -877,10 +875,10 @@
     queue: the bar over its members, showing only the second of three questions.
   </p>
 
-  <section class="block card" data-block-id="b-choice-rich" data-version="1" data-kind="choice">
-    <div class="card-head"><button type="button" class="card-chevron" aria-label="Collapse section" aria-describedby="card-title-b-choice-rich">▾</button><span class="card-title" role="heading" aria-level="2" id="card-title-b-choice-rich">Which version should Asset.java keep?</span><span class="card-head-spacer"></span></div>
-    <div class="card-body"><div class="block-content">
-      <div class="choice-block"><div class="choice-options" role="radiogroup" aria-labelledby="card-title-b-choice-rich">
+  <section class="block" data-block-id="b-choice-rich" data-version="1" data-kind="choice">
+    <div class="block-frame"><div class="block-label block-frame-head" id="block-label-b-choice-rich"><span class="block-heading-text" role="heading" aria-level="2">Which version should Asset.java keep?</span><span class="block-frame-space"></span></div>
+    <div class="block-body"><div class="block-content">
+      <div class="choice-block"><div class="choice-options" role="radiogroup" aria-labelledby="block-label-b-choice-rich">
         <div class="choice-option has-body selected" tabindex="0" role="radio" aria-checked="true"><div class="choice-option-text"><span class="choice-option-head"><span class="choice-option-label">Original PR</span></span><div class="choice-option-body"><pre><code class="sk-fence language-java">public record Asset(
     @Schema(description = "Asset id") String id,
     @Schema(description = "Asset name") String name,
@@ -896,7 +894,7 @@
 ) {}
 </code></pre></div></div></div>
       </div></div>
-    </div></div>
+    </div></div></div>
   </section>
 
   <div class="cq-bar" data-run="Gallery queue|b-choice-q1">
@@ -905,14 +903,14 @@
     <div class="cq-nav"><button type="button" class="cq-btn">← Prev</button><button type="button" class="cq-btn">Next undecided</button><button type="button" class="cq-btn cq-primary">Next →</button></div>
     <label class="cq-all"><input type="checkbox"> Show all</label>
   </div>
-  <section class="block card" data-block-id="b-choice-q2" data-version="1" data-kind="choice">
-    <div class="card-head"><button type="button" class="card-chevron" aria-label="Collapse section" aria-describedby="card-title-b-choice-q2">▾</button><span class="card-title" role="heading" aria-level="2" id="card-title-b-choice-q2">Second question?</span><span class="card-head-spacer"></span></div>
-    <div class="card-body"><div class="block-content">
-      <div class="choice-block"><div class="choice-options" role="radiogroup" aria-labelledby="card-title-b-choice-q2">
+  <section class="block" data-block-id="b-choice-q2" data-version="1" data-kind="choice">
+    <div class="block-frame"><div class="block-label block-frame-head" id="block-label-b-choice-q2"><span class="block-heading-text" role="heading" aria-level="2">Second question?</span><span class="block-frame-space"></span></div>
+    <div class="block-body"><div class="block-content">
+      <div class="choice-block"><div class="choice-options" role="radiogroup" aria-labelledby="block-label-b-choice-q2">
         <div class="choice-option" tabindex="0" role="radio" aria-checked="false"><div class="choice-option-text"><span class="choice-option-head"><span class="choice-option-label">Yes</span></span></div></div>
         <div class="choice-option" tabindex="0" role="radio" aria-checked="false"><div class="choice-option-text"><span class="choice-option-head"><span class="choice-option-label">No</span></span></div></div>
       </div></div>
-    </div></div>
+    </div></div></div>
   </section>
 
 </body>
