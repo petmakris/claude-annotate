@@ -52,9 +52,6 @@ section.block[data-sel-scope] { box-shadow: 0 0 0 2px var(--accent); }
 .sel-quote { font-size: 12px; font-style: italic; color: var(--text-dim);
   border-left: 2px solid var(--accent); padding-left: 8px; margin-bottom: 8px; }
 .sel-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; }
-.sel-cancel { padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 500;
-  border: 1px solid var(--control-border); border-radius: 5px; background: transparent;
-  color: var(--text); cursor: pointer; }
 .sel-chip {
   display: block; margin: 6px 0 2px; padding: 4px 9px; font-size: 13px; border-radius: 8px;
   color: var(--type-comment-fg); background: var(--type-comment-wash);

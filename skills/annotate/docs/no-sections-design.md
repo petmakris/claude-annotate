@@ -61,7 +61,8 @@ The window:
 - opens right of the text, level with the first selected line, and never over
   the selected words; on a window too narrow for that it opens below the
   selection;
-- remembers its last size per page (`localStorage`, wrapped in try/catch);
+- remembers its last size, one for every page (`localStorage`, wrapped in
+  try/catch);
 - is one at a time. Opening a second comment while one is open shows the open
   one, as `revealOpenDraft` does today.
 

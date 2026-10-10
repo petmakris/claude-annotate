@@ -68,6 +68,7 @@
 
     const grip = win.querySelector(".comment-window-resize");
     grip.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
       e.preventDefault();
       const start = box(), x = e.clientX, y = e.clientY;
       grip.setPointerCapture(e.pointerId);
@@ -87,8 +88,13 @@
       grip.addEventListener("pointercancel", up);
     });
 
+    // Esc closes an empty window only. Words or pictures in it are the
+    // reader's, and one stray key must not throw them away: the window pulses
+    // instead. The × and Cancel are the deliberate ways to discard.
     win.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
+      if (e.key !== "Escape") return;
+      e.preventDefault(); e.stopPropagation();
+      if (hasWords()) call(); else close();
     });
     window.addEventListener("resize", () => {
       if (win && !win.hidden) apply(window.AnnotateWindowPlace.clamp(box(), view()));
@@ -104,10 +110,11 @@
   // Open for `owner`, holding `body` (the editor the caller built). A window
   // already open for another owner is closed first, its onClose told so it
   // can drop an empty draft; the caller checks hasWords() before asking.
-  function open({ owner, quote, body, near, onClose }) {
+  // `home` gives the part focus returns to when the window closes.
+  function open({ owner, quote, body, near, onClose, home }) {
     if (!win) build();
     if (current && current.owner !== owner) close();
-    current = { owner, onClose };
+    current = { owner, onClose, home };
     win.querySelector(".comment-window-quote").textContent = quote || "";
     win.querySelector(".comment-window-quote").hidden = !quote;
     win.querySelector(".comment-window-body").replaceChildren(body);
@@ -122,15 +129,27 @@
     if (!win || win.hidden || !current) return;
     if (owner && current.owner !== owner) return;
     const was = current;
+    const hadFocus = win.contains(document.activeElement);
     current = null;
     win.hidden = true;
     win.querySelector(".comment-window-body").replaceChildren();
     try { was.onClose && was.onClose(); } catch (_) {}
+    // Hiding the window drops focus to <body> (a clicked × keeps it until the
+    // next style pass), and the next Tab would start from the top of the
+    // page: hand it back to the part.
+    const a = document.activeElement;
+    if (hadFocus && (!a || a === document.body || win.contains(a)) && was.home && typeof focusHome === "function") {
+      focusHome(was.home());
+    }
   }
 
+  // Typed text or a pasted picture: either is the reader's work, and both
+  // openers (selection.js openComposer, script.js openAnnotation) ask this
+  // before a window is replaced.
   function hasWords() {
-    const ta = win && !win.hidden && win.querySelector("textarea");
-    return !!(ta && ta.value.trim());
+    if (!win || win.hidden) return false;
+    const ta = win.querySelector("textarea");
+    return !!((ta && ta.value.trim()) || win.querySelector(".paste-thumb"));
   }
 
   // The answer to "why did nothing open": the open window, pulsed, with the

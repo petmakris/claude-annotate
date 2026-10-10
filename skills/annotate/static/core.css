@@ -412,16 +412,6 @@ body {
 }
 .comment-card[data-type="reject"]   { background: var(--type-reject-wash); }
 .comment-card[data-type="comment"]  { background: var(--type-comment-wash); }
-.comment-card .quote {
-  font-size: 11px;
-  font-style: italic;
-  color: var(--text-dim);
-  padding-left: 8px;
-  margin-bottom: 8px;
-  border-left: 2px solid var(--border);
-}
-.comment-card .quote[data-type="reject"]   { border-left-color: var(--type-reject-fg); }
-.comment-card .quote[data-type="comment"]  { border-left-color: var(--type-comment-fg); }
 
 /* Step header — names the diagram row / sub-unit a comment targets, so a
    stack of cards below a diagram is never ambiguous about which row is which. */

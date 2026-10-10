@@ -330,8 +330,7 @@
   let composer = null, draft = null;
   const W = () => window.AnnotateCommentWindow;
   function syncDraftLock() {
-    const ta = composer && W().owner() === "span" && composer.querySelector("textarea");
-    const on = !!(ta && ta.value.trim());
+    const on = !!composer && W().owner() === "span" && W().hasWords();
     if (document.body.classList.contains("has-sel-draft") === on) return;
     document.body.classList.toggle("has-sel-draft", on);
     S()?.renderDock();
@@ -347,24 +346,28 @@
   function commentOn(section, anchor) {
     const hit = S().overlapping(anchor).find((x) => x.m.kind === "comment" && x.m.text
       && sameWords(section, x.m, anchor));
-    return hit ? hit.m.text : "";
+    return hit ? hit.m : null;
   }
 
   function openComposer(section, anchor, range, initial) {
     if (W().isOpen() && W().hasWords()) { W().call(); return; }
     const box = document.createElement("div");
-    box.className = "sel-composer";
+    box.className = "sel-body";
     const ta = document.createElement("textarea");
-    ta.value = initial != null ? initial : commentOn(section, anchor);
+    const prior = commentOn(section, anchor);
+    ta.value = initial != null ? initial : (prior ? prior.text : "");
+    // Pictures pasted here ride on the mark, as a part's comment's do.
+    let images = (prior && prior.images) || [];
+    const strip = attachPaste(ta, images, (list) => { images = list; syncDraftLock(); });
     ta.placeholder = "Ask or push back on this…";
     ta.setAttribute("aria-label", "Comment on the selected words");
     ta.addEventListener("input", () => { if (draft) draft.text = ta.value; syncDraftLock(); });
     const row = document.createElement("div");
     row.className = "sel-row";
     row.innerHTML = '<span class="card-submit-hint"><kbd>↩</kbd> to add · '
-      + '<kbd>⇧</kbd><kbd>↩</kbd> new line · <kbd>Esc</kbd> to close</span>';
+      + '<kbd>⇧</kbd><kbd>↩</kbd> new line · paste an image to attach</span>';
     const cancel = document.createElement("button");
-    cancel.type = "button"; cancel.className = "sel-cancel"; cancel.textContent = "Cancel";
+    cancel.type = "button"; cancel.className = "comment-cancel"; cancel.textContent = "Cancel";
     const add = document.createElement("button");
     add.type = "button"; add.className = "card-submit-btn"; add.textContent = "Add to round";
     // The words may have been rewritten while the window was open. Still
@@ -377,10 +380,10 @@
       if (!v) return;
       const home = homeFor(parts[0]);
       const live = parts.every((p) => { const s = homeFor(p); return s && A().rangeFor(s, p); });
-      if (live) S().setSpanMark(anchor, "comment", v);
+      if (live) S().setSpanMark(anchor, "comment", v, images);
       else if (home) {
         const q = anchor.selected_text.length > 120 ? anchor.selected_text.slice(0, 117) + "…" : anchor.selected_text;
-        S().pinComment({ block_id: parts[0].block_id, text: `On the passage that read "${q}": ${v}` });
+        S().pinComment({ block_id: parts[0].block_id, text: `On the passage that read "${q}": ${v}`, images });
       } else {
         document.dispatchEvent(new CustomEvent("annotate:orphan-comment",
           { detail: { text: v, quote: anchor.selected_text } }));
@@ -392,13 +395,14 @@
     add.addEventListener("click", (e) => { e.stopPropagation(); commit(); });
     ta.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commit(); }
-      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); dismiss(); }
     });
     row.append(cancel, add);
-    box.append(ta, row);
+    box.append(ta, strip, row);
     window.AnnotateCommentWindow.open({ owner: "span", quote: anchor.selected_text, body: box,
       near: range.getBoundingClientRect(),
-      onClose: () => { composer = null; draft = null; syncDraftLock(); } });
+      home: () => homeFor((anchor.spans || [anchor])[0]),
+      // A part's draft that waited while this box held words shows now.
+      onClose: () => { composer = null; draft = null; syncDraftLock(); queueMicrotask(() => window.renderComments?.()); } });
     composer = box;
     draft = { anchor, text: ta.value };
     ta.focus();

@@ -53,3 +53,30 @@ def test_the_window_is_styled_and_readable():
     css = STYLE_CSS.read_text()
     assert ".comment-window {" in css and "position: fixed" in css[css.index(".comment-window {"):]
     assert ".comment-window.is-calling" in css
+
+
+def _inner(src, name):
+    """An indented `function name(` inside an IIFE, up to its closing brace."""
+    i = src.index("function %s(" % name)
+    return src[i:src.index("\n  }\n", i)]
+
+
+def test_esc_keeps_the_readers_words():
+    esc = WIN[WIN.index('e.key !== "Escape"'):]
+    esc = esc[:esc.index("});")]
+    assert "if (hasWords()) call(); else close();" in esc, \
+        "Esc closes a window holding words, and the card's onClose deletes the draft"
+    assert '"Escape"' not in _inner(SEL, "openComposer"), \
+        "the selection's box handles Esc itself again, around the window's rule"
+
+
+def test_one_has_words_rule_for_both_openers():
+    assert ".paste-thumb" in _inner(WIN, "hasWords"), \
+        "a window holding only a pasted picture counts as empty"
+    assert "W().hasWords()" in _inner(SEL, "openComposer")
+    assert "AnnotateCommentWindow.hasWords()" in _fn(SCRIPT_JS.read_text(), "openAnnotation")
+
+
+def test_a_saved_draft_does_not_replace_a_window_with_words():
+    assert "!W.hasWords()" in _fn(SCRIPT_JS.read_text(), "renderComments"), \
+        "a response switch opens a saved draft over the selection's box and drops its words"

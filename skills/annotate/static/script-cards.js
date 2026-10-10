@@ -58,6 +58,104 @@ function startUpdatingOverlay(section) {
   }, 1000);
 }
 
+// The image paste strip under a comment's text box, shared by both bodies of
+// the comment window: a part's comment (buildCard) and the selection's box
+// (selection.js). A pasted image is uploaded, its token goes into the text
+// at the caret, and `onImages` hears the whole list each time it changes.
+// Returns the strip, for the caller to place under the text box.
+function attachPaste(ta, images, onImages) {
+  let pastes = (images || []).map(img => ({ token: img.token, path: img.path, thumbUrl: null }));
+  let nextIndex = pastes.length + 1;
+  const strip = document.createElement("div");
+  strip.className = "paste-strip";
+
+  function changed() {
+    onImages(pastes.map(p => ({ token: p.token, path: p.path })));
+  }
+
+  function render() {
+    strip.replaceChildren();
+    if (pastes.length === 0) {
+      strip.dataset.empty = "1";
+      return;
+    }
+    delete strip.dataset.empty;
+    for (const p of pastes) {
+      const tile = document.createElement("div");
+      tile.className = "paste-thumb";
+      tile.dataset.token = p.token;
+      const img = document.createElement("img");
+      img.alt = p.token;
+      if (p.thumbUrl) img.src = p.thumbUrl;
+      else tile.classList.add("no-thumb");
+      const label = document.createElement("span");
+      label.className = "paste-label";
+      label.textContent = p.token;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "paste-remove";
+      remove.title = "Remove";
+      remove.textContent = "×";
+      remove.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        pastes = pastes.filter(x => x.token !== p.token);
+        changed();
+        render();
+      });
+      tile.appendChild(img);
+      tile.appendChild(label);
+      tile.appendChild(remove);
+      strip.appendChild(tile);
+    }
+  }
+
+  let errorChipTimer = null;
+  function showPasteError(msg) {
+    let chip = strip.querySelector(".paste-error");
+    if (!chip) {
+      chip = document.createElement("span");
+      chip.className = "paste-error";
+      strip.appendChild(chip);
+    }
+    chip.textContent = msg;
+    if (errorChipTimer) clearTimeout(errorChipTimer);
+    errorChipTimer = setTimeout(() => { chip.remove(); errorChipTimer = null; }, 4000);
+  }
+
+  ta.addEventListener("paste", async (ev) => {
+    const items = ev.clipboardData?.items;
+    if (!items) return;
+    let imageItem = null;
+    for (const it of items) {
+      if (it.kind === "file" && it.type.startsWith("image/")) { imageItem = it; break; }
+    }
+    if (!imageItem) return;
+    ev.preventDefault();
+    const blob = imageItem.getAsFile();
+    if (!blob) return;
+    const token = `paste-${nextIndex++}`;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const insertion = `![${token}]`;
+    ta.value = ta.value.slice(0, start) + insertion + ta.value.slice(end);
+    const caret = start + insertion.length;
+    ta.setSelectionRange(caret, caret);
+    // The owner keeps its text from its own input listener.
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    try {
+      const result = await WebCompanion.api.pasteImage(blob);
+      pastes.push({ token, path: result.path, thumbUrl: URL.createObjectURL(blob) });
+      changed();
+      render();
+    } catch (_) {
+      showPasteError("upload failed");
+    }
+  });
+
+  render();
+  return strip;
+}
+
 function buildCard(id, a, onSubmitCb) {
   const card = document.createElement("div");
   card.className = "comment-card";
@@ -99,64 +197,6 @@ function buildCard(id, a, onSubmitCb) {
   wrap.className = "editor-wrap";
 
   const ta = document.createElement("textarea");
-  const pasteState = {
-    pastes: (annotations[id].images || []).map(img => ({
-      token: img.token,
-      path: img.path,
-      thumbUrl: null,
-    })),
-    nextIndex: ((annotations[id].images || []).length) + 1,
-  };
-
-  const pasteStrip = document.createElement("div");
-  pasteStrip.className = "paste-strip";
-  if (pasteState.pastes.length === 0) pasteStrip.dataset.empty = "1";
-
-  function renderStrip() {
-    pasteStrip.replaceChildren();
-    if (pasteState.pastes.length === 0) {
-      pasteStrip.dataset.empty = "1";
-      return;
-    }
-    delete pasteStrip.dataset.empty;
-    for (const p of pasteState.pastes) {
-      const tile = document.createElement("div");
-      tile.className = "paste-thumb";
-      tile.dataset.token = p.token;
-      const img = document.createElement("img");
-      img.alt = p.token;
-      if (p.thumbUrl) img.src = p.thumbUrl;
-      else tile.classList.add("no-thumb");
-      const label = document.createElement("span");
-      label.className = "paste-label";
-      label.textContent = p.token;
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "paste-remove";
-      remove.title = "Remove";
-      remove.textContent = "×";
-      remove.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        pasteState.pastes = pasteState.pastes.filter(x => x.token !== p.token);
-        persistImages();
-        renderStrip();
-      });
-      tile.appendChild(img);
-      tile.appendChild(label);
-      tile.appendChild(remove);
-      pasteStrip.appendChild(tile);
-    }
-  }
-
-  function persistImages() {
-    if (pasteState.pastes.length === 0) {
-      delete annotations[id].images;
-    } else {
-      annotations[id].images = pasteState.pastes.map(p => ({ token: p.token, path: p.path }));
-    }
-    saveDrafts();
-  }
-
   const placeholder = PLACEHOLDER_TEXT[a.type] || PLACEHOLDER_TEXT.comment;
   ta.placeholder = placeholder;
   ta.value = a.comment || "";
@@ -210,8 +250,12 @@ function buildCard(id, a, onSubmitCb) {
   wrap.appendChild(ta);
   wrap.appendChild(handle);
   card.appendChild(wrap);
-  card.appendChild(pasteStrip);
-  renderStrip();
+  card.appendChild(attachPaste(ta, annotations[id].images, (images) => {
+    if (!annotations[id]) return;
+    if (images.length) annotations[id].images = images;
+    else delete annotations[id].images;
+    saveDrafts();
+  }));
   // Auto-grow once on initial render so a card with prior content shows it all.
   queueMicrotask(autoGrow);
 
@@ -272,52 +316,16 @@ function buildCard(id, a, onSubmitCb) {
     focusHome(home);
     window.AnnotateA11y?.announce("Comment added to the round");
   });
+  // Cancel is the window's ×: the draft goes, and focus goes back to the
+  // part (comment-window.js close()).
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "comment-cancel";
+  cancelBtn.textContent = "Cancel";
+  cancelBtn.addEventListener("click", () => window.AnnotateCommentWindow.close("card:" + id));
+  submitRow.appendChild(cancelBtn);
   submitRow.appendChild(submitBtn);
   card.appendChild(submitRow);
-
-  // ── Image paste ────────────────────────────────────────────────────────
-  ta.addEventListener("paste", async (ev) => {
-    const items = ev.clipboardData?.items;
-    if (!items) return;
-    let imageItem = null;
-    for (const it of items) {
-      if (it.kind === "file" && it.type.startsWith("image/")) { imageItem = it; break; }
-    }
-    if (!imageItem) return;
-    ev.preventDefault();
-    const blob = imageItem.getAsFile();
-    if (!blob) return;
-    const token = `paste-${pasteState.nextIndex++}`;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const insertion = `![${token}]`;
-    ta.value = ta.value.slice(0, start) + insertion + ta.value.slice(end);
-    const caret = start + insertion.length;
-    ta.setSelectionRange(caret, caret);
-    annotations[id].comment = ta.value;
-    saveDrafts();
-    try {
-      const result = await WebCompanion.api.pasteImage(blob);
-      pasteState.pastes.push({ token, path: result.path, thumbUrl: URL.createObjectURL(blob) });
-      persistImages();
-      renderStrip();
-    } catch (_) {
-      showPasteError("upload failed");
-    }
-  });
-
-  let errorChipTimer = null;
-  function showPasteError(msg) {
-    let chip = pasteStrip.querySelector(".paste-error");
-    if (!chip) {
-      chip = document.createElement("span");
-      chip.className = "paste-error";
-      pasteStrip.appendChild(chip);
-    }
-    chip.textContent = msg;
-    if (errorChipTimer) clearTimeout(errorChipTimer);
-    errorChipTimer = setTimeout(() => { chip.remove(); errorChipTimer = null; }, 4000);
-  }
 
   return card;
 }
@@ -354,7 +362,10 @@ function renderComments() {
     if (W.owner() && W.owner().startsWith("card:")) W.close();
   } else {
     const [id, a] = entries[0];
-    if (W.owner() !== "card:" + id) {
+    // A window holding the reader's words for another owner (the selection's
+    // box, when a response switch brings back a saved draft) is not replaced:
+    // the draft waits, and the box's close calls this again to show it.
+    if (W.owner() !== "card:" + id && !W.hasWords()) {
       const section = document.querySelector(`section.block[data-block-id="${cssEsc(a.block_id)}"]`);
       const step = a.step_id ? stepContextFor(a.block_id, a.step_id) : null;
       const label = (section && section.querySelector(".block-label")) || section;
@@ -363,6 +374,7 @@ function renderComments() {
         quote: a.selected_text || (step && step.label) || (section ? section.getAttribute("aria-label") : ""),
         body: buildCard(id, a),
         near: (step && step.node ? step.node : label).getBoundingClientRect(),
+        home: () => document.querySelector(`section.block[data-block-id="${cssEsc(a.block_id)}"]`),
         // The window's × is the old card's ×: the draft goes with it.
         onClose: () => {
           if (!annotations[id]) return;

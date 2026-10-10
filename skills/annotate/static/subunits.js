@@ -171,7 +171,9 @@
       .map(({ key, m }) => ({ key, m }));
   }
 
-  function setSpanMark(anchor, kind, text) {
+  // `images` are pictures pasted into the comment window (attachPaste), sent
+  // with the round as a part's comment's are.
+  function setSpanMark(anchor, kind, text, images) {
     const key = spanKey(anchor);
     const existing = marks[key];
     if (existing && existing.kind === kind && !text) {
@@ -183,6 +185,7 @@
                   prefix: anchor.prefix || "", suffix: anchor.suffix || "" };
       if (anchor.step_id) m.step_id = anchor.step_id;
       if (text) m.text = text;
+      if (images && images.length) m.images = images;
       marks[key] = m;
     }
     saveMarks();
