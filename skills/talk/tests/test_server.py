@@ -494,7 +494,7 @@ def test_a_turn_being_worked_on_is_not_ended_as_idle(tmp_path):
         call.last_seen = time.time()
         call.offer("do the long thing", typed=True)
         await call.turns.next(timeout=0)
-        call.last_turn = time.time() - 60
+        call.last_turn = call.last_doorbell = time.time() - 60
         if active:
             call.turns.note_activity()
         task = asyncio.ensure_future(talk.watch(call))
@@ -504,7 +504,40 @@ def test_a_turn_being_worked_on_is_not_ended_as_idle(tmp_path):
 
     import asyncio
     assert run(go(True)) is None
-    assert run(go(False)) == "nothing was said for 0.05 minutes"
+    assert run(go(False)) == "nothing was said and no session listened for 0.05 minutes"
+
+
+def test_a_quiet_call_stays_open_while_its_session_listens(tmp_path):
+    """Hours with nothing said do not end a call whose doorbell is waiting, or polled a moment ago."""
+    from helpers import make_args
+
+    async def go(doorbell):
+        call = talk.Call(make_args(idle_minutes=0.05), "T", tmp_path / "out")
+        call.last_turn = time.time() - 5 * 3600
+        call.last_doorbell = time.time() - 5 * 3600
+        if doorbell == "polled":
+            call.last_doorbell = time.time()
+        waiting = asyncio.ensure_future(call.turns.next(timeout=5)) if doorbell == "waiting" else None
+        task = asyncio.ensure_future(talk.watch(call))
+        await asyncio.sleep(1.3)
+        task.cancel()
+        if waiting:
+            waiting.cancel()
+        return call.ended
+
+    assert run(go("waiting")) is None
+    assert run(go("polled")) is None
+    assert run(go("gone")) == "nothing was said and no session listened for 0.05 minutes"
+
+
+def test_a_doorbell_poll_marks_its_session_as_listening(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, _):
+            call.last_doorbell = 0.0
+            assert (await client.get("/api/turn?wait=0", headers=AUTH)).status == 204
+            return call.last_doorbell
+
+    assert time.time() - run(go()) < 5
 
 
 def test_a_call_whose_page_was_never_opened_stays_open(tmp_path):

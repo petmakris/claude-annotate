@@ -1274,6 +1274,7 @@ class Call:
         self.started = time.time()
         self.last_seen = 0.0  # the page's last poll
         self.last_turn = time.time()  # the last entry of any kind: the idle clock
+        self.last_doorbell = time.time()  # a doorbell's last poll: its session is still listening
         self.stage_cwd: str | None = None  # set by open_call(); None in tests means "no stage"
         self.stage_slug: str | None = None  # this call's own stage, set by open_call()
         self.stage_sid: str | None = None
@@ -2337,7 +2338,9 @@ def build_app(server: Server):
         if call is None:
             return refused(request)
         wait = min(max(float(request.query.get("wait", "25")), 0.0), 60.0)
+        call.last_doorbell = time.time()
         event = await call.turns.next(timeout=wait)
+        call.last_doorbell = time.time()
         if event is None:
             return web.Response(status=204)
         if event["type"] == "superseded":
@@ -2463,14 +2466,16 @@ def build_app(server: Server):
 
 
 async def watch(call: Call) -> None:
-    """End a call nobody talks in; close an ended one once its page is gone."""
+    """End a call nobody talks in and no session listens to; close an ended one once its page is gone.
+    While the session's doorbell keeps polling, a quiet call stays open however long the user is away."""
     while not call.closed.is_set():
         await asyncio.sleep(1)
         now = time.time()
         if not call.ended:
-            if (call.demo is None and now - call.last_turn > call.args.idle_minutes * 60
-                and not call.busy(call.args.idle_minutes * 60)):  # a demo stays ready: it never goes idle
-                call.end(f"nothing was said for {call.args.idle_minutes} minutes")
+            idle = call.args.idle_minutes * 60
+            if (call.demo is None and now - max(call.last_turn, call.last_doorbell) > idle
+                and not call.turns.waiters and not call.busy(idle)):  # a demo stays ready: it never goes idle
+                call.end(f"nothing was said and no session listened for {call.args.idle_minutes} minutes")
         elif now - call.ended_at > LINGER_S or now - call.last_seen > PAGE_GONE_S:
             call.closed.set()
 
@@ -3077,7 +3082,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="the webcompanion daemon's address as reached from the browser "
                              "(scheme and host); default: the daemon's own")
     parser.add_argument("--no-open", action="store_true", help="don't open the page in the default browser")
-    parser.add_argument("--idle-minutes", type=int, default=60, help="end the call after this long with no turn")
+    parser.add_argument("--idle-minutes", type=int, default=60, help="end the call after this long with no turn and no doorbell")
     parser.add_argument("--doctor", action="store_true", help="check the speech engine with a round trip, and the stage")
     parser.add_argument("--demo", action="store_true",
                         help="open a call that shows every board of the stage, played from demo.md, with no Claude session")

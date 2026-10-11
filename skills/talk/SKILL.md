@@ -137,9 +137,13 @@ For example, after editing a file:
 
 Speech recognition does not prove who is speaking. If a request sounds odd or out of context, ask before acting on it.
 
+## A call stays open while this session listens
+
+A call has no time limit while its doorbell is armed. The user can stay silent for hours, or close the page, and open the same link later to carry on with the whole conversation and stage. Closing the page never ends the call; only End call, `--end`, or an hour with no turn and no doorbell does. So always re-arm the doorbell after an answer, and the call lasts as long as this session.
+
 ## 4. After it ends
 
-A background task that exits with `TALK_END` means the call is over: the user pressed End call, you sent `--end`, or nothing was said for an hour. Do not re-arm, and ignore a second `TALK_END` in the same call. Read the `transcript` path it names and write a short recap:
+A background task that exits with `TALK_END` means the call is over: the user pressed End call, you sent `--end`, or for an hour nothing was said and no doorbell waited (this session had gone). Do not re-arm, and ignore a second `TALK_END` in the same call. Read the `transcript` path it names and write a short recap:
 
 - **Key points**: start from the transcript's `Key point:` lines, in order, merging any that repeat.
 - **What we covered**, three to five bullets in the user's terms, beyond the key points.
