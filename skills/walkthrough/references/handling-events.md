@@ -7,7 +7,8 @@ step lands here.
 ## `WEBCOMPANION_EVENT` (a question on a step)
 
 1. **Parse the banner** for `sid` and `event_id`.
-2. **Read the payload** between `---payload---` and `---end---`: the daemon
+2. **Read the event** with `webcompanion event --sid <sid> --event-id <event_id>`, never from the
+   notification body, which may be truncated: the daemon
    stores exactly `{anchor, text, images}` — `anchor` is always `step:<id>`,
    `text` is the question, `images` is `[{token, path}]` — `Read` each before
    answering.

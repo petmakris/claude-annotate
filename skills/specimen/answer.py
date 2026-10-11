@@ -33,10 +33,13 @@ def parse_banner(line: str) -> dict:
 
 def parse_payload(text: str) -> dict:
     start = text.find('---payload---')
-    end = text.find('---end---', start + 1)
-    if start == -1 or end == -1:
-        raise ValueError('no ---payload--- / ---end--- block')
-    body = json.loads(text[start + len('---payload---'):end].strip())
+    if start == -1:
+        body = json.loads(text.strip())
+    else:
+        end = text.find('---end---', start + 1)
+        if end == -1:
+            raise ValueError('no ---payload--- / ---end--- block')
+        body = json.loads(text[start + len('---payload---'):end].strip())
     return {'anchor': body.get('anchor', ''),
             'question': body.get('text', '')}
 

@@ -40,6 +40,12 @@ def test_parse_payload_extracts_anchor_and_question():
     assert got['question'] == 'why is this null here?'
 
 
+def test_parse_payload_reads_the_stored_event_printed_by_webcompanion_event():
+    got = parse_payload('{"anchor": "app.Result#proposed", "text": "why is this null here?", "images": []}\n')
+    assert got['anchor'] == 'app.Result#proposed'
+    assert got['question'] == 'why is this null here?'
+
+
 def test_context_names_the_field_and_where_its_shape_came_from():
     got = context_for(TYPES, 'app.Result#proposed')
     assert got['type'] == 'app.Result'

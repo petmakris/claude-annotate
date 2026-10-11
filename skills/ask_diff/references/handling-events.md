@@ -7,7 +7,8 @@ wake-up after the session is open lands here.
 ## `WEBCOMPANION_EVENT`
 
 1. **Parse the banner:** extract `sid`, `event_id`.
-2. **Read the payload** between `---payload---` and `---end---` — the daemon
+2. **Read the event** with `webcompanion event --sid <sid> --event-id <event_id>`, never from the
+   notification body, which may be truncated — the daemon
    stores exactly `{anchor, text, images}` (there is no `type` field on the
    wire; the daemon's `_submit` handler keeps only these three keys from
    whatever was posted):

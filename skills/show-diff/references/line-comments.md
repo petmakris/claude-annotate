@@ -35,8 +35,9 @@ means step 6 below never happened for an earlier event — the watcher gave up
 re-emitting it — so tell the user plainly that a question went unanswered and
 ask them to re-ask it on the line, rather than trying to reconstruct it.
 
-1. **Parse the banner** for `sid` and `event_id`. Read the payload between
-   `---payload---` and `---end---`: `{"anchor": "<path>:<side>:<line>",
+1. **Parse the banner** for `sid` and `event_id`. Read the event with
+   `webcompanion event --sid <sid> --event-id <event_id>`, never from the notification body,
+   which may be truncated: `{"anchor": "<path>:<side>:<line>",
    "text": "<question>", "images": [...]}`.
 2. **Read the diff.** The script printed `WC_STATE_DIR=<dir>` beside
    `WC_SID=` and wrote the diff it opened to `<dir>/diff.patch`; that

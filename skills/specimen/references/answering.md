@@ -23,8 +23,9 @@ does not end the loop).
 ## On `WEBCOMPANION_EVENT`
 
 1. Parse the banner with `skills.specimen.answer.parse_banner` for `sid` and `event_id`.
-2. Parse the block between `---payload---` and `---end---` with
-   `skills.specimen.answer.parse_payload`. The block is one line of JSON with `anchor`, `text`
+2. Read the event with `webcompanion event --sid <sid> --event-id <event_id>`, never from the
+   notification body, which may be truncated, and pass its output to
+   `skills.specimen.answer.parse_payload`. The output is one line of JSON with `anchor`, `text`
    (the question) and `images`; `parse_payload` returns `anchor` and `question`.
 3. Call `skills.specimen.answer.context_for(types_payload, anchor)`, where `types_payload` is
    the `__specimen__` item's `types.json`-shaped body (`root`, `worktree`, `commit`,

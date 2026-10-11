@@ -345,6 +345,8 @@ Banners, unchanged:
 
 - **`WEBCOMPANION_EVENT skill=annotate sid=<sid> event_id=<id>`** — one per
   submitted comment, followed by `---payload---`, the event JSON, `---end---`.
+  That inline copy may be truncated by the notification: always read the
+  event with `webcompanion event --sid <sid> --event-id <event_id>` before handling it.
 - **`WEBCOMPANION_FINISHED`** / **`WEBCOMPANION_CANCELLED`**.
 
 **One obligation that is new and is not optional.** Every event you answer
@@ -361,6 +363,7 @@ rule about *when* (after the rewrite, never before) is unchanged.
 
 ### The event payload
 
+Read it with `webcompanion event --sid <sid> --event-id <event_id>`, never from the notification body.
 The daemon stores `{anchor, text, images}` and nothing else, so annotate's
 richer vocabulary travels as JSON inside `text` — always JSON, never
 sometimes-prose, so there is nothing to guess:

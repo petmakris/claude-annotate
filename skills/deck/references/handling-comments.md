@@ -8,7 +8,9 @@ holding the edit to the house style, re-pushing and acking.
 ## Reading the comment
 
 You wake on a `WEBCOMPANION_EVENT skill=deck sid=<sid> event_id=<id>` banner, followed by
-`---payload---`, the event JSON, and `---end---`. The daemon stores exactly
+`---payload---`, the event JSON, and `---end---`. That inline copy may be truncated by the
+notification, so read the event with `webcompanion event --sid <sid> --event-id <event_id>` and never
+from the notification body. The daemon stores exactly
 `{"anchor": "...", "text": "...", "images": [...]}`, and `text` is not the comment itself but a
 **JSON-encoded envelope** you must `json.loads()` before reading anything out of it. Its
 `scope` says what the user commented on:

@@ -29,10 +29,30 @@ scratchpad that was cleaned), rebuild the working copy from the page first:
 `claude-annotate pull --sid <sid> --out <scratchpad>/blocks.json`. Editing
 from nothing and re-pushing would replace the whole page.
 
+## Read the event from the store, never from the notification
+
+The notification shows a payload between `---payload---` and `---end---`, but
+**it is not the event**. The Monitor tool cuts a long notification short and
+ends it with `...(truncated)`, and a round of several comments is exactly the
+payload that runs long. On 2026-10-11 a round of six reactions arrived cut
+after the first; the handler answered that one, acked, and the other five
+comments were lost.
+
+So the banner is a doorbell. Take `sid` and `event_id` from it and read the
+event itself, every time, however complete the inline copy looks:
+
+```bash
+webcompanion event --sid <sid> --event-id <event_id>
+```
+
+It prints the stored record in full, whether the event still waits for its
+ack or was already archived. Never handle an event, and never ack one, from
+the notification body.
+
 ## The event payload is JSON inside JSON
 
-What arrives between `---payload---` and `---end---` is the daemon's own
-record, and it has exactly three keys:
+What `webcompanion event` prints is the daemon's own record, and it has
+exactly three keys:
 
 ```json
 {"anchor": "section-2", "text": "{\"type\":\"round\",\"reactions\":[…]}", "images": []}
@@ -186,7 +206,7 @@ These commands are cheap and must never fail the turn: if one errors, carry on.
 ### `WEBCOMPANION_EVENT` (per-comment submission)
 
 1. Parse the banner: `skill`, `sid`, `event_id`.
-2. Read the event payload between the `---payload---` and `---end---` markers in the notification body, and parse its `text` as JSON (see "The event payload is JSON inside JSON" above). **If the envelope's `type == "choice"`, jump to the `choice` subsection below.** Otherwise, the envelope's fields are:
+2. Read the event with `webcompanion event --sid <sid> --event-id <event_id>` (see "Read the event from the store, never from the notification" above; the notification body may be truncated), and parse its `text` as JSON (see "The event payload is JSON inside JSON" above). **If the envelope's `type == "choice"`, jump to the `choice` subsection below.** Otherwise, the envelope's fields are:
    - `block_id` — the block to update. **Absent** for a general comment from the page's chat box: treat a missing `block_id` the same as `null`.
    - `step_id` — which authored `data-annotate-id` element the selected words sit
      inside, or `null` for the whole block. **Pictures no longer produce one.**
