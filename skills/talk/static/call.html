@@ -46,7 +46,7 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"light"');
           <textarea id="text" rows="1" placeholder="Type, or press the mic" aria-label="Type a message"></textarea>
           <div class="wave" id="wave" hidden><span class="bars" id="bars"></span><span class="rectime" id="rectime">0:00</span></div>
           <button class="ib go" id="sendtext" type="button" aria-label="Send text" data-tip="Send" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
-          <button class="ib send" id="send" type="button" aria-label="Send" data-tip="Send" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></button>
+          <button class="ib send" id="send" type="button" aria-label="Done" data-tip="Done" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></button>
           <button class="ib mic" id="talk" type="button" aria-label="Talk" data-tip="Talk"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg><span class="spin" aria-hidden="true"></span></button>
         </div>
       </div>

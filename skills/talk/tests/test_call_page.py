@@ -141,3 +141,33 @@ def test_play_from_here_on_a_stage_step_plays_the_answer_from_the_sentence_that_
     # a frame no answer has does nothing
     page.js("audio.pause(); fromStage({ type: 'stage:play', view: 'turn', answer: 1, n: 9 });").check("audio.paused")
     assert page.run() == [[True, True, True], True]
+
+
+LISTEN_HEARS = """
+globalThis.fetch = (inner => async (path, opts = {}) => {
+  if (String(path).startsWith("/api/listen")) {
+    sentTo.push([String(path), null]);
+    return { ok: true, status: 200, json: async () => ({ text: "show me the queue" }) };
+  }
+  return inner(path, opts);
+})(globalThis.fetch);
+"""
+
+
+def test_a_recording_is_written_into_the_text_field_to_edit_and_sent_only_with_send(tmp_path):
+    html, states = served(tmp_path, [])
+    page = CallPage(html, states).js(LISTEN_HEARS)
+    page.js("await sendWav(new Blob(['x']));")
+    page.check("[$('text').value, sentTo.map(s => s[0].split('?')[0])]")
+    page.js("$('text').value = 'show me the reply queue'; $('text').dispatchEvent(new ShimEvent('input')); $('sendtext').click();")
+    page.check("sentTo.filter(s => s[0] === '/api/say').map(s => s[1])")
+    assert page.run() == [["show me the queue", ["/api/listen"]],
+                          [{"text": "show me the reply queue", "spoken": True}]]
+
+
+def test_a_recording_adds_to_what_is_already_typed(tmp_path):
+    html, states = served(tmp_path, [])
+    page = CallPage(html, states).js(LISTEN_HEARS)
+    page.js("$('text').value = 'about the tests:'; await sendWav(new Blob(['x']));")
+    page.check("$('text').value")
+    assert page.run() == ["about the tests: show me the queue"]

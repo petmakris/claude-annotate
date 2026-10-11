@@ -7,8 +7,8 @@
 # ///
 """talk: a spoken conversation with a Claude Code session, one turn at a time.
 
-    browser page: press Talk, speak, press Send
-        -> this script -> speech to text -> a turn the session collects (talk_client.py doorbell)
+    browser page: press Talk, speak, press Done -> speech to text -> the words in the text field
+        -> checked, then Send -> this script -> a turn the session collects (talk_client.py doorbell)
     the session answers (talk_client.py reply)
         -> board tags go on the stage, the rest -> text to speech, the whole answer in one go,
            -> one audio file the page plays, with pause, skip back and speed buttons
@@ -2216,7 +2216,7 @@ def build_app(server: Server):
         return web.json_response(server.view(call))
 
     async def listen(request):
-        """A recording from the page, as a 16 kHz mono WAV, becomes a turn."""
+        """A recording from the page, as a 16 kHz mono WAV, becomes a turn; with draft=1 only its words come back."""
         call = call_of(request)
         if call is None:
             return refused(request)
@@ -2232,6 +2232,8 @@ def build_app(server: Server):
             return web.json_response({"error": str(err)}, status=502)
         if not text.strip():
             return web.json_response({"text": ""})
+        if request.query.get("draft") == "1":  # Talk: the words go back to the text field, to be checked before Send
+            return web.json_response({"text": text})
         # Live mode: the user spoke over an answer. Its own words heard back are an echo, not a turn;
         # "mm-hm" means go on; with cue words, only words that start with one interrupt, and a cue word
         # alone means "stop and listen".
@@ -2307,7 +2309,8 @@ def build_app(server: Server):
             return web.json_response({"error": "nothing to send"}, status=400)
         if server.handing_over:
             return web.json_response({"error": "the talk server is restarting; try again in a moment"}, status=503)
-        return web.json_response({"text": text, "entry": call.offer(text[:4000], typed=True)})
+        spoken = isinstance(body, dict) and body.get("spoken") is True  # said with Talk, then checked in the field
+        return web.json_response({"text": text, "entry": call.offer(text[:4000], typed=not spoken)})
 
     async def floor(request):
         call = call_of(request)

@@ -48,6 +48,28 @@ def test_a_recording_becomes_a_turn(tmp_path):
     assert languages == ["el"]
 
 
+def test_a_recording_to_edit_comes_back_as_text_and_is_no_turn(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            fake.heard = "show me the queue"
+            said = await (await client.post("/api/listen?lang=en&draft=1", data=silent_wav(), headers=AUTH)).json()
+            return said, len(call.entries), (await client.get("/api/turn?wait=0.1", headers=AUTH)).status
+
+    assert run(go()) == ({"text": "show me the queue"}, 0, 204)
+
+
+def test_spoken_text_sent_after_editing_is_a_turn_not_marked_typed(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            await client.post("/api/say", json={"text": "show me the queue, edited", "spoken": True}, headers=AUTH)
+            turn = await (await client.get("/api/turn?wait=1", headers=AUTH)).json()
+            return turn, call.entries[-1]
+
+    turn, entry = run(go())
+    assert turn["said"] == [{"who": "you", "text": "show me the queue, edited"}]
+    assert entry["typed"] is False
+
+
 def test_a_recording_with_nothing_heard_is_no_turn(tmp_path):
     async def go():
         async with running_app(tmp_path) as (client, call, fake):

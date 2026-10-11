@@ -248,6 +248,7 @@ window.addEventListener("blur", () => {
 
 // ---- the toast: an error for a while, or a lost connection until it is back ----
 let errText = "", errTimer = null, connText = "", connDown = false;
+let spoken = false;         // the text field holds words said with Talk: sent as spoken, not typed
 let unsent = null;          // a recording the server did not take: kept, so the user never says it twice
 function paintToast() {
   const text = connText || errText || (unsent ? "Your recording was not sent." : "");
@@ -505,7 +506,7 @@ function paintPill() {
   const rec = !!recorder, ended = !!view.ended, shown = shownAnswer();
   const liveMode = talkMode === "live";
   const liveLabel = !live ? "Listen" : live.suspended ? "Start listening" : live.parked ? "Listen here" : "Stop listening";
-  const talkLabel = rec ? "Send" : liveMode ? liveLabel : "Talk";
+  const talkLabel = rec ? "Done" : liveMode ? liveLabel : "Talk";
   // The rail's mic is the panel's: the same label, the same look.
   for (const id of ["talk", "railtalk"]) {
     const b = $(id);
@@ -1021,29 +1022,38 @@ async function sendRecording() {
   await sendWav(toWav(r.chunks, r.ctx.sampleRate));
 }
 
-// While the server restarts (503, or no answer at all) the recording is sent again until the next
-// server takes it, for up to three minutes. A recording still not taken is kept for Send again.
+// A recording comes back as words in the text field, to be checked and changed before Send; nothing
+// reaches Claude until then. While the server restarts (503, or no answer at all) the recording is sent
+// again until the next server takes it, for up to three minutes. One still not taken is kept for Send again.
 async function sendWav(wav) {
   unsent = null;
   setMode("busy");
   const until = Date.now() + 180000;
   for (let wait = 1000; ; wait = Math.min(wait * 2, 8000)) {
     let resp = null, failed = "";
-    try { resp = await api("/api/listen?lang=" + language, {method: "POST", body: wav, headers: {"Content-Type": "audio/wav"}}); }
+    try { resp = await api("/api/listen?draft=1&lang=" + language, {method: "POST", body: wav, headers: {"Content-Type": "audio/wav"}}); }
     catch (err) { failed = err.message; }
     if (resp && resp.status !== 503) {
       const body = await resp.json().catch(() => ({}));
       if (!resp.ok) { if (![410, 413].includes(resp.status)) unsent = wav; showError(body.error || "Sending failed: HTTP " + resp.status); }
       else if (!body.text) showError("Nothing was heard. Try again, a little closer to the microphone.");
-      view.v = -1;
+      else writeOut(body.text);
       break;
     }
     if (Date.now() > until) { unsent = wav; showError("Sending failed: " + (failed || "the talk server is restarting")); break; }
-    errText = "Reconnecting… your recording is kept and will be sent."; paintToast();
+    errText = "Reconnecting… your recording is kept and will be written out."; paintToast();
     await new Promise(ok => setTimeout(ok, wait));
   }
   if (errText.startsWith("Reconnecting…")) showError("");
   setMode("idle");
+}
+
+// What was said joins anything already typed, and the field takes the keys so Enter sends it.
+function writeOut(text) {
+  const t = $("text"), before = t.value.trimEnd();
+  t.value = before ? before + " " + text : text;
+  spoken = true;
+  fitText(); t.focus(); t.selectionStart = t.selectionEnd = t.value.length;
 }
 
 async function sendText() {
@@ -1051,11 +1061,11 @@ async function sendText() {
   $("sendtext").disabled = true;
   takeFloor(null);
   try {
-    const resp = await api("/api/say", {method: "POST", body: JSON.stringify({text}), headers: {"Content-Type": "application/json"}});
+    const resp = await api("/api/say", {method: "POST", body: JSON.stringify(spoken ? {text, spoken} : {text}), headers: {"Content-Type": "application/json"}});
     const body = await resp.json().catch(() => ({}));
     // What you send moves the call on: the answer still playing stops, so the reply plays when it comes,
     // as it does when you press Talk.
-    if (resp.ok) { $("text").value = ""; fitText(); release(); if (!audio.paused) audio.pause(); view.v = -1; }
+    if (resp.ok) { $("text").value = ""; spoken = false; fitText(); release(); if (!audio.paused) audio.pause(); view.v = -1; }
     else showError(body.error || "Sending failed: HTTP " + resp.status);
   } catch (err) { showError("Sending failed: " + err.message); }
   $("sendtext").disabled = !$("text").value.trim();
@@ -1063,6 +1073,7 @@ async function sendText() {
 // The text field grows with what is typed, up to a few lines, and Send waits for something to send.
 function fitText() {
   const t = $("text"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 120) + "px";
+  if (!t.value.trim()) spoken = false;
   $("sendtext").disabled = !t.value.trim();
 }
 $("text").addEventListener("input", fitText);
