@@ -57,6 +57,18 @@ class TestTheBlockCarriesTheSentence(unittest.TestCase):
         self.assertIn("WATCHER_STALE_MS = 180_000", ENTRY)
 
 
+class TestAStoppedWatcherIsNotWatching(unittest.TestCase):
+    # A stopped watch leaves its heartbeat in place (the IDE plugin reads a
+    # missing one as "just armed"), so a fresh heartbeat alone kept the dot
+    # on Watching for up to 180s after TaskStop. The daemon reports the stop
+    # as `watcher_stopped_at`, and the page must read it.
+    def test_the_poll_field_reaches_the_painter(self):
+        self.assertIn("paintWatcherHealth(data.watcher_seen_at, data.watcher_stopped_at)", ENTRY)
+
+    def test_a_stop_rules_out_live(self):
+        self.assertIn("const live = lastStoppedAt == null && seenAt != null", ENTRY)
+
+
 class TestTheResumeCommandCameWithIt(unittest.TestCase):
     def test_the_popover_and_its_toggle_are_gone(self):
         self.assertNotIn("resume-toggle", ENTRY)

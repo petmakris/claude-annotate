@@ -274,7 +274,7 @@ async function boot() {
       // The command just became available and the current paint (from whatever
       // checkWatcherHealth tick already ran) does not know that yet -- it is
       // what decides whether the resume row is shown at all.
-      paintWatcherHealth(lastSeenAt);
+      paintWatcherHealth(lastSeenAt, lastStoppedAt);
     } catch (_) {
       /* no control, which is the safe direction */
     }
@@ -299,9 +299,14 @@ async function boot() {
   // The last value /poll reported, so setupResumeControl can re-paint when the
   // command arrives without waiting up to 15s for the next tick.
   let lastSeenAt = null;
+  // When the last watcher was stopped (TaskStop, Ctrl-C), from /poll's
+  // `watcher_stopped_at`. Its heartbeat stays fresh for up to 180s after a
+  // stop, so without this the dot kept saying Watching for 3 minutes.
+  let lastStoppedAt = null;
 
-  function paintWatcherHealth(seenAt) {
+  function paintWatcherHealth(seenAt, stoppedAt) {
     lastSeenAt = seenAt;
+    lastStoppedAt = stoppedAt == null ? null : stoppedAt;
     const btn = document.getElementById("menu-toggle");
     const block = document.getElementById("menu-status");
     const title = document.getElementById("menu-status-title");
@@ -309,7 +314,8 @@ async function boot() {
     const resumeEl = document.getElementById("menu-resume");
     if (!btn || !title || !sub) return;
 
-    const live = seenAt != null && (Date.now() - seenAt * 1000) <= WATCHER_STALE_MS;
+    const live = lastStoppedAt == null && seenAt != null
+      && (Date.now() - seenAt * 1000) <= WATCHER_STALE_MS;
     const cls = live ? "watcher-live" : "watcher-stale";
     btn.classList.remove("watcher-live", "watcher-stale");
     btn.classList.add(cls);
@@ -322,6 +328,12 @@ async function boot() {
       title.textContent = "Watching";
       sub.textContent = "A live Claude Code session is watching this page and "
         + "will answer comments here.";
+    } else if (lastStoppedAt != null) {
+      const mins = Math.max(0, Math.round((Date.now() - lastStoppedAt * 1000) / 60000));
+      title.textContent = "Unwatched";
+      sub.textContent = "The session that answers comments here stopped "
+        + "watching " + (mins < 1 ? "just now" : mins + " min ago")
+        + ". A comment will queue until a session watches again.";
     } else if (seenAt == null) {
       title.textContent = "Unwatched";
       sub.textContent = "No Claude Code session has watched this page yet — "
@@ -360,7 +372,7 @@ async function boot() {
       // "unwatched" on it would read as a problem to fix rather than the
       // session simply being over.
       if (data.finished || data.cancelled) return;
-      paintWatcherHealth(data.watcher_seen_at);
+      paintWatcherHealth(data.watcher_seen_at, data.watcher_stopped_at);
     } catch (_) {
       /* offline: leave whatever the badge last said, rather than flicker */
     }
