@@ -37,15 +37,15 @@ async def _settle(call):
         await asyncio.sleep(0.02)
 
 
-def served(tmp_path, answers, seconds=4.0, voices=()):
+def served(tmp_path, answers, seconds=4.0, voices=(), code=None):
     """The call page's HTML and its /api/state before any answer and after each of `answers`. `voices`: the
-    engine's voices offered to the page's picker, as speech.voices() gives them."""
+    engine's voices offered to the page's picker, as speech.voices() gives them. `code`: the call's code folder."""
     from unittest.mock import patch
 
     import talk
 
     async def go():
-        async with running_app(tmp_path, stage_url=STAGE) as (client, call, fake):
+        async with running_app(tmp_path, stage_url=STAGE, **({"code": code} if code else {})) as (client, call, fake):
             fake.seconds = seconds
             states = [await (await client.get("/api/state", headers=AUTH)).json()]
             for text in answers:

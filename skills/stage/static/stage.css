@@ -46,6 +46,12 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .pos:hover,.pos[aria-expanded="true"]{background:var(--row-alt);color:var(--ink)}
 .posdot{width:7px;height:7px;border-radius:50%;background:var(--claude)}
 .posdot[hidden]{display:none}
+/* Shown while the reader holds the board: it puts the stage back on the voice */
+.follow{height:28px;margin-left:6px;padding:0 12px;border:0;border-radius:14px;background:var(--acc);color:var(--on-acc);cursor:pointer;
+  font:500 12.5px/1 var(--sans);white-space:nowrap}
+.follow:hover{filter:brightness(1.08)}
+.follow:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.follow[hidden]{display:none}
 .boards{position:absolute;top:38px;left:8px;width:min(360px,calc(100vw - 16px));max-height:min(60vh,420px);overflow:auto;box-sizing:border-box;
   padding:6px;border-radius:14px;background:var(--panel);border:1px solid var(--line);box-shadow:0 18px 50px -18px rgba(15,23,42,.45)}
 .boards[hidden]{display:none}

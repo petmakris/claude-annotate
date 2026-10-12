@@ -570,3 +570,24 @@ def test_a_click_on_an_actor_card_follows_it_and_another_click_lets_it_go(tmp_pa
     page = _turn(tmp_path).open()
     page.js(CLICK % "'.ln-chip[data-actor=\"az\"]'").check(FOLLOWED).js(CLICK % "'.ln-chip[data-actor=\"az\"]'").check(FOLLOWED)
     assert page.run() == [{"dim": ["s1", "s4", "s5", "s6", "s7"], "followed": ["az"]}, {"dim": [], "followed": []}]
+
+
+def test_a_board_the_reader_picks_stays_in_front_until_they_press_follow_the_voice(tmp_path):
+    # call IriDPEiq: the reader picked a page and the voice's next whole picture took it away
+    (tmp_path / "walk.html").write_text("<h1>walk</h1>")
+    table = {"type": "inline", "format": "table", "body": "| a | b |\n|---|---|\n| 1 | 2 |"}
+    page = (StagePage(tmp_path).show("one", table, title="One asset's groups")
+            .show("walk", {"type": "file", "path": "walk.html", "fragment": None}, title="Report data walkthrough").open())
+    shown = "[[...document.querySelectorAll('button[role=tab]')].find((t) => t.getAttribute('aria-selected') === 'true')?.dataset.view, document.querySelector('.follow').hidden]"
+    page.send({"type": "stage:state", "front": "one", "frames": {}, "keys": 0, "answer": 3}).check(shown)
+    page.js("document.querySelector('button[role=tab][data-view=walk]').click();").check(shown)
+    # the reader goes back a sentence and plays on, then replays an older answer: the voice's picture leaves the page in front
+    page.send({"type": "stage:state", "front": "one", "frames": {}, "keys": 0, "answer": 3})
+    page.send({"type": "stage:answer", "n": 2, "follow": False})
+    page.send({"type": "stage:state", "front": "one", "frames": {}, "keys": 0, "answer": 2}).check(shown)
+    page.js("document.querySelector('.follow').click();").check("follows()")
+    page.send({"type": "stage:state", "front": "one", "frames": {}, "keys": 0, "answer": 2}).check(shown)
+    # the next answer starting by itself follows the voice again too
+    page.js("document.querySelector('button[role=tab][data-view=walk]').click();")
+    page.send({"type": "stage:answer", "n": 4}).check(shown)
+    assert page.run() == [["one", True], ["walk", False], ["walk", False], [False, True], ["one", True], ["walk", True]]

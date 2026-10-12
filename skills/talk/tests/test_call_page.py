@@ -43,21 +43,62 @@ def test_a_replay_from_the_first_word_fronts_the_board_the_answer_came_in_with(t
     assert page.run() == [{"type": "stage:state", "front": "three-paths-changed", "frames": {}, "keys": 0, "answer": 1}]
 
 
-def test_a_play_the_reader_starts_takes_the_board_back_to_the_voice(tmp_path):
+def test_a_play_the_reader_starts_keeps_the_board_they_picked(tmp_path):
+    # call IriDPEiq: the reader picked a board, went back a sentence and played on, and the stage took the board away
     html, states = served(tmp_path, [FLOW_ANSWER], seconds=3.0)
     page = CallPage(html, states, seconds=3.0).js("await serve(1); await playTo(1.2);")
     page.check("toStage().some((m) => m.type === 'stage:frame' && m.n === 1)")
     starts = {"Play": "$('playpause').click();",
               "conversation Play": "document.querySelector('#convo .turn.claude button.play').click();",
               "word tap": "document.querySelector(\"#convo .turn.claude .w[data-i='3']\").click();",
-              "Space": "document.body.focus(); key(' ');"}
+              "Space": "document.body.focus(); key(' ');",
+              "← then Space": "document.body.focus(); key('ArrowLeft'); key(' ');",
+              "← on the stage then Space": "fromStage({ type: 'stage:key', key: 'ArrowLeft' }); fromStage({ type: 'stage:key', key: ' ' });"}
     for how, start in starts.items():
         page.js("if (!audio.paused) $('playpause').click();")
-        # the reader stepped the board by hand: the stage turned following off and said so
+        # the reader picked a board by hand: the stage turned following off and said so
         page.js("fromStage({ type: 'stage:follow', on: false });").check("follow")
         page.js("toStage().length = 0;").js(start)
         page.check(f"[{how!r}, !audio.paused, follow, {SENT}]")
-    assert page.run() == [True] + [x for how in starts for x in (False, [how, True, True, ["follow:true", "state"]])]
+    # Follow the voice on the stage puts it back where the voice is
+    page.js("toStage().length = 0; fromStage({ type: 'stage:follow', on: true });").check(f"[follow, {SENT}]")
+    sent = {how: ["state", "state"] if how.startswith("←") else ["state"] for how in starts}  # ← sends its own picture
+    assert page.run() == [True] + [x for how in starts for x in (False, [how, True, False, sent[how]])] + [[True, ["state"]]]
+
+
+def test_only_an_answer_that_starts_by_itself_turns_following_back_on(tmp_path):
+    html, states = served(tmp_path, ["The first answer.", "The second answer."])
+    page = CallPage(html, states, start=1)
+    page.js("fromStage({ type: 'stage:follow', on: false }); toStage().length = 0;")
+    page.js("document.querySelector('#convo .turn.claude button.play').click();")  # the reader replays an old answer
+    page.js("await end(); await serve(2);")  # a new one comes and plays by itself
+    page.check("toStage().filter((m) => m.type === 'stage:answer')")
+    assert page.run() == [[{"type": "stage:answer", "n": 1, "follow": False}, {"type": "stage:answer", "n": 2, "follow": True}]]
+
+
+def test_play_on_a_board_the_voice_is_not_on_plays_its_explanation_and_follows_again(tmp_path):
+    html, states = served(tmp_path, [f"[[show table | One]]{TABLE}[[/show]] {six('first')}. "
+                                     f"[[show table | Two]]| c | d |\n|---|---|\n| 3 | 4 |[[/show]] {six('second')}."], seconds=6.0)
+    page = CallPage(html, states, seconds=6.0).js("await serve(1); await playTo(5.0); audio.pause();")
+    page.js("fromStage({ type: 'stage:views', list: [{name: 'one', answer: 1}, {name: 'two', answer: 1}] });")
+    page.js("fromStage({ type: 'stage:shown', view: 'one' }); fromStage({ type: 'stage:follow', on: false }); toStage().length = 0;")
+    page.js("$('playpause').click();").check(f"[!audio.paused, audio.currentTime, follow, {SENT}]")
+    assert page.run() == [[True, 0, True, ["follow:true", "state"]]]
+
+
+def test_a_replay_of_the_sentence_about_a_page_fronts_the_page(tmp_path):
+    # call IriDPEiq: the answer opened on its page, then went on to a table
+    code = tmp_path / "code"
+    code.mkdir()
+    (code / "walk.html").write_text("<h1>Walkthrough</h1>")
+    html, states = served(tmp_path, [f"[[show page: walk.html | Report data walkthrough]] {six('page')}. "
+                                     f"[[show table | One asset's groups]]{TABLE}[[/show]] {six('fund')}."], seconds=4.0, code=code)
+    page = CallPage(html, states, seconds=4.0, autoplay=False).js("await serve(1);")
+    page.check("[...document.querySelectorAll('#convo button.chip.board')].map((b) => b.dataset.view)")
+    for word in (0, 7):
+        page.js("toStage().length = 0;").js(f"document.querySelector(\"#convo .turn.claude .w[data-i='{word}']\").click();")
+        page.check("toStage().find((m) => m.type === 'stage:state').front")
+    assert page.run() == [["report-data-walkthrough", "one-asset-s-groups"], "report-data-walkthrough", "one-asset-s-groups"]
 
 
 def test_an_answer_played_to_its_end_holds_its_last_frame_then_shows_its_boards_whole(tmp_path):

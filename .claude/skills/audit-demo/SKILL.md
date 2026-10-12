@@ -16,7 +16,7 @@ The stage demo is talk's tutorial: the gear's **Stage demo** opens it in a tab, 
 ## Covering tests — read these first, do not duplicate them
 
 - `skills/talk/tests/test_demo.py::test_every_demo_answer_goes_through_the_reply_parser_without_a_board_problem` — every answer parses with no `board:` problem, and the demo shows code, change, sequence, flowchart and table.
-- `skills/talk/tests/test_demo.py::test_the_demo_shows_every_board_kind_and_every_way_to_steer_one` — every kind in talk's `BOARD_KINDS` (but Mermaid's `diagram`), every point form (lines, row or cell, node, step), and the `next`, `+` and `key` tags and a `page:` line all appear. Do not re-report a missing kind or form; run the test instead.
+- `skills/talk/tests/test_demo.py::test_the_demo_shows_every_board_kind_and_every_way_to_steer_one` — every kind in talk's `BOARD_KINDS` (but Mermaid's `diagram`), every point form (lines, row or cell, node, step), and the `next`, `+` and `key` tags all appear. Do not re-report a missing kind or form; run the test instead.
 - `skills/talk/tests/test_demo.py` also covers next, again, back and start over, and the gear's demo being reused.
 
 ## Step 1 — inventory

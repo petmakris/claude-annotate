@@ -2,11 +2,10 @@
 The stage demo: `talk.py --demo` plays these answers in a call, one each time the user says or types
 anything ("next" goes on, "again" plays the same one, "back" the one before, "start over" the first).
 Each answer is written exactly as a Claude session writes one, so it goes through the same board
-tags, scenes, voice and stage. Answers are separated by a line holding only `---`. A first line
-`page: <path> | <title>` puts that file on the stage, behind the boards, as a page opens in a call.
-Paths are relative to the repository root.
+tags, scenes, voice and stage. Answers are separated by a line holding only `---`. Paths are relative
+to the repository root.
 -->
-Welcome to the stage demo. Every board the stage can show comes past in turn, explained the way a call explains it, so you can see each one move with the voice. [[key: say next for the next board, again to replay one, back to go back]] Say next, or type it, whenever you are ready for the next board. [[key: the stage follows the voice until you take it in hand]] If you pick a board yourself, the stage stops following the voice until you press Play or the next answer starts.
+Welcome to the stage demo. Every board the stage can show comes past in turn, explained the way a call explains it, so you can see each one move with the voice. [[key: say next for the next board, again to replay one, back to go back]] Say next, or type it, whenever you are ready for the next board. [[key: the stage follows the voice until you take it in hand]] If you pick a board yourself, it stays in front whatever you play, until you press Follow the voice at the top of the stage or the next answer starts.
 ---
 [[show code: skills/talk/live_turns.py:33-53 | How a turn waits]] This is real code from talk: the turn queue. [[point: lines 33-41]] When you send something, offer puts it in the queue, and a turn sent before Claude collects the last one is merged into it. [[point: lines 43-53]] Withdraw takes a line back again, but only while no doorbell has collected it. [[key: a code board lights the lines being talked about]] Say next to see a change.
 ---
@@ -59,7 +58,6 @@ A table comes in a row at a time. [[next]] [[point: cell "Speed" / "Azure"]] Azu
   {"from": "speaking", "to": "listening", "label": "it ends"}]} [[/show]]
 A map can go round in loops too, like the states of live mode. [[+ listening]] It listens. [[+ hearing]] When you speak, it hears you. [[+ sending]] After your pause, it sends what you said. [[+ working]] If there were words, Claude works on them. [[+ speaking]] And then it speaks the answer. [[+ sending->listening, speaking->hearing, speaking->listening]] A map with more than one loop is drawn as a ring, and the arrows that go back curve across its middle: nothing said, you cut in, or the answer ends. [[key: a map that loops is drawn as a ring, its ways back across the middle]] Next is a page.
 ---
-page: README.md | The README
-A page is a file, an address or another session, and in a call it opens behind the boards. The repository's README is on the stage now: pick it from the list of boards, under the counter at the top, to read it. [[key: a page opens behind the boards; pick it from the list]] Next is the end.
+[[show page: README.md | The README]] A page is a file, an address or another session, and an answer brings it forward with its voice like any other board. This is the repository's README. [[key: an answer brings a page forward as it talks about it]] Pick another board and press Play: the stage keeps the board you picked until you press Follow the voice. Next is the end.
 ---
 That was every board: code, a change, a sequence, a map, a table, a map with loops, a page, and the key points pinned at the end of the list. Go back through them with the arrows at the top of the stage, or say start over to play the demo again. [[key: the arrows at the top go back through every board]]

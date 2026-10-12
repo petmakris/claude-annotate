@@ -258,6 +258,8 @@ def stage_view(item: dict) -> tuple[str, dict, str]:
         source = {k: item[k] for k in CHANGE_FIELDS}
     elif item["kind"] in VISUAL_KINDS:
         source = item["visual"]
+    elif item["kind"] == "page":
+        source = item["source"]
     else:
         source = {"type": "inline", "format": item["kind"], "body": item["body"]}
     return name, source, title
@@ -419,11 +421,11 @@ def align_words(text: str, start: int, end: int, heard: list, duration: float, o
             for (a, b), (t0, t1) in zip(tokens, times)]
 
 
-BOARD_KINDS = ("code", "change", "diagram", "table", "sequence", "flowchart")
+BOARD_KINDS = ("code", "change", "diagram", "table", "sequence", "flowchart", "page")
 VISUAL_KINDS = ("sequence", "flowchart")  # drawn by the shared tools from a JSON spec; any other body is Mermaid
-LINE_KINDS = ("code", "change")  # one-line tags: their source is read from disk, so no body follows
+LINE_KINDS = ("code", "change", "page")  # one-line tags: their source is named on the tag, so no body follows
 KIND_ALIASES = {"mermaid": "diagram", "graph": "diagram", "flow": "diagram",
-                "grid": "table", "diff": "change", "edit": "change"}
+                "grid": "table", "diff": "change", "edit": "change", "file": "page", "url": "page"}
 CHANGE_FIELDS = ("type", "format", "path", "rev", "hunks", "added", "removed", "more", "lang")
 KEY_VIEW = "key-points"  # the one Key points view of a call
 MAX_KEY_CHARS = 120
@@ -901,7 +903,7 @@ class Board:
         if kind in LINE_KINDS:
             self.spill += self.close_block()
             cue, n = self.new_cue(), len(self.items)
-            (self.add_code if kind == "code" else self.add_change)(rest, title)
+            {"code": self.add_code, "change": self.add_change, "page": self.add_page}[kind](rest, title)
             if len(self.items) > n:
                 cue["view"] = self.items[-1]["view"]
             return True
@@ -924,8 +926,8 @@ class Board:
         """The board a point means: the one titled so, or with no title the last board shown, earlier
         in this reply or else earlier in the call. Among boards of that title, one of `kind` (code
         counts a change too) wins, then one titled exactly so, then the latest."""
-        if not title:
-            return self.items[-1] if self.items else None
+        if not title:  # a page has nothing to point at, so the last board shown is the last one that has
+            return next((i for i in reversed(self.items) if i["kind"] != "page"), None)
         want = fold(title)
 
         def bare(item):
@@ -966,6 +968,9 @@ class Board:
                          else "point not shown: no board has been shown yet")
             return
         name, kind = item.get("title") or item["kind"], item["kind"]
+        if kind == "page":
+            self.problem(f'point not shown: "{name}" is a page, which has no lines, rows or nodes to light')
+            return
         if kind in VISUAL_KINDS:
             self.point_visual(item, name, m)
             return
@@ -1216,6 +1221,26 @@ class Board:
         title = title or f"What changed in {Path(src['path']).name}"
         self.add({"kind": "change", "title": title, **src})
 
+    def add_page(self, spec: str, title: str) -> None:
+        """[[show page: <file in the code folder, address or session:kind/slug> | title]]: a page as a board of
+        the answer, fronted when the voice reaches the tag like any other board."""
+        try:
+            if not spec.strip():
+                raise stage_model.SourceError("expected a file in the code folder, an address or session:<kind>/<slug>")
+            is_file = not spec.strip().startswith(("http://", "https://", "session:"))
+            if is_file and not self.code_dir:
+                raise stage_model.SourceError(f"talk was started without --code: {spec.strip()}")
+            src = stage_model.parse_source(spec, self.code_dir or Path("."))
+            if src["type"] not in stage_mod.PAGE_TYPES:
+                raise stage_model.SourceError(f"{spec.strip()} is not a page; use [[show code: ...]] or [[show change: ...]]")
+            if src["type"] == "file" and not (self.code_dir / src["path"]).is_file():
+                raise stage_model.SourceError(f"no such file in the code folder: {src['path']}")
+        except stage_model.SourceError as err:
+            self.problem(f"page not shown, {err}")
+            return
+        default = src.get("url") or src.get("slug") or Path(src.get("path") or "page").name
+        self.add({"kind": "page", "title": title or default, "source": src, "ident": spec.strip()})
+
     def add(self, item: dict) -> None:
         cue = item.pop("cue", None)
         ident = item.pop("ident", item.get("path", ""))
@@ -1414,26 +1439,9 @@ class Call:
         return entry
 
     async def demo_play(self, i: int) -> None:
-        """Play demo answer i, as a Claude session's reply would come: boards, voice and all. A first line
-        `page: <path> | <title>` puts that file behind the boards first, as a page opens in a call."""
+        """Play demo answer i, as a Claude session's reply would come: boards, voice and all."""
         self.demo_at = i
-        text = self.demo[i]
-        first, _, rest = text.partition("\n")
-        m = re.fullmatch(r"page:\s*(?P<path>[^|]+?)\s*(?:\|\s*(?P<title>.+))?", first.strip())
-        if m and self.stage_cwd:
-            path, title = m["path"], (m["title"] or m["path"]).strip()
-            cwd, slug, owner = self.stage_cwd, self.stage_sid or self.stage_slug, self.stage_owner()
-            code = Path(self.args.code or cwd)
-
-            def show_page():
-                source = stage_model.parse_source(path, code)
-                stage_mod.show(cwd, slugify(title) or "page", source, title=title, slug=slug, owner=owner, background=True)
-            try:
-                await asyncio.get_running_loop().run_in_executor(self.stage_pool, show_page)
-            except Exception as err:  # noqa: BLE001
-                self.board.problem(f"the demo page {path} was not shown: {err}")
-            text = rest
-        await self.answer(text)
+        await self.answer(self.demo[i])
 
     def withdraw(self, entry_id) -> bool:
         """Take back what the user said, while no doorbell has collected it."""

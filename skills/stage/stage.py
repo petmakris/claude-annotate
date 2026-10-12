@@ -115,7 +115,8 @@ def show(cwd: str, name: str, source: dict, *, title: str | None = None,
     """Put a view on the stage. `extra` adds metadata to the view's body (answer, kind, caption,
     pinned, scene, scenes); any other key is ignored. `owner` names the writer: a view put there by another writer
     is never replaced, it raises ViewTaken. On a talk call's stage a page (a file, an address or a
-    session) opens behind what is in front and never takes the front: the result says so with `behind`."""
+    session) opens behind what is in front and never takes the front: the result says so with `behind`. A page a
+    writer (`owner`) brings in replaces any copy of the same page put up by hand."""
     if not model.NAME_RE.match(name):
         raise ValueError("view name must match %s: %r" % (model.NAME_RE.pattern, name))
     row = ensure_stage(cwd, slug=slug)
@@ -131,6 +132,16 @@ def show(cwd: str, name: str, source: dict, *, title: str | None = None,
     if owner:
         view["owner"] = owner
     layout = _layout(items)
+    # A writer bringing in a page takes over the copy of it put up by hand, so the stage never holds it twice.
+    copies = [] if not owner or source["type"] not in PAGE_TYPES else [
+        anchor[len("view:"):] for anchor, item in items.items()
+        if anchor.startswith("view:") and anchor != "view:" + name and not ((item or {}).get("body") or {}).get("owner")
+        and _same_page(((item or {}).get("body") or {}).get("source") or {}, source)]
+    for copy in copies:
+        wc.delete_item(sid, "view:" + copy, kind=KIND)
+        layout["order"] = [n for n in layout["order"] if n != copy]
+        if layout["front"] == copy:
+            layout["front"] = name
     if name not in layout["order"]:
         layout["order"].append(name)
     behind = source["type"] in PAGE_TYPES and str(row.get("slug", "")).startswith(PRIVATE_SLUG_PREFIX)
@@ -140,6 +151,12 @@ def show(cwd: str, name: str, source: dict, *, title: str | None = None,
     if source["type"] == "file":
         start_watch(cwd, sid)
     return {"sid": sid, "url": row["url"], "view": view, "behind": behind}
+
+
+def _same_page(a: dict, b: dict) -> bool:
+    """Whether two view sources show the same page: one file, one address or one session."""
+    fields = {"file": ("path", "fragment"), "url": ("url",), "session": ("kind", "slug")}.get(a.get("type"))
+    return bool(fields) and a.get("type") == b.get("type") and all(a.get(f) == b.get(f) for f in fields)
 
 
 def hide(cwd: str, name: str, *, slug: str | None = None) -> None:
@@ -269,8 +286,9 @@ def main(argv=None) -> int:
             res = show(cwd, args.name, source, title=args.title, background=args.background, slug=args.slug)
             print(res["url"])
             if res["behind"]:
-                print("stage: a call is on, so this page opened as a background tab; say so, and the user "
-                      "taps its tab to look", file=sys.stderr)
+                print("stage: a call is on, so this page opened as a background tab; to talk about it, put "
+                      "[[show page: <the same source> | <title>]] in the answer before the sentence about it, "
+                      "and the voice brings it forward", file=sys.stderr)
         elif args.cmd == "hide":
             hide(cwd, args.name, slug=args.slug)
         elif args.cmd == "link":

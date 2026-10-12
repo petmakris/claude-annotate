@@ -240,6 +240,28 @@ def test_a_view_another_writer_put_there_is_never_replaced(fake, tmp_path):
     assert stage.main(["show", "plan", "https://c", "--cwd", str(tmp_path)]) == 2
 
 
+def test_a_page_a_call_brings_in_takes_over_the_copy_put_up_by_hand(fake, tmp_path):
+    # call IriDPEiq: the page was put up by hand as report-data, then talked about; the call's own view replaces it
+    fake.rows = [dict(ROW, slug="talk-abcd1234")]
+    table = {"type": "inline", "format": "table", "body": "| a |\n|---|\n| 1 |"}
+    stage.show(str(tmp_path), "board", table, slug="talk-abcd1234", owner="talk call C1")
+    stage.show(str(tmp_path), "report-data", {"type": "url", "url": "https://share/r.html"}, slug="talk-abcd1234")
+    stage.show(str(tmp_path), "other", {"type": "url", "url": "https://share/other.html"}, slug="talk-abcd1234")
+    stage.show(str(tmp_path), "walkthrough", {"type": "url", "url": "https://share/r.html"}, slug="talk-abcd1234",
+               owner="talk call C1")
+    assert sorted(a for a in fake.items if a.startswith("view:")) == ["view:board", "view:other", "view:walkthrough"]
+    assert fake.items["__layout__"] == {"order": ["board", "other", "walkthrough"], "front": "board"}
+    # a copy by hand of a file page goes too; a writer's own view of the same page, and a hand view, never do
+    (tmp_path / "p.html").write_text("<p>")
+    page = {"type": "file", "path": "p.html", "fragment": None}
+    stage.show(str(tmp_path), "by-hand", page, slug="talk-abcd1234")
+    stage.show(str(tmp_path), "mine", page, slug="talk-abcd1234", owner="talk call C1")
+    stage.show(str(tmp_path), "again-by-hand", page, slug="talk-abcd1234")
+    stage.show(str(tmp_path), "theirs", page, slug="talk-abcd1234", owner="talk call C2")
+    assert sorted(a for a in fake.items if a.startswith("view:")) == [
+        "view:board", "view:mine", "view:other", "view:theirs", "view:walkthrough"]
+
+
 def test_a_session_source_in_another_folder_is_found_by_slug_or_sid(fake, tmp_path):
     fake.list_sessions = lambda cwd, kind: [r for r in fake.rows if r.get("kind") == kind and r.get("cwd") == cwd]
     fake.rows.append({"sid": "d1", "slug": "my-plan", "kind": "annotate", "cwd": "/elsewhere", "state": "live"})

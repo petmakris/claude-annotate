@@ -11,15 +11,12 @@ def test_every_demo_answer_goes_through_the_reply_parser_without_a_board_problem
     assert len(answers) >= 9
     call = talk.Call(make_args(code=talk.SKILL_DIR.parents[1]), "Stage demo", tmp_path / "out")
     for text in answers:
-        first, _, rest = text.partition("\n")
-        body = rest if first.startswith("page:") else text
         call.board.problems.clear()
-        call.split_reply(body)
-        assert call.board.problems == [], (body[:60], call.board.problems)
+        call.split_reply(text)
+        assert call.board.problems == [], (text[:60], call.board.problems)
     # every kind of board the stage draws comes past
     kinds = {item["kind"] for item in call.board.items}
-    assert {"code", "change", "sequence", "flowchart", "table"} <= kinds, kinds  # a call draws no Mermaid
-    assert any(a.startswith("page:") for a in answers)
+    assert {"code", "change", "sequence", "flowchart", "table", "page"} <= kinds, kinds  # a call draws no Mermaid
 
 
 def test_a_demo_starts_when_its_page_opens_and_next_again_back_move_through_it(tmp_path):
@@ -84,7 +81,7 @@ def test_the_demo_shows_every_board_kind_and_every_way_to_steer_one():
              "node": r"\[\[point[^\]]*: node ", "step": r"\[\[point[^\]]*: step "}
     missing = [name for name, rx in forms.items() if not re.search(rx, text)]
     assert not missing, f"no demo answer points at a {missing}"
-    for tag in ("[[next]]", "[[+ ", "[[key:", "\npage:"):
+    for tag in ("[[next]]", "[[+ ", "[[key:"):
         assert tag in text, f"the demo never uses {tag.strip()}"
 
 
@@ -92,8 +89,7 @@ def test_every_demo_board_keeps_what_the_stage_keeps_true(tmp_path):
     call = talk.Call(make_args(code=talk.SKILL_DIR.parents[1]), "Stage demo", tmp_path / "out")
     breaks = []
     for text in talk.load_demo():
-        first, _, rest = text.partition("\n")
-        shown = call.split_reply(rest if first.startswith("page:") else text)
+        shown = call.split_reply(text)
         breaks += stage_rule_breaks(call, shown)
         for item in call.board.items:
             item.pop("scene", None)  # a scene belongs to the answer that compiled it

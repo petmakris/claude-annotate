@@ -598,6 +598,51 @@ def split_in(tmp_path, text, code):
     return " ".join(shown.split()), call.board.items, call.board.problems
 
 
+def test_a_page_tag_makes_the_page_a_board_the_voice_fronts(tmp_path):
+    # call IriDPEiq: the answer was about a page, and nothing in it could bring the page forward
+    code = tmp_path / "code"
+    (code / "docs").mkdir(parents=True)
+    (code / "docs" / "walk.html").write_text("<h1>Walkthrough</h1>")
+    text = ("[[show page: docs/walk.html | Report data walkthrough]] I made a page with the real data. "
+            "[[show table | One asset's groups]]| list | bucket |\n|---|---|\n| Country | LU |[[/show]] Start with one fund.")
+    entry, problems = cues_of(tmp_path, text, code)
+    assert problems == []
+    said = entry["text"]
+    assert [(c["view"], c["at"]) for c in entry["cues"] if c["kind"] == "front"] == [
+        ("report-data-walkthrough", 0), ("one-asset-s-groups", said.index("Start"))]
+    _, items, _ = split_in(tmp_path, text, code)
+    page = items[0]
+    assert (page["kind"], page["title"], page["view"]) == ("page", "Report data walkthrough", "report-data-walkthrough")
+    assert talk.stage_view(page) == ("report-data-walkthrough", {"type": "file", "path": "docs/walk.html", "fragment": None},
+                                     "Report data walkthrough")
+    _, items, problems = split_in(tmp_path, "[[show page: https://share.mac/r.html]] Here.", None)
+    assert problems == [] and items[0]["source"] == {"type": "url", "url": "https://share.mac/r.html"}
+    assert items[0]["title"] == "https://share.mac/r.html"
+    _, items, problems = split_in(tmp_path, "[[page: docs/walk.html | W]] Short form.", code)
+    assert problems == [] and [i["kind"] for i in items] == ["page"]
+
+
+def test_a_page_that_cannot_be_shown_or_pointed_at_is_a_problem(tmp_path):
+    code = tmp_path / "code"
+    code.mkdir()
+    (code / "a.py").write_text("x = 1\n")
+    cases = {"[[show page: gone.html | G]] Hi.": ["page not shown, no such file in the code folder: gone.html"],
+             "[[show page: ../out.html | O]] Hi.": [f"page not shown, ../out.html is outside the project {code.resolve()}"],
+             "[[show page: code:a.py:1-1 | C]] Hi.": ["page not shown, code:a.py:1-1 is not a page; use [[show code: ...]] or [[show change: ...]]"],
+             "[[show page | Nothing]] Hi.": ["page not shown, expected a file in the code folder, an address or session:<kind>/<slug>"]}
+    for text, want in cases.items():
+        _, items, problems = split_in(tmp_path, text, code)
+        assert (items, problems) == ([], want), text
+    _, _, problems = split_in(tmp_path, "[[show page: a.py | P]] Hi.", None)
+    assert problems == ["page not shown, talk was started without --code: a.py"]
+    _, problems = cues_of(tmp_path, "[[show page: https://x.mac/p | P]] Hi. [[point P: row 1]] There.", code)
+    assert problems == ['point not shown: "P" is a page, which has no lines, rows or nodes to light']
+    # a point with no title means the last board that has something to point at, not a page shown after it
+    entry, problems, focus = focus_cues(tmp_path, "[[show code: a.py:1-1 | A]] The line. [[show page: https://x.mac/p | P]] "
+                                                  "The page. [[point: line 1]] Back to the line.", code)
+    assert problems == [] and focus == [("a", ["line:1"])]
+
+
 def test_a_change_that_cannot_be_shown_is_a_problem(tmp_path):
     code = git_repo(tmp_path / "code")
     _, items, problems = split_in(tmp_path, "[[show change: a.py | What I changed]] I renamed it.", code)

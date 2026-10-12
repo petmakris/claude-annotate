@@ -18,8 +18,9 @@
 //                                         in front stays as it is. Fronted by the voice of an answer with no
 //                                         scene of its own for the view, the view shows whole. A view not here
 //                                         yet is fronted when it arrives, unless another front came first
-//     {type:'stage:answer', n}            answer n started playing: following turns on again, and a frame
-//                                         or front another answer sent for a view not here yet is dropped
+//     {type:'stage:answer', n, follow}    answer n started playing: unless the reader started it (follow:false)
+//                                         following turns on again; a frame or front another answer sent for a
+//                                         view not here yet is dropped
 //     {type:'stage:rest', views, answer}  answer `answer` has ended: each of these views still on its scene goes
 //                                         to the rest frame (the whole board, nothing dimmed); never the view in
 //                                         front while following is off
@@ -40,7 +41,7 @@
 //     {type:'stage:views', list:[{name, title, kind, answer}]}   after every change to the tabs
 //     {type:'stage:changed', name, title, isNew}                 a view was created or its source changed
 //     {type:'stage:follow', on}                                  following changed here (a tab tap, a chip, a step
-//                                                                by hand, a new answer)
+//                                                                by hand, Follow the voice, a new answer)
 //     {type:'stage:shown', view}                                 this board is in front now, by the voice or by hand
 //     {type:'stage:key', key}                                    Space, ArrowLeft or ArrowRight pressed here, on nothing
 //                                                                that takes keys: the call page pauses or moves the answer
@@ -188,6 +189,7 @@ root.innerHTML = `<div class="stage">
       <button type="button" class="nb navbtn next" aria-label="Next board"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
       <button type="button" class="pos" aria-haspopup="true" aria-expanded="false" aria-label="All boards"><span class="tabpos"></span><span class="posdot" hidden></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
     </div>
+    <button type="button" class="follow" hidden>Follow the voice</button>
     <div class="boards" hidden><h4>Boards, newest first</h4><nav class="tabs" role="tablist" aria-label="Stage" aria-orientation="vertical"></nav></div></div>
   <div class="panes"><div class="empty"><div class="emptycard">
     <h2>The stage is empty</h2><p class="msg">${EMPTY_LINE}</p>
@@ -197,6 +199,7 @@ root.innerHTML = `<div class="stage">
 </div>`;
 const tabsEl = root.querySelector(".tabs"), panesEl = root.querySelector(".panes");
 const navEl = root.querySelector(".tabnav"), boardsEl = root.querySelector(".boards"), posEl = root.querySelector(".pos");
+const followEl = root.querySelector(".follow");
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const views = new Map();            // name -> {body, tab, pane, filled, stale, renderSeq, changedAt, snap}
 let layout = { order: [], front: null };
@@ -898,8 +901,11 @@ function updateNav() {
   navEl.querySelector(".posdot").hidden = !changed;
   posEl.setAttribute("aria-label", "All boards" + (changed ? ", one changed" : ""));
 }
-// The pane headers start after the history buttons, which sit over their left end.
-new ResizeObserver(() => root.querySelector(".stage").style.setProperty("--navw", navEl.offsetWidth + "px")).observe(navEl);
+// The pane headers start after the history buttons and Follow the voice, which sit over their left end.
+const barRoom = () => root.querySelector(".stage").style.setProperty("--navw",
+  (navEl.hidden ? 0 : navEl.offsetWidth) + (followEl.hidden ? 0 : followEl.offsetWidth + 14) + "px");  // its 6px margin, and 8px before the title
+const barObserver = new ResizeObserver(barRoom);
+barObserver.observe(navEl); barObserver.observe(followEl);
 function step(d) {
   const tabs = [...tabsEl.children], i = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
   const next = tabs[i + d];
@@ -1056,11 +1062,16 @@ async function onItem(anchor, version) {
 
 // Following lives on the call page's gear; the stage keeps the state and tells the page when it
 // changes here.
+// While it is off, Follow the voice shows beside the history: the board the reader picked stays in front,
+// whatever they play, until they press it or the next answer starts.
 function setFollow(on) {
   if (follow === on) return;
   follow = on;
+  followEl.hidden = !embedded || on;
+  barRoom();
   post({ type: "stage:follow", on });
 }
+followEl.onclick = () => setFollow(true);
 
 // Centre `el` (an element, or several taken together, such as the lines of a range) in each box around it
 // that scrolls, inside the pane only: never the page around the stage. What is taller than the box starts at
@@ -1227,7 +1238,7 @@ function onMessage(m) {
     if (v && selectedName() !== v.body.name) markUpdated(v, true);
   }
   else if (m.type === "stage:answer") {
-    setFollow(true);
+    if (m.follow !== false) setFollow(true);
     for (const [name, late] of lateFrames) if (late.answer !== answerKey(m.n)) lateFrames.delete(name);
     if (lateFront && lateFront.answer !== answerKey(m.n)) lateFront = null;
   }

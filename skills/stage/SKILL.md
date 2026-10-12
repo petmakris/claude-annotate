@@ -57,15 +57,19 @@ Rules:
   `{type:'stage:theme', theme}` as a message instead, so it also needs
   `addEventListener("message", e => { if (e.data?.type === "stage:theme") document.documentElement.dataset.theme = e.data.theme; })`.
   Prefer a file in the project over an address.
-- **During a talk call a page waits behind.** On a call's stage a file, address or session view opens
-  as a background board and never takes the front; `stage.py` says so on stderr. Tell the user it is there.
+- **During a talk call a page waits behind.** On a call's stage a file, address or session view put up with
+  `stage.py show` opens as a background board and never takes the front; `stage.py` says so on stderr. To talk
+  about it, bring it into the answer with talk's `[[show page: ... | title]]`, which fronts it with the voice and
+  replaces the copy put up by hand.
 - **Inside a talk call the stage follows the voice.** /talk embeds the stage and steers it over
   postMessage (the protocol is at the top of `static/stage.js`): it fronts each board as the
   spoken answer reaches it and lights up the lines, row or node a `[[point ...]]` tag names (on a change board a
   removed line too), keeping a range of lines or rows in view whole when it fits. The call
   page's gear has a **Stage follows the voice** switch for it. Picking a board by hand (its tab, its chip
-  in the conversation, or Back and Next on its steps) turns it off; pressing Play, or the next answer, turns
-  it on again and puts the board back where the voice is. A board the voice reaches before it has come up
+  in the conversation, or Back and Next on its steps) turns it off, and the board stays in front whatever the
+  reader plays. **Follow the voice**, a button beside the board counter while following is off, the gear's
+  switch, Play on the board in front, or the next answer starting by itself turns it on again and puts the board
+  back where the voice is. A board the voice reaches before it has come up
   is fronted when it arrives. When an answer has ended, after a short hold, each board it stepped shows
   whole, nothing dimmed. The call page also sets the stage's light or dark theme. The answer that showed a view is
   marked on its row in the list (`A3`). Every answer that steps a view keeps its own scene on it (`scenes`, by answer number), and
