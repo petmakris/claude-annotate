@@ -686,6 +686,94 @@ def test_a_scene_that_cannot_be_shown_or_pointed_at_is_a_problem(tmp_path):
         assert want[0] in problems and len(problems) <= 2, (text, problems)  # beside the note that no sentence names a part
 
 
+# -- stops: the answer asks, and waits ------------------------------------------------
+
+
+def test_a_stop_says_its_question_and_the_answer_pauses_right_after_it(tmp_path):
+    entry, problems = cues_of(tmp_path, "Ben buys a fund. [[guess: What does his cell print | Fixed Income | "
+                                        "*Investment Grade Bonds | Nothing]] It prints the old name. [[check]] "
+                                        "Next, the rule. [[deeper]]")
+    assert problems == []
+    assert entry["text"] == "Ben buys a fund. What does his cell print? It prints the old name. Clear so far? Next, the rule."
+    stops = [c for c in entry["cues"] if c["kind"] == "stop"]
+    assert [(c["at"], c["stop"]) for c in stops] == [
+        (entry["text"].index("It prints"), {"type": "guess", "question": "What does his cell print?",
+                                            "choices": ["Fixed Income", "Investment Grade Bonds", "Nothing"], "right": 1}),
+        (entry["text"].index("Next,"), {"type": "check", "question": "Clear so far?",
+                                        "choices": ["Go on", "Again, slower", "Another example"]}),
+        (len(entry["text"]), {"type": "deeper", "question": "", "choices": ["Go deeper", "That's enough"]})]
+    assert all("view" not in c for c in stops)
+
+
+def test_a_check_takes_its_own_question_and_a_say_back_ends_the_answer(tmp_path):
+    entry, problems = cues_of(tmp_path, "That is the match. [[check: Is the matching clear?]] Good. "
+                                        "[[say it back: What does hard-coded mean here]]")
+    assert problems == []
+    assert entry["text"] == "That is the match. Is the matching clear? Good. What does hard-coded mean here?"
+    assert [c["stop"]["type"] for c in entry["cues"]] == ["check", "sayback"]
+    assert entry["cues"][1] == {"at": len(entry["text"]), "kind": "stop", "stop": {
+        "type": "sayback", "question": "What does hard-coded mean here?", "choices": []}}
+
+
+def test_a_guess_never_brings_in_the_part_it_asks_about(tmp_path):
+    # the guess named "the PDF", so the scene showed what the PDF prints before the reader picked
+    call = _call(tmp_path)
+    call.split_reply(SCENE + "First the data the server sends. Then the template rule. [[guess: What does the PDF print | "
+                             "Fixed Income | *Investment Grade Bonds]] It prints the old name, as the PDF shows.")
+    frames = call.board.items[0]["scene"]["frames"]
+    assert [f["cur"] for f in frames[1:-1]] == [["part:data"], ["part:rule"], ["part:old", "part:pdf"]]
+    pdf = next(c for c in call.reply_cues if c["kind"] == "frame" and c["n"] == 3)
+    stop = next(c for c in call.reply_cues if c["kind"] == "stop")
+    assert pdf["at"] == stop["at"] == call.reply_cues[-1]["at"]  # the PDF comes in only once the guess is past
+
+
+def test_a_stop_written_wrong_is_reported(tmp_path):
+    cases = {"Hi. [[guess: What prints? | Only one]] There.":
+             ("Hi. What prints? There.", "a guess needs a question and two choices or more: [[guess: question | choice | *right | choice]]"),
+             "Hi. [[guess: What prints? | *a | *b]] There.":
+             ("Hi. What prints? There.", "a guess marks one right choice with *, not several"),
+             "Hi. [[say back]] There.":
+             ("Hi. There.", "a say back needs its question: [[say back: what does X mean here?]]"),
+             "Hi. [[check: Clear? | Yes | No]] There.":
+             ("Hi. Clear? There.", "[[check]] takes no choices: its buttons are fixed"),
+             "Hi. [[say back: What is it?]] And more after.":
+             ("Hi. What is it? And more after.", "[[say back]] hands over to the reader, and Claude's next answer checks "
+                                                 "what they say: end the answer at it, and say the rest after")}
+    for text, (said, problem) in cases.items():
+        entry, problems = cues_of(tmp_path, text)
+        assert (entry["text"], problems) == (said, [problem]), text
+    entry, _ = cues_of(tmp_path, "Hi. [[guess: What prints? | *a | *b]] There.")
+    assert entry["cues"] == []  # a broken guess is said, never stopped at
+    entry, _ = cues_of(tmp_path, "Hi. [[check: Clear? | Yes | No]] There.")
+    assert entry["cues"][0]["stop"]["choices"] == ["Go on", "Again, slower", "Another example"]
+
+
+def test_a_guess_picked_goes_with_the_next_turn_and_a_say_back_answer_names_its_question(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            await call.answer("Ben buys. [[guess: What prints? | Fixed Income | *Old name]] The old name. [[check]] On.")
+            picked = await client.post("/api/pick", json={"answer": 1, "i": 0, "choice": 0}, headers=AUTH)
+            wrong = [await client.post("/api/pick", json=body, headers=AUTH) for body in (
+                {"answer": 1, "i": 1, "choice": 0}, {"answer": 2, "i": 0, "choice": 0}, {"answer": 1, "i": 0, "choice": 5})]
+            quiet = (await client.get("/api/turn?wait=0.1", headers=AUTH)).status
+            await client.post("/api/say", json={"text": "It means named in the code", "answering": "What is hard-coded?"},
+                              headers=AUTH)
+            turn = await (await client.get("/api/turn?wait=1", headers=AUTH)).json()
+            await client.post("/api/say", json={"text": "next"}, headers=AUTH)
+            later = await (await client.get("/api/turn?wait=1", headers=AUTH)).json()
+            return (await picked.json(), [r.status for r in wrong], quiet, turn["said"], later["said"],
+                    call.entries[-2], call.transcript.read_text())
+
+    pick, wrong, quiet, said, later, entry, transcript = run(go())
+    assert pick == {"pick": {"answer": 1, "question": "What prints?", "picked": "Fixed Income", "right": "Old name"}}
+    assert wrong == [404, 404, 400] and quiet == 204  # a pick is no turn: the answer plays on
+    assert said == [{"who": "you", "text": "It means named in the code", "answering": "What is hard-coded?",
+                     "picks": [{"answer": 1, "question": "What prints?", "picked": "Fixed Income", "right": "Old name"}]}]
+    assert "picks" not in later[0]  # each pick goes once
+    assert entry["answering"] == "What is hard-coded?"
+    assert "**Picked:** What prints? Fixed Income (right: Old name)" in transcript
+
+
 def test_a_long_sentence_or_a_long_answer_is_reported_so_the_next_answer_is_shorter(tmp_path):
     long_sentence = "This one sentence " + "goes on and on " * 8 + "until it ends."
     _, problems = cues_of(tmp_path, f"Short. {long_sentence} Short again.")
@@ -753,7 +841,8 @@ def test_every_tag_the_skill_teaches_is_one_the_parser_reads():
         verb, kind, _, _ = talk.parse_head(tag)
         known = (verb == "/show" or (verb == "show" and kind in talk.BOARD_KINDS)
                  or talk.parse_point(tag) is not None or talk.parse_key(tag) is not None or tag.startswith("note:")
-                 or talk.stage_scene.parse_verb(tag) is not None)
+                 or talk.stage_scene.parse_verb(tag) is not None
+                 or (talk.parse_stop(tag) or {"problem": "not a stop"})["problem"] is None)
         assert known, tag
     for tag in tags:
         point = talk.parse_point(tag)

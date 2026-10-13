@@ -588,6 +588,43 @@ def parse_key(marker: str) -> str | None:
     return " ".join(m["text"].split()) if m else None
 
 
+_STOP_HEAD = re.compile(r"(?P<type>check|guess|say[ \t]*(?:it[ \t]*)?back|deeper)(?![a-z0-9])[ \t]*(?::(?P<rest>.*))?\Z",
+                        re.IGNORECASE | re.DOTALL)
+STOP_BUTTONS = {"check": ["Go on", "Again, slower", "Another example"], "deeper": ["Go deeper", "That's enough"]}
+CHECK_QUESTION = "Clear so far?"
+
+
+def parse_stop(marker: str) -> dict | None:
+    """A tag that stops the voice to ask the reader: [[check]] or [[check: question]], [[guess: question |
+    choice | *right choice | ...]], [[say back: question]], [[deeper]]. Returns {type, question, choices,
+    right, problem}: `question` is said before the answer stops, `problem` (or None) says what was wrong.
+    None when the marker is not one of them."""
+    m = _STOP_HEAD.match(marker.strip())
+    if not m:
+        return None
+    kind = "sayback" if m["type"].lower().startswith("say") else m["type"].lower()
+    parts = [" ".join(p.split()) for p in (m["rest"] or "").split("|")]
+    question, given = parts[0], [p for p in parts[1:] if p]
+    stop = {"type": kind, "question": question, "choices": STOP_BUTTONS.get(kind, []), "right": None, "problem": None}
+    if kind == "check":
+        stop["question"] = question or CHECK_QUESTION
+    if kind == "guess":
+        right = [i for i, c in enumerate(given) if c.startswith("*")]
+        stop["choices"] = [c.lstrip("*").strip() for c in given]
+        stop["right"] = right[0] if len(right) == 1 else None
+        if not question or len(given) < 2:
+            stop["problem"] = "a guess needs a question and two choices or more: [[guess: question | choice | *right | choice]]"
+        elif len(right) > 1:
+            stop["problem"] = "a guess marks one right choice with *, not several"
+    elif given:
+        stop["problem"] = f"[[{m['type']}]] takes no choices: its buttons are fixed"
+    if kind == "sayback" and not question:
+        stop["problem"] = "a say back needs its question: [[say back: what does X mean here?]]"
+    if stop["question"] and stop["question"][-1] not in ".?!…":
+        stop["question"] += "?"
+    return stop
+
+
 def cut_words(text: str, limit: int) -> str:
     """At most `limit` characters, cut at a word boundary, with an ellipsis when cut."""
     if len(text) <= limit:
@@ -1342,7 +1379,8 @@ class Call:
         self.view_names: dict[str, str] = {"\0keys": KEY_VIEW}
         self.keys: list[dict] = []  # every [[key: ...]] of the call, in order: {answer, text}
         self.answer_no = 0  # the number the reply being split will get
-        self.reply_cues: list[dict] = []  # the cues of the reply just split: {at, view, kind, n?, index?}
+        self.reply_cues: list[dict] = []  # the cues of the reply just split: {at, view, kind, n?, index?, stop?}
+        self.picks: list[dict] = []  # guesses picked since the last turn, which goes with the next one
         self.reply_shows = 0  # boards of the reply being split put on the stage so far: only the first fronts
         self.reply_items: list[dict] = []
         self.stage_pending: list = []
@@ -1456,12 +1494,18 @@ class Call:
 
     # -- turns --------------------------------------------------------------
 
-    def offer(self, text: str, typed: bool, interrupted: dict | None = None, live: bool = False) -> dict:
+    def offer(self, text: str, typed: bool, interrupted: dict | None = None, live: bool = False,
+              answering: str | None = None) -> dict:
+        """What the user said becomes a turn. `answering`: the [[say back]] question it answers. The
+        guesses picked since the last turn go with it (`picks`), so Claude knows what they guessed."""
         self.turn_count += 1
-        entry = self.add("you", text, typed=typed, **({"interrupted": interrupted} if interrupted else {}))
-        said = {"who": "you", "text": text}
-        if interrupted:
-            said["interrupted"] = interrupted
+        extra = {"interrupted": interrupted} if interrupted else {}
+        if answering:
+            extra["answering"] = answering
+        entry = self.add("you", text, typed=typed, **extra)
+        said = {"who": "you", "text": text, **extra}
+        if self.picks:
+            said["picks"], self.picks = self.picks, []
         if self.turns.working:  # said while Claude works on the last turn: an addition to it, not a new question
             said["while_working"] = True
         self.said_lines[entry["id"]] = said
@@ -1477,6 +1521,16 @@ class Call:
         """Play demo answer i, as a Claude session's reply would come: boards, voice and all."""
         self.demo_at = i
         await self.answer(self.demo[i])
+
+    def pick(self, answer: int, question: str, picked: str, right: str | None) -> dict:
+        """A choice picked on a [[guess]] stop. The answer plays on, so it is no turn: it goes to Claude with
+        the next one. Kept in the transcript as well."""
+        got = {"answer": answer, "question": question, "picked": picked}
+        if right is not None:
+            got["right"] = right
+        self.picks.append(got)
+        self.record("Picked", f"{question} {picked}" + ("" if right is None else " (right)" if picked == right else f" (right: {right})"))
+        return got
 
     def withdraw(self, entry_id) -> bool:
         """Take back what the user said, while no doorbell has collected it."""
@@ -1658,6 +1712,10 @@ class Call:
                     if key is not None:
                         shown += self.add_key(key)
                         continue
+                    stop = parse_stop(chunk)
+                    if stop is not None:
+                        shown += self.add_stop(stop)
+                        continue
                     before = len(self.board.cues)
                     if not self.board.marker(chunk):
                         shown += f"[[{chunk}]]"
@@ -1690,9 +1748,11 @@ class Call:
             shown = shown[:start] + CUE + "\n" + CUE * shown[start:end].count(CUE) + shown[end:]
         placed.sort(key=lambda pc: pc[0])  # stable: the i-th CUE in `shown` is the i-th cue here
         shown, marks = place_cues(shown)
-        timed = self.compile_scenes(shown, [(at, cue) for (_, cue), at in zip(placed, marks) if cue["view"]])
+        timed = self.compile_scenes(shown, [(at, cue) for (_, cue), at in zip(placed, marks)
+                                            if cue["view"] or cue["kind"] == "stop"])
         self.reply_cues = [{"at": at, **{k: v for k, v in cue.items() if v is not None}} for at, cue in timed]
         self.check_length(shown)
+        self.check_stops(shown)
         boards = [c for c in self.reply_cues if c["kind"] == "front"]  # a key belongs after its sentence
         if len(boards) >= 2 and all(c["at"] == len(shown) for c in boards):
             self.board.problem("all boards were placed after the last sentence, so the stage cannot follow "
@@ -1743,6 +1803,13 @@ class Call:
                     view_runs.append([at, [cue]])
         fronts = [(at, cue["view"]) for at, cue in timed if cue["kind"] == "front"]
         starts = sentence_starts(shown)
+        # A stop's question names no part: a guess that brought in the part it asks about would give its answer away.
+        named = shown
+        for at, cue in timed:
+            q = cue["kind"] == "stop" and cue["stop"]["question"]
+            begin = shown.rfind(q, 0, at) if q else -1
+            if begin >= 0:
+                named = named[:begin] + " " * len(q) + named[begin + len(q):]
         auto: set[str] = set()  # the boards that came in with the sentences said about them
         for i, (at, view) in enumerate(fronts):
             item = self.board.item_for(view)
@@ -1756,7 +1823,7 @@ class Call:
                 continue
             end = fronts[i + 1][0] if i + 1 < len(fronts) else len(shown)
             bounds = [at] + [s for s in starts if at < s < end]
-            sentences = [shown[a:b] for a, b in zip(bounds, bounds[1:] + [end])]
+            sentences = [named[a:b] for a, b in zip(bounds, bounds[1:] + [end])]
             title = item.get("title") or item["kind"]
             # The board's own points, by the sentence they stand in: each is the reveal for its sentence.
             pointed: dict[int, list[str]] = {}
@@ -1827,6 +1894,26 @@ class Call:
         self.record("Key point", text)
         self.board.cues.append({"kind": "key", "view": KEY_VIEW, "index": len(self.keys)})
         return CUE
+
+    def add_stop(self, stop: dict) -> str:
+        """A stop: its question is said, then the voice waits for the reader on a card of buttons. Returns
+        the question with the CUE after it, where the answer pauses."""
+        problem = stop.pop("problem")
+        if problem:
+            self.board.problem(problem)
+            if stop["type"] != "check" and stop["type"] != "deeper":
+                return f" {stop['question']} " if stop["question"] else ""
+        self.board.cues.append({"kind": "stop", "view": None, "stop": {k: v for k, v in stop.items() if v is not None}})
+        self.record("Stop", f"{stop['type']}: {stop['question']}".rstrip(": "))
+        return (f" {stop['question']}" if stop["question"] else "") + CUE + " "
+
+    def check_stops(self, shown: str) -> None:
+        """A say back hands the answer to the reader: what follows it waits for their reply, so it is reported."""
+        for cue in self.reply_cues:
+            if cue["kind"] == "stop" and cue["stop"]["type"] == "sayback" and shown[cue["at"]:].strip():
+                self.board.problem("[[say back]] hands over to the reader, and Claude's next answer checks what "
+                                   "they say: end the answer at it, and say the rest after")
+                break
 
     def show_keys(self, added: int) -> None:
         """After a reply that added key points: one chip for the reply, and the Key points board, updated
@@ -2368,7 +2455,28 @@ def build_app(server: Server):
         if server.handing_over:
             return web.json_response({"error": "the talk server is restarting; try again in a moment"}, status=503)
         spoken = isinstance(body, dict) and body.get("spoken") is True  # said with Talk, then checked in the field
-        return web.json_response({"text": text, "entry": call.offer(text[:4000], typed=not spoken)})
+        answering = str(body.get("answering") or "").strip()[:400] or None  # the [[say back]] question it answers
+        return web.json_response({"text": text, "entry": call.offer(text[:4000], typed=not spoken, answering=answering)})
+
+    async def picked(request):
+        """A choice picked on a [[guess]] stop: {answer, i (the stop's place among the answer's stops), choice}."""
+        call = call_of(request)
+        if call is None:
+            return refused(request)
+        body = await request.json()
+        body = body if isinstance(body, dict) else {}
+        answers = [x for x in call.entries if x["who"] == "claude"]  # answer n is the n-th Claude entry
+        n = body.get("answer")
+        e = answers[n - 1] if isinstance(n, int) and 0 < n <= len(answers) else None
+        stops = [c["stop"] for c in (e or {}).get("cues", []) if c["kind"] == "stop"]
+        i, choice = body.get("i"), body.get("choice")
+        if not isinstance(i, int) or not 0 <= i < len(stops) or stops[i]["type"] != "guess":
+            return web.json_response({"error": "no such guess"}, status=404)
+        stop = stops[i]
+        if not isinstance(choice, int) or not 0 <= choice < len(stop["choices"]):
+            return web.json_response({"error": "no such choice"}, status=400)
+        right = stop["choices"][stop["right"]] if "right" in stop else None
+        return web.json_response({"pick": call.pick(body["answer"], stop["question"], stop["choices"][choice], right)})
 
     async def floor(request):
         call = call_of(request)
@@ -2513,6 +2621,7 @@ def build_app(server: Server):
         web.get("/api/state", state),
         web.post("/api/listen", listen),
         web.post("/api/say", typed),
+        web.post("/api/pick", picked),
         web.post("/api/withdraw", withdraw),
         web.post("/api/demo", demo),
         web.post("/api/floor", floor),

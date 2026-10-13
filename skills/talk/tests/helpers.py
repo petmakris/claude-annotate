@@ -172,7 +172,7 @@ def stage_rule_breaks(call, shown: str) -> list[str]:
             continue
         model, frames = talk.scene_model(item), built["frames"]
         name = item.get("title") or view
-        at = {c["n"]: c["at"] for c in cues if c["view"] == view and c["kind"] == "frame"}
+        at = {c["n"]: c["at"] for c in cues if c.get("view") == view and c["kind"] == "frame"}
         front = next(a for a, v in fronts if v == view)
         end = next((a for a, v in fronts if a > front), len(shown))
         part = {k: (model.up[k][0] if k.startswith("cell#") else k) for k in model.keys}

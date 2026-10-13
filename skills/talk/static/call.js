@@ -131,6 +131,7 @@ window.addEventListener("message", ev => {
   else if (m.type === "stage:missing") paintMissing(String(m.view));
   else if (m.type === "stage:key" && MEDIA_KEYS.has(m.key)) mediaKey(m.key);
   else if (m.type === "stage:play") playFrame(String(m.view || ""), Number(m.answer), Number(m.n));
+  else if (m.type === "stage:pick" && stopped && stopped.n === Number(m.answer) && stopped.i === Number(m.i)) pickStop(Number(m.choice));
 });
 // Play from here, in a sequence step's popup on the stage: the answer plays from the word where that frame begins.
 function playFrame(board, n, frameNo) {
@@ -771,9 +772,10 @@ function highlight() {
     const unheard = !sent && e.id > (view.heard_upto ?? -1);
     if (audio.currentTime > 0 || (cueSync && ((sent && sent.id === e.id) || unheard))) {
       const lead = wordAt(e, audio.currentTime + LEAD_S * (audio.playbackRate || 1));
-      syncStage(e, lead >= 0 ? e.words[lead][0] : -1);
+      syncStage(e, Math.min(lead >= 0 ? e.words[lead][0] : -1, heldAt(e) - 1));
     }
     if (audio.currentTime > 0) caption(e, audio.currentTime);
+    checkStop(e);
   }
   const turn = readingTurn();
   if (lastTurn && lastTurn !== turn) {
@@ -811,6 +813,113 @@ function caption(e, t) {
   if (text === captionShown) return;
   captionShown = text;
   toStage({type: "stage:caption", text, answer: e ? e.n || null : null});
+}
+
+// ---- stops: the answer asks, and waits ----------------------------------------
+// A stop ([[check]], [[guess]], [[say back]], [[deeper]]) pauses the voice right after its question, on a card of
+// buttons: on the stage for a staged answer, else in the panel. Play at a stop is its first button. A stop the
+// play went by is not stopped at again until the reader plays from before it (`passed`, set again on a seek).
+let stopped = null;      // the stop the answer waits at: {id, n, i, stop, picked}
+let passed = new Set();  // "<answer id>:<stop index>"
+let slowTill = null;     // Again, slower: {id, i}: the stop where the speed comes back
+let answering = null;    // the [[say back]] question the text field answers
+const GUESS_SHOWN_MS = 1600;
+const stopsOf = (e) => (e.cues || []).filter((c) => c.kind === "stop");
+// Just after the question's last word, before the next word starts; Infinity for a stop at the end.
+function stopTime(e, c) {
+  const words = e.words || [], next = words.find((w) => w[0] >= c.at);
+  if (!next) return Infinity;
+  const prev = words.filter((w) => w[1] <= c.at).pop();
+  return Math.min(next[2] - 0.02, prev ? prev[3] + 0.25 : next[2]);
+}
+// The stage runs a little ahead of the voice, but never past a stop it has not passed (or waits at): what
+// comes after a guess would give its answer away.
+function heldAt(e) {
+  if (stopped && stopped.id === e.id) return stopsOf(e)[stopped.i].at;
+  const ahead = stopsOf(e).filter((c, i) => !passed.has(e.id + ":" + i)).map((c) => c.at);
+  return ahead.length ? Math.min(...ahead) : Infinity;
+}
+function markPassed(e, t) {
+  passed = new Set(stopsOf(e).flatMap((c, i) => (stopTime(e, c) < t + 0.05 ? [e.id + ":" + i] : [])));
+}
+function checkStop(e) {
+  if (stopped || audio.paused || !e.words || !e.words.length) return;
+  stopsOf(e).some((c, i) => {
+    if (passed.has(e.id + ":" + i) || audio.currentTime < stopTime(e, c)) return false;
+    stopAt(e, i); return true;
+  });
+}
+function stopAt(e, i) {
+  const c = stopsOf(e)[i];
+  passed.add(e.id + ":" + i);
+  if (slowTill && slowTill.id === e.id && slowTill.i === i) { audio.playbackRate = speed; slowTill = null; }
+  stopped = {id: e.id, n: e.n || 0, i, stop: c.stop, picked: null};  // before the pause, which paints the stage
+  if (!audio.paused) audio.pause();
+  if (c.stop.type === "sayback") {
+    answering = c.stop.question;
+    const t = $("text"); t.placeholder = "Say it in your own words, then Send"; t.focus();
+  }
+  showStop();
+}
+function showStop() {
+  const e = stopped && view.entries.find((x) => x.id === stopped.id);
+  const onStage = !!e && staged(e);
+  toStage({type: "stage:stop", answer: stopped ? stopped.n : null, i: stopped ? stopped.i : null,
+           stop: onStage ? {...stopped.stop, picked: stopped.picked} : null});
+  paintStopCard(e && !onStage ? e : null);
+}
+function clearStop() {
+  if (!stopped) return;
+  stopped = null; showStop();
+}
+// The panel's card, for an answer with no board.
+function paintStopCard(e) {
+  const card = $("stopcard");
+  card.hidden = !e;
+  if (!e) { card.replaceChildren(); return; }
+  const {stop, picked} = stopped;
+  card.dataset.type = stop.type;
+  const q = document.createElement("p"); q.className = "sq"; q.textContent = stop.question || "Want more?";
+  const row = document.createElement("div"); row.className = "sbtns";
+  stop.choices.forEach((label, k) => {
+    const b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.textContent = label;
+    if (picked !== null) {
+      b.disabled = true;
+      if (stop.right === k) b.classList.add("right");
+      else if (picked === k) b.classList.add("wrong");
+    }
+    b.onclick = () => pickStop(k);
+    row.append(b);
+  });
+  if (stop.type === "sayback") { const h = document.createElement("p"); h.className = "shint"; h.textContent = "Answer in the text field, or press Talk."; row.append(h); }
+  card.replaceChildren(q, row);
+}
+function goOn() {
+  clearStop();
+  if (!audio.ended) { readerPlays(current); audio.play().catch(() => {}); }
+}
+function pickStop(k) {
+  if (!stopped) return;
+  const {id, n, i, stop} = stopped, e = view.entries.find((x) => x.id === id);
+  if (!e) return;
+  if (stop.type === "guess") {
+    if (stopped.picked !== null) return;
+    stopped.picked = k; showStop();
+    api("/api/pick", {method: "POST", body: JSON.stringify({answer: n, i, choice: k}), headers: {"Content-Type": "application/json"}}).catch(() => {});
+    setTimeout(() => { if (stopped && stopped.id === id && stopped.i === i) goOn(); }, GUESS_SHOWN_MS);
+  } else if (k === 0) goOn();
+  else if (stop.type === "check" && k === 1) {
+    // Again, slower: the stretch since the stop before plays again at 0.8×, and stops here again.
+    const before = stopsOf(e).slice(0, i).map((c) => stopTime(e, c)).filter((t) => t !== Infinity).pop();
+    clearStop(); slowTill = {id, i};
+    playFrom(e, before === undefined ? 0 : before + 0.01);
+    audio.playbackRate = speed * 0.8;
+  }
+  else if (stop.type === "check" && k === 2) { clearStop(); $("text").value = "Another example, please."; sendText(); }
+  else if (stop.type === "deeper" && k === 1) {  // That's enough: the answer ends here
+    clearStop(); audio.currentTime = audio.duration || audio.currentTime;
+    syncStage(e, Infinity); restBoards(e); caption(null, 0);
+  }
 }
 
 // ---- the board follows the voice ------------------------------------------
@@ -884,10 +993,16 @@ audio.addEventListener("ended", () => {
   if (!current) return;
   const e = view.entries.find(x => x.id === current.id) || current;
   syncStage(e, Infinity);
+  const last = stopsOf(e).findIndex((c, i) => stopTime(e, c) === Infinity && !passed.has(e.id + ":" + i));
+  if (last >= 0) stopAt(e, last);
   clearTimeout(restTimer);
   restTimer = setTimeout(() => { if (current && current.id === e.id && audio.ended) { restBoards(e); caption(null, 0); } }, REST_HOLD_MS);
 });
-audio.addEventListener("seeking", () => { cueSync = true; });
+audio.addEventListener("seeking", () => { cueSync = true; if (current) markPassed(current, audio.currentTime); });
+audio.addEventListener("play", () => {
+  if (stopped) clearStop();
+  if (answering) { answering = null; $("text").placeholder = "Type, or press the mic"; }  // the say back was left
+});
 function skip(by) { audio.currentTime = Math.min(Math.max(0, audio.currentTime + by), audio.duration || 0); paintPill(); }
 // Play plays the board in front. When the voice is not on it (it came from an earlier answer, or this
 // answer has moved past it), Play plays that board's explanation, from the sentence it came in with,
@@ -908,6 +1023,7 @@ function boardStart() {
 function wordCharAt(e, t) { const k = wordAt(e, t); return k < 0 ? -1 : e.words[k][0]; }
 function togglePlay() {
   release();
+  if (stopped && audio.paused) { if (stopped.stop.type === "deeper" || stopped.stop.type === "check") pickStop(0); else goOn(); return; }
   const b = boardStart();
   if (b) { playFrom(b.e, b.t, true); return; }
   if (!current) { const e = lastAnswer(); if (e) { readerPlays(e); load(e, true); } return; }
@@ -1104,11 +1220,16 @@ async function sendText() {
   $("sendtext").disabled = true;
   takeFloor(null);
   try {
-    const resp = await api("/api/say", {method: "POST", body: JSON.stringify(spoken ? {text, spoken} : {text}), headers: {"Content-Type": "application/json"}});
+    const body0 = spoken ? {text, spoken} : {text};
+    if (answering) body0.answering = answering;
+    const resp = await api("/api/say", {method: "POST", body: JSON.stringify(body0), headers: {"Content-Type": "application/json"}});
     const body = await resp.json().catch(() => ({}));
     // What you send moves the call on: the answer still playing stops, so the reply plays when it comes,
     // as it does when you press Talk.
-    if (resp.ok) { $("text").value = ""; spoken = false; fitText(); release(); if (!audio.paused) audio.pause(); view.v = -1; }
+    if (resp.ok) {
+      $("text").value = ""; spoken = false; fitText(); release(); if (!audio.paused) audio.pause(); view.v = -1;
+      if (answering) { answering = null; $("text").placeholder = "Type, or press the mic"; clearStop(); }
+    }
     else showError(body.error || "Sending failed: HTTP " + resp.status);
   } catch (err) { showError("Sending failed: " + err.message); }
   $("sendtext").disabled = !$("text").value.trim();

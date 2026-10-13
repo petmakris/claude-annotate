@@ -638,3 +638,22 @@ def test_the_sentence_being_said_shows_beside_the_scene_part_and_at_the_foot_of_
     page.send({"type": "stage:caption", "text": "", "answer": 1}).check(cap)
     assert page.run() == [[True, "", ""], [False, "bubble", "The data comes first."],
                           [False, "bar", "Now the table."], [True, "", ""]]
+
+
+def test_a_stop_asks_on_a_card_in_place_of_the_caption_and_a_press_goes_to_the_call_page(tmp_path):
+    table = {"type": "inline", "format": "table", "body": "| a | b |\n|---|---|\n| 1 | 2 |"}
+    page = StagePage(tmp_path, embedded=True).show("t", table, title="T").open()
+    card = ("(() => { const c = document.querySelector('.stopcard'); return [c.hidden, c.querySelector('.sq')?.textContent ?? '',"
+            " [...c.querySelectorAll('button')].map((b) => b.textContent + (b.disabled ? ':off' : '') + (b.classList.contains('right') ? ':right' : '')"
+            " + (b.classList.contains('wrong') ? ':wrong' : '')), document.querySelector('.caption').hidden]; })()")
+    page.send({"type": "stage:caption", "text": "What prints?", "answer": 1})
+    guess = {"type": "guess", "question": "What prints?", "choices": ["Fixed Income", "Old name"], "right": 1}
+    page.send({"type": "stage:stop", "answer": 1, "i": 0, "stop": {**guess, "picked": None}}).check(card)
+    page.js("document.querySelector('.stopcard button').click();")
+    page.send({"type": "stage:stop", "answer": 1, "i": 0, "stop": {**guess, "picked": 0}}).check(card)
+    page.send({"type": "stage:stop", "answer": 1, "i": 0, "stop": None}).check(card)
+    assert page.run() == [
+        [False, "What prints?", ["Fixed Income", "Old name"], True],
+        [False, "What prints?", ["Fixed Income:off:wrong", "Old name:off:right"], True],
+        [True, "", [], False]]  # the card gone, the caption is back
+    assert [m for m in page.posted if m["type"] == "stage:pick"] == [{"type": "stage:pick", "answer": 1, "i": 0, "choice": 0}]

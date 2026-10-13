@@ -35,6 +35,7 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"light"');
           <div class="status" id="status" hidden></div><button class="undo" id="undo" type="button" hidden>Undo</button>
           <div class="prep" id="prep" hidden><span class="preplbl" id="preplbl"></span><span class="preptrack"><i id="prepfill"></i></span></div>
         </div>
+        <div class="stopcard" id="stopcard" role="group" aria-label="The answer asks" hidden></div>
         <div class="player" id="player" hidden>
           <button class="ib" id="back" type="button" aria-label="Back 10 seconds" data-tip="Back 10 s"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg></button>
           <button class="ib pp" id="playpause" type="button" aria-label="Play" data-tip="Play"><svg class="i-play" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5v14l12-7z"/></svg><svg class="i-pause" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>

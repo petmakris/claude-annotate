@@ -200,10 +200,11 @@ root.innerHTML = `<div class="stage">
       `<span class="tile">${icon(k)}<span>${k[0].toUpperCase() + k.slice(1)}</span></span>`).join("")}</div>
   </div></div></div>
   <div class="caption" hidden></div>
+  <div class="stopcard" role="group" aria-label="The answer asks" hidden></div>
 </div>`;
 const tabsEl = root.querySelector(".tabs"), panesEl = root.querySelector(".panes");
 const navEl = root.querySelector(".tabnav"), boardsEl = root.querySelector(".boards"), posEl = root.querySelector(".pos");
-const followEl = root.querySelector(".follow"), captionEl = root.querySelector(".caption");
+const followEl = root.querySelector(".follow"), captionEl = root.querySelector(".caption"), stopEl = root.querySelector(".stopcard");
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const views = new Map();            // name -> {body, tab, pane, filled, stale, renderSeq, changedAt, snap}
 let layout = { order: [], front: null };
@@ -1287,6 +1288,7 @@ function onMessage(m) {
   }
   else if (m.type === "stage:follow") setFollow(!!m.on);
   else if (m.type === "stage:caption") { captionText = String(m.text || ""); placeCaption(); }
+  else if (m.type === "stage:stop") paintStop(m.stop && typeof m.stop === "object" ? m : null);
   else if (m.type === "stage:frame") setFrame(String(m.view), Number(m.n), !!m.animate, m.answer);
   else if (m.type === "stage:state") {
     lateFrames.clear(); lateFront = null;  // the whole picture: a late frame or front it still wants is in it again
@@ -1298,19 +1300,44 @@ function onMessage(m) {
   }
 }
 
+// A stop: the answer asks and waits, on a card at the foot of the stage, in place of the caption. A press goes
+// to the call page, which plays on, plays again, or sends a turn; a guess shows right and wrong once picked.
+function paintStop(m) {
+  stopEl.hidden = !m;
+  stopEl.replaceChildren();
+  if (m) {
+    const { stop } = m, picked = Number.isInteger(stop.picked) ? stop.picked : null;
+    stopEl.dataset.type = stop.type;
+    const q = document.createElement("p"); q.className = "sq"; q.textContent = stop.question || "Want more?";
+    const row = document.createElement("div"); row.className = "sbtns";
+    (stop.choices || []).forEach((label, k) => {
+      const b = button(String(label), () => post({ type: "stage:pick", answer: m.answer, i: m.i, choice: k }));
+      if (picked !== null) {
+        b.disabled = true;
+        if (stop.right === k) b.classList.add("right");
+        else if (picked === k) b.classList.add("wrong");
+      }
+      row.append(b);
+    });
+    if (stop.type === "sayback") { const h = document.createElement("p"); h.className = "shint"; h.textContent = "Answer in the text field, or press Talk."; row.append(h); }
+    stopEl.append(q, row);
+  }
+  placeCaption();
+}
+
 // The sentence being said: under the part being said when the board in front is a scene, else at the foot.
 let captionText = "";
 // Placing it scrolls the scene up just enough for the bubble to fit under the part (the scene keeps room
 // at its foot for that), so it never covers a part already shown. It goes above only when the part
 // itself fills the stage. A scroll moves it along (`scrolled`) without scrolling again.
 function placeCaption(scrolled = false) {
-  captionEl.hidden = !captionText;
+  captionEl.hidden = !captionText || !stopEl.hidden;
   captionEl.textContent = captionText;
   const name = selectedName(), v = name && views.get(name);
   const part = v && !v.pane.hidden && [...v.pane.querySelectorAll(".scene .k-focus, .scene .s-cur")].pop();
   captionEl.className = "caption" + (!captionText ? "" : part ? " bubble" : " bar");
   captionEl.style.left = captionEl.style.top = "";
-  if (!captionText || !part) return;
+  if (!captionText || !part || !stopEl.hidden) return;
   const stage = root.querySelector(".stage").getBoundingClientRect();
   const h = captionEl.offsetHeight, w = captionEl.offsetWidth;
   let r = part.getBoundingClientRect();

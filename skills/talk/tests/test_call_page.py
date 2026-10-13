@@ -243,3 +243,83 @@ def test_an_answer_with_boards_folds_its_text_and_show_text_opens_it(tmp_path):
     page.js("await serve(1); await advance(1000);")  # the page polls again: the reader's choice stays
     page.check(f"{turn}.classList.contains('folded')")
     assert page.run() == [[True, "Show text"], [False, "Hide text"], False]
+
+
+# -- stops: the answer asks, and waits ------------------------------------------------
+STOPS = "toStage().filter((m) => m.type === 'stage:stop').map((m) => m.stop && [m.answer, m.i, m.stop.type, m.stop.picked])"
+CHECK_ANSWER = f"[[show table | One]]{TABLE}[[/show]] First things first here. [[check]] Then the second thing."
+
+
+def test_a_check_pauses_the_voice_after_its_question_and_go_on_plays_on(tmp_path):
+    html, states = served(tmp_path, [CHECK_ANSWER], seconds=4.0)
+    page = CallPage(html, states, seconds=4.0).js("await serve(1); await playOn(3.9);")
+    page.check(f"[audio.paused, Math.round(audio.currentTime * 10) / 10, {STOPS}]")
+    # the card asks on the stage, in place of the caption; Play there is Go on
+    page.js("fromStage({ type: 'stage:pick', answer: 1, i: 0, choice: 0 });").check(f"[audio.paused, {STOPS}]")
+    # played on past it, the stop is not stopped at again; played from before it, it is
+    page.js("await playOn(3.9);").check("audio.paused")
+    page.js("audio.pause(); audio.currentTime = 0; audio.play(); await playOn(3.9);").check(f"[audio.paused, {STOPS}.length]")
+    page.js("$('playpause').click();").check(f"[audio.paused, {STOPS}.length]")
+    # the stop stands after "Clear so far?": "far?" is the 7th of 11 words, which ends at 7/11 of the 4 seconds (2.55 s)
+    assert page.run() == [[True, 2.5, [[1, 0, "check", None]]], [False, [[1, 0, "check", None], None]], False,
+                          [True, 3], [False, 4]]
+
+
+def test_again_slower_plays_the_stretch_again_at_a_slower_speed_and_stops_there_again(tmp_path):
+    html, states = served(tmp_path, [CHECK_ANSWER], seconds=4.0)
+    page = CallPage(html, states, seconds=4.0).js("await serve(1); await playOn(3.9);")
+    page.js("fromStage({ type: 'stage:pick', answer: 1, i: 0, choice: 1 });")
+    page.check("[audio.paused, audio.currentTime, audio.playbackRate]")
+    page.js("await playOn(3.9);").check("[audio.paused, audio.playbackRate]")
+    assert page.run() == [[False, 0, 0.8], [True, 1]]
+
+
+def test_another_example_sends_a_turn_and_the_card_goes(tmp_path):
+    html, states = served(tmp_path, [CHECK_ANSWER], seconds=4.0)
+    page = CallPage(html, states, seconds=4.0).js("await serve(1); await playOn(3.9);")
+    page.js("fromStage({ type: 'stage:pick', answer: 1, i: 0, choice: 2 });")
+    page.check(f"[sentTo.filter(s => s[0] === '/api/say').map(s => s[1]), audio.paused, {STOPS}.pop()]")
+    assert page.run() == [[[{"text": "Another example, please."}], True, None]]
+
+
+def test_a_guess_marks_the_pick_sends_it_and_plays_on(tmp_path):
+    html, states = served(tmp_path, [f"[[show table | One]]{TABLE}[[/show]] Ben buys a fund. "
+                                     "[[guess: What prints | Fixed Income | *Old name]] It prints the old name."], seconds=4.0)
+    page = CallPage(html, states, seconds=4.0).js("await serve(1); await playOn(3.9);")
+    page.js("fromStage({ type: 'stage:pick', answer: 1, i: 0, choice: 0 });")
+    page.check(f"[audio.paused, {STOPS}.pop(), sentTo.filter(s => s[0] === '/api/pick').map(s => s[1])]")
+    page.js("fromStage({ type: 'stage:pick', answer: 1, i: 0, choice: 1 });")  # one pick per guess
+    page.js("await advance(1700);").check(f"[audio.paused, {STOPS}.pop(), sentTo.filter(s => s[0] === '/api/pick').length]")
+    assert page.run() == [[True, [1, 0, "guess", 0], [{"answer": 1, "i": 0, "choice": 0}]], [False, None, 1]]
+
+
+def test_a_stop_of_an_answer_with_no_board_asks_in_the_panel(tmp_path):
+    html, states = served(tmp_path, ["Just words here. [[deeper]] The longer version now."], seconds=4.0)
+    page = CallPage(html, states, seconds=4.0).js("await serve(1); await playOn(3.9);")
+    card = "$('stopcard')"
+    page.check(f"[audio.paused, {card}.hidden, [...{card}.querySelectorAll('button')].map(b => b.textContent), {STOPS}]")
+    page.js(f"{card}.querySelector('button').click();").check(f"[audio.paused, {card}.hidden]")
+    assert page.run() == [[True, False, ["Go deeper", "That's enough"], [None]], [False, True]]
+
+
+def test_a_say_back_waits_for_the_answer_in_the_text_field_and_sends_its_question(tmp_path):
+    html, states = served(tmp_path, ["The template names one sticker. [[say back: What does hard-coded mean here]]"], seconds=4.0)
+    page = CallPage(html, states, seconds=4.0).js("await serve(1); await end();")
+    page.check("[$('stopcard').hidden, $('text').placeholder, document.activeElement === $('text')]")
+    page.js("$('text').value = 'it names the old sticker'; $('text').dispatchEvent(new ShimEvent('input')); $('sendtext').click();")
+    page.check("[sentTo.filter(s => s[0] === '/api/say').map(s => s[1]), $('stopcard').hidden, $('text').placeholder]")
+    assert page.run() == [[False, "Say it in your own words, then Send", True],
+                          [[{"text": "it names the old sticker", "answering": "What does hard-coded mean here?"}], True,
+                           "Type, or press the mic"]]
+
+
+def test_the_stage_never_runs_past_a_guess_the_reader_has_not_answered(tmp_path):
+    scene = ('[[show scene | Ben]] <section data-part="data" data-name="the data">x</section>'
+             '<section data-part="pdf" data-name="the PDF">Old name</section> [[/show]] ')
+    html, states = served(tmp_path, [scene + "First the data comes. [[guess: What does the PDF print | Fixed Income | *Old name]] "
+                                             "The PDF prints the old name."], seconds=4.0)
+    frames = "toStage().filter((m) => m.type === 'stage:frame' || m.type === 'stage:state').map((m) => m.n ?? m.frames.ben)"
+    page = CallPage(html, states, seconds=4.0).js("await serve(1); await playOn(3.9);").check(f"[audio.paused, {frames}]")
+    page.js("await advance(500);").check(frames)  # waiting at the guess, the stage stays where it is
+    page.js("fromStage({ type: 'stage:pick', answer: 1, i: 0, choice: 1 }); await advance(1700); await playOn(3.9);").check(frames)
+    assert page.run() == [[True, [1]], [1], [1, 2]]

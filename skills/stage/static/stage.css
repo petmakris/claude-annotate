@@ -594,3 +594,17 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .caption.bar{left:50%;bottom:16px;transform:translateX(-50%);max-width:min(760px,calc(100% - 32px));padding:10px 18px;border-radius:12px;
   background:var(--panel);color:var(--ink);border:1px solid var(--line);box-shadow:0 10px 30px -14px rgba(0,0,0,.35);text-align:center}
 @media (prefers-reduced-motion:reduce){.caption.bubble{transition:none}}
+
+/* A stop: the answer asks and waits, on a card at the foot of the stage in place of the caption */
+.stopcard{position:absolute;z-index:7;left:50%;bottom:16px;transform:translateX(-50%);box-sizing:border-box;width:max-content;
+  max-width:min(640px,calc(100% - 32px));display:grid;gap:12px;padding:14px 18px;border-radius:14px;background:var(--panel);
+  border:1px solid var(--acc);box-shadow:0 14px 36px -14px rgba(0,0,0,.4);font-family:var(--sans)}
+.stopcard[hidden]{display:none}
+.stopcard .sq{margin:0;font:600 17px/1.4 var(--sans);color:var(--ink);text-wrap:balance}
+.stopcard .sbtns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.stopcard .btn{font-size:14px;padding:8px 14px}
+.stopcard:is([data-type=check],[data-type=deeper]) .btn:first-child{background:var(--acc);color:var(--on-acc);border-color:var(--acc)}
+.stopcard .btn:disabled{opacity:1;cursor:default}
+.stopcard .btn.right{border-color:var(--good);color:var(--good);font-weight:600}
+.stopcard .btn.wrong{border-color:var(--bad);color:var(--bad);text-decoration:line-through}
+.stopcard .shint{margin:0;font-size:14px;color:var(--muted)}

@@ -93,6 +93,11 @@ async function playTo(t) {
   audio._t = t; await settle(1);
 }
 async function end() { await playTo(audio.duration); audio.end(); await settle(); }
+// as playTo, but the voice stays where the page paused it
+async function playOn(t) {
+  for (let x = audio.currentTime; x < t && !audio.paused; x += 0.05) { audio._t = x; await settle(1); }
+  if (!audio.paused) { audio._t = t; await settle(1); }
+}
 const key = (k, target = document.body) => target.dispatchEvent(new ShimEvent("keydown", { key: k, bubbles: true }));
 const out = [];
 await advance(100);
