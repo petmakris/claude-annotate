@@ -688,6 +688,10 @@ function renderInline(v, seq) {
     box.className = "visual map";
     renderMap(box, src.spec, embedded);
     requestAnimationFrame(() => { if (current()) { paintFrame(v, box); if (!hasScene(v)) layoutMap(box, null); } });
+  } else if (src.format === "scene" && src.sandboxed) {
+    // A scene with a script runs whole in a sealed frame; the frames reach its parts by message.
+    box.className = "visual scene sandboxed";
+    paintSandbox(v, box, src);
   } else if (src.format === "scene") {
     // A scene comes in part by part with the voice: its parts are keyed for the frames to show and light.
     box.className = "visual scene";
@@ -721,6 +725,82 @@ function paintScene(v, box, src) {
   box.onclick = (e) => tapScene(v, e);
   requestAnimationFrame(() => { if (box.isConnected) paintFrame(v, box); });
 }
+
+// A scene with a script runs in a sealed frame: sandbox="allow-scripts" without allow-same-origin, so it reaches
+// neither the stage nor its storage, and a policy of default-src 'none' lets it load nothing but the stage's own
+// stylesheet and fonts. A small script put in first keys its parts and applies the frames the stage posts.
+const SANDBOX_SHIM = `(() => {
+  let last = null;
+  const key = () => { for (const el of document.querySelectorAll("[data-part]")) el.dataset.key = "part:" + el.dataset.part; };
+  const apply = (m) => {
+    last = m; key();
+    if (m.theme) document.documentElement.dataset.theme = m.theme;
+    const show = new Set(m.show), focus = new Set(m.focus), cur = new Set(m.cur);
+    for (const el of document.querySelectorAll("[data-key]")) {
+      const k = el.dataset.key;
+      el.classList.add("k-key");
+      el.classList.toggle("k-hidden", !show.has(k));
+      el.classList.toggle("k-focus", focus.has(k));
+      el.classList.toggle("s-cur", cur.has(k));
+    }
+    if (document.body) document.body.classList.toggle("k-dim", focus.size > 0);
+    const said = [...document.querySelectorAll(".k-focus, .s-cur")].pop();
+    if (said) said.scrollIntoView({ block: "nearest", behavior: m.animate ? "smooth" : "auto" });
+  };
+  addEventListener("message", (e) => { if (e.source === parent && e.data && e.data.type === "scene:frame") apply(e.data); });
+  addEventListener("DOMContentLoaded", () => { key(); if (last) apply(last); parent.postMessage({ type: "scene:ready" }, "*"); });
+})();`;
+// The frame loads nothing: the stage's stylesheet goes in inline, and its fonts as data: URLs (the frame's origin
+// is opaque and fonts are fetched with CORS), each read once. Without them the frame falls back to the system's
+// sans-serif and the browser's own look.
+const FONTS = [["Inter", "Inter-Variable.woff2", "100 900", ""], ["Inter", "Inter-Greek-Variable.woff2", "100 900",
+  "unicode-range:U+0370-0377,U+037A-037F,U+0384-038A,U+038C,U+038E-03A1,U+03A3-03FF;"],
+  ["JetBrains Mono", "JetBrainsMono-Variable.woff2", "100 800", ""]];
+let fontsP = null;
+function fontFaces() {
+  const asData = (blob) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(blob); });
+  fontsP ||= Promise.all(FONTS.map(async ([family, file, weight, range]) => {
+    const resp = await fetch(new URL("fonts/" + file, import.meta.url));
+    if (!resp.ok) throw new Error("font " + file + ": HTTP " + resp.status);
+    const url = String(await asData(await resp.blob())).replace(/^data:[^;,]*/, "data:font/woff2");
+    return `@font-face{font-family:"${family}";src:url("${url}") format("woff2");font-weight:${weight};font-display:swap;${range}}`;
+  })).then((faces) => faces.join("\n"), (e) => { console.warn("stage:", e.message); return ""; });
+  return withTimeout(fontsP, 4000).catch(() => "");
+}
+let sheetP = null;
+function stageSheet() {
+  sheetP ||= fetch(new URL("stage.css", import.meta.url)).then((r) => (r.ok ? r.text() : ""))
+    .then((t) => t.replace(/@font-face\{[^}]*\}/g, ""), () => "");
+  return withTimeout(sheetP, 4000).catch(() => "");
+}
+function paintSandbox(v, box, src) {
+  const policy = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:";
+  const frame = document.createElement("iframe");
+  frame.className = "sandbox";
+  frame.title = v.body.title || "Scene";
+  frame.setAttribute("sandbox", "allow-scripts");
+  box.replaceChildren(frame);
+  v.sandbox = { frame, last: null };
+  Promise.all([fontFaces(), stageSheet()]).then(([faces, sheet]) => {
+    const theme = document.documentElement.dataset.theme;
+    frame.srcdoc = `<!doctype html><html${theme ? ` data-theme="${theme}"` : ""}><head><meta charset="utf-8">`
+      + `<meta http-equiv="Content-Security-Policy" content="${esc(policy)}">`
+      + `<style>${faces}\n${sheet.replace(/<\/style/gi, "<\\/style")}\nhtml,body{height:auto;min-height:100%;background:transparent}[data-part]:not(.k-key){opacity:0}</style>`
+      + `<script>${SANDBOX_SHIM}<\/script></head><body class="visual scene sealed">${src.html}</body></html>`;
+  });
+  requestAnimationFrame(() => { if (box.isConnected) paintFrame(v, box); });
+}
+// The frame of view v's scene as the sealed frame applies it: what shows, what is lit, what is being said.
+function postSandbox(v, msg) {
+  const sb = v.sandbox;
+  if (!sb) return;
+  sb.last = { type: "scene:frame", ...msg, theme: document.documentElement.dataset.theme || null };
+  try { sb.frame.contentWindow.postMessage(sb.last, "*"); } catch {}
+}
+window.addEventListener("message", (e) => {
+  const v = e.data && e.data.type === "scene:ready" ? [...views.values()].find((x) => x.sandbox && x.sandbox.frame.contentWindow === e.source) : null;
+  if (v && v.sandbox && v.sandbox.last) postSandbox(v, v.sandbox.last);
+});
 
 // A tap in a scene: on a term (<dfn title="meaning">) its meaning shows, and the voice goes on; on a part, its popup
 // offers Ask about this (the question starts in the call page's text field) and Play from here.
@@ -1220,8 +1300,20 @@ function startFrame(v) {
 function paintFrame(v, box, animate = false) {
   const on = painted(v);
   box = box || v.pane.querySelector(".code, .md, .diagram, .visual");
+  if (!on && box && box.classList.contains("sandboxed")) {  // no answer steps it: the whole scene shows
+    const all = (v.body.source.parts || []).map((p) => "part:" + p.id);
+    postSandbox(v, { show: all, focus: [], cur: [], animate: false });
+  }
   if (!on || !box) return;
   const { scene, n } = on;
+  if (box.classList.contains("sandboxed")) {
+    const last = scene.frames.length - 1, frame = scene.frames[Math.max(0, Math.min(n, last))];
+    postSandbox(v, { show: frame.show, focus: frame.focus, cur: beingSaid(scene, n), animate });
+    v.applied = n;
+    const step = v.pane.querySelector(".vstep");
+    if (step) step.textContent = stepLabel(scene, n);
+    return;
+  }
   const done = applyFrame(scene, box, n, animate && v.applied === n - 1 ? v.applied : null);
   if (!done) return;
   if (box.classList.contains("lanes")) { layoutLanes(box, scene, n); done.focused = null; }  // lanes scroll themselves
@@ -1319,6 +1411,7 @@ function onMessage(m) {
     if (document.documentElement.dataset.theme === theme) return;
     document.documentElement.dataset.theme = theme;
     for (const f of document.querySelectorAll("iframe.frame")) themeFrame(f);
+    for (const v of views.values()) if (v.sandbox && v.sandbox.last) postSandbox(v, v.sandbox.last);
     redrawDiagrams();
   }
   else if (m.type === "stage:follow") setFollow(!!m.on);

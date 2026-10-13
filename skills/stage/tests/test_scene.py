@@ -555,15 +555,23 @@ def test_a_scene_is_read_as_its_parts_in_page_order_with_their_names_and_nesting
         "The template rule", "What the PDF prints in the Product cell"]
 
 
-def test_a_scene_with_no_parts_a_repeated_part_a_bad_id_or_a_script_is_refused():
+def test_a_scene_with_no_parts_a_repeated_part_a_bad_id_or_a_javascript_link_is_refused():
     for html, why in [("<div><p>All at once</p></div>", "no parts: mark each part with data-part"),
                       ('<p data-part="a">x</p><p data-part="a">y</p>', 'part "a" is marked twice'),
                       ('<p data-part="a b">x</p>', 'part id "a b" must be letters, digits, - or _'),
-                      ('<p data-part="a">x</p><script>alert(1)</script>', "a scene runs no scripts; take out the <script>"),
-                      ('<p data-part="a" onclick="go()">x</p>', "a scene runs no scripts; take out onclick"),
-                      ('<a data-part="a" href=" JavaScript:go()">x</a>', "a scene runs no scripts; take out the javascript: link")]:
+                      ('<a data-part="a" href=" JavaScript:go()">x</a>', "a javascript: link never runs in a scene; use a button with a handler")]:
         with pytest.raises(stage_model.SourceError, match=re.escape(why)):
             stage_model.scene_source(html)
+
+
+def test_a_scene_with_a_script_or_a_handler_is_kept_whole_for_a_sealed_frame():
+    plain = stage_model.scene_source('<p data-part="a">x</p>')
+    scripted = stage_model.scene_source('<div data-part="a"><script>const words = "not a name";</script>'
+                                        '<style>p { color: red }</style>The <b>row</b></div>')
+    handler = stage_model.scene_source('<button data-part="a" onclick="go()">Buy</button>')
+    assert "sandboxed" not in plain and scripted["sandboxed"] is True and handler["sandboxed"] is True
+    assert "<script>" in scripted["html"]  # kept whole: the stage runs it, never sanitizes it
+    assert [p["name"] for p in scripted["parts"]] == ["The row"]  # a script's text names no part
 
 
 def test_a_part_brings_its_parent_and_a_parent_brings_the_parts_no_verb_reveals_on_its_own():

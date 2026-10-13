@@ -698,3 +698,35 @@ def test_a_term_the_scene_defines_is_tappable_in_the_caption(tmp_path):
     page.js("document.querySelector('.caption button.term').click();").check(SPOP)
     assert page.run() == [["The k&e sticker is old, said K&E twice.", ["k&e", "K&E"]],
                           [False, "k&e", "the bank's check of what a client knows", []]]
+
+
+SANDBOX_HTML = ('<section class="box" data-part="ctl" data-name="the controls"><button onclick="flip()">V2</button></section>'
+                '<section class="box" data-part="row" data-name="the report row"><p id="out">Fixed Income</p></section>'
+                '<script>function flip() { document.getElementById("out").textContent = "Investment Grade Bonds"; }</script>')
+
+
+def test_a_scene_with_a_script_runs_in_a_sealed_frame_that_the_frames_reach_by_message(tmp_path):
+    from skills.stage import model as stage_model
+    src = stage_model.scene_source(SANDBOX_HTML)
+    built = _scene(scene.parts_model(src["parts"]), [["+ ctl"], ["+ row"]], "Sandbox")
+    page = StagePage(tmp_path).show("sb", src, title="Sandbox", extra={"scene": built, "kind": "scene"}).open()
+    frame = "pane('sb').querySelector('iframe.sandbox')"
+    page.check(f"[{frame}.getAttribute('sandbox'), /default-src 'none'; script-src 'unsafe-inline'/.test({frame}.srcdoc),"
+               f" {frame}.srcdoc.includes('<button onclick=\"flip()\">V2</button>'), pane('sb').querySelectorAll('[data-part]').length]")
+    for n in range(4):
+        page.send({"type": "stage:state", "front": "sb", "frames": {"sb": n}, "keys": 0})
+    page.check(f"{frame}.contentWindow.posted.map((m) => [m.type, m.show, m.cur])")
+    page.check("pane('sb').querySelector('.vstep')?.textContent ?? null")
+    assert page.run() == [
+        ["allow-scripts", True, True, 0],  # the parts live in the frame, never in the stage's own page
+        # at rest as it opens, as any scene; then each frame the voice reaches
+        [["scene:frame", ["part:ctl", "part:row"], []], ["scene:frame", [], []], ["scene:frame", ["part:ctl"], ["part:ctl"]],
+         ["scene:frame", ["part:ctl", "part:row"], ["part:row"]], ["scene:frame", ["part:ctl", "part:row"], []]],
+        "All shown"]
+
+
+def test_a_sealed_scene_no_answer_steps_shows_whole(tmp_path):
+    from skills.stage import model as stage_model
+    page = StagePage(tmp_path).show("sb", stage_model.scene_source(SANDBOX_HTML), title="Sandbox", extra={"kind": "scene"}).open()
+    page.check("pane('sb').querySelector('iframe.sandbox').contentWindow.posted.map((m) => m.show)")
+    assert page.run() == [[["part:ctl", "part:row"]]]

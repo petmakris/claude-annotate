@@ -79,7 +79,8 @@ Rules:
   `[[key: ...]]` tags. Embedded in a call, the stage also shows the sentence being said (`stage:caption`) and an
   answer's stops (`stage:stop`: a card of buttons, answered with `stage:pick`). A tap on a scene part opens its popup
   (Ask about this posts `stage:ask`; Play from here posts `stage:play`), and a `<dfn title>` term in a scene or in the
-  caption shows its meaning.
+  caption shows its meaning. A scene with a `<script>` or an `on…` handler runs in a sealed frame (`sandbox="allow-scripts"`,
+  a policy of `default-src 'none'`, the stage's stylesheet and fonts inline), and its frames reach it by message.
 
 ## What the stage keeps true
 

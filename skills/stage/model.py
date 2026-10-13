@@ -57,6 +57,8 @@ class _Parts(HTMLParser):
         self.parts: list[dict] = []
         self.stack: list[tuple[str, dict | None]] = []  # open elements, with the part each one starts
         self.heading: list[dict] = []  # the parts whose first heading is being read
+        self.scripted = False  # a <script> or an on… handler: the scene runs in a sealed frame
+        self.code = False  # inside a <script> or <style>, whose text names no part
 
     def open_parts(self) -> list[dict]:
         return [p for _, p in self.stack if p is not None]
@@ -65,9 +67,12 @@ class _Parts(HTMLParser):
         a = dict(attrs)
         for name, value in attrs:
             if name.startswith("on"):
-                raise SourceError(f"a scene runs no scripts; take out {name}")
+                self.scripted = True
             if re.match(r"\s*javascript:", value or "", re.IGNORECASE):
-                raise SourceError("a scene runs no scripts; take out the javascript: link")
+                raise SourceError("a javascript: link never runs in a scene; use a button with a handler")
+        if tag in ("script", "style"):
+            self.scripted = self.scripted or tag == "script"
+            self.code = True
         part = None
         if "data-part" in a:
             ident = (a["data-part"] or "").strip()
@@ -84,6 +89,8 @@ class _Parts(HTMLParser):
             self.stack.append((tag, part))
 
     def handle_endtag(self, tag):
+        if tag in ("script", "style"):
+            self.code = False
         if re.fullmatch(r"h[1-6]", tag):
             self.heading = []
         for i in range(len(self.stack) - 1, -1, -1):
@@ -92,6 +99,8 @@ class _Parts(HTMLParser):
                 break
 
     def handle_data(self, data):
+        if self.code:
+            return
         words = data.split()
         for p in self.open_parts():
             p["words"] += words
@@ -102,9 +111,8 @@ class _Parts(HTMLParser):
 def scene_source(html: str) -> dict:
     """A scene: HTML whose parts (elements marked data-part) the voice reveals one at a time. Each part's name
     is its data-name, else its first heading, else its first eight words; a part inside another names it as
-    its parent. The stage sanitizes the HTML; a script is refused here, since a scene runs none."""
-    if re.search(r"<\s*script\b", html, re.IGNORECASE):
-        raise SourceError("a scene runs no scripts; take out the <script>")
+    its parent. The stage sanitizes a scene with no script; one with a <script> or an on… handler is kept whole
+    and marked `sandboxed`, and the stage runs it in a sealed frame that reaches nothing outside it."""
     if len(html) > SCENE_MAX_CHARS:
         raise SourceError(f"a scene holds at most {SCENE_MAX_CHARS} characters; split it into two")
     reader = _Parts()
@@ -114,7 +122,8 @@ def scene_source(html: str) -> dict:
         raise SourceError("no parts: mark each part with data-part")
     parts = [{"id": p["id"], "parent": p["parent"],
               "name": p["name"] or " ".join(p["head"].split()) or " ".join(p["words"][:8])} for p in reader.parts]
-    return {"type": "inline", "format": "scene", "html": html, "parts": parts}
+    return {"type": "inline", "format": "scene", "html": html, "parts": parts,
+            **({"sandboxed": True} if reader.scripted else {})}
 
 
 class SourceError(ValueError):

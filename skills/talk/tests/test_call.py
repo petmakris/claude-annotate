@@ -676,8 +676,8 @@ def test_a_scene_is_a_board_the_voice_reveals_part_by_part(tmp_path):
 def test_a_scene_that_cannot_be_shown_or_pointed_at_is_a_problem(tmp_path):
     cases = {"[[show scene | All]] <div><p>Everything at once</p></div> [[/show]] Hi.":
              ['scene "All" not shown: no parts: mark each part with data-part'],
-             "[[show scene | S]] <p data-part=\"a\">x</p><script>go()</script> [[/show]] Hi.":
-             ['scene "S" not shown: a scene runs no scripts; take out the <script>'],
+             "[[show scene | S]] <a data-part=\"a\" href=\"javascript:go()\">x</a> [[/show]] Hi.":
+             ['scene "S" not shown: a javascript: link never runs in a scene; use a button with a handler'],
              SCENE + "Hi. [[point: part nothing]] There.": ['point not shown: no part nothing in "Ben\'s product name"'],
              SCENE + "Hi. [[point: row 2]] There.": ['point not shown: "Ben\'s product name" is a scene; use part ID'],
              "[[show table | T]]| a |\n|---|\n| 1 |[[/show]] Hi. [[point: part a]] There.": ['point not shown: "T" is a table; use row N, rows A-B, row "text" or cell "row" / "column"']}
