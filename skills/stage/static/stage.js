@@ -1209,7 +1209,7 @@ function paintFrame(v, box, animate = false) {
   const room = box.classList.contains("map") ? +box.dataset.room || 0 : 0;
   const keep = [done.focused].flat().filter(Boolean);
   if (keep.length) requestAnimationFrame(() => { if (!v.pane.hidden) centre(keep, room); });
-  if (captionText) requestAnimationFrame(placeCaption);
+  if (captionText) requestAnimationFrame(() => placeCaption());
   const step = v.pane.querySelector(".vstep");
   if (step) step.textContent = stepLabel(scene, n);
   const back = v.pane.querySelector(".stepback"), next = v.pane.querySelector(".stepnext");
@@ -1300,7 +1300,10 @@ function onMessage(m) {
 
 // The sentence being said: under the part being said when the board in front is a scene, else at the foot.
 let captionText = "";
-function placeCaption() {
+// Placing it scrolls the scene up just enough for the bubble to fit under the part (the scene keeps room
+// at its foot for that), so it never covers a part already shown. It goes above only when the part
+// itself fills the stage. A scroll moves it along (`scrolled`) without scrolling again.
+function placeCaption(scrolled = false) {
   captionEl.hidden = !captionText;
   captionEl.textContent = captionText;
   const name = selectedName(), v = name && views.get(name);
@@ -1308,14 +1311,21 @@ function placeCaption() {
   captionEl.className = "caption" + (!captionText ? "" : part ? " bubble" : " bar");
   captionEl.style.left = captionEl.style.top = "";
   if (!captionText || !part) return;
-  const stage = root.querySelector(".stage").getBoundingClientRect(), r = part.getBoundingClientRect();
+  const stage = root.querySelector(".stage").getBoundingClientRect();
   const h = captionEl.offsetHeight, w = captionEl.offsetWidth;
+  let r = part.getBoundingClientRect();
+  const short = r.bottom + 10 + h - (stage.bottom - 8), box = part.closest(".visual.scene");
+  if (!scrolled && short > 0 && box && r.top - short >= box.getBoundingClientRect().top) {
+    box.scrollTop += short;
+    r = part.getBoundingClientRect();
+  }
   const below = r.bottom + 10 + h <= stage.bottom - 8;
   captionEl.style.top = (below ? r.bottom - stage.top + 10 : Math.max(8, r.top - stage.top - h - 10)) + "px";
-  captionEl.style.left = Math.max(8, Math.min(r.left - stage.left, stage.width - w - 8)) + "px";
+  captionEl.style.left = Math.max(16, Math.min(r.left - stage.left, stage.width - w - 16)) + "px";
   captionEl.classList.toggle("above", !below);
 }
-window.addEventListener("resize", placeCaption);
+window.addEventListener("resize", () => placeCaption());
+document.addEventListener("scroll", (e) => { if (captionText && e.target.closest?.(".visual.scene")) placeCaption(true); }, true);
 
 function post(msg) { if (embedded) window.parent.postMessage(msg, "*"); }
 // Play from here, on a sequence step: the first frame that says the step, in the scene on the board, else in

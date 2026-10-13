@@ -579,12 +579,18 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .scene td{padding:9px 12px;border-top:1px solid var(--line)}
 .scene tr.k-focus td{background:var(--spot-bg)}
 .visual.scene{background:none;border:0}
+/* Room at the foot, so the last part can scroll up and leave space under it for the caption's bubble */
+.visual.scene{padding-bottom:160px}
 
 /* The sentence being said: a bubble under the scene part it is about, else a line at the stage's foot */
-.caption{position:absolute;z-index:6;pointer-events:none;font:500 16px/1.45 var(--sans);text-wrap:balance}
+.caption{position:absolute;z-index:6;box-sizing:border-box;pointer-events:none;font:500 16px/1.45 var(--sans);text-wrap:balance}
 .caption[hidden]{display:none}
-.caption.bubble{max-width:min(440px,calc(100% - 16px));padding:10px 14px;border-radius:12px;background:var(--ink);color:var(--panel);
+.caption.bubble{max-width:min(440px,calc(100% - 32px));padding:10px 14px;border-radius:12px;background:var(--ink);color:var(--panel);
   box-shadow:0 12px 32px -12px rgba(0,0,0,.45);transition:top .3s,left .3s}
+/* In dark mode an inverted bubble is a near-white glare: it is a lifted card instead, 11.6 L* above the
+   part's card, its words at 8.7:1 and its accent edge at 5:1. */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .caption.bubble{background:#3C4043;color:var(--ink);border:1px solid var(--acc)}}
+:root[data-theme="dark"] .caption.bubble{background:#3C4043;color:var(--ink);border:1px solid var(--acc)}
 .caption.bar{left:50%;bottom:16px;transform:translateX(-50%);max-width:min(760px,calc(100% - 32px));padding:10px 18px;border-radius:12px;
   background:var(--panel);color:var(--ink);border:1px solid var(--line);box-shadow:0 10px 30px -14px rgba(0,0,0,.35);text-align:center}
 @media (prefers-reduced-motion:reduce){.caption.bubble{transition:none}}
