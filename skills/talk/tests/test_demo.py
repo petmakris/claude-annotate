@@ -81,7 +81,7 @@ def test_the_demo_shows_every_board_kind_and_every_way_to_steer_one():
              "node": r"\[\[point[^\]]*: node ", "step": r"\[\[point[^\]]*: step "}
     missing = [name for name, rx in forms.items() if not re.search(rx, text)]
     assert not missing, f"no demo answer points at a {missing}"
-    for tag in ("[[next]]", "[[+ ", "[[key:"):
+    for tag in ("[[next]]", "[[+ ", "[[key:", "[[guess:", "[[check]]", "<dfn title=", "<script>"):
         assert tag in text, f"the demo never uses {tag.strip()}"
 
 

@@ -63,8 +63,22 @@ A map can go round in loops too, like the states of live mode. [[+ listening]] I
  <section class="box" data-part="check" data-name="the text field"><p class="cap">2 · The text field</p><p>Your words land here, to check and edit.</p><p class="mark" data-part="send" data-name="only send">Only Send makes them a turn.</p></section>
  <section class="box" data-part="answer" data-name="claude answers"><p class="cap">3 · The answer</p><p>Claude answers with a scene like this one, one part at a time.</p></section>
 </div> [[/show]]
-A scene is a page Claude writes for one answer, and it comes in one part at a time. [[+ say]] First, what you say. [[point: part mic]] You press Talk, speak, and press Done. [[+ check]] Your words land in the text field, to check and edit. [[point: part send]] Only Send makes them a turn. [[+ answer]] Then Claude answers, with a scene like this one. [[key: a scene is a page the voice builds one part at a time]] Next is a page.
+A scene is a page Claude writes for one answer, and it comes in one part at a time. [[+ say]] First, what you say. [[point: part mic]] You press Talk, speak, and press Done. [[+ check]] Your words land in the text field, to check and edit. [[point: part send]] Only Send makes them a turn. [[+ answer]] Then Claude answers, with a scene like this one. [[key: a scene is a page the voice builds one part at a time]] Next, a scene that asks you.
+---
+[[show scene | What Send does]] <div class="cols">
+ <section class="box" data-part="field" data-name="the text field"><p class="cap">1 · The text field</p><p>"Why does the table not move?"</p></section>
+ <section class="box" data-part="turn" data-name="a turn"><p class="cap">2 · A turn</p><p>Your words wait in a queue for the <dfn title="the background task in Claude's session that wakes it when you say something">doorbell</dfn>.</p></section>
+ <section class="box" data-part="reply" data-name="the reply"><p class="cap">3 · The reply</p><p class="big">Claude answers with a scene.</p></section>
+</div> [[/show]]
+An answer can stop and ask you. First, the text field. Send makes your words a turn, which waits for the doorbell. Tap the underlined word for what it means. [[guess: What happens to words you type but never send | Claude reads them anyway | *Nothing, they stay in the field]] Nothing happens to them. Then the reply comes, as a scene. [[key: an answer can stop, ask, and wait for you]] Tap any part to ask about it. [[check]] Next, a scene you can change.
+---
+[[show scene | Change the case]] <div class="cols">
+ <section class="box" data-part="pick" data-name="the speed"><p class="cap">Pick a speed</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button aria-pressed="true" onclick="speed(1, this)">1×</button><button aria-pressed="false" onclick="speed(1.25, this)">1.25×</button><button aria-pressed="false" onclick="speed(1.5, this)">1.5×</button></div></section>
+ <section class="box" data-part="time" data-name="how long it takes"><p class="cap">A 200-word answer takes</p><p class="big" id="out">80 seconds</p></section>
+</div>
+<script>function speed(x, b) { for (const o of b.parentNode.children) o.setAttribute("aria-pressed", String(o === b)); document.getElementById("out").textContent = Math.round(80 / x) + " seconds"; }</script> [[/show]]
+A scene can carry a script, so you can change the case and watch the result. Pick the speed you listen at. Then see how long a 200-word answer takes. The script runs sealed off, so it never reaches your files or the network. [[key: a scene with a script lets you change the case]] Next is a page.
 ---
 [[show page: README.md | The README]] A page is a file, an address or another session, and an answer brings it forward with its voice like any other board. This is the repository's README. [[key: an answer brings a page forward as it talks about it]] Pick another board and press Play: the stage keeps the board you picked until you press Follow the voice. Next is the end.
 ---
-That was every board: code, a change, a sequence, a map, a table, a map with loops, a scene and a page. The key points are pinned at the end of the list. Go back through them with the arrows at the top of the stage, or say start over to play the demo again. [[key: the arrows at the top go back through every board]]
+That was every board: code, a change, a sequence, a map, a table, a map with loops, three scenes and a page. The key points are pinned at the end of the list. Go back through them with the arrows at the top of the stage, or say start over to play the demo again. [[key: the arrows at the top go back through every board]]
