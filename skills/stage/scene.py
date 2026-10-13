@@ -17,7 +17,7 @@ import difflib
 import html
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from html.entities import html5
 
 LATER = ("-", "mark", "strike", "callout", "morph")
@@ -552,7 +552,22 @@ def flowchart_spec_model(spec: dict) -> SceneModel:
                       edges=edge_map, can_hide=True)
 
 
-ENTITY_PREFIXES = {"sequence": ("step:", "actor:")}
+def parts_model(parts: list[dict]) -> SceneModel:
+    """A scene's parts, in page order. A part brings the part it sits in; a part brings the parts inside it,
+    except those the answer reveals on their own (compile_scene drops those from `down`)."""
+    keys = [f"part:{p['id']}" for p in parts]
+    up = {f"part:{p['id']}": [f"part:{p['parent']}"] for p in parts if p.get("parent")}
+    down: dict[str, list[str]] = {}
+    for child, (parent,) in up.items():
+        down.setdefault(parent, []).append(child)
+    names: dict[str, str] = {}
+    for p in parts:
+        if fold(p.get("name") or ""):
+            names.setdefault(fold(p["name"]), f"part:{p['id']}")
+    return SceneModel("parts", keys, order=list(keys), up=up, down=down, names=names, can_hide=True)
+
+
+ENTITY_PREFIXES = {"sequence": ("step:", "actor:"), "parts": ("part:",)}
 
 
 def _prefixes(model: SceneModel) -> tuple[str, ...]:
@@ -617,7 +632,7 @@ def resolve(model: SceneModel, raw: str, title: str) -> tuple[list[str], str | N
             return [model.names[fold(text)]], None
         key = _closest(model, text)
         return ([key], f'"{raw}" in "{title}" read as {key}') if key else ([], dropped)
-    m = re.fullmatch(r"(?:nodes?|steps?)\s+(.+)", raw, re.IGNORECASE)
+    m = re.fullmatch(r"(?:nodes?|steps?|parts?)\s+(.+)", raw, re.IGNORECASE)
     if m is None and model.kind == "sequence":
         actor = re.fullmatch(r"actors?\s+(.+)", raw, re.IGNORECASE)
         if actor and f"actor:{actor[1].strip()}" in model.keys:
@@ -647,7 +662,7 @@ def _reveal(model: SceneModel, key: str, shown: set) -> None:
         if k not in shown:
             shown.add(k)
             stack.extend(model.up.get(k, []))
-            if k.startswith("row#"):  # a row is shown whole, however it came in
+            if k.startswith(("row#", "part:")):  # a row is shown whole, and a part with what it holds
                 stack.extend(model.down.get(k, []))
 
 
@@ -712,7 +727,7 @@ def part_names(model: SceneModel) -> dict[str, list[list[str]]]:
         if _words(name):
             out.setdefault(key, []).append(_words(name))
     for key in model.order:
-        ident = key.split(":", 1)[1] if key.startswith(("node:", "step:", "group:")) else ""
+        ident = key.split(":", 1)[1] if key.startswith(("node:", "step:", "group:", "part:")) else ""
         if len(ident) >= 3 and not re.fullmatch(r"[a-z]?\d+", ident, re.IGNORECASE) and _words(ident):
             out.setdefault(key, []).append(_words(ident))
     return out
@@ -736,7 +751,8 @@ def auto_steps(model: SceneModel, sentences: list[str], pointed: dict[int, list[
     Returns, per sentence index, the reveals for it (each a list of keys; the last is what the sentence
     is about), and the parts that came in by order rather than by name."""
     parts, m = model.order, len(sentences)
-    if not model.can_hide or len(parts) <= AUTO_STEP_OVER or m < 1:
+    # a scene always steps: a page must never come up whole at once
+    if not model.can_hide or len(parts) <= (1 if model.kind == "parts" else AUTO_STEP_OVER) or m < 1:
         return {}, []
     words, names = [_words(s) for s in sentences], part_names(model)
     point_at: dict[str, int] = {}
@@ -756,6 +772,8 @@ def auto_steps(model: SceneModel, sentences: list[str], pointed: dict[int, list[
             by_name.add(p)
         elif p in point_at:
             anchor[p] = point_at[p]
+        elif model.kind == "parts" and model.up.get(p, [None])[0] in anchor:
+            anchor[p] = anchor[model.up[p][0]]  # a part no sentence names rides in with the part it sits in
         if p in anchor and model.kind == "sequence":
             floor = max(floor, anchor[p])
     busy = set(anchor.values()) | set(point_at.values())
@@ -812,6 +830,9 @@ def compile_scene(model: SceneModel, groups: list[list[Verb]], title: str) -> tu
                 named[id(verb)] += got
     empty = model.can_hide and any(v.name in ("next", "all") or (v.name == "+" and named[id(v)])
                                    for g in groups for v in g)
+    if model.kind == "parts":  # a part revealed or pointed at on its own does not come in with its parent
+        alone = {k for keys in named.values() for k in keys}
+        model = replace(model, down={k: [c for c in v if c not in alone] for k, v in model.down.items()})
     shown = set() if empty else set(model.keys)
     focus: set = set()
     frames = [_snap(model, shown, focus)]

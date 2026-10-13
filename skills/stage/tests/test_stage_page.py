@@ -591,3 +591,50 @@ def test_a_board_the_reader_picks_stays_in_front_until_they_press_follow_the_voi
     page.js("document.querySelector('button[role=tab][data-view=walk]').click();")
     page.send({"type": "stage:answer", "n": 4}).check(shown)
     assert page.run() == [["one", True], ["walk", False], ["walk", False], [False, True], ["one", True], ["walk", True]]
+
+
+SCENE_HTML = ('<div class="cols"><section class="box" data-part="data" data-name="the data"><p class="cap">Data</p>'
+              '<div data-part="old">Investment Grade Bonds</div></section>'
+              '<section class="box" data-part="rule" data-name="the rule">find</section>'
+              '<section class="box" data-part="pdf" data-name="the pdf">printed</section></div>')
+
+
+def test_a_scene_starts_empty_and_each_part_comes_in_and_lights_on_its_own_step(tmp_path):
+    from skills.stage import model as stage_model
+    src = stage_model.scene_source(SCENE_HTML)
+    built = _scene(scene.parts_model(src["parts"]), [["+ data"], ["focus old"], ["+ pdf"]], "Ben")
+    page = StagePage(tmp_path).show("ben", src, title="Ben", extra={"scene": built, "kind": "scene"}).open()
+    parts = ("(() => { const p = pane('ben'); return ['data', 'old', 'rule', 'pdf'].map((id) => { const el = p.querySelector(`[data-part=\"${id}\"]`);"
+             " return id + ':' + (el.classList.contains('k-hidden') ? 'hidden' : 'shown') + (el.classList.contains('k-focus') ? '+lit' : '')"
+             " + (el.classList.contains('s-cur') ? '+said' : ''); }); })()")
+    for n in range(5):
+        page.send({"type": "stage:state", "front": "ben", "frames": {"ben": n}, "keys": 0}).check(parts)
+    page.check("pane('ben').querySelector('.vmeta span').textContent")
+    assert page.run() == [
+        ["data:hidden", "old:hidden", "rule:hidden", "pdf:hidden"],
+        ["data:shown+said", "old:hidden", "rule:hidden", "pdf:hidden"],
+        ["data:shown", "old:shown+lit+said", "rule:hidden", "pdf:hidden"],
+        ["data:shown", "old:shown", "rule:hidden", "pdf:shown+said"],
+        ["data:shown", "old:shown", "rule:shown", "pdf:shown"],  # at rest the whole scene shows, nothing lit
+        "Scene · 4 parts"]
+
+
+
+def test_the_sentence_being_said_shows_beside_the_scene_part_and_at_the_foot_of_other_boards(tmp_path):
+    from skills.stage import model as stage_model
+    src = stage_model.scene_source(SCENE_HTML)
+    built = _scene(scene.parts_model(src["parts"]), [["+ data"], ["+ rule"]], "Ben")
+    table = {"type": "inline", "format": "table", "body": "| a | b |\n|---|---|\n| 1 | 2 |"}
+    page = (StagePage(tmp_path).show("t", table, title="T")
+            .show("ben", src, title="Ben", extra={"scene": built, "kind": "scene"}).open())
+    # where the bubble sits is layout, checked in the browser: here, only which kind it is
+    cap = ("(() => { const c = document.querySelector('.caption'); return [c.hidden,"
+           " c.classList.contains('bubble') ? 'bubble' : c.classList.contains('bar') ? 'bar' : '', c.textContent]; })()")
+    page.check(cap)
+    page.send({"type": "stage:state", "front": "ben", "frames": {"ben": 1}, "keys": 0})
+    page.send({"type": "stage:caption", "text": "The data comes first.", "answer": 1}).check(cap)
+    page.send({"type": "stage:state", "front": "t", "frames": {}, "keys": 0})
+    page.send({"type": "stage:caption", "text": "Now the table.", "answer": 1}).check(cap)
+    page.send({"type": "stage:caption", "text": "", "answer": 1}).check(cap)
+    assert page.run() == [[True, "", ""], [False, "bubble", "The data comes first."],
+                          [False, "bar", "Now the table."], [True, "", ""]]

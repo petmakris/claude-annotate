@@ -91,6 +91,7 @@ if (CFG.stageUrl) {
 //   {type:'stage:key', view, index}     key point number index (from 1) was just said: light it up
 //   {type:'stage:theme', theme}         'light' or 'dark': the theme chosen here
 //   {type:'stage:follow', on}           the gear's switch turned following on or off
+//   {type:'stage:caption', text, answer}  the sentence being said, of an answer that has boards ('' clears it)
 // Stage to talk: {type:'stage:ready'}, {type:'stage:views', list:[{name, title, kind, answer}]} on every
 // change, {type:'stage:changed', name, title, isNew}, and {type:'stage:follow', on} when following
 // changes inside the stage (a tab tap, a chip or a step by hand turns it off, Follow the voice or a new answer
@@ -293,6 +294,8 @@ const nodes = new Map();    // entry id -> {el, sig}
 let rendered = false;
 const sigOf = e => `${e.who}|${e.text.length}|${e.speech}|${e.words?.length || 0}|${e.speech_error || ""}|${e.n || 0}|${e.withdrawn ? 1 : 0}`;
 
+const unfolded = new Set();  // the answers whose text the reader opened
+const staged = (e) => !!CFG.stageUrl && (e.cues || []).some((c) => c.kind === "front");
 function buildEntry(e) {
   let el;
   if (e.who === "you" || e.who === "claude") {
@@ -305,6 +308,14 @@ function buildEntry(e) {
     if (e.who === "claude") text.replaceChildren(...wordSpans(e)); else text.textContent = e.text;
     el.dataset.id = e.id;
     el.append(who, text);
+    if (e.who === "claude" && staged(e)) {
+      // An answer with boards is said on the stage: its text folds to one line until the reader opens it.
+      el.classList.toggle("folded", !unfolded.has(e.id));
+      const f = document.createElement("button"); f.type = "button"; f.className = "fold";
+      const paintFold = () => { f.textContent = el.classList.contains("folded") ? "Show text" : "Hide text"; };
+      f.onclick = () => { if (unfolded.has(e.id)) unfolded.delete(e.id); else unfolded.add(e.id); el.classList.toggle("folded", !unfolded.has(e.id)); paintFold(); };
+      paintFold(); who.append(f);
+    }
     if (e.who === "claude") {
       if (e.speech === "ready") {
         const b = document.createElement("button"); b.className = "play"; b.type = "button";
@@ -341,6 +352,7 @@ const KIND_ICONS = {
   change: '<path d="M4.5 2v6M1.5 5h6M8.5 12.5h6"/>',
   points: '<path d="M6 4h8M6 8h8M6 12h8"/><circle cx="2.6" cy="4" r=".9"/><circle cx="2.6" cy="8" r=".9"/><circle cx="2.6" cy="12" r=".9"/>',
   page: '<path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M9.5 1.5v3h3M5.5 8.5h5M5.5 11h5"/>',
+  scene: '<rect x="1.5" y="2.5" width="5.5" height="5" rx="1.2"/><rect x="9" y="2.5" width="5.5" height="5" rx="1.2"/><rect x="1.5" y="10" width="13" height="3.5" rx="1.2"/>',
 };
 const kindIcon = kind => `<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${KIND_ICONS[kind] || KIND_ICONS.page}</svg>`;
 
@@ -761,6 +773,7 @@ function highlight() {
       const lead = wordAt(e, audio.currentTime + LEAD_S * (audio.playbackRate || 1));
       syncStage(e, lead >= 0 ? e.words[lead][0] : -1);
     }
+    if (audio.currentTime > 0) caption(e, audio.currentTime);
   }
   const turn = readingTurn();
   if (lastTurn && lastTurn !== turn) {
@@ -778,6 +791,26 @@ function highlight() {
   lastWord = k >= 0 ? readSpans[k] || null : null;
   if (lastWord) { lastWord.classList.add("now-word"); followVoice(false); }
   if (!audio.paused) paintNowLine();
+}
+
+// ---- the sentence being said, shown on the stage -------------------------------
+// Each sentence of an answer: its start in seconds and its span in the text.
+function sentenceSpans(e) {
+  const out = [];
+  if (!e.words || !e.words.length) return out;
+  let first = 0;
+  e.words.forEach((w, i) => {
+    if (i === e.words.length - 1 || /[.!?…][)\]"'”’]*$/.test(e.text.slice(w[0], w[1]))) { out.push({t: e.words[first][2], a: e.words[first][0], b: w[1]}); first = i + 1; }
+  });
+  return out;
+}
+let captionShown = "";  // the caption on the stage now: sent only when it changes
+function caption(e, t) {
+  let text = "";
+  if (e && staged(e)) { const s = sentenceSpans(e).filter((x) => x.t <= t + 0.05).pop(); text = s ? e.text.slice(s.a, s.b).trim() : ""; }
+  if (text === captionShown) return;
+  captionShown = text;
+  toStage({type: "stage:caption", text, answer: e ? e.n || null : null});
 }
 
 // ---- the board follows the voice ------------------------------------------
@@ -852,7 +885,7 @@ audio.addEventListener("ended", () => {
   const e = view.entries.find(x => x.id === current.id) || current;
   syncStage(e, Infinity);
   clearTimeout(restTimer);
-  restTimer = setTimeout(() => { if (current && current.id === e.id && audio.ended) restBoards(e); }, REST_HOLD_MS);
+  restTimer = setTimeout(() => { if (current && current.id === e.id && audio.ended) { restBoards(e); caption(null, 0); } }, REST_HOLD_MS);
 });
 audio.addEventListener("seeking", () => { cueSync = true; });
 function skip(by) { audio.currentTime = Math.min(Math.max(0, audio.currentTime + by), audio.duration || 0); paintPill(); }

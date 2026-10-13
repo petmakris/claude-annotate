@@ -74,8 +74,8 @@ Rules:
   whole, nothing dimmed. The call page also sets the stage's light or dark theme. The answer that showed a view is
   marked on its row in the list (`A3`). Every answer that steps a view keeps its own scene on it (`scenes`, by answer number), and
   the call page names the answer with each frame, so replaying an earlier answer steps the board as that answer did; an answer
-  that showed the board with no steps of its own shows it whole. A stage opened on its own ignores all of this. Code, change, table and diagram views
-  can be pointed at from /talk only; /talk also keeps a pinned **Key points** board of the call's
+  that showed the board with no steps of its own shows it whole. A stage opened on its own ignores all of this. Code, change, table, diagram and scene views
+  can be pointed at from /talk only (a scene is HTML whose `data-part` elements the voice reveals one by one); /talk also keeps a pinned **Key points** board of the call's
   `[[key: ...]]` tags.
 
 ## What the stage keeps true

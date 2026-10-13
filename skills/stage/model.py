@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+from html.parser import HTMLParser
 from pathlib import Path
 
 from skills._shared.visuals import flowchart, sequence
@@ -41,6 +42,79 @@ def file_display(name: str) -> str:
     if suffix in PAGE_SUFFIXES:
         return "page"
     return "markdown" if suffix in MARKDOWN_SUFFIXES else "text"
+
+
+_PART_ID = re.compile(r"[A-Za-z0-9_-]+")
+_VOID = frozenset("area base br col embed hr img input link meta source track wbr".split())
+SCENE_MAX_CHARS = 100_000
+
+
+class _Parts(HTMLParser):
+    """A scene's parts: every element with data-part, in page order, with the part it sits in and its name."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts: list[dict] = []
+        self.stack: list[tuple[str, dict | None]] = []  # open elements, with the part each one starts
+        self.heading: list[dict] = []  # the parts whose first heading is being read
+
+    def open_parts(self) -> list[dict]:
+        return [p for _, p in self.stack if p is not None]
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        for name, value in attrs:
+            if name.startswith("on"):
+                raise SourceError(f"a scene runs no scripts; take out {name}")
+            if re.match(r"\s*javascript:", value or "", re.IGNORECASE):
+                raise SourceError("a scene runs no scripts; take out the javascript: link")
+        part = None
+        if "data-part" in a:
+            ident = (a["data-part"] or "").strip()
+            if not _PART_ID.fullmatch(ident):
+                raise SourceError(f'part id "{ident}" must be letters, digits, - or _')
+            if any(p["id"] == ident for p in self.parts):
+                raise SourceError(f'part "{ident}" is marked twice')
+            parent = self.open_parts()[-1]["id"] if self.open_parts() else None
+            part = {"id": ident, "name": (a.get("data-name") or "").strip(), "parent": parent, "words": [], "head": ""}
+            self.parts.append(part)
+        if re.fullmatch(r"h[1-6]", tag):
+            self.heading = [p for p in self.open_parts() + ([part] if part else []) if not p["head"]]
+        if tag not in _VOID:
+            self.stack.append((tag, part))
+
+    def handle_endtag(self, tag):
+        if re.fullmatch(r"h[1-6]", tag):
+            self.heading = []
+        for i in range(len(self.stack) - 1, -1, -1):
+            if self.stack[i][0] == tag:
+                del self.stack[i:]
+                break
+
+    def handle_data(self, data):
+        words = data.split()
+        for p in self.open_parts():
+            p["words"] += words
+        for p in self.heading:
+            p["head"] = (p["head"] + " " + data).strip()
+
+
+def scene_source(html: str) -> dict:
+    """A scene: HTML whose parts (elements marked data-part) the voice reveals one at a time. Each part's name
+    is its data-name, else its first heading, else its first eight words; a part inside another names it as
+    its parent. The stage sanitizes the HTML; a script is refused here, since a scene runs none."""
+    if re.search(r"<\s*script\b", html, re.IGNORECASE):
+        raise SourceError("a scene runs no scripts; take out the <script>")
+    if len(html) > SCENE_MAX_CHARS:
+        raise SourceError(f"a scene holds at most {SCENE_MAX_CHARS} characters; split it into two")
+    reader = _Parts()
+    reader.feed(html)
+    reader.close()
+    if not reader.parts:
+        raise SourceError("no parts: mark each part with data-part")
+    parts = [{"id": p["id"], "parent": p["parent"],
+              "name": p["name"] or " ".join(p["head"].split()) or " ".join(p["words"][:8])} for p in reader.parts]
+    return {"type": "inline", "format": "scene", "html": html, "parts": parts}
 
 
 class SourceError(ValueError):

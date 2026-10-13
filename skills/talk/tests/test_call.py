@@ -515,7 +515,7 @@ def test_a_point_lights_up_lines_of_the_last_board_and_a_bad_point_is_reported(t
     _, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point Nope: row 1]] There.", code)
     assert problems == ['point not shown: no board titled "Nope" in this call']
     entry, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point: wibble]] There.", code)
-    assert problems == ['point not shown: expected line N, lines A-B, old line N, row N, rows A-B, row "text", cell "row" / "column", node ID or step ID']
+    assert problems == ['point not shown: expected line N, lines A-B, old line N, row N, rows A-B, row "text", cell "row" / "column", node ID, step ID or part ID']
     assert [c["kind"] for c in entry["cues"]] == ["front"] and "wibble" not in entry["text"]
 
 
@@ -641,6 +641,69 @@ def test_a_page_that_cannot_be_shown_or_pointed_at_is_a_problem(tmp_path):
     entry, problems, focus = focus_cues(tmp_path, "[[show code: a.py:1-1 | A]] The line. [[show page: https://x.mac/p | P]] "
                                                   "The page. [[point: line 1]] Back to the line.", code)
     assert problems == [] and focus == [("a", ["line:1"])]
+
+
+SCENE = ("[[show scene | Ben's product name]] <div class=\"cols\">"
+         "<section data-part=\"data\" data-name=\"the data the server sends\"><div data-part=\"old\">K&amp;EProductType: Investment Grade Bonds</div></section>"
+         "<section data-part=\"rule\" data-name=\"the template rule\">find</section>"
+         "<section data-part=\"pdf\" data-name=\"what the PDF prints\">Investment Grade Bonds</section></div> [[/show]] ")
+
+
+def test_a_scene_is_a_board_the_voice_reveals_part_by_part(tmp_path):
+    from helpers import stage_rule_breaks
+    call = _call(tmp_path)
+    # no verbs: each part comes in with the sentence that names it, never the page at once
+    shown = call.split_reply(SCENE + "Follow one value. First the data the server sends. Then the template rule. "
+                                     "And what the PDF prints.")
+    (item,) = call.board.items
+    assert (item["kind"], item["view"], call.board.problems) == ("scene", "ben-s-product-name", [])
+    assert talk.stage_view(item)[1] == item["visual"] and item["visual"]["format"] == "scene"
+    frames = item["scene"]["frames"]
+    assert item["scene"]["start"] == "empty" and [f["cur"] for f in frames[1:-1]] == [
+        ["part:data", "part:old"], ["part:rule"], ["part:pdf"]]
+    assert stage_rule_breaks(call, shown) == []
+    # verbs and points by part
+    call.add("claude", shown, cues=call.reply_cues)
+    item.pop("scene")  # a scene belongs to the answer that compiled it
+    shown = call.split_reply(SCENE + "[[+ data]] The data. [[point: part old]] The old sticker. [[+ part pdf]] The PDF.")
+    frames = call.board.items[-1]["scene"]["frames"]
+    assert [f["cur"] for f in frames[1:-1]] == [["part:data"], ["part:old"], ["part:pdf"]]
+    assert call.board.problems == ['1 of 4 elements of "Ben\'s product name" are never revealed; they come in with the rest frame']
+    assert frames[1]["show"] == ["part:data"]  # old is pointed at on its own, so it waits for its own step
+    assert stage_rule_breaks(call, shown) == []
+
+
+def test_a_scene_that_cannot_be_shown_or_pointed_at_is_a_problem(tmp_path):
+    cases = {"[[show scene | All]] <div><p>Everything at once</p></div> [[/show]] Hi.":
+             ['scene "All" not shown: no parts: mark each part with data-part'],
+             "[[show scene | S]] <p data-part=\"a\">x</p><script>go()</script> [[/show]] Hi.":
+             ['scene "S" not shown: a scene runs no scripts; take out the <script>'],
+             SCENE + "Hi. [[point: part nothing]] There.": ['point not shown: no part nothing in "Ben\'s product name"'],
+             SCENE + "Hi. [[point: row 2]] There.": ['point not shown: "Ben\'s product name" is a scene; use part ID'],
+             "[[show table | T]]| a |\n|---|\n| 1 |[[/show]] Hi. [[point: part a]] There.": ['point not shown: "T" is a table; use row N, rows A-B, row "text" or cell "row" / "column"']}
+    for text, want in cases.items():
+        _, problems = cues_of(tmp_path, text)
+        assert want[0] in problems and len(problems) <= 2, (text, problems)  # beside the note that no sentence names a part
+
+
+def test_a_long_sentence_or_a_long_answer_is_reported_so_the_next_answer_is_shorter(tmp_path):
+    long_sentence = "This one sentence " + "goes on and on " * 8 + "until it ends."
+    _, problems = cues_of(tmp_path, f"Short. {long_sentence} Short again.")
+    assert problems == ['1 sentence is over 30 words, and the stage shows each sentence as one caption: split it '
+                        '(it starts "This one sentence goes on and on goes on and…")']
+    _, problems = cues_of(tmp_path, "One short sentence is here. " * 46)
+    assert problems == ["this answer is 230 words: keep an answer under 220 words, and say the rest in the next one"]
+    _, problems = cues_of(tmp_path, "One short sentence is here. " * 44)
+    assert problems == []
+
+
+def test_a_point_at_code_never_lands_on_a_page_shown_after_it(tmp_path):
+    code = tmp_path / "code"
+    code.mkdir()
+    (code / "a.py").write_text("x = 1\n")
+    _, problems, focus = focus_cues(tmp_path, "[[show code: a.py:1-1 | A]] The line. [[show page: https://x.mac/p | A]] "
+                                              "The page. [[point A: line 1]] Back to the line.", code)
+    assert focus == [("a", ["line:1"])]
 
 
 def test_a_change_that_cannot_be_shown_is_a_problem(tmp_path):

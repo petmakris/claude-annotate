@@ -212,3 +212,34 @@ def test_a_recording_adds_to_what_is_already_typed(tmp_path):
     page.js("$('text').value = 'about the tests:'; await sendWav(new Blob(['x']));")
     page.check("$('text').value")
     assert page.run() == ["about the tests: show me the queue"]
+
+
+CAPTIONS = "toStage().filter((m) => m.type === 'stage:caption').map((m) => m.text)"
+
+
+def test_the_sentence_being_said_goes_to_the_stage_and_clears_when_the_answer_rests(tmp_path):
+    html, states = served(tmp_path, [f"[[show table | One]]{TABLE}[[/show]] First things first. Then the second thing."], seconds=4.0)
+    page = CallPage(html, states, seconds=4.0).js("await serve(1); await playTo(0.5);").check(CAPTIONS)
+    page.js("await playTo(3.5);").check(CAPTIONS)
+    page.js("await end(); await advance(1600);").check(CAPTIONS)
+    assert page.run() == [["First things first."], ["First things first.", "Then the second thing."],
+                          ["First things first.", "Then the second thing.", ""]]
+
+
+def test_an_answer_with_no_board_sends_no_caption_and_keeps_its_text_open(tmp_path):
+    html, states = served(tmp_path, ["Just words, nothing to show."], seconds=3.0)
+    page = CallPage(html, states, seconds=3.0).js("await serve(1); await playTo(1.0);").check(CAPTIONS)
+    page.check("document.querySelector('#convo .turn.claude').classList.contains('folded')")
+    assert page.run() == [[], False]
+
+
+def test_an_answer_with_boards_folds_its_text_and_show_text_opens_it(tmp_path):
+    html, states = served(tmp_path, [f"[[show table | One]]{TABLE}[[/show]] First things first. Then the second thing."])
+    page = CallPage(html, states, autoplay=False).js("await serve(1);")
+    turn = "document.querySelector('#convo .turn.claude')"
+    page.check(f"[{turn}.classList.contains('folded'), {turn}.querySelector('button.fold').textContent]")
+    page.js(f"{turn}.querySelector('button.fold').click();")
+    page.check(f"[{turn}.classList.contains('folded'), {turn}.querySelector('button.fold').textContent]")
+    page.js("await serve(1); await advance(1000);")  # the page polls again: the reader's choice stays
+    page.check(f"{turn}.classList.contains('folded')")
+    assert page.run() == [[True, "Show text"], [False, "Hide text"], False]

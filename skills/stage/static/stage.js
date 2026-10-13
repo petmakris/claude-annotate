@@ -33,6 +33,8 @@
 //                                         the view with (body.scenes[answer]; without an answer, body.scene),
 //                                         clamped to its rest frame, animated only as the next one; never for
 //                                         the view in front while following is off
+//     {type:'stage:caption', text, answer} the sentence being said ('' clears it): a bubble under the scene part
+//                                         being said, else a line at the stage's foot
 //     {type:'stage:state', front, frames, keys, answer}  after a jump: every scene's frame as a snap, then the
 //                                         front and the key point lit (0: none). It replaces the whole picture:
 //                                         frames waiting for a view not here yet are dropped first
@@ -174,6 +176,7 @@ const ICON_PATHS = {
   page: '<path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M9.5 1.5v3h3M5.5 8.5h5M5.5 11h5"/>',
   change: '<path d="M4.5 2v6M1.5 5h6M8.5 12.5h6"/>',
   points: '<path d="M6 4h8M6 8h8M6 12h8"/><circle cx="2.6" cy="4" r=".9"/><circle cx="2.6" cy="8" r=".9"/><circle cx="2.6" cy="12" r=".9"/>',
+  scene: '<rect x="1.5" y="2.5" width="5.5" height="5" rx="1.2"/><rect x="9" y="2.5" width="5.5" height="5" rx="1.2"/><rect x="1.5" y="10" width="13" height="3.5" rx="1.2"/>',
 };
 const icon = (kind) => `<svg class="ico" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[kind] || ICON_PATHS.page}</svg>`;
 const kindOf = (src) => (src.type !== "inline" ? "page" : src.format === "visual" ? "diagram"
@@ -196,10 +199,11 @@ root.innerHTML = `<div class="stage">
     <div class="tiles">${["code", "diagram", "table", "page"].map((k) =>
       `<span class="tile">${icon(k)}<span>${k[0].toUpperCase() + k.slice(1)}</span></span>`).join("")}</div>
   </div></div></div>
+  <div class="caption" hidden></div>
 </div>`;
 const tabsEl = root.querySelector(".tabs"), panesEl = root.querySelector(".panes");
 const navEl = root.querySelector(".tabnav"), boardsEl = root.querySelector(".boards"), posEl = root.querySelector(".pos");
-const followEl = root.querySelector(".follow");
+const followEl = root.querySelector(".follow"), captionEl = root.querySelector(".caption");
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const views = new Map();            // name -> {body, tab, pane, filled, stale, renderSeq, changedAt, snap}
 let layout = { order: [], front: null };
@@ -251,6 +255,7 @@ function metaText(src) {
   if (src.format === "change") return `Change · ${src.path} · +${src.added} −${src.removed}` + (src.rev ? ` · since ${src.rev}` : "");
   if (src.format === "points") { const n = src.items.length; return `${n} key ${n === 1 ? "point" : "points"} from this call`; }
   if (src.format === "diagram") return "Diagram";
+  if (src.format === "scene") { const n = (src.parts || []).length; return `Scene · ${n} ${n === 1 ? "part" : "parts"}`; }
   if (src.format === "visual") return src.tool === "sequence" ? "Sequence diagram" : "Flowchart";
   return "Board";
 }
@@ -680,6 +685,14 @@ function renderInline(v, seq) {
     box.className = "visual map";
     renderMap(box, src.spec, embedded);
     requestAnimationFrame(() => { if (current()) { paintFrame(v, box); if (!hasScene(v)) layoutMap(box, null); } });
+  } else if (src.format === "scene") {
+    // A scene comes in part by part with the voice: its parts are keyed for the frames to show and light.
+    box.className = "visual scene";
+    paintScene(v, box, src);
+    if (!window.DOMPurify) libsReady().then(() => {
+      if (!current()) return;
+      if (window.DOMPurify) paintScene(v, box, src); else note(box, "The scene could not be made safe to show, so it is not shown.", retryLibs);
+    });
   } else if (src.format === "diagram") {
     box.className = "diagram drawing";
     box.innerHTML = `<div class="spin"></div><span>Drawing the diagram…</span>`;
@@ -693,6 +706,16 @@ function renderInline(v, seq) {
     });
   }
   return box;
+}
+
+// A scene's HTML, sanitized: no script, form, frame, style or link survives, and no handler attribute.
+// Each part (data-part) becomes a key the frames reveal and light.
+function paintScene(v, box, src) {
+  if (!window.DOMPurify) return;
+  box.innerHTML = DOMPurify.sanitize(src.html, { FORBID_TAGS: ["form", "meta", "iframe", "style", "base", "script", "link", "object", "embed"] });
+  for (const el of box.querySelectorAll("[data-part]")) el.dataset.key = "part:" + el.dataset.part;
+  for (const a of box.querySelectorAll("a[href]")) { a.target = "_blank"; a.rel = "noopener"; }
+  requestAnimationFrame(() => { if (box.isConnected) paintFrame(v, box); });
 }
 
 function sourceFrame(text) {
@@ -947,6 +970,7 @@ function select(name, arrive = false) {
     }
   }
   if (was !== name) post({ type: "stage:shown", view: name });  // the call's Play plays the board in front
+  if (captionText) placeCaption();
 }
 
 // A pinned view (Key points) leads the history, whatever the layout's order, so the list shows it last.
@@ -1167,6 +1191,12 @@ function paintFrame(v, box, animate = false) {
   if (box.classList.contains("lanes")) { layoutLanes(box, scene, n); done.focused = null; }  // lanes scroll themselves
   // the map is placed to fit; on one taller than its board, the card being said is kept in view
   if (box.classList.contains("map")) done.focused = layoutMap(box, scene, n, animate && v.applied === n - 1);
+  if (box.classList.contains("scene")) {
+    // the part being said is marked, and kept in view with what is pointed at
+    const cur = new Set(beingSaid(scene, n));
+    const said = [...box.querySelectorAll("[data-key]")].filter((el) => { const on = cur.has(el.dataset.key); el.classList.toggle("s-cur", on); return on; });
+    if (!done.focused.length) done.focused = said;
+  }
   if (box.classList.contains("grid")) {
     const cur = new Set(beingSaid(scene, n).filter((k) => k.startsWith("row#")));
     for (const tr of box.querySelectorAll("tbody tr")) tr.classList.toggle("g-cur", cur.has(tr.dataset.key));
@@ -1179,6 +1209,7 @@ function paintFrame(v, box, animate = false) {
   const room = box.classList.contains("map") ? +box.dataset.room || 0 : 0;
   const keep = [done.focused].flat().filter(Boolean);
   if (keep.length) requestAnimationFrame(() => { if (!v.pane.hidden) centre(keep, room); });
+  if (captionText) requestAnimationFrame(placeCaption);
   const step = v.pane.querySelector(".vstep");
   if (step) step.textContent = stepLabel(scene, n);
   const back = v.pane.querySelector(".stepback"), next = v.pane.querySelector(".stepnext");
@@ -1255,6 +1286,7 @@ function onMessage(m) {
     redrawDiagrams();
   }
   else if (m.type === "stage:follow") setFollow(!!m.on);
+  else if (m.type === "stage:caption") { captionText = String(m.text || ""); placeCaption(); }
   else if (m.type === "stage:frame") setFrame(String(m.view), Number(m.n), !!m.animate, m.answer);
   else if (m.type === "stage:state") {
     lateFrames.clear(); lateFront = null;  // the whole picture: a late frame or front it still wants is in it again
@@ -1265,6 +1297,25 @@ function onMessage(m) {
     lightKey(Number(m.keys) || 0, false);
   }
 }
+
+// The sentence being said: under the part being said when the board in front is a scene, else at the foot.
+let captionText = "";
+function placeCaption() {
+  captionEl.hidden = !captionText;
+  captionEl.textContent = captionText;
+  const name = selectedName(), v = name && views.get(name);
+  const part = v && !v.pane.hidden && [...v.pane.querySelectorAll(".scene .k-focus, .scene .s-cur")].pop();
+  captionEl.className = "caption" + (!captionText ? "" : part ? " bubble" : " bar");
+  captionEl.style.left = captionEl.style.top = "";
+  if (!captionText || !part) return;
+  const stage = root.querySelector(".stage").getBoundingClientRect(), r = part.getBoundingClientRect();
+  const h = captionEl.offsetHeight, w = captionEl.offsetWidth;
+  const below = r.bottom + 10 + h <= stage.bottom - 8;
+  captionEl.style.top = (below ? r.bottom - stage.top + 10 : Math.max(8, r.top - stage.top - h - 10)) + "px";
+  captionEl.style.left = Math.max(8, Math.min(r.left - stage.left, stage.width - w - 8)) + "px";
+  captionEl.classList.toggle("above", !below);
+}
+window.addEventListener("resize", placeCaption);
 
 function post(msg) { if (embedded) window.parent.postMessage(msg, "*"); }
 // Play from here, on a sequence step: the first frame that says the step, in the scene on the board, else in

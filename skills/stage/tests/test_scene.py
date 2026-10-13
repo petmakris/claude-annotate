@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -528,3 +529,71 @@ def test_a_saved_scene_lights_an_arrow_between_ids_that_hold_an_arrow_once_both_
                         {"show": ["node:a->b", "node:c"], "focus": []}, {"show": keys, "focus": []}]}
     assert _scene_js("S.settled(s).frames.map((f) => f.show)", saved) == [
         [], ["node:a->b"], ["node:a->b", "node:c", "edge:a->b->c#0"], keys]
+
+
+# -- scenes: an HTML page made of parts the voice reveals ---------------------------------------------
+
+from skills.stage import model as stage_model  # noqa: E402
+
+BEN = """<div class="cols">
+  <section class="box" data-part="data" data-name="the data the server sends"><p class="cap">Data</p>
+    <div data-part="old">K&amp;EProductType: Investment Grade Bonds</div>
+    <div data-part="v2">K&amp;EProductTypeV2: Fixed Income</div></section>
+  <section class="box" data-part="rule"><h4>The template rule</h4><pre>find('K&amp;EProductType')</pre></section>
+  <section class="box" data-part="pdf"><br><img src="x.png">What the PDF prints in the Product cell for Ben</section>
+</div>"""
+
+
+def test_a_scene_is_read_as_its_parts_in_page_order_with_their_names_and_nesting():
+    src = stage_model.scene_source(BEN)
+    assert src["type"] == "inline" and src["format"] == "scene" and src["html"] == BEN
+    assert [(p["id"], p["parent"]) for p in src["parts"]] == [
+        ("data", None), ("old", "data"), ("v2", "data"), ("rule", None), ("pdf", None)]
+    # data-name first, else the part's first heading, else its first eight words
+    assert [p["name"] for p in src["parts"]] == [
+        "the data the server sends", "K&EProductType: Investment Grade Bonds", "K&EProductTypeV2: Fixed Income",
+        "The template rule", "What the PDF prints in the Product cell"]
+
+
+def test_a_scene_with_no_parts_a_repeated_part_a_bad_id_or_a_script_is_refused():
+    for html, why in [("<div><p>All at once</p></div>", "no parts: mark each part with data-part"),
+                      ('<p data-part="a">x</p><p data-part="a">y</p>', 'part "a" is marked twice'),
+                      ('<p data-part="a b">x</p>', 'part id "a b" must be letters, digits, - or _'),
+                      ('<p data-part="a">x</p><script>alert(1)</script>', "a scene runs no scripts; take out the <script>"),
+                      ('<p data-part="a" onclick="go()">x</p>', "a scene runs no scripts; take out onclick"),
+                      ('<a data-part="a" href=" JavaScript:go()">x</a>', "a scene runs no scripts; take out the javascript: link")]:
+        with pytest.raises(stage_model.SourceError, match=re.escape(why)):
+            stage_model.scene_source(html)
+
+
+def test_a_part_brings_its_parent_and_a_parent_brings_the_parts_no_verb_reveals_on_its_own():
+    m = scene.parts_model(stage_model.scene_source(BEN)["parts"])
+    assert m.kind == "parts" and m.keys == ["part:data", "part:old", "part:v2", "part:rule", "part:pdf"]
+    assert m.order == m.keys and m.up["part:old"] == ["part:data"] and m.down["part:data"] == ["part:old", "part:v2"]
+    built, notes = scene.compile_scene(m, [[scene.parse_verb("+ data")], [scene.parse_verb("+ v2")], [scene.parse_verb("focus old")]], "Ben")
+    shows = [f["show"] for f in built["frames"]]
+    # data comes alone, because v2 and old are revealed on their own; the point at old brings it in and lights it
+    assert shows[1] == ["part:data"] and shows[2] == ["part:data", "part:v2"]
+    assert shows[3] == ["part:data", "part:old", "part:v2"] and built["frames"][3]["focus"] == ["part:old"]
+    assert built["frames"][3]["cur"] == ["part:old"] and notes == ['2 of 5 elements of "Ben" are never revealed; they come in with the rest frame']
+    built, _ = scene.compile_scene(m, [[scene.parse_verb("+ data")]], "Ben")
+    assert built["frames"][1]["show"] == ["part:data", "part:old", "part:v2"]  # nothing named its parts alone
+
+
+def test_part_targets_read_by_id_by_prefix_and_by_name():
+    m = scene.parts_model(stage_model.scene_source(BEN)["parts"])
+    assert scene.resolve(m, "old", "Ben") == (["part:old"], None)
+    assert scene.resolve(m, "part rule", "Ben") == (["part:rule"], None)
+    assert scene.resolve(m, "the template rule", "Ben") == (["part:rule"], None)
+
+
+def test_a_scene_with_no_verbs_comes_in_part_by_part_with_the_sentences_that_name_them():
+    m = scene.parts_model(stage_model.scene_source(BEN)["parts"])
+    plan, by_order = scene.auto_steps(m, ["Follow one value.", "First the data the server sends.",
+                                          "Then the template rule.", "Then what the PDF prints."])
+    # the parts inside the data box, named by no sentence, ride in with it
+    assert plan == {1: [["part:data", "part:old", "part:v2"]], 2: [["part:rule"]], 3: [["part:pdf"]]}
+    # even two parts never come up at once: a scene always steps
+    two = scene.parts_model(stage_model.scene_source('<p data-part="a">Apples</p><p data-part="b">Pears</p>')["parts"])
+    plan, _ = scene.auto_steps(two, ["Here are apples.", "And pears."])
+    assert plan == {0: [["part:a"]], 1: [["part:b"]]}

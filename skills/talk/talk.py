@@ -256,7 +256,7 @@ def stage_view(item: dict) -> tuple[str, dict, str]:
                   "lines": item["lines"], "highlight": item["highlight"], "lang": item["lang"]}
     elif item["kind"] == "change":
         source = {k: item[k] for k in CHANGE_FIELDS}
-    elif item["kind"] in VISUAL_KINDS:
+    elif item["kind"] in STEPPED_KINDS:
         source = item["visual"]
     elif item["kind"] == "page":
         source = item["source"]
@@ -421,13 +421,16 @@ def align_words(text: str, start: int, end: int, heard: list, duration: float, o
             for (a, b), (t0, t1) in zip(tokens, times)]
 
 
-BOARD_KINDS = ("code", "change", "diagram", "table", "sequence", "flowchart", "page")
+BOARD_KINDS = ("code", "change", "diagram", "table", "sequence", "flowchart", "scene", "page")
 VISUAL_KINDS = ("sequence", "flowchart")  # drawn by the shared tools from a JSON spec; any other body is Mermaid
+STEPPED_KINDS = VISUAL_KINDS + ("scene",)  # come in with the sentences that name their parts unless verbs reveal them
 LINE_KINDS = ("code", "change", "page")  # one-line tags: their source is named on the tag, so no body follows
 KIND_ALIASES = {"mermaid": "diagram", "graph": "diagram", "flow": "diagram",
                 "grid": "table", "diff": "change", "edit": "change", "file": "page", "url": "page"}
 CHANGE_FIELDS = ("type", "format", "path", "rev", "hunks", "added", "removed", "more", "lang")
 KEY_VIEW = "key-points"  # the one Key points view of a call
+MAX_SENTENCE_WORDS = 30  # the stage shows each sentence as one caption
+MAX_ANSWER_WORDS = 220   # past this, an answer stops being followed: say the rest in the next one
 MAX_KEY_CHARS = 120
 _HEAD = re.compile(r"(?:(?P<show>show)(?![a-z0-9])\s*[:\-_]?\s*)?(?P<kind>[a-z][a-z0-9_]*)?(?:(?:\s*:\s*|\s+)(?P<rest>.*))?\Z",
                    re.IGNORECASE | re.DOTALL)
@@ -600,8 +603,10 @@ _POINT_TARGET = re.compile(
     r"(?:(?:(?P<old>old)\s+)?(?P<line>lines?)\s+(?P<a>\d+)(?:\s*[-–]\s*(?P<b>\d+))?"
     r"|rows?\s+(?:(?P<n>\d+)(?:\s*[-–]\s*(?P<n2>\d+))?|\"(?P<text>[^\"]+)\"|“(?P<curly>[^”]+)”|'(?P<single>[^']+)')"
     r"|cells?\s+(?P<cell>[^\[\]]+?/[^\[\]]+?)"
-    r"|nodes?\s+(?P<node>[^\s:\[\]][^:\[\]]*?)|steps?\s+(?P<step>[^\s:\[\]][^:\[\]]*?))\s*\Z", re.IGNORECASE)
-POINT_FORMS = 'expected line N, lines A-B, old line N, row N, rows A-B, row "text", cell "row" / "column", node ID or step ID'
+    r"|nodes?\s+(?P<node>[^\s:\[\]][^:\[\]]*?)|steps?\s+(?P<step>[^\s:\[\]][^:\[\]]*?)"
+    r"|parts?\s+(?P<part>[^\s:\[\]][^:\[\]]*?))\s*\Z", re.IGNORECASE)
+POINT_FORMS = ('expected line N, lines A-B, old line N, row N, rows A-B, row "text", cell "row" / "column", node ID, '
+               "step ID or part ID")
 
 
 def parse_point(marker: str) -> tuple[str, str] | None:
@@ -689,6 +694,11 @@ def spec_tool(body: str) -> str | None:
     return None
 
 
+def as_pointed(kind: str) -> str:
+    """The kind a point looks for: a change is pointed at as code is, by its lines."""
+    return "code" if kind in ("code", "change") else kind
+
+
 def scene_model(item: dict) -> stage_scene.SceneModel | None:
     kind = item["kind"]
     if kind == "code":
@@ -704,6 +714,8 @@ def scene_model(item: dict) -> stage_scene.SceneModel | None:
         return stage_scene.sequence_model(item["visual"]["spec"])
     if kind == "flowchart":
         return stage_scene.flowchart_spec_model(item["visual"]["spec"])
+    if kind == "scene":
+        return stage_scene.parts_model(item["visual"]["parts"])
     return None
 
 
@@ -936,7 +948,7 @@ class Board:
         found = [item for item in self.items
                  if want in (fold(item.get("title") or ""), fold(bare(item)), item["view"])]
         if kind:
-            found = [i for i in found if (i["kind"] if i["kind"] not in LINE_KINDS else "code") == kind] or found
+            found = [i for i in found if as_pointed(i["kind"]) == kind] or found
         exact = [i for i in found if title.strip() in (i.get("title"), bare(i))]
         return (exact or found)[-1] if found else None
 
@@ -961,7 +973,8 @@ class Board:
             self.problem(f"point not shown: {POINT_FORMS}")
             return
         row_text = m["text"] or m["curly"] or m["single"]
-        wanted = "code" if m["line"] else "table" if (m["n"] or row_text or m["cell"]) else "diagram"
+        wanted = ("code" if m["line"] else "table" if (m["n"] or row_text or m["cell"]) else "scene" if m["part"]
+                  else "diagram")
         item = self.find(title, wanted)
         if item is None:
             self.problem(f'point not shown: no board titled "{title}" in this call' if title
@@ -971,15 +984,18 @@ class Board:
         if kind == "page":
             self.problem(f'point not shown: "{name}" is a page, which has no lines, rows or nodes to light')
             return
+        if kind == "scene":
+            self.point_part(item, name, m)
+            return
         if kind in VISUAL_KINDS:
             self.point_visual(item, name, m)
             return
         use = {"code": "line N or lines A-B", "change": "line N or lines A-B (new line numbers), or old line N",
                "table": 'row N, rows A-B, row "text" or cell "row" / "column"', "diagram": "node ID"}[kind]
-        if m["step"]:
+        if m["step"] or m["part"]:
             self.problem(f'point not shown: "{name}" is a {kind}; use {use}')
             return
-        if (kind if kind not in LINE_KINDS else "code") != wanted or (m["old"] and kind != "change"):
+        if as_pointed(kind) != wanted or (m["old"] and kind != "change"):
             self.problem(f'point not shown: "{name}" is a {kind}; use {use}')
             return
         if kind == "change" and m["old"]:
@@ -1052,10 +1068,21 @@ class Board:
         self.cues.append({"kind": "frame", "view": item["view"],
                           "verb": stage_scene.Verb("focus", keys=self.target_keys(item, target))})
 
+    def point_part(self, item: dict, name: str, m: re.Match) -> None:
+        """A point at a scene's part, by its id or its name."""
+        if not m["part"]:
+            self.problem(f'point not shown: "{name}" is a scene; use part ID')
+            return
+        keys, _ = stage_scene.resolve(scene_model(item), "part " + m["part"].strip(), name)
+        if not keys:
+            self.problem(f'point not shown: no part {m["part"].strip()} in "{name}"')
+            return
+        self.cues.append({"kind": "frame", "view": item["view"], "verb": stage_scene.Verb("focus", keys=keys)})
+
     def point_visual(self, item: dict, name: str, m: re.Match) -> None:
         """A point at a sequence's step or a flowchart's node: lit by its key."""
         want = ("step", m["step"]) if item["kind"] == "sequence" else ("node", m["node"])
-        if not want[1]:
+        if not want[1] or m["part"]:
             use = "step ID" if item["kind"] == "sequence" else "node ID"
             self.problem(f'point not shown: "{name}" is a {item["kind"]}; use {use}')
             return
@@ -1110,6 +1137,14 @@ class Board:
         item["body"] = body.strip()
         if not item["body"]:
             self.problem(f'empty {kind} "{title}" not shown')
+            return rest
+        if kind == "scene":
+            try:
+                item["visual"] = stage_model.scene_source(item["body"])
+            except stage_model.SourceError as e:
+                self.problem(f'scene "{title}" not shown: {e}')
+                return rest
+            self.add(item)
             return rest
         if kind in VISUAL_KINDS and not item["body"].startswith("{"):
             item["kind"] = kind = "diagram"
@@ -1657,6 +1692,7 @@ class Call:
         shown, marks = place_cues(shown)
         timed = self.compile_scenes(shown, [(at, cue) for (_, cue), at in zip(placed, marks) if cue["view"]])
         self.reply_cues = [{"at": at, **{k: v for k, v in cue.items() if v is not None}} for at, cue in timed]
+        self.check_length(shown)
         boards = [c for c in self.reply_cues if c["kind"] == "front"]  # a key belongs after its sentence
         if len(boards) >= 2 and all(c["at"] == len(shown) for c in boards):
             self.board.problem("all boards were placed after the last sentence, so the stage cannot follow "
@@ -1667,6 +1703,20 @@ class Call:
         for item in items:
             self.put_on_stage(item)
         return shown
+
+    def check_length(self, shown: str) -> None:
+        """An answer is followed one short sentence at a time: a long sentence or a long answer is reported."""
+        bounds = [0, *sentence_starts(shown), len(shown)]
+        long = [shown[a:b].strip() for a, b in zip(bounds, bounds[1:]) if len(shown[a:b].split()) > MAX_SENTENCE_WORDS]
+        if long:
+            what = "1 sentence is" if len(long) == 1 else f"{len(long)} sentences are"
+            first = " ".join(long[0].split()[:10])
+            self.board.problem(f"{what} over {MAX_SENTENCE_WORDS} words, and the stage shows each sentence as one caption: "
+                               f'split {"it" if len(long) == 1 else "them"} (it starts "{first}…")')
+        words = len(shown.split())
+        if words > MAX_ANSWER_WORDS:
+            self.board.problem(f"this answer is {words} words: keep an answer under {MAX_ANSWER_WORDS} words, "
+                               "and say the rest in the next one")
 
     def split_reply_safely(self, text: str) -> str:
         """split_reply, but a board that breaks never costs the answer: the turn is already taken, so
@@ -1700,7 +1750,7 @@ class Call:
             reveals = any(c["verb"].name in ("+", "next", "all") for _, cues in own for c in cues)
             # A sequence or flowchart comes in with the sentences that name its parts unless its verbs reveal
             # it themselves: a point brings in what it lights, and the sentences bring in the rest.
-            stepped = item is not None and (view not in runs or (item["kind"] in VISUAL_KINDS and not reveals))
+            stepped = item is not None and (view not in runs or (item["kind"] in STEPPED_KINDS and not reveals))
             model = scene_model(item) if stepped else None
             if model is None or at >= len(shown):
                 continue
@@ -1724,7 +1774,7 @@ class Call:
             if not plan:
                 continue
             auto.add(view)
-            if item["kind"] not in VISUAL_KINDS:
+            if item["kind"] not in STEPPED_KINDS:
                 self.board.problem(f'"{title}" has {len(model.order)} elements and no verbs, '
                                    "so it came in with the sentences said about it (dump); tag the word that names each thing")
             elif by_order:
