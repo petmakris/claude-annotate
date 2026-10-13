@@ -76,7 +76,10 @@ Rules:
   the call page names the answer with each frame, so replaying an earlier answer steps the board as that answer did; an answer
   that showed the board with no steps of its own shows it whole. A stage opened on its own ignores all of this. Code, change, table, diagram and scene views
   can be pointed at from /talk only (a scene is HTML whose `data-part` elements the voice reveals one by one); /talk also keeps a pinned **Key points** board of the call's
-  `[[key: ...]]` tags.
+  `[[key: ...]]` tags. Embedded in a call, the stage also shows the sentence being said (`stage:caption`) and an
+  answer's stops (`stage:stop`: a card of buttons, answered with `stage:pick`). A tap on a scene part opens its popup
+  (Ask about this posts `stage:ask`; Play from here posts `stage:play`), and a `<dfn title>` term in a scene or in the
+  caption shows its meaning.
 
 ## What the stage keeps true
 

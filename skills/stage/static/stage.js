@@ -201,10 +201,12 @@ root.innerHTML = `<div class="stage">
   </div></div></div>
   <div class="caption" hidden></div>
   <div class="stopcard" role="group" aria-label="The answer asks" hidden></div>
+  <div class="spop" role="dialog" hidden></div>
 </div>`;
 const tabsEl = root.querySelector(".tabs"), panesEl = root.querySelector(".panes");
 const navEl = root.querySelector(".tabnav"), boardsEl = root.querySelector(".boards"), posEl = root.querySelector(".pos");
 const followEl = root.querySelector(".follow"), captionEl = root.querySelector(".caption"), stopEl = root.querySelector(".stopcard");
+const spopEl = root.querySelector(".spop");
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const views = new Map();            // name -> {body, tab, pane, filled, stale, renderSeq, changedAt, snap}
 let layout = { order: [], front: null };
@@ -716,8 +718,41 @@ function paintScene(v, box, src) {
   box.innerHTML = DOMPurify.sanitize(src.html, { FORBID_TAGS: ["form", "meta", "iframe", "style", "base", "script", "link", "object", "embed"] });
   for (const el of box.querySelectorAll("[data-part]")) el.dataset.key = "part:" + el.dataset.part;
   for (const a of box.querySelectorAll("a[href]")) { a.target = "_blank"; a.rel = "noopener"; }
+  box.onclick = (e) => tapScene(v, e);
   requestAnimationFrame(() => { if (box.isConnected) paintFrame(v, box); });
 }
+
+// A tap in a scene: on a term (<dfn title="meaning">) its meaning shows, and the voice goes on; on a part, its popup
+// offers Ask about this (the question starts in the call page's text field) and Play from here.
+function tapScene(v, e) {
+  if (e.target.closest("a[href]")) return;
+  const dfn = e.target.closest("dfn[title]");
+  if (dfn) { showTerm(dfn.textContent, dfn.title, dfn); return; }
+  const part = e.target.closest("[data-part]:not(.k-hidden)");
+  if (!part) { closePop(); return; }
+  const id = part.dataset.part, name = (v.body.source.parts || []).find((p) => p.id === id)?.name || id;
+  const acts = [button("Ask about this", () => { closePop(); post({ type: "stage:ask", text: `About "${name}": ` }); }, "pri")];
+  if (playKey(v, "part:" + id, true)) acts.push(button("Play from here", () => { closePop(); playKey(v, "part:" + id); }));
+  openPop(name.charAt(0).toUpperCase() + name.slice(1), null, acts, part);
+}
+function showTerm(term, means, anchor) { openPop(term.trim(), means, [], anchor); }
+// The popup sits under what was tapped, or over it near the stage's foot, inside a 16px gutter.
+function openPop(title, text, acts, anchor) {
+  spopEl.replaceChildren();
+  const h = document.createElement("h3"); h.textContent = title;
+  spopEl.append(h);
+  if (text) { const p = document.createElement("p"); p.textContent = text; spopEl.append(p); }
+  if (acts.length) { const row = document.createElement("div"); row.className = "sacts"; row.append(...acts); spopEl.append(row); }
+  spopEl.setAttribute("aria-label", title);
+  spopEl.hidden = false;
+  const stage = root.querySelector(".stage").getBoundingClientRect(), r = anchor.getBoundingClientRect();
+  const w = spopEl.offsetWidth, ht = spopEl.offsetHeight, below = r.bottom + 8 + ht <= stage.bottom - 8;
+  spopEl.style.top = (below ? r.bottom - stage.top + 8 : Math.max(8, r.top - stage.top - ht - 8)) + "px";
+  spopEl.style.left = Math.max(16, Math.min(r.left - stage.left, stage.width - w - 16)) + "px";
+}
+function closePop() { spopEl.hidden = true; }
+document.addEventListener("pointerdown", (e) => { if (!spopEl.hidden && !spopEl.contains(e.target) && !e.target.closest?.(".scene, .caption")) closePop(); }, true);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !spopEl.hidden) closePop(); });
 
 function sourceFrame(text) {
   const pre = document.createElement("pre"); pre.className = "srcframe"; pre.textContent = text;
@@ -1325,6 +1360,29 @@ function paintStop(m) {
   placeCaption();
 }
 
+// The caption's words, with each term the scene in front defines (<dfn title>) as a button that shows its meaning.
+function captionWords(v) {
+  const terms = new Map();
+  for (const d of (v && !v.pane.hidden ? v.pane.querySelectorAll(".scene dfn[title]") : [])) {
+    const t = d.textContent.trim();
+    if (t && !terms.has(t.toLowerCase())) terms.set(t.toLowerCase(), [t, d.title]);
+  }
+  captionEl.replaceChildren();
+  if (!terms.size) { captionEl.textContent = captionText; return; }
+  const alts = [...terms.keys()].sort((a, b) => b.length - a.length).map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])(${alts.join("|")})(?![\\p{L}\\p{N}])`, "giu");
+  let at = 0;
+  for (const m of captionText.matchAll(re)) {
+    captionEl.append(captionText.slice(at, m.index));
+    const [, means] = terms.get(m[0].toLowerCase());
+    const b = document.createElement("button"); b.type = "button"; b.className = "term"; b.textContent = m[0];
+    b.onclick = () => showTerm(m[0], means, b);
+    captionEl.append(b);
+    at = m.index + m[0].length;
+  }
+  captionEl.append(captionText.slice(at));
+}
+
 // The sentence being said: under the part being said when the board in front is a scene, else at the foot.
 let captionText = "";
 // Placing it scrolls the scene up just enough for the bubble to fit under the part (the scene keeps room
@@ -1332,8 +1390,8 @@ let captionText = "";
 // itself fills the stage. A scroll moves it along (`scrolled`) without scrolling again.
 function placeCaption(scrolled = false) {
   captionEl.hidden = !captionText || !stopEl.hidden;
-  captionEl.textContent = captionText;
   const name = selectedName(), v = name && views.get(name);
+  if (!scrolled) captionWords(v);
   const part = v && !v.pane.hidden && [...v.pane.querySelectorAll(".scene .k-focus, .scene .s-cur")].pop();
   captionEl.className = "caption" + (!captionText ? "" : part ? " bubble" : " bar");
   captionEl.style.left = captionEl.style.top = "";
@@ -1357,8 +1415,10 @@ document.addEventListener("scroll", (e) => { if (captionText && e.target.closest
 function post(msg) { if (embedded) window.parent.postMessage(msg, "*"); }
 // Play from here, on a sequence step: the first frame that says the step, in the scene on the board, else in
 // the latest answer's scene that says it. False when no answer says it; `dry` only asks.
-function playStep(v, step, dry = false) {
-  const key = "step:" + step, scenes = v.body.scenes || {};
+function playStep(v, step, dry = false) { return playKey(v, "step:" + step, dry); }
+// The same for any key a scene's frames say: a scene part ("part:<id>") as much as a sequence step.
+function playKey(v, key, dry = false) {
+  const scenes = v.body.scenes || {};
   const own = v.answer != null ? [[String(v.answer), scenes[v.answer]]] : [];
   const tries = [...own, ...Object.entries(scenes).sort((a, b) => Number(b[0]) - Number(a[0]))];
   if (v.body.scene && v.body.answer != null) tries.push([String(v.body.answer), v.body.scene]);

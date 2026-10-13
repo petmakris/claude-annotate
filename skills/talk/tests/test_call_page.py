@@ -323,3 +323,12 @@ def test_the_stage_never_runs_past_a_guess_the_reader_has_not_answered(tmp_path)
     page.js("await advance(500);").check(frames)  # waiting at the guess, the stage stays where it is
     page.js("fromStage({ type: 'stage:pick', answer: 1, i: 0, choice: 1 }); await advance(1700); await playOn(3.9);").check(frames)
     assert page.run() == [[True, [1]], [1], [1, 2]]
+
+
+def test_ask_about_a_stage_part_pauses_and_starts_the_question_in_the_text_field(tmp_path):
+    html, states = served(tmp_path, [CHECK_ANSWER], seconds=4.0)
+    page = CallPage(html, states, seconds=4.0).js("await serve(1); await playOn(1.0);")
+    page.js("fromStage({ type: 'stage:ask', text: 'About \"the data\": ' });")
+    page.check("[audio.paused, $('text').value, document.activeElement === $('text'), $('sendtext').disabled,"
+               " sentTo.filter(s => s[0] === '/api/say').length]")
+    assert page.run() == [[True, 'About "the data": ', True, False, 0]]  # nothing goes until Send

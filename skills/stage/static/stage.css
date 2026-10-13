@@ -608,3 +608,19 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .stopcard .btn.right{border-color:var(--good);color:var(--good);font-weight:600}
 .stopcard .btn.wrong{border-color:var(--bad);color:var(--bad);text-decoration:line-through}
 .stopcard .shint{margin:0;font-size:14px;color:var(--muted)}
+
+/* Asking from a scene: a part is tappable and its popup asks about it; a term (<dfn title>) shows its meaning */
+.scene [data-part]:not(.k-hidden){cursor:pointer}
+.scene [data-part]:not(.k-hidden):hover:not(:has([data-part]:not(.k-hidden):hover)){outline:1px dashed var(--acc-mid);outline-offset:3px;border-radius:6px}
+.scene dfn{font-style:normal;text-decoration:underline dotted var(--acc);text-decoration-thickness:2px;text-underline-offset:3px;cursor:pointer}
+.caption .term{pointer-events:auto;font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;
+  text-decoration:underline dotted;text-decoration-thickness:2px;text-underline-offset:3px}
+.spop{position:absolute;z-index:8;box-sizing:border-box;width:max-content;max-width:min(380px,calc(100% - 32px));display:grid;gap:8px;
+  padding:12px 14px;border-radius:12px;background:var(--panel);border:1px solid var(--acc);box-shadow:0 14px 36px -14px rgba(0,0,0,.4);font-family:var(--sans)}
+.spop[hidden]{display:none}
+.spop h3{margin:0;font:600 15px/1.35 var(--sans);color:var(--ink)}
+.spop p{margin:0;font-size:14px;line-height:1.5;color:var(--ink)}
+.spop .sacts{display:flex;flex-wrap:wrap;gap:8px}
+.spop .btn.pri{background:var(--acc);border-color:var(--acc);color:var(--on-acc)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .spop{background:#3C4043}}
+:root[data-theme="dark"] .spop{background:#3C4043}

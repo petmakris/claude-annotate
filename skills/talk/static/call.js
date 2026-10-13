@@ -131,6 +131,7 @@ window.addEventListener("message", ev => {
   else if (m.type === "stage:missing") paintMissing(String(m.view));
   else if (m.type === "stage:key" && MEDIA_KEYS.has(m.key)) mediaKey(m.key);
   else if (m.type === "stage:play") playFrame(String(m.view || ""), Number(m.answer), Number(m.n));
+  else if (m.type === "stage:ask") askAbout(String(m.text || ""));
   else if (m.type === "stage:pick" && stopped && stopped.n === Number(m.answer) && stopped.i === Number(m.i)) pickStop(Number(m.choice));
 });
 // Play from here, in a sequence step's popup on the stage: the answer plays from the word where that frame begins.
@@ -1208,6 +1209,14 @@ async function sendWav(wav) {
 }
 
 // What was said joins anything already typed, and the field takes the keys so Enter sends it.
+// Ask about this, on a scene part: the voice pauses and the question starts in the text field, for the reader to
+// finish and send. Nothing goes until they press Send.
+function askAbout(text) {
+  if (!text) return;
+  if (!audio.paused) audio.pause();
+  const t = $("text"); t.value = text; spoken = false;
+  fitText(); t.focus(); t.selectionStart = t.selectionEnd = t.value.length;
+}
 function writeOut(text) {
   const t = $("text"), before = t.value.trimEnd();
   t.value = before ? before + " " + text : text;
