@@ -64,6 +64,9 @@ public final class ShortcutCatalog {
         new Row(WALK, "Previous step", WalkthroughActions.PREV_ID, "", true),
         new Row(WALK, "Ask about this step", WalkthroughActions.ASK_ID, "", true),
         new Row(WALK, "Show / hide inline card", WalkthroughActions.TOGGLE_ID, "", true),
+        new Row(WALK, "Bigger text", WalkthroughZoom.IN_ID, "", true),
+        new Row(WALK, "Smaller text", WalkthroughZoom.OUT_ID, "", true),
+        new Row(WALK, "Reset text size", WalkthroughZoom.RESET_ID, "", true),
 
         new Row(STOCK, "Compare with branch…", "Git.CompareWithBranch", "", true),
         new Row(STOCK, "Show file history", "Vcs.ShowTabbedFileHistory", "", true),

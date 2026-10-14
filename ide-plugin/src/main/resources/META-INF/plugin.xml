@@ -121,6 +121,28 @@
             <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt W"/>
             <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt W"/>
         </action>
+        <!-- The panel's title bar has buttons for these too. -->
+        <action id="com.petros.ireview.WalkthroughZoomIn"
+                class="com.petros.ireview.WalkthroughZoom$In"
+                text="Walkthrough: Bigger Text"
+                description="Make the walkthrough panel's text bigger.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt EQUALS"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt EQUALS"/>
+        </action>
+        <action id="com.petros.ireview.WalkthroughZoomOut"
+                class="com.petros.ireview.WalkthroughZoom$Out"
+                text="Walkthrough: Smaller Text"
+                description="Make the walkthrough panel's text smaller.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt MINUS"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt MINUS"/>
+        </action>
+        <action id="com.petros.ireview.WalkthroughZoomReset"
+                class="com.petros.ireview.WalkthroughZoom$Reset"
+                text="Walkthrough: Reset Text Size"
+                description="Set the walkthrough panel's text back to the IDE's own size.">
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="alt 0"/>
+            <keyboard-shortcut keymap="Mac OS X"       first-keystroke="alt 0"/>
+        </action>
         <!-- Moved in from env/apps/ide-toolbelt on 2026-09-24, when that plugin was retired. -->
         <action id="com.petros.ireview.PrettifyJsonStringAction"
                 class="com.petros.ireview.PrettifyJsonStringAction"
