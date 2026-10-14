@@ -26,13 +26,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 def find_chrome() -> str:
+    # Playwright's own Chromium first, the installed Chrome last: a headless
+    # instance of the real app is what macOS focuses when Chrome is clicked,
+    # and a brew upgrade replaces it underneath a render.
+    cache = Path.home() / "Library/Caches/ms-playwright"
+    for pattern in ("chromium_headless_shell-*/chrome-headless-shell-*/chrome-headless-shell",
+                    "chromium-*/chrome-mac*/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"):
+        found = sorted(cache.glob(pattern), key=lambda p: int(re.search(r"-(\d+)/", str(p)).group(1)))
+        if found:
+            return str(found[-1])
+    for name in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable"):
+        if shutil.which(name):
+            return shutil.which(name)
     mac = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     if Path(mac).exists():
         return mac
-    for name in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser"):
-        if shutil.which(name):
-            return shutil.which(name)
-    raise SystemExit("no Chrome or Chromium found — install one to export PDFs")
+    raise SystemExit("no Chrome or Chromium found — run `npx playwright install chromium` to export PDFs")
 
 
 CHROME = None  # resolved on first export
