@@ -134,6 +134,7 @@ def main() -> int:
     c = sub.add_parser("check")
     c.add_argument("files", nargs="+")
     c.add_argument("--out", default=str(Path(tempfile.gettempdir()) / "vz-check"))
+    c.add_argument("--untitled", action="store_true", help="the drawing has no title on purpose (a deck slide or an annotate part)")
     f = sub.add_parser("frames")
     f.add_argument("file")
     f.add_argument("--out", required=True)
@@ -163,6 +164,8 @@ def main() -> int:
                                 faults += [f"{mode} {n}: {x}" for x in pg.evaluate(PROBE, mode)]
                             pg.evaluate(FRAME, [None, 0])
                     pg.locator("svg.vz").screenshot(path=str(out / f"{path.stem}-{theme}.png"))
+                if a.untitled:
+                    faults = [x for x in faults if not x.endswith("no title")]
                 seen, uniq = set(), []
                 for x in faults:
                     if x not in seen:

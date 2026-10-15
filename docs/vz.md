@@ -82,6 +82,10 @@ Load `skills/_shared/static/vz.css` (the look, light and dark, every colour a `-
 
 During a talk call both diagrams step with the voice. A map is `[[show map | Title]]` with a map spec (or `stage.py show map:-`): it is drawn by `map_svg.render(..., keyed=True)`, which stamps a `data-key` on every part, and the voice builds it in its build order and then follows its route. A lane sequence is `[[show sequence | Title]]`: the stage draws it as its lanes (`skills/stage/static/lanes.js`) in this same look, because the lanes also fit a phone, open a popup on each step and fold its boxes. `sequence_svg.render(..., keyed=True)` keys a sequence's steps and actors the same way, for any page that steps one.
 
+## In a slide deck
+
+`python3 tools/vz.py deck SPEC.json --mode build|route -o part.svg` writes the drawing for a `/slides` deck: every part with a step becomes a `.frag`, so in present mode each click adds the next step, and the PDF and PNG exports show the whole. The slide's title states the claim, so the drawing leaves its own title out. `skills/slides/references/components.md` says where it goes; `framework/inline.py` adds the look to the deck.
+
 ## Safety
 
 The SVG is built from a validated spec. A spec holds words, never markup: every text is escaped, ids are prefixed with a checked uid, and captions travel as JSON text. Read `docs/security/diagram-rendering.md` before giving a spec any way to carry markup.

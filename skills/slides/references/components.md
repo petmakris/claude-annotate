@@ -356,3 +356,14 @@ A theme can bring components of its own — per-project `.k.<project>` chips, pe
 `.cmp.<name>` colours, a brand-specific slide shell — as rules in its `theme.css`. When the
 theme directory has a `README.md`, read it before writing slides: it documents what that
 theme adds on top of this file.
+
+
+## Diagram: a map or a lane sequence
+
+An architecture diagram is a **map** and a request over time is a **lane sequence**, both drawn by the shared library in `skills/_shared/visuals` (guide: `docs/vz.md`). Never hand-draw these two kinds in a deck.
+
+1. Write the spec (JSON) as `docs/vz.md` says; check it with `uv run tools/vz_check.py check` until it reports 0 faults.
+2. `python3 tools/vz.py deck SPEC.json --mode build -o part.svg` (or `--mode route` to follow one request; a lane sequence always steps by its numbers). Every part with a step becomes a `.frag` with that step as `data-frag`, so in present mode each click adds the next step, and the PDF and the PNGs show the whole. The drawing leaves its own title out, because the slide's title states the claim (`--with-title` keeps it); check the deck drawing with `vz_check.py check part.svg --untitled`.
+3. Paste the SVG into the slide's content area, inside `<div class="vz-slide">…</div>`, and run `framework/inline.py` on the deck: it adds the `vz:css` block (the look and the Inter and JetBrains Mono faces) once the deck holds a diagram.
+
+The diagram scales to the slide; give it the full content width. One diagram per slide, and the slide's title is the diagram's claim.

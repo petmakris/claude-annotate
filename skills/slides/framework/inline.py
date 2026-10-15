@@ -13,6 +13,9 @@ The deck carries these marker pairs (the skeleton has all of them):
     <!-- theme:css -->...<!-- /theme:css -->           <theme>/theme.css
     <!-- theme:logo -->...<!-- /theme:logo -->         <theme>/logo.svg, if the theme has one
     <!-- framework:js -->...<!-- /framework:js -->     framework/deck.js
+    <!-- vz:css -->...<!-- /vz:css -->                 skills/_shared/static/vz.css, the look of maps and
+                                                       lane sequences (tools/vz.py deck); added once a
+                                                       deck holds one (an <svg class="vz">)
 
 Whatever sits between a pair is replaced, with a one-line comment recording the
 version, theme and date. A deck made before themes existed has no theme:css pair;
@@ -44,6 +47,9 @@ from slides_config import config_dir, config_path, load_config
 
 HERE = pathlib.Path(__file__).resolve().parent
 SHIPPED = HERE.parent / "themes"
+VZ_CSS = HERE.parents[1] / "_shared" / "static" / "vz.css"
+VZ_FONTS = ("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800"
+            "&family=JetBrains+Mono:wght@400;500;600&display=swap")
 
 
 def find_theme(requested: str | None) -> tuple[pathlib.Path, str]:
@@ -90,6 +96,14 @@ def logo_block(theme: pathlib.Path) -> str:
     return f"<!-- theme:logo -->{body}<!-- /theme:logo -->"
 
 
+def vz_block() -> str:
+    """Maps and lane sequences are measured in Inter and JetBrains Mono, so the block loads both."""
+    today = datetime.date.today().isoformat()
+    note = (f"<!-- vz:css snapshot ({today}): how maps and lane sequences draw. This deck owns this copy. -->")
+    return (f'<!-- vz:css -->\n{note}\n<link rel="stylesheet" href="{VZ_FONTS}">\n<style>\n'
+            f'{VZ_CSS.read_text().rstrip()}\n</style>\n<!-- /vz:css -->')
+
+
 def pattern(name: str) -> re.Pattern:
     return re.compile(rf"<!-- {name} -->.*?<!-- /{name} -->", re.S)
 
@@ -131,6 +145,9 @@ def main(argv: list[str]) -> int:
         html = html.replace("<!-- /framework:css -->", "<!-- /framework:css -->\n<!-- theme:css --><!-- /theme:css -->", 1)
     html = pattern("theme:css").sub(lambda _m: theme_block(theme), html, count=1)
     html = pattern("theme:logo").sub(lambda _m: logo_block(theme), html)
+    if not pattern("vz:css").search(html) and re.search(r'<svg class="vz[ "]', html):
+        html = html.replace("<!-- /theme:css -->", "<!-- /theme:css -->\n<!-- vz:css --><!-- /vz:css -->", 1)
+    html = pattern("vz:css").sub(lambda _m: vz_block(), html, count=1)
     deck.write_text(html)
     print(f"{deck}: framework v{version} inlined, theme '{theme.name}' ({why})")
     return 0

@@ -11,6 +11,7 @@ Pure functions, no I/O.
 from __future__ import annotations
 
 import json
+import re
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -56,6 +57,64 @@ def render_any(spec: dict[str, Any], uid: str) -> str:
     if "actors" in spec:
         return sequence_figure(spec, uid)
     return map_figure(spec, uid)
+
+
+def deck_svg(spec: dict[str, Any], uid: str, mode: str = "build", title: bool = False) -> str:
+    """The SVG for a slide deck (claude-annotate skills/slides), revealed by the deck's own present mode:
+    every part with a build step (``mode="build"``) or a route step (``mode="route"``) becomes a ``.frag``
+    with ``data-frag`` set to that step, so each click adds the next step. A route deck shows the route
+    arrows and dims the parts the request never reaches, as the player's route mode does. The slide's own
+    title states the claim, so the drawing's title and subtitle are left out unless ``title`` is set: the
+    view starts below them and nothing else moves."""
+    if mode not in ("build", "route"):
+        raise ValueError("mode is build or route")
+    key = "b" if mode == "build" else "r"
+    if "actors" in spec:
+        svg, key = sequence_svg.render(spec, uid), "r"
+    else:
+        svg = map_svg.render(spec, uid)
+    if mode == "route" and "actors" not in spec:
+        svg = svg.replace('<svg class="vz"', '<svg class="vz mode-route"', 1)
+
+    if not title and spec.get("title"):
+        svg = _crop_title(svg, spec, "actors" in spec)
+    return _frag(svg, key)
+
+
+def _crop_title(svg: str, spec: dict[str, Any], sequence: bool) -> str:
+    """Drop the title and subtitle texts and start the view where the drawing below them starts."""
+    if sequence:
+        dy = sequence_svg.TITLE_Y + 16 - sequence_svg.PAD
+        if spec.get("subtitle"):
+            dy += sequence_svg.SUB_GAP
+    else:
+        dy = map_svg.TITLE_Y + 10 - map_svg.PAD
+        if spec.get("subtitle"):
+            dy += map_svg.SUB_GAP
+    svg = re.sub(r'<text class="(ttl|sub)"[^>]*>.*?</text>', "", svg, count=2)
+    m = re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg)
+    w, h = float(m.group(1)), float(m.group(2))
+    return svg.replace(m.group(0), f'viewBox="0 {dy} {w:.0f} {h - dy:.0f}"', 1)
+
+
+def _frag(svg: str, key: str) -> str:
+    """Every tag that carries data-<key> gains the frag class and a data-frag of the same step."""
+    out, pos = [], 0
+    for m in re.finditer(r"<(\w+)\b([^<>]*)>", svg):
+        attrs = m.group(2)
+        step = re.search(rf' data-{key}="(\d+)"', attrs)
+        out.append(svg[pos:m.start()])
+        pos = m.end()
+        if not step:
+            out.append(m.group(0))
+            continue
+        closing = attrs.endswith("/")
+        body = attrs[:-1] if closing else attrs
+        cls = re.search(r' class="([^"]*)"', body)
+        body = body.replace(cls.group(0), f' class="{cls.group(1)} frag"', 1) if cls else ' class="frag"' + body
+        out.append(f'<{m.group(1)}{body} data-frag="{step.group(1)}"{"/" if closing else ""}>')
+    out.append(svg[pos:])
+    return "".join(out)
 
 
 def standalone(fragments: list[str], title: str) -> str:

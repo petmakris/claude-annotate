@@ -119,3 +119,17 @@ def test_which_theme_says_why(tmp_path):
     done = run("--which-theme", config_home=tmp_path / "cfg")
     assert done.returncode == 0
     assert "default" in done.stdout and "no theme configured" in done.stdout
+
+
+def test_a_deck_with_a_diagram_gets_the_diagram_look_once(deck, tmp_path):
+    html = deck.read_text()
+    deck.write_text(html.replace('<div class="deck">', '<div class="deck"><svg class="vz" viewBox="0 0 10 10"></svg>', 1))
+    assert run(deck, config_home=tmp_path / "cfg").returncode == 0
+    assert run(deck, config_home=tmp_path / "cfg").returncode == 0
+    html = deck.read_text()
+    assert html.count("<!-- vz:css -->") == 1 and "svg.vz" in html and "family=Inter" in html
+
+
+def test_a_deck_without_a_diagram_gets_no_diagram_look(deck, tmp_path):
+    assert run(deck, config_home=tmp_path / "cfg").returncode == 0
+    assert "vz:css" not in deck.read_text()

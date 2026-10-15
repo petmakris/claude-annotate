@@ -4,10 +4,12 @@
 Run:  python3 tools/vz.py svg SPEC.json [--uid ID] [-o OUT.svg]
       python3 tools/vz.py html SPEC.json [SPEC.json ...] [--title T] -o OUT.html
       python3 tools/vz.py fragment SPEC.json [--uid ID] [-o OUT.html]
+      python3 tools/vz.py deck SPEC.json [--mode build|route] [--uid ID] [-o OUT.svg]
 
 A spec with "actors" is a sequence, one with "columns" and "boxes" a map. `svg` writes the drawing
 alone, `fragment` the player a page embeds next to vz.css and vz-reveal.js, `html` one page that holds
-everything, for a file, an artifact or a deck. Check a drawing with tools/vz_check.py.
+everything, for a file or an artifact. `deck` writes the SVG for a slide of a /slides deck: each click
+in present mode adds the next build or route step. Check a drawing with tools/vz_check.py.
 """
 from __future__ import annotations
 
@@ -31,7 +33,9 @@ def uid_for(path: Path, given: str | None) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("what", choices=["svg", "html", "fragment"])
+    ap.add_argument("what", choices=["svg", "html", "fragment", "deck"])
+    ap.add_argument("--mode", choices=["build", "route"], default="build")
+    ap.add_argument("--with-title", action="store_true", help="deck: keep the drawing's own title")
     ap.add_argument("specs", nargs="+")
     ap.add_argument("--uid")
     ap.add_argument("--title", default="Diagrams")
@@ -43,7 +47,9 @@ def main() -> int:
         spec = json.loads(path.read_text())
         uid = uid_for(path, a.uid if len(a.specs) == 1 else None)
         try:
-            if a.what == "svg":
+            if a.what == "deck":
+                outs.append(player.deck_svg(spec, uid, a.mode, a.with_title))
+            elif a.what == "svg":
                 outs.append((sequence_svg if "actors" in spec else map_svg).render(spec, uid))
             else:
                 outs.append(player.render_any(spec, uid))
