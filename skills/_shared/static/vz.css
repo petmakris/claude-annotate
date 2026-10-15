@@ -10,7 +10,7 @@
    face: Inter and JetBrains Mono). Sizes here must stay in sync with those styles. */
 .vz-player, svg.vz {
   --vz-fg: #161c1a; --vz-dim: #56615b; --vz-line: #d6dbd5; --vz-card: #ffffff; --vz-sunk: #eceee9;
-  --vz-accent: #b2570a;
+  --vz-accent: #b2570a; --vz-accent-soft: #fbeedd;
   --vz-blue: #2c5d8f; --vz-blue-soft: #e8eff8; --vz-red: #a33b30; --vz-red-soft: #f9e6e2;
   --vz-green: #2f6b3d; --vz-green-soft: #e4f1e6; --vz-amber: #8a5a00; --vz-amber-soft: #fbf1df;
   --vz-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -21,12 +21,12 @@ svg.vz {
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .vz-player, :root:not([data-theme="light"]) svg.vz {
   --vz-fg: #e9edea; --vz-dim: #a3aca7; --vz-line: #313936; --vz-card: #1c2220; --vz-sunk: #161b19;
-  --vz-accent: #f3a957;
+  --vz-accent: #f3a957; --vz-accent-soft: #3a2a14;
   --vz-blue: #8fb8e6; --vz-blue-soft: #1b2634; --vz-red: #f0928a; --vz-red-soft: #2f1c1a;
   --vz-green: #93c897; --vz-green-soft: #1b2a1e; --vz-amber: #e3b860; --vz-amber-soft: #2b2415 } }
 :root[data-theme="dark"] .vz-player, :root[data-theme="dark"] svg.vz {
   --vz-fg: #e9edea; --vz-dim: #a3aca7; --vz-line: #313936; --vz-card: #1c2220; --vz-sunk: #161b19;
-  --vz-accent: #f3a957;
+  --vz-accent: #f3a957; --vz-accent-soft: #3a2a14;
   --vz-blue: #8fb8e6; --vz-blue-soft: #1b2634; --vz-red: #f0928a; --vz-red-soft: #2f1c1a;
   --vz-green: #93c897; --vz-green-soft: #1b2a1e; --vz-amber: #e3b860; --vz-amber-soft: #2b2415 }
 
@@ -55,7 +55,7 @@ svg.vz .zone { fill: none; stroke: var(--vz-dim); stroke-width: 1.5; stroke-dash
 svg.vz .zone.blue { stroke: var(--vz-blue) } svg.vz .zone.red { stroke: var(--vz-red) }
 svg.vz .zone.green { stroke: var(--vz-green) } svg.vz .zone.amber { stroke: var(--vz-amber) }
 svg.vz .zone.blue + text, svg.vz text.zn.blue { fill: var(--vz-blue) }
-svg.vz .band { fill: var(--vz-sunk); stroke: none }
+svg.vz .band { fill: var(--vz-sunk); fill-opacity: .45; stroke: none }
 
 /* Arrows: a line or path with class ar, the head a marker whose path has class ah */
 svg.vz .ar { fill: none; stroke: var(--vz-dim); stroke-width: 1.8 }
@@ -97,7 +97,7 @@ svg.vz .n.now { fill: var(--vz-accent) }
 svg.vz rect.bx.now, svg.vz rect.chip.now { stroke: var(--vz-accent); stroke-width: 2.4 }
 svg.vz text.lb.now { fill: var(--vz-accent); font-weight: 600 }
 svg.vz g.now .ar { stroke: var(--vz-accent); stroke-width: 3 }
-svg.vz g.now rect.chip { stroke: var(--vz-accent); stroke-width: 2.2 }
+svg.vz g.now rect.chip { stroke: var(--vz-accent); stroke-width: 2.2; fill: var(--vz-accent-soft) }
 svg.vz g.now .bd { stroke: var(--vz-accent); stroke-width: 3 }
 svg.vz g.now .n { fill: var(--vz-accent) }
 svg.vz .draw { transition: stroke-dashoffset .7s ease }

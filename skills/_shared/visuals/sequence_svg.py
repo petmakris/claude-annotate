@@ -47,6 +47,7 @@ BADGE_R = 10
 CHECK_H = 24
 CHECK_GAP = 8
 BAND_HEAD = 34
+TAG_H = 28           # a lane's name repeated at the top of a later band
 SELF_IN = 16           # a self step's chip starts this far right of its lane
 OUTCOME_GAP = 22
 NOTE_GAP = 24
@@ -132,6 +133,10 @@ def _numbers(steps: list[dict]) -> list[int | None]:
 def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
     """Validate and draw `spec` as one SVG string. `uid` prefixes every id, so diagrams can share a page.
 
+    Actors that are never in use at the same time share a column, the later one headed where it starts
+    (``"share_lanes": false`` turns this off). Columns sit as close as their heads allow; a chip may lie
+    over the lanes beside it, so a long payload never pushes the lanes apart.
+
     With `keyed`, each step's group also carries ``data-key="step:<id>"``, and an actor's head, its words and
     its lifeline ``data-key="actor:<id>"``, for a page that reveals and lights parts by key. Without it the
     output is exactly what it was before keys existed."""
@@ -144,26 +149,48 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
     nums = _numbers(steps)
     shown_badge = set()
 
-    # ---- lane positions: room for the heads, and for each chip between the lanes it spans
-    head_w = []
+    # ---- lanes: an actor's life runs from its first step to its last; actors whose lives never overlap
+    # share a column (unless the spec says "share_lanes": false), and a later one gets its head where it
+    # starts. Columns are as close as their heads allow: a chip may lie over the lanes beside it.
+    life: dict[str, list[int]] = {}
+    for i, s in enumerate(steps):
+        for who in (s["from"], s["to"]):
+            life.setdefault(who, [i, i])
+            life[who][1] = i
     for a in actors:
+        life.setdefault(a["id"], [0, 0])
+    col_of: dict[str, int] = {}
+    cols: list[list[str]] = []
+    share = spec.get("share_lanes", True)
+    for a in actors:
+        aid = a["id"]
+        placed = False
+        if share:
+            for c, members in enumerate(cols):
+                if all(life[aid][0] > life[m][1] + 0 or life[aid][1] < life[m][0] for m in members):
+                    members.append(aid)
+                    col_of[aid] = c
+                    placed = True
+                    break
+        if not placed:
+            col_of[aid] = len(cols)
+            cols.append([aid])
+    first_in_col = {members[0] for members in cols}
+
+    def head_width(a: dict) -> float:
         w = max([_width(ln, "vz-nm", bool(a.get("mono"))) for ln in _head_lines(a)] + [_width(a.get("role") or "", "vz-sb")])
-        head_w.append(max(HEAD_MIN_W, w + HEAD_PAD))
-    gaps = [head_w[i] / 2 + head_w[i + 1] / 2 + LANE_GAP for i in range(len(actors) - 1)]
-    for s in steps:
-        if s["arrow"] in ("request", "event") and s["from"] != s["to"]:
-            i, j = sorted((idx[s["from"]], idx[s["to"]]))
-            lines = _chip_lines(s)
-            need = _lines_w(lines) + 2 * CHIP_PAD_X + (2 * BADGE_R + 16)
-            have = sum(gaps[i:j])
-            if need > have:
-                extra = (need - have) / (j - i)
-                for k in range(i, j):
-                    gaps[k] += extra
-    xs = [PAD + head_w[0] / 2]
+        return max(HEAD_MIN_W, w + HEAD_PAD)
+
+    by_id = {a["id"]: a for a in actors}
+    col_w = [max(head_width(by_id[m]) for m in members) for members in cols]
+    gaps = [col_w[i] / 2 + col_w[i + 1] / 2 + LANE_GAP for i in range(len(cols) - 1)]
+    cx = [PAD + col_w[0] / 2]
     for g in gaps:
-        xs.append(xs[-1] + g)
-    right_edge = xs[-1] + head_w[-1] / 2
+        cx.append(cx[-1] + g)
+    xs = [cx[col_of[a["id"]]] for a in actors]
+    head_w = [col_w[col_of[a["id"]]] for a in actors]
+    canvas_r = cx[-1] + col_w[-1] / 2
+    right_edge = canvas_r
 
     # ---- rows
     out_rows: list[str] = []
@@ -183,12 +210,34 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
     note_x = right_edge + NOTE_GAP
     notes_w = 0.0
 
-    for s, n in zip(steps, nums):
+    head_at: dict[str, float] = {}       # where each later actor's head is drawn
+    tags: list[tuple[str, float]] = []   # (actor, y): a lane's name repeated at the top of a later band
+    life_y: dict[str, list[float]] = {}  # top and bottom of each actor's lifeline
+    for si, (s, n) in enumerate(zip(steps, nums)):
+        late = [a["id"] for a in actors if a["id"] not in first_in_col and life[a["id"]][0] == si]
         if s["id"] in phases:
-            if bands:
-                pass
             bands.append((y, phases[s["id"]]["label"], n, _tone(phases[s["id"]].get("tone"))))
             y += BAND_HEAD
+            if len(bands) > 1:
+                # repeat the names of the lanes this band uses, so a reader who scrolled knows each line
+                end = next((k for k in range(si + 1, len(steps)) if steps[k]["id"] in phases), len(steps)) - 1
+                live = []
+                for members in cols:
+                    # one name per column: the lane in use as the band starts, else the column's first
+                    # lane if it starts inside the band (a later lane there gets its own head)
+                    at_start = [m for m in members if m not in late and life[m][0] <= si <= life[m][1]]
+                    if at_start:
+                        live.append(at_start[0])
+                    elif members[0] not in late and si <= life[members[0]][0] <= end:
+                        live.append(members[0])
+                if live:
+                    for aid in live:
+                        tags.append((aid, y))
+                    y += TAG_H + 14
+        if late:
+            for aid in late:
+                head_at[aid] = y
+            y += HEAD_H + 16
         att = f' data-p="1"' + (f' data-r="{n}"' if n else "")
         tone = _tone(s.get("tone"))
         g: list[str] = []
@@ -243,16 +292,19 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
             mid = (start + end) / 2
             if reply:
                 arrow_y = y + 8
+                wl = _lines_w(lines)
+                lm = min(max(mid, PAD + wl / 2), max(canvas_r, PAD + wl) - wl / 2)
                 for k, (t, m) in enumerate(lines):
-                    g.append(_text(_cls("lb", "mono" if m else "", tone), mid, arrow_y + 20 + CHIP_LINE * k, t, "", "middle"))
+                    g.append(_text(_cls("lb", "mono" if m else "", tone), lm, arrow_y + 20 + CHIP_LINE * k, t, "", "middle"))
                 below = 8 + CHIP_LINE * len(lines)
             else:
                 if lines:
                     w = _lines_w(lines) + 2 * CHIP_PAD_X
                     h = CHIP_LINE * len(lines) + 2 * CHIP_PAD_Y
-                    g.append(f'<rect class="{_cls("chip", tone)}" x="{mid - w / 2:.0f}" y="{y:.0f}" width="{w:.0f}" height="{h:.0f}" rx="6"/>')
+                    cm = min(max(mid, PAD + w / 2), max(canvas_r, PAD + w) - w / 2)
+                    g.append(f'<rect class="{_cls("chip", tone)}" x="{cm - w / 2:.0f}" y="{y:.0f}" width="{w:.0f}" height="{h:.0f}" rx="6"/>')
                     for k, (t, m) in enumerate(lines):
-                        g.append(_text(_cls("lb", "mono" if m else ""), mid, y + CHIP_PAD_Y + 14 + CHIP_LINE * k, t, "", "middle"))
+                        g.append(_text(_cls("lb", "mono" if m else ""), cm, y + CHIP_PAD_Y + 14 + CHIP_LINE * k, t, "", "middle"))
                     arrow_y = y + h + 6
                 else:
                     arrow_y = y + 8
@@ -272,8 +324,7 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
                     text = ("✓ " if ok else "✗ ") + c["label"]
                     pills.append((text, "green" if ok else "red", _width(text, "vz-sb") + 22))
                 total = sum(p[2] for p in pills) + CHECK_GAP * (len(pills) - 1)
-                px = tx - total / 2 if direction > 0 else tx - total / 2
-                px = min(max(px, PAD), max(xs[-1], tx) + 200 - total)
+                px = min(max(tx - total / 2, PAD), max(canvas_r, PAD + total) - total)
                 for text, col, w in pills:
                     g.append(f'<rect class="chip {col}" x="{px:.0f}" y="{y:.0f}" width="{w:.0f}" height="{CHECK_H}" rx="12"/>')
                     g.append(_text(f"sb {col}", px + w / 2, y + 16.5, text, "", "middle"))
@@ -284,6 +335,9 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
         if s.get("note"):
             g.append(_text("sb mono", note_x, arrow_y + 4, s["note"]))
             notes_w = max(notes_w, _width(s["note"], "vz-mono", True))
+        for who in (s["from"], s["to"]):
+            life_y.setdefault(who, [0.0, 0.0])
+            life_y[who][1] = max(life_y[who][1], y - 4)
         key = f' data-key="step:{escape(s["id"], quote=True)}"' if keyed else ""
         out_rows.append(f'<g data-step="{escape(s["id"], quote=True)}"{key}{att}>' + "".join(g) + "</g>")
 
@@ -292,6 +346,8 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
     width = max(right_edge, note_x + notes_w if notes_w else right_edge) + PAD
     if spec.get("title"):
         width = max(width, PAD * 2 + _width(spec["title"], "vz-ttl"))
+        if spec.get("subtitle"):
+            width = max(width, PAD * 2 + _width(spec["subtitle"], "vz-sb"))
     if outcome:
         # The outcome box spans the canvas, its words 18px in from each side:
         # a line wider than the lanes widens the canvas, or it runs off it.
@@ -311,21 +367,35 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
         return f' data-key="actor:{escape(a["id"], quote=True)}"' if keyed else ""
 
     for i, a in enumerate(actors):
-        parts.append(f'<line class="life" x1="{xs[i]:.0f}" y1="{head_top + HEAD_H:.0f}" x2="{xs[i]:.0f}" y2="{lane_end:.0f}"{akey(a)}/>')
+        aid = a["id"]
+        top = (head_at[aid] + HEAD_H) if aid in head_at else head_top + HEAD_H
+        members = cols[col_of[aid]]
+        nxt = members[members.index(aid) + 1] if members.index(aid) + 1 < len(members) else None
+        bottom = (head_at[nxt] - 8) if nxt else lane_end
+        parts.append(f'<line class="life" x1="{xs[i]:.0f}" y1="{top:.0f}" x2="{xs[i]:.0f}" y2="{bottom:.0f}"{akey(a)}/>')
     for i, a in enumerate(actors):
         tone = _tone(a.get("tone"))
-        w = head_w[i]
+        w = head_width(a)
         x0 = xs[i] - w / 2
+        ht = head_at.get(a["id"], head_top)
         lines = _head_lines(a)
-        parts.append(f'<rect class="{_cls("bx", tone)}" x="{x0:.0f}" y="{head_top:.0f}" width="{w:.0f}" height="{HEAD_H}" rx="8"{akey(a)}/>')
+        parts.append(f'<rect class="{_cls("bx", tone)}" x="{x0:.0f}" y="{ht:.0f}" width="{w:.0f}" height="{HEAD_H}" rx="8"{akey(a)}/>')
         if a.get("role") and len(lines) == 1:
-            parts.append(_text(_cls("nm", "mono" if a.get("mono") else ""), xs[i], head_top + 23, lines[0], akey(a), "middle"))
-            parts.append(_text(_cls("sb", tone), xs[i], head_top + 42, a["role"], akey(a), "middle"))
+            parts.append(_text(_cls("nm", "mono" if a.get("mono") else ""), xs[i], ht + 23, lines[0], akey(a), "middle"))
+            parts.append(_text(_cls("sb", tone), xs[i], ht + 42, a["role"], akey(a), "middle"))
         else:
-            base = head_top + (33 if len(lines) == 1 else 23)
+            base = ht + (33 if len(lines) == 1 else 23)
             for k, ln in enumerate(lines[:2]):
                 parts.append(_text(_cls("nm", "mono" if a.get("mono") else ""), xs[i], base + 19 * k, ln, akey(a), "middle"))
 
+    for aid, ty in tags:
+        a = by_id[aid]
+        i = idx[aid]
+        tone = _tone(a.get("tone"))
+        name = _head_lines(a)[0]
+        w = _width(name, "vz-nm", bool(a.get("mono"))) + 24
+        parts.append(f'<rect class="{_cls("bx", tone)}" x="{xs[i] - w / 2:.0f}" y="{ty:.0f}" width="{w:.0f}" height="{TAG_H}" rx="6"{akey(a)}/>')
+        parts.append(_text(_cls("nm", "mono" if a.get("mono") else ""), xs[i], ty + 20, name, akey(a), "middle"))
     parts.extend(out_rows)
     y = lane_end
     if outcome:

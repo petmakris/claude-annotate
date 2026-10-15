@@ -160,7 +160,7 @@ section.block[data-kind="flowchart"] .block-content {
 :root:has(body:not([data-page-theme="dark"])) svg.vz,
 :root:has(body:not([data-page-theme="dark"])) .block-frame:has(.vz-player) {
   --vz-fg: #161c1a; --vz-dim: #56615b; --vz-line: #d6dbd5; --vz-card: #ffffff; --vz-sunk: #eceee9;
-  --vz-accent: #b2570a;
+  --vz-accent: #b2570a; --vz-accent-soft: #fbeedd;
   --vz-blue: #2c5d8f; --vz-blue-soft: #e8eff8; --vz-red: #a33b30; --vz-red-soft: #f9e6e2;
   --vz-green: #2f6b3d; --vz-green-soft: #e4f1e6; --vz-amber: #8a5a00; --vz-amber-soft: #fbf1df;
 }
@@ -168,7 +168,7 @@ section.block[data-kind="flowchart"] .block-content {
 :root:has(body[data-page-theme="dark"]) svg.vz,
 :root:has(body[data-page-theme="dark"]) .block-frame:has(.vz-player) {
   --vz-fg: #e9edea; --vz-dim: #a3aca7; --vz-line: #313936; --vz-card: #1c2220; --vz-sunk: #161b19;
-  --vz-accent: #f3a957;
+  --vz-accent: #f3a957; --vz-accent-soft: #3a2a14;
   --vz-blue: #8fb8e6; --vz-blue-soft: #1b2634; --vz-red: #f0928a; --vz-red-soft: #2f1c1a;
   --vz-green: #93c897; --vz-green-soft: #1b2a1e; --vz-amber: #e3b860; --vz-amber-soft: #2b2415;
 }
