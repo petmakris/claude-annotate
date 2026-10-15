@@ -156,7 +156,7 @@
       if (e.key === 'ArrowRight') { e.preventDefault(); stop(); go(cur + 1); }
       if (e.key === 'ArrowLeft') { e.preventDefault(); stop(); go(cur - 1); }
     });
-    root.vz = { setMode, go };
+    root.vz = { setMode, go, state: () => ({ mode, cur, last: mode ? last[mode] : 0 }) };
     paint(false);
     if (root.dataset.vzStart) {
       const [m, n] = root.dataset.vzStart.split(':');

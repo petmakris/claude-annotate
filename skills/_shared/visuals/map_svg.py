@@ -524,6 +524,25 @@ def _label_spots(pts: list[Pt], w: float, badge: Pt | None) -> list[tuple[tuple[
     return out
 
 
+def _free_spot(at: Pt, w: float, rects: list, segs: list, width: float):
+    """The free label spot nearest `at`, searched outward in rings, or None."""
+    best = None
+    for dy in range(-140, 141, 10):
+        for dx in range(-320, 321, 16):
+            cx, cy = at[0] + dx, at[1] + dy
+            rect = (cx - w / 2, cy - LABEL_H / 2, w, LABEL_H)
+            if rect[0] < PAD or rect[0] + w > width - PAD or rect[1] < 8:
+                continue
+            d = dx * dx + 3 * dy * dy
+            if best is not None and d >= best[0]:
+                continue
+            pad = (rect[0] - 6, rect[1] - 4, w + 12, LABEL_H + 8)
+            if any(_overlaps(pad, r) for r in rects) or any(_rect_hits_seg(pad, s) for s in segs):
+                continue
+            best = (d, (rect, (cx, cy + 4, "middle")))
+    return best[1] if best else None
+
+
 def _frange(a: float, b: float, step: float) -> list[float]:
     out, x = [], a
     while x <= b + 0.01:
@@ -674,6 +693,15 @@ def _draw(spec: dict, uid: str, g: _Grid) -> tuple[list[str], dict[int, float], 
                     continue
                 spot = (rect, where)
                 break
+            if spot is None and route and badge:
+                # a route label needs no gap of its own: put it in the nearest free spot by its badge,
+                # with a thin line back to the badge
+                spot = _free_spot(badge, w, box_rects + labels_by["route"], segs_by["route"], width)
+                if spot is not None:
+                    (rx, ry, rw, rh), _ = spot
+                    ex = min(max(badge[0], rx), rx + rw)
+                    ey = min(max(badge[1], ry), ry + rh)
+                    top_labels.append(f'<line class="lk" x1="{badge[0]:.0f}" y1="{badge[1]:.0f}" x2="{ex:.0f}" y2="{ey:.0f}"{att}/>')
             if spot is None:
                 # ask for a wider gap where the longest run lies
                 (p, q) = max(own, key=lambda s: abs(s[0][0] - s[1][0]) + abs(s[0][1] - s[1][1]))

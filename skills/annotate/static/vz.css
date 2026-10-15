@@ -73,6 +73,9 @@ svg.vz .chip.red { fill: var(--vz-red-soft); stroke: var(--vz-red) }
 svg.vz .chip.green { fill: var(--vz-green-soft); stroke: var(--vz-green) }
 svg.vz .chip.amber { fill: var(--vz-amber-soft); stroke: var(--vz-amber) }
 
+/* A thin line from a step badge to its label, when the label sits apart */
+svg.vz .lk { stroke: var(--vz-dim); stroke-width: 1; stroke-dasharray: 2 3; fill: none }
+
 /* Step badges: a numbered circle */
 svg.vz .bd { fill: var(--vz-card); stroke: var(--vz-blue); stroke-width: 2 }
 svg.vz .bd.solid { fill: var(--vz-blue-soft) }
