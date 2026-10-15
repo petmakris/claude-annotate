@@ -96,6 +96,10 @@ svg.vz .bd.now { stroke: var(--vz-accent); stroke-width: 3 }
 svg.vz .n.now { fill: var(--vz-accent) }
 svg.vz rect.bx.now, svg.vz rect.chip.now { stroke: var(--vz-accent); stroke-width: 2.4 }
 svg.vz text.lb.now { fill: var(--vz-accent); font-weight: 600 }
+svg.vz g.now .ar { stroke: var(--vz-accent); stroke-width: 3 }
+svg.vz g.now rect.chip { stroke: var(--vz-accent); stroke-width: 2.2 }
+svg.vz g.now .bd { stroke: var(--vz-accent); stroke-width: 3 }
+svg.vz g.now .n { fill: var(--vz-accent) }
 svg.vz .draw { transition: stroke-dashoffset .7s ease }
 @media (prefers-reduced-motion: reduce) { svg.vz [data-p], svg.vz .draw { transition: none } }
 
