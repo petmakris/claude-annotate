@@ -4,7 +4,7 @@ Run the tests with:
 
     uv run -q --with-requirements requirements-test.txt python -m pytest skills -q
 
-`requirements-test.txt` pins the test tooling for CI, the pre-push hook and this command alike: pytest, pytest-xdist and aiohttp. The suite runs about 2,080 tests in about 15 seconds, on 4 workers (`pytest.ini`). For one file, name it instead of `skills`. Add `-n 0` to run serially.
+`requirements-test.txt` pins the test tooling for CI, the pre-push hook and this command alike: pytest, pytest-xdist and aiohttp. The suite runs about 2,300 tests in about 15 seconds, on 4 workers (`pytest.ini`). For one file, name it instead of `skills`. Add `-n 0` to run serially.
 
 The suite has no browser tests and starts no daemon: no test drives Chromium, and none needs webcompanion running. Keep it that way. A few tests run the page's JavaScript under node and skip without it. `skills/stage/tests/stage_page.py` and `skills/talk/tests/call_page.py` run the real `stage.js` and `call.js` under node on a small DOM (`skills/_shared/tests/dom_shim.mjs`), for page logic only: every box measures 0, so nothing about layout can be checked there.
 

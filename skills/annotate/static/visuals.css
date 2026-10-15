@@ -85,8 +85,8 @@
                                          text-decoration-color: var(--t-hot); }
 
 /* ── the numbered badge, and the key it points at ──────────────────
-   The grid carries arrows and numbers; every word lives in the key below it
-   (`render_key` in diagrams/sequence.py). The two halves pair on
+   Pages stored before the lane sequence carry an old grid whose words sit in a key
+   below it. The two halves pair on
    `data-step-id` — the same handle a comment anchors to — so clicking either
    side lights both.
 
