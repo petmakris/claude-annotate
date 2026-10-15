@@ -59,7 +59,7 @@ Long responses (multi-step plans, analyses, lists of findings) get pushed to a b
 - `render.py` — Renders one block model into the daemon item body `compat.js` expects.
 - `anchors.py` / `check_anchors.py` — Code-anchor resolution and the pre-announce check that catches a wrong file/line before the URL goes out.
 - `static/` — HTML/JS/CSS for the browser page.
-- The `flowchart` and `sequence` block kinds are drawn by the shared tools in `skills/_shared/visuals/` (`elk_layout.py` there is the one renderer that shells out, to `node`, for geometry).
+- The `flowchart`, `sequence` and `map` block kinds are drawn by the shared tools in `skills/_shared/visuals/` (`sequence` and `map` by `sequence_svg.py` and `map_svg.py`, played by `vz-reveal.js`; see `docs/vz.md`) (`elk_layout.py` there is the one renderer that shells out, to `node`, for geometry).
 - `tests/` — Unit and integration tests.
 
 ## Diagram sizing

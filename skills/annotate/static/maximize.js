@@ -33,7 +33,7 @@
   // Kinds where more width buys something. Prose is deliberately excluded: it
   // is set to a max measure, so a wider column only makes the lines harder to
   // track back to the left edge.
-  const MAXIMIZABLE = new Set(["sequence", "flowchart", "mockup"]);
+  const MAXIMIZABLE = new Set(["sequence", "map", "flowchart", "mockup"]);
 
   const ICON_MAX =
     '<svg viewBox="0 0 24 24" aria-hidden="true">' +
@@ -187,6 +187,15 @@
       section.style.removeProperty("--max-fit-h");
       fitBtn.textContent = "Fit width";
       fitBtn.setAttribute("aria-pressed", "false");
+      return;
+    }
+    // A map or a lane sequence fits by CSS alone (diagram.css): its drawing
+    // takes the width given, and its height follows, so nothing is measured
+    // and the card keeps its player's controls below the drawing.
+    if (section.querySelector(".vz-player")) {
+      section.classList.add("is-fit");
+      fitBtn.textContent = "Actual size";
+      fitBtn.setAttribute("aria-pressed", "true");
       return;
     }
     const host = section.querySelector(".block-content");

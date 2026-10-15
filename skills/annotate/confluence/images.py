@@ -4,7 +4,12 @@ The SVG annotate stores is deliberately style-free: `class="actor-box
 tone-edge"`, and the colours live in the stylesheet. That is right for a page
 that themes its diagrams, and fatal for one lifted out of it — so this module
 rebuilds the missing half, inlining core.css (palette, type), visuals.css
-(the drawing), diagram.css (tone tokens) and the two woff2 faces as data URIs.
+(the drawing), vz.css (maps and lane sequences), diagram.css (tone tokens)
+and the woff2 faces as data URIs.
+
+A map or a lane sequence is stored as its player (visuals/player.py). No
+script runs here, so the player has no controls and the drawing is whole:
+the PNG is a shot of the svg alone.
 
 Chromium, not librsvg: diagram.css uses `color-mix()`, which librsvg does not
 implement. `rsvg-convert` would not fail — it would draw the washes wrong and
@@ -24,7 +29,14 @@ STATIC = Path(__file__).resolve().parents[1] / "static"
 FONTS = {
     "Monaspace Radon": STATIC / "fonts" / "MonaspaceRadon-Regular.woff2",
     "Bricolage Grotesque": STATIC / "fonts" / "BricolageGrotesque-Variable.woff2",
+    # The stage face, which maps and lane sequences (vz.css) are measured in.
+    "Inter": STATIC / "fonts" / "Inter-Variable.woff2",
+    "JetBrains Mono": STATIC / "fonts" / "JetBrainsMono-Variable.woff2",
 }
+# Every stylesheet a stored drawing needs, in the page's cascade order
+# (entry.js): vz.css draws maps and lane sequences, and diagram.css after it
+# holds them to the light theme.
+STYLESHEETS = ("core.css", "visuals.css", "vz.css", "diagram.css")
 SCALE = 2
 
 # The stylesheets declare their own @font-face rules pointing at a relative
@@ -49,7 +61,7 @@ class ChromiumMissing(RuntimeError):
 
 @functools.lru_cache(maxsize=None)
 def _font_faces() -> str:
-    """The two faces as data URIs — ~630 KB of base64, encoded once."""
+    """The faces as data URIs, encoded once."""
     out = []
     for family, path in FONTS.items():
         blob = base64.b64encode(path.read_bytes()).decode("ascii")
@@ -60,17 +72,24 @@ def _font_faces() -> str:
 
 
 def _intrinsic_size(svg: str) -> tuple[str, str]:
+    """The drawing's own size: its width and height attributes, else its
+    viewBox. A map or a lane sequence (svg.vz) declares only a viewBox and
+    fills the width it is given, so the box round it must be that size."""
     tag_match = _SVG_TAG_RE.search(svg)
     tag = tag_match.group(0) if tag_match else svg
-    width = re.search(r'width="([\d.]+)"', tag)
-    height = re.search(r'height="([\d.]+)"', tag)
+    width = re.search(r'\bwidth="([\d.]+)"', tag)
+    height = re.search(r'\bheight="([\d.]+)"', tag)
+    if not (width and height):
+        box = re.search(r'viewBox="[\d.-]+ [\d.-]+ ([\d.]+) ([\d.]+)"', tag)
+        if box:
+            return box.group(1), box.group(2)
     return (width.group(1) if width else "auto",
             height.group(1) if height else "auto")
 
 
 def standalone_html(svg: str) -> str:
     """The SVG with everything it needs to look like it does on the page."""
-    css = "".join((STATIC / name).read_text() for name in ("core.css", "visuals.css", "diagram.css"))
+    css = "".join((STATIC / name).read_text() for name in STYLESHEETS)
     css = _FONT_FACE_RE.sub("", css)
     width, height = _intrinsic_size(svg)
     wrapped = "<div style='width:%spx;height:%spx'>%s</div>" % (width, height, svg)

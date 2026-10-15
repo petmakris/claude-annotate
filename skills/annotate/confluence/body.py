@@ -28,11 +28,12 @@ from skills._shared.visuals.views import ALL_VIEW
 # disagreed about produced a placeholder no upload would ever fill. That
 # failure surfaced in `finalize`, AFTER the page and its attachments existed,
 # which is the worst moment available.
-DIAGRAM_KINDS = ("sequence", "flowchart")
+DIAGRAM_KINDS = ("sequence", "map", "flowchart")
 
 
 _SVG_W = re.compile(r'<svg[^>]*\bwidth="([\d.]+)"')
 _SVG_H = re.compile(r'<svg[^>]*\bheight="([\d.]+)"')
+_SVG_BOX = re.compile(r'<svg[^>]*\bviewBox="[\d.-]+ [\d.-]+ ([\d.]+) ([\d.]+)"')
 
 
 def svg_size(svg: str):
@@ -44,8 +45,54 @@ def svg_size(svg: str):
     """
     w, h = _SVG_W.search(svg or ""), _SVG_H.search(svg or "")
     if not (w and h):
-        return None
+        # A map or a lane sequence declares only a viewBox: its size.
+        box = _SVG_BOX.search(svg or "")
+        if not box:
+            return None
+        return (int(float(box.group(1))), int(float(box.group(2))))
     return (int(float(w.group(1))), int(float(h.group(1))))
+
+
+def is_player(svg: str) -> bool:
+    """Whether a stored drawing is a map's or a lane sequence's player
+    (visuals/player.py), rather than the numbered grid stored before it."""
+    return 'class="vz-player"' in (svg or "")
+
+
+def _inline(text: str) -> str:
+    """Escaped text, with `backtick` spans as code, as vz-reveal.js shows a
+    caption."""
+    return re.sub(r"`([^`]+)`", r"<code>\1</code>", escape(text))
+
+
+def _caption_list(items: Any) -> str:
+    rows = []
+    for c in items if isinstance(items, list) else []:
+        if not (isinstance(c, dict) and isinstance(c.get("title"), str)):
+            continue
+        text = c.get("text") if isinstance(c.get("text"), str) else ""
+        rows.append("<li><p><strong>%s</strong>%s</p></li>"
+                    % (_inline(c["title"]), (" " + _inline(text)) if text else ""))
+    return "<ol>%s</ol>" % "".join(rows) if rows else ""
+
+
+def player_captions(kind: str, spec: dict[str, Any]) -> str:
+    """A player's step captions as a numbered list.
+
+    On the annotate page the captions show one at a time while the reader
+    steps through the drawing. A PNG has no player, so the steps are written
+    out under it instead. The picture already carries every label, so the
+    old sequence key table would only repeat it."""
+    caps = spec.get("captions")
+    if kind == "sequence":
+        return _caption_list(caps)
+    if not isinstance(caps, dict):
+        return ""
+    build, route = _caption_list(caps.get("build")), _caption_list(caps.get("route"))
+    if build and route:
+        return ("<p>Built up step by step:</p>%s"
+                "<p>Following one request:</p>%s" % (build, route))
+    return build or route
 
 
 
@@ -211,7 +258,15 @@ def render_block(blk: dict[str, Any],
 
     if kind == "markdown":
         out.append(to_html(blk.get("markdown", "")))
+    elif kind in ("sequence", "map") and is_player(blk.get("svg") or ""):
+        spec = blk.get("spec") or {}
+        if isinstance(spec.get("subtitle"), str) and spec["subtitle"].strip():
+            out.append("<p>%s</p>" % escape(spec["subtitle"]))
+        out.append(figure(blk["id"], _title_of(blk), size=size))
+        out.append(player_captions(kind, spec))
     elif kind == "sequence":
+        # A body stored before the lane sequence: the numbered grid, whose
+        # words live in its key.
         out.append(figure(blk["id"], _title_of(blk), size=size))
         out.append(sequence_key_table(blk.get("spec") or {}))
     elif kind == "flowchart":

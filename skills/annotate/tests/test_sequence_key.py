@@ -183,16 +183,6 @@ def test_a_spec_with_no_message_steps_renders_an_empty_key():
     assert render_key(spec, "section-1") == ""
 
 
-def test_render_block_puts_both_halves_on_the_wire():
-    """The client paints what the push stored. A body carrying `svg` but no
-    `key` renders a grid of numbered circles nothing explains."""
-    from skills.annotate.render import render_block
-    body = render_block({"id": "section-2", "kind": "sequence", "spec": _spec()})
-    assert body["svg"].startswith("<svg")
-    assert body["key"].startswith('<div class="seq-key"')
-    assert 'data-step-id="s1"' in body["svg"] and 'data-step-id="s1"' in body["key"]
-
-
 def test_a_malformed_spec_ships_the_error_pill_and_no_half_diagram():
     from skills.annotate.render import render_block
     body = render_block({"id": "section-2", "kind": "sequence",

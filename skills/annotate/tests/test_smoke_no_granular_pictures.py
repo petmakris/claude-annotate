@@ -45,9 +45,9 @@ def _strip_comments(js: str) -> str:
 
 
 def _picture_branches() -> str:
-    """The sequence/diagram/flowchart arms of createBlockSection, code only."""
+    """The sequence/map/flowchart arms of createBlockSection, code only."""
     src = SCRIPT_JS.read_text()
-    region = src.split('if (kind === "sequence") {', 1)[1]
+    region = src.split('if (kind === "sequence" || kind === "map") {', 1)[1]
     region = region.split('} else if (kind === "choice") {', 1)[0]
     return _strip_comments(region)
 
@@ -121,8 +121,8 @@ def test_the_badge_is_the_one_licensed_click_and_its_answer_ships_with_it():
     # the key and leave a grid of unexplained circles.
     # The trailing `;` is what separates the two call sites from the one
     # definition, which the same substring otherwise matches.
-    assert js.count("paintSequence(content, blk);") == 2, \
-        "a sequence paint site bypasses paintSequence"
+    assert js.count("paintVz(content, blk);") == 2, \
+        "a sequence paint site bypasses paintVz"
     assert 'content.innerHTML = blk.svg' not in js, \
         "a paint site paints the grid without its key"
 

@@ -2,7 +2,7 @@
 
 The daemon stores items as opaque JSON and never inspects them, so
 everything that used to happen per-request in annotate's own server —
-compiling a flowchart's source, rasterising a sequence spec to
+compiling a flowchart's source, drawing a sequence or a map spec to
 SVG — happens once here, at push time, and the rendered body is what gets
 stored.
 
@@ -13,9 +13,10 @@ can change while a session is open) using this same plugin's anchor format.
 from __future__ import annotations
 
 import html as _html
+import re
 from typing import Callable
 
-from skills._shared.visuals.sequence import render, render_key
+from skills._shared.visuals import map_svg, player, sequence_svg
 from skills._shared.visuals.flowchart import render as render_flowchart
 from skills._shared.visuals.flowchart import render_variants as render_flowchart_variants
 from skills._shared.visuals import elk_layout, flavours
@@ -52,28 +53,88 @@ def _error_pill(blk_id: str, css: str, label: str, error: Exception, *,
     )
 
 
-def _render_sequence(blk: dict, base: dict) -> None:
+def _vz_uid(blk_id: str) -> str:
+    """The id prefix for one drawing: the block id, made safe for map_svg's
+    and sequence_svg's uid rule (a letter first, then letters, digits, - and
+    _). Block ids are unique on a page, so the drawings' ids are too."""
+    tail = re.sub(r"[^A-Za-z0-9_-]+", "-", blk_id)[:36]
+    return "vz-" + tail
+
+
+_VIEWBOX = re.compile(r'viewBox="0 0 ([\d.]+) ([\d.]+)"')
+_TITLE_TEXT = re.compile(r'<text class="(?:ttl|sub)" [^>]*>.*?</text>', re.S)
+
+
+def _untitled(svg: str, spec: dict, draw: Callable[[dict, str], str],
+              uid: str) -> str:
+    """The drawing with its title band cut off.
+
+    The part's heading already shows the title (block-title.js reads
+    `spec.title`), and the reader comments on a picture by selecting that
+    heading. Drawn again inside the SVG, the same sentence would sit twice,
+    one under the other. The subtitle goes under the heading as text
+    (script-blocks.js), so it is not lost.
+
+    The drawing is laid out with its title, as its author checked it: a map's
+    `points` are canvas coordinates that assume the title band is there. So
+    nothing moves; the viewBox starts below the band instead. The band's
+    height is how much shorter the same spec draws without a title. The title
+    stays the SVG's accessible name.
+    """
+    if not (isinstance(spec.get("title"), str) and spec["title"].strip()):
+        return svg
+    plain = draw({k: v for k, v in spec.items() if k not in ("title", "subtitle")}, uid)
+    have, bare = _VIEWBOX.search(svg), _VIEWBOX.search(plain)
+    if not (have and bare):
+        return svg
+    w, h = float(have.group(1)), float(have.group(2))
+    band = h - float(bare.group(2))
+    if not 0 < band < h:
+        return svg
+    svg = _TITLE_TEXT.sub("", svg, count=2)
+    return _VIEWBOX.sub('viewBox="0 %g %g %g"' % (band, w, h - band), svg, count=1)
+
+
+def _render_vz(blk: dict, base: dict, draw: Callable[[dict, str], str],
+               captions: Callable[[dict], dict], css: str, label: str) -> None:
+    """A map or a lane sequence, stored as the player fragment.
+
+    `svg` holds player.figure(...): the drawing inside a `.vz-player`, with
+    its captions as JSON text the page writes only as text (vz-reveal.js).
+    Every word in it went through the library's escaping; nothing from the
+    spec reaches the page as markup.
+    """
     spec = blk.get("spec") or {}
-    key = ""
     try:
-        svg = render(spec, block_id=blk["id"])
-        # The grid is numbered badges and nothing else, so a grid without
-        # its key is a picture of unexplained circles. Render both under
-        # the one try: if either half fails, the reader gets the error pill
-        # rather than half a diagram.
-        key = render_key(spec, block_id=blk["id"])
+        uid = _vz_uid(blk["id"])
+        drawn = _untitled(draw(spec, uid), spec, draw, uid)
+        svg = player.figure(drawn, captions(spec))
     except Exception as e:
         # Catch *any* render failure (ValidationError, or a KeyError from a
         # spec that passed validation but is missing a field the renderer
-        # reads).
-        svg = _error_pill(blk["id"], "annotate-seq", "sequence diagram", e,
-                          sized=True)
+        # reads): one bad block must never blank the page.
+        svg = _error_pill(blk["id"], css, label, e, sized=True)
     base["spec"] = spec
     base["svg"] = svg
-    # Additive, like flowchart's `svgs` below: a client that has not been
-    # updated paints the grid alone and is no worse off than before.
-    if key:
-        base["key"] = key
+
+
+def _render_sequence(blk: dict, base: dict) -> None:
+    # The lane sequence (sequence_svg) reads the same spec the numbered grid
+    # did, so every stored sequence block draws in the new look on its next
+    # push. The grid's separate key (`key`) is gone: the words sit on the
+    # arrows now.
+    _render_vz(blk, base, sequence_svg.render,
+               lambda spec: {"route": spec.get("captions")},
+               "annotate-seq", "sequence diagram")
+
+
+def _render_map(blk: dict, base: dict) -> None:
+    def caps(spec: dict) -> dict:
+        c = spec.get("captions") or {}
+        return {"build": c.get("build"), "route": c.get("route")} \
+            if isinstance(c, dict) else {}
+    _render_vz(blk, base, map_svg.render, caps, "annotate-map",
+               "architecture map")
 
 
 def _compile_flowchart_source(blk: dict, spec: dict
@@ -209,6 +270,7 @@ def _render_markdown(blk: dict, base: dict) -> None:
 # other kind before a push reaches here, so it can never swallow one.
 _RENDERERS: dict[str, Callable[[dict, dict], None]] = {
     "sequence": _render_sequence,
+    "map": _render_map,
     "flowchart": _render_flowchart,
     "choice": _forward_spec,
     "mockup": _forward_spec,
@@ -224,7 +286,8 @@ def render_block(blk: dict) -> dict:
     second, disagreeing source of truth.
 
     - markdown blocks → pass markdown through
-    - sequence / flowchart → rendered svg + spec
+    - sequence / map → the player fragment (in `svg`) + spec
+    - flowchart → rendered svg + spec
     - choice / mockup → spec forwarded verbatim
     """
     kind = blk.get("kind") or "markdown"

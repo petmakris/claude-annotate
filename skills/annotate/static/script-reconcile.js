@@ -306,10 +306,11 @@ function updateBlockContent(section, blk, srvVer) {
   }
   const content = section.querySelector(".block-content");
   if (content) {
-    if (newKind === "sequence") {
-      // Both halves again. The pairing listeners live on .block-content,
-      // which survives this swap.
-      paintSequence(content, blk);
+    if (newKind === "sequence" || newKind === "map") {
+      // The player again (or, for an old body, both halves). The pairing
+      // listeners live on .block-content, which survives this swap, and the
+      // "annotate:rendered" that follows boots the new player.
+      paintVz(content, blk);
     } else if (newKind === "flowchart") {
       // Without this a flowchart fell through to the markdown branch below and
       // rendered blk.markdown — which a flowchart does not have — so updating

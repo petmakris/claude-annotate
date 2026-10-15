@@ -210,7 +210,7 @@ These commands are cheap and must never fail the turn: if one errors, carry on.
    - `block_id` — the block to update. **Absent** for a general comment from the page's chat box: treat a missing `block_id` the same as `null`.
    - `step_id` — which authored `data-annotate-id` element the selected words sit
      inside, or `null` for the whole block. **Pictures no longer produce one.**
-     A `sequence`, `flowchart` or `diagram` block is commented as a whole, when
+     A `map`, `sequence`, `flowchart` or `diagram` block is commented as a whole, when
      the reader selected its title, so its comments arrive with `step_id: null`;
      the reader cannot click a step row, a node, or a pflow source line to scope
      one. (The field is still live: `mockup` blocks produce it from a
@@ -563,7 +563,7 @@ When `block_id` is absent or `null` (a general comment from the page's chat box 
 
 ## Diagram block-rewrite contract
 
-For `WEBCOMPANION_EVENT` payloads that target a `kind: "sequence"` block, the rewrite contract has three deltas from the markdown contract above:
+For `WEBCOMPANION_EVENT` payloads that target a `kind: "sequence"` or `kind: "map"` block, the rewrite contract has three deltas from the markdown contract above. For a map, read box and arrow ids where it says step ids; a new box or arrow gets an id of its own choosing, kept stable after.
 
 1. **Whole-diagram by default (`step_id: null`)** — the usual case, and now the only one the UI produces. A picture is commented as a whole when the reader selected its title, so read the comment against the whole spec and apply it across steps as needed: restructure phases, reorder steps, add/remove actors, retitle. Analogous to general comments with `block_id: null` in the markdown contract. The reader is pointing at the diagram; work out from the words which part they mean.
 

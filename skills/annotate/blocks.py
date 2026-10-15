@@ -45,7 +45,7 @@ BLOCK_KEYS = frozenset({
 # named below so a spec written against the old menu fails loudly instead of
 # rendering as an empty card.
 BLOCK_KINDS = frozenset({
-    "markdown", "sequence", "flowchart", "choice", "mockup", "explain",
+    "markdown", "sequence", "map", "flowchart", "choice", "mockup", "explain",
 })
 RETIRED_KINDS = {"diagram": "removed — use `flowchart`, or a fenced code block "
                             "in `markdown` for anything it cannot draw"}
@@ -224,7 +224,7 @@ def _canonical_spec(spec: dict[str, Any]) -> str:
 
 
 def update_spec_block(doc: BlocksDoc, block_id: str, new_spec: dict[str, Any]) -> bool:
-    """Update a spec-bearing block's spec (sequence/choice/explain/mockup).
+    """Update a spec-bearing block's spec (sequence/map/choice/explain/mockup).
 
     Returns True if changed. Kind-agnostic on purpose: it swaps `spec` and
     nothing else, so a new spec-bearing kind needs no change here.
