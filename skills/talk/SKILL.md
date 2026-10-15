@@ -165,7 +165,7 @@ Follow one value: Ben's product name. [[+ data]] The server sends the fund's sti
 - Prefer a change board over describing an edit line by line.
 - At most 3 key points per answer, in the user's words.
 - Greek titles and text are fine.
-- Close a table or diagram with `[[/show]]`. Tags are forgiving (`show: table`, `mermaid`, `diff`), and a markdown table or mermaid fence without a tag is still moved to the stage. `reply` prints a `board:` line for anything it could not show as asked: fix it in the next answer.
+- Close a table or diagram with `[[/show]]`. Tags are forgiving (`show: table`, `mermaid`, `diff`), and a markdown table or mermaid fence without a tag is still moved to the stage (a Mermaid graph or state diagram as a map; any other Mermaid is not shown). `reply` prints a `board:` line for anything it could not show as asked: fix it in the next answer.
 
 For example, after editing a file:
 ```
