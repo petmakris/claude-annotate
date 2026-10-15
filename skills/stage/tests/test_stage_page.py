@@ -440,6 +440,17 @@ def test_only_a_scene_frame_lights_a_part_and_the_old_point_message_does_nothing
 
 
 
+
+def test_a_mermaid_board_saved_before_the_stage_stopped_drawing_mermaid_shows_its_source(tmp_path):
+    old = {"type": "inline", "format": "diagram", "body": "graph TD\n  A[Page] --> B[Queue]"}
+    page = StagePage(tmp_path).show("d", old, title="Old flow").open()
+    page.check("[pane('d').querySelector('.pbody .legacy .note').textContent,"
+               " pane('d').querySelector('.pbody .legacy pre.srcframe').textContent,"
+               " pane('d').querySelector('.vmeta span').textContent]")
+    assert page.run() == [["The stage no longer draws Mermaid, so this is the diagram's source.",
+                           "graph TD\n  A[Page] --> B[Queue]", "Mermaid source"]]
+    assert page.errors == []
+
 DRAWN_SPEC = {"actors": [{"id": "pg", "label": "Call page", "sub": "call.js"}, {"id": "sv", "label": "Talk server"},
                          {"id": "az", "label": "Azure", "tone": "hot"}],
               "steps": [{"id": "s1", "from": "pg", "to": "sv", "arrow": "request", "label": "sends the choice", "sub": "POST /api/voice"},

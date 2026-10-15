@@ -1,11 +1,11 @@
-import { drawOn, flowchartKeys, resetDraw } from "./svg_keys.js";
+import { drawOn, resetDraw } from "./draw_on.js";
 
 const GAP_MS = 50, LAST_MS = 550;
 let seq = 0;
 
 // Every board marks what the eye can land on with data-key, and the engine reads nothing else. The
-// shared sequence and flowchart tools key their own drawing; code lines, table rows and a Mermaid
-// drawing are keyed here, once they are painted.
+// lanes, the map and a scene key their own drawing; code lines and table rows are keyed here, once
+// they are painted.
 function stampKeys(kind, box) {
   if (box.querySelector("[data-key]")) return true;
   if (kind === "lines") {
@@ -21,10 +21,7 @@ function stampKeys(kind, box) {
     });
     return rows.length > 0;
   }
-  const svg = box.querySelector("svg");
-  if (!svg) return false;
-  for (const [key, els] of flowchartKeys(svg)) for (const el of els) el.dataset.key = key;
-  return true;
+  return false;
 }
 
 function keyedElements(box) {

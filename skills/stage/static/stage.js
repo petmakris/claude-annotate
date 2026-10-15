@@ -2,8 +2,7 @@
 //
 // It paints at once: the shell, the snapshot and every view go up before any library has
 // loaded. The libraries ship beside this file (vendor/, see VERSIONS.txt) and upgrade what is
-// already on screen when they arrive; mermaid is large, so it loads on demand, and a diagram
-// draws in its own task so a slow load never holds up other views.
+// already on screen when they arrive.
 //
 // Each pane is a header (title, plain-words meta, buttons) over a body that scrolls; tables,
 // code and diagrams scroll inside their own boxes so the header and a table's column names
@@ -55,14 +54,12 @@
 //     {type:'stage:theme', theme}         on each load and each change. A page from this daemon (a file or
 //                                         session board) also gets data-theme on its <html> straight away.
 // Unknown types are ignored.
-import { flowchartKeys } from "./svg_keys.js";
 import { applyFrame, beingSaid, settled, stepLabel } from "./scene.js";
 import { layoutLanes, renderLanes } from "./lanes.js";
 import { layoutMap, renderMap } from "./map.js";
 
 const VENDOR = ["highlight.min.js", "marked.min.js", "purify.min.js"]
   .map((f) => new URL("vendor/" + f, import.meta.url).href);
-const MERMAID = new URL("vendor/mermaid.min.js", import.meta.url).href;
 
 const withTimeout = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error("timed out")), ms))]);
 const loadScript = (src) => new Promise((ok, no) => {
@@ -70,7 +67,6 @@ const loadScript = (src) => new Promise((ok, no) => {
   s.onload = ok; s.onerror = () => { s.remove(); no(new Error("could not load " + src)); };
   document.head.append(s);
 });
-const idle = (fn) => (window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 3000 }) : setTimeout(fn, 1500));
 
 // Resolves even on error or timeout: rendering uses whatever arrived. Reset by 'Try again'.
 let libsP = null;
@@ -82,90 +78,6 @@ function libsReady() {
   return libsP;
 }
 const hasMarkdown = () => !!(window.marked && window.DOMPurify);
-
-// ---- Theme: mermaid takes its colours from the shared tokens -------------------------------
-
-// A token as an opaque hex colour: a translucent token is laid over --panel first, because
-// mermaid derives its other shades from these and a node fill should not show the grid through.
-function tokenHex(name) {
-  const probe = document.createElement("i");
-  probe.style.cssText = `position:absolute;visibility:hidden;color:var(${name});background:var(--panel)`;
-  document.body.append(probe);
-  const cs = getComputedStyle(probe), fg = rgba(cs.color), bg = rgba(cs.backgroundColor);
-  probe.remove();
-  const mix = fg.map((c, i) => (i < 3 ? Math.round(c * fg[3] + bg[i] * (1 - fg[3])) : 1));
-  return "#" + mix.slice(0, 3).map((c) => c.toString(16).padStart(2, "0")).join("");
-}
-function rgba(s) {
-  const n = (s.match(/[\d.]+/g) || [0, 0, 0]).map(Number);
-  return [n[0], n[1], n[2], n.length > 3 ? n[3] : 1];
-}
-
-function mermaidConfig() {
-  const t = (n) => tokenHex(n);
-  return {
-    startOnLoad: false, securityLevel: "strict", theme: "base", deterministicIds: true, htmlLabels: false,
-    themeVariables: {
-      fontFamily: "Inter, system-ui, sans-serif", fontSize: "15px",
-      primaryColor: t("--panel"), primaryBorderColor: t("--acc"), primaryTextColor: t("--ink"),
-      lineColor: t("--muted"), secondaryColor: t("--hl-soft"), tertiaryColor: t("--row-alt"),
-      clusterBkg: t("--row-alt"), clusterBorder: t("--line"), edgeLabelBackground: t("--panel"),
-      noteBkgColor: t("--claude-soft"), noteTextColor: t("--ink"), noteBorderColor: t("--line"),
-      textColor: t("--ink"), mainBkg: t("--panel"), nodeBorder: t("--acc"), titleColor: t("--ink"),
-    },
-    flowchart: { curve: "basis", nodeSpacing: 40, rankSpacing: 56, padding: 14, htmlLabels: false },
-  };
-}
-
-// Memoised; a failed or timed-out import resets the memo so 'Try again' really retries.
-let mermaidP = null;
-function getMermaid() {
-  mermaidP ||= withTimeout(window.mermaid ? Promise.resolve() : loadScript(MERMAID), 10000).then(() => {
-    window.mermaid.initialize(mermaidConfig());
-    return window.mermaid;
-  }).catch((e) => { mermaidP = null; throw e; });
-  return mermaidP;
-}
-// Warm mermaid once the page has painted, but only on a stage that has a diagram.
-let mermaidWarmed = false;
-function warmMermaid() {
-  if (mermaidWarmed) return;
-  mermaidWarmed = true;
-  idle(() => getMermaid().catch(() => {}));
-}
-
-// The diagram's type: the first word of its first line that is not front matter or a comment.
-function diagramType(text) {
-  const lines = text.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("%%"));
-  if (lines[0] === "---") { const end = lines.indexOf("---", 1); lines.splice(0, end > 0 ? end + 1 : 1); }
-  return ((lines[0] || "").match(/^[A-Za-z0-9-]+/) || [""])[0];
-}
-
-// Mermaid reads '<' and '>' in a flowchart label as markup. Inside label delimiters only — [..],
-// (..), {..}, "..", |..| — they become mermaid's own entity codes; arrows outside stay as written,
-// and so does a <br> line break. Every other diagram type is left alone: their arrows (--|>, ->>)
-// hold the same characters.
-const NOT_FLOW = /^(sequenceDiagram|classDiagram(-v2)?|stateDiagram(-v2)?|erDiagram|gantt|pie|mindmap|timeline|journey|gitGraph|quadrantChart|xychart(-beta)?|block(-beta)?|sankey(-beta)?|requirementDiagram|C4\w*|packet(-beta)?|architecture(-beta)?|kanban|radar(-beta)?)$/;
-function escapeLabels(text) {
-  if (NOT_FLOW.test(diagramType(text))) return text;
-  const close = { "[": "]", "(": ")", "{": "}", '"': '"', "|": "|" };
-  let out = "", open = null, shut = null, depth = 0;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (!open) {
-      if (c in close && !(c === "|" && text[i + 1] === ">")) { open = c; shut = close[c]; depth = 1; }
-      out += c;
-      continue;
-    }
-    if (c === "\n") { open = null; out += c; continue; }  // a label never spans lines
-    if (c === shut && (open === shut || --depth === 0)) { open = null; out += c; continue; }
-    if (c === open && open !== shut) depth++;
-    const br = c === "<" && /^<br\s*\/?>/i.exec(text.slice(i, i + 8));
-    if (br) { out += br[0]; i += br[0].length - 1; continue; }
-    out += c === "<" ? "#lt;" : c === ">" ? "#gt;" : c;
-  }
-  return out;
-}
 
 // ---- Shell ---------------------------------------------------------------------------------
 
@@ -214,7 +126,6 @@ let live = false;                   // the first snapshot is in: from here a cha
 let follow = true;                  // embedded: boards come to the front as the voice reaches them
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const isDiagram = (body) => body.source.type === "inline" && body.source.format === "diagram";
 const narrow = () => matchMedia("(max-width: 600px)").matches;
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -257,7 +168,7 @@ function metaText(src) {
   if (src.format === "table") { const n = tableRows(src.body); return `Table · ${n} ${n === 1 ? "row" : "rows"}`; }
   if (src.format === "change") return `Change · ${src.path} · +${src.added} −${src.removed}` + (src.rev ? ` · since ${src.rev}` : "");
   if (src.format === "points") { const n = src.items.length; return `${n} key ${n === 1 ? "point" : "points"} from this call`; }
-  if (src.format === "diagram") return "Diagram";
+  if (src.format === "diagram") return "Mermaid source";
   if (src.format === "scene") { const n = (src.parts || []).length; return `Scene · ${n} ${n === 1 ? "part" : "parts"}`; }
   if (src.format === "visual") return { sequence: "Sequence diagram", map: "Architecture map" }[src.tool] || "Flowchart";
   return "Board";
@@ -339,19 +250,6 @@ function header(v) {
     }, "wrapbtn");
     wrap.setAttribute("aria-pressed", String(wrapOn()));
     btns.append(wrap);
-  }
-  if (src.type === "inline" && src.format === "diagram") {
-    const seg = document.createElement("div"); seg.className = "seg"; seg.setAttribute("role", "group");
-    seg.setAttribute("aria-label", "Diagram size");
-    const set = (actual) => {
-      v.actual = actual;
-      fit.setAttribute("aria-pressed", String(!actual)); real.setAttribute("aria-pressed", String(actual));
-      const box = v.pane.querySelector(".diagram");
-      if (box) { box.classList.toggle("fit", !actual); box.classList.toggle("actual", actual); }
-    };
-    const fit = button("Fit", () => set(false)), real = button("Actual size", () => set(true));
-    seg.append(fit, real); btns.append(seg);
-    set(!!v.actual);
   }
   return h;
 }
@@ -645,17 +543,9 @@ function restart(el, cls) {
   el.addEventListener("animationend", () => el.classList.remove(cls), { once: true });
 }
 
-// ---- Diagrams ------------------------------------------------------------------------------
+// ---- Boards ---------------------------------------------------------------------------------
 
-// Fit: up to twice as drawn, never wider or taller than the pane. Actual size: as drawn.
-function sizeSvg(box) {
-  const svg = box.querySelector("svg"); if (!svg) return;
-  const vb = svg.viewBox?.baseVal;
-  if (vb && vb.width) { svg.style.setProperty("--w", vb.width + "px"); svg.style.setProperty("--h", vb.height + "px"); }
-  svg.removeAttribute("height");
-}
-
-// Returns the box at once. Anything that waits (libraries, mermaid) fills it later, and only
+// Returns the box at once. Anything that waits (libraries) fills it later, and only
 // while the view still shows the body it started from: `seq` is the fill it belongs to.
 function renderInline(v, seq) {
   const src = v.body.source, box = document.createElement("div");
@@ -709,9 +599,11 @@ function renderInline(v, seq) {
       if (window.DOMPurify) paintScene(v, box, src); else note(box, "The scene could not be made safe to show, so it is not shown.", retryLibs);
     });
   } else if (src.format === "diagram") {
-    box.className = "diagram drawing";
-    box.innerHTML = `<div class="spin"></div><span>Drawing the diagram…</span>`;
-    drawDiagram(v, seq, box, current);
+    // A Mermaid board saved before the stage stopped drawing Mermaid: its source, as written.
+    box.className = "md legacy";
+    const said = document.createElement("p"); said.className = "note";
+    said.textContent = "The stage no longer draws Mermaid, so this is the diagram's source.";
+    box.append(said, sourceFrame(src.body));
   } else {
     box.className = "md";
     paintTable(v, box, src);
@@ -921,59 +813,6 @@ function sourceFrame(text) {
   return pre;
 }
 
-// Detached from the delta queue: the queue never awaits mermaid.
-// A stage the page around it has hidden (talk's Conversation view on a tablet) has no size, and
-// mermaid lays a diagram out at the size it is drawn at: such a diagram waits, marked stale, and is
-// drawn once the stage has a size again (the ResizeObserver below), or when its tab is opened.
-const unsized = (box) => !box.isConnected || !document.documentElement.clientWidth || !box.clientWidth;
-
-async function drawDiagram(v, seq, box, current) {
-  const id = "m" + Math.random().toString(36).slice(2);
-  const body = v.body.source.body, pulse = v.prev?.diagram;
-  v.prev = null;
-  let mermaid;
-  try { mermaid = await getMermaid(); } catch (e) {
-    if (!current()) return;
-    box.className = "diagram failed"; box.replaceChildren(sourceFrame(body));
-    note(box, `The diagram library did not load (${e.message}), so this is the diagram's source.`, () => fillPane(v));
-    return;
-  }
-  if (!current()) return;
-  if (unsized(box)) { v.stale = true; return; }
-  try {
-    const { svg } = await mermaid.render(id, escapeLabels(body));
-    if (!current()) return;
-    if (unsized(box)) { v.stale = true; return; }
-    box.className = "diagram " + (v.actual ? "actual" : "fit"); box.innerHTML = svg;
-    sizeSvg(box);
-    // A layout of next to nothing means it was drawn with no room: draw it again when there is.
-    const vb = box.querySelector("svg")?.viewBox?.baseVal;
-    if (vb && vb.width <= 16) v.stale = true;
-    if (pulse) restart(box, "pulse");
-    paintFrame(v, box);
-  } catch (e) {
-    document.getElementById("d" + id)?.remove();
-    if (!current()) return;
-    box.className = "diagram failed";
-    const card = document.createElement("div"); card.className = "failcard";
-    card.innerHTML = `<p class="fail-h">This diagram could not be drawn.</p><p class="fail-e"></p>`;
-    card.querySelector(".fail-e").textContent = String(e?.message || e).split("\n")[0];
-    card.append(button("Try again", () => fillPane(v)));
-    box.replaceChildren(card, sourceFrame(body));
-  }
-}
-
-// Theme switch (the system's, or the call page's): every diagram is stale; only the visible one
-// redraws now. Mermaid takes its colours when it draws, so each needs drawing again.
-async function redrawDiagrams() {
-  if (mermaidP) { try { (await mermaidP).initialize(mermaidConfig()); } catch {} }
-  for (const v of views.values()) {
-    if (!isDiagram(v.body) || !v.filled) continue;
-    if (v.pane.hidden) v.stale = true; else fillPane(v);
-  }
-}
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redrawDiagrams);
-
 // A page board takes the theme the call page set. A page from this daemon's origin gets data-theme
 // on its <html>, which a page written with the shared rules (:root[data-theme="dark"] beside the
 // prefers-color-scheme query) follows as it is. A page from another origin cannot be reached, so it
@@ -985,12 +824,6 @@ function themeFrame(frame) {
   try { frame.contentWindow.postMessage({ type: "stage:theme", theme }, "*"); } catch {}
 }
 
-// The stage got a size back: draw what waited for one, in the pane on show.
-new ResizeObserver(() => {
-  if (!document.documentElement.clientWidth) return;
-  for (const v of views.values()) if (v.stale && v.filled && !v.pane.hidden) fillPane(v);
-}).observe(document.documentElement);
-
 // ---- Panes ---------------------------------------------------------------------------------
 
 // `update`: an in-place change to the view being read, so what changed may pulse.
@@ -998,7 +831,7 @@ function fillPane(v, update = false) {
   const { source: src, rev, title } = v.body;
   const seq = v.renderSeq = (v.renderSeq || 0) + 1;
   const first = !v.filled;
-  v.prev = update ? { ...v.snap, diagram: true } : null;
+  v.prev = update ? { ...v.snap } : null;
   v.filled = true; v.stale = false; v.applied = null;
   const body = document.createElement("div"); body.className = "pbody";
   v.pane.replaceChildren(header(v), body);
@@ -1206,7 +1039,6 @@ function afterViewChange(removedName) {
 }
 
 function upsert(body) {
-  if (isDiagram(body)) warmMermaid();
   // a scene saved before frames named what is said gets the arrow rule of today's scenes (scene.js settled)
   if (body.scene) body.scene = settled(body.scene);
   for (const n of Object.keys(body.scenes || {})) body.scenes[n] = settled(body.scenes[n]);
@@ -1258,7 +1090,7 @@ function upsert(body) {
 
 function remove(name) {
   const v = views.get(name); if (!v) return;
-  v.renderSeq++;  // drop any diagram still drawing for it
+  v.renderSeq++;  // drop any fill still waiting for it
   v.tab.remove(); v.pane.remove(); views.delete(name);
   updateNav();
 }
@@ -1381,7 +1213,7 @@ function startFrame(v) {
 
 function paintFrame(v, box, animate = false) {
   const on = painted(v);
-  box = box || v.pane.querySelector(".code, .md, .diagram, .visual");
+  box = box || v.pane.querySelector(".code, .md, .visual");
   if (!on && box && box.classList.contains("sandboxed")) {  // no answer steps it: the whole scene shows
     const all = (v.body.source.parts || []).map((p) => "part:" + p.id);
     postSandbox(v, { show: all, focus: [], cur: [], animate: false });
@@ -1499,7 +1331,6 @@ function onMessage(m) {
     document.documentElement.dataset.theme = theme;
     for (const f of document.querySelectorAll("iframe.frame")) themeFrame(f);
     for (const v of views.values()) if (v.sandbox && v.sandbox.last) postSandbox(v, v.sandbox.last);
-    redrawDiagrams();
   }
   else if (m.type === "stage:follow") setFollow(!!m.on);
   else if (m.type === "stage:caption") { captionText = String(m.text || ""); placeCaption(); }
@@ -1686,6 +1517,6 @@ async function loadSnapshot() {
   }
 }
 
-window.__stageTest = { escapeLabels, diagramType, splitLines, highlightLines, onMessage, markRange, pairEdits, flowchartKeys,
+window.__stageTest = { splitLines, highlightLines, onMessage, markRange, pairEdits,
   frames: () => Object.fromEntries([...views].map(([name, v]) => [name, v.applied])) };
 await loadSnapshot();
