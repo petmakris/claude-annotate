@@ -31,11 +31,66 @@ def test_a_bad_session_is_refused(tmp_path):
 
 
 def test_diagram_and_table_read_stdin(tmp_path):
-    assert model.parse_source("diagram:-", tmp_path, "graph TD; A-->B\n") == {
-        "type": "inline", "format": "diagram", "body": "graph TD; A-->B"}
     assert model.parse_source("table:-", tmp_path, "| a |\n|---|\n| 1 |")["format"] == "table"
-    with pytest.raises(model.SourceError):
+    with pytest.raises(model.SourceError, match="stdin was empty"):
         model.parse_source("diagram:-", tmp_path, "  ")
+
+
+def test_a_mermaid_graph_or_state_diagram_is_drawn_as_the_map_a_call_draws():
+    graph = model.parse_source("diagram:-", Path("."), "graph LR; P[Page] -->|words| Q[Queue]\n")
+    assert graph == {"type": "inline", "format": "visual", "tool": "flowchart", "spec": {
+        "nodes": [{"id": "P", "role": "entry", "label": "Page"}, {"id": "Q", "role": "code", "label": "Queue"}],
+        "edges": [{"from": "P", "to": "Q", "label": "words"}]}}
+    states = model.parse_source("graph:-", Path("."), "stateDiagram-v2\n  [*] --> Idle\n  Idle --> Busy: work")
+    assert states["tool"] == "flowchart" and [n["role"] for n in states["spec"]["nodes"]] == ["entry", "code"]
+    for alias in ("mermaid:-", "flow:-", "Mermaid:-"):
+        assert model.parse_source(alias, Path("."), "graph TD; A-->B")["tool"] == "flowchart", alias
+
+
+def test_a_mermaid_sequence_diagram_is_drawn_as_lanes():
+    got = model.parse_source("diagram:-", Path("."), """sequenceDiagram
+    %% the doorbell
+    autonumber
+    participant P as Call page
+    actor U as User
+    U->>P: presses Talk
+    P->>+S: POST /api/turn
+    S-->>-P: the answer
+    S->>S: speaks it
+    Note over P,S: one turn
+    alt key set
+      S-)A: asks Azure
+    else no key
+      S-xV: asks VoiceStudio
+    end""")
+    assert got["tool"] == "sequence"
+    assert got["spec"]["actors"] == [{"id": "P", "label": "Call page"}, {"id": "U", "label": "User"},
+                                     {"id": "S", "label": "S"}, {"id": "A", "label": "A"}, {"id": "V", "label": "V"}]
+    assert [(s["from"], s["to"], s["arrow"], s.get("label")) for s in got["spec"]["steps"]] == [
+        ("U", "P", "request", "presses Talk"), ("P", "S", "request", "POST /api/turn"), ("S", "P", "event", "the answer"),
+        ("S", "S", "self", "speaks it"), ("P", "S", "band", "one turn"), ("S", "A", "request", "asks Azure"),
+        ("S", "V", "request", "asks VoiceStudio")]
+    assert got["spec"]["groups"] == [{"id": "g1", "kind": "alt", "branches": ["key set", "no key"]}]
+    assert [(s.get("group"), s.get("branch")) for s in got["spec"]["steps"][5:]] == [("g1", "0"), ("g1", "1")]
+
+
+@pytest.mark.parametrize("body, said", [
+    ("pie title Pets\n  \"Dogs\": 3", "diagram:-: the stage does not draw Mermaid pie, only a Mermaid graph, state or "
+     "sequence diagram; write a JSON spec for flowchart:-, sequence:- or map:- instead"),
+    ("classDiagram\n  A <|-- B", "diagram:-: the stage does not draw Mermaid classDiagram, only a Mermaid graph, state "
+     "or sequence diagram; write a JSON spec for flowchart:-, sequence:- or map:- instead"),
+    ("sequenceDiagram\n  loop every turn\n  opt late\n  A->>B: hi\n  end\n  end",
+     "diagram:-: this sequenceDiagram cannot be drawn as lanes: opt inside loop has no box of its own on the lanes; "
+     "write it as a JSON spec for sequence:-"),
+    ("sequenceDiagram\n  A->>B: hi\n  critical locked\n  B->>C: go\n  end",
+     "diagram:-: this sequenceDiagram cannot be drawn as lanes: the line 'critical locked' has no place on the lanes; "
+     "write it as a JSON spec for sequence:-"),
+    ("sequenceDiagram\n  participant A\n  participant B", "diagram:-: drawn as a sequence, sequence requires at least 1 step"),
+])
+def test_any_other_mermaid_is_refused_in_one_line_that_names_the_json_kinds(body, said):
+    with pytest.raises(model.SourceError) as err:
+        model.parse_source("diagram:-", Path("."), body)
+    assert str(err.value) == said and "\n" not in said
 
 
 def test_a_file_keeps_its_fragment_and_may_not_exist_yet(tmp_path):
@@ -276,7 +331,7 @@ def test_a_spec_the_tool_cannot_read_is_refused_not_raised(tmp_path, monkeypatch
 
 
 def test_stdin_kinds_take_talks_names_and_an_unknown_one_is_refused(tmp_path):
-    assert model.parse_source("mermaid:-", tmp_path, "graph TD; A-->B")["format"] == "diagram"
+    assert model.parse_source("mermaid:-", tmp_path, "graph TD; A-->B")["tool"] == "flowchart"
     assert model.parse_source("grid:-", tmp_path, "| a |\n|---|\n| 1 |")["format"] == "table"
     with pytest.raises(model.SourceError, match="unknown chart:-"):
         model.parse_source("chart:-", tmp_path, "x")

@@ -343,6 +343,80 @@ def mermaid_spec(body: str) -> dict | None:
     return spec
 
 
+_SEQ_HEAD = re.compile(r"\A\s*sequenceDiagram\b", re.IGNORECASE)
+_SEQ_ACTOR = re.compile(r"(?:participant|actor)\s+(?P<id>[\w.-]+)(?:\s+as\s+(?P<label>.+))?\Z", re.IGNORECASE)
+_SEQ_MSG = re.compile(r"(?P<a>\w+(?:[-.]\w+)*)\s*(?P<arrow><<-->>|<<->>|-->>|->>|-->|->|--x|-x|--\)|-\))\s*[+-]?\s*"
+                      r"(?P<b>\w+(?:[-.]\w+)*)\s*(?::(?P<text>.*))?\Z")
+_SEQ_NOTE = re.compile(r"note\s+(?:over|left\s+of|right\s+of)\s+(?P<a>[\w.-]+)(?:\s*,\s*(?P<b>[\w.-]+))?\s*:(?P<text>.*)\Z",
+                       re.IGNORECASE)
+_SEQ_OPEN = re.compile(r"(?P<kind>loop|alt|opt|par)\b\s*(?P<text>.*)\Z", re.IGNORECASE)
+_SEQ_SKIP = re.compile(r"(?:autonumber|activate|deactivate)\b", re.IGNORECASE)
+
+
+def mermaid_sequence_spec(body: str) -> dict | None:
+    """A Mermaid sequenceDiagram as a sequence spec, for the stage to draw as its lanes; None for any other kind.
+    A participant or actor is an actor (`as` gives its label); a solid message is a request and a dashed one an
+    event, one to itself a self step; a note is a band across the actors it is over; `loop`, `opt`, and `alt` or
+    `par` with their `else` and `and` branches are boxes. ValueError names anything else it would have to drop
+    (a box inside a box, `critical`, `break`, `rect`, `box`, `create`), so nothing is lost without a word."""
+    lines = [ln.strip() for ln in body.splitlines() if ln.strip() and not ln.strip().startswith("%%")]
+    if not lines or not _SEQ_HEAD.match(lines[0]):
+        return None
+    actors: dict[str, dict] = {}
+    steps: list[dict] = []
+    groups: list[dict] = []
+    spec: dict = {}
+    box: dict | None = None  # the box being read, with the branch it is on
+
+    def actor(ident: str, label: str = "") -> str:
+        a = actors.setdefault(ident, {"id": ident, "label": ident})
+        if label:
+            a["label"] = label
+        return ident
+
+    def step(**fields) -> None:
+        s = {"id": f"s{len(steps) + 1}", **fields}
+        if box:
+            s["group"] = box["group"]["id"]
+            if "branches" in box["group"]:
+                s["branch"] = box["branch"]
+        steps.append(s)
+
+    for st in lines[1:]:
+        low = st.lower()
+        if _SEQ_SKIP.match(st):
+            continue
+        if low.startswith("title"):
+            spec["title"] = _text(st[5:].lstrip(" :"))
+        elif m := _SEQ_ACTOR.match(st):
+            actor(m["id"], _text(m["label"] or ""))
+        elif m := _SEQ_MSG.match(st):
+            a, b, text = actor(m["a"]), actor(m["b"]), _text(m["text"] or "")
+            arrow = "self" if a == b else "event" if m["arrow"].lstrip("<").startswith("--") else "request"
+            step(**{"from": a, "to": b, "arrow": arrow, **({"label": text} if text else {})})
+        elif m := _SEQ_NOTE.match(st):
+            a, b = actor(m["a"]), actor(m["b"] or m["a"])
+            step(**{"from": a, "to": b, "arrow": "band", "label": _text(m["text"])})
+        elif m := _SEQ_OPEN.match(st):
+            if box:
+                raise ValueError(f"{m['kind'].lower()} inside {box['kind']} has no box of its own on the lanes")
+            kind, cond = m["kind"].lower(), _text(m["text"]) or m["kind"].lower()
+            group = {"id": f"g{len(groups) + 1}", "kind": kind,
+                     **({"branches": [cond]} if kind in ("alt", "par") else {"label": cond})}
+            groups.append(group)
+            box = {"kind": kind, "group": group, "branch": 0}
+        elif box and re.match(r"(?:else|and)\b", low) and "branches" in box["group"]:
+            box["group"]["branches"].append(_text(st[4 if low.startswith("else") else 3:]) or "else")
+            box["branch"] += 1
+        elif low == "end" and box:
+            box = None
+        else:
+            raise ValueError(f"the line {st[:40]!r} has no place on the lanes")
+    if box:
+        raise ValueError(f"the {box['kind']} has no end")
+    return {**spec, "actors": list(actors.values()), "steps": steps, **({"groups": groups} if groups else {})}
+
+
 def _ungroup(nodes: dict[str, dict], edges: list[dict], groups: dict[str, str], member: dict[str, str]
              ) -> tuple[list[dict], list[dict]]:
     """Mermaid subgraphs on a map, which draws no boxes: an arrow into a subgraph goes to each of its parts
@@ -386,99 +460,6 @@ def _ungroup(nodes: dict[str, dict], edges: list[dict], groups: dict[str, str], 
             nodes[ident]["sub"] = "in " + groups[g]
     kept = [{"id": g, "label": groups[g], "nodes": inside[g]} for g in groups if inside[g]]
     return edges, kept
-
-
-def flowchart_model(body: str) -> SceneModel | None:
-    statements = _statements(body)
-    if statements is None:
-        return None
-    groups: list[str] = []
-    nodes: list[str] = []
-    edges: list[tuple[str, str, str]] = []
-    order: list[str] = []
-    labels: dict[str, str] = {}
-    member: dict[str, str] = {}
-    parent: dict[str, str] = {}
-    stack: list[str] = []
-    pairs: dict[tuple[str, str], int] = {}
-
-    def see(ident: str, label: str) -> None:
-        if ident in groups:
-            return
-        if ident not in nodes:
-            nodes.append(ident)
-            order.append(f"node:{ident}")
-        if label:
-            labels[ident] = label
-        if stack and ident not in member:
-            member[ident] = stack[-1]
-
-    for st in statements:
-        low = st.lower()
-        if low == "end":
-            if stack:
-                stack.pop()
-            continue
-        if low.startswith("subgraph"):
-            ident, label = _subgraph(st[len("subgraph"):].strip())
-            if ident not in groups:
-                groups.append(ident)
-            labels[ident] = label
-            if stack:
-                parent[ident] = stack[-1]
-            stack.append(ident)
-            continue
-        if _SKIP.match(st):
-            continue
-        chain, i = [], 0
-        while True:
-            found, i = _node_group(st, i)
-            if not found:
-                break
-            chain.append(found)
-            for ident, label in found:
-                see(ident, label)
-            link = _LINK.match(st, i)
-            if not link or link.end() == i:
-                break
-            i = link.end()
-        for left, right in zip(chain, chain[1:]):
-            for a, _ in left:
-                for b, _ in right:
-                    n = pairs.get((a, b), 0)
-                    pairs[(a, b)] = n + 1
-                    key = f"edge:{a}->{b}#{n}"
-                    edges.append((a, b, key))
-    if not nodes and not groups:
-        return None
-
-    def ref(ident: str) -> str:
-        return f"group:{ident}" if ident in groups else f"node:{ident}"
-
-    up: dict[str, list[str]] = {}
-    for ident, g in member.items():
-        up[ref(ident)] = [f"group:{g}"]
-    for g, p in parent.items():
-        up[f"group:{g}"] = [f"group:{p}"]
-    edge_map: dict[tuple[str, str], list[str]] = {}
-    for a, b, key in edges:
-        up[key] = [ref(a), ref(b)]
-        edge_map.setdefault((a, b), []).append(key)
-    down: dict[str, list[str]] = {}
-    for g in groups:
-        kids, todo = [], [g]
-        while todo:
-            cur = todo.pop()
-            kids += [f"node:{n}" for n, owner in member.items() if owner == cur and n not in groups]
-            subs = [s for s, owner in parent.items() if owner == cur]
-            kids += [f"group:{s}" for s in subs]
-            todo += subs
-        down[f"group:{g}"] = kids
-    names: dict[str, str] = {}
-    for ident, label in labels.items():
-        names.setdefault(fold(label), ref(ident))
-    keys = [f"group:{g}" for g in groups] + [f"node:{n}" for n in nodes] + [k for _, _, k in edges]
-    return SceneModel("flowchart", keys, order=order, up=up, down=down, names=names, edges=edge_map, can_hide=True)
 
 
 def split_targets(text: str) -> list[str]:

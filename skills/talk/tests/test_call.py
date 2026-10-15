@@ -448,10 +448,17 @@ def test_an_untagged_table_or_mermaid_fence_goes_on_the_stage(tmp_path):
     assert problems == ["table shown without a tag; wrap it in [[show table | title]] next time"]
     spoken, items, problems = split(tmp_path, "First this. Here is the flow:\n```mermaid\ngraph TD\nA-->B\n```\nDone.")
     assert spoken == "First this. Here is the flow: Done."
-    assert [(i["kind"], i["title"], i["body"]) for i in items] == [("diagram", "Here is the flow", "graph TD\nA-->B")]
+    assert [(i["kind"], i["title"]) for i in items] == [("flowchart", "Here is the flow")]  # drawn as a map
+    assert [n["id"] for n in items[0]["visual"]["spec"]["nodes"]] == ["A", "B"]
     assert any("without a tag" in p for p in problems)
     spoken, items, _ = split(tmp_path, "One pipe | here | is prose.")
     assert items == [] and spoken == "One pipe | here | is prose."
+
+
+def test_an_untagged_mermaid_fence_a_call_cannot_draw_is_said_neither_aloud_nor_on_the_stage(tmp_path):
+    spoken, items, problems = split(tmp_path, "First this. The pets:\n```mermaid\npie title Pets\n  \"Dogs\": 3\n```\nDone.")
+    assert spoken == "First this. The pets: Done." and items == []
+    assert problems == ['"The pets" not shown: a call draws no Mermaid; use a sequence, a flowchart or a table']
 
 
 def test_view_names_are_distinct_for_greek_titles_and_stable_per_title(tmp_path):
@@ -997,12 +1004,6 @@ def test_a_node_point_in_a_diagram_the_stage_cannot_light_is_a_problem(tmp_path)
         _, problems = cues_of(tmp_path, "[[show diagram | G]]graph TD\nsubgraph Backend\nA -- Yes --> B\nend[[/show]] "
                                         f"Hi. [[point G: node {word}]] It.")
         assert problems == [f'point not shown: no node {word} in "G"']
-
-
-def test_mermaid_types_the_stage_draws_are_not_a_problem():
-    for first in ("C4Container", "xychart", "kanban", "architecture-beta", "block", "packet-beta", "radar-beta",
-                  "classDiagram-v2"):
-        assert talk.diagram_problems(f"{first}\n  x", "D") == [], first
 
 
 def test_a_second_untagged_fence_is_titled_by_its_own_sentence(tmp_path):

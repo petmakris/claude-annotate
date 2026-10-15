@@ -506,32 +506,6 @@ def block_head(kind: str, body: str) -> tuple[str, str]:
     return "".join(lines[:j]), "".join(lines[j:])
 
 
-MERMAID_TYPES = {
-    "graph", "flowchart", "sequenceDiagram", "classDiagram", "classDiagram-v2", "stateDiagram", "stateDiagram-v2",
-    "erDiagram", "gantt", "pie", "mindmap", "timeline", "journey", "gitGraph", "quadrantChart", "xychart",
-    "xychart-beta", "block", "block-beta", "sankey", "sankey-beta", "requirementDiagram", "packet", "packet-beta",
-    "architecture", "architecture-beta", "kanban", "radar", "radar-beta",
-}
-
-
-def diagram_problems(body: str, title: str) -> list[str]:
-    """What Mermaid will choke on, said before the stage shows its error card."""
-    lines = [ln.strip() for ln in body.splitlines()]
-    lines = [ln for ln in lines if ln and not ln.startswith("%%")]
-    if lines and lines[0] == "---":  # front matter: title and config
-        end = next((k for k in range(1, len(lines)) if lines[k] == "---"), None)
-        lines = lines[end + 1 :] if end is not None else lines
-    first = re.match(r"[A-Za-z0-9-]*", lines[0]).group() if lines else ""
-    if first not in MERMAID_TYPES and not first.startswith("C4"):
-        return [f'diagram "{title}" does not start with a Mermaid type such as graph TD']
-    if first in ("graph", "flowchart"):
-        for label in re.findall(r"\[(?!\")([^\[\]]*)\]", "\n".join(lines[1:] + [lines[0]])):
-            inner = label[1:-1] if label.startswith("(") and label.endswith(")") else label
-            if not inner.startswith('"') and re.search(r"[()]", inner):
-                return [f'diagram "{title}": quote labels with brackets: A["f(x)"]']
-    return []
-
-
 # A table's separator row, as GFM reads it: `|---|`, `|:-|-:|` and `--|--` all count.
 _TABLE_SEP = re.compile(r"^\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$")
 _MERMAID_FENCE = re.compile(r"^[ \t]*```[ \t]*mermaid[ \t]*\n(?P<body>.*?)^[ \t]*```[ \t]*$\n?",
@@ -748,8 +722,6 @@ def scene_model(item: dict) -> stage_scene.SceneModel | None:
     if kind == "table":
         return stage_scene.rows_model([cell_text(c) for c in table_first_cells(item["body"])],
                                       [cell_text(c) for c in table_header(item["body"])])
-    if kind == "diagram":
-        return stage_scene.flowchart_model(item["body"])
     if kind == "sequence":
         return stage_scene.sequence_model(item["visual"]["spec"])
     if kind == "flowchart":
@@ -1206,14 +1178,10 @@ class Board:
                 self.problem(f'"{title}" is a {tool} spec, so it was drawn as one; write [[show {tool} | ...]]')
                 item["kind"] = kind = tool
         if kind == "diagram":
-            # A call draws no Mermaid: a graph or a state diagram becomes a map, anything else is not shown.
-            spec = stage_scene.mermaid_spec(item["body"])
-            if spec is None:
-                self.problem(f'"{title}" not shown: a call draws no Mermaid; use a sequence, a flowchart or a table')
+            if not self.from_mermaid(item, title):
                 return rest
-            kind = item["kind"] = "flowchart"
-            item["body"] = json.dumps(spec)
-        if kind in VISUAL_KINDS:
+            kind = "flowchart"
+        if kind in VISUAL_KINDS and "visual" not in item:
             try:
                 item["visual"] = stage_model.visual_source(kind, item["body"])
             except stage_model.SourceError as e:
@@ -1223,11 +1191,23 @@ class Board:
                 return rest
             if kind == "sequence":
                 self.add_refs(item, title)
-        if kind == "diagram":
-            for problem in diagram_problems(item["body"], title):
-                self.problem(problem)
         self.add(item)
         return rest
+
+    def from_mermaid(self, item: dict, title: str) -> bool:
+        """A call draws no Mermaid: a graph or a state diagram becomes a flowchart, drawn as a map, in place in
+        `item`; anything else is not shown, and False."""
+        spec = stage_scene.mermaid_spec(item["body"])
+        if spec is not None:
+            try:
+                visual = stage_model.visual_source("flowchart", json.dumps(spec))
+            except stage_model.SourceError as e:
+                self.problem(f'"{title}" not shown: {str(e).split(": ", 1)[-1]}')
+                return False
+            item.update(kind="flowchart", body=json.dumps(spec), visual=visual)
+            return True
+        self.problem(f'"{title}" not shown: a call draws no Mermaid; use a sequence, a flowchart or a table')
+        return False
 
     def add_refs(self, item: dict, title: str) -> None:
         """A sequence's steps with a `ref` keep the lines round it, from the code folder, for their popups."""
@@ -1750,17 +1730,19 @@ class Call:
         # Tables and Mermaid written without a tag still go on the stage, never into the speech.
         found = untagged_boards(shown)
         placed = list(zip([i for i, c in enumerate(shown) if c == CUE], self.board.cues))
+        dropped = set()
         for start, end, kind, title, body in found:
+            item = {"kind": kind, "title": title, "body": body}
+            if kind == "diagram" and not self.board.from_mermaid(item, title):
+                dropped.add(start)
+                continue
             self.board.problem(f"{kind} shown without a tag; wrap it in [[show {kind} | title]] next time")
-            if kind == "diagram":
-                for problem in diagram_problems(body, title):
-                    self.board.problem(problem)
             cue = self.board.new_cue()
             placed.append((start, cue))
-            self.board.add({"kind": kind, "title": title, "body": body, "cue": cue,
-                            "ident": f"untagged-{len(self.board.items)}"})
+            self.board.add({**item, "cue": cue, "ident": f"untagged-{len(self.board.items)}"})
         for start, end, *_ in reversed(found):
-            shown = shown[:start] + CUE + "\n" + CUE * shown[start:end].count(CUE) + shown[end:]
+            board = "" if start in dropped else CUE + "\n"
+            shown = shown[:start] + board + CUE * shown[start:end].count(CUE) + shown[end:]
         placed.sort(key=lambda pc: pc[0])  # stable: the i-th CUE in `shown` is the i-th cue here
         shown, marks = place_cues(shown)
         timed = self.compile_scenes(shown, [(at, cue) for (_, cue), at in zip(placed, marks)

@@ -10,6 +10,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 from skills._shared.visuals import flowchart, map_svg, sequence, sequence_svg
+from skills.stage import scene
 
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 MAX_CODE_LINES = 60
@@ -270,7 +271,9 @@ def parse_source(raw: str, cwd: Path, stdin_text: str | None = None) -> dict:
             raise SourceError(f"unknown {raw}: stdin takes sequence:-, flowchart:-, map:-, diagram:- or table:-")
         body = (stdin_text or "").strip()
         if not body:
-            raise SourceError(f"{kind}:- reads its body from stdin, and stdin was empty")
+            raise SourceError(f"{raw} reads its body from stdin, and stdin was empty")
+        if kind == "diagram":
+            return mermaid_source(raw, body, cwd)
         return {"type": "inline", "format": kind, "body": body}
     if raw.startswith("code:"):
         return code_source(cwd, raw[len("code:"):])
@@ -281,6 +284,29 @@ def parse_source(raw: str, cwd: Path, stdin_text: str | None = None) -> dict:
     if not path.parent.is_dir():
         raise SourceError(f"no such folder in the project: {path.parent}")
     return {"type": "file", "path": path.relative_to(cwd.resolve()).as_posix(), "fragment": fragment or None}
+
+
+def mermaid_source(raw: str, body: str, root: Path | None = None) -> dict:
+    """Mermaid, which the stage no longer draws, as the board it can: a graph, flowchart or state diagram as a
+    flowchart (drawn as a map, as a talk call draws it) and a sequenceDiagram as a sequence (drawn as lanes).
+    Any other kind is refused in one line that names the JSON kinds to write instead."""
+    spec, tool = scene.mermaid_spec(body), "flowchart"
+    if spec is None:
+        tool = "sequence"
+        try:
+            spec = scene.mermaid_sequence_spec(body)
+        except ValueError as e:
+            raise SourceError(f"{raw}: this sequenceDiagram cannot be drawn as lanes: {e}; "
+                              "write it as a JSON spec for sequence:-") from None
+    if spec is None:
+        word = re.match(r"[A-Za-z][\w-]*", body)
+        what = f"Mermaid {word.group()}" if word else "this body"
+        raise SourceError(f"{raw}: the stage does not draw {what}, only a Mermaid graph, state or sequence diagram; "
+                          "write a JSON spec for flowchart:-, sequence:- or map:- instead")
+    try:
+        return visual_source(tool, json.dumps(spec), root=root)
+    except SourceError as e:
+        raise SourceError(f"{raw}: drawn as a {tool}, {str(e).split(': ', 1)[-1]}") from None
 
 
 _PARTS = {"sequence": "actors, steps, phases, legend, groups", "flowchart": "nodes, edges, groups",

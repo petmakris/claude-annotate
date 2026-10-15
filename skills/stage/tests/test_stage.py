@@ -169,6 +169,18 @@ def test_cli_refuses_a_bad_source_with_exit_2(fake, tmp_path, capsys):
     assert "outside" in capsys.readouterr().err
 
 
+def test_cli_draws_a_mermaid_graph_as_a_map_and_refuses_other_mermaid_with_exit_2(fake, tmp_path, capsys, monkeypatch):
+    import io
+    monkeypatch.setattr("sys.stdin", io.StringIO("graph LR; A[Page] --> B[Queue]"))
+    assert stage.main(["show", "flow", "diagram:-", "--cwd", str(tmp_path)]) == 0
+    assert fake.items["view:flow"]["source"]["tool"] == "flowchart"
+    monkeypatch.setattr("sys.stdin", io.StringIO("gantt\n  title Plan"))
+    assert stage.main(["show", "plan", "mermaid:-", "--cwd", str(tmp_path)]) == 2
+    assert capsys.readouterr().err == ("stage: mermaid:-: the stage does not draw Mermaid gantt, only a Mermaid graph, "
+                                       "state or sequence diagram; write a JSON spec for flowchart:-, sequence:- or map:- instead\n")
+    assert "view:plan" not in fake.items
+
+
 def test_cli_reports_an_unreachable_daemon_with_exit_3(tmp_path, capsys):
     def down(*a, **k):
         raise stage.wc.DaemonUnreachable("cannot reach the webcompanion daemon")

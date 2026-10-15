@@ -20,18 +20,24 @@ EXAMPLE = """flowchart LR
   pws --> legacy"""
 
 
+def _flow(body):
+    """A Mermaid graph as the stage models it: turned into a flowchart spec, as a talk call draws it."""
+    spec = scene.mermaid_spec(body)
+    return None if spec is None else scene.flowchart_spec_model(spec)
+
+
 def test_a_flowchart_names_its_groups_nodes_and_edges_in_declaration_order():
-    m = scene.flowchart_model(EXAMPLE)
+    m = _flow(EXAMPLE)
     assert m.keys == ["group:adv", "node:pws", "node:legacy", "node:wf", "node:engine",
                       "edge:pws->wf#0", "edge:wf->engine#0", "edge:pws->legacy#0"]
     assert m.order == m.keys[1:5]
-    assert m.up["edge:pws->wf#0"] == ["node:pws", "node:wf"] and m.up["node:pws"] == ["group:adv"]
+    assert m.up["edge:pws->wf#0"] == ["node:pws", "node:wf"] and "node:pws" not in m.up  # a group has no box to bring
     assert m.down == {"group:adv": ["node:pws", "node:legacy"]}
     assert m.names["flowable engine"] == "node:engine" and m.names[":advisory"] == "group:adv"
 
 
 def test_chains_ampersands_repeated_edges_and_text_links_are_all_edges():
-    m = scene.flowchart_model("graph TD\n  A[Start] --> B & C\n  B --> D --> E\n  A --> B\n"
+    m = _flow("graph TD\n  A[Start] --> B & C\n  B --> D --> E\n  A --> B\n"
                               "  A -- text --> B\n  A -.-> B\n  X:::cls --> Y")
     assert [k for k in m.keys if k.startswith("edge:")] == [
         "edge:A->B#0", "edge:A->C#0", "edge:B->D#0", "edge:D->E#0", "edge:A->B#1", "edge:A->B#2", "edge:A->B#3",
@@ -39,26 +45,25 @@ def test_chains_ampersands_repeated_edges_and_text_links_are_all_edges():
 
 
 def test_labels_with_brackets_shapes_and_nested_groups_are_read():
-    m = scene.flowchart_model('graph TD\nA["f(x)"] --> B[(Store)]\nB --> C{Decide?}\nC -- Yes --> D>flag]\n'
+    m = _flow('graph TD\nA["f(x)"] --> B[(Store)]\nB --> C{Decide?}\nC -- Yes --> D>flag]\n'
                               "subgraph outer [Outer]\n  subgraph inner_one [Inner]\n    F\n  end\n  G\nend\nF --> outer")
     assert m.names["f(x)"] == "node:A" and m.names["store"] == "node:B"
-    assert m.up["group:inner_one"] == ["group:outer"] and m.up["node:F"] == ["group:inner_one"]
-    assert m.down["group:outer"] == ["node:G", "group:inner_one", "node:F"]
-    assert m.up["edge:F->outer#0"] == ["node:F", "group:outer"]
+    assert m.down == {"group:outer": ["node:F", "node:G"], "group:inner_one": ["node:F"]}  # nested groups name their nodes
+    assert m.up["edge:F->G#0"] == ["node:F", "node:G"]  # an arrow into a group joins the parts in it
 
 
 def test_ids_with_dashes_dots_and_greek_letters_and_every_link_style_are_read():
-    m = scene.flowchart_model("flowchart TD\n  a-b[Dash id] --> c_d\n  c_d --> e.f\n  A1 --o B1\n  B1 --x C1\n"
+    m = _flow("flowchart TD\n  a-b[Dash id] --> c_d\n  c_d --> e.f\n  A1 --o B1\n  B1 --x C1\n"
                               "  C1 <--> D1\n  D1 ~~~ E1\n  style B1 fill:#f9f\n  class A1 hot")
     assert [k for k in m.keys if k.startswith("edge:")] == [
-        "edge:a-b->c_d#0", "edge:c_d->e.f#0", "edge:A1->B1#0", "edge:B1->C1#0", "edge:C1->D1#0", "edge:D1->E1#0"]
-    greek = scene.flowchart_model("graph LR\n  αρχή[Αρχή] --> τέλος[Τέλος]")
+        "edge:a-b->c_d#0", "edge:c_d->e.f#0", "edge:A1->B1#0", "edge:B1->C1#0", "edge:C1->D1#0"]  # ~~~ is no arrow
+    greek = _flow("graph LR\n  αρχή[Αρχή] --> τέλος[Τέλος]")
     assert greek.keys == ["node:αρχή", "node:τέλος", "edge:αρχή->τέλος#0"] and greek.names["αρχη"] == "node:αρχή"
 
 
 def test_only_a_graph_or_flowchart_has_a_model():
-    assert scene.flowchart_model("sequenceDiagram\nAlice->>Bob: hi") is None
-    assert scene.flowchart_model("graph TD; P[Page]-->Q[Queue]").keys == ["node:P", "node:Q", "edge:P->Q#0"]
+    assert _flow("sequenceDiagram\nAlice->>Bob: hi") is None
+    assert _flow("graph TD; P[Page]-->Q[Queue]").keys == ["node:P", "node:Q", "edge:P->Q#0"]
 
 
 def test_code_lines_are_always_shown_and_table_rows_can_be_hidden():
@@ -88,7 +93,7 @@ def test_verbs_read_their_scene_title_and_targets():
 
 
 def test_a_target_that_names_nothing_exactly_is_repaired_and_said():
-    m = scene.flowchart_model(EXAMPLE)
+    m = _flow(EXAMPLE)
     assert scene.resolve(m, "pws", "T") == (["node:pws"], None)
     assert scene.resolve(m, "node wf", "T") == (["node:wf"], None)
     assert scene.resolve(m, "ProposalWorkflowServiceImp", "T") == (
@@ -99,7 +104,7 @@ def test_a_target_that_names_nothing_exactly_is_repaired_and_said():
     assert scene.resolve(m, "wf->pws", "T") == (
         ["edge:pws->wf#0"], '"wf->pws" in "T" read as pws->wf: that edge only goes the other way')
     assert scene.resolve(m, "nope", "T") == ([], '"nope" in "T" matches nothing; dropped')
-    dotted = scene.flowchart_model("graph TD\n  c_d --> e.f")
+    dotted = _flow("graph TD\n  c_d --> e.f")
     assert scene.resolve(dotted, "c_d->e.f", "T") == (["edge:c_d->e.f#0"], None)
     lines = scene.lines_model(range(10, 15))
     assert scene.resolve(lines, "lines 12-13", "C") == (["line:12", "line:13"], None)
@@ -126,20 +131,19 @@ WORKED = [["+ pws"], ["+ pws->wf"], ["+ wf->engine"], ["focus pws->wf"], ["focus
 
 
 def test_the_worked_example_compiles_to_frames_a0_to_a6_and_a_rest_frame():
-    model = scene.flowchart_model(EXAMPLE)
+    model = _flow(EXAMPLE)
     built, notes = scene.compile_scene(model, [verbs(*g) for g in WORKED], "advisory drops :workflows")
     assert notes == []
     frames = built["frames"]
     assert (built["steps"], built["rest"], built["start"], built["repairs"]) == (6, 7, "empty", 0)
     assert frames[0] == {"show": [], "focus": [], "cur": []}
-    assert frames[1] == {"show": ["group:adv", "node:pws"], "focus": [], "cur": ["node:pws"]}
-    assert frames[2]["show"] == ["group:adv", "node:pws", "node:wf", "edge:pws->wf#0"]
+    assert frames[1] == {"show": ["node:pws"], "focus": [], "cur": ["node:pws"]}  # a group has no box to bring
+    assert frames[2]["show"] == ["node:pws", "node:wf", "edge:pws->wf#0"]
     assert frames[2]["cur"] == ["node:wf", "edge:pws->wf#0"]  # an arrow said with the end it brought in
-    assert frames[3]["show"] == ["group:adv", "node:pws", "node:wf", "node:engine", "edge:pws->wf#0",
-                                 "edge:wf->engine#0"]
+    assert frames[3]["show"] == ["node:pws", "node:wf", "node:engine", "edge:pws->wf#0", "edge:wf->engine#0"]
     assert frames[4] == {"show": frames[3]["show"], "focus": ["edge:pws->wf#0"], "cur": ["edge:pws->wf#0"]}
     assert frames[5] == {"show": frames[3]["show"], "focus": [], "cur": []}
-    assert frames[6] == {"show": model.keys, "focus": ["node:legacy"], "cur": ["node:legacy", "edge:pws->legacy#0"]}
+    assert frames[6] == {"show": model.keys[1:], "focus": ["node:legacy"], "cur": ["node:legacy", "edge:pws->legacy#0"]}
     assert frames[7] == {"show": model.keys, "focus": [], "cur": []}
 
 
@@ -155,7 +159,7 @@ def test_a_scene_that_only_focuses_starts_with_everything_shown():
 
 
 def test_a_group_brings_its_children_and_a_focused_group_lights_them():
-    model = scene.flowchart_model(EXAMPLE)
+    model = _flow(EXAMPLE)
     built, _ = scene.compile_scene(model, [verbs("+ adv"), verbs("focus adv"), verbs("all")], "T")
     assert built["frames"][1]["show"] == ["group:adv", "node:pws", "node:legacy", "edge:pws->legacy#0"]
     assert built["frames"][2]["focus"] == ["group:adv", "node:pws", "node:legacy"]
@@ -163,7 +167,7 @@ def test_a_group_brings_its_children_and_a_focused_group_lights_them():
 
 
 def test_repairs_are_counted_and_what_is_never_revealed_comes_in_with_the_rest_frame():
-    model = scene.flowchart_model(EXAMPLE)
+    model = _flow(EXAMPLE)
     built, notes = scene.compile_scene(model, [verbs("+ pwss"), verbs("+ ghost")], "T")
     assert built["repairs"] == 2
     assert notes == ['"pwss" in "T" read as node:pws', '"ghost" in "T" matches nothing; dropped',
@@ -183,20 +187,20 @@ def test_a_board_whose_every_reveal_names_nothing_starts_whole_instead_of_blank(
 
 
 def test_next_reveals_in_declaration_order_and_says_when_nothing_is_left():
-    model = scene.flowchart_model("graph TD; P[Page]-->Q[Queue]")
+    model = _flow("graph TD; P[Page]-->Q[Queue]")
     built, notes = scene.compile_scene(model, [verbs("next"), verbs("next 2"), verbs("next")], "F")
     assert [f["show"] for f in built["frames"][1:4]] == [["node:P"], model.keys, model.keys]
     assert notes == ['next in "F": everything is shown already']
 
 
 def test_a_board_with_more_than_three_elements_and_no_verbs_is_stepped_per_sentence():
-    model = scene.flowchart_model(EXAMPLE)
+    model = _flow(EXAMPLE)
     plan, later = scene.auto_steps(model, ["One.", "Two.", "Three."])
     assert plan == {0: [["node:pws"]], 1: [["node:legacy"]], 2: [["node:wf", "node:engine"]]} and later == model.order
     # more sentences than parts, none naming one: the first is the board's introduction and brings nothing
     plan, _ = scene.auto_steps(model, [f"S{i}." for i in range(20)])
     assert plan == {1: [["node:pws"]], 2: [["node:legacy"]], 3: [["node:wf"]], 4: [["node:engine"]]}
-    assert scene.auto_steps(scene.flowchart_model("graph TD; P-->Q"), ["a."] * 5) == ({}, [])
+    assert scene.auto_steps(_flow("graph TD; P-->Q"), ["a."] * 5) == ({}, [])
     assert scene.auto_steps(scene.lines_model(range(1, 30)), ["a."] * 5) == ({}, [])
     assert scene.auto_steps(model, []) == ({}, [])
     assert scene.compile_scene(model, [], "T") == (None, [])
@@ -215,7 +219,7 @@ def _shown(frame):
 
 
 def test_an_arrow_shows_once_both_its_ends_do_even_when_only_the_boxes_were_named():
-    m = scene.flowchart_model("graph LR; P[Page] --> Q[Queue]; Q --> S[Session]")
+    m = _flow("graph LR; P[Page] --> Q[Queue]; Q --> S[Session]")
     built, _ = scene.compile_scene(m, [[scene.Verb("+", targets=["P"])], [scene.Verb("+", targets=["Q"])],
                                        [scene.Verb("+", targets=["S"])]], "Turn path")
     assert "edge:P->Q#0" not in _shown(built["frames"][1])
@@ -254,7 +258,7 @@ def test_steps_actors_and_nodes_are_found_by_id_by_word_or_by_label():
 
 
 def test_auto_steps_spread_evenly_and_never_end_on_an_empty_sentence():
-    model = scene.flowchart_model("graph TD; A-->B; B-->C; C-->D; D-->E")
+    model = _flow("graph TD; A-->B; B-->C; C-->D; D-->E")
     plan, _ = scene.auto_steps(model, ["One.", "Two.", "Three.", "Four."])
     assert [len(steps[0]) for _, steps in sorted(plan.items())] == [1, 1, 1, 2]
     groups = [[scene.Verb("+", keys=keys) for keys in steps] for _, steps in sorted(plan.items())]
