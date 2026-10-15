@@ -144,13 +144,10 @@ def figure(block_id: str, alt: str, caption: str = "",
 
 
 def sequence_key_table(spec: dict[str, Any]) -> str:
-    """The numbered key as native text.
+    """The numbered key as native text, built from the spec.
 
-    `render_key()` already emits HTML rather than SVG because it is the half a
-    reader selects text out of. On Confluence that pays off twice: the key
-    stays searchable and reflows on a phone, while only the grid is a picture.
-    Built from the spec rather than parsed out of that HTML — same source,
-    same numbering helper, no HTML round-trip.
+    The key stays searchable and reflows on a phone, while only the drawing
+    is a picture.
     """
     rows = []
     for step, num in _numbered(spec.get("steps") or []):

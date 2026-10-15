@@ -37,7 +37,7 @@ class Style:
 
 
 def _styles(SANS_400, SANS_600, SANS_700, MONO, MONO_FALLBACK) -> dict[str, Style]:
-    # Keep in sync with the .annotate-flow and .annotate-seq rules in visuals.css.
+    # Keep in sync with the .annotate-flow rules in visuals.css.
     return {
         "flow-label":       Style(SANS_600, SANS_600["x"], 13.5, 18),
         "flow-label-error": Style(SANS_700, SANS_700["x"], 13.0, 18),
@@ -45,21 +45,6 @@ def _styles(SANS_400, SANS_600, SANS_700, MONO, MONO_FALLBACK) -> dict[str, Styl
         "flow-method":      Style(MONO, MONO_FALLBACK, 11.5, 16),
         "flow-sub":         Style(SANS_400, SANS_400["x"], 11.0, 15),
         "edge-label":       Style(SANS_600, SANS_600["x"], 11.0, 14),
-        # .annotate-seq — the seq-* keys are what the fixed-pitch renderer measures.
-        # Labels are measured with the 600 table although the CSS sets weight 500:
-        # Bricolage 500 sits between the 400 and 600 instances, so measuring with
-        # 600 over-estimates by a hair and every fit decision errs toward roomy.
-        "seq-name":         Style(MONO, MONO_FALLBACK, 10.0, 13),
-        "seq-label":        Style(SANS_600, SANS_600["x"], 11.5, 15),
-        "seq-tag":          Style(MONO, MONO_FALLBACK, 10.0, 13),
-        "seq-note":         Style(MONO, MONO_FALLBACK, 10.0, 13),
-        "seq-band":         Style(MONO, MONO_FALLBACK, 10.5, 14),
-        "seq-legend":       Style(MONO, MONO_FALLBACK, 11.5, 15),
-        # Retained: the geometry suite and older callers measure actor/arrow text
-        # through these names.
-        "actor-label":      Style(MONO, MONO_FALLBACK, 10.0, 13),
-        "arrow-label":      Style(SANS_600, SANS_600["x"], 11.5, 15),
-        "arrow-sub":        Style(MONO, MONO_FALLBACK, 10.0, 13),
         # svg.vz — the map and the lane sequence (map_svg.py, sequence_svg.py). Keep in sync with vz.css;
         # they are always measured in the stage face (Inter and JetBrains Mono).
         "vz-ttl":           Style(SANS_700, SANS_700["x"], 22.0, 28),
