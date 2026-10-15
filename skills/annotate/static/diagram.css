@@ -149,3 +149,59 @@ section.block[data-kind="flowchart"] .block-content {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* ── maps and lane sequences (vz.css) ──────────────────────────────
+   vz.css picks its light or dark tokens by the OS (prefers-color-scheme) or
+   by :root[data-theme]. This page has its own switch, body[data-page-theme],
+   and a light page on a dark OS must stay light. So the two token sets are
+   set again here by the page's switch. The values are vz.css's own;
+   tests/test_vz_blocks.py fails when the two files disagree. */
+:root:has(body:not([data-page-theme="dark"])) .vz-player,
+:root:has(body:not([data-page-theme="dark"])) svg.vz,
+:root:has(body:not([data-page-theme="dark"])) .block-frame:has(.vz-player) {
+  --vz-fg: #161c1a; --vz-dim: #56615b; --vz-line: #d6dbd5; --vz-card: #ffffff; --vz-sunk: #eceee9;
+  --vz-accent: #b2570a;
+  --vz-blue: #2c5d8f; --vz-blue-soft: #e8eff8; --vz-red: #a33b30; --vz-red-soft: #f9e6e2;
+  --vz-green: #2f6b3d; --vz-green-soft: #e4f1e6; --vz-amber: #8a5a00; --vz-amber-soft: #fbf1df;
+}
+:root:has(body[data-page-theme="dark"]) .vz-player,
+:root:has(body[data-page-theme="dark"]) svg.vz,
+:root:has(body[data-page-theme="dark"]) .block-frame:has(.vz-player) {
+  --vz-fg: #e9edea; --vz-dim: #a3aca7; --vz-line: #313936; --vz-card: #1c2220; --vz-sunk: #161b19;
+  --vz-accent: #f3a957;
+  --vz-blue: #8fb8e6; --vz-blue-soft: #1b2634; --vz-red: #f0928a; --vz-red-soft: #2f1c1a;
+  --vz-green: #93c897; --vz-green-soft: #1b2a1e; --vz-amber: #e3b860; --vz-amber-soft: #2b2415;
+}
+
+/* The drawing was measured in Inter and JetBrains Mono with no letter
+   spacing (visuals/text_metrics.py, stage face). The page body sets a small
+   negative tracking, which the SVG's text would inherit and draw narrower
+   than measured. */
+svg.vz, .vz-player { letter-spacing: normal; font-feature-settings: normal; }
+
+/* The player sits on the ground vz.css draws for (--vz-card), and scrolls a
+   wide drawing in its own .vz-stage, so the card's scroll shadows go. */
+.block-frame:has(.vz-player) { background: var(--vz-card); }
+section.block .block-content:has(.vz-player) { background: none; overflow: visible; }
+
+/* The prose rules reach into the player's caption and must not:
+   `main.prose p` gives every paragraph a 140px right gutter for comment
+   cards, and `main.prose :not(pre) > code` repaints inline code. */
+main.prose .vz-player p { padding: 0; border-radius: 0; }
+main.prose .vz-player p:hover { background: none; }
+main.prose .vz-cap code {
+  background: var(--vz-sunk); padding: 1px 4px; border-radius: 4px;
+  font-family: var(--vz-mono); font-size: .9em;
+}
+
+/* A sequence's or a map's subtitle, painted under its heading as text
+   (script-blocks.js paintVz). */
+main.prose p.vz-subtitle {
+  margin: 0 0 10px; padding: 0; color: var(--text-dim); font-size: 14px;
+}
+
+/* A drawing keeps its own size (paintVz sets --vz-w from its viewBox) and
+   its stage scrolls sideways. Maximize's Fit width is vz.css's own rule:
+   the drawing fills the width it is given. */
+main.prose .vz-stage svg.vz { width: var(--vz-w, 100%); max-width: none; }
+main.prose section.block.is-fit .vz-stage svg.vz { width: 100%; min-width: 0; }

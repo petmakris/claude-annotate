@@ -64,7 +64,7 @@
   }
   // A choice is answered with its own controls, and a picture is commented
   // whole through its title: neither body takes a selection.
-  const WHOLE_ONLY = ["choice", "sequence", "diagram", "flowchart"];
+  const WHOLE_ONLY = ["choice", "sequence", "map", "diagram", "flowchart"];
   function excluded(node, section) {
     const el = node && (node.nodeType === 1 ? node : node.parentElement);
     if (!el) return true;

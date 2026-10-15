@@ -273,6 +273,11 @@ def render(spec: dict[str, Any], uid: str) -> str:
     width = max(right_edge, note_x + notes_w if notes_w else right_edge) + PAD
     if spec.get("title"):
         width = max(width, PAD * 2 + _width(spec["title"], "vz-ttl"))
+    if outcome:
+        # The outcome box spans the canvas, its words 18px in from each side:
+        # a line wider than the lanes widens the canvas, or it runs off it.
+        words = [_width(outcome["title"], "vz-nm")] + [_width(ln, "vz-sb") for ln in outcome.get("lines") or []]
+        width = max(width, PAD * 2 + 36 + max(words))
     parts: list[str] = []
 
     # bands behind everything

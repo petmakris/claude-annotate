@@ -223,13 +223,43 @@ function linkPflowHover(content) {
   content.addEventListener("mouseleave", clear);
 }
 
-// A sequence block is two halves: the grid (`blk.svg`) and the numbered key
-// beneath it (`blk.key`). The grid carries arrows and badges and no words at
-// all, so painting the svg alone leaves a picture of unexplained circles —
-// both halves go in together, always.
-function paintSequence(content, blk) {
+// A sequence or a map. Since the lane sequence, `blk.svg` is the player
+// fragment render.py stores (visuals/player.py): the drawing, built from a
+// validated spec with every word escaped, and its captions as JSON text that
+// vz-reveal.js writes only as text. The subtitle is painted here, as text,
+// because the drawing leaves out the title and subtitle the heading already
+// carries (render.py's _drawn).
+//
+// A body stored before the lane sequence is two halves: the grid (`blk.svg`)
+// and the numbered key beneath it (`blk.key`). The grid carries arrows and
+// badges and no words at all, so painting the svg alone leaves a picture of
+// unexplained circles — both halves go in together, always.
+function paintVz(content, blk) {
   content.innerHTML = (blk.svg || "") + (blk.key || "");
+  // At its own size, as every picture on this page is: a wide drawing
+  // scrolls inside its player rather than shrinking its words. Maximize's
+  // Fit width lets it fill the width instead (diagram.css, is-fit).
+  content.querySelectorAll(".vz-stage > svg.vz").forEach((svg) => {
+    const box = svg.viewBox && svg.viewBox.baseVal;
+    if (box && box.width) svg.style.setProperty("--vz-w", box.width + "px");
+  });
+  const spec = blk.spec || {};
+  const sub = typeof spec.subtitle === "string" ? spec.subtitle.trim() : "";
+  if (sub && content.querySelector(".vz-player")) {
+    const p = document.createElement("p");
+    p.className = "vz-subtitle";
+    p.textContent = sub;
+    content.prepend(p);
+  }
 }
+
+// The players get their controls once their sections are in the document:
+// both render paths and a rewrite dispatch "annotate:rendered" after that.
+// boot() skips a player it has already set up, and a repaint makes a new one.
+function bootPlayers() {
+  if (window.vzReveal) window.vzReveal.boot();
+}
+document.addEventListener("annotate:rendered", bootPlayers);
 
 // Badge ⇄ key pairing. They pair on data-step-id, which is also what a
 // comment anchors to, so lighting a step lights whatever a comment marked.
@@ -273,7 +303,7 @@ function linkSequenceKey(content) {
 // Kinds that work differently from prose — a picture you can maximise, a
 // question waiting for a pick, code walked note by note — sit in a light
 // frame with their title on it, so the reader sees where prose stops.
-const FRAMED = ["sequence", "flowchart", "mockup", "choice", "explain"];
+const FRAMED = ["sequence", "map", "flowchart", "mockup", "choice", "explain"];
 
 function createBlockSection(blk) {
   const section = document.createElement("section");
@@ -297,9 +327,9 @@ function createBlockSection(blk) {
   body.className = "block-body";
   const content = document.createElement("div");
   content.className = "block-content";
-  if (kind === "sequence") {
-    // Server pre-rendered both halves; inject as-is.
-    paintSequence(content, blk);
+  if (kind === "sequence" || kind === "map") {
+    // Server pre-rendered; inject as-is.
+    paintVz(content, blk);
     linkSequenceKey(content);
     // Still no comment-on-click: a picture is commented as a whole, from its
     // heading, for the same reason flowchart lost its node handler

@@ -30,6 +30,7 @@
   // diagram that failed to name itself is not text.
   const SPEC_TITLED = {
     sequence:  { keys: ["title"],    fallback: "Diagram" },
+    map:       { keys: ["title"],    fallback: "Diagram" },
     flowchart: { keys: ["title"],    fallback: "Diagram" },
     choice:    { keys: ["question"], fallback: "Decision" },
   };

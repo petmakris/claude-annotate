@@ -43,6 +43,9 @@ const CSS = [
   "style-read-aloud.css",
   "style-edit.css",
   "visuals.css",
+  // Maps and lane sequences (skills/_shared/static/vz.css). Before
+  // diagram.css, which ties their colours to the page's theme.
+  "vz.css",
   "diagram.css",
   "popover.css",
   "code-theme.css",
@@ -84,6 +87,10 @@ const JS = [
   "spans.js",
   // Pure word diff; no DOM, so any later script may use it.
   "edit-diff.js",
+  // The player for maps and lane sequences. Before script.js, so
+  // window.vzReveal is there when the first blocks paint; script-blocks.js
+  // boots the players after every render.
+  "vz-reveal.js",
   // The page code, one program in nine parts and in this order (script.js's
   // header says how they share one scope). The last one boots the page.
   "script.js",

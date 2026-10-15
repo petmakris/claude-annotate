@@ -184,3 +184,21 @@ def test_a_standalone_page_inlines_the_style_and_the_script():
     assert "svg.vz" in page and "vzReveal" in page and page.split("<script>")[0].count('<div class="vz-player" data-vz-player') == 2
     script = page[page.rindex("<script>"):]
     assert script.count("</script>") == 1
+
+
+def test_an_outcome_line_wider_than_the_lanes_widens_the_canvas():
+    """The outcome box spans the canvas, so a long line in it used to run off
+    the right edge whenever the title was short: the title alone set the
+    width the outcome had to fit."""
+    from skills._shared.visuals.map_svg import _width
+    line = "The heal writes no archive row, so the next startup can heal again, and nothing says so."
+    spec = {"title": "Short", "actors": [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}],
+            "steps": [{"id": "s1", "from": "a", "to": "b", "arrow": "request", "label": "go"}],
+            "outcome": {"tone": "green", "title": "Done", "lines": [line]}}
+    svg = sequence_svg.render(spec, "u")
+    width = float(re.search(r'viewBox="0 0 ([\d.]+) ', svg).group(1))
+    x = float(re.search(r'<text class="sb" x="([\d.]+)" y="[\d.]+"[^>]*>' + re.escape(line), svg).group(1))
+    box = re.search(r'<rect class="bx green" x="([\d.]+)" y="[\d.]+" width="([\d.]+)"', svg)
+    right = float(box.group(1)) + float(box.group(2))
+    assert x + _width(line, "vz-sb") <= right - 18 + 1
+    assert right <= width

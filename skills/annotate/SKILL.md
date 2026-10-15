@@ -72,8 +72,9 @@ Composing a push is a two-pass job: split the response into blocks, then run thi
 |------|----------|---------------|
 | `markdown` (default) | Prose, lists, code, tables, callouts. | `references/pushing.md` (How to push + Markdown first) |
 | `explain` | **How a specific piece of code works** — the explanation rides on the code itself: spans marked in place, each label hanging off its own column, a bracket for a claim about a range of lines. Several notes on one line is the case it is for. The pane **walks** the notes one at a time in the order you write them, so `notes` is reading order, not file order; a note that is true in two places carries `spans` and marks both. Quote every span as a literal substring; never compute a column. Prefer this over `markdown` + a `code` anchor whenever the claims are *about named spans*, because that pairing makes the reader ping-pong between prose and pane. | `references/block-kinds/explain.md` |
-| `sequence` | ≥2 named entities interacting **in temporal order**, where who-talks-to-whom matters (code flows, request/response, event lifecycles). | `references/block-kinds/sequence.md` |
-| `flowchart` | Branching/decision/process-flow logic — guard clauses, validation pipelines, fan-in from multiple callers, success/error outcomes. Structured nodes/edges, role color, jump-to-source links. Give every `ref` an `href` — a ref is painted as a link whether or not it is one. Write `spec.source` (restricted Python, compiled) instead of nodes when the reader will want to change the flow — the source pane shows them which line draws which box, so they can name it. | `references/block-kinds/flowchart.md` |
+| `map` | **Architecture**: the parts of a system, where each caller comes in, where the rules live. Boxes on a grid of columns, arrows that route themselves, and a request's path the reader can follow step by step. | `references/block-kinds/map.md` |
+| `sequence` | **A request over time**: ≥2 named entities interacting in temporal order, where who-talks-to-whom matters (code flows, request/response, event lifecycles). Drawn as lanes, the words on the arrows, with ✓/✗ checks where a rule is applied; the reader can step through it. | `references/block-kinds/sequence.md` |
+| `flowchart` | **Branching logic**: decision/process-flow logic — guard clauses, validation pipelines, fan-in from multiple callers, success/error outcomes. Structured nodes/edges, role color, jump-to-source links. Give every `ref` an `href` — a ref is painted as a link whether or not it is one. Write `spec.source` (restricted Python, compiled) instead of nodes when the reader will want to change the flow — the source pane shows them which line draws which box, so they can name it. | `references/block-kinds/flowchart.md` |
 | `flowchart` + views | The flowchart answers more than one reader's question and its edges cross. Measure with `views.check`, group the edges by question, verify. | `references/block-kinds/flowchart-views.md` |
 | `choice` | A decision point with 2–4 discrete options where the pick drives the next step. Options may carry `markdown` (code, tables) when the options are content; many similar questions share a `group` and render as a queue. | `references/block-kinds/choice.md` |
 | `mockup` | A high-fidelity, interactive UI mock is clearer than prose or a static diagram — real `<style>`/`<script>`/Tailwind, hover, interaction. Renders in a sandboxed iframe. | `references/block-kinds/mockup.md` |
@@ -106,8 +107,7 @@ unique **within a kind**, so pass `--kind annotate` wherever one is ambiguous.
 Don't mint a fresh workspace on every push within one conversation. Each
 push records its sid, slug, repo root and working `blocks.json` in this
 conversation's marker (`~/.claude/annotate/pending-${CLAUDE_CODE_SESSION_ID}.json`,
-printed by `claude-annotate session show`); every later push passes that slug,
-so it lands on the same page. See `references/pushing.md` for the push side
+printed by `claude-annotate session show`); every later push passes that slug, so it lands on the same page. See `references/pushing.md` for the push side
 and `references/resuming.md` (step 4 of `/annotate resume <slug>`) for resume. To reopen a workspace from a past
 conversation, the user can open the daemon's list page (the `index` that
 `claude-annotate session lookup` prints; it lists every live workspace,

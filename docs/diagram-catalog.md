@@ -10,7 +10,8 @@ Every place your projects make a diagram, what draws it, where it shows, and whe
 | ai-building-blocks | Lifecycles on the reference pages (`tools/build.py` `state_diagram()`) | state | Mermaid 11.4.1 | reference pages | ~113 | stays: state diagrams are not one of the two types |
 | ai-building-blocks | Request path on the home page (`tools/build.py`) | flowchart | Mermaid | home page | 1 | stays: flowchart |
 | ai-building-blocks | Diagram checker and slide export (`tools/diagrams.py`) | tool | Playwright Chromium | fault list, light and dark PNGs | 1 | library: becomes its checker |
-| claude-annotate | `/annotate` sequence block (`_shared/visuals/sequence.py`) | sequence | SVG generated in Python on push | annotate page; PNG to Confluence | per answer | library: sequence |
+| claude-annotate | `/annotate` sequence block (`_shared/visuals/sequence_svg.py`) | sequence | lane sequence drawn in Python on push, played by `vz-reveal.js` | annotate page; PNG to Confluence | per answer | library: sequence (done) |
+| claude-annotate | `/annotate` map block (`_shared/visuals/map_svg.py`) | map | map drawn in Python on push, played by `vz-reveal.js` | annotate page; PNG to Confluence | per answer | library: map (done) |
 | claude-annotate | `/annotate` flowchart block (`_shared/visuals/flowchart.py`) | flowchart | SVG in Python, ELK layout through node | annotate page; PNG to Confluence | per answer | stays: flowchart |
 | claude-annotate | `/stage` and `/talk` lanes (`stage/static/lanes.js`) | sequence | DOM and SVG in the browser, revealed by frames | stage page, talk call page | per board | library: sequence |
 | claude-annotate | `/stage` and `/talk` map (`stage/static/map.js`) | flowchart as cards | DOM cards and SVG edges, revealed by frames | stage page, talk call page | per board | library: map, for architecture boards |

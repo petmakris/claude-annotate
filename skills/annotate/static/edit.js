@@ -34,7 +34,7 @@
   const EDITOR_SRC = new URL("vendor/editor.min.js", BASE).href;
   const RICH_SRC = new URL("vendor/rich.min.js", BASE).href;
   // Answered with their own controls, or pictures: no markdown to edit.
-  const NOT_TEXT = ["choice", "sequence", "diagram", "flowchart", "mockup"];
+  const NOT_TEXT = ["choice", "sequence", "map", "diagram", "flowchart", "mockup"];
   const HINT_SOURCE = "⌘/ rich ⇄ source · ⌘S save · F6 bar · esc done";
   const HINT_RICH = "⌘B bold · ⌘I italic · ⌘E code · ⌘K link · ## heading · - list · F6 bar · esc done";
   const NO_RICH = "Rich editing isn't available for this part — showing the source";

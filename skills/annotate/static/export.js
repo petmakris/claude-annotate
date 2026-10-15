@@ -2,7 +2,7 @@
 // standalone HTML file you can send to someone who cannot reach this machine.
 //
 // Everything happens in the browser, because everything needed is already on
-// screen. The server renders sequence/flowchart/diagram blocks to inline SVG
+// screen. The server renders sequence/map/flowchart blocks to inline SVG
 // and markdown-it renders the prose here, so the live DOM IS the finished
 // document — there is no second renderer to write and no way for the file to
 // disagree with what the author was looking at when they pressed the button.
@@ -43,7 +43,32 @@
     ".ex-bar",              // step controls
     ".ex-tray",             // the current note, restated by the ladder below it
     ".ex-at",               // the numbered pins, and the buttons inside them
+    // A map's or a lane sequence's player (vz-reveal.js): its controls and
+    // caption are dead without JS, and its captions' JSON has no reader.
+    // resetPlayers() below puts the drawing back to the whole picture.
+    ".vz-bar",
+    ".vz-cap",
+    "script.vz-steps",
   ].join(", ");
+
+  // A player stepped to step 3 marks later parts `fut` (hidden) and the
+  // current ones `now` (accent), and swaps the current arrows' heads. The
+  // export carries the whole picture, as the drawing is at rest.
+  function resetPlayers(root) {
+    root.querySelectorAll("[data-vz-player]").forEach((pl) => {
+      pl.removeAttribute("data-vz-ready");
+      pl.removeAttribute("tabindex");
+    });
+    root.querySelectorAll("svg.vz").forEach((svg) => {
+      svg.classList.remove("mode-build", "mode-route", "outline");
+      svg.querySelectorAll("[data-p]").forEach((el) => {
+        el.classList.remove("fut", "now", "draw");
+        el.removeAttribute("style");
+        if (el.dataset.mk) el.setAttribute("marker-end", el.dataset.mk);
+        el.removeAttribute("data-mk");
+      });
+    });
+  }
 
   // Review state painted onto the document as attributes. Left in place, a
   // block someone marked "delete" reaches the reader struck through and
@@ -176,6 +201,10 @@ body.exported .export-foot {
   // have fallen back to a system mono, inside boxes drawn for Monaspace. The
   // page looked perfect; only the exported copy was wrong.
   const DIAGRAM_SELECTOR = ".annotate-seq, .annotate-flow";
+  // Maps and lane sequences (svg.vz) are measured in the stage face instead:
+  // Inter, which the prose keeps anyway, and JetBrains Mono, whatever code
+  // font the reader picked (visuals/text_metrics.py, vz.css).
+  const VZ_SELECTOR = "svg.vz";
 
   function stripUnusedFontFaces(css) {
     const d = document.body.dataset;
@@ -183,6 +212,7 @@ body.exported .export-foot {
       [PROSE_FAMILY,
        CODE_FAMILIES[d.codeFont || "jetbrains"],
        document.querySelector(DIAGRAM_SELECTOR) ? "Monaspace Radon" : null,
+       document.querySelector(VZ_SELECTOR) ? "JetBrains Mono" : null,
       ].filter(Boolean));
     // Quotes optional: collectCss fetches the stylesheet's SOURCE, where these
     // are quoted today, but a one-word family is legal unquoted and a stricter
@@ -213,6 +243,7 @@ body.exported .export-foot {
     const clone = src.cloneNode(true);
 
     clone.querySelectorAll(STRIP).forEach((n) => n.remove());
+    resetPlayers(clone);
 
     // A search leaves <mark> wrappers behind AND hides every non-matching
     // section. Exporting mid-search must not quietly ship a document with

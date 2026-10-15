@@ -67,7 +67,7 @@ def test_a_part_has_no_hover_wash_or_engaged_tint():
 
 def test_pictures_and_questions_get_a_frame_with_their_title_on_it():
     src = SCRIPT_JS.read_text()
-    assert 'const FRAMED = ["sequence", "flowchart", "mockup", "choice", "explain"];' in src
+    assert 'const FRAMED = ["sequence", "map", "flowchart", "mockup", "choice", "explain"];' in src
     i = src.index("function blockLabel(")
     body = src[i:src.index("\n}", i)]
     assert "block-frame-head" in body
