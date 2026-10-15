@@ -63,7 +63,6 @@ FACES: dict[str, dict[str, Style]] = {
     "stage": _styles(fm.STAGE_SANS_400, fm.STAGE_SANS_600, fm.STAGE_SANS_700, fm.STAGE_MONO,
                      fm.STAGE_MONO_FALLBACK),
 }
-STYLES = FACES["annotate"]
 _face: contextvars.ContextVar = contextvars.ContextVar("face", default="annotate")
 
 

@@ -24,8 +24,7 @@ import re
 from html import escape
 from typing import Any
 
-from . import text_metrics as tm
-from .map_svg import _cls, _markers, _segments, _text, _width, MARK
+from .map_svg import _cls, _markers, _text, _width, MARK
 from .sequence import ValidationError, validate as _validate_base
 
 TONE_MAP = {"plain": "plain", "blue": "blue", "red": "red", "green": "green", "amber": "amber",
@@ -188,7 +187,6 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
     for g in gaps:
         cx.append(cx[-1] + g)
     xs = [cx[col_of[a["id"]]] for a in actors]
-    head_w = [col_w[col_of[a["id"]]] for a in actors]
     canvas_r = cx[-1] + col_w[-1] / 2
     right_edge = canvas_r
 
@@ -206,7 +204,6 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
             y += SUB_GAP
     head_top = y
     y = head_top + HEAD_H + 18
-    lane_bottom = y
     note_x = right_edge + NOTE_GAP
     notes_w = 0.0
 
@@ -238,7 +235,7 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
             for aid in late:
                 head_at[aid] = y
             y += HEAD_H + 16
-        att = f' data-p="1"' + (f' data-r="{n}"' if n else "")
+        att = ' data-p="1"' + (f' data-r="{n}"' if n else "")
         tone = _tone(s.get("tone"))
         g: list[str] = []
         fx, tx = xs[idx[s["from"]]], xs[idx[s["to"]]]
@@ -426,7 +423,3 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
     aria = escape(spec.get("aria") or spec.get("title") or "Sequence diagram", quote=True)
     return (f'<svg class="vz" viewBox="0 0 {width:.0f} {height:.0f}" role="img" aria-label="{aria}" data-vz="sequence">'
             + _markers(uid) + "".join(title_parts) + "".join(parts) + "</svg>")
-
-
-def step_count(spec: dict[str, Any]) -> int:
-    return max((n for n in _numbers(spec.get("steps") or []) if n), default=0)

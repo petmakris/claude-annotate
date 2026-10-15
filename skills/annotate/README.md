@@ -78,7 +78,7 @@ If a font size changes in `static/visuals.css` (its source is
 `skills/_shared/static/visuals.css`), mirror it in `_styles` in
 `text_metrics.py` — that table is the only place layout learns about type.
 
-`skills/_shared/visuals/tests/test_flowchart_geometry.py` and `test_sequence_geometry.py` beside it assert
+`skills/_shared/visuals/tests/test_flowchart_geometry.py` asserts
 geometry invariants on the rendered SVG (no overlapping nodes, no text escaping
 its shape, no edge label on top of a node, nothing outside the viewBox) across
 a fixed corpus plus 40 generated DAGs, so layout regressions fail a test

@@ -28,7 +28,6 @@ from typing import Any
 from . import text_metrics as tm
 
 TONES = ("plain", "blue", "red", "green", "amber")
-SIDES = ("left", "right", "top", "bottom")
 PATHS = ("auto", "straight", "hv", "vh", "hvh", "vhv")
 
 PAD = 24            # canvas margin
@@ -864,31 +863,3 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
     aria = escape(spec.get("aria") or spec.get("title") or "Architecture map", quote=True)
     return (f'<svg class="vz" viewBox="0 0 {width:.0f} {height:.0f}" role="img" aria-label="{aria}" data-vz="map">'
             + _markers(uid) + "".join(out) + "</svg>")
-
-
-def step_counts(spec: dict[str, Any]) -> tuple[int, int]:
-    """(last build step, last route step) of a map, 0 when it has none."""
-    nb = nr = 0
-
-    def take(o: dict) -> None:
-        nonlocal nb, nr
-        if isinstance(o.get("b"), int):
-            nb = max(nb, o["b"])
-        if isinstance(o.get("r"), int):
-            nr = max(nr, o["r"])
-
-    def walk(b: dict) -> None:
-        take(b)
-        for ln in b.get("lines") or []:
-            if isinstance(ln, dict):
-                take(ln)
-        for ch in b.get("children") or []:
-            walk(ch)
-
-    for b in spec.get("boxes") or []:
-        walk(b)
-    for z in spec.get("zones") or []:
-        take(z)
-    for a in spec.get("arrows") or []:
-        take(a)
-    return nb, nr

@@ -62,7 +62,6 @@ def test_a_map_draws_as_one_svg_with_its_title_columns_and_every_box():
 def test_a_map_carries_build_and_route_steps_and_separates_route_arrows():
     svg = map_svg.render(MAP, "m1")
     assert max(attrs(svg, "b")) == 3 and max(attrs(svg, "r")) == 4
-    assert map_svg.step_counts(MAP) == (3, 4)
     route = re.findall(r'<path [^>]*data-route="1"', svg)
     base = re.findall(r'<path [^>]*data-base="1"', svg)
     assert len(route) == 3 and len(base) == 4
@@ -142,7 +141,7 @@ def test_a_lane_sequence_draws_heads_chips_checks_bands_and_outcome():
     assert ">Person<" in svg and ">pays<" in svg
     assert "✓ unpaid" in svg and "✗ already paid" in svg
     assert "FIRST" in svg and "LATER" in svg and ">Refused<" in svg
-    assert sequence_svg.step_count(SEQ) == 2
+    assert max(attrs(svg, "r")) == 2
 
 
 def test_each_step_of_a_lane_sequence_is_tagged_with_its_number():
@@ -160,7 +159,7 @@ def test_a_lane_sequence_numbers_every_arrow_when_the_spec_does_not():
     spec = json.loads(json.dumps(SEQ))
     for s in spec["steps"]:
         s.pop("n")
-    assert sequence_svg.step_count(spec) == 4
+    assert max(attrs(sequence_svg.render(spec, "q1"), "r")) == 4
 
 
 def test_a_lane_sequence_keeps_the_base_rules():
