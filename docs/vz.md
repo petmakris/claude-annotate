@@ -78,6 +78,10 @@ The sequence spec of `kind: "sequence"` (`skills/annotate/references/block-kinds
 
 Load `skills/_shared/static/vz.css` (the look, light and dark, every colour a `--vz-*` token) and `vz-reveal.js` (the player), and put each `vz.py fragment` where it goes. A page that sets its own colours overrides the `--vz-*` tokens on `.vz-player, svg.vz`.
 
+## On the stage
+
+During a talk call both diagrams step with the voice. A map is `[[show map | Title]]` with a map spec (or `stage.py show map:-`): it is drawn by `map_svg.render(..., keyed=True)`, which stamps a `data-key` on every part, and the voice builds it in its build order and then follows its route. A lane sequence is `[[show sequence | Title]]`: the stage draws it as its lanes (`skills/stage/static/lanes.js`) in this same look, because the lanes also fit a phone, open a popup on each step and fold its boxes. `sequence_svg.render(..., keyed=True)` keys a sequence's steps and actors the same way, for any page that steps one.
+
 ## Safety
 
 The SVG is built from a validated spec. A spec holds words, never markup: every text is escaped, ids are prefixed with a checked uid, and captions travel as JSON text. Read `docs/security/diagram-rendering.md` before giving a spec any way to carry markup.

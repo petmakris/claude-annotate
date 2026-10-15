@@ -37,8 +37,8 @@ function keyedElements(box) {
   return found;
 }
 
-const isEdgePath = (key, el) => key.startsWith("edge:") && el.tagName.toLowerCase() === "path";
-const rank = (key) => (key.startsWith("group:") || key.startsWith("actor:") ? 0 : key.startsWith("edge:") ? 2 : 1);
+const isEdgePath = (key, el) => /^(edge|route):/.test(key) && el.tagName.toLowerCase() === "path";  // a map's route steps draw in too
+const rank = (key) => (/^(group|actor|zone):/.test(key) ? 0 : /^(edge|route):/.test(key) ? 2 : 1);
 const DIAGRAMS = new Set(["flowchart", "sequence"]);
 
 // The board's title, over a diagram that starts empty. Not on the map or the lanes, which are never empty:

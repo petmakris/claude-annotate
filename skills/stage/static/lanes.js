@@ -1,5 +1,9 @@
-// Lanes: a sequence diagram that unfolds with the voice, drawn whole from the start. Each actor is a card in
-// its own colour, kept on top while the rows scroll, over its lifeline. A call opens a bar on its receiver's
+// Lanes: a sequence diagram that unfolds with the voice, drawn whole from the start, in the look of the lane
+// sequence (sequence_svg, docs/vz.md): each actor is a box in its tone (blue the AI path, red the central
+// mechanism, green a rule that holds, amber a cost; no tone is plain), with its role and file under its name,
+// kept on top while the rows scroll, over its lifeline. A call carries what it sends in a chip on its arrow,
+// a step's `checks` are ✓ / ✗ badges where the rule is applied, phases are bands behind their steps, and an
+// `outcome` box closes the diagram. A call opens a bar on its receiver's
 // lifeline until its reply (`reply_to`); calls inside it nest their bars. Replies are dashed and lighter.
 // `alt`, `par`, `loop` and `opt` boxes (`groups`) are filled cards with their condition in a header, and
 // cover the lifelines of the actors they do not involve. Phases head their steps. The steps not said yet
@@ -17,8 +21,10 @@
 import { beingSaid } from "./scene.js";
 
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-const TONES = new Set(["plain", "edge", "internal", "service", "cheap", "hot", "good", "dropped"]);
-const tone = (t) => (TONES.has(t) ? t : "plain");
+// the four tones of the lane sequence; the older tones map onto them as sequence_svg maps them
+const TONE = { plain: "plain", blue: "blue", red: "red", green: "green", amber: "amber", edge: "blue", service: "blue",
+               internal: "amber", hot: "red", good: "green", cheap: "plain", dropped: "dropped" };
+const tone = (t) => TONE[t] || "plain";
 const KINDS = ["request", "event", "self", "band"];
 const EDGE = 6;          // nothing comes nearer the board's edge than this
 const GAP = 10;          // between two cards on one line
@@ -26,8 +32,8 @@ const CARD = 92;         // narrower than this, the cards take two lines, every 
 const BAR = 10;          // an activation bar's width; a nested one stands NEST to the right
 const NEST = 6;
 const PHASE_H = 34, HEAD_H = 30, BRANCH_H = 30, CLOSE_H = 18, SUMMARY_H = 46;
-// An actor's colour: its tone's, or the next of six in turn, so neighbours never share one.
-const actorColour = (a, i) => (a.tone && TONES.has(a.tone) && a.tone !== "plain" ? `var(--t-${a.tone})` : `var(--a${(i % 6) + 1})`);
+// An actor's colour is its tone's: a colour carries a meaning, so an actor with none is plain.
+const actorColour = (a) => `var(--t-${tone(a.tone) === "dropped" ? "plain" : tone(a.tone)})`;
 const ARROW = (d) => `<svg width="18" height="10" viewBox="0 0 18 10" aria-hidden="true"><path d="M1 5h14m-4-4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6"${d ? ' stroke-dasharray="3 2"' : ""}/></svg>`;
 const CLOSE = `<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m3 3 8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
 const PLAY = `<svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.5v11l9-5.5z" fill="currentColor"/></svg>`;
@@ -41,8 +47,8 @@ export function renderLanes(box, spec, embedded, more = {}) {
   const legend = (spec.legend || []).length
     ? `<div class="ln-legend">${spec.legend.map((l) => `<span class="t-${tone(l.tone)}"><i></i>${esc(l.label)}</span>`).join("")}</div>` : "";
   box.innerHTML = `<div class="ln-head"><div class="ln-actors">${actors.map((a, i) =>
-      `<button type="button" class="ln-chip" style="--ac:${actorColour(a, i)}" data-key="actor:${esc(a.id)}" data-actor="${esc(a.id)}"
-        title="Follow ${esc(String(a.label || a.id).replace(/\n/g, " "))}"><span>${esc(String(a.label || a.id).replace(/\n/g, " "))}</span>${a.sub ? `<small>${esc(a.sub)}</small>` : ""}</button>`).join("")}</div>${legend}</div>
+      `<button type="button" class="ln-chip t-${tone(a.tone)}${a.mono ? " ln-mono" : ""}" style="--ac:${actorColour(a, i)}" data-key="actor:${esc(a.id)}" data-actor="${esc(a.id)}"
+        title="Follow ${esc(String(a.label || a.id).replace(/\n/g, " "))}"><span>${esc(String(a.label || a.id).replace(/\n/g, " "))}</span>${a.role ? `<em>${esc(a.role)}</em>` : ""}${a.sub ? `<small>${esc(a.sub)}</small>` : ""}</button>`).join("")}</div>${legend}</div>
     <div class="ln-body"></div>`;
   box._lanes = { spec, refs: more.refs || {}, play: embedded ? more.play : null, scene: null, n: null, cur: null, drawn: undefined,
                  focus: null, folded: new Set(), pop: null, popNew: false, model: model(spec) };
@@ -71,7 +77,10 @@ function model(spec) {
   const phases = starts.map((p, i) => ({ ...p, b: i + 1 < starts.length ? starts[i + 1].a - 1 : steps.length - 1 }));
   const groups = new Map((spec.groups || []).map((g) => [g.id, g]));
   const reply = new Map(steps.filter((s) => s.reply_to).map((s) => [s.reply_to, s.id]));
-  return { steps, at, phases, groups, reply, actors: spec.actors || [] };
+  // each step's number: its own `n` when the spec numbers its walkthrough (several arrows share one), else 1, 2, 3
+  let last = null;
+  const nums = steps.some((s) => s.n != null) ? steps.map((s) => (last = s.n ?? last)) : steps.map((s, i) => i + 1);
+  return { steps, at, phases, groups, reply, nums, actors: spec.actors || [], outcome: spec.outcome || null };
 }
 
 // After a frame: which steps are shown, which one is being said, which actors the voice points at.
@@ -112,6 +121,7 @@ function paint(box) {
       rows.push({ type: "summary", p, y, h: SUMMARY_H }); y += SUMMARY_H + 10;
       continue;
     }
+    const top = y;
     if (p.label != null) { rows.push({ type: "phase", p, y, h: PHASE_H }); y += PHASE_H; }
     let box_ = null;
     for (let i = p.a; i <= p.b; i++) {
@@ -133,8 +143,12 @@ function paint(box) {
       y += h;
     }
     if (box_) y = closeBox(box_, y);
+    if (p.label != null) rows.push({ type: "band", p, y: top, h: y + 2 - top });
     y += 6;
   }
+  // the outcome closes the diagram: its title and its lines, in its tone
+  const out = st.model.outcome;
+  if (out) { const lines = (out.lines || []).length; rows.push({ type: "outcome", out, y: y + 8, h: 30 + 22 * lines + 18 }); y += 8 + 30 + 22 * lines + 18 + 10; }
   const H = y + 24;
 
   // -- activation bars: a call's on its receiver until its reply; a call to itself a short one ------------
@@ -164,7 +178,12 @@ function paint(box) {
   // -- the drawing --------------------------------------------------------------------------------------
   const bg = [], top = [], html = [];
   const life = (a, y1, y2) => `<line class="ln-life${st.focus && st.focus !== a.id ? " ln-dim" : ""}" data-actor="${esc(a.id)}" x1="${xs.get(a.id)}" x2="${xs.get(a.id)}" y1="${y1}" y2="${y2}"/>`;
-  for (const a of actors) bg.push(life(a, 0, H));
+  for (const r of rows.filter((r) => r.type === "band")) {  // a phase is a band behind its steps
+    const pos = cur == null ? "" : cur > r.p.b ? " ln-past" : cur >= r.p.a ? " ln-here" : "";
+    bg.push(`<rect class="ln-band${phaseOn(r.p) ? "" : " ln-ghost"}${pos}" x="${EDGE}" y="${r.y}" width="${w - 2 * EDGE}" height="${r.h}" rx="10"/>`);
+  }
+  const outRow = rows.find((r) => r.type === "outcome");
+  for (const a of actors) bg.push(life(a, 0, outRow ? outRow.y - 6 : H));  // the lifelines end where the outcome closes the diagram
   const fills = [], frames = [], spans = [];
   for (const r of rows.filter((r) => r.type === "box")) boxDrawing(r, st, cols, w, narrow, shown, fills, frames, spans, html);
   bg.push(...fills);
@@ -189,6 +208,10 @@ function paint(box) {
         <span class="ln-chk">${done ? CHECK : ""}</span><span class="ln-sph">${esc(p.label)}</span><span class="ln-gist">${gist}</span><span class="ln-n">${k} ${k === 1 ? "step" : "steps"}</span></button>`);
     } else if (r.type === "step") {
       html.push(stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown));
+    } else if (r.type === "outcome") {
+      const o = r.out;
+      html.push(`<div class="ln-outcome t-${tone(o.tone)}${shown(steps.length - 1) ? "" : " ln-ghost"}" style="top:${r.y}px;height:${r.h}px">
+        <b>${esc(o.title)}</b>${(o.lines || []).map((l) => `<span>${esc(l)}</span>`).join("")}</div>`);
     }
   }
   const body = box.querySelector(".ln-body");
@@ -258,10 +281,13 @@ function paintCards(box, st, cols, involved) {
 // A row's height and where its arrow lies in it: room above the arrow for its sentence, under it for its
 // call. The step being said is larger; once drawn, words that wrap make their row taller (measure).
 function baseSize(s, isCur, narrow) {
+  const checks = (s.checks || []).length ? 32 : 0;
   if (s.arrow === "band") return { h: isCur ? 70 : 54, ay: isCur ? 35 : 27 };
-  if (s.arrow === "self" || s.from === s.to) return { h: isCur ? 76 : 56, ay: isCur ? 38 : 28 };
-  const sub = s.sub ? 16 : 0;
-  return { h: (isCur ? (narrow ? 76 : 72) : (narrow ? 54 : 48)) + sub, ay: isCur ? (narrow ? 48 : 44) : 32 };
+  if (s.arrow === "self" || s.from === s.to) return { h: (isCur ? 76 : 56) + checks, ay: isCur ? 38 : 28 };
+  // a call's chip sits over its arrow, its label and then its sub; a reply's words over it, with no chip
+  const chip = s.arrow === "event" ? 0 : 14, sub = s.sub ? 16 : 0;
+  const ay = (isCur ? (narrow ? 48 : 44) : 32) + chip + sub;
+  return { h: ay + (isCur ? 28 : 16) + checks, ay };
 }
 const tallKey = (s, isCur) => s.id + (isCur ? ":cur" : "");
 function rowSize(st, s, isCur, narrow) {
@@ -290,7 +316,7 @@ function boxDrawing(r, st, cols, w, narrow, shown, fills, frames, spans, html) {
   let x2 = narrow ? w - EDGE : Math.max(...xx) + (inv.size === 1 ? 240 : 46);
   for (let i = r.first; i <= r.last; i++) {   // a call to itself keeps its words beside it, inside the box
     const s = steps[i];
-    if (s.arrow === "self" && !r.folded) x2 = Math.max(x2, xs.get(s.from) + 60 + Math.max(s.label.length * 8.2, (s.sub || "").length * 7.2) + 16);
+    if (s.arrow === "self" && !r.folded) x2 = Math.max(x2, xs.get(s.from) + 60 + Math.max((s.label || "").length * 8.2, (s.sub || "").length * 7.2) + 16);
   }
   x2 = Math.min(w - EDGE, Math.max(x2, x1 + need));
   for (const lx of xs.values()) if (Math.abs(x2 - lx) < 18) x2 = lx > x2 && lx - 18 - x1 >= need ? lx - 18 : Math.min(w - EDGE, lx + 18);
@@ -334,13 +360,14 @@ function stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown) {
     words = `<div class="ln-lbl ln-inband" style="left:${lo + 12}px;width:${hi - lo - 24}px;top:${ay}px"><b>${esc(s.label)}</b>${s.sub && isCur ? `<code>${esc(s.sub)}</code>` : ""}</div>`;
   } else if (kind === "self" || s.from === s.to) {
     const x0 = edge(s.from, abs + 6, 1);
-    const flip = fx > w * 0.62 && fx - 300 > cols.left;
+    const right = w - (fx + 52) - EDGE, left = fx - 52 - cols.left;  // a chip goes where it has room, left on a narrow board
+    const flip = (fx > w * 0.62 && fx - 300 > cols.left) || (right < 170 && left > right);
     const xr = flip ? xs.get(s.from) - 40 : xs.get(s.from) + 40;
     const sx = flip ? edge(s.from, abs - 10, -1) : edge(s.from, abs - 10, 1);
     const ex = flip ? edge(s.from, abs + 10, -1) : x0;
     svg = `<path class="ln-path" pathLength="1" d="M${sx} ${ay - 10}H${xr}V${ay + 10}H${ex + (flip ? -9 : 9)}"/>${head(ex, ay + 10, flip ? 1 : -1, false)}`;
     const room = flip ? xr - 12 - cols.left : w - (xr + 12) - (s.note && !narrow ? 120 : EDGE);
-    words = `<div class="ln-lbl ln-beside${flip ? " ln-flip" : ""}" style="${flip ? `right:${w - xr + 12}px` : `left:${xr + 12}px`};top:${ay}px;width:${Math.max(140, room)}px">
+    words = `<div class="ln-lbl ln-beside ln-chipped${flip ? " ln-flip" : ""}" style="${flip ? `right:${w - xr + 12}px` : `left:${xr + 12}px`};top:${ay}px;max-width:${Math.max(100, room)}px">
       <b>${esc(s.label)}</b>${s.sub ? `<code>${esc(s.sub)}</code>` : ""}</div>`;
   } else {
     const dir = Math.sign(tx - fx), x1 = edge(s.from, abs, dir), x2 = edge(s.to, abs, -dir), ret = kind === "event";
@@ -348,18 +375,26 @@ function stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown) {
     if (isCur && st.drawn !== cur) svg += `<circle class="ln-dot" r="4.5" cx="${x1}" cy="${ay}"><animate attributeName="cx" from="${x1}" to="${x2}" dur=".6s" fill="freeze"/><animate attributeName="opacity" values="1;1;0" dur="1s" fill="freeze"/></circle>`;
     const mid = (x1 + x2) / 2, span = Math.abs(x2 - x1);
     // as wide as its words on one line (Inter's and JetBrains Mono's average widths), else as the board allows
-    const need = Math.max(s.label.length * (isCur ? 8.9 : 7.5), (s.sub || "").length * (isCur ? 7.6 : 7)) + 12;
+    const need = Math.max((s.label || "").length * (isCur ? 8.9 : 7.5), (s.sub || "").length * (isCur ? 7.6 : 7)) + 12;
     let lw = Math.min(Math.max(span + 30, need, narrow ? 180 : 230), w - cols.left - EDGE);
     const right = w - (s.note && !narrow ? 120 : EDGE);
     const lc = Math.min(Math.max(mid, lw / 2 + cols.left - 6), right - lw / 2);
-    words = `<div class="ln-lbl ln-over" style="left:${lc}px;width:${lw}px;top:${ay}px"><b>${esc(s.label)}</b></div>`
-      + (s.sub ? `<div class="ln-call" style="left:${lc}px;width:${lw}px;top:${ay}px"><code>${esc(s.sub)}</code></div>` : "");
+    // what a call carries sits in a chip on its arrow: its label, then its sub in mono; a reply's words are bare
+    const chip = kind === "event" ? "" : " ln-chipped";
+    words = `<div class="ln-lbl ln-over${chip}" style="left:${lc}px;max-width:${lw}px;top:${ay}px">${s.label ? `<b>${esc(s.label)}</b>` : ""}${s.sub ? `<code>${esc(s.sub)}</code>` : ""}</div>`;
     if (dir < 0) cls.push("ln-back");
+  }
+  // a step's checks: ✓ / ✗ badges under its arrow, where the rule is applied
+  if ((s.checks || []).length && kind !== "band") {
+    const at = kind === "self" || s.from === s.to ? xs.get(s.from) + 40 : xs.get(s.to);
+    const room = Math.max(160, w - EDGE - Math.max(cols.left, at - 150));
+    words += `<div class="ln-checks" style="left:${Math.max(cols.left, at - 150)}px;top:${ay + (kind === "self" || s.from === s.to ? 22 : 10)}px;max-width:${room}px">${s.checks.map((c) =>
+      `<span class="ln-ck ${c.ok === false ? "ln-no" : "ln-ok"}">${c.ok === false ? "✗" : "✓"} ${esc(c.label)}</span>`).join("")}</div>`;
   }
   return `<div class="${cls.join(" ")}" role="button" tabindex="0" aria-label="Step ${i + 1}: ${esc(s.label)}" data-key="step:${esc(s.id)}"
       data-step="${esc(s.id)}" data-from="${esc(s.from)}" data-to="${esc(s.to)}"${shown(i) ? " data-on" : ""}
       style="top:${y}px;height:${h}px"><svg class="ln-svg" width="${w}" height="${h}" aria-hidden="true">${svg}</svg>
-    <span class="ln-num" style="top:${ay}px">${i + 1}</span>${words}${note}</div>`;
+    <span class="ln-num" style="top:${ay}px">${i > 0 && st.model.nums[i - 1] === st.model.nums[i] ? "" : st.model.nums[i] ?? ""}</span>${words}${note}</div>`;
 }
 
 function head(x, y, dir, open) {
@@ -375,7 +410,7 @@ function measure(box, st, rows) {
   for (const r of rows) {
     if (r.type !== "step") continue;
     const el = box.querySelector(`.ln-row[data-step="${CSS.escape(String(r.s.id))}"]`);
-    const said = el?.querySelector(".ln-lbl"), call = el?.querySelector(".ln-call");
+    const said = el?.querySelector(".ln-lbl"), call = el?.querySelector(".ln-call, .ln-checks");
     const sh = said ? said.offsetHeight : 0, ch = call ? call.offsetHeight : 0;
     if (!sh) continue;
     const isCur = el.classList.contains("ln-cur"), b = baseSize(r.s, isCur, st.w < 600);
@@ -419,7 +454,7 @@ function popup(box, st, rows, cols, w) {
   el.style.cssText = `left:${left}px;top:${below ? r.y + r.h - 2 : r.y + 6}px;width:${pw}px;--caret:${Math.max(18, Math.min(pw - 18, mid - left))}px`;
   el.innerHTML = `<div class="ln-pophead"><span class="ln-badge${r.i === (st.drawn ?? -1) ? " ln-said" : ""}">${r.i + 1}</span><span class="ln-popph">${esc(p?.label || "")}</span>
       <button type="button" class="ln-x" data-close title="Close" aria-label="Close">${CLOSE}</button></div>
-    <h3>${esc(s.label.charAt(0).toUpperCase() + s.label.slice(1))}</h3>
+    <h3>${esc(String(s.label || s.sub || "").charAt(0).toUpperCase() + String(s.label || s.sub || "").slice(1))}</h3>
     <div class="ln-whos">${who(s.from)}${s.from === s.to ? "<em>to itself</em>" : ARROW(s.arrow === "event") + who(s.to)}<span class="ln-kindtag">${kind}</span></div>
     ${s.sub ? `<div class="ln-popcall">${esc(s.sub)}</div>` : ""}
     ${src ? `<div class="ln-src"><div class="ln-srchead">${CODE}${esc(src.path)}:${src.at}</div><div class="ln-lines">${code}</div></div>` : s.ref ? `<div class="ln-srchead ln-nosrc">${CODE}${esc(s.ref)}</div>` : ""}

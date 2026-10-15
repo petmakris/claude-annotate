@@ -183,7 +183,7 @@ def stage_rule_breaks(call, shown: str) -> list[str]:
                 out.append(f"R1 {name} frame {n} names {f['cur']} as being said")
             if focus and not set(parts) <= focus:
                 out.append(f"R1/R3 {name} frame {n} says {parts} while it points at {sorted(focus)}")
-            nodes = [k for k in parts if k.startswith("node:")]
+            nodes = [k for k in parts if k.startswith(("node:", "box:"))]  # a flowchart's node or a map's box
             for e in (k for k in f["cur"] if k.startswith("edge:")):
                 if not set(model.up[e]) <= set(f["show"]):
                     out.append(f"R4 {name} frame {n} says {e} without both its ends")

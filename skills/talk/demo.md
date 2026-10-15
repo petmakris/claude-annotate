@@ -34,7 +34,23 @@ A sequence comes in a step at a time, here the path of one turn. When you stop t
  "edges": [{"from": "page", "to": "talk", "label": "your words · polls"}, {"from": "launchd", "to": "talk", "label": "starts it"},
   {"from": "talk", "to": "azure", "label": "text ⇄ speech"}, {"from": "talk", "to": "claude", "label": "turns"},
   {"from": "talk", "to": "stage", "label": "boards"}]} [[/show]]
-A map shows how parts connect, all of it faint at first. [[+ page]] Everything starts in the call page, in your browser. [[+ talk]] It talks to one talk server on this Mac. [[+ launchd]] launchd keeps that server running. [[+ azure]] The server sends your words to Azure, and gets each answer's voice back. [[+ claude]] Your Claude session collects turns from it. [[+ stage]] And the boards go to the stage, which the webcompanion daemon serves. [[point: node talk]] The talk server is the one part everything else goes through. [[key: a map is faint at first and lights part by part]] Next is a table.
+A map shows how parts connect, all of it faint at first. [[+ page]] Everything starts in the call page, in your browser. [[+ talk]] It talks to one talk server on this Mac. [[+ launchd]] launchd keeps that server running. [[+ azure]] The server sends your words to Azure, and gets each answer's voice back. [[+ claude]] Your Claude session collects turns from it. [[+ stage]] And the boards go to the stage, which the webcompanion daemon serves. [[point: node talk]] The talk server is the one part everything else goes through. [[key: a map is faint at first and lights part by part]] Next is an architecture map.
+---
+[[show map | Where talk's parts live]] {"title": "One talk server sits between the page, Claude and the speech service",
+ "columns": ["Your browser", "This Mac", "Outside talk"],
+ "boxes": [{"id": "page", "col": 0, "row": 0, "name": "Call page", "lines": ["`call.js`: microphone and player"], "b": 1, "r": 1},
+  {"id": "stage", "col": 0, "row": 1, "name": "Stage", "lines": ["`stage.js`: the boards"], "b": 4, "r": 4},
+  {"id": "talk", "col": 1, "row": 0, "rows": 2, "tone": "red", "name": "Talk server", "lines": ["`talk.py`, one per machine", "holds every call"], "b": 2, "r": 1},
+  {"id": "claude", "col": 2, "row": 0, "tone": "blue", "name": "Claude session", "lines": ["`talk_client.py`"], "b": 3, "r": 2},
+  {"id": "azure", "col": 2, "row": 1, "tone": "amber", "name": "Azure speech", "lines": ["billed per character"], "b": 3, "r": 3}],
+ "zones": [{"label": "one browser tab", "boxes": ["page", "stage"]}],
+ "arrows": [{"from": "page", "to": "talk", "label": "turns", "b": 2}, {"from": "talk", "to": "claude", "b": 3},
+  {"from": "talk", "to": "azure", "tone": "amber", "b": 3}, {"from": "talk", "to": "stage", "label": "boards", "b": 4},
+  {"layer": "route", "from": "page", "to": "talk", "n": 1, "r": 1, "label": "sends your words"},
+  {"layer": "route", "from": "talk", "to": "claude", "tone": "blue", "n": 2, "r": 2, "label": "the doorbell wakes Claude"},
+  {"layer": "route", "from": "talk", "to": "azure", "tone": "amber", "n": 3, "r": 3, "label": "reads the answer aloud"},
+  {"layer": "route", "from": "talk", "to": "stage", "n": 4, "r": 4, "label": "puts up the boards"}]} [[/show]]
+An architecture map puts each part where it lives. The call page runs in your browser tab. It talks to one talk server on this Mac. The server reaches your Claude session, and Azure speech outside. The stage shows the boards. [[key: a map is built up part by part, then follows one request]] [[point: box talk]] Everything goes through this one server, so now follow one turn. The page sends your words. The doorbell wakes Claude. Azure reads the answer aloud. And the server puts up the boards. Next is a table.
 ---
 [[show table | Two speech engines]]
 | | Azure | VoiceStudio |
@@ -81,4 +97,4 @@ A scene can carry a script, so you can change the case and watch the result. Pic
 ---
 [[show page: README.md | The README]] A page is a file, an address or another session, and an answer brings it forward with its voice like any other board. This is the repository's README. [[key: an answer brings a page forward as it talks about it]] Pick another board and press Play: the stage keeps the board you picked until you press Follow the voice. Next is the end.
 ---
-That was every board: code, a change, a sequence, a map, a table, a map with loops, three scenes and a page. The key points are pinned at the end of the list. Go back through them with the arrows at the top of the stage, or say start over to play the demo again. [[key: the arrows at the top go back through every board]]
+That was every board: code, a change, a sequence, a map, an architecture map, a table, a map with loops, three scenes and a page. The key points are pinned at the end of the list. Go back through them with the arrows at the top of the stage, or say start over to play the demo again. [[key: the arrows at the top go back through every board]]

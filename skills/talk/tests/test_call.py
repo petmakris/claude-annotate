@@ -515,7 +515,7 @@ def test_a_point_lights_up_lines_of_the_last_board_and_a_bad_point_is_reported(t
     _, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point Nope: row 1]] There.", code)
     assert problems == ['point not shown: no board titled "Nope" in this call']
     entry, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point: wibble]] There.", code)
-    assert problems == ['point not shown: expected line N, lines A-B, old line N, row N, rows A-B, row "text", cell "row" / "column", node ID, step ID or part ID']
+    assert problems == ['point not shown: expected line N, lines A-B, old line N, row N, rows A-B, row "text", cell "row" / "column", node ID, step ID, part ID, box ID, zone N or route N']
     assert [c["kind"] for c in entry["cues"]] == ["front"] and "wibble" not in entry["text"]
 
 
@@ -1465,3 +1465,44 @@ def test_each_answer_keeps_its_own_scene_on_a_board_and_the_stage_gets_them_all(
     _said(call, f"[[show sequence | Release path]] {changed} [[/show]] [[point: step s4]] {RELEASE_SAID[4]}",
           show.call_args_list)
     assert list(call.board.items[-1]["scenes"]) == ["4"]
+
+
+MAP_REPLY = ('[[show map | Where pay lives]] {"columns": ["Who asks", "Entry", "Service"],'
+             ' "boxes": [{"id": "u", "col": 0, "row": 0, "name": "A person", "b": 1, "r": 1},'
+             ' {"id": "api", "col": 1, "row": 0, "name": "REST endpoint", "b": 2, "r": 1},'
+             ' {"id": "svc", "col": 2, "row": 0, "tone": "green", "name": "Billing service", "b": 3, "r": 2},'
+             ' {"id": "log", "col": 2, "row": 1, "name": "Audit log", "b": 4}],'
+             ' "arrows": [{"from": "u", "to": "api", "b": 2}, {"from": "api", "to": "svc", "b": 3}, {"from": "svc", "to": "log", "b": 4},'
+             ' {"layer": "route", "from": "u", "to": "api", "n": 1, "r": 1, "label": "sends the payment"},'
+             ' {"layer": "route", "from": "api", "to": "svc", "n": 2, "r": 2, "label": "asks the rule"}]} [[/show]] ')
+
+
+def test_a_map_is_a_board_built_up_as_it_is_said_and_followed_when_the_answer_follows_the_request(tmp_path):
+    from helpers import stage_rule_breaks
+    call = _call(tmp_path)
+    shown = call.split_reply(MAP_REPLY + "A person starts here. The REST endpoint takes the call. The billing service holds "
+                                         "the rule. The audit log keeps a copy. Now the person sends the payment. "
+                                         "The endpoint asks the rule.")
+    (item,) = call.board.items
+    assert (item["kind"], call.board.problems) == ("map", [])
+    assert talk.stage_view(item)[1] == item["visual"] and 'data-key="box:svc"' in item["visual"]["svg"]
+    frames = item["scene"]["frames"]
+    assert [f["cur"][0] for f in frames[1:-1]] == ["box:u", "box:api", "box:svc", "box:log", "route:1", "route:2"]
+    assert stage_rule_breaks(call, shown) == []
+    # an answer that never follows the request builds the map and leaves its route alone
+    call.add("claude", shown, cues=call.reply_cues)
+    item.pop("scene")
+    shown = call.split_reply(MAP_REPLY + "A person starts here. The REST endpoint takes the call. The billing service holds "
+                                         "the rule. [[point: box log]] The audit log keeps a copy.")
+    frames = call.board.items[-1]["scene"]["frames"]
+    assert call.board.problems == [] and not any(k.startswith("route:") for f in frames[:-1] for k in f["show"])
+    assert frames[4]["focus"] == ["box:log"]
+    assert stage_rule_breaks(call, shown) == []
+
+
+def test_a_map_point_names_a_box_a_zone_or_a_route_step_and_a_wrong_one_is_a_problem(tmp_path):
+    _, problems = cues_of(tmp_path, MAP_REPLY + "Here. [[point: route 2]] The rule. [[point: box nope]] Gone. [[point: node u]] No.")
+    assert [p for p in problems if p.startswith("point")] == ['point not shown: no box nope in "Where pay lives"',
+                        'point not shown: "Where pay lives" is a map; use box ID, zone N or route N']
+    _, problems = cues_of(tmp_path, '[[show map | M]] {"columns": ["a"], "boxes": [{"id": "x", "col": 0, "row": 0}]} [[/show]] Hi.')
+    assert problems == ["map \"M\" not shown: box 'x': name must be text"]

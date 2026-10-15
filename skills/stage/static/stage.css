@@ -328,6 +328,18 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .lanes .t-cheap{--tc:var(--t-cheap);--tb:var(--t-cheap-bg)} .lanes .t-hot{--tc:var(--t-hot);--tb:var(--t-hot-bg)}
 .lanes .t-good{--tc:var(--t-good);--tb:var(--t-good-bg)} .lanes .t-dropped{--tc:var(--t-dropped);--tb:var(--t-cheap-bg)}
 
+/* The lane sequence's look (sequence_svg and vz.css draw it the same everywhere): four tones, each with one meaning
+   (blue the AI path, red the central mechanism, green a rule that holds, amber a cost); every other actor is plain.
+   Lanes map the older tones onto these. */
+:root{--t-blue:#2c5d8f;--t-blue-bg:#e8eff8;--t-red:#a33b30;--t-red-bg:#f9e6e2;--t-green:#2f6b3d;--t-green-bg:#e4f1e6;
+  --t-amber:#8a5a00;--t-amber-bg:#fbf1df}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--t-blue:#8fb8e6;--t-blue-bg:#1b2634;--t-red:#f0928a;--t-red-bg:#2f1c1a;
+  --t-green:#93c897;--t-green-bg:#1b2a1e;--t-amber:#e3b860;--t-amber-bg:#2b2415}}
+:root[data-theme="dark"]{--t-blue:#8fb8e6;--t-blue-bg:#1b2634;--t-red:#f0928a;--t-red-bg:#2f1c1a;
+  --t-green:#93c897;--t-green-bg:#1b2a1e;--t-amber:#e3b860;--t-amber-bg:#2b2415}
+.lanes .t-blue{--tc:var(--t-blue);--tb:var(--t-blue-bg)} .lanes .t-red{--tc:var(--t-red);--tb:var(--t-red-bg)}
+.lanes .t-green{--tc:var(--t-green);--tb:var(--t-green-bg)} .lanes .t-amber{--tc:var(--t-amber);--tb:var(--t-amber-bg)}
+
 /* the actor cards, on top while the rows scroll */
 .ln-head{position:sticky;top:-16px;z-index:6;background:var(--panel);border-bottom:1px solid var(--line);border-radius:12px 12px 0 0;padding:10px 0 10px}
 .ln-actors{position:relative;height:56px}
@@ -341,6 +353,31 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .ln-chip.ln-on{border-color:var(--ac,var(--acc));box-shadow:inset 0 3px 0 var(--ac),0 0 0 1px var(--ac),0 4px 14px -6px var(--ac)}
 .ln-chip.ln-off{opacity:.55}
 .ln-tight .ln-chip{min-width:0;padding-inline:8px}
+/* an actor's head as the lane sequence draws it: a box in its tone, its role under its name in that tone */
+.lanes .ln-chip{background:var(--tb);border:1.5px solid var(--tc);box-shadow:0 1px 2px rgba(60,64,67,.10);font-weight:700;font-size:14.5px}
+.lanes .ln-chip.t-plain{background:var(--panel);border-color:var(--line)}
+.ln-chip.ln-mono span{font-family:var(--mono);font-weight:600}
+.ln-chip em{font:400 12.5px/1.3 var(--sans);font-style:normal;color:var(--tc)}
+.ln-chip.t-plain em{color:var(--muted)}
+.lanes .ln-chip.ln-on{border-color:var(--tc);box-shadow:0 0 0 1.5px var(--tc),0 4px 14px -6px var(--tc)}
+.lanes .ln-chip.t-plain.ln-on{border-color:var(--ink);box-shadow:0 0 0 1.5px var(--ink)}
+/* what a call carries, in a chip on its arrow; a step's checks, as badges where the rule is applied */
+.ln-chipped{width:max-content;box-sizing:border-box;padding:5px 10px;border-radius:7px;background:var(--tb);
+  border:1px solid color-mix(in srgb,var(--tc) 60%,transparent)}
+.ln-row.t-plain .ln-chipped,.ln-row.t-dropped .ln-chipped{background:var(--panel);border-color:var(--line)}
+.ln-over.ln-chipped{transform:translate(-50%,calc(-100% - 6px))}
+.ln-chipped code{color:var(--ink)} .ln-chipped b{overflow-wrap:anywhere}
+.ln-checks{position:absolute;display:flex;flex-wrap:wrap;gap:6px;pointer-events:none}
+.ln-ck{font:500 12px/1 var(--sans);padding:5px 9px;border-radius:12px;border:1px solid;white-space:nowrap}
+.ln-ck.ln-ok{color:var(--t-green);background:var(--t-green-bg);border-color:var(--t-green)}
+.ln-ck.ln-no{color:var(--t-red);background:var(--t-red-bg);border-color:var(--t-red)}
+/* a phase is a band behind its steps; the outcome is a box that closes the diagram */
+.ln-band{fill:var(--row-alt);transition:opacity .25s} .ln-band.ln-ghost{opacity:.5}
+.ln-outcome{position:absolute;left:12px;right:12px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;gap:4px;
+  padding:10px 18px;border-radius:10px;border:1.5px solid var(--tc);background:var(--tb);transition:opacity .25s}
+.ln-outcome b{font:700 15.5px/1.3 var(--sans);color:var(--tc)} .ln-outcome span{font:400 13px/1.4 var(--sans);color:var(--muted)}
+.ln-outcome.t-plain{border-color:var(--line);background:var(--panel)} .ln-outcome.t-plain b{color:var(--ink)}
+.ln-outcome.ln-ghost{opacity:.35}
 .ln-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 16px;margin-top:8px;font:400 12px var(--sans);color:var(--muted)}
 .ln-legend span{display:inline-flex;align-items:center;gap:6px}
 .ln-legend i{width:16px;height:3px;border-radius:2px;background:var(--tc)}
@@ -418,6 +455,9 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .ln-num{position:absolute;left:20px;width:24px;height:24px;margin-top:-12px;border-radius:50%;display:grid;place-items:center;
   font:600 11.5px var(--sans);color:var(--muted);background:var(--row-alt);font-variant-numeric:tabular-nums}
 .ln-cur .ln-num{background:var(--acc);color:var(--on-acc)}
+.lanes .ln-num:not(:empty){border:1.5px solid var(--t-blue);color:var(--t-blue);background:var(--t-blue-bg);box-sizing:border-box}
+.lanes .ln-cur .ln-num:not(:empty){border-color:var(--acc);background:var(--acc);color:var(--on-acc)}
+.lanes .ln-num:empty{display:none}
 .ln-note{position:absolute;right:14px;transform:translateY(-50%);font:500 11px var(--mono);color:var(--muted);background:var(--row-alt);border-radius:6px;padding:3px 7px;white-space:nowrap}
 .ln-lbl,.ln-call{position:absolute;pointer-events:none}
 .ln-lbl b{display:block;font:500 13.5px/1.3 var(--sans);color:var(--ink)}
@@ -635,3 +675,15 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .scene button[aria-pressed="true"],.scene button.on{background:var(--acc);border-color:var(--acc);color:var(--on-acc)}
 .scene input,.scene select,.scene textarea{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
 .scene input[type=range],.scene input[type=checkbox],.scene input[type=radio]{accent-color:var(--acc);padding:0}
+
+/* An architecture map (map_svg on the server, vz.css for its look): keyed parts the frames show and light. What is
+   still to come is an outline, as in the player; the parts being said take vz.css's `now`; a part pointed at
+   keeps the accent while the rest dims. A wide map scrolls sideways rather than shrinking its words. */
+.visual.vzmap{padding:14px 16px;overflow-x:auto;overflow-y:visible}
+.vzmap svg.vz{min-width:760px;max-width:1400px;margin:0 auto}
+.vzmap svg.vz rect.bx.k-hidden,.vzmap svg.vz rect.zone.k-hidden{opacity:1!important;fill:none;stroke:var(--vz-line);stroke-width:1.2;stroke-dasharray:4 4}
+.vzmap.k-dim svg.vz [data-key]:not(.k-focus):not(.k-hidden):not(.now){opacity:.3}
+.vzmap svg.vz rect.bx.k-focus{stroke:var(--vz-accent);stroke-width:2.4}
+.vzmap svg.vz .ar.k-focus{stroke:var(--vz-accent);stroke-width:3.2}
+.vzmap svg.vz [data-key]:not(.k-hidden){cursor:pointer}
+.vzmap svg.vz.mode-route .r-later:not(.now){opacity:.3}

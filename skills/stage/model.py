@@ -9,7 +9,7 @@ import subprocess
 from html.parser import HTMLParser
 from pathlib import Path
 
-from skills._shared.visuals import flowchart, sequence
+from skills._shared.visuals import flowchart, map_svg, sequence, sequence_svg
 
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 MAX_CODE_LINES = 60
@@ -264,10 +264,10 @@ def parse_source(raw: str, cwd: Path, stdin_text: str | None = None) -> dict:
     if raw.endswith(":-") and re.fullmatch(r"[A-Za-z]\w*:-", raw):
         kind = raw[:-2].lower()
         kind = {"mermaid": "diagram", "graph": "diagram", "flow": "diagram", "grid": "table"}.get(kind, kind)
-        if kind in ("sequence", "flowchart"):
+        if kind in ("sequence", "flowchart", "map"):
             return visual_source(kind, stdin_text or "", root=cwd)
         if kind not in ("diagram", "table"):
-            raise SourceError(f"unknown {raw}: stdin takes sequence:-, flowchart:-, diagram:- or table:-")
+            raise SourceError(f"unknown {raw}: stdin takes sequence:-, flowchart:-, map:-, diagram:- or table:-")
         body = (stdin_text or "").strip()
         if not body:
             raise SourceError(f"{kind}:- reads its body from stdin, and stdin was empty")
@@ -283,7 +283,10 @@ def parse_source(raw: str, cwd: Path, stdin_text: str | None = None) -> dict:
     return {"type": "file", "path": path.relative_to(cwd.resolve()).as_posix(), "fragment": fragment or None}
 
 
-_PARTS = {"sequence": "actors, steps, phases, legend, groups", "flowchart": "nodes, edges, groups"}
+_PARTS = {"sequence": "actors, steps, phases, legend, groups", "flowchart": "nodes, edges, groups",
+          "map": "boxes, zones, arrows, legend"}
+_NUMBERS = {"n"}  # fields the tools read as numbers: a step's number in the walkthrough
+_MAP_TEXT = {"id", "name", "label", "from", "to"}  # on a map every other field may be a number (col, row, b, r)
 
 
 def _plain(tool: str, spec: dict) -> dict:
@@ -294,7 +297,8 @@ def _plain(tool: str, spec: dict) -> dict:
         if name in _PARTS[tool].split(", ") and value is not None:
             if not isinstance(value, list) or not all(isinstance(x, dict) for x in value):
                 raise SourceError(f"{tool}:-: {name} must be a list of objects")
-            value = [{k: str(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else v
+            text = (lambda k: k in _MAP_TEXT) if tool == "map" else (lambda k: k not in _NUMBERS)
+            value = [{k: str(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and text(k) else v
                       for k, v in x.items()} for x in value]
         out[name] = value
     return out
@@ -321,8 +325,11 @@ def check_flowchart(spec: dict) -> None:
 
 
 def visual_source(tool: str, text: str, root: Path | None = None) -> dict:
-    """A sequence or flowchart spec (JSON), checked and kept as its spec: the stage draws a sequence as its lanes
-    (lanes.js) and a flowchart as its map (map.js), so no drawing of the shared tools is stored with it.
+    """A sequence, flowchart or map spec (JSON), checked and kept as its spec. The stage draws a sequence as its
+    lanes (lanes.js) and a flowchart as its map (map.js), so no drawing is stored with them. An architecture map
+    is drawn here, by map_svg, keyed for the stage's frames, and kept as `svg` beside its spec: it is measured and
+    routed in Python, so the page cannot draw it. Its words reach the SVG only as escaped text, and the stage
+    still runs it through DOMPurify before it goes in.
     With `root`, a sequence also keeps the lines round each step's `ref` (see step_refs), for its popups."""
     try:
         spec = json.loads(text)
@@ -336,15 +343,23 @@ def visual_source(tool: str, text: str, root: Path | None = None) -> dict:
     spec = _plain(tool, spec)
     try:
         if tool == "sequence":
-            sequence.validate(spec)
+            sequence_svg.validate(spec)  # the base rules, plus role, checks, n, outcome and the four tones
+        elif tool == "map":
+            map_svg.validate(spec)
         else:
             # Loops are allowed, since a state machine has them, so annotate's checks (which want a DAG) are not used.
             check_flowchart(spec)
-    except (sequence.ValidationError, flowchart.ValidationError) as e:
+    except (sequence.ValidationError, flowchart.ValidationError, map_svg.ValidationError) as e:
         raise SourceError(f"{tool}:-: {e}") from None
     except Exception as e:
         raise SourceError(f"{tool}:-: the tool could not read this spec ({type(e).__name__}: {e})") from None
     source = {"type": "inline", "format": "visual", "tool": tool, "spec": spec}
+    if tool == "map":
+        uid = "vzm" + hashlib.sha1(json.dumps(spec, sort_keys=True).encode()).hexdigest()[:8]
+        try:
+            source["svg"] = map_svg.render(spec, uid, keyed=True)
+        except Exception as e:
+            raise SourceError(f"map:-: the map could not be drawn ({type(e).__name__}: {e})") from None
     if tool == "sequence" and root is not None:
         refs, _ = step_refs(spec, root)
         if refs:

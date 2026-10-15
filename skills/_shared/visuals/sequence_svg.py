@@ -129,8 +129,12 @@ def _numbers(steps: list[dict]) -> list[int | None]:
     return out
 
 
-def render(spec: dict[str, Any], uid: str) -> str:
-    """Validate and draw `spec` as one SVG string. `uid` prefixes every id, so diagrams can share a page."""
+def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
+    """Validate and draw `spec` as one SVG string. `uid` prefixes every id, so diagrams can share a page.
+
+    With `keyed`, each step's group also carries ``data-key="step:<id>"``, and an actor's head, its words and
+    its lifeline ``data-key="actor:<id>"``, for a page that reveals and lights parts by key. Without it the
+    output is exactly what it was before keys existed."""
     validate(spec)
     if not re.fullmatch(r"[A-Za-z][\w-]{0,40}", uid or ""):
         raise ValidationError(f"uid {uid!r}: letters, digits, - and _, starting with a letter")
@@ -280,7 +284,8 @@ def render(spec: dict[str, Any], uid: str) -> str:
         if s.get("note"):
             g.append(_text("sb mono", note_x, arrow_y + 4, s["note"]))
             notes_w = max(notes_w, _width(s["note"], "vz-mono", True))
-        out_rows.append(f'<g data-step="{escape(s["id"], quote=True)}"{att}>' + "".join(g) + "</g>")
+        key = f' data-key="step:{escape(s["id"], quote=True)}"' if keyed else ""
+        out_rows.append(f'<g data-step="{escape(s["id"], quote=True)}"{key}{att}>' + "".join(g) + "</g>")
 
     lane_end = y
     outcome = spec.get("outcome")
@@ -297,21 +302,24 @@ def render(spec: dict[str, Any], uid: str) -> str:
         parts.append(_text(_cls("zl", tone), PAD, top + 16, label.upper(), att))
 
     # lifelines and heads
+    def akey(a: dict) -> str:
+        return f' data-key="actor:{escape(a["id"], quote=True)}"' if keyed else ""
+
     for i, a in enumerate(actors):
-        parts.append(f'<line class="life" x1="{xs[i]:.0f}" y1="{head_top + HEAD_H:.0f}" x2="{xs[i]:.0f}" y2="{lane_end:.0f}"/>')
+        parts.append(f'<line class="life" x1="{xs[i]:.0f}" y1="{head_top + HEAD_H:.0f}" x2="{xs[i]:.0f}" y2="{lane_end:.0f}"{akey(a)}/>')
     for i, a in enumerate(actors):
         tone = _tone(a.get("tone"))
         w = head_w[i]
         x0 = xs[i] - w / 2
         lines = _head_lines(a)
-        parts.append(f'<rect class="{_cls("bx", tone)}" x="{x0:.0f}" y="{head_top:.0f}" width="{w:.0f}" height="{HEAD_H}" rx="8"/>')
+        parts.append(f'<rect class="{_cls("bx", tone)}" x="{x0:.0f}" y="{head_top:.0f}" width="{w:.0f}" height="{HEAD_H}" rx="8"{akey(a)}/>')
         if a.get("role") and len(lines) == 1:
-            parts.append(_text(_cls("nm", "mono" if a.get("mono") else ""), xs[i], head_top + 23, lines[0], "", "middle"))
-            parts.append(_text(_cls("sb", tone), xs[i], head_top + 42, a["role"], "", "middle"))
+            parts.append(_text(_cls("nm", "mono" if a.get("mono") else ""), xs[i], head_top + 23, lines[0], akey(a), "middle"))
+            parts.append(_text(_cls("sb", tone), xs[i], head_top + 42, a["role"], akey(a), "middle"))
         else:
             base = head_top + (33 if len(lines) == 1 else 23)
             for k, ln in enumerate(lines[:2]):
-                parts.append(_text(_cls("nm", "mono" if a.get("mono") else ""), xs[i], base + 19 * k, ln, "", "middle"))
+                parts.append(_text(_cls("nm", "mono" if a.get("mono") else ""), xs[i], base + 19 * k, ln, akey(a), "middle"))
 
     parts.extend(out_rows)
     y = lane_end

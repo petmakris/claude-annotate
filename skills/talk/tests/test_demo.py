@@ -16,7 +16,7 @@ def test_every_demo_answer_goes_through_the_reply_parser_without_a_board_problem
         assert call.board.problems == [], (text[:60], call.board.problems)
     # every kind of board the stage draws comes past
     kinds = {item["kind"] for item in call.board.items}
-    assert {"code", "change", "sequence", "flowchart", "table", "page"} <= kinds, kinds  # a call draws no Mermaid
+    assert {"code", "change", "sequence", "flowchart", "map", "table", "page"} <= kinds, kinds  # a call draws no Mermaid
 
 
 def test_a_demo_starts_when_its_page_opens_and_next_again_back_move_through_it(tmp_path):
@@ -78,7 +78,7 @@ def test_the_demo_shows_every_board_kind_and_every_way_to_steer_one():
     shown = set(re.findall(r"\[\[show (\w+)", text))
     assert kinds <= shown, f"no demo answer shows: {sorted(kinds - shown)}"
     forms = {"lines": r"\[\[point[^\]]*: lines? \d", "row or cell": r"\[\[point[^\]]*: (?:row|cell) ",
-             "node": r"\[\[point[^\]]*: node ", "step": r"\[\[point[^\]]*: step "}
+             "node": r"\[\[point[^\]]*: node ", "step": r"\[\[point[^\]]*: step ", "box": r"\[\[point[^\]]*: box "}
     missing = [name for name, rx in forms.items() if not re.search(rx, text)]
     assert not missing, f"no demo answer points at a {missing}"
     for tag in ("[[next]]", "[[+ ", "[[key:", "[[guess:", "[[check]]", "<dfn title=", "<script>"):

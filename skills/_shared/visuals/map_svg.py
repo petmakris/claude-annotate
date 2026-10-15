@@ -624,8 +624,10 @@ def _badge_at(pts: list[Pt]) -> Pt:
 
 # ---------------------------------------------------------------- drawing
 
-def _attrs(b: Any = None, r: Any = None, *, base: bool = False, route: bool = False) -> str:
+def _attrs(b: Any = None, r: Any = None, *, base: bool = False, route: bool = False, key: str = "") -> str:
     out = ' data-p="1"'
+    if key:
+        out += f' data-key="{escape(key, quote=True)}"'
     if b is not None:
         out += f' data-b="{int(b)}"'
     if r is not None:
@@ -660,8 +662,24 @@ def _markers(uid: str) -> str:
         for k, c in heads) + "</defs>"
 
 
-def _draw(spec: dict, uid: str, g: _Grid) -> tuple[list[str], dict[int, float], float]:
-    """Draw everything. Returns the parts, the extra width each gap needs for a label that found no spot, and the width."""
+def arrow_keys(spec: dict[str, Any]) -> list[str]:
+    """Each arrow's key, in spec order: a structure arrow is ``edge:<from>-><to>#<n>`` (the n-th from that box to
+    that one, counted from 0), a route arrow ``route:<r>``, the route step it belongs to (1 when it has none)."""
+    seen: dict[tuple[str, str], int] = {}
+    out = []
+    for a in spec.get("arrows") or []:
+        if a.get("layer", "base") == "route":
+            out.append(f"route:{a['r'] if a.get('r') is not None else 1}")
+        else:
+            pair = (a["from"], a["to"])
+            out.append(f"edge:{pair[0]}->{pair[1]}#{seen.get(pair, 0)}")
+            seen[pair] = seen.get(pair, 0) + 1
+    return out
+
+
+def _draw(spec: dict, uid: str, g: _Grid, keyed: bool = False) -> tuple[list[str], dict[int, float], float]:
+    """Draw everything. Returns the parts, the extra width each gap needs for a label that found no spot, and the width.
+    `keyed` stamps each part's key on it (see render)."""
     out: list[str] = []
     width = g.width
     if spec.get("title"):
@@ -682,7 +700,7 @@ def _draw(spec: dict, uid: str, g: _Grid) -> tuple[list[str], dict[int, float], 
 
     obstacles: list[tuple[float, float, float, float]] = list(head_rects)
     zone_edges: list[Seg] = []
-    for z, lines in zip(spec.get("zones") or [], g.zone_lines):
+    for zi, (z, lines) in enumerate(zip(spec.get("zones") or [], g.zone_lines)):
         mem = [g.boxes[m] for m in z["boxes"]]
         head = 12 + ZONE_LINE * max(1, len(lines))
         x0 = min(b.x for b in mem) - ZONE_PAD
@@ -691,7 +709,7 @@ def _draw(spec: dict, uid: str, g: _Grid) -> tuple[list[str], dict[int, float], 
         y1 = max(b.btm for b in mem) + ZONE_FOOT - 4
         zr = z.get("r", min((g.boxes[m].spec["r"] for m in z["boxes"] if g.boxes[m].spec.get("r") is not None), default=None))
         zb = z.get("b", min((g.boxes[m].spec["b"] for m in z["boxes"] if g.boxes[m].spec.get("b") is not None), default=None))
-        att = _attrs(zb, zr)
+        att = _attrs(zb, zr, key=f"zone:{zi}" if keyed else "")
         zone_edges += [((x0, y0), (x1, y0)), ((x1, y0), (x1, y1)), ((x0, y1), (x1, y1)), ((x0, y0), (x0, y1))]
         out.append(f'<rect class="{_cls("zone", z.get("tone", "plain"))}" x="{x0:.0f}" y="{y0:.0f}" width="{x1 - x0:.0f}" height="{y1 - y0:.0f}" rx="10"{att}/>')
         for i, ln in enumerate(lines):
@@ -703,7 +721,8 @@ def _draw(spec: dict, uid: str, g: _Grid) -> tuple[list[str], dict[int, float], 
     def draw_box(bx: _Box, inh_b: Any, inh_r: Any) -> None:
         s = bx.spec
         b, r = s.get("b", inh_b), s.get("r", inh_r)
-        att = _attrs(b, r)
+        key = f"box:{s['id']}" if keyed else ""
+        att = _attrs(b, r, key=key)
         out.append(f'<rect class="{_cls("bx", s.get("tone", "plain"))}" x="{bx.x:.0f}" y="{bx.y:.0f}" width="{bx.w:.0f}" '
                    f'height="{bx.h:.0f}" rx="{6 if bx.parent else 8}"{att}/>')
         out.append(_text(_cls("nm", "mono" if s.get("mono") else ""), bx.x + BOX_PAD_L, bx.y + NAME_Y, s["name"], att))
@@ -716,7 +735,7 @@ def _draw(spec: dict, uid: str, g: _Grid) -> tuple[list[str], dict[int, float], 
         for ln in s.get("lines") or []:
             ln = _line(ln)
             y += LINE_STEP + (GAP_STEP if ln.get("gap") else 0)
-            la = _attrs(ln.get("b", b), ln.get("r", r))
+            la = _attrs(ln.get("b", b), ln.get("r", r), key=key)
             out.append(_text(_cls("sb", "mono" if ln.get("mono") else "", ln.get("tone", "plain")), bx.x + BOX_PAD_L, y, ln["text"], la))
         for ch in s.get("children") or []:
             draw_box(g.boxes[ch["id"]], b, r)
@@ -740,10 +759,11 @@ def _draw(spec: dict, uid: str, g: _Grid) -> tuple[list[str], dict[int, float], 
     need: dict[int, float] = {}
     top_labels: list[str] = []
 
-    for a, pts in routed:
+    keys = arrow_keys(spec) if keyed else [""] * len(routed)
+    for (a, pts), key in zip(routed, keys):
         tone = a.get("tone", "plain")
         route = a.get("layer", "base") == "route"
-        att = _attrs(a.get("b"), a.get("r"), base=not route, route=route)
+        att = _attrs(a.get("b"), a.get("r"), base=not route, route=route, key=key)
         d = "M" + " L".join(f"{x:.0f},{y:.0f}" for x, y in pts)
         out.append(f'<path class="{_cls("ar", tone, "dash" if a.get("dash") else "")}" d="{d}" marker-end="url(#{uid}-{MARK[tone]})"{att}/>')
         badge = None
@@ -799,15 +819,20 @@ def _draw(spec: dict, uid: str, g: _Grid) -> tuple[list[str], dict[int, float], 
     return out, need, width
 
 
-def render(spec: dict[str, Any], uid: str) -> str:
-    """Validate and draw `spec` as one SVG string. `uid` prefixes every id, so maps can share a page."""
+def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
+    """Validate and draw `spec` as one SVG string. `uid` prefixes every id, so maps can share a page.
+
+    With `keyed`, every part also carries ``data-key``, for a page that reveals and lights parts by key (the
+    stage): ``zone:<i>`` (its place in ``zones``), ``box:<id>`` on a box, its name and its lines (a child box
+    has its own), and on an arrow, its badge and its label the key ``arrow_keys`` gives it. Without it the
+    output is exactly what it was before keys existed."""
     validate(spec)
     if not re.fullmatch(r"[A-Za-z][\w-]{0,40}", uid or ""):
         raise ValidationError(f"uid {uid!r}: letters, digits, - and _, starting with a letter")
     extra: dict[int, float] = {}
     for _ in range(4):
         g = _layout(spec, extra)
-        out, need, width = _draw(spec, uid, g)
+        out, need, width = _draw(spec, uid, g, keyed)
         if not need:
             break
         for c, more in need.items():

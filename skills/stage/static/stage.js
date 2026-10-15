@@ -259,7 +259,7 @@ function metaText(src) {
   if (src.format === "points") { const n = src.items.length; return `${n} key ${n === 1 ? "point" : "points"} from this call`; }
   if (src.format === "diagram") return "Diagram";
   if (src.format === "scene") { const n = (src.parts || []).length; return `Scene · ${n} ${n === 1 ? "part" : "parts"}`; }
-  if (src.format === "visual") return src.tool === "sequence" ? "Sequence diagram" : "Flowchart";
+  if (src.format === "visual") return { sequence: "Sequence diagram", map: "Architecture map" }[src.tool] || "Flowchart";
   return "Board";
 }
 
@@ -683,6 +683,14 @@ function renderInline(v, seq) {
     box.className = "visual lanes";
     renderLanes(box, src.spec, embedded, { refs: src.refs, play: (step, dry) => playStep(v, step, dry) });
     requestAnimationFrame(() => { if (current()) paintFrame(v, box); });
+  } else if (src.format === "visual" && src.tool === "map") {
+    // An architecture map is drawn on the server (map_svg, keyed for the frames) and made safe again here.
+    box.className = "visual vzmap";
+    paintVzMap(v, box, src);
+    if (!window.DOMPurify) libsReady().then(() => {
+      if (!current()) return;
+      if (window.DOMPurify) paintVzMap(v, box, src); else note(box, "The map could not be made safe to show, so it is not shown.", retryLibs);
+    });
   } else if (src.format === "visual" && src.tool === "flowchart") {
     // A flowchart is a map the stage draws itself: ghosts first, lit part by part with the voice.
     box.className = "visual map";
@@ -724,6 +732,80 @@ function paintScene(v, box, src) {
   for (const a of box.querySelectorAll("a[href]")) { a.target = "_blank"; a.rel = "noopener"; }
   box.onclick = (e) => tapScene(v, e);
   requestAnimationFrame(() => { if (box.isConnected) paintFrame(v, box); });
+}
+
+// An architecture map, as map_svg drew it on the server: its words are escaped text there, and DOMPurify (SVG only)
+// takes out anything else before it goes in, so a forged view can bring no markup. Every part carries its key
+// (box:, zone:, edge:, route:), which the frames show and light.
+function paintVzMap(v, box, src) {
+  if (!window.DOMPurify) return;
+  box.innerHTML = DOMPurify.sanitize(String(src.svg || ""), { USE_PROFILES: { svg: true } });
+  const svg = box.querySelector("svg.vz");
+  if (svg) {
+    svg.classList.add("outline");  // what is still to come is an outline, as in the player
+    for (const el of svg.querySelectorAll("[marker-end]")) el.dataset.mk = el.getAttribute("marker-end");
+  }
+  box.onclick = (e) => tapMap(v, e);
+  requestAnimationFrame(() => { if (box.isConnected) paintFrame(v, box); });
+}
+// After a frame: the parts being said take the accent (vz.css's `now`, with the accent's arrowhead), and while
+// the voice follows the request (a route step shown before the rest frame) the map is in route mode: the route's
+// arrows show, the structure arrows off it go, the parts it never touches are dimmed, and so are the parts it
+// reaches only later. Returns the parts said.
+function layoutVzMap(box, scene, n) {
+  const svg = box.querySelector("svg.vz");
+  if (!svg) return [];
+  const last = scene.frames.length - 1, frame = scene.frames[Math.max(0, Math.min(n, last))];
+  const cur = new Set(beingSaid(scene, n));
+  const steps = n < scene.rest ? frame.show.filter((k) => k.startsWith("route:")).map((k) => +k.slice(6)) : [];
+  const at = steps.length ? Math.max(...steps) : null;  // how far the request has come
+  svg.classList.toggle("mode-route", at !== null);
+  const on = svg.querySelector('marker[id$="-on"]')?.id, said = [];
+  for (const el of svg.querySelectorAll("[data-key]")) {
+    const now = cur.has(el.dataset.key);
+    el.classList.toggle("now", now);
+    el.classList.toggle("r-later", at !== null && el.dataset.r !== undefined && +el.dataset.r > at);  // the request is not there yet
+    if (now) said.push(el);
+    if (!el.dataset.mk) continue;
+    const head = now && on ? `url(#${on})` : el.dataset.mk;
+    if (el.dataset.marker) el.dataset.marker = head;  // drawing in: its head comes back when the line is drawn
+    else el.setAttribute("marker-end", head);
+  }
+  return said;
+}
+// A map wider than its board scrolls sideways: the parts being said are brought to its middle.
+function centreAcross(box, els) {
+  const shown = els.filter((e) => e.isConnected);
+  if (!shown.length || box.scrollWidth <= box.clientWidth + 1) return;
+  const b = box.getBoundingClientRect(), rs = shown.map((e) => e.getBoundingClientRect());
+  const mid = (Math.min(...rs.map((r) => r.left)) + Math.max(...rs.map((r) => r.right))) / 2 - b.left;
+  box.scrollTo({ left: box.scrollLeft + mid - box.clientWidth / 2, behavior: reduced() ? "auto" : "smooth" });
+}
+// A part of the map tapped: its name, Ask about this, and Play from here when an answer says it.
+function tapMap(v, e) {
+  const part = e.target.closest("[data-key]:not(.k-hidden)");
+  if (!part) { closePop(); return; }
+  const key = part.dataset.key, name = mapPartName(v.body.source.spec || {}, key);
+  const acts = [button("Ask about this", () => { closePop(); post({ type: "stage:ask", text: `About "${name}": ` }); }, "pri")];
+  if (playKey(v, key, true)) acts.push(button("Play from here", () => { closePop(); playKey(v, key); }));
+  openPop(name.charAt(0).toUpperCase() + name.slice(1), null, acts, part);
+}
+function mapPartName(spec, key) {
+  const plain = (t) => String(t || "").replace(/`/g, "");
+  const [kind, id] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
+  const boxes = [];
+  const walk = (b) => { boxes.push(b); (b.children || []).forEach(walk); };
+  (spec.boxes || []).forEach(walk);
+  const box = (bid) => plain(boxes.find((b) => b.id === bid)?.name || bid);
+  if (kind === "box") return box(id);
+  if (kind === "zone") return plain((spec.zones || [])[+id]?.label || "zone " + id);
+  if (kind === "route") {
+    const cap = ((spec.captions || {}).route || [])[+id - 1];
+    const labels = (spec.arrows || []).filter((a) => a.layer === "route" && String(a.r ?? 1) === id && a.label).map((a) => plain(a.label));
+    return plain(cap?.title) || labels.join(", ") || "step " + id + " of the request";
+  }
+  const [from, to] = id.replace(/#\d+$/, "").split("->");
+  return `${box(from)} to ${box(to)}`;
 }
 
 // A scene with a script runs in a sealed frame: sandbox="allow-scripts" without allow-same-origin, so it reaches
@@ -831,7 +913,7 @@ function openPop(title, text, acts, anchor) {
   spopEl.style.left = Math.max(16, Math.min(r.left - stage.left, stage.width - w - 16)) + "px";
 }
 function closePop() { spopEl.hidden = true; }
-document.addEventListener("pointerdown", (e) => { if (!spopEl.hidden && !spopEl.contains(e.target) && !e.target.closest?.(".scene, .caption")) closePop(); }, true);
+document.addEventListener("pointerdown", (e) => { if (!spopEl.hidden && !spopEl.contains(e.target) && !e.target.closest?.(".scene, .vzmap, .caption")) closePop(); }, true);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !spopEl.hidden) closePop(); });
 
 function sourceFrame(text) {
@@ -1319,6 +1401,11 @@ function paintFrame(v, box, animate = false) {
   if (box.classList.contains("lanes")) { layoutLanes(box, scene, n); done.focused = null; }  // lanes scroll themselves
   // the map is placed to fit; on one taller than its board, the card being said is kept in view
   if (box.classList.contains("map")) done.focused = layoutMap(box, scene, n, animate && v.applied === n - 1);
+  if (box.classList.contains("vzmap")) {
+    const said = layoutVzMap(box, scene, n), lit = done.focused.length ? done.focused : said;
+    done.focused = lit;
+    requestAnimationFrame(() => { if (!v.pane.hidden) centreAcross(box, lit); });  // a map wider than its board
+  }
   if (box.classList.contains("scene")) {
     // the part being said is marked, and kept in view with what is pointed at
     const cur = new Set(beingSaid(scene, n));
