@@ -44,6 +44,8 @@ EXPECTED = {
     "fonts/JetBrainsMono-Variable.woff2": ["annotate", "stage"],
     "fonts/JETBRAINS_MONO_LICENSE.txt": ["annotate", "stage"],
     "visuals.css": ["annotate", "stage"],
+    "vz.css": ["annotate", "stage"],
+    "vz-reveal.js": ["annotate", "stage"],
     "wc-threads.js": ["dataflow"],
     "wc-boot.js": ["annotate", "dataflow", "deck"],
     "wc-open.js": ["annotate", "dataflow", "specimen"],

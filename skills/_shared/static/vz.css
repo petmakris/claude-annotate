@@ -1,0 +1,125 @@
+/* vz.css — how the map and the lane sequence draw (skills/_shared/visuals/map_svg.py and
+   sequence_svg.py). Every rule is scoped to svg.vz, so the diagrams drop into any page.
+
+   Colours are tokens on .vz-player and svg.vz with light defaults, dark values under prefers-color-scheme
+   and [data-theme="dark"]; a page overrides a --vz-* token with a rule on .vz-player, svg.vz. Colour carries
+   meaning and only four hues exist: blue is the AI or model path, red the central mechanism or the
+   risky part, green where a rule holds or what passes, amber a warning, a cost or a workaround.
+
+   The SVGs are laid out on the server and measured by visuals/text_metrics.py ("vz-*" styles, stage
+   face: Inter and JetBrains Mono). Sizes here must stay in sync with those styles. */
+.vz-player, svg.vz {
+  --vz-fg: #161c1a; --vz-dim: #56615b; --vz-line: #d6dbd5; --vz-card: #ffffff; --vz-sunk: #eceee9;
+  --vz-accent: #b2570a;
+  --vz-blue: #2c5d8f; --vz-blue-soft: #e8eff8; --vz-red: #a33b30; --vz-red-soft: #f9e6e2;
+  --vz-green: #2f6b3d; --vz-green-soft: #e4f1e6; --vz-amber: #8a5a00; --vz-amber-soft: #fbf1df;
+  --vz-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --vz-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+svg.vz {
+  display: block; width: 100%; height: auto; font-family: var(--vz-sans); overflow: visible;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .vz-player, :root:not([data-theme="light"]) svg.vz {
+  --vz-fg: #e9edea; --vz-dim: #a3aca7; --vz-line: #313936; --vz-card: #1c2220; --vz-sunk: #161b19;
+  --vz-accent: #f3a957;
+  --vz-blue: #8fb8e6; --vz-blue-soft: #1b2634; --vz-red: #f0928a; --vz-red-soft: #2f1c1a;
+  --vz-green: #93c897; --vz-green-soft: #1b2a1e; --vz-amber: #e3b860; --vz-amber-soft: #2b2415 } }
+:root[data-theme="dark"] .vz-player, :root[data-theme="dark"] svg.vz {
+  --vz-fg: #e9edea; --vz-dim: #a3aca7; --vz-line: #313936; --vz-card: #1c2220; --vz-sunk: #161b19;
+  --vz-accent: #f3a957;
+  --vz-blue: #8fb8e6; --vz-blue-soft: #1b2634; --vz-red: #f0928a; --vz-red-soft: #2f1c1a;
+  --vz-green: #93c897; --vz-green-soft: #1b2a1e; --vz-amber: #e3b860; --vz-amber-soft: #2b2415 }
+
+/* Text */
+svg.vz .ttl { font-size: 22px; font-weight: 700; fill: var(--vz-fg) }
+svg.vz .sub { font-size: 13px; fill: var(--vz-dim) }
+svg.vz .zl { font-size: 12.5px; font-weight: 600; letter-spacing: .08em; fill: var(--vz-dim) }
+svg.vz .nm { font-size: 15.5px; font-weight: 600; fill: var(--vz-fg) }
+svg.vz .sb { font-size: 13px; fill: var(--vz-dim) }
+svg.vz .lb { font-size: 13px; fill: var(--vz-fg) }
+svg.vz .zn { font-size: 13px; font-weight: 600; fill: var(--vz-dim) }
+svg.vz .mono { font-family: var(--vz-mono); font-size: 13px }
+svg.vz .nm.mono { font-size: 14.5px }
+svg.vz text.blue, svg.vz tspan.blue { fill: var(--vz-blue) }
+svg.vz text.red, svg.vz tspan.red { fill: var(--vz-red) }
+svg.vz text.green, svg.vz tspan.green { fill: var(--vz-green) }
+svg.vz text.amber, svg.vz tspan.amber { fill: var(--vz-amber) }
+
+/* Boxes and zones */
+svg.vz .bx { fill: var(--vz-card); stroke: var(--vz-line); stroke-width: 1.5 }
+svg.vz .bx.blue { fill: var(--vz-blue-soft); stroke: var(--vz-blue) }
+svg.vz .bx.red { fill: var(--vz-red-soft); stroke: var(--vz-red) }
+svg.vz .bx.green { fill: var(--vz-green-soft); stroke: var(--vz-green) }
+svg.vz .bx.amber { fill: var(--vz-amber-soft); stroke: var(--vz-amber) }
+svg.vz .zone { fill: none; stroke: var(--vz-dim); stroke-width: 1.5; stroke-dasharray: 6 5 }
+svg.vz .zone.blue { stroke: var(--vz-blue) } svg.vz .zone.red { stroke: var(--vz-red) }
+svg.vz .zone.green { stroke: var(--vz-green) } svg.vz .zone.amber { stroke: var(--vz-amber) }
+svg.vz .zone.blue + text, svg.vz text.zn.blue { fill: var(--vz-blue) }
+svg.vz .band { fill: var(--vz-sunk); stroke: none }
+
+/* Arrows: a line or path with class ar, the head a marker whose path has class ah */
+svg.vz .ar { fill: none; stroke: var(--vz-dim); stroke-width: 1.8 }
+svg.vz .ar.blue { stroke: var(--vz-blue) } svg.vz .ar.red { stroke: var(--vz-red) }
+svg.vz .ar.green { stroke: var(--vz-green) } svg.vz .ar.amber { stroke: var(--vz-amber) }
+svg.vz .ar.dash { stroke-dasharray: 6 4 }
+svg.vz .ah { fill: var(--vz-dim) } svg.vz .ah.blue { fill: var(--vz-blue) } svg.vz .ah.red { fill: var(--vz-red) }
+svg.vz .ah.green { fill: var(--vz-green) } svg.vz .ah.amber { fill: var(--vz-amber) } svg.vz .ah.on { fill: var(--vz-accent) }
+
+/* Lanes of a sequence */
+svg.vz .life { stroke: var(--vz-line); stroke-width: 1.5; stroke-dasharray: 3 4; fill: none }
+svg.vz .chip { fill: var(--vz-card); stroke: var(--vz-line); stroke-width: 1.2 }
+svg.vz .chip.blue { fill: var(--vz-blue-soft); stroke: var(--vz-blue) }
+svg.vz .chip.red { fill: var(--vz-red-soft); stroke: var(--vz-red) }
+svg.vz .chip.green { fill: var(--vz-green-soft); stroke: var(--vz-green) }
+svg.vz .chip.amber { fill: var(--vz-amber-soft); stroke: var(--vz-amber) }
+
+/* Step badges: a numbered circle */
+svg.vz .bd { fill: var(--vz-card); stroke: var(--vz-blue); stroke-width: 2 }
+svg.vz .bd.solid { fill: var(--vz-blue-soft) }
+svg.vz .bd.dash { stroke-dasharray: 3 2.5 }
+svg.vz .n { font-size: 12.5px; font-weight: 700; fill: var(--vz-blue); text-anchor: middle }
+
+/* Reveal (vz-reveal.js). The svg carries mode-build or mode-route while a reveal runs, and each part
+   is still to come (fut), new in this step (now) or already seen. Without a mode the map is still:
+   the whole structure, and no route. */
+svg.vz:not(.mode-route) [data-route] { display: none }
+svg.vz.mode-route [data-base]:not([data-r]) { display: none }
+svg.vz.mode-route [data-p]:not([data-r]):not([data-route]) { opacity: .28 }
+svg.vz [data-p] { transition: opacity .45s ease }
+svg.vz [data-p].fut { opacity: 0 }
+svg.vz.outline rect.bx.fut, svg.vz.outline rect.zone.fut { opacity: 1; fill: none; stroke: var(--vz-line); stroke-width: 1.2; stroke-dasharray: 4 4 }
+svg.vz .ar.now { stroke: var(--vz-accent); stroke-width: 3.2 }
+svg.vz .bd.now { stroke: var(--vz-accent); stroke-width: 3 }
+svg.vz .n.now { fill: var(--vz-accent) }
+svg.vz rect.bx.now, svg.vz rect.chip.now { stroke: var(--vz-accent); stroke-width: 2.4 }
+svg.vz text.lb.now { fill: var(--vz-accent); font-weight: 600 }
+svg.vz .draw { transition: stroke-dashoffset .7s ease }
+@media (prefers-reduced-motion: reduce) { svg.vz [data-p], svg.vz .draw { transition: none } }
+
+/* The player's controls (vz-reveal.js): modes, steps, the caption under the diagram. */
+.vz-player { display: grid; gap: 12px; color: var(--vz-fg); font-family: var(--vz-sans) }
+.vz-player:focus-visible { outline: 2px solid var(--vz-accent); outline-offset: 4px; border-radius: 8px }
+.vz-stage { overflow-x: auto }
+.vz-stage svg.vz { min-width: 720px }
+.vz-bar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center }
+.vz-modes, .vz-ctl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
+.vz-ctl[hidden], .vz-cap[hidden] { display: none }
+.vz-player button { font: 500 14px var(--vz-sans); color: var(--vz-fg); background: var(--vz-sunk); border: 1px solid var(--vz-line);
+  border-radius: 8px; padding: 6px 12px; cursor: pointer }
+.vz-player button:hover { border-color: var(--vz-dim) }
+.vz-player button:focus-visible, .vz-opt input:focus-visible { outline: 2px solid var(--vz-accent); outline-offset: 2px }
+.vz-player button:disabled { opacity: .45; cursor: default }
+.vz-player .vz-mode[aria-pressed="true"] { background: var(--vz-fg); color: var(--vz-card); border-color: var(--vz-fg) }
+.vz-player .vz-primary { background: var(--vz-accent); border-color: var(--vz-accent); color: var(--vz-card); font-weight: 600 }
+.vz-chips { display: flex; gap: 5px; margin-inline: 4px }
+.vz-chips button { width: 32px; height: 32px; padding: 0; border-radius: 50%; font: 600 13px var(--vz-mono); color: var(--vz-dim); background: var(--vz-card) }
+.vz-chips button.seen { color: var(--vz-blue); border-color: var(--vz-blue) }
+.vz-chips button.cur { color: var(--vz-card); background: var(--vz-accent); border-color: var(--vz-accent) }
+.vz-opt { display: flex; align-items: center; gap: 7px; font-size: 14px; color: var(--vz-dim) }
+.vz-opt input { width: 17px; height: 17px; accent-color: var(--vz-accent) }
+.vz-cap { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 14px; align-items: baseline;
+  border-top: 1px solid var(--vz-line); padding-top: 12px }
+.vz-cap .vz-n { font: 700 13px var(--vz-mono); color: var(--vz-accent); white-space: nowrap }
+.vz-cap strong { font-size: 19px; font-weight: 700 }
+.vz-cap p { grid-column: 2; margin: 0; max-width: 62em; min-height: 3.2em }
+.vz-cap code { font-family: var(--vz-mono); font-size: .9em; background: var(--vz-sunk); border-radius: 4px; padding: 1px 4px }

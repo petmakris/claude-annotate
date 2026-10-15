@@ -60,6 +60,16 @@ def _styles(SANS_400, SANS_600, SANS_700, MONO, MONO_FALLBACK) -> dict[str, Styl
         "actor-label":      Style(MONO, MONO_FALLBACK, 10.0, 13),
         "arrow-label":      Style(SANS_600, SANS_600["x"], 11.5, 15),
         "arrow-sub":        Style(MONO, MONO_FALLBACK, 10.0, 13),
+        # svg.vz — the map and the lane sequence (map_svg.py, sequence_svg.py). Keep in sync with vz.css;
+        # they are always measured in the stage face (Inter and JetBrains Mono).
+        "vz-ttl":           Style(SANS_700, SANS_700["x"], 22.0, 28),
+        "vz-zl":            Style(SANS_600, SANS_600["x"], 12.5, 16),
+        "vz-nm":            Style(SANS_600, SANS_600["x"], 15.5, 20),
+        "vz-sb":            Style(SANS_400, SANS_400["x"], 13.0, 20),
+        "vz-zn":            Style(SANS_600, SANS_600["x"], 13.0, 20),
+        "vz-mono":          Style(MONO, MONO_FALLBACK, 13.0, 20),
+        "vz-nm-mono":       Style(MONO, MONO_FALLBACK, 14.5, 20),
+        "vz-n":             Style(SANS_700, SANS_700["x"], 12.5, 16),
     }
 
 
