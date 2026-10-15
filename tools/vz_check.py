@@ -57,6 +57,14 @@ PROBE = r"""
     if (a.x < c.x + c.width - 1 && c.x < a.x + a.width - 1 && a.y < c.y + c.height - 2 && c.y < a.y + a.height - 2)
       faults.push(`labels overlap: "${texts[i].s}" and "${texts[j].s}"`);
   }
+  for (const c of [...svg.querySelectorAll('circle.bd')].filter(shown)) {
+    const b = c.getBBox();
+    for (const x of texts) {
+      const a = x.b;
+      if (a.x < b.x + b.width - 1 && b.x < a.x + a.width - 1 && a.y < b.y + b.height - 1 && b.y < a.y + a.height - 1)
+        faults.push(`a step badge covers "${x.s}"`);
+    }
+  }
   for (const el of [...svg.querySelectorAll('.ar')].filter(shown)) {
     if (getComputedStyle(el).fill !== 'none') faults.push(`arrow is filled: ${el.getAttribute('d') || ''}`);
     const len = el.getTotalLength();

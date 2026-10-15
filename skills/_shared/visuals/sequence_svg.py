@@ -294,9 +294,10 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
                 arrow_y = y + 8
                 wl = _lines_w(lines)
                 lm = min(max(mid, PAD + wl / 2), max(canvas_r, PAD + wl) - wl / 2)
+                drop = 8 if badge_here else 0   # the badge sits on the arrow's start; the words go clear of it
                 for k, (t, m) in enumerate(lines):
-                    g.append(_text(_cls("lb", "mono" if m else "", tone), lm, arrow_y + 20 + CHIP_LINE * k, t, "", "middle"))
-                below = 8 + CHIP_LINE * len(lines)
+                    g.append(_text(_cls("lb", "mono" if m else "", tone), lm, arrow_y + 20 + drop + CHIP_LINE * k, t, "", "middle"))
+                below = 8 + drop + CHIP_LINE * len(lines)
             else:
                 if lines:
                     w = _lines_w(lines) + 2 * CHIP_PAD_X
