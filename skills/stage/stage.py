@@ -7,7 +7,7 @@
 
 <source>: a project file (path[#fragment]), http(s)://..., session:<kind>/<slug>,
 code:<path>:<a>-<b>[ highlight x[-y]], change:<path>[ since <rev>] (what changed, read from git),
-or diagram:- / table:- / sequence:- / flowchart:- with the body on stdin.
+or diagram:- / table:- / sequence:- / flowchart:- / map:- with the body on stdin.
 Prints the stage URL. Exit 2: the name or source was refused. Exit 3: no daemon, or the
 daemon refused a request.
 """

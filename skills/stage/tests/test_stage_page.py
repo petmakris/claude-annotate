@@ -452,16 +452,17 @@ DRAWN = ("(n => { const b = pane(n).querySelector('.visual.lanes');"
          " live: [...b.querySelectorAll('.ln-actbar.ln-live')].map((r) => [r.dataset.actor, r.style.getPropertyValue('--bc')])}; })")
 
 
-def test_the_lanes_give_each_actor_its_colour_and_file_and_light_the_bar_of_the_call_being_answered(tmp_path):
+def test_the_lanes_give_each_actor_its_tones_colour_and_file_and_light_the_bar_of_the_call_being_answered(tmp_path):
     m = scene.sequence_model(DRAWN_SPEC)
     built = _scene(m, [["next"], ["next"], ["next"]], "Picking a voice")
     page = StagePage(tmp_path).show("pick", visual("sequence", DRAWN_SPEC), title="Picking a voice", extra={"scene": built}).open()
     for n in (0, 1, 2, 3):
         page.send({"type": "stage:frame", "view": "pick", "n": n, "animate": n > 0})
     page.check(DRAWN + "('pick')")
-    # the reply being said: the bar its call opened on Azure is lit, in Azure's colour
-    assert page.run() == [{"subs": True, "colours": ["var(--a1)", "var(--a2)", "var(--t-hot)"],
-                           "names": ["Call pagecall.js", "Talk server", "Azure"], "live": [["az", "var(--t-hot)"]]}]
+    # the reply being said: the bar its call opened on Azure is lit, in Azure's colour. A colour carries a meaning,
+    # so an actor with no tone is plain, and the older "hot" is the lane sequence's red
+    assert page.run() == [{"subs": True, "colours": ["var(--t-plain)", "var(--t-plain)", "var(--t-red)"],
+                           "names": ["Call pagecall.js", "Talk server", "Azure"], "live": [["az", "var(--t-red)"]]}]
 
 
 # A spoken turn's path through talk (the stage mockups' flow, cut to three actors), its first step's ref in a
@@ -730,3 +731,94 @@ def test_a_sealed_scene_no_answer_steps_shows_whole(tmp_path):
     page = StagePage(tmp_path).show("sb", stage_model.scene_source(SANDBOX_HTML), title="Sandbox", extra={"kind": "scene"}).open()
     page.check("pane('sb').querySelector('iframe.sandbox').contentWindow.posted.map((m) => m.show)")
     assert page.run() == [[["part:ctl", "part:row"]]]
+
+
+# -- the architecture map ----------------------------------------------------------------------------------
+
+PAY_MAP = {"title": "One service holds the rule", "columns": ["Who asks", "Entry", "Service"],
+           "boxes": [{"id": "u", "col": 0, "row": 0, "name": "A person", "b": 1, "r": 1},
+                     {"id": "api", "col": 1, "row": 0, "name": "REST", "b": 2, "r": 1},
+                     {"id": "svc", "col": 2, "row": 0, "tone": "green", "name": "bills.pay", "lines": ["refuses a 2nd payment"], "b": 3, "r": 2}],
+           "arrows": [{"from": "u", "to": "api", "b": 2}, {"from": "api", "to": "svc", "b": 3},
+                      {"layer": "route", "from": "u", "to": "api", "n": 1, "r": 1, "label": "sends the payment"},
+                      {"layer": "route", "from": "api", "to": "svc", "n": 2, "r": 2, "label": "asks the rule"}]}
+MAP_SEEN = ("(n => { const b = pane(n).querySelector('.visual.vzmap'), svg = b.querySelector('svg.vz'), set = (s) => [...new Set(keys(b.querySelectorAll(s)))];"
+            " return {hidden: set('.k-hidden'), now: set('.now'), later: set('.r-later'), route: svg.classList.contains('mode-route'),"
+            " heads: [...b.querySelectorAll('.now[marker-end]')].map((e) => e.getAttribute('marker-end'))}; })")
+
+
+def test_a_map_is_built_up_in_its_build_order_and_then_follows_its_route(tmp_path):
+    src = visual("map", PAY_MAP)
+    built = _scene(scene.map_model(PAY_MAP), [["next"]] * 5, "Pay")
+    page = StagePage(tmp_path).show("pay", src, title="Pay", extra={"scene": built}).open()
+    for n in (1, 3, 4, 6):
+        page.send({"type": "stage:frame", "view": "pay", "n": n, "animate": False}).check(MAP_SEEN + "('pay')")
+    on = 'url(#%s-on)' % src["svg"].split('<marker id="')[1].split("-")[0]
+    # build: the person first, every other part an outline; then the service with the arrow that reached it;
+    # then the route's first step, said with the box it arrives at, and the map in route mode; at rest the
+    # whole map, nothing said, and no route
+    assert page.run() == [
+        {"hidden": ["box:api", "box:svc", "edge:u->api#0", "edge:api->svc#0", "route:1", "route:2"], "now": ["box:u"],
+         "later": [], "route": False, "heads": []},
+        {"hidden": ["route:1", "route:2"], "now": ["box:svc", "edge:api->svc#0"], "later": [], "route": False, "heads": [on]},
+        # the service, which the request reaches next, waits faint
+        {"hidden": ["route:2"], "now": ["box:api", "route:1"], "later": ["box:svc", "route:2"], "route": True, "heads": [on]},
+        {"hidden": [], "now": [], "later": [], "route": False, "heads": []}]
+
+
+def test_a_tap_on_a_map_box_asks_about_it_or_plays_from_it(tmp_path):
+    built = _scene(scene.map_model(PAY_MAP), [["next"]] * 3, "Pay")
+    page = StagePage(tmp_path, embedded=True).show("pay", visual("map", PAY_MAP), title="Pay", extra={
+        "scene": built, "scenes": {"1": built}, "answer": 1}).open()
+    page.send({"type": "stage:state", "front": "pay", "frames": {"pay": 3}, "keys": 0})
+    page.js("pane('pay').querySelector('text[data-key=\"box:svc\"]').click();").check(SPOP)
+    page.js("[...document.querySelectorAll('.spop button')].find((b) => b.textContent === 'Play from here').click();")
+    assert page.run() == [[False, "Bills.pay", "", ["Ask about this", "Play from here"]]]
+    assert [m for m in page.posted if m["type"] == "stage:play"] == [{"type": "stage:play", "view": "pay", "answer": 1, "n": 3}]
+
+
+def test_a_map_shown_with_no_answer_is_whole_with_no_route(tmp_path):
+    page = StagePage(tmp_path).show("pay", visual("map", PAY_MAP), title="Pay").open()
+    page.check("(() => { const b = pane('pay').querySelector('.visual.vzmap'); return [b.querySelectorAll('.k-hidden').length,"
+               " b.querySelector('svg.vz').classList.contains('mode-route'), b.querySelectorAll('[data-route]').length > 0,"
+               " pane('pay').querySelector('.pmeta, .meta')?.textContent ?? null]; })()")
+    out = page.run()
+    assert out[0][:3] == [0, False, True]  # the route arrows are drawn, and vz.css hides them outside route mode
+
+
+# The lane sequence's own fields on the lanes: the tool layer's second request (ai-building-blocks/diagrams/toollayer.seq.json), cut down.
+TOOL_SEQ = {"actors": [{"id": "claude", "label": "Claude", "role": "own model, over MCP", "tone": "blue"},
+                       {"id": "run", "label": "runTool", "mono": True, "role": "one runner", "tone": "red"},
+                       {"id": "pay", "label": "bills.pay", "mono": True, "role": "the service", "tone": "green"}],
+            "phases": [{"id": "later", "label": "An hour later", "start_at": "s1"}],
+            "steps": [{"id": "s1", "from": "claude", "to": "run", "arrow": "request", "sub": "runTool(mark_paid, args, ctx)", "tone": "red", "n": 7,
+                       "checks": [{"label": "scopes", "ok": True}, {"label": "input", "ok": True}]},
+                      {"id": "s2", "from": "run", "to": "pay", "arrow": "request", "sub": "bills.pay(household, bill, body)", "tone": "red", "n": 7,
+                       "checks": [{"label": "already paid", "ok": False}]},
+                      {"id": "s3", "from": "pay", "to": "run", "arrow": "event", "label": "\"This bill is already paid.\"", "tone": "red"}],
+            "outcome": {"tone": "red", "title": "Refused", "lines": ["The rule lives in bills.pay."]}}
+LOOK = ("(() => { const b = pane('tool').querySelector('.visual.lanes');"
+        " return {heads: [...b.querySelectorAll('.ln-chip')].map((c) => [c.className.split(' ').filter((k) => /^t-|ln-mono/.test(k)).join(' '), c.querySelector('em')?.textContent]),"
+        " chips: [...b.querySelectorAll('.ln-row')].map((r) => [r.dataset.step, !!r.querySelector('.ln-chipped'), r.querySelector('.ln-lbl')?.textContent]),"
+        " checks: [...b.querySelectorAll('.ln-ck')].map((c) => [c.textContent, c.classList.contains('ln-no')]),"
+        " nums: [...b.querySelectorAll('.ln-num')].map((n) => n.textContent),"
+        " bands: [...b.querySelectorAll('.ln-band')].length,"
+        " outcome: [...(b.querySelector('.ln-outcome')?.children || [])].map((e) => e.textContent),"
+        " ghost: b.querySelector('.ln-outcome')?.classList.contains('ln-ghost')}; })()")
+
+
+def test_the_lanes_draw_the_lane_sequences_heads_chips_checks_bands_and_outcome(tmp_path):
+    built = _scene(scene.sequence_model(TOOL_SEQ), [["next"], ["next"], ["next"]], "Refused")
+    page = StagePage(tmp_path).show("tool", visual("sequence", TOOL_SEQ), title="Refused", extra={"scene": built}).open()
+    page.send({"type": "stage:frame", "view": "tool", "n": 1}).check(LOOK)
+    page.send({"type": "stage:frame", "view": "tool", "n": 3}).check(LOOK)
+    first, last = page.run()
+    assert first["heads"] == [["t-blue", "own model, over MCP"], ["t-red ln-mono", "one runner"], ["t-green ln-mono", "the service"]]
+    # a call carries its sub in a chip on its arrow; a reply's words are bare
+    assert first["chips"] == [["s1", True, "runTool(mark_paid, args, ctx)"], ["s2", True, "bills.pay(household, bill, body)"],
+                              ["s3", False, '"This bill is already paid."']]
+    assert first["checks"] == [["✓ scopes", False], ["✓ input", False], ["✗ already paid", True]]
+    # the two arrows of step 7 share one badge; the reply has none of its own
+    assert first["nums"] == ["7", "", ""] and first["bands"] == 1
+    assert first["outcome"] == ["Refused", "The rule lives in bills.pay."] and first["ghost"] is True
+    assert last["ghost"] is False  # the outcome is there once the last step is

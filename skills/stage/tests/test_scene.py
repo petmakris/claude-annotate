@@ -605,3 +605,70 @@ def test_a_scene_with_no_verbs_comes_in_part_by_part_with_the_sentences_that_nam
     two = scene.parts_model(stage_model.scene_source('<p data-part="a">Apples</p><p data-part="b">Pears</p>')["parts"])
     plan, _ = scene.auto_steps(two, ["Here are apples.", "And pears."])
     assert plan == {0: [["part:a"]], 1: [["part:b"]]}
+
+
+# -- an architecture map (map_svg) -------------------------------------------------------------------------
+
+BILL_MAP = {"columns": ["Who asks", "Entry", "Service"],
+            "boxes": [{"id": "svc", "col": 2, "row": 0, "tone": "green", "name": "Billpod services", "b": 3, "r": 2},
+                      {"id": "chat", "col": 0, "row": 0, "name": "A person in the chat", "b": 1, "r": 1},
+                      {"id": "ask", "col": 1, "row": 0, "name": "Ask Billpod", "b": 2, "r": 1,
+                       "children": [{"id": "gemini", "name": "Gemini"}, {"id": "card", "name": "A card first", "b": 4}]}],
+            "zones": [{"label": "defined once", "boxes": ["ask"]}],
+            "arrows": [{"from": "chat", "to": "ask", "b": 2}, {"from": "ask", "to": "svc", "b": 3},
+                       {"layer": "route", "from": "chat", "to": "ask", "n": 1, "r": 1, "label": "`mark_paid`, said in words"},
+                       {"layer": "route", "from": "gemini", "to": "svc", "n": 2, "r": 2, "label": "runs the tool"}],
+            "captions": {"route": [{"title": "The person asks"}, {"title": "The service decides"}]}}
+
+
+def test_a_map_keys_its_parts_in_build_order_then_the_steps_of_its_route():
+    m = scene.map_model(BILL_MAP)
+    assert m.kind == "map"
+    assert m.order == ["box:chat", "box:ask", "box:gemini", "zone:0", "box:svc", "box:card", "route:1", "route:2"]
+    assert m.keys == ["zone:0", "box:chat", "box:ask", "box:gemini", "box:svc", "box:card",
+                      "edge:chat->ask#0", "edge:ask->svc#0", "route:1", "route:2"]
+    # a child rides with its box unless its own step is later; a zone brings its boxes
+    assert m.down == {"box:ask": ["box:gemini"], "zone:0": ["box:ask"]}
+    assert m.up["box:card"] == ["box:ask"] and m.up["edge:ask->svc#0"] == ["box:ask", "box:svc"]
+    # a route step brings the boxes its arrows join, and is said with the box it arrives at
+    assert m.up["route:2"] == ["box:gemini", "box:svc"] and m.said_with["route:2"] == ["box:svc"]
+    assert m.names["mark_paid, said in words"] == "route:1" and m.names["the service decides"] == "route:2"
+    assert m.names["defined once"] == "zone:0" and m.names["ask billpod"] == "box:ask"
+
+
+def test_a_map_target_is_a_box_a_zone_a_route_step_or_an_arrow_by_its_boxes():
+    m = scene.map_model(BILL_MAP)
+    assert scene.resolve(m, "box ask", "B") == (["box:ask"], None)
+    assert scene.resolve(m, "gemini", "B") == (["box:gemini"], None)
+    assert scene.resolve(m, "route 2", "B") == (["route:2"], None)
+    assert scene.resolve(m, "zone 0", "B") == (["zone:0"], None)
+    assert scene.resolve(m, "chat->ask", "B") == (["edge:chat->ask#0"], None)
+    assert scene.resolve(m, "Billpod services", "B") == (["box:svc"], None)
+
+
+def test_next_builds_a_map_up_and_then_walks_its_route_and_all_never_starts_the_route():
+    m = scene.map_model(BILL_MAP)
+    built, notes = scene.compile_scene(m, [[scene.parse_verb("next 2")], [scene.parse_verb("next 3")],
+                                           [scene.parse_verb("next")], [scene.parse_verb("next")]], "B")
+    f = built["frames"]
+    assert notes == [] and built["start"] == "empty"
+    assert f[1]["show"] == ["box:chat", "box:ask", "box:gemini", "edge:chat->ask#0"]  # gemini rides in with its box
+    assert f[3]["cur"] == ["route:1", "box:ask"] and "route:2" not in f[3]["show"]
+    assert f[4]["cur"] == ["route:2", "box:svc"]
+    whole, notes = scene.compile_scene(m, [[scene.parse_verb("all")]], "B")
+    assert notes == [] and [k for k in whole["frames"][1]["show"] if k.startswith("route:")] == []
+
+
+def test_a_route_step_pointed_at_lights_the_box_it_arrives_at_with_it():
+    m = scene.map_model(BILL_MAP)
+    built, _ = scene.compile_scene(m, [[scene.parse_verb("focus route 2")]], "B")
+    assert built["frames"][1]["focus"] == ["box:svc", "route:2"] and built["frames"][1]["cur"] == ["route:2", "box:svc"]
+
+
+def test_with_no_verbs_a_map_follows_its_route_only_when_a_sentence_names_a_step_of_it():
+    m = scene.map_model(BILL_MAP)
+    built = ["A person in the chat starts it.", "Ask Billpod reads it.", "Billpod services hold the rule."]
+    plan, _ = scene.auto_steps(m, built)
+    assert sorted({k for steps in plan.values() for s in steps for k in s if k.startswith("route:")}) == []
+    plan, _ = scene.auto_steps(m, built + ["Now the person asks.", "And the service decides."])
+    assert plan[3][-1] == ["route:1"] and plan[4][-1] == ["route:2"]

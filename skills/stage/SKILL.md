@@ -1,6 +1,6 @@
 ---
 name: stage
-description: Put something in front of the user on a live page and keep it current while you work — a deck or HTML page being edited, a running app or dashboard URL, another webcompanion session, a code range, a sequence diagram, a flowchart, a Mermaid diagram or a table. Each view has a name; showing the same name again updates it in place, and a file view reloads on every save. Use when the user says "/stage", "show me", "put it on the stage", or when seeing the thing would beat reading about it. /talk uses it for its board.
+description: Put something in front of the user on a live page and keep it current while you work — a deck or HTML page being edited, a running app or dashboard URL, another webcompanion session, a code range, a sequence diagram, a flowchart, an architecture map, a Mermaid diagram or a table. Each view has a name; showing the same name again updates it in place, and a file view reloads on every save. Use when the user says "/stage", "show me", "put it on the stage", or when seeing the thing would beat reading about it. /talk uses it for its board.
 argument-hint: "[<name> <source>]"
 allowed-tools:
   - Bash
@@ -31,7 +31,8 @@ that names an ended stage or a stage in another folder fails rather than making 
 | `code:<path>:<a>-<b> [highlight x-y]` | at most 60 lines of real code |
 | `change:<path> [since <rev>]` | what changed in a file, read from git (working tree against HEAD by default); at most 80 diff lines |
 | `diagram:-` / `table:-` | Mermaid or a markdown table, body on stdin (heredoc) |
-| `sequence:-` / `flowchart:-` | a sequence diagram (drawn as lanes) or a flowchart (drawn as a map), drawn by the stage itself from a JSON spec in annotate's format on stdin (the spec is in `$SKILL_DIR/../annotate/references/block-kinds/`; give only the inner `spec` object, not annotate's block wrapper or its `source` form); a refused spec exits 2 with the reason |
+| `sequence:-` / `flowchart:-` | a sequence diagram (drawn as lanes) or a flowchart (drawn as a map), drawn by the stage itself from a JSON spec in annotate's format on stdin (the spec is in `$SKILL_DIR/../annotate/references/block-kinds/`; give only the inner `spec` object, not annotate's block wrapper or its `source` form); a sequence also takes the lane sequence's `role`, `checks`, `n`, `outcome` and four tones (`$SKILL_DIR/../../docs/vz.md`); a refused spec exits 2 with the reason |
+| `map:-` | an architecture map, from the map spec of `$SKILL_DIR/../../docs/vz.md` on stdin, drawn by `map_svg` in the same look as everywhere else; a refused spec exits 2 with the reason |
 
 Rules:
 
@@ -74,7 +75,7 @@ Rules:
   whole, nothing dimmed. The call page also sets the stage's light or dark theme. The answer that showed a view is
   marked on its row in the list (`A3`). Every answer that steps a view keeps its own scene on it (`scenes`, by answer number), and
   the call page names the answer with each frame, so replaying an earlier answer steps the board as that answer did; an answer
-  that showed the board with no steps of its own shows it whole. A stage opened on its own ignores all of this. Code, change, table, diagram and scene views
+  that showed the board with no steps of its own shows it whole. A stage opened on its own ignores all of this. Code, change, table, diagram, map and scene views
   can be pointed at from /talk only (a scene is HTML whose `data-part` elements the voice reveals one by one); /talk also keeps a pinned **Key points** board of the call's
   `[[key: ...]]` tags. Embedded in a call, the stage also shows the sentence being said (`stage:caption`) and an
   answer's stops (`stage:stop`: a card of buttons, answered with `stage:pick`). A tap on a scene part opens its popup

@@ -2,7 +2,8 @@
 
 Keys: node:<id>, edge:<a>-><b>#<n> (the n-th edge from a to b), group:<subgraph id>, line:<n>, old:<n> (a line a
 change removed, by its old number), row#<n>,
-and for a sequence spec actor:<id> and step:<id>. An edge shows as soon as both its ends do.
+for a sequence spec actor:<id> and step:<id>, and for a map box:<id>, zone:<i> and route:<r> (a step of its
+route). An edge shows as soon as both its ends do.
 Verbs ([[+ k]], [[next]], [[all]], [[focus k]]) compile into full snapshot frames: frame 0 is the
 opening state, one frame follows per place in the speech, and the rest frame shows everything with
 no focus. Every frame also names what is being said in it (`cur`), so the page draws that and guesses
@@ -26,7 +27,7 @@ FUZZY_RATIO = 0.8
 
 _VERB = re.compile(r"(?:(?P<sym>[+-])|(?P<word>next|all|focus|mark|strike|callout|morph)(?![\w-]))\s*(?P<rest>.*)\Z",
                    re.IGNORECASE | re.DOTALL)
-_TARGET = re.compile(r"none|(?:old\s+)?(?:lines?\s+)?\d+(?:\s*[-–]\s*\d+)?|rows?\s+\S.*|nodes?\s+[\w.-]+"
+_TARGET = re.compile(r"none|(?:old\s+)?(?:lines?\s+)?\d+(?:\s*[-–]\s*\d+)?|rows?\s+\S.*|(?:nodes?|box(?:es)?|zones?|routes?)\s+[\w.-]+"
                      r"|[\w.-]+?\s*-+>\s*[\w.-]+|[\w.-]+", re.IGNORECASE)
 _LINES = re.compile(r"(?:(?P<old>old)\s+)?(?:lines?\s+)?(?P<a>\d+)(?:\s*[-–]\s*(?P<b>\d+))?", re.IGNORECASE)
 _CELL = re.compile(r"cells?\s+(?P<r>.+?)\s*(?:/|,|×)\s*(?P<c>.+)", re.IGNORECASE)
@@ -65,6 +66,7 @@ class SceneModel:
     edges: dict[tuple[str, str], list[str]] = field(default_factory=dict)
     can_hide: bool = False
     columns: dict[str, int] = field(default_factory=dict)  # a table's columns by header, apart from its parts' names
+    said_with: dict[str, list[str]] = field(default_factory=dict)  # a map's route step: the boxes it arrives at
 
 
 def fold(text: str) -> str:
@@ -552,6 +554,75 @@ def flowchart_spec_model(spec: dict) -> SceneModel:
                       edges=edge_map, can_hide=True)
 
 
+def map_model(spec: dict) -> SceneModel:
+    """An architecture map (map_svg): its boxes and zones in build order, then the steps of its route.
+
+    The build order is each part's `b` (a part with none comes first; a child takes its box's, a zone its first
+    box's), then the order the spec lists them in. A child box rides in with the box it sits in, unless its own
+    `b` is later; a zone brings its boxes. A structure arrow (`edge:<from>-><to>#<n>`) shows once both its
+    boxes do, as on a flowchart. A route step (`route:<r>`, every route arrow with that `r`) brings the boxes
+    its arrows join, and is said with the boxes it arrives at. Parts are named by a box's name, a zone's label,
+    and a route step's arrow labels and caption title."""
+    from skills._shared.visuals.map_svg import arrow_keys
+
+    plain = lambda t: fold(str(t or "").replace("`", ""))  # noqa: E731
+    up: dict[str, list[str]] = {}
+    down: dict[str, list[str]] = {}
+    names: dict[str, str] = {}
+    built: list[tuple[int, int, int, str]] = []  # (b, box 0 or zone 1, place, key)
+    first_b: dict[str, int] = {}
+
+    def walk(box: dict, parent: str | None, inherited: int | None) -> None:
+        key = f"box:{box['id']}"
+        b = box.get("b", inherited)
+        first_b[box["id"]] = b or 0
+        built.append((b or 0, 0, len(built), key))
+        names.setdefault(plain(box.get("name")), key)
+        if parent:
+            up[key] = [parent]
+            if b == inherited:
+                down.setdefault(parent, []).append(key)
+        for child in box.get("children") or []:
+            walk(child, key, b)
+
+    for box in spec.get("boxes") or []:
+        walk(box, None, None)
+    for i, z in enumerate(spec.get("zones") or []):
+        key = f"zone:{i}"
+        b = z.get("b", min((first_b.get(m, 0) for m in z.get("boxes") or []), default=0))
+        built.append((b or 0, 1, len(built), key))
+        down[key] = [f"box:{m}" for m in z.get("boxes") or []]
+        if z.get("label"):
+            names.setdefault(plain(z["label"]), key)
+    order = [key for *_, key in sorted(built)]
+    edges: dict[tuple[str, str], list[str]] = {}
+    route: dict[str, list[dict]] = {}
+    for a, key in zip(spec.get("arrows") or [], arrow_keys(spec)):
+        if key.startswith("route:"):
+            route.setdefault(key, []).append(a)
+        else:
+            up[key] = [f"box:{a['from']}", f"box:{a['to']}"]
+            edges.setdefault((a["from"], a["to"]), []).append(key)
+    steps = sorted(route, key=lambda k: int(k.split(":")[1]))
+    captions = (spec.get("captions") or {}).get("route") or []
+    said_with: dict[str, list[str]] = {}
+    for key in steps:
+        arrows = route[key]
+        up[key] = list(dict.fromkeys(f"box:{a[end]}" for a in arrows for end in ("from", "to")))
+        said_with[key] = list(dict.fromkeys(f"box:{a['to']}" for a in arrows))
+        for a in arrows:
+            if a.get("label"):
+                names.setdefault(plain(a["label"]), key)
+        r = int(key.split(":")[1])
+        if 1 <= r <= len(captions) and isinstance(captions[r - 1], dict) and captions[r - 1].get("title"):
+            names.setdefault(plain(captions[r - 1]["title"]), key)
+    names.pop("", None)
+    keys = [k for k in order if k.startswith("zone:")] + [k for k in order if k.startswith("box:")] \
+        + [k for pair in edges.values() for k in pair] + steps
+    return SceneModel("map", keys, order=order + steps, up=up, down=down, names=names, edges=edges, can_hide=True,
+                      said_with=said_with)
+
+
 def parts_model(parts: list[dict]) -> SceneModel:
     """A scene's parts, in page order. A part brings the part it sits in; a part brings the parts inside it,
     except those the answer reveals on their own (compile_scene drops those from `down`)."""
@@ -567,7 +638,7 @@ def parts_model(parts: list[dict]) -> SceneModel:
     return SceneModel("parts", keys, order=list(keys), up=up, down=down, names=names, can_hide=True)
 
 
-ENTITY_PREFIXES = {"sequence": ("step:", "actor:"), "parts": ("part:",)}
+ENTITY_PREFIXES = {"sequence": ("step:", "actor:"), "parts": ("part:",), "map": ("box:", "zone:", "route:")}
 
 
 def _prefixes(model: SceneModel) -> tuple[str, ...]:
@@ -632,7 +703,11 @@ def resolve(model: SceneModel, raw: str, title: str) -> tuple[list[str], str | N
             return [model.names[fold(text)]], None
         key = _closest(model, text)
         return ([key], f'"{raw}" in "{title}" read as {key}') if key else ([], dropped)
-    m = re.fullmatch(r"(?:nodes?|steps?|parts?)\s+(.+)", raw, re.IGNORECASE)
+    if model.kind == "map":  # box ID, zone N, route N
+        named = re.fullmatch(r"(box|zone|route)(?:e?s)?\s+(.+)", raw, re.IGNORECASE)
+        if named and f"{named[1].lower()}:{named[2].strip()}" in model.keys:
+            return [f"{named[1].lower()}:{named[2].strip()}"], None
+    m = re.fullmatch(r"(?:nodes?|steps?|parts?|box(?:es)?)\s+(.+)", raw, re.IGNORECASE)
     if m is None and model.kind == "sequence":
         actor = re.fullmatch(r"actors?\s+(.+)", raw, re.IGNORECASE)
         if actor and f"actor:{actor[1].strip()}" in model.keys:
@@ -662,7 +737,8 @@ def _reveal(model: SceneModel, key: str, shown: set) -> None:
         if k not in shown:
             shown.add(k)
             stack.extend(model.up.get(k, []))
-            if k.startswith(("row#", "part:")):  # a row is shown whole, and a part with what it holds
+            # a row is shown whole, a part with what it holds, a map's box with its children and a zone with its boxes
+            if k.startswith(("row#", "part:", "box:", "zone:")):
                 stack.extend(model.down.get(k, []))
 
 
@@ -691,9 +767,11 @@ def _said(model: SceneModel, keys: list[str], before: set, shown: set) -> list[s
         if k.startswith("edge:"):
             cur += [end for end in model.up[k] if end in new]
         cur.append(k)
+    for k in list(cur):
+        cur += model.said_with.get(k, [])  # a map's route step with the boxes it arrives at
     cur = list(dict.fromkeys(cur))
-    node = next((k for k in reversed(cur) if k.startswith("node:")), None)
-    if model.kind == "flowchart" and node and not any(k.startswith("edge:") for k in cur):
+    node = next((k for k in reversed(cur) if k.startswith(("node:", "box:"))), None)
+    if model.kind in ("flowchart", "map") and node and not any(k.startswith("edge:") for k in cur):
         edges = [k for k in new if k.startswith("edge:")]
         edge = next((e for e in edges if model.up[e][1] == node), None) or next((e for e in edges if model.up[e][0] == node), None)
         if edge:
@@ -727,7 +805,7 @@ def part_names(model: SceneModel) -> dict[str, list[list[str]]]:
         if _words(name):
             out.setdefault(key, []).append(_words(name))
     for key in model.order:
-        ident = key.split(":", 1)[1] if key.startswith(("node:", "step:", "group:", "part:")) else ""
+        ident = key.split(":", 1)[1] if key.startswith(("node:", "step:", "group:", "part:", "box:")) else ""
         if len(ident) >= 3 and not re.fullmatch(r"[a-z]?\d+", ident, re.IGNORECASE) and _words(ident):
             out.setdefault(key, []).append(_words(ident))
     return out
@@ -755,6 +833,12 @@ def auto_steps(model: SceneModel, sentences: list[str], pointed: dict[int, list[
     if not model.can_hide or len(parts) <= (1 if model.kind == "parts" else AUTO_STEP_OVER) or m < 1:
         return {}, []
     words, names = [_words(s) for s in sentences], part_names(model)
+    if model.kind == "map":
+        # a map follows its route only when the answer follows the request: a sentence or a point names a step of it
+        route = [p for p in parts if p.startswith("route:")]
+        said = {k for keys in (pointed or {}).values() for k in keys}
+        if not any(p in said or any(names_part(w, names.get(p, [])) for w in words) for p in route):
+            parts = [p for p in parts if p not in route]
     point_at: dict[str, int] = {}
     for i in sorted(pointed or {}):
         for k in (pointed or {})[i]:
@@ -772,7 +856,8 @@ def auto_steps(model: SceneModel, sentences: list[str], pointed: dict[int, list[
             by_name.add(p)
         elif p in point_at:
             anchor[p] = point_at[p]
-        elif model.kind == "parts" and model.up.get(p, [None])[0] in anchor:
+        elif model.kind in ("parts", "map") and model.up.get(p, [None])[0] in anchor \
+                and p in model.down.get(model.up[p][0], []):
             anchor[p] = anchor[model.up[p][0]]  # a part no sentence names rides in with the part it sits in
         if p in anchor and model.kind == "sequence":
             floor = max(floor, anchor[p])
@@ -830,7 +915,7 @@ def compile_scene(model: SceneModel, groups: list[list[Verb]], title: str) -> tu
                 named[id(verb)] += got
     empty = model.can_hide and any(v.name in ("next", "all") or (v.name == "+" and named[id(v)])
                                    for g in groups for v in g)
-    if model.kind == "parts":  # a part revealed or pointed at on its own does not come in with its parent
+    if model.kind in ("parts", "map"):  # a part revealed or pointed at on its own does not come in with its parent
         alone = {k for keys in named.values() for k in keys}
         model = replace(model, down={k: [c for c in v if c not in alone] for k, v in model.down.items()})
     shown = set() if empty else set(model.keys)
@@ -849,8 +934,8 @@ def compile_scene(model: SceneModel, groups: list[list[Verb]], title: str) -> tu
                     _reveal(model, k, shown)
                 revealed = left[:verb.count]
                 continue
-            if verb.name == "all":
-                shown |= set(model.keys)
+            if verb.name == "all":  # on a map, the whole structure: its route is followed step by step
+                shown |= {k for k in model.keys if not (model.kind == "map" and k.startswith("route:"))}
                 revealed = []
                 continue
             if verb.name == "focus" and verb.keys is None and [t.lower() for t in verb.targets] == ["none"]:
@@ -860,7 +945,8 @@ def compile_scene(model: SceneModel, groups: list[list[Verb]], title: str) -> tu
             for k in keys:
                 _reveal(model, k, shown)
             if verb.name == "focus":
-                focus = {d for k in keys for d in [k, *(model.down.get(k, []) if k.startswith("group:") else [])]}
+                focus = {d for k in keys for d in [k, *(model.down.get(k, []) if k.startswith(("group:", "zone:")) else []),
+                                                   *model.said_with.get(k, [])]}
                 pointed = keys
             else:
                 revealed = keys
@@ -870,7 +956,7 @@ def compile_scene(model: SceneModel, groups: list[list[Verb]], title: str) -> tu
             focus = set()
         said = pointed if pointed is not None else revealed or []
         frames.append(_snap(model, shown, focus, _said(model, said, before, shown)))
-    never = [k for k in model.order if k not in shown]
+    never = [k for k in model.order if k not in shown and not k.startswith("route:")]  # a map's route is followed or not
     if empty and never:
         notes.append(f'{len(never)} of {len(model.order)} elements of "{title}" are never revealed; '
                      "they come in with the rest frame")

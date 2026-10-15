@@ -270,7 +270,7 @@ def test_a_group_must_name_an_id_and_only_the_specs_nodes(tmp_path):
 
 
 def test_a_spec_the_tool_cannot_read_is_refused_not_raised(tmp_path, monkeypatch):
-    monkeypatch.setattr(model.sequence, "validate", lambda *a, **k: 1 / 0)
+    monkeypatch.setattr(model.sequence_svg, "validate", lambda *a, **k: 1 / 0)
     with pytest.raises(model.SourceError, match="could not read this spec"):
         model.parse_source("sequence:-", tmp_path, json.dumps(SEQ))
 
@@ -300,3 +300,38 @@ def test_a_sequences_refs_keep_the_lines_round_them_and_a_ref_to_nothing_is_a_pr
     # a sequence put up from stdin keeps them, read from the folder it is put up in
     source = model.parse_source("sequence:-", tmp_path, json.dumps({**spec, "steps": spec["steps"][:1]}))
     assert source["refs"] == {"s1": refs["s1"]}
+
+
+MAP = {"columns": ["Who", "Where"], "boxes": [{"id": 1, "col": 0, "row": 0, "name": "A <b>person</b>", "b": 1},
+                                              {"id": "svc", "col": 1, "row": 0, "name": "bills.pay", "b": 2, "r": 1}],
+       "arrows": [{"from": 1, "to": "svc", "b": 2}, {"layer": "route", "from": 1, "to": "svc", "r": 1, "n": 1}]}
+
+
+def test_a_map_on_stdin_is_drawn_here_keyed_and_keeps_its_numbers_and_its_words_as_text(tmp_path):
+    src = model.parse_source("map:-", tmp_path, json.dumps(MAP))
+    assert (src["type"], src["format"], src["tool"]) == ("inline", "visual", "map")
+    # an id written as a number is text; a column, a row and a step stay numbers
+    assert src["spec"]["boxes"][0] == {"id": "1", "col": 0, "row": 0, "name": "A <b>person</b>", "b": 1}
+    assert src["spec"]["arrows"][1]["r"] == 1 and src["spec"]["arrows"][1]["to"] == "svc"
+    svg = src["svg"]
+    assert svg.startswith('<svg class="vz"') and 'data-key="box:1"' in svg and 'data-key="route:1"' in svg
+    assert "<b>" not in svg and "A &lt;b&gt;person&lt;/b&gt;" in svg
+    # the same spec draws the same map, its ids prefixed alike
+    assert model.parse_source("map:-", tmp_path, json.dumps(MAP))["svg"] == svg
+
+
+def test_a_map_the_tool_refuses_says_why(tmp_path):
+    with pytest.raises(model.SourceError, match="map:-: map requires columns"):
+        model.parse_source("map:-", tmp_path, json.dumps({"boxes": [{"id": "a"}]}))
+    with pytest.raises(model.SourceError, match="map:-: box 'b' overlaps box 'a'"):
+        model.parse_source("map:-", tmp_path, json.dumps({"columns": ["x"], "boxes": [
+            {"id": "a", "col": 0, "row": 0, "name": "A"}, {"id": "b", "col": 0, "row": 0, "name": "B"}]}))
+
+
+def test_a_sequence_takes_the_lane_sequences_fields_and_keeps_its_step_numbers(tmp_path):
+    seq = {"actors": [{"id": "p", "label": "Person", "role": "pays", "tone": "blue"}, {"id": "s", "label": "Service", "tone": "green"}],
+           "steps": [{"id": "s1", "from": "p", "to": "s", "arrow": "request", "label": "pays", "n": 1,
+                      "checks": [{"label": "unpaid", "ok": True}]}],
+           "outcome": {"tone": "green", "title": "Paid once", "lines": ["the rule holds"]}}
+    src = model.parse_source("sequence:-", tmp_path, json.dumps(seq))
+    assert src["spec"]["steps"][0]["n"] == 1 and src["spec"]["outcome"]["title"] == "Paid once"

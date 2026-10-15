@@ -421,8 +421,8 @@ def align_words(text: str, start: int, end: int, heard: list, duration: float, o
             for (a, b), (t0, t1) in zip(tokens, times)]
 
 
-BOARD_KINDS = ("code", "change", "diagram", "table", "sequence", "flowchart", "scene", "page")
-VISUAL_KINDS = ("sequence", "flowchart")  # drawn by the shared tools from a JSON spec; any other body is Mermaid
+BOARD_KINDS = ("code", "change", "diagram", "table", "sequence", "flowchart", "map", "scene", "page")
+VISUAL_KINDS = ("sequence", "flowchart", "map")  # drawn by the shared tools from a JSON spec; any other body is Mermaid
 STEPPED_KINDS = VISUAL_KINDS + ("scene",)  # come in with the sentences that name their parts unless verbs reveal them
 LINE_KINDS = ("code", "change", "page")  # one-line tags: their source is named on the tag, so no body follows
 KIND_ALIASES = {"mermaid": "diagram", "graph": "diagram", "flow": "diagram",
@@ -641,9 +641,10 @@ _POINT_TARGET = re.compile(
     r"|rows?\s+(?:(?P<n>\d+)(?:\s*[-–]\s*(?P<n2>\d+))?|\"(?P<text>[^\"]+)\"|“(?P<curly>[^”]+)”|'(?P<single>[^']+)')"
     r"|cells?\s+(?P<cell>[^\[\]]+?/[^\[\]]+?)"
     r"|nodes?\s+(?P<node>[^\s:\[\]][^:\[\]]*?)|steps?\s+(?P<step>[^\s:\[\]][^:\[\]]*?)"
+    r"|(?P<mapk>box|zone|route)(?:e?s)?\s+(?P<mapid>[^\s:\[\]][^:\[\]]*?)"
     r"|parts?\s+(?P<part>[^\s:\[\]][^:\[\]]*?))\s*\Z", re.IGNORECASE)
 POINT_FORMS = ('expected line N, lines A-B, old line N, row N, rows A-B, row "text", cell "row" / "column", node ID, '
-               "step ID or part ID")
+               "step ID, part ID, box ID, zone N or route N")
 
 
 def parse_point(marker: str) -> tuple[str, str] | None:
@@ -717,7 +718,7 @@ def cell_text(cell: str) -> str:
 
 def spec_tool(body: str) -> str | None:
     """Which shared tool a JSON body is written for, by its keys: nodes for a flowchart, actors or
-    steps for a sequence. None when it is not a JSON object or names neither."""
+    steps for a sequence, columns and boxes for a map. None when it is not a JSON object or names none."""
     try:
         spec = json.loads(body)
     except ValueError:
@@ -726,6 +727,8 @@ def spec_tool(body: str) -> str | None:
         return None
     if "nodes" in spec:
         return "flowchart"
+    if "boxes" in spec and "columns" in spec:
+        return "map"
     if "actors" in spec or "steps" in spec:
         return "sequence"
     return None
@@ -751,6 +754,8 @@ def scene_model(item: dict) -> stage_scene.SceneModel | None:
         return stage_scene.sequence_model(item["visual"]["spec"])
     if kind == "flowchart":
         return stage_scene.flowchart_spec_model(item["visual"]["spec"])
+    if kind == "map":
+        return stage_scene.map_model(item["visual"]["spec"])
     if kind == "scene":
         return stage_scene.parts_model(item["visual"]["parts"])
     return None
@@ -1029,7 +1034,7 @@ class Board:
             return
         use = {"code": "line N or lines A-B", "change": "line N or lines A-B (new line numbers), or old line N",
                "table": 'row N, rows A-B, row "text" or cell "row" / "column"', "diagram": "node ID"}[kind]
-        if m["step"] or m["part"]:
+        if m["step"] or m["part"] or m["mapk"]:
             self.problem(f'point not shown: "{name}" is a {kind}; use {use}')
             return
         if as_pointed(kind) != wanted or (m["old"] and kind != "change"):
@@ -1117,7 +1122,17 @@ class Board:
         self.cues.append({"kind": "frame", "view": item["view"], "verb": stage_scene.Verb("focus", keys=keys)})
 
     def point_visual(self, item: dict, name: str, m: re.Match) -> None:
-        """A point at a sequence's step or a flowchart's node: lit by its key."""
+        """A point at a sequence's step, a flowchart's node, or a map's box, zone or route step: lit by its key."""
+        if item["kind"] == "map":
+            if not m["mapk"]:
+                self.problem(f'point not shown: "{name}" is a map; use box ID, zone N or route N')
+                return
+            key = f'{m["mapk"].lower()}:{m["mapid"].strip()}'
+            if key not in scene_model(item).keys:
+                self.problem(f'point not shown: no {m["mapk"].lower()} {m["mapid"].strip()} in "{name}"')
+                return
+            self.cues.append({"kind": "frame", "view": item["view"], "verb": stage_scene.Verb("focus", keys=[key])})
+            return
         want = ("step", m["step"]) if item["kind"] == "sequence" else ("node", m["node"])
         if not want[1] or m["part"]:
             use = "step ID" if item["kind"] == "sequence" else "node ID"
