@@ -215,7 +215,21 @@ def render(spec: dict[str, Any], uid: str) -> str:
                 g.append(f'<text class="n" x="{fx:.0f}" y="{y + h / 2 + 4.5:.1f}">{n}</text>')
                 shown_badge.add(n)
             arrow_y = y + h / 2
-            y += h + ROW_GAP
+            y += h + 8
+            checks = s.get("checks") or []
+            if checks:
+                px = cx
+                for c in checks:
+                    ok = c.get("ok", True)
+                    text = ("✓ " if ok else "✗ ") + c["label"]
+                    col = "green" if ok else "red"
+                    w2 = _width(text, "vz-sb") + 22
+                    g.append(f'<rect class="chip {col}" x="{px:.0f}" y="{y:.0f}" width="{w2:.0f}" height="{CHECK_H}" rx="12"/>')
+                    g.append(_text(f"sb {col}", px + w2 / 2, y + 16.5, text, "", "middle"))
+                    right_edge = max(right_edge, px + w2)
+                    px += w2 + CHECK_GAP
+                y += CHECK_H + 8
+            y += ROW_GAP - 8
         else:
             reply = s["arrow"] == "event"
             lines = _chip_lines(s)

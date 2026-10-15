@@ -53,6 +53,9 @@ BADGE_R = 11
 LEGEND_ROW = 30
 ZL_TRACK = 0.08     # letter-spacing of .zl, in em
 LABEL_H = 18
+ROW_LABEL_H = 26    # room above a row for its label
+LABEL_LINE = 18     # line pitch of a label with more than one line
+BEND = 40           # what a turn costs when routes are compared by length
 
 CODE = re.compile(r"`([^`]+)`")
 MARK = {"plain": "a", "blue": "b", "red": "r", "green": "g", "amber": "m"}
@@ -114,6 +117,7 @@ def validate(spec: dict[str, Any]) -> None:
         _tone(box, f"box {bid!r}")
         _step(box, "b", f"box {bid!r}")
         _step(box, "r", f"box {bid!r}")
+        _step(box, "n", f"box {bid!r}")
         for i, ln in enumerate(box.get("lines") or []):
             if isinstance(ln, str):
                 continue
@@ -145,6 +149,10 @@ def validate(spec: dict[str, Any]) -> None:
 
     for i, b in enumerate(boxes):
         walk(b, f"box {i}", True)
+
+    rl = spec.get("row_labels")
+    if rl is not None and (not isinstance(rl, list) or not all(x is None or isinstance(x, str) for x in rl)):
+        raise ValidationError("row_labels is a list with a label or null for each row")
 
     for i, z in enumerate(spec.get("zones") or []):
         _tone(z, f"zone {i}")
@@ -199,8 +207,13 @@ def _segments(text: str) -> list[tuple[str, bool]]:
     return out or [("", False)]
 
 
+WIDE = re.compile("[✓✗→←↔⇒…]")   # glyphs the font tables lack: the browser draws them from a fallback face, wider
+
+
 def _width(text: str, style: str, mono: bool = False) -> float:
     mono_style = "vz-nm-mono" if style == "vz-nm" else "vz-mono"
+    if not mono:
+        text = WIDE.sub("M", text)
     with tm.face("stage"):
         if mono:
             return tm.text_px(text.replace("`", ""), mono_style)
@@ -273,7 +286,8 @@ class _Box:
 
 
 class _Grid:
-    __slots__ = ("boxes", "col_x", "col_w", "row_y", "row_h", "width", "label_y", "zone_lines", "gaps")
+    __slots__ = ("boxes", "col_x", "col_w", "row_y", "row_h", "width", "label_y", "zone_lines", "gaps",
+                 "row_labels", "row_label_y")
 
 
 def _layout(spec: dict, extra: dict[int, float]) -> _Grid:
@@ -331,14 +345,23 @@ def _layout(spec: dict, extra: dict[int, float]) -> _Grid:
         last = max(m["row"] + m.get("rows", 1) - 1 for m in mem)
         foot[last] = max(foot[last], ZONE_FOOT)
 
+    row_labels = list(spec.get("row_labels") or []) + [None] * n_rows
     y = PAD
     if spec.get("title"):
         y = TITLE_Y + (SUB_GAP if spec.get("subtitle") else 0) + 10
     label_y = y + 22
     grid_top = label_y + 18
     row_y = []
+    row_label_y = []
     y = grid_top
     for r in range(n_rows):
+        if row_labels[r]:
+            if r > 0:
+                y += 6
+            row_label_y.append(y + 4)
+            y += ROW_LABEL_H
+        else:
+            row_label_y.append(None)
         y += head[r]
         row_y.append(y)
         y += row_h[r] + foot[r] + ROW_GAP
@@ -371,6 +394,7 @@ def _layout(spec: dict, extra: dict[int, float]) -> _Grid:
     g.boxes, g.col_x, g.col_w, g.row_y, g.row_h = placed, col_x, col_w, row_y, row_h
     g.width = col_x[-1] + col_w[-1] + ZONE_PAD + PAD
     g.label_y, g.zone_lines, g.gaps = label_y, zone_lines, gaps
+    g.row_labels, g.row_label_y = row_labels[:n_rows], row_label_y
     return g
 
 
@@ -397,17 +421,43 @@ def _gap_mid(g: _Grid, c: int) -> float:
     return g.col_x[c] + g.col_w[c] + g.gaps[c] / 2
 
 
-def _route(a: dict, A: _Box, B: _Box, g: _Grid, lanes: dict[int, int]) -> list[Pt]:
-    """Points of an orthogonal route from A to B. `lanes` counts arrows already using each column gap."""
+def _channels(g: _Grid) -> tuple[list[float], list[float]]:
+    """The free vertical lines (column gaps and the margins) and horizontal lines (row gaps and margins)."""
+    xs = [g.col_x[0] - ZONE_PAD - 6] + [_gap_mid(g, c) for c in range(len(g.gaps))] + [g.col_x[-1] + g.col_w[-1] + ZONE_PAD + 6]
+    ys = []
+    for r in range(len(g.row_y) - 1):
+        lo = max(b.btm for b in g.boxes.values() if b.parent is None and b.spec["row"] + b.spec.get("rows", 1) - 1 == r) \
+            if any(b.parent is None and b.spec["row"] + b.spec.get("rows", 1) - 1 == r for b in g.boxes.values()) else g.row_y[r] + g.row_h[r]
+        ys.append((lo + g.row_y[r + 1]) / 2)
+    ys = [g.row_y[0] - 14] + ys + [max(b.btm for b in g.boxes.values()) + 16]
+    return xs, ys
+
+
+def _length(pts: list[Pt]) -> float:
+    return sum(abs(p[0] - q[0]) + abs(p[1] - q[1]) for p, q in zip(pts, pts[1:])) + BEND * (len(pts) - 2)
+
+
+def _route(a: dict, A: _Box, B: _Box, g: _Grid, lanes: dict) -> list[Pt]:
+    """Points of an orthogonal route from A to B: straight when the boxes face each other, else one turn,
+    else the shortest clear path through a gap between columns or rows. `lanes` counts arrows already
+    using each gap line, so arrows sharing a gap get their own lane."""
     if a.get("points"):
         return [(float(x), float(y)) for x, y in a["points"]]
     fam = _family(A) + _family(B)
     others = [b for b in g.boxes.values() if b not in fam and A not in _family(b) and B not in _family(b)]
+    # a box that holds A or B is no obstacle, but the name and lines above its child are
+    for child in (A, B):
+        if child.parent is not None:
+            par = child.parent
+            others.append(_Box({"id": "_head"}, par.x, par.y, par.w, max(1.0, child.y - par.y - 6), None))
     off_a = float(a.get("offset", 0))
     off_b = float(a.get("offset_to", a.get("offset", 0)))
 
     def clear(pts: list[Pt]) -> bool:
         return not any(_hits(s, o) for s in zip(pts, pts[1:]) for o in others)
+
+    def crossings(pts: list[Pt]) -> int:
+        return sum(1 for s in zip(pts, pts[1:]) for o in others if _hits(s, o))
 
     cand: list[tuple[str, list[Pt]]] = []
     lo, hi = max(A.y, B.y), min(A.btm, B.btm)
@@ -434,34 +484,43 @@ def _route(a: dict, A: _Box, B: _Box, g: _Grid, lanes: dict[int, int]) -> list[P
     bx2, by2 = (B.x - ARROW_GAP) if right else (B.r + ARROW_GAP), B.cy + off_b
     if (down and by2 > ay2 + 20) or (not down and by2 < ay2 - 20):
         cand.append(("vh", [(ax2, ay2), (ax2, by2), (bx2, by2)]))
-    # through the column gap next to A, on its own lane
-    c_from = A.spec.get("col", None)
-    if c_from is None:
-        top = A
-        while top.parent is not None:
-            top = top.parent
-        c_from = top.spec["col"]
-        span = top.spec.get("cols", 1)
-    else:
-        span = A.spec.get("cols", 1)
-    gc = (c_from + span - 1) if right else (c_from - 1)
-    if 0 <= gc < len(g.gaps):
-        k = lanes.get(gc, 0)
-        gx = _gap_mid(g, gc) + ((k + 1) // 2) * CHANNEL * (1 if k % 2 else -1)
-        bx3 = (B.x - ARROW_GAP) if right else (B.r + ARROW_GAP)
-        cand.append(("hvh", [(ax, ay), (gx, ay), (gx, B.cy + off_b), (bx3, B.cy + off_b)]))
+
+    xs, ys = _channels(g)
+    chan: list[tuple[str, list[Pt], tuple]] = []
+    for gx in xs:
+        k = lanes.get(("x", round(gx)), 0)
+        x = gx + ((k + 1) // 2) * CHANNEL * (1 if k % 2 else -1)
+        if A.x - 2 <= x <= A.r + 2 or B.x - 2 <= x <= B.r + 2:
+            continue
+        sa = A.r if x > A.r else A.x
+        sb = (B.x - ARROW_GAP) if x < B.x else (B.r + ARROW_GAP)
+        chan.append(("hvh", [(sa, A.cy + off_a), (x, A.cy + off_a), (x, B.cy + off_b), (sb, B.cy + off_b)], ("x", round(gx))))
+    for gy in ys:
+        k = lanes.get(("y", round(gy)), 0)
+        y = gy + ((k + 1) // 2) * CHANNEL * (1 if k % 2 else -1)
+        if A.y - 2 <= y <= A.btm + 2 or B.y - 2 <= y <= B.btm + 2:
+            continue
+        sa = A.btm if y > A.btm else A.y
+        sb = (B.y - ARROW_GAP) if y < B.y else (B.btm + ARROW_GAP)
+        chan.append(("vhv", [(A.cx + off_a, sa), (A.cx + off_a, y), (B.cx + off_b, y), (B.cx + off_b, sb)], ("y", round(gy))))
 
     want = a.get("path", "auto")
-    chosen = None
+    pick = None
     if want != "auto":
-        chosen = next((p for n, p in cand if n == want), None)
-    if chosen is None:
-        chosen = next((p for n, p in cand if clear(p)), None)
-    if chosen is None:
-        chosen = cand[0][1] if cand else [(A.cx, A.cy), (B.cx, B.cy)]
-    if len(chosen) == 4 and 0 <= gc < len(g.gaps) and abs(chosen[1][0] - chosen[2][0]) < 1:
-        lanes[gc] = lanes.get(gc, 0) + 1
-    return chosen
+        pool = [(n, p, None) for n, p in cand] + chan
+        named = [c for c in pool if c[0] == want]
+        if named:
+            pick = min(named, key=lambda c: (crossings(c[1]), _length(c[1])))
+    if pick is None:
+        pick = next(((n, p, None) for n, p in cand if clear(p)), None)
+    if pick is None:
+        ok = sorted((c for c in chan if clear(c[1])), key=lambda c: _length(c[1]))
+        pick = ok[0] if ok else None
+    if pick is None:
+        pick = (cand[0][0], cand[0][1], None) if cand else ("line", [(A.cx, A.cy), (B.cx, B.cy)], None)
+    if pick[2] is not None:
+        lanes[pick[2]] = lanes.get(pick[2], 0) + 1
+    return pick[1]
 
 
 def _spread(routed: list[tuple[dict, list[Pt]]]) -> None:
@@ -496,27 +555,28 @@ def _overlaps(a: tuple[float, float, float, float], b: tuple[float, float, float
     return a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]
 
 
-def _label_spots(pts: list[Pt], w: float, badge: Pt | None) -> list[tuple[tuple[float, float, float, float], tuple[float, float, str]]]:
-    """Candidate spots for a label beside each run of its arrow: longest run first, positions nearest the
-    run's middle first, every 12 px, on both sides. A spot never covers the arrow's own step badge."""
+def _label_spots(pts: list[Pt], w: float, badge: Pt | None, h: float = LABEL_H):
+    """Candidate spots for a label of height `h` beside each run of its arrow: longest run first, positions
+    nearest the run's middle first, every 12 px, on both sides. A spot never covers the arrow's own badge.
+    Each spot is (rect, (x, first baseline, anchor))."""
     segs = sorted(zip(pts, pts[1:]), key=lambda s: -(abs(s[0][0] - s[1][0]) + abs(s[0][1] - s[1][1])))
     out = []
     for p, q in segs:
         horiz = abs(p[1] - q[1]) < 1
         lo, hi = (min(p[0], q[0]), max(p[0], q[0])) if horiz else (min(p[1], q[1]), max(p[1], q[1]))
-        span = (w / 2 + 6) if horiz else (LABEL_H / 2 + 4)
+        span = (w / 2 + 6) if horiz else (h / 2 + 4)
         if hi - lo < 2 * span:
             centres = [(lo + hi) / 2]
         else:
             mid = (lo + hi) / 2
-            centres = sorted((c for c in _frange(lo + span, hi - span, 12)), key=lambda c: abs(c - mid))
+            centres = sorted(_frange(lo + span, hi - span, 12), key=lambda c: abs(c - mid))
         for c in centres:
             if horiz:
-                spots = [((c - w / 2, p[1] - LABEL_H - 6, w, LABEL_H), (c, p[1] - 10, "middle")),
-                         ((c - w / 2, p[1] + 6, w, LABEL_H), (c, p[1] + 20, "middle"))]
+                spots = [((c - w / 2, p[1] - h - 6, w, h), (c, p[1] - h - 6 + 13, "middle")),
+                         ((c - w / 2, p[1] + 6, w, h), (c, p[1] + 20, "middle"))]
             else:
-                spots = [((p[0] + 10, c - LABEL_H / 2 - 4, w, LABEL_H), (p[0] + 12, c + 4, "")),
-                         ((p[0] - 12 - w, c - LABEL_H / 2 - 4, w, LABEL_H), (p[0] - 12, c + 4, "end"))]
+                spots = [((p[0] + 10, c - h / 2 - 4, w, h), (p[0] + 12, c - h / 2 + 9, "")),
+                         ((p[0] - 12 - w, c - h / 2 - 4, w, h), (p[0] - 12, c - h / 2 + 9, "end"))]
             for rect, where in spots:
                 if badge and _overlaps(rect, (badge[0] - BADGE_R - 4, badge[1] - BADGE_R - 4, 2 * BADGE_R + 8, 2 * BADGE_R + 8)):
                     continue
@@ -524,22 +584,22 @@ def _label_spots(pts: list[Pt], w: float, badge: Pt | None) -> list[tuple[tuple[
     return out
 
 
-def _free_spot(at: Pt, w: float, rects: list, segs: list, width: float):
-    """The free label spot nearest `at`, searched outward in rings, or None."""
+def _free_spot(at: Pt, w: float, rects: list, segs: list, width: float, h: float = LABEL_H):
+    """The free spot for a label of height `h` nearest `at`, searched outward in rings, or None."""
     best = None
     for dy in range(-140, 141, 10):
         for dx in range(-320, 321, 16):
             cx, cy = at[0] + dx, at[1] + dy
-            rect = (cx - w / 2, cy - LABEL_H / 2, w, LABEL_H)
+            rect = (cx - w / 2, cy - h / 2, w, h)
             if rect[0] < PAD or rect[0] + w > width - PAD or rect[1] < 8:
                 continue
             d = dx * dx + 3 * dy * dy
             if best is not None and d >= best[0]:
                 continue
-            pad = (rect[0] - 6, rect[1] - 4, w + 12, LABEL_H + 8)
+            pad = (rect[0] - 6, rect[1] - 4, w + 12, h + 8)
             if any(_overlaps(pad, r) for r in rects) or any(_rect_hits_seg(pad, s) for s in segs):
                 continue
-            best = (d, (rect, (cx, cy + 4, "middle")))
+            best = (d, (rect, (cx, cy - h / 2 + 13, "middle")))
     return best[1] if best else None
 
 
@@ -610,11 +670,17 @@ def _draw(spec: dict, uid: str, g: _Grid) -> tuple[list[str], dict[int, float], 
         if spec.get("subtitle"):
             out.append(_text("sub", PAD, TITLE_Y + SUB_GAP, spec["subtitle"]))
             width = max(width, PAD * 2 + _width(spec["subtitle"], "vz-sb"))
+    head_rects: list[tuple[float, float, float, float]] = []
     for c, label in enumerate(spec["columns"]):
         if label:
             out.append(_text("zl", g.col_x[c], g.label_y, label.upper()))
+            head_rects.append((g.col_x[c] - 2, g.label_y - 14, _width(label.upper(), "vz-zl") + 4, 18))
+    for label, y in zip(g.row_labels, g.row_label_y):
+        if label and y is not None:
+            out.append(_text("zl", PAD, y + 12, label.upper()))
+            head_rects.append((PAD - 2, y - 2, _width(label.upper(), "vz-zl") + 4, 18))
 
-    obstacles: list[tuple[float, float, float, float]] = []
+    obstacles: list[tuple[float, float, float, float]] = list(head_rects)
     zone_edges: list[Seg] = []
     for z, lines in zip(spec.get("zones") or [], g.zone_lines):
         mem = [g.boxes[m] for m in z["boxes"]]
@@ -632,6 +698,8 @@ def _draw(spec: dict, uid: str, g: _Grid) -> tuple[list[str], dict[int, float], 
             out.append(_text(_cls("zn", z.get("tone", "plain")), x0 + 16, y0 + 20 + ZONE_LINE * i, ln, att))
             obstacles.append((x0 + 14, y0 + 6 + ZONE_LINE * i, _width(ln, "vz-zn") + 4, ZONE_LINE))
 
+    badges: list[str] = []
+
     def draw_box(bx: _Box, inh_b: Any, inh_r: Any) -> None:
         s = bx.spec
         b, r = s.get("b", inh_b), s.get("r", inh_r)
@@ -639,6 +707,11 @@ def _draw(spec: dict, uid: str, g: _Grid) -> tuple[list[str], dict[int, float], 
         out.append(f'<rect class="{_cls("bx", s.get("tone", "plain"))}" x="{bx.x:.0f}" y="{bx.y:.0f}" width="{bx.w:.0f}" '
                    f'height="{bx.h:.0f}" rx="{6 if bx.parent else 8}"{att}/>')
         out.append(_text(_cls("nm", "mono" if s.get("mono") else ""), bx.x + BOX_PAD_L, bx.y + NAME_Y, s["name"], att))
+        if s.get("n") is not None:
+            # a route step that happens inside this box, with no arrow to carry its number
+            cx, cy = bx.r - BADGE_R - 8, bx.y + BADGE_R + 8
+            badges.append(f'<circle class="bd solid" cx="{cx:.0f}" cy="{cy:.0f}" r="{BADGE_R}"{att}/>')
+            badges.append(f'<text class="n" x="{cx:.0f}" y="{cy + 4.5:.1f}"{att}>{int(s["n"])}</text>')
         y = bx.y + NAME_Y
         for ln in s.get("lines") or []:
             ln = _line(ln)
@@ -681,11 +754,13 @@ def _draw(spec: dict, uid: str, g: _Grid) -> tuple[list[str], dict[int, float], 
             labels_by[layer_of(a)].append((badge[0] - BADGE_R, badge[1] - BADGE_R, 2 * BADGE_R, 2 * BADGE_R))
         if a.get("label"):
             mono = bool(a.get("mono"))
-            w = _width(a["label"], "vz-sb", mono)
+            label_lines = [ln for ln in a["label"].split("\n") if ln.strip()] or [a["label"]]
+            w = max(_width(ln, "vz-sb", mono) for ln in label_lines)
             own = list(zip(pts, pts[1:]))
             spot = None
-            for rect, where in _label_spots(pts, w, badge):
-                if rect[0] < 4 or rect[1] < 4:
+            lh = LABEL_H + LABEL_LINE * (len(label_lines) - 1)
+            for rect, where in _label_spots(pts, w, badge, lh):
+                if rect[0] < 4 or rect[1] < 4 or rect[0] + rect[2] > g.width - 4:
                     continue
                 if any(_overlaps(rect, b) for b in box_rects + labels_by[layer_of(a)]):
                     continue
@@ -696,7 +771,7 @@ def _draw(spec: dict, uid: str, g: _Grid) -> tuple[list[str], dict[int, float], 
             if spot is None and route and badge:
                 # a route label needs no gap of its own: put it in the nearest free spot by its badge,
                 # with a thin line back to the badge
-                spot = _free_spot(badge, w, box_rects + labels_by["route"], segs_by["route"], width)
+                spot = _free_spot(badge, w, box_rects + labels_by["route"], segs_by["route"], width, lh)
                 if spot is not None:
                     (rx, ry, rw, rh), _ = spot
                     ex = min(max(badge[0], rx), rx + rw)
@@ -712,13 +787,15 @@ def _draw(spec: dict, uid: str, g: _Grid) -> tuple[list[str], dict[int, float], 
                     if lo - 2 <= mx <= lo + g.gaps[c] + 2:
                         want = w + 24 + (2 * BADGE_R + 24 if badge else 0)
                         need[c] = max(need.get(c, 0.0), max(16.0, want - run))
-                cands = _label_spots(pts, w, badge)
+                cands = _label_spots(pts, w, badge, lh)
                 spot = cands[0] if cands else ((pts[0][0], pts[0][1] - 24, w, LABEL_H), (pts[0][0], pts[0][1] - 10, ""))
             rect, (tx, ty, anchor) = spot
             labels_by[layer_of(a)].append(rect)
             lcls = _cls("lb", "mono" if mono else "")
-            top_labels.append(_text(lcls, tx, ty, a["label"], att, anchor))
+            for k, ln in enumerate(label_lines):
+                top_labels.append(_text(lcls, tx, ty + LABEL_LINE * k, ln, att, anchor))
     out.extend(top_labels)
+    out.extend(badges)
     return out, need, width
 
 
@@ -746,6 +823,10 @@ def render(spec: dict[str, Any], uid: str) -> str:
             step = len(item["label"]) and _width(item["label"], "vz-sb") + 44 + 30
             if x + step > width - PAD and x > PAD:
                 x, y = PAD, y + LEGEND_ROW
+            if item.get("kind") == "note":
+                out.append(_text("sb", x, y, item["label"]))
+                x += _width(item["label"], "vz-sb") + 30
+                continue
             if item.get("kind") == "box":
                 out.append(f'<rect class="{_cls("bx", tone)}" x="{x}" y="{y - 12}" width="28" height="16" rx="4"/>')
             else:
