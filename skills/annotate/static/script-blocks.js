@@ -548,3 +548,30 @@ function applyFolds() {
   }
 }
 document.addEventListener("annotate:rendered", applyFolds);
+
+// A click on inline code copies its text: a class name, an id, a config key.
+// A drag still selects for a comment, so only a click with no selection
+// copies. Code inside a link or a fence is left alone.
+document.addEventListener("click", async (ev) => {
+  const code = ev.target.closest && ev.target.closest(".block-content code");
+  if (!code || code.closest("pre, a")) return;
+  const sel = window.getSelection();
+  if (sel && !sel.isCollapsed) return;
+  ev.stopPropagation();
+  const text = code.textContent.trim();
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (_) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { ok = document.execCommand("copy"); } catch (_) { ok = false; }
+    ta.remove();
+  }
+  if (!ok) return;
+  code.title = "Copied";
+  code.classList.add("is-copied");
+  setTimeout(() => { code.classList.remove("is-copied"); code.removeAttribute("title"); }, 1200);
+}, true);
