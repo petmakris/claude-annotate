@@ -110,12 +110,32 @@ main.prose pre code:not(.sk-fence) {
   font-family: var(--font-code);
   font-size: 13.5px;
 }
+/* Inline code: blue ink on a faint blue-white tint with a hairline, picked
+   with the user in a colour picker. The ink clears 7:1 on its ground in both
+   themes. The ground barely lifts off the card (0.2 L* light, 3.1 dark), on
+   purpose: the hairline and the ink mark the code, not a filled box. The old
+   rule painted var(--surface), the card's own colour, so the box was
+   invisible and its 6px padding read as stray spaces round every name. */
+:root {
+  --code-inline-bg: #f6f8ff;
+  --code-inline-fg: #1a4fac;
+  --code-inline-line: #dee1e9;
+}
+:root:has(body[data-page-theme="dark"]) {
+  --code-inline-bg: #2e3137;
+  --code-inline-fg: #9fc2fe;
+  --code-inline-line: #42454d;
+}
 /* Inline code only — must not match <code> inside <pre>. */
 main.prose :not(pre) > code {
-  background: var(--surface);
-  padding: 1px 6px; border-radius: 3px;
+  background: var(--code-inline-bg);
+  color: var(--code-inline-fg);
+  box-shadow: inset 0 0 0 1px var(--code-inline-line);
+  padding: 0.1em 0.5em; border-radius: 4px;
   font-family: var(--font-code);
-  font-size: 0.92em;
+  font-size: 0.86em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 /* A click on inline code copies it (script-blocks.js). */
 main.prose .block-content :not(pre):not(a) > code { cursor: copy; }

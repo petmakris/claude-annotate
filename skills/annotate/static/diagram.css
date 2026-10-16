@@ -191,6 +191,7 @@ main.prose .vz-player p { padding: 0; border-radius: 0; }
 main.prose .vz-player p:hover { background: none; }
 main.prose .vz-cap code {
   background: var(--vz-sunk); padding: 1px 4px; border-radius: 4px;
+  color: inherit; box-shadow: none;
   font-family: var(--vz-mono); font-size: .9em;
 }
 

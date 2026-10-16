@@ -125,6 +125,7 @@ main.prose .ex-val-chip code {
   font-family: inherit;
   font-size: inherit;
   background: none;
+  box-shadow: none;
   padding: 0;
   border-radius: 0;
   color: inherit;
@@ -161,6 +162,7 @@ main.prose .ex-lbl code {
   font-family: var(--font-code);
   font-size: 10.5px;
   background: none;
+  box-shadow: none;
   padding: 0;
   border-radius: 0;
   color: var(--ex-ink);
