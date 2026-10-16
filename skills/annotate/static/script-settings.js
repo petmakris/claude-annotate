@@ -11,11 +11,18 @@
 // ── Page-wide view controls ───────────────────────────────────────────
 // How wide the column is, stored per response, because a preference you
 // must re-set on every reload is worse than not having one.
-// Two stops: Normal, a 760px reading column, and Wide, which has no cap and runs
-// the full width of the window less the side gutters. Code panes always
-// sit under the prose, so no stop has to make room for a second column.
-const VIEW_WIDTHS = ["normal", "wide"];
-const VIEW_LABELS = { normal: "Normal", wide: "Wide" };
+// A slider, not stops. It had two, Normal (760px) and Wide (no cap), and
+// neither fitted: Normal was too narrow for a document with code and Wide
+// ran the full window. The slider goes from WIDTH_MIN to WIDTH_MAX in
+// WIDTH_STEP steps, and its one stop past WIDTH_MAX is "full", no cap at
+// all, so the column is the window less the side gutters. Code panes
+// always sit under the prose, so no width has to make room for a second
+// column.
+const WIDTH_MIN = 600;
+const WIDTH_MAX = 1600;
+const WIDTH_STEP = 20;
+// Where "full" sits on the slider: one step past the widest capped width.
+const WIDTH_FULL_AT = WIDTH_MAX + WIDTH_STEP;
 
 function viewKey(name) {
   const rid = (document.body.dataset.responseId || "default");
@@ -24,18 +31,41 @@ function viewKey(name) {
 function readStored(name) {
   try { return localStorage.getItem(viewKey(name)); } catch (_) { return null; }
 }
-// Every new session opens at Normal, code or not. This used to be derived
+// Every new session opens at 760px, code or not. This used to be derived
 // from data-has-code, which made the opening measure depend on something
 // the reader never chose. One default, chosen once; anything else is the
-// reader's own click, and that is what `stored` is for.
-const DEFAULT_WIDTH = "normal";
+// reader's own choice, and that is what `stored` is for. It is also the
+// :root default in style.css, which is what an export with no width gets.
+const DEFAULT_WIDTH = "760";
+// The two stops the slider replaced, as the widths they drew, so a width
+// chosen before the slider still reads the same.
+const OLD_WIDTH_STOPS = { normal: "760", wide: "full" };
 // `pagewidth`, not `width`: the stops have been renamed in place before,
-// and the older key's values all name columns narrower than Normal now.
+// and the older key's values all name columns narrower than 760px now.
 // AnnotateStorage retires that key rather than mapping it to the default.
 const WIDTH_KEY = "pagewidth";
+// A stored width as the page paints it: "full", or a number of pixels as a
+// string, clamped to the slider and snapped to its step. Anything else
+// (nothing stored, a value from some other build) is the default.
+function widthFromStored(stored) {
+  if (stored == null) return DEFAULT_WIDTH;
+  if (stored === "full") return "full";
+  if (Object.prototype.hasOwnProperty.call(OLD_WIDTH_STOPS, stored)) return OLD_WIDTH_STOPS[stored];
+  if (!/^\d+$/.test(stored)) return DEFAULT_WIDTH;
+  const n = Math.round(Number(stored) / WIDTH_STEP) * WIDTH_STEP;
+  return String(Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, n)));
+}
 function effectiveWidth() {
-  const stored = readStored(WIDTH_KEY);
-  return VIEW_WIDTHS.indexOf(stored) >= 0 ? stored : DEFAULT_WIDTH;
+  return widthFromStored(readStored(WIDTH_KEY));
+}
+// What a width paints into --content-max ("none" is main.prose's no cap),
+// and the words shown beside the slider.
+function widthCss(w) { return w === "full" ? "none" : `${w}px`; }
+function widthText(w) { return w === "full" ? "Full" : `${w} px`; }
+// A width's position on the slider, and back.
+function widthToSlider(w) { return w === "full" ? WIDTH_FULL_AT : Number(w); }
+function sliderToWidth(v) {
+  return Number(v) >= WIDTH_FULL_AT ? "full" : widthFromStored(String(v));
 }
 // Pane themes. Daylight is the measured light palette the pane shipped
 // with; the others redeclare its variables. An unknown stored value falls
@@ -70,6 +100,8 @@ function effectivePaneTheme() {
 // `attr` is the dataset key, so `width` paints data-width and `codeFont`
 // paints data-code-font. The stylesheet keys off those attributes and
 // nothing else; see the view-controls and typography blocks in style.css.
+// The width is the one exception: a number no rule can match, so it also
+// paints --content-max onto <body> (applyViewControls).
 const SETTINGS = [
   // First row, and "global": a reader who works in the dark does so in every
   // document, the same way they read in one typeface. Light is the default
@@ -77,9 +109,10 @@ const SETTINGS = [
   { key: "pagetheme", attr: "pageTheme", label: "Page", scope: "global",
     def: "light",
     options: [["light", "Light"], ["dark", "Dark"]] },
+  // The one row that is a slider rather than buttons: `range` builds it, and
+  // it has no options. Its value is "full" or a number of pixels.
   { key: WIDTH_KEY, attr: "width", label: "Page width", scope: "doc",
-    read: effectiveWidth,
-    options: VIEW_WIDTHS.map((v) => [v, VIEW_LABELS[v]]) },
+    read: effectiveWidth, range: true },
   { key: "panetheme", attr: "paneTheme", label: "Code theme", scope: "doc",
     read: effectivePaneTheme,
     // Each is a standard editor theme, used as it ships (code-paint.js).
@@ -156,6 +189,20 @@ function applyViewControls() {
   for (const s of SETTINGS) {
     const value = settingValue(s);
     document.body.dataset[s.attr] = value;
+    if (s.range) {
+      // A stylesheet cannot carry a rule for every width, so the width goes
+      // onto <body> as --content-max itself. data-width still names it, for
+      // the export and for anyone reading the page.
+      document.body.style.setProperty("--content-max", widthCss(value));
+      const group = groups && groups.querySelector(`[data-setting="${s.key}"]`);
+      if (!group) continue;
+      const slider = group.querySelector('input[type="range"]');
+      // Left alone while it is being dragged: what it holds is what painted.
+      if (slider && document.activeElement !== slider) slider.value = String(widthToSlider(value));
+      const out = group.querySelector(".set-value");
+      if (out) out.textContent = widthText(value);
+      continue;
+    }
     if (!groups) continue;
     groups.querySelectorAll(`[data-setting="${s.key}"] [data-value]`).forEach((b) => {
       b.setAttribute("aria-pressed", b.dataset.value === value ? "true" : "false");
@@ -175,6 +222,24 @@ function wireViewControls() {
       label.textContent = s.label;
       const row = document.createElement("div");
       row.className = "set-row";
+      if (s.range) {
+        // Painted and stored on every input event, so the column follows the
+        // thumb while it is dragged and a reload keeps where it stopped.
+        row.classList.add("set-range");
+        const slider = document.createElement("input");
+        slider.type = "range";
+        slider.min = String(WIDTH_MIN);
+        slider.max = String(WIDTH_FULL_AT);
+        slider.step = String(WIDTH_STEP);
+        slider.setAttribute("aria-label", s.label);
+        slider.addEventListener("input", () => setSetting(s, sliderToWidth(slider.value)));
+        const out = document.createElement("output");
+        out.className = "set-value";
+        row.append(slider, out);
+        group.append(label, row);
+        groups.appendChild(group);
+        continue;
+      }
       for (const [value, text, chipBg, chipFg] of s.options) {
         const b = document.createElement("button");
         b.type = "button";

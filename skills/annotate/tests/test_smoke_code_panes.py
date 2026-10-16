@@ -211,38 +211,46 @@ class TestCodePaneReading(unittest.TestCase):
                          "the default is being read off the popover's order again")
 
 
-class TestPageWidthStops(unittest.TestCase):
-    """Two stops, Normal (760px) and Wide (the whole viewport less the side
-    gutters), Normal by default. Normal is a reading measure: at 1600px it
-    was wider than most windows, so the two stops looked the same."""
+class TestPageWidth(unittest.TestCase):
+    """A slider from 600px to 1600px, then Full (the whole viewport less the
+    side gutters), 760px by default. It replaced two stops, Normal (760px)
+    and Wide (no cap), of which neither fitted. What the slider paints is
+    run under node in page_width.test.mjs."""
 
-    def test_normal_is_760_and_wide_has_no_cap(self):
-        self.assertIn('const VIEW_WIDTHS = ["normal", "wide"]', JS)
-        self.assertIn('normal: "Normal", wide: "Wide"', JS)
-        self.assertIn('body[data-width="normal"] { --content-max: 760px; }', CSS)
-        self.assertIn('body[data-width="wide"]   { --content-max: none; }', CSS)
-        for gone in ("1040px", "1180px"):
-            self.assertNotIn(gone, CSS, "%s is still a column in style.css" % gone)
+    def test_the_slider_runs_600_to_1600_then_full(self):
+        self.assertIn("const WIDTH_MIN = 600;", JS)
+        self.assertIn("const WIDTH_MAX = 1600;", JS)
+        self.assertIn('return w === "full" ? "none" : `${w}px`;', JS)
+        # No rule answers the width any more: the page paints it on <body>.
+        self.assertNotIn('body[data-width=', CSS)
+        for gone in ("VIEW_WIDTHS", "VIEW_LABELS"):
+            self.assertNotIn(gone, JS, "%s, of the old stops, is back" % gone)
 
-    def test_a_page_with_no_width_reads_at_normal(self):
-        # An export can carry no data-width. The :root default is what it
-        # gets, and that must be Normal's measure.
+    def test_a_page_with_no_width_reads_at_760(self):
+        # An export can carry no width. The :root default is what it gets.
         root = CSS[CSS.index(":root {"):CSS.index("}", CSS.index(":root {"))]
         self.assertIn("--content-max: 760px;", root)
 
-    def test_the_chrome_is_full_width_at_every_stop(self):
-        # A capped bar narrower than Wide's column would sit inset from it,
-        # and a bar that followed the column would move between stops.
+    def test_the_chrome_is_full_width_at_every_width(self):
+        # A capped bar narrower than Full's column would sit inset from it,
+        # and a bar that followed the column would move with the slider.
         self.assertNotIn("--chrome-max", CSS)
         i = CSS.index("body .page-header {")
         self.assertIn("padding: 10px var(--content-gutter);",
                       CSS[i:CSS.index("}", i)])
 
-    def test_normal_is_the_default(self):
-        self.assertIn('const DEFAULT_WIDTH = "normal"', JS)
+    def test_760_is_the_default(self):
+        self.assertIn('const DEFAULT_WIDTH = "760"', JS)
+
+    def test_the_export_carries_the_width_as_a_style(self):
+        # data-width="960" matches no rule, so an export with only the
+        # attribute would read at 760px whatever the author chose.
+        export = (Path(__file__).resolve().parents[1] / "static" / "export.js").read_text()
+        self.assertIn('getPropertyValue("--content-max")', export)
+        self.assertIn('style="--content-max: ', export)
 
     def test_the_pre_rename_width_key_is_retired_not_mapped(self):
-        # Every value the old `width` key could hold is narrower than Normal
+        # Every value the old `width` key could hold is narrower than 760px
         # now, so a mapping would send all of them to the default. The key is
         # swept instead, and nothing reads it.
         self.assertNotIn("LEGACY_WIDTH", JS)
@@ -258,3 +266,4 @@ class TestPageWidthStops(unittest.TestCase):
         self.assertIn('data-pane-to="settings"', shell)
         self.assertIn('{ key: WIDTH_KEY, attr: "width", label: "Page width"', JS,
                       "the settings panel no longer offers a width")
+        self.assertIn('slider.type = "range";', JS)

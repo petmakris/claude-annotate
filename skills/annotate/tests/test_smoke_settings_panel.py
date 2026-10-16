@@ -101,7 +101,6 @@ class TestThePanelPaintsTheDocument(unittest.TestCase):
     def test_every_setting_has_a_stylesheet_rule_to_land_on(self):
         for attr, values in (
             ("data-page-theme", ("dark",)),
-            ("data-width", ("normal", "wide")),
             ("data-code-font", ("jetbrains", "system")),
             ("data-text-size", ("small", "large")),
         ):

@@ -14,9 +14,10 @@
    views; annotate's reading column is set here instead. The prose and the
    sticky bars inside it derive their width from --content-max, and every
    band of chrome derives its inset from --content-gutter.
-   760px is the Normal stop (see the view controls below). It is also the
-   :root default, so a page that carries no data-width at all — an export —
-   reads at Normal rather than at some older measure. */
+   760px is the page width's default (see the view controls in
+   style-page.css). It is also the :root default, so a page that carries no
+   width at all — an export — reads at 760px rather than at some older
+   measure. */
 :root {
   --content-max: 760px;
   --content-gutter: 24px;
@@ -28,10 +29,10 @@
      Measured then: the width toggle sat at x=980 / 1051 / 1261 across the
      stops, a 281px swing from a setting that is about prose. It later sat
      on a 1600px measure of its own, which was fine while 1600px was the
-     widest column; with Wide uncapped, a capped bar would sit inset from
+     widest column; with Full uncapped, a capped bar would sit inset from
      the column below it. Full width is the one measure no column exceeds,
-     so at Wide the bar and the column share a left edge, and at Normal the
-     bar simply keeps it. test_browser_review.py measures both stops. */
+     so at Full the bar and the column share a left edge, and at any capped
+     width the bar simply keeps it. */
 }
 
 /* === Response content (prose) ======================================== */

@@ -294,6 +294,15 @@ body.exported .export-foot {
     return '<div class="export-foot">Read-only export · ' + esc(when) + "</div>";
   }
 
+  // The page width is a number from the settings slider, which no rule in
+  // the stylesheet matches: the live page paints it as --content-max on
+  // <body>'s own style (script-settings.js), so the export carries that
+  // style. With none, the export reads at the :root default, 760px.
+  function contentMaxStyle() {
+    const cm = document.body.style.getPropertyValue("--content-max").trim();
+    return cm ? ` style="--content-max: ${esc(cm)}"` : "";
+  }
+
   async function buildDocument() {
     const titleEl = document.querySelector(".header-text");
     const respEl = document.querySelector(".header-respid");
@@ -315,7 +324,7 @@ body.exported .export-foot {
       // have quietly ignored the reader's font.
       const attr = "data-" + k.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase());
       return ` ${attr}="${esc(v)}"`;
-    }).join("");
+    }).join("") + contentMaxStyle();
 
     const css = await embedFonts(stripUnusedFontFaces(dedupeFontSrc(await collectCss())));
     return (

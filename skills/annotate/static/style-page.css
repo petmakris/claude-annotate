@@ -479,23 +479,17 @@ section.block[data-diff="open"] .diff-pane { display: block; }
    about what a click does. Comments come from the card header. */
 
 /* === Page-wide view controls =========================================
-   Two stops. Normal is a 760px column; Wide has no cap at all, so the
-   column is the viewport less main.prose's own side gutters. The bar above
-   is full width at both (see the :root note), so it never moves.
+   The width is a slider in the settings panel, from 600px to 1600px and
+   then Full, which has no cap at all, so the column is the viewport less
+   main.prose's own side gutters. The bar above is full width at every
+   width (see the :root note), so it never moves.
 
-   script.js writes data-width on every render, chosen or not, so on the
-   live page the attribute is never absent. An export may carry none, and
-   then the :root default — Normal's 760px — applies.
-
-   760px is a reading measure: about 90 characters of body text a line.
-   Normal used to be 1600px, wider than most windows, so on a laptop the
-   two stops drew the same column and the setting looked broken.
-
-   Nothing else sets --content-max on <body> any more (documents with code
-   used to get a wider column of their own), so these rules no longer
-   depend on their position in the file. */
-body[data-width="normal"] { --content-max: 760px; }
-body[data-width="wide"]   { --content-max: none; }
+   No rule here answers it: a stylesheet cannot hold one per width, so
+   script-settings.js writes --content-max onto <body>'s own style on every
+   render, next to data-width naming the same width, and the export carries
+   that style over. A page with neither gets the :root default, 760px, a
+   reading measure of about 90 characters of body text a line. It was two
+   stops before, Normal (760px) and Wide (no cap), and neither fitted. */
 
 /* === Typography, chosen in the settings popover ======================
    Each rule redefines a token declared in core.css's :root. Nothing here
@@ -567,6 +561,18 @@ body .page-header {
   background: var(--accent); border-color: var(--accent); color: var(--accent-fg);
 }
 .set-row button[aria-pressed="true"] .pt-name { color: var(--accent-fg); }
+/* The page width's slider, and the width it reads beside it. The value has
+   a fixed width so the track does not shift as "960 px" becomes "Full". */
+.set-row.set-range { flex-wrap: nowrap; align-items: center; gap: 10px; }
+.set-range input[type="range"] {
+  flex: 1; min-width: 0; margin: 0;
+  accent-color: var(--accent); cursor: pointer;
+}
+.set-range .set-value {
+  flex: none; min-width: 52px; text-align: right;
+  font-family: inherit; font-size: 12px; font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
 /* At the foot of the panel, under a hairline, and deliberately NOT styled as
    a seventh row: the rows are choices that stay chosen, and this is an action
    that fires once. Quiet by default — it undoes work, however cheaply, so it
