@@ -47,7 +47,7 @@ CHECK_H = 24
 CHECK_GAP = 8
 BAND_HEAD = 34
 TAG_H = 28           # a lane's name repeated at the top of a later band
-SELF_IN = 16           # a self step's chip starts this far right of its lane
+SELF_W = 30            # how far a self step's arc reaches right of its lane; its chip starts 12 px past it
 OUTCOME_GAP = 22
 NOTE_GAP = 24
 
@@ -254,15 +254,17 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
             lines = _chip_lines(s)
             w = _lines_w(lines) + 2 * CHIP_PAD_X
             h = CHIP_LINE * max(1, len(lines)) + 2 * CHIP_PAD_Y
-            cx = fx + SELF_IN + (BADGE_R + 6 if badge_here else 0)
-            g.append(f'<path class="{_cls("ar", tone)}" d="M{fx:.0f},{y + 8:.0f} H{fx + SELF_IN - 4:.0f} V{y + h - 8:.0f} H{fx + 4:.0f}" marker-end="url(#{uid}-{MARK[tone]})"/>')
+            cx = fx + SELF_W + 12
+            ry = round((h - 16) / 2)   # one half-oval out of the lane and back, as tall as the chip less 8 px each end
+            g.append(f'<path class="{_cls("ar", tone)}" d="M{fx:.0f},{y + 8:.0f} A{SELF_W},{ry:.0f} 0 0 1 {fx + 5:.0f},{y + 8 + 2 * ry:.0f}" marker-end="url(#{uid}-{MARK[tone]})"/>')
             g.append(f'<rect class="{_cls("chip", tone)}" x="{cx:.0f}" y="{y:.0f}" width="{w:.0f}" height="{h:.0f}" rx="6"/>')
             for k, (t, m) in enumerate(lines):
                 g.append(_text(_cls("sb", "mono" if m else ""), cx + CHIP_PAD_X, y + CHIP_PAD_Y + 14 + CHIP_LINE * k, t))
             right_edge = max(right_edge, cx + w)
-            if badge_here:
-                g.append(f'<circle class="bd solid" cx="{fx:.0f}" cy="{y + h / 2:.0f}" r="{BADGE_R}"/>')
-                g.append(f'<text class="n" x="{fx:.0f}" y="{y + h / 2 + 4.5:.1f}">{n}</text>')
+            if badge_here:   # left of the lane, so it covers no part of the arc
+                bx = fx - BADGE_R - 8
+                g.append(f'<circle class="bd solid" cx="{bx:.0f}" cy="{y + h / 2:.0f}" r="{BADGE_R}"/>')
+                g.append(f'<text class="n" x="{bx:.0f}" y="{y + h / 2 + 4.5:.1f}">{n}</text>')
                 shown_badge.add(n)
             arrow_y = y + h / 2
             y += h + 8

@@ -365,7 +365,8 @@ function stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown) {
     const xr = flip ? xs.get(s.from) - 40 : xs.get(s.from) + 40;
     const sx = flip ? edge(s.from, abs - 10, -1) : edge(s.from, abs - 10, 1);
     const ex = flip ? edge(s.from, abs + 10, -1) : x0;
-    svg = `<path class="ln-path" pathLength="1" d="M${sx} ${ay - 10}H${xr}V${ay + 10}H${ex + (flip ? -9 : 9)}"/>${head(ex, ay + 10, flip ? 1 : -1, false)}`;
+    // one half-oval out of the lane to xr and back, as sequence_svg draws it
+    svg = `<path class="ln-path" pathLength="1" d="M${sx} ${ay - 10}A${Math.abs(xr - sx)} 10 0 0 ${flip ? 0 : 1} ${ex + (flip ? -9 : 9)} ${ay + 10}"/>${head(ex, ay + 10, flip ? 1 : -1, false)}`;
     const room = flip ? xr - 12 - cols.left : w - (xr + 12) - (s.note && !narrow ? 120 : EDGE);
     words = `<div class="ln-lbl ln-beside ln-chipped${flip ? " ln-flip" : ""}" style="${flip ? `right:${w - xr + 12}px` : `left:${xr + 12}px`};top:${ay}px;max-width:${Math.max(100, room)}px">
       <b>${esc(s.label)}</b>${s.sub ? `<code>${esc(s.sub)}</code>` : ""}</div>`;

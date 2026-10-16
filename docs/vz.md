@@ -67,7 +67,7 @@ The sequence spec of `kind: "sequence"` (`skills/annotate/references/block-kinds
 
 - `role` on an actor: a second line in its head (`"one runner"`, `"the app's chat"`).
 - `tone` takes the four colours above; the older tones still work (`edge` and `service` are blue, `internal` amber, `hot` red, `good` green).
-- `label` and `sub` sit in a chip on the arrow; `sub` is mono. An `event` is a dashed reply with its words under it. A `self` step is a chip beside its lane.
+- `label` and `sub` sit in a chip on the arrow; `sub` is mono. An `event` is a dashed reply with its words under it. A `self` step is one arc out of its lane and back, its chip beside the arc and its number left of the lane.
 - `checks` on a step: `[{"label": "scopes", "ok": true}, {"label": "already paid", "ok": false}]`, drawn as ✓ / ✗ badges where the rule is applied.
 - `n` on a step: its number in the walkthrough. Several arrows share a number; without any `n`, every arrow is numbered.
 - `phases` become bands behind their rows.

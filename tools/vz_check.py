@@ -9,7 +9,7 @@ Run:  uv run tools/vz_check.py check FILE.svg [FILE.svg ...] [--out DIR]
 
 `check` draws each SVG with skills/_shared/static/vz.css and the Inter and JetBrains Mono fonts, in
 light and dark, and lists every fault: text off the canvas, text that leaves its box or touches its
-edge, labels that overlap, an arrow through text or through a box, a filled arrow, text with no
+edge, labels that overlap, a step badge over text or touching an arrow, an arrow through text or through a box, a filled arrow, text with no
 visible colour, a missing title. For a map it also checks every build and route frame, since a part
 can collide with another only while some parts are hidden. It writes light and dark PNGs.
 
@@ -63,6 +63,17 @@ PROBE = r"""
       const a = x.b;
       if (a.x < b.x + b.width - 1 && b.x < a.x + a.width - 1 && a.y < b.y + b.height - 1 && b.y < a.y + a.height - 1)
         faults.push(`a step badge covers "${x.s}"`);
+    }
+    const r = c.r.baseVal.value, cx = c.cx.baseVal.value, cy = c.cy.baseVal.value;
+    for (const el of [...svg.querySelectorAll('.ar')].filter(shown)) {
+      const len = el.getTotalLength();
+      for (let d = 0; d <= len; d += 2) {
+        const p = el.getPointAtLength(d);
+        if (Math.hypot(p.x - cx, p.y - cy) < r + 3) {   // an arrow starts 4px clear of its badge
+          faults.push(`a step badge touches arrow ${el.getAttribute('d') || `${el.getAttribute('x1')},${el.getAttribute('y1')}`}`);
+          break;
+        }
+      }
     }
   }
   for (const el of [...svg.querySelectorAll('.ar')].filter(shown)) {

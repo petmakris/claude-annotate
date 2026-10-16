@@ -524,6 +524,20 @@ def test_the_lanes_draw_every_step_from_the_start_and_open_a_bar_from_each_call_
                            "live": ["s1", "s2"], "ghostPhases": ["Answer"], "s2": ["472", "839"], "cols": ["88px", "467px", "846px"]}]
 
 
+SELF_PATHS = ("(() => { const b = pane('turn').querySelector('.visual.lanes');"
+              " return ['s4', 's7'].map((s) => b.querySelector(`.ln-row[data-step=\"${s}\"] .ln-path`).getAttribute('d')); })()")
+
+
+def test_the_lanes_draw_a_call_to_itself_as_one_arc_out_of_its_lane_and_back(tmp_path):
+    built = _scene(scene.sequence_model(TURN), [[f"+ step s{i}"] for i in range(1, 8)], "A spoken turn")
+    page = _turn(tmp_path, extra={"scene": built}).open()
+    page.check(SELF_PATHS)
+    # unmeasured, the server's lane stands at 467 and the page's at 88: each arc leaves the edge of its lane's bar
+    # 10px above the arrow, reaches 40px past the lane and comes back 10px under it to its arrowhead, as
+    # sequence_svg draws one. The server's call nests a bar in the one already open, so it leaves from further out
+    assert page.run() == [["M472 18A35 10 0 0 1 487 38", "M88 18A40 10 0 0 1 102 38"]]
+
+
 BOXES = ("(() => { const b = pane('turn').querySelector('.visual.lanes');"
          " return {kinds: [...b.querySelectorAll('.ln-kind')].map((k) => k.textContent.trim()),"
          " guards: [...b.querySelectorAll('.ln-guard')].map((g) => g.textContent.trim()),"

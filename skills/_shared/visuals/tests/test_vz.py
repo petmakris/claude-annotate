@@ -150,6 +150,22 @@ def test_each_step_of_a_lane_sequence_is_tagged_with_its_number():
     assert groups == [("s1", "1"), ("s2", "1"), ("s3", "2"), ("s4", "2")]
 
 
+def test_a_step_to_itself_is_one_arc_out_of_its_lane_with_its_badge_left_of_the_lane():
+    spec = json.loads(json.dumps(SEQ))
+    for s in spec["steps"]:
+        s.pop("n")
+    svg = sequence_svg.render(spec, "q1")
+    step = re.search(r'<g data-step="s4"[^>]*>(.*?)</g>', svg).group(1)
+    arc = re.search(r'd="M(\d+),(\d+) A30,(\d+) 0 0 1 (\d+),(\d+)"', step)
+    assert arc, step
+    lane, top, ry, end, bottom = map(int, arc.groups())
+    assert (end - lane, bottom - top, ry) == (5, 2 * ry, ry)
+    badge = re.search(r'<circle class="bd solid" cx="(\d+)" cy="(\d+)"', step)
+    assert int(badge.group(1)) == lane - 18 and abs(int(badge.group(2)) - (top + ry)) <= 1
+    chip = re.search(r'<rect class="chip[^"]*" x="(\d+)"', step)
+    assert int(chip.group(1)) == lane + 42
+
+
 def test_a_lane_sequence_reads_annotates_older_tones():
     svg = sequence_svg.render(SEQ, "q1")
     assert 'class="lb green"' in svg  # "good" became green
