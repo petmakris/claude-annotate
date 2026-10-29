@@ -48,5 +48,5 @@ the same way.
 The page: one surface for every board at one size, 4 to 6 to a line under each group's title;
 two fingers or the wheel pan, a pinch or Ctrl + wheel zooms round the pointer, Fit all and 100 %
 are buttons, the view is remembered, a toggle shows one shot label alone, a click opens the full
-image. A project that cannot reach this repo (lomem's CI) vendors the empty page from
+image. A project that cannot reach this repo vendors the empty page from
 `python3 "$SKILL_DIR/../../tools/canvas.py" template -o viewer.html` and puts its data in itself.

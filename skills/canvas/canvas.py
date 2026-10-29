@@ -3,7 +3,7 @@
 A manifest (JSON) names the groups, their boards and each board's shots; `build` writes a folder
 with one self-contained index.html, the images, and thumbnails made here. `check` validates a
 manifest. `template` writes the page with no data in it, for a project that cannot reach this
-repo (lomem's CI) to vendor and fill in itself. See skills/canvas/SKILL.md.
+repo to vendor and fill in itself. See skills/canvas/SKILL.md.
 
 Manifest:
 

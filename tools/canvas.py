@@ -7,7 +7,7 @@ Run:  uv run --with pillow tools/canvas.py build MANIFEST.json --out DIR
 
 `build` writes DIR/index.html, the images it shows and their thumbnails (DIR may be the manifest's
 own folder). `check` prints what is wrong with a manifest and exits 1, or prints "ok". `template`
-writes the page with no data in it, for a project to vendor (lomem's `journey vendor-canvas`).
+writes the page with no data in it, for a project that fills it in itself.
 The manifest's format is in skills/canvas/canvas.py.
 """
 from __future__ import annotations
