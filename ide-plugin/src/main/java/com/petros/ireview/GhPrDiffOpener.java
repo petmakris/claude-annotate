@@ -61,6 +61,16 @@ final class GhPrDiffOpener {
                 + "enough to open the GitHub diff.");
             return;
         }
+        show(project, number, null, filePath, side, line0);
+    }
+
+    /** Open PR {@code number}'s diff at its first changed file; {@code nodeId} skips the {@code gh} lookup. */
+    static void openPr(@NotNull Project project, long number, @Nullable String nodeId) {
+        show(project, number, nodeId, null, "R", 0);
+    }
+
+    private static void show(@NotNull Project project, long number, @Nullable String knownNodeId,
+                             @Nullable String filePath, @NotNull String side, int line0) {
         String repoRoot = project.getBasePath();
         if (repoRoot == null) {
             notifyWarn(project, "No project root", "Can't locate the git working tree for this project.");
@@ -69,7 +79,9 @@ final class GhPrDiffOpener {
         final long prNumber = number;
         // gh shells out — keep it off the EDT, then hop back on for the GH VM.
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
-            NodeIdResult result = resolveNodeId(repoRoot, prNumber);
+            NodeIdResult result = knownNodeId != null && !knownNodeId.isBlank()
+                ? NodeIdResult.ok(knownNodeId)
+                : resolveNodeId(repoRoot, prNumber);
             if (result.nodeId().isEmpty()) {
                 notifyWarn(project, "Couldn't resolve PR #" + prNumber, result.failure());
                 return;

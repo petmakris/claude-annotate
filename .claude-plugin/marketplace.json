@@ -27,11 +27,12 @@
       "version": "0.1.0",
       "source": "./",
       "strict": false,
-      "description": "Ask Claude questions on a PR diff line or a code walkthrough step in IntelliJ, or open any local diff in VS Code and ask on its lines. Requires Python 3.9+ on PATH and either the companion IntelliJ plugin (/ask-diff, /walkthrough) or the vscode-plugin extension (/show-diff). /ask-diff and /walkthrough also need the separately-installed webcompanion daemon, as do /show-diff's per-line comments (run /annotate-doctor to check or install it); only /show-diff's read-only diff opens without it.",
+      "description": "Ask Claude questions on a PR diff line or a code walkthrough step in IntelliJ, open any local diff in VS Code and ask on its lines, or open a GitHub PR's diff in the IntelliJ window that has its branch checked out (/pr-diff). Requires Python 3.9+ on PATH and either the companion IntelliJ plugin (/ask-diff, /walkthrough) or the vscode-plugin extension (/show-diff). /ask-diff and /walkthrough also need the separately-installed webcompanion daemon, as do /show-diff's per-line comments (run /annotate-doctor to check or install it); only /show-diff's read-only diff opens without it.",
       "skills": [
         "./skills/ask_diff",
         "./skills/walkthrough",
         "./skills/show-diff",
+        "./skills/pr-diff",
         "./skills/annotate-doctor"
       ]
     }

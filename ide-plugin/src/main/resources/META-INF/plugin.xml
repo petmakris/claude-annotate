@@ -32,6 +32,7 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <notificationGroup id="Claude IDE Review" displayType="BALLOON"/>
+        <jbProtocolCommand implementation="com.petros.ireview.PrDiffProtocolCommand"/>
         <projectService serviceImplementation="com.petros.ireview.SmartDiffService"/>
         <projectService serviceImplementation="com.petros.ireview.DiffSettings"/>
         <projectConfigurable parentId="tools"
