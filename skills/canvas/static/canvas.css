@@ -1,0 +1,116 @@
+/* The canvas viewer's look: a neutral scaffold (system font, greys, one
+   accent) with light and dark modes, lifted from lomem's journey canvas. It is
+   a tool's page, not an app screen, so it wears no project's design system. */
+:root {
+  --bg: #f6f6f4; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e2e2dd; --group: #ececea;
+  --accent: #2f6fde; --ok: #1f8a4c; --ok-bg: #e3f4ea; --bad: #c8322b; --bad-bg: #fbe6e4;
+  --warn: #9a6400; --warn-bg: #fbf0d9; --idle: #7a7a74; --idle-bg: #ececea; --shadow: 0 1px 3px rgba(0,0,0,.12);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141413; --panel: #1e1e1c; --text: #ecece8; --muted: #9a9a94; --line: #30302d; --group: #1b1b1a;
+    --accent: #7aa7ff; --ok: #5fcf8c; --ok-bg: #173323; --bad: #ff7b72; --bad-bg: #3d1a18;
+    --warn: #e8b44c; --warn-bg: #3a2d10; --idle: #a3a39c; --idle-bg: #2a2a27; --shadow: 0 1px 3px rgba(0,0,0,.5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141413; --panel: #1e1e1c; --text: #ecece8; --muted: #9a9a94; --line: #30302d; --group: #1b1b1a;
+  --accent: #7aa7ff; --ok: #5fcf8c; --ok-bg: #173323; --bad: #ff7b72; --bad-bg: #3d1a18;
+  --warn: #e8b44c; --warn-bg: #3a2d10; --idle: #a3a39c; --idle-bg: #2a2a27; --shadow: 0 1px 3px rgba(0,0,0,.5);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+body { display: flex; flex-direction: column; }
+.top { flex: none; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); padding: 12px 16px 8px; }
+.title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.title h1 { font-size: 18px; margin: 0; }
+.meta { color: var(--muted); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; }
+.tools button { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; min-width: 32px; }
+.tools button:hover { border-color: var(--accent); }
+.zoom-label { color: var(--muted); min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; margin-left: -1px; }
+.seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 6px 6px 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; position: relative; }
+nav { display: flex; gap: 6px; overflow-x: auto; padding-top: 8px; scrollbar-width: thin; }
+.nav-link { white-space: nowrap; color: var(--text); text-decoration: none; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--line); font-size: 12px; }
+.nav-link:hover { border-color: var(--accent); }
+.nav-failed { border-color: var(--bad); color: var(--bad); }
+.nav-not-run, .nav-skipped { color: var(--muted); border-style: dashed; }
+.nav-interrupted { border-color: var(--warn); color: var(--warn); }
+.chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; }
+.chip-passed { color: var(--ok); background: var(--ok-bg); }
+.chip-failed { color: var(--bad); background: var(--bad-bg); }
+.chip-interrupted, .chip-running, .chip-incomplete { color: var(--warn); background: var(--warn-bg); }
+.chip-not-run, .chip-skipped, .chip-info { color: var(--idle); background: var(--idle-bg); }
+.banner { flex: none; margin: 0; padding: 10px 16px; background: var(--bad-bg); color: var(--bad); }
+.banner a { color: inherit; font-weight: 600; }
+.muted { color: var(--muted); }
+/* The canvas: one surface (the world) under a transform, panned and zoomed as
+   a whole. Every board is placed once by the layout; moving the view changes
+   only the world's transform, so no frame lays anything out. */
+.canvas { flex: 1; min-height: 0; position: relative; overflow: hidden; touch-action: none; cursor: grab;
+  user-select: none; -webkit-user-select: none; outline: none; }
+.canvas.hand, .canvas.hand .shot { cursor: grab; }
+.canvas.grabbing, .canvas.grabbing .shot { cursor: grabbing; }
+.world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+/* On only while the view moves: a layer that keeps will-change is drawn at the
+   zoom it started at, so it is dropped once the view rests and redrawn sharp. */
+.world.moving { will-change: transform; }
+.group-bg { position: absolute; background: var(--group); border-radius: 24px; }
+.board { position: absolute; margin: 0; }
+.shot { position: absolute; display: block; padding: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden;
+  background: var(--panel); box-shadow: var(--shadow); cursor: zoom-in; }
+.shot img { display: block; width: 100%; height: auto; }
+/* A full-page shot shows its first screen; the arrow says there is more. */
+.shot .more { position: absolute; right: 6px; bottom: 6px; width: 22px; height: 22px; border-radius: 11px; font-size: 13px;
+  line-height: 22px; text-align: center; color: #fff; background: rgba(0,0,0,.55); pointer-events: none; }
+.board.hit .shot { outline: 8px solid var(--accent); outline-offset: 6px; }
+.board.failure .shot { border: 4px solid var(--bad); }
+/* Titles and captions stay one size on screen, like Figma's frame names:
+   drawn above the surface, moved with it, never scaled. */
+.labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.lbl { position: absolute; left: 0; top: 0; white-space: nowrap; font-size: 12px; line-height: 16px; visibility: hidden;
+  overflow: hidden; text-overflow: ellipsis; }
+.lbl .num { color: var(--muted); font-variant-numeric: tabular-nums; }
+.lbl-row { display: flex; align-items: baseline; gap: 10px; padding: 2px 8px 2px 0; line-height: 20px; overflow: visible; }
+.lbl-row h2 { font-size: 15px; margin: 0; }
+.lbl-variant { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.lbl-fail strong { color: var(--bad); }
+.lbl-cap { white-space: pre-line; color: var(--muted); line-height: 16px; overflow: hidden; }
+.lightbox { position: fixed; inset: 0; z-index: 10; background: #0e0e0d; display: none;
+  flex-direction: column; align-items: stretch; }
+.lightbox.open { display: flex; }
+/* Opaque bar: the page header must never show through the viewer's chrome. */
+.lb-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px; color: #fff;
+  background: #0e0e0d; border-bottom: 1px solid #2a2a28; }
+.lb-bar .cap { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.lb-bar a, .lb-bar button { color: #fff; background: #2a2a28; border: 0; border-radius: 6px;
+  padding: 6px 10px; font: inherit; cursor: pointer; text-decoration: none; }
+.lb-bar a:hover, .lb-bar button:hover { background: #3a3a37; }
+.lb-note { flex: none; color: #d6d6d0; padding: 8px 16px 0; max-width: 900px; margin: 0 auto; }
+/* align-items: flex-start, not stretch: a stretched flex item takes the
+   scroller's height whatever its width, which squashed the shot. Only the
+   width is ever set (by the script); height: auto keeps the image's ratio. */
+.lb-scroll { flex: 1; min-height: 0; overflow: auto; display: flex; justify-content: center; align-items: flex-start;
+  padding: 16px 16px 24px; }
+.lb-scroll img { flex: none; display: block; width: auto; height: auto; max-width: 100%; border-radius: 4px; background: #fff; }
+/* A phone: the bar stays a few short lines, so the canvas keeps the screen. */
+@media (max-width: 600px) {
+  .top { padding: 6px 8px 4px; }
+  .title { gap: 4px 8px; }
+  .title h1 { font-size: 16px; }
+  .tools { margin-left: 0; gap: 4px; }
+  .tools button { padding: 2px 7px; font-size: 13px; min-width: 28px; }
+  .zoom-label { min-width: 36px; font-size: 13px; }
+  .meta { font-size: 11px; margin-top: 2px; }
+  nav { padding-top: 4px; }
+}

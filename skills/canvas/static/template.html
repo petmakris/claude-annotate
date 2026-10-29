@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="generator" content="claude-annotate canvas viewer">
+<title>Canvas</title>
+<style>
+/*CANVAS:CSS*/
+</style>
+</head>
+<body>
+<header class="top" id="top"></header>
+<div class="banner" id="banner" role="alert" hidden></div>
+<main class="canvas" id="canvas" tabindex="-1">
+<div class="world" id="world"></div>
+<div class="labels" id="labels" aria-hidden="true"></div>
+</main>
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Shot">
+  <div class="lb-bar">
+    <button type="button" data-lb="prev" aria-label="Previous shot">←</button>
+    <button type="button" data-lb="next" aria-label="Next shot">→</button>
+    <span class="cap" id="lb-cap"></span>
+    <button type="button" data-lb="mode" id="lb-mode" title="Fit the whole shot, or its width with scrolling (F)">Fit</button>
+    <a id="lb-open" href="#" target="_blank" rel="noopener">Image</a>
+    <button type="button" data-lb="close" aria-label="Close">✕</button>
+  </div>
+  <div class="lb-note" id="lb-note"></div>
+  <div class="lb-scroll" id="lb-scroll"><img id="lb-img" alt=""></div>
+</div>
+<script type="application/json" id="canvas-data">/*CANVAS:DATA*/</script>
+<script>
+/*CANVAS:JS*/
+</script>
+</body>
+</html>

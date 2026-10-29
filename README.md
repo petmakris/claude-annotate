@@ -11,6 +11,8 @@ block* — not the whole answer, not a fresh reply appended below it.
 - **`python3` on your `PATH`, version 3.9 or newer.** Standard library only —
   there is nothing to `pip install`.
 - **`bash` and `curl`** (both ship with macOS and every mainstream Linux).
+- **`/canvas` only:** building a canvas makes thumbnails with Pillow, which
+  `uv run --with pillow tools/canvas.py build …` fetches for that one run.
 - **macOS or Linux.** Windows is not supported.
 - **`node`** — runs the ELK layout engine behind the flowchart layout
   switcher. Without it, `kind: "flowchart"` blocks still render, but fall

@@ -1,0 +1,74 @@
+
+/* Comments: pins over the surface at one screen size, a box to write in, a
+   thread and a panel. */
+.tools button[aria-pressed="true"].c-toggle { background: var(--accent); border-color: var(--accent); color: #fff; }
+.c-status { font-size: 12px; color: var(--warn); background: var(--warn-bg); border-radius: 999px; padding: 2px 8px; display: none; }
+.c-status.on { display: inline-block; }
+.canvas.commenting .shot, .canvas.commenting .shot img { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='M2 26V13A11 11 0 1 1 13 24H4z' fill='%232f6fde' stroke='white' stroke-width='2'/%3E%3Cpath d='M9 12h9M9 16h6' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") 2 26, crosshair; }
+.canvas.commenting.hand .shot, .canvas.commenting.grabbing .shot { cursor: grab; }
+.pins { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.pin { position: absolute; left: 0; top: 0; width: 28px; height: 28px; margin: 0; padding: 0; border: 2px solid #fff;
+  border-radius: 14px 14px 14px 2px; background: var(--accent); color: #fff; font: 600 12px/24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.35); pointer-events: auto; cursor: pointer; visibility: hidden;
+  font-variant-numeric: tabular-nums; }
+.pin.resolved { background: #8a8a84; }
+.pin.unsent { background: var(--warn); }
+.pin.draft { background: var(--accent); outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.pin.active { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.c-hover { position: fixed; z-index: 7; max-width: 280px; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.18); padding: 8px 10px; font-size: 13px; pointer-events: none; display: none;
+  white-space: pre-wrap; word-break: break-word; }
+.c-hover b { display: block; font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
+.c-pop { position: fixed; z-index: 8; width: 320px; max-width: calc(100vw - 16px); max-height: calc(100vh - 24px); overflow: auto;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.22); padding: 10px; display: none; }
+.c-pop.open { display: block; }
+.c-pop textarea { width: 100%; min-height: 64px; resize: vertical; font: inherit; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+.c-pop textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.c-pop button { font: inherit; font-size: 13px; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+.c-pop button:hover { border-color: var(--accent); }
+.c-pop button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.c-pop button:disabled { opacity: .5; cursor: default; }
+.c-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.c-row .grow { flex: 1; }
+.c-where { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.c-seg { display: inline-flex; }
+.c-seg button { border-radius: 0; margin-left: -1px; }
+.c-seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.c-seg button:last-child { border-radius: 0 6px 6px 0; }
+.c-seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; position: relative; }
+.c-mic { min-width: 36px; }
+.c-mic.rec { background: var(--bad); border-color: var(--bad); color: #fff; }
+.c-note { font-size: 12px; color: var(--muted); }
+.c-note.bad { color: var(--bad); }
+.c-msg { border-top: 1px solid var(--line); padding: 8px 0 4px; }
+.c-msg:first-of-type { border-top: 0; padding-top: 2px; }
+.c-msg .c-text { white-space: pre-wrap; word-break: break-word; margin: 2px 0; }
+.c-meta { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.c-meta button { font-size: 12px; padding: 1px 6px; }
+.c-chip { font-size: 11px; font-weight: 600; border-radius: 999px; padding: 0 7px; background: var(--idle-bg); color: var(--idle); }
+.c-chip.open { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.c-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.c-head .c-title { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c-panel { position: absolute; top: 0; right: 0; bottom: 0; width: 360px; max-width: 100%; z-index: 6; background: var(--panel);
+  border-left: 1px solid var(--line); box-shadow: -4px 0 16px rgba(0,0,0,.08); display: none; flex-direction: column; }
+.c-panel.open { display: flex; }
+.c-panel-head { padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.c-panel-head .c-head { margin: 0; }
+.c-panel-head button { font: inherit; font-size: 13px; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+.c-list { flex: 1; overflow: auto; padding: 4px 0; }
+.c-item { display: block; width: 100%; text-align: left; font: inherit; color: var(--text); background: none; border: 0;
+  border-bottom: 1px solid var(--line); padding: 10px 12px; cursor: pointer; }
+.c-item:hover { background: var(--bg); }
+.c-item .c-text { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 3px; white-space: pre-wrap; }
+.c-num { display: inline-block; min-width: 22px; height: 20px; border-radius: 10px 10px 10px 2px; background: var(--accent); color: #fff;
+  font-size: 11px; font-weight: 600; line-height: 20px; text-align: center; margin-right: 6px; padding: 0 4px; }
+.c-num.resolved { background: #8a8a84; }
+.c-empty { padding: 16px 12px; color: var(--muted); }
+@media (max-width: 600px) {
+  .c-pop { left: 8px !important; right: 8px; bottom: 8px; top: auto !important; width: auto; max-height: 60vh; }
+  .c-panel { width: 100%; }
+}
