@@ -138,6 +138,8 @@ function relayout() {
       });
     });
   });
+  // A group title's width, for coversGroup: measured once, while hidden but laid out.
+  groupEls.forEach(function (ge) { if (!ge.lblW) ge.lblW = ge.lbl.offsetWidth; });
   world.style.width = layout.w + 'px';
   world.style.height = layout.h + 'px';
   labelsOff();
@@ -213,7 +215,8 @@ function render() {
     }
     show(o, 'lbl', on);
   }
-  // Group titles above their group; one that would overlap the one above is left out.
+  // Group titles above their group; one that would overlap the one above, or
+  // another group's boards (short groups, zoomed far out), is left out.
   var below = -Infinity;
   for (i = 0; i < groupEls.length; i++) {
     o = groupEls[i];
@@ -221,12 +224,22 @@ function render() {
     // Above the group's panel (72 above its first line), never closer to the boards than their titles.
     sx = Math.max(x + (o.box.x - 48) * z, 8); sy = y + (o.box.y - 72) * z - 30;
     if (titles) sy = Math.min(sy, y + o.box.y * z - 48);
-    on = sy < H && y + (o.box.y + o.box.h) * z > 0 && x + (o.box.x + o.box.w) * z > 0 && x + o.box.x * z < W && sy >= below;
+    on = sy < H && y + (o.box.y + o.box.h) * z > 0 && x + (o.box.x + o.box.w) * z > 0 && x + o.box.x * z < W && sy >= below &&
+      !coversGroup(i, sx, sy, sx + (o.lblW || 0), sy + 26, x, y, z);
     if (on) { below = sy + 26; o.lbl.style.transform = 'translate(' + sx + 'px,' + sy + 'px)'; }
     show(o, 'lbl', on);
   }
   loadInView();
   if (hooks.render) hooks.render();
+}
+// Whether the screen box (l, t)-(r, b) overlaps the boards of any group but `skip`.
+function coversGroup(skip, l, t, r, b, x, y, z) {
+  for (var k = 0; k < groupEls.length; k++) {
+    var g = groupEls[k].box;
+    if (k === skip || !g) continue;
+    if (l < x + (g.x + g.w) * z && r > x + g.x * z && t < y + (g.y + g.h) * z && b > y + g.y * z) return true;
+  }
+  return false;
 }
 // Thumbnails for every shot in view (or within half a window of it), at the
 // tier the zoom needs; a shot keeps the sharper one once it has it.
