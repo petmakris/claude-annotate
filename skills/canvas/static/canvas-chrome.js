@@ -20,6 +20,25 @@
       '<button type="button" id="c-panel-btn" class="c-toggle" aria-pressed="false" title="Every comment on this canvas">Comments <span id="c-count"></span></button>' +
       '<span class="c-status" id="c-status" role="status"></span>';
   }
+  // What changed since an earlier capture: a count and the Changed only button.
+  // A board with no `change` counts as unchanged; the failure board is no board.
+  var changed = '';
+  var CH = D.changes;
+  if (CH) {
+    var all = 0, moved = 0, fresh = 0;
+    D.groups.forEach(function (g) {
+      g.boards.forEach(function (b) {
+        if (b.status === 'failure') return;
+        all++;
+        if (b.change === 'changed' || b.change === 'new') moved++;
+        if (b.change === 'new') fresh++;
+      });
+    });
+    var count = moved + ' of ' + all + ' board' + (all === 1 ? '' : 's') + ' changed' + (CH.since ? ' since ' + CH.since : '') +
+      (fresh ? ' (' + fresh + ' new)' : '');
+    changed = '<button type="button" id="chg-only" class="chg-only" aria-pressed="false" title="Show only the boards that changed">Changed only</button>' +
+      '<span class="chg-count" id="chg-count">' + esc(count) + '</span>';
+  }
   var status = D.status ? '<span class="chip chip-' + esc(D.status.kind) + '">' + esc(D.status.label) + '</span>' : '';
   var nav = D.groups.length > 1 ? '<nav aria-label="Groups">' + D.groups.map(function (g, i) {
     return '<a class="nav-link nav-' + esc(g.status || 'none') + '" href="#c-' + (i + 1) + '">' + (i + 1) + ' · ' + esc(g.name) + '</a>';
@@ -27,14 +46,18 @@
   document.getElementById('top').innerHTML =
     '<div class="title"><h1>' + esc(D.title) + '</h1>' + status +
     (D.subtitle ? '<span class="muted">' + esc(D.subtitle) + '</span>' : '') +
-    '<div class="tools" role="toolbar" aria-label="Zoom">' + seg +
+    '<div class="tools" role="toolbar" aria-label="Zoom">' + changed + seg +
     '<button type="button" data-zoom="out" aria-label="Zoom out" title="Zoom out (−)">−</button>' +
     '<span class="zoom-label" id="zoom-label">100%</span>' +
     '<button type="button" data-zoom="in" aria-label="Zoom in" title="Zoom in (+)">+</button>' +
     '<button type="button" data-zoom="fit" title="Every board in the window (Shift+1)">Fit all</button>' +
     '<button type="button" data-zoom="actual" title="Boards at their drawn size (Shift+0)">100%</button>' +
     '<button type="button" id="theme" title="Light or dark">◐</button>' + comments + '</div></div>' +
-    ((D.meta || []).length ? '<div class="meta">' + D.meta.map(function (m) { return '<span>' + esc(m) + '</span>'; }).join('') + '</div>' : '') + nav;
+    ((D.meta || []).length ? '<div class="meta">' + D.meta.map(function (m) { return '<span>' + esc(m) + '</span>'; }).join('') + '</div>' : '') +
+    (CH && (CH.removed || []).length ? '<div class="meta chg-removed"><span><strong>' + CH.removed.length + ' removed</strong>' +
+      (CH.since ? ' since ' + esc(CH.since) : '') + ':</span>' + CH.removed.map(function (r) {
+        return '<span>' + (r.number ? '<span class="num">' + esc(r.number) + '</span> ' : '') + esc(r.title) + (r.group ? ' <span class="muted">· ' + esc(r.group) + '</span>' : '') + '</span>';
+      }).join('') + '</div>' : '') + nav;
   var banner = document.getElementById('banner');
   if (D.banner) {
     banner.innerHTML = esc(D.banner) + (D.groups.some(function (g) { return g.boards.some(function (b) { return b.status === 'failure'; }); })

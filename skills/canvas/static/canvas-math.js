@@ -87,13 +87,17 @@ var CanvasMath = (function () {
   }
 
   // Every board at one size, in a grid under its group's title: boards wrap
-  // into lines `lineW` wide. `shown(label)` says which shots are on show.
+  // into lines `lineW` wide. `shown(label)` says which shots are on show, and
+  // `o.keep(board)`, when given, which boards: a group left with none of its
+  // boards is left out whole.
   function layoutAt(groups, shown, o, lineW) {
     var out = [], y = 0, worldW = 0;
     for (var g = 0; g < groups.length; g++) {
       var grp = groups[g], gy = y, x = 0, lineTop = y, boards = [], lineH = 0, gw = 0;
+      if (o.keep && !grp.boards.some(o.keep)) continue;
       for (var b = 0; b < grp.boards.length; b++) {
         var bd = grp.boards[b], shots = [], sx = 0;
+        if (o.keep && !o.keep(bd)) continue;
         for (var s = 0; s < bd.shots.length; s++) {
           if (!shown(bd.shots[s].label) && bd.shots.length > 1) continue;
           var f = frameOf(bd.shots[s], o.height);
@@ -147,12 +151,13 @@ var CanvasMath = (function () {
     var o = {
       height: opts.height, shotGap: opts.shotGap || 16, boardGap: opts.boardGap || 64,
       rowGap: opts.rowGap || 72, groupGap: opts.groupGap || 200, captionH: opts.captionH || 0,
-      emptyW: opts.emptyW || 600, emptyH: opts.emptyH || 120
+      emptyW: opts.emptyW || 600, emptyH: opts.emptyH || 120, keep: opts.keep || null
     };
     var widths = [], g, b;
     for (g = 0; g < groups.length; g++) {
       for (b = 0; b < groups[g].boards.length; b++) {
         var bd = groups[g].boards[b], w = 0, n = 0;
+        if (o.keep && !o.keep(bd)) continue;
         for (var s = 0; s < bd.shots.length; s++) {
           if (!shown(bd.shots[s].label) && bd.shots.length > 1) continue;
           w += frameOf(bd.shots[s], o.height).w + (n++ ? o.shotGap : 0);

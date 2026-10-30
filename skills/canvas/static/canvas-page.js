@@ -10,6 +10,11 @@
 // at build time, loaded for what is in view; the full image is only in the
 // viewer a click opens.
 //
+// A canvas whose data has `changes` (canvas.py) marks the boards that changed
+// or are new since an earlier capture with an outline and a word, has a
+// Changed only button that lays out those boards alone, and its viewer shows a
+// changed shot now, before, or both side by side.
+//
 // This fragment runs inside one closure with canvas-comments.js, which fills
 // in `hooks`. CanvasMath (canvas-math.js) is loaded before it.
 var M = CanvasMath;
@@ -18,6 +23,8 @@ var root = document.documentElement;
 function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function save(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+// 'changed' or 'new' for a board marked so, else ''.
+function changeOf(b) { return b.status !== 'failure' && (b.change === 'changed' || b.change === 'new') ? b.change : ''; }
 function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; }
 
 var theme = load('canvas-theme');
@@ -58,14 +65,18 @@ DATA.groups.forEach(function (g, gi) {
   layer.appendChild(lbl);
   groupEls.push({ g: g, bg: bg, lbl: lbl, id: 'c-' + (gi + 1) });
   g.boards.forEach(function (b, bi) {
-    var fig = el('figure', 'board' + (b.status === 'failure' ? ' failure' : ''));
+    var chg = changeOf(b);
+    var fig = el('figure', 'board' + (b.status === 'failure' ? ' failure' : '') + (chg ? ' chg chg-' + chg : ''));
     fig.id = b.status === 'failure' ? 'failure' : 'b-' + b.number;
-    var title = b.status === 'failure' ? '<strong>Failed here</strong>' : '<span class="num">' + esc(b.number) + '</span> ' + esc(b.title);
+    var title = b.status === 'failure' ? '<strong>Failed here</strong>' :
+      (chg ? '<span class="chg-tag chg-tag-' + chg + '">' + esc(b.changeLabel || chg) + '</span> ' : '') +
+      '<span class="num">' + esc(b.number) + '</span> ' + esc(b.title);
     var bo = { g: gi, b: bi, data: b, el: fig, shots: [],
       lbl: layer.appendChild(el('div', 'lbl lbl-board' + (b.status === 'failure' ? ' lbl-fail' : ''), title)),
       cap: b.caption || b.error ? layer.appendChild(el('div', 'lbl lbl-cap', esc(b.error || b.caption))) : null };
     b.shots.forEach(function (s, si) {
-      var btn = el('button', 'shot');
+      // A changed board outlines the shots that changed; one that does not say, all of them.
+      var btn = el('button', 'shot' + (chg && (!s.change || s.change !== 'unchanged') ? ' chg-shot' : ''));
       btn.type = 'button';
       var caption = b.number + ' · ' + b.title + (b.shots.length > 1 ? ' · ' + s.label : '');
       btn.setAttribute('data-file', s.file);
@@ -95,12 +106,18 @@ DATA.groups.forEach(function (g, gi) {
 
 // ── Layout: positions on the surface, made again when the shot toggle changes ──
 var layout = null;
+var CHANGES = DATA.changes || null;
+var CHANGED_KEY = 'canvas-changed-only:' + (DATA.id || location.pathname);
+var changedOnly = !!CHANGES && load(CHANGED_KEY) === '1';
+// Changed only keeps the failure board too: it says where the run stopped.
+function keepChanged(b) { return b.status === 'failure' || !!changeOf(b); }
 // Above a group's first line: its panel's edge and the boards' titles (canvas-math.js firstView).
 var TITLE_ROOM = 72;
 function relayout() {
-  layout = M.layoutCanvas(DATA.groups, isShown, { height: DATA.height, captionH: DATA.captionH || 0 });
+  layout = M.layoutCanvas(DATA.groups, isShown, { height: DATA.height, captionH: DATA.captionH || 0, keep: changedOnly ? keepChanged : null });
+  if (emptyNote) emptyNote.hidden = !(changedOnly && !layout.groups.length);
   var pad = 48;
-  groupEls.forEach(function (ge) { ge.on = false; ge.lbl.style.visibility = 'hidden'; ge.box = null; ge.bg.style.display = 'none'; });
+  groupEls.forEach(function (ge) { ge.lblOn = false; ge.lbl.style.visibility = 'hidden'; ge.box = null; ge.bg.style.display = 'none'; });
   boardEls.forEach(function (bo) { bo.box = null; bo.el.style.display = 'none'; });
   shotEls.forEach(function (so) { so.box = null; so.el.style.display = 'none'; });
   layout.groups.forEach(function (lg) {
@@ -127,7 +144,7 @@ function relayout() {
   if (hooks.measured) hooks.measured();
 }
 function labelsOff() {
-  [groupEls, boardEls].forEach(function (list) { list.forEach(function (o) { o.on = false; o.lbl.style.visibility = 'hidden'; if (o.cap) { o.cap.style.visibility = 'hidden'; o.capOn = false; } }); });
+  [groupEls, boardEls].forEach(function (list) { list.forEach(function (o) { o.lblOn = false; o.lbl.style.visibility = 'hidden'; if (o.cap) { o.cap.style.visibility = 'hidden'; o.capOn = false; } }); });
   shotEls.forEach(function (so) { if (so.lbl) { so.lbl.style.visibility = 'hidden'; so.lblOn = false; } });
 }
 function measureBox() {
@@ -151,6 +168,8 @@ function render() {
   frame = 0;
   var x = view.x, y = view.y, z = view.z, W = box.w, H = box.h, i, o, sx, sy, sw, on;
   world.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + z + ')';
+  // The change outlines keep one width on screen at any zoom (canvas.css).
+  if (CHANGES) world.style.setProperty('--z', String(z));
   if (!world.classList.contains('moving')) world.classList.add('moving');
   clearTimeout(idle);
   idle = setTimeout(rest, 180);
@@ -278,6 +297,25 @@ if (LABELS.length > 1) {
     b.setAttribute('aria-pressed', String(b.getAttribute('data-shown') === shown));
     b.addEventListener('click', function () { setShown(b.getAttribute('data-shown')); });
   });
+}
+
+// Changed only: the boards that changed or are new, laid out alone, in view.
+var emptyNote = null, changedBtn = document.getElementById('chg-only');
+if (CHANGES) {
+  emptyNote = canvas.appendChild(el('div', 'chg-empty', 'No board changed' + (CHANGES.since ? ' since ' + esc(CHANGES.since) : '') + '.'));
+  emptyNote.hidden = true;
+}
+function setChangedOnly(on) {
+  changedOnly = !!on && !!CHANGES;
+  save(CHANGED_KEY, changedOnly ? '1' : '0');
+  if (changedBtn) changedBtn.setAttribute('aria-pressed', String(changedOnly));
+  root.setAttribute('data-changed-only', changedOnly ? '1' : '0');
+  relayout();
+  animateTo(changedOnly ? fitAll() : first());
+}
+if (changedBtn) {
+  changedBtn.setAttribute('aria-pressed', String(changedOnly));
+  changedBtn.addEventListener('click', function () { setChangedOnly(!changedOnly); });
 }
 
 // The wheel: two fingers on a trackpad pan any way, a mouse wheel pans down
@@ -412,20 +450,57 @@ if (window.ResizeObserver) new ResizeObserver(function () { measureBox(); }).obs
 // ── The viewer a click opens: the full image ──
 function visibleShots() { return shotEls.filter(function (s) { return !!s.box; }); }
 var lb = document.getElementById('lightbox'), lbImg = document.getElementById('lb-img');
+var lbPrev = document.getElementById('lb-prev'), lbCmp = document.getElementById('lb-cmp');
 var shots = [], cur = -1;
+// A shot with an earlier image shows it now, before, or both side by side
+// ('now', 'before', 'side'); the choice is remembered.
+var cmp = ['now', 'before', 'side'].indexOf(load('canvas-lb-compare')) >= 0 ? load('canvas-lb-compare') : 'side';
+function cmpOf(s) { return s && s.data.previous ? cmp : 'now'; }
 // 'width': the shot at 1.5x its CSS size (capped by the window), scrolling
 // down a tall one. 'fit': the whole shot in the window. Either way only the
 // width is set, so the image keeps its own aspect ratio.
 var mode = load('canvas-lb-mode') === 'fit' ? 'fit' : 'width';
 function size() {
   if (cur < 0) return;
-  var s = shots[cur].data, scroll = document.getElementById('lb-scroll');
+  var s = shots[cur].data, scroll = document.getElementById('lb-scroll'), c = cmpOf(shots[cur]);
   var w = s.width, h = s.height;
-  var availW = scroll.clientWidth - 32, availH = scroll.clientHeight - 40;
+  // Side by side: two columns 16 px apart; a caption over each when comparing.
+  var cols = c === 'side' ? 2 : 1, capH = s.previous ? 24 : 0;
+  var availW = (scroll.clientWidth - 32 - (cols - 1) * 16) / cols, availH = scroll.clientHeight - 40 - capH;
   var width = mode === 'fit' ? Math.min(w * 1.5, availW, (availH * w) / h) : Math.min(w * 1.5, availW);
-  lbImg.style.width = Math.max(80, Math.floor(width)) + 'px';
+  var px = Math.max(80, Math.floor(width)) + 'px';
+  lbImg.style.width = px;
+  lbPrev.style.width = px;
   document.getElementById('lb-mode').textContent = mode === 'fit' ? 'Width' : 'Fit';
 }
+// Where the shot differs from its earlier image, outlined on both (canvas.py `diff`, CSS pixels of the shot).
+function diffBoxes(s) {
+  var d = s.diff;
+  lb.querySelectorAll('.lb-diff').forEach(function (box) {
+    if (!d || !s.previous) { box.style.display = 'none'; return; }
+    box.style.cssText = 'display:block;left:' + (100 * d.x / s.width) + '%;top:' + (100 * d.y / s.height) + '%;width:' +
+      (100 * d.width / s.width) + '%;height:' + (100 * d.height / s.height) + '%';
+  });
+}
+function showCompare() {
+  if (cur < 0) return;
+  var so = shots[cur], s = so.data, c = cmpOf(so);
+  lbCmp.hidden = !s.previous;
+  lbCmp.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-cmp') === c)); });
+  lb.classList.toggle('comparing', !!s.previous);
+  document.getElementById('lb-before').hidden = c === 'now';
+  document.getElementById('lb-now').hidden = c === 'before';
+  if (s.previous) {
+    if (lbPrev.getAttribute('src') !== s.previous) lbPrev.src = s.previous;
+    document.getElementById('lb-before-cap').textContent = 'Before' + (CHANGES && CHANGES.since ? ' · ' + CHANGES.since : '');
+  } else lbPrev.removeAttribute('src');
+  document.getElementById('lb-open').href = c === 'before' ? s.previous : s.file;
+  diffBoxes(s);
+  size();
+}
+lbCmp.querySelectorAll('button').forEach(function (b) {
+  b.addEventListener('click', function () { cmp = b.getAttribute('data-cmp'); save('canvas-lb-compare', cmp); showCompare(); });
+});
 function open(i) {
   if (i < 0 || i >= shots.length) return;
   cur = i;
@@ -433,12 +508,13 @@ function open(i) {
   lbImg.src = s.data.file;
   lbImg.alt = s.el.getAttribute('data-caption');
   document.getElementById('lb-cap').textContent = s.el.getAttribute('data-caption');
-  var note = document.getElementById('lb-note');
-  note.textContent = b.error || b.caption || '';
+  var note = document.getElementById('lb-note'), chg = changeOf(b), since = CHANGES && CHANGES.since ? ' since ' + CHANGES.since : '';
+  var change = !chg ? '' : (b.changeLabel || chg).replace(/^./, function (c) { return c.toUpperCase(); }) + since + '.' +
+    (b.changeNote ? ' ' + b.changeNote : '') + (s.data.change === 'unchanged' ? ' This shot is the same as before.' : '');
+  note.textContent = [change, b.error || b.caption || ''].filter(Boolean).join(' ');
   note.style.display = note.textContent ? '' : 'none';
-  document.getElementById('lb-open').href = s.data.file;
   lb.classList.add('open');
-  size();
+  showCompare();
   document.getElementById('lb-scroll').scrollTop = 0;
 }
 function close() { lb.classList.remove('open'); cur = -1; }

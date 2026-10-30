@@ -21,12 +21,18 @@
     <button type="button" data-lb="prev" aria-label="Previous shot">←</button>
     <button type="button" data-lb="next" aria-label="Next shot">→</button>
     <span class="cap" id="lb-cap"></span>
+    <span class="seg lb-cmp" id="lb-cmp" role="group" aria-label="Compare with the earlier capture" hidden>
+      <button type="button" data-cmp="now" aria-pressed="false">Now</button><button type="button" data-cmp="before" aria-pressed="false">Before</button><button type="button" data-cmp="side" aria-pressed="false">Side by side</button>
+    </span>
     <button type="button" data-lb="mode" id="lb-mode" title="Fit the whole shot, or its width with scrolling (F)">Fit</button>
     <a id="lb-open" href="#" target="_blank" rel="noopener">Image</a>
     <button type="button" data-lb="close" aria-label="Close">✕</button>
   </div>
   <div class="lb-note" id="lb-note"></div>
-  <div class="lb-scroll" id="lb-scroll"><img id="lb-img" alt=""></div>
+  <div class="lb-scroll" id="lb-scroll">
+    <figure class="lb-fig" id="lb-before"><figcaption id="lb-before-cap">Before</figcaption><div class="lb-wrap"><img id="lb-prev" alt=""><div class="lb-diff"></div></div></figure>
+    <figure class="lb-fig" id="lb-now"><figcaption>Now</figcaption><div class="lb-wrap"><img id="lb-img" alt=""><div class="lb-diff"></div></div></figure>
+  </div>
 </div>
 <script type="application/json" id="canvas-data">/*CANVAS:DATA*/</script>
 <script>

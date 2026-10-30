@@ -30,6 +30,12 @@ the same way.
    }
    ```
 
+   To mark what changed since an earlier capture, give each board a `change` (`changed`,
+   `unchanged`, `new`), each shot its `previous` image (and `diff`, the box that differs), and the
+   manifest `changes` with `since` and the `removed` boards; the format is in `$SKILL_DIR/canvas.py`.
+   The page then outlines changed and new boards, adds Changed only and a count to the toolbar, and
+   opens a changed shot now, before or side by side. The project does the comparing.
+
    Leave `comments` out unless pins on the shots are wanted. Its `canvas` id is where they are kept
    in the journey-comments service on main; never reuse another canvas's id.
 

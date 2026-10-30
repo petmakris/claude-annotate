@@ -61,6 +61,13 @@ def test_a_good_manifest_has_no_problems(tmp_path):
     (lambda m: m["comments"].update(url="journey-comments"), "comments.url"),
     (lambda m: m["groups"][0]["boards"][0].update(status="broken"), "status"),
     (lambda m: m["groups"][0]["boards"][0]["shots"][0].update(viewport={"width": 0}), "viewport"),
+    (lambda m: m["groups"][0]["boards"][0].update(change="moved"), "change: one of changed, unchanged, new"),
+    (lambda m: m["groups"][0]["boards"][0].update(change_note=3), "change_note: must be a string"),
+    (lambda m: m["groups"][0]["boards"][0]["shots"][0].update(previous="previous/gone.png"), "previous: previous/gone.png does not exist"),
+    (lambda m: m["groups"][0]["boards"][0]["shots"][0].update(previous="../x.png"), "previous: a path relative"),
+    (lambda m: m["groups"][0]["boards"][0]["shots"][0].update(change="same"), "shots[0].change"),
+    (lambda m: m["groups"][0]["boards"][0]["shots"][0].update(diff={"x": 1, "y": 2}), "diff"),
+    (lambda m: m.update(changes={"since": "today", "removed": [{"number": 3}]}), "changes.removed"),
 ])
 def test_check_names_what_is_wrong(tmp_path, change, problem):
     m = json.loads(journey(tmp_path).read_text())
@@ -132,3 +139,48 @@ def test_the_cli_checks_and_builds(tmp_path):
     out = subprocess.run([sys.executable, str(TOOL), "build", str(man), "--out", str(tmp_path / "o")], capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
     assert (tmp_path / "o" / "index.html").is_file()
+
+
+def with_changes(tmp: Path) -> Path:
+    """The journey, compared with an earlier capture: board 1's desktop shot changed, board 2 is new."""
+    man = journey(tmp)
+    png(tmp / "previous" / "01-a.png", 1600, 1000, (10, 10, 10))
+    png(tmp / "previous" / "01-a.phone.png", 780, 3808)
+    m = json.loads(man.read_text())
+    m["changes"] = {"since": "29 Oct 2026, 08:00", "removed": [{"number": 3, "title": "Gone", "group": "Account"}]}
+    b1, b2 = m["groups"][0]["boards"]
+    b1.update(change="changed", change_label="renamed", change_note="Was “Log in”.")
+    b1["shots"][0].update(change="changed", previous="previous/01-a.png", diff={"x": 10, "y": 20, "width": 300, "height": 40})
+    b1["shots"][1].update(change="unchanged", previous="previous/01-a.phone.png")
+    b2["change"] = "new"
+    man.write_text(json.dumps(m))
+    return man
+
+
+def test_a_manifest_with_changes_has_no_problems(tmp_path):
+    man = with_changes(tmp_path)
+    assert canvas.check(json.loads(man.read_text()), tmp_path) == []
+
+
+def test_the_changes_reach_the_page_and_the_earlier_images_get_no_thumbnails(tmp_path):
+    out = tmp_path / "out"
+    page = canvas.build(with_changes(tmp_path / "src"), out)
+    d = page_data(page)
+    assert d["changes"] == {"since": "29 Oct 2026, 08:00", "removed": [{"number": 3, "title": "Gone", "group": "Account"}]}
+    b1, b2 = d["groups"][0]["boards"]
+    assert (b1["change"], b1["changeLabel"], b1["changeNote"], b2["change"]) == ("changed", "renamed", "Was “Log in”.", "new")
+    desk, phone = b1["shots"]
+    assert desk["previous"] == "previous/01-a.png" and desk["change"] == "changed"
+    assert desk["diff"] == {"x": 10, "y": 20, "width": 300, "height": 40}
+    assert phone["change"] == "unchanged" and "diff" not in phone
+    assert "previous" not in b2["shots"][0] and "change" not in b2["shots"][0]
+    # Copied beside the new images, so the viewer can open them; no thumbnail of them.
+    assert PIL.open(out / "previous" / "01-a.png").getpixel((0, 0)) == (10, 10, 10)
+    assert sorted(p.name for p in (out / "thumbs").iterdir()) == sorted(
+        f"{s}.{t}.webp" for s in ("01-a", "01-a.phone", "02-b") for t in (1, 2))
+
+
+def test_a_canvas_without_changes_carries_no_change_data(tmp_path):
+    d = page_data(canvas.build(journey(tmp_path), tmp_path))
+    assert "changes" not in d
+    assert not any(k in b for b in d["groups"][0]["boards"] for k in ("change", "changeLabel", "changeNote"))

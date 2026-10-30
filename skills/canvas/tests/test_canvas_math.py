@@ -104,6 +104,21 @@ def test_a_board_with_one_shot_stays_when_the_toggle_picks_another_label():
     assert r == 1
 
 
+def test_changed_only_lays_out_the_kept_boards_alone_and_leaves_out_groups_with_none():
+    # Group 0 keeps its 2nd and 4th boards, group 1 none, group 2 its first; group 3 is empty.
+    r = js(JOURNEY + "var g = [group(5), group(3), group(2), { boards: [] }];"
+           "g[0].boards[1].change = 'changed'; g[0].boards[3].change = 'new'; g[2].boards[0].change = 'changed';"
+           "var keep = function (b) { return !!b.change; };"
+           "var l = M.layoutCanvas(g, all, { height: 300, keep: keep }), a = M.layoutCanvas(g, all, { height: 300 });"
+           "var none = M.layoutCanvas(g, all, { height: 300, keep: function () { return false; } });"
+           "return { groups: l.groups.map(function (x) { return [x.i, x.boards.map(function (b) { return b.i; })]; }),"
+           "  first: l.groups[0].boards.map(function (b) { return b.x; }), all: a.groups.length, none: none.groups.length };")
+    assert r["groups"] == [[0, [1, 3]], [2, [0]]]
+    # The kept boards close up: the second starts one board and one gap after the first.
+    assert r["first"] == [0, 480 + 16 + 300 * 390 / 844 + 64]
+    assert r["all"] == 4 and r["none"] == 0
+
+
 def test_the_first_view_fits_the_first_group_but_a_phone_sees_its_first_board_whole():
     r = js(JOURNEY + "var l = M.layoutCanvas(groups, all, { height: 300 }), g = l.groups[0];"
            "var d = M.firstView(l, 1440, 800, 48, 44), p = M.firstView(l, 390, 700, 16, 44);"

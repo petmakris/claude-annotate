@@ -30,6 +30,21 @@ Manifest:
 A shot's file is relative to the manifest. Its width and height are its size in CSS pixels (a 2x
 PNG of a 390 px window is 390 wide); left out, they are the image's own. With a viewport the shot
 is drawn as its first screen, the rest of a full-page shot in the viewer a click opens.
+
+What changed since an earlier capture, all optional (the project compares; the page only shows):
+
+      "changes": {"since": "29 Oct 2026, 08:00",                 the earlier capture, for the count
+                  "removed": [{"number": 64, "title": "…", "group": "Coach"}]},
+      board:  "change": "changed" | "unchanged" | "new",          a mark on the board
+              "change_label": "renamed",                           the mark's word, else the change
+              "change_note": "Was “Sunday morning”.",              shown in the viewer
+      shot:   "change": "changed" | "unchanged" | "new",          which of a board's shots moved
+              "previous": "previous/01-sign-in.png",               the earlier image, before and after
+              "diff": {"x": 120, "y": 40, "width": 300, "height": 18}   where it differs, CSS pixels
+
+A canvas with `changes` gets a Changed only button and a count; a board with no `change` counts
+as unchanged. A shot's `previous` is relative to the manifest, as its file is; it gets no
+thumbnail (the canvas draws only the new image).
 """
 from __future__ import annotations
 
@@ -47,6 +62,7 @@ SCRIPTS = ["canvas-math.js", "canvas-store.js", "canvas-chrome.js"]
 CLOSURE = ["canvas-page.js", "canvas-comments.js"]
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 SHOT_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,19}$")
+CHANGES = ("changed", "unchanged", "new")
 # Captions are drawn under their board, in this much of the surface (canvas-math.js).
 CAPTION_H = 128
 TALL = 2.4
@@ -71,6 +87,14 @@ def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40] or "canvas"
 
 
+def _file_problem(f: Any, base: Path | None) -> str | None:
+    if not isinstance(f, str) or not f or f.startswith("/") or ".." in Path(f).parts:
+        return "a path relative to the manifest, inside its folder."
+    if base is not None and not (base / f).is_file():
+        return f"{f} does not exist."
+    return None
+
+
 def check(m: Any, base: Path | None = None) -> list[str]:
     """What is wrong with a manifest, one line each; empty when it builds. `base` checks the files."""
     errs: list[str] = []
@@ -89,6 +113,14 @@ def check(m: Any, base: Path | None = None) -> list[str]:
         sc = c.get("scopes") if isinstance(c, dict) else None
         if sc is not None and not (isinstance(sc, dict) and isinstance(sc.get("app"), str) and isinstance(sc.get("both"), str)):
             errs.append('comments.scopes: {"app": label, "both": label}.')
+    ch = m.get("changes")
+    if ch is not None:
+        if not isinstance(ch, dict) or not isinstance(ch.get("since", ""), str):
+            errs.append('changes: {"since": text, "removed": [...]}.')
+        else:
+            removed = ch.get("removed", [])
+            if not isinstance(removed, list) or not all(isinstance(r, dict) and isinstance(r.get("title"), str) for r in removed):
+                errs.append('changes.removed: a list of {"number", "title", "group"}.')
     if "board_width" in m and not (isinstance(m["board_width"], (int, float)) and 40 <= m["board_width"] <= 4000):
         errs.append("board_width: a number of pixels from 40 to 4000.")
     groups = m.get("groups")
@@ -126,6 +158,11 @@ def check(m: Any, base: Path | None = None) -> list[str]:
                     errs.append(f"{bat}.{k}: must be a string.")
             if "status" in b and b["status"] not in ("failure",):
                 errs.append(f'{bat}.status: only "failure" is known.')
+            if "change" in b and b["change"] not in CHANGES:
+                errs.append(f"{bat}.change: one of {', '.join(CHANGES)}.")
+            for k in ("change_label", "change_note"):
+                if k in b and not isinstance(b[k], str):
+                    errs.append(f"{bat}.{k}: must be a string.")
             shots = b.get("shots")
             if not isinstance(shots, list) or not shots:
                 errs.append(f"{bat}.shots: a non-empty list is required.")
@@ -143,11 +180,18 @@ def check(m: Any, base: Path | None = None) -> list[str]:
                     errs.append(f"{sat}.label: {label} twice on one board.")
                 else:
                     keys.add(slug(label))
-                f = s.get("file")
-                if not isinstance(f, str) or not f or f.startswith("/") or ".." in Path(f).parts:
-                    errs.append(f"{sat}.file: a path relative to the manifest, inside its folder.")
-                elif base is not None and not (base / f).is_file():
-                    errs.append(f"{sat}.file: {f} does not exist.")
+                why = _file_problem(s.get("file"), base)
+                if why:
+                    errs.append(f"{sat}.file: {why}")
+                if "previous" in s:
+                    why = _file_problem(s["previous"], base)
+                    if why:
+                        errs.append(f"{sat}.previous: {why}")
+                if "change" in s and s["change"] not in CHANGES:
+                    errs.append(f"{sat}.change: one of {', '.join(CHANGES)}.")
+                d = s.get("diff")
+                if d is not None and not (isinstance(d, dict) and all(isinstance(d.get(k), (int, float)) and d[k] >= 0 for k in ("x", "y", "width", "height"))):
+                    errs.append(f'{sat}.diff: {{"x", "y", "width", "height"}} in CSS pixels.')
                 for k in ("width", "height"):
                     if k in s and not (isinstance(s[k], (int, float)) and s[k] > 0):
                         errs.append(f"{sat}.{k}: a positive number of pixels.")
@@ -237,20 +281,26 @@ def data_for(m: dict, base: Path, out: Path, thumbs: Callable = make_thumbs) -> 
                 aspect = frame_aspect(s)
                 frame_w = height / aspect
                 if out.resolve() != base.resolve():
-                    dest = out / s["file"]
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(base / s["file"], dest)
+                    for f in (s["file"], s.get("previous")):
+                        if f:
+                            dest = out / f
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(base / f, dest)
                 stem = re.sub(r"[^A-Za-z0-9._-]+", "-", str(Path(s["file"]).with_suffix("")))
                 paths, tw, th, cropped = thumbs(base / s["file"], out, stem, aspect, frame_w)
                 shot = {"label": label, "key": key, "file": s["file"], "width": s["width"], "height": s["height"],
                         "thumbs": paths, "thumbW": tw, "thumbH": th, "cropped": cropped}
                 if s.get("viewport"):
                     shot["viewport"] = {"width": s["viewport"]["width"], "height": s["viewport"]["height"]}
+                for k in ("previous", "change", "diff"):
+                    if s.get(k):
+                        shot[k] = s[k]
                 shots.append(shot)
             board = {"number": b["number"], "title": b.get("title", ""), "shots": shots}
-            for k in ("caption", "status", "error"):
+            for k, dk in (("caption", "caption"), ("status", "status"), ("error", "error"), ("change", "change"),
+                          ("change_label", "changeLabel"), ("change_note", "changeNote")):
                 if b.get(k):
-                    board[k] = b[k]
+                    board[dk] = b[k]
             captions = captions or bool(b.get("caption") or b.get("error"))
             boards.append(board)
         grp = {"name": g["name"], "boards": boards}
@@ -260,7 +310,7 @@ def data_for(m: dict, base: Path, out: Path, thumbs: Callable = make_thumbs) -> 
         out_groups.append(grp)
     data = {"title": m["title"], "id": m.get("id") or slug(m["title"]), "height": round(height, 2),
             "captionH": CAPTION_H if captions else 0, "labels": labels, "groups": out_groups}
-    for k in ("subtitle", "status", "meta", "banner", "comments"):
+    for k in ("subtitle", "status", "meta", "banner", "comments", "changes"):
         if m.get(k):
             data[k] = m[k]
     return data
