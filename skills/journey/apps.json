@@ -1,0 +1,56 @@
+{
+  "_doc": [
+    "The journey apps: the one list /journey, its doorman and `journey.py launch` read (skills/journey/journey.py).",
+    "name: what the canvas calls the app. scopes: the comment box's choice, or null for none.",
+    "checkout: the app's journey checkout (env's machines/claude-sessions names the same folder for `@claude on main journey-<app>`).",
+    "canvas: the folder the app publishes its canvas into; it is the page of the app's webcompanion session (kind journey, slug = the app).",
+    "features: where the feature ids come from. gherkin: a journey.feature's Scenarios as slugs (@skip kept); command: argv that prints [{id, name, skip}] as JSON.",
+    "run: argv that runs features and publishes them, in the checkout; {features} is the chosen ids, nothing for every feature.",
+    "after: argv run once the run ends, whatever its result (null for none). env: added to the run's environment; {checkout} is the checkout.",
+    "results: the folder, relative to the checkout, whose <feature>/manifest.json the run writes (status, finishedAt, boards, error)."
+  ],
+  "mealy": {
+    "name": "Mealy",
+    "scopes": {"app": "This app", "both": "Both apps"},
+    "checkout": "~/projects/lomem-checkouts/05-petros-journey-mealy",
+    "canvas": "~/.local/share/lomem/journey-canvas/mealy",
+    "features": {"gherkin": "apps/mealy/frontend/e2e/journey/journey.feature"},
+    "run": ["tools/lomem/bin/mealy", "journey", "{features}", "--publish"],
+    "after": ["tools/lomem/bin/mealy", "kill"],
+    "env": {"LOMEM_HOME": "{checkout}"},
+    "results": "apps/mealy/frontend/e2e/journey/.out"
+  },
+  "billpod": {
+    "name": "Billpod",
+    "scopes": {"app": "This app", "both": "Both apps"},
+    "checkout": "~/projects/lomem-checkouts/06-petros-journey-billpod",
+    "canvas": "~/.local/share/lomem/journey-canvas/billpod",
+    "features": {"gherkin": "apps/billpod/frontend/e2e/journey/journey.feature"},
+    "run": ["tools/lomem/bin/billpod", "journey", "{features}", "--publish"],
+    "after": ["tools/lomem/bin/billpod", "kill"],
+    "env": {"LOMEM_HOME": "{checkout}"},
+    "results": "apps/billpod/frontend/e2e/journey/.out"
+  },
+  "tunatutor": {
+    "name": "tunatutor",
+    "scopes": null,
+    "checkout": "~/projects/lomem-checkouts/09-petros-journey-tunatutor",
+    "canvas": "~/.local/share/lomem/journey-canvas/tunatutor",
+    "features": {"gherkin": "apps/tunatutor/frontend/e2e/journey/journey.feature"},
+    "run": ["tools/lomem/bin/tunatutor", "journey", "{features}", "--publish"],
+    "after": ["tools/lomem/bin/tunatutor", "kill"],
+    "env": {"LOMEM_HOME": "{checkout}"},
+    "results": "apps/tunatutor/frontend/e2e/journey/.out"
+  },
+  "voice": {
+    "name": "Claude Voice",
+    "scopes": null,
+    "checkout": "~/projects/claude-voice-worktrees/journey-voice",
+    "canvas": "~/.local/share/journey-canvas/voice",
+    "features": {"command": ["python3", "android/tools/states/journey.py", "features", "--json"]},
+    "run": ["~/.local/bin/uv", "run", "-q", "--with", "pillow", "python", "android/tools/states/journey.py", "run", "{features}", "--publish"],
+    "after": null,
+    "env": {},
+    "results": "android/app/build/journey"
+  }
+}

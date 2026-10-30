@@ -13,7 +13,7 @@ manifest and build it with the viewer, so every canvas pans, zooms, loads and ta
 the same way.
 
 1. **Write the manifest** next to the images (`canvas.json`). Groups are the chapters or flows,
-   in reading order; each board has a stable number (`#board-N` links and comments use it), or,
+   in reading order; each board has a stable number (`#board-N` and `#N` links and comments use it), or,
    where each group numbers its boards from 1, a stable `id` as well (`#board-<id>` and comments
    use it), a title, an optional caption, and its shots. Give a shot its size in CSS pixels and, for a
    full-page shot, the window it was taken in (`viewport`): the canvas draws that first screen,

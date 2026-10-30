@@ -297,16 +297,17 @@ def test_a_long_answer_for_one_app_never_holds_another_apps_wake(monkeypatch):
     t = threading.Thread(target=journey.doorman, kwargs={"once": True})
     t.start()
     for _ in range(100):
-        if len(started) == 3:
+        if len(started) == len(journey.APPS):
             break
         threading.Event().wait(0.02)
-    assert sorted(started) == ["billpod", "mealy", "tunatutor"]  # all began while mealy still ran
+    assert sorted(started) == sorted(journey.APPS)  # all began while mealy still ran
     release.set()
     t.join(5)
 
 
 def test_the_build_item_carries_the_published_pages_own_time_so_a_reload_lands_on_it(tmp_path, monkeypatch):
-    monkeypatch.setattr(journey, "CANVASES", tmp_path)
+    for app in ("mealy", "billpod"):
+        monkeypatch.setitem(journey.APPS, app, {**journey.APPS[app], "canvas": str(tmp_path / app)})
     (tmp_path / "mealy").mkdir()
     (tmp_path / "mealy" / "index.html").write_text(
         '<script type="application/json" id="canvas-data">{"title":"x","built":"2026-10-30T08:00:41.454Z","groups":[]}</script>')
@@ -320,3 +321,91 @@ def test_the_published_canvas_lives_outside_the_outbox_and_its_link_is_the_sessi
     assert journey.stable_link("mealy") == "https://webcompanion.main.okimotus.com/s/mealy/"
     assert journey.board_link("tunatutor", "today/01-today") == \
         "https://webcompanion.main.okimotus.com/s/tunatutor/#board-today/01-today"
+
+
+def test_voice_is_a_journey_app_whose_canvas_lives_outside_the_outbox_and_lomem(monkeypatch):
+    monkeypatch.setattr(journey, "public_base", lambda: "https://webcompanion.main.okimotus.com")
+    assert list(journey.APPS) == ["mealy", "billpod", "tunatutor", "voice"]
+    assert journey.canvas_dir("voice") == journey.HOME / ".local" / "share" / "journey-canvas" / "voice"
+    assert journey.checkout("voice") == journey.HOME / "projects" / "claude-voice-worktrees" / "journey-voice"
+    assert journey.checkout("mealy") == journey.HOME / "projects" / "lomem-checkouts" / "05-petros-journey-mealy"
+    assert journey.stable_link("voice") == "https://webcompanion.main.okimotus.com/s/voice/"
+    assert journey.board_link("voice", 14) == "https://webcompanion.main.okimotus.com/s/voice/#board-14"
+
+
+def test_every_app_names_its_checkout_canvas_features_run_and_results():
+    for app, spec in journey.APPS.items():
+        assert {"name", "scopes", "checkout", "canvas", "features", "run", "after", "results"} <= set(spec), app
+        assert ("gherkin" in spec["features"]) != ("command" in spec["features"]), app
+        assert "{features}" in spec["run"], app
+
+
+@pytest.fixture
+def command_app(tmp_path, monkeypatch):
+    """An app whose features come from a command and whose run is a script of its checkout (as Claude Voice's)."""
+    co = tmp_path / "co"
+    (co / "tools").mkdir(parents=True)
+    (co / "tools" / "list.py").write_text(
+        "import json; print(json.dumps([{'id': 'turn', 'name': 'Speaking a turn'}, {'id': 'fix', 'name': 'Fixing words'}]))")
+    run = co / "tools" / "run.py"
+    run.write_text(
+        "import json, os, sys, datetime\n"
+        "ids = sys.argv[1:-1] or ['turn', 'fix']\n"
+        "assert sys.argv[-1] == '--publish'\n"
+        "for f in ids:\n"
+        "    d = os.path.join('out', f); os.makedirs(d, exist_ok=True)\n"
+        "    at = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')\n"
+        "    json.dump({'status': 'passed', 'finishedAt': at, 'boards': [1, 2]}, open(os.path.join(d, 'manifest.json'), 'w'))\n"
+        "open('ran', 'a').write(' '.join(sys.argv[1:]) + '\\n')\n")
+    spec = {"name": "Claude Voice", "scopes": None, "checkout": str(co), "canvas": str(tmp_path / "canvas"),
+            "features": {"command": ["python3", "tools/list.py"]},
+            "run": ["python3", "tools/run.py", "{features}", "--publish"], "after": None, "env": {}, "results": "out"}
+    monkeypatch.setitem(journey.APPS, "voice", spec)
+    monkeypatch.setattr(journey, "STATE_ROOT", tmp_path / "state")
+    monkeypatch.setattr(journey, "on_main", lambda: True)
+    monkeypatch.setattr(journey, "sid_of", lambda app: "s-1")
+    items = {}
+    monkeypatch.setattr(journey, "put_item", lambda sid, anchor, body: items.setdefault(anchor, []).append(body))
+    monkeypatch.setattr(journey, "ensure", lambda app: {"sid": "s-1"})
+    monkeypatch.setattr(journey, "public_base", lambda: "https://webcompanion.main.okimotus.com")
+    return co, items
+
+
+def test_an_apps_features_can_come_from_a_command_it_names(command_app):
+    assert journey.features("voice") == [{"id": "turn", "name": "Speaking a turn", "skip": False},
+                                         {"id": "fix", "name": "Fixing words", "skip": False}]
+
+
+def test_a_rerun_runs_the_apps_own_command_with_the_chosen_ids_and_reads_its_results(command_app):
+    co, items = command_app
+    res = journey.rerun("voice", ["fix"], "e-1")
+    assert (co / "ran").read_text() == "fix --publish\n"
+    assert res["features"] == {"fix": {"state": "passed", "boards": 2}}
+    assert [b["state"] for b in items["run/fix"]] == ["running", "passed"]
+    assert res["boards"] == {"fix": "https://webcompanion.main.okimotus.com/s/voice/#c-2"}
+    journey.rerun("voice", ["all"])
+    assert (co / "ran").read_text().splitlines()[-1] == "--publish"  # every feature: no ids
+
+
+def test_a_rerun_refuses_an_id_the_command_does_not_list(command_app):
+    with pytest.raises(journey.Refused, match="no feature send"):
+        journey.rerun("voice", ["send"])
+    assert not (command_app[0] / "ran").exists()
+
+
+def test_a_comments_images_are_its_boards_shots_by_id_or_by_number(tmp_path, monkeypatch):
+    for app in ("voice", "mealy"):
+        monkeypatch.setitem(journey.APPS, app, {**journey.APPS[app], "canvas": str(tmp_path / app)})
+    (tmp_path / "voice" / "fix").mkdir(parents=True)
+    (tmp_path / "voice" / "fix" / "014.png").write_bytes(b"png")
+    (tmp_path / "voice" / "canvas.json").write_text(json.dumps({"groups": [{"boards": [
+        {"number": 14, "shots": [{"file": "fix/014.png"}]}]}]}))
+    assert journey.board_files("voice", 14) == [str(tmp_path / "voice" / "fix" / "014.png")]
+    assert journey.board_files("voice", 15) == []
+    (tmp_path / "mealy" / "today").mkdir(parents=True)
+    for f in ("01-today.png", "01-today.phone.png"):
+        (tmp_path / "mealy" / "today" / f).write_bytes(b"png")
+    (tmp_path / "mealy" / "canvas.json").write_text(json.dumps({"groups": [{"boards": [
+        {"number": 1, "id": "today/01-today", "shots": [{"file": "today/01-today.png"}, {"file": "today/01-today.phone.png"}]}]}]}))
+    assert journey.board_files("mealy", "today/01-today") == [str(tmp_path / "mealy" / "today" / f)
+                                                             for f in ("01-today.png", "01-today.phone.png")]

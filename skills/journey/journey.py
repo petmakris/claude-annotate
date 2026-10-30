@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """/journey: an app's journey canvas as a webcompanion session, answered by one Claude session per app.
 
-Every app with a journey (mealy, billpod, tunatutor) has, on petros-main only:
+Every app with a journey (apps.json beside this file: mealy, billpod, tunatutor
+and voice) has, on petros-main only:
 
   * a webcompanion session of kind `journey`, slug = the app, whose page is the
-    app's published canvas (~/.local/share/lomem/journey-canvas/<app>, built by
-    lomem's `<app> journey publish` with claude-annotate's canvas viewer), at
-    https://webcompanion.main.okimotus.com/s/<app>/. Comments are its threads,
-    one per board; Send to Claude and Re-run are events on it.
-  * a journey checkout, ~/projects/lomem-checkouts/<nn>-petros-journey-<app>
-    (env's machines/claude-sessions, line `main journey-<app> <dir>`).
+    app's published canvas (apps.json's `canvas` folder: lomem's apps publish into
+    ~/.local/share/lomem/journey-canvas/<app> with `<app> journey publish`, Claude
+    Voice into ~/.local/share/journey-canvas/voice with its
+    android/tools/states/journey.py; both build it with claude-annotate's canvas
+    viewer), at https://webcompanion.main.okimotus.com/s/<app>/. Comments are its
+    threads, one per board; Send to Claude and Re-run are events on it.
+  * a journey checkout (apps.json's `checkout`; env's machines/claude-sessions
+    names the same folder in its line `main journey-<app> <dir>`).
   * one Claude session, whose id is ~/.local/state/journey/<app>/claude-session.
     `owner.json` beside it says who has it open (pid, interactive or headless)
     and `lock` is held by whoever is starting Claude on it, so two processes
@@ -73,17 +76,13 @@ KIND = "journey"
 HOME = Path.home()
 ENV_HOME = Path(os.environ.get("ENV_HOME") or HOME / "projects" / "env")
 STATE_ROOT = Path(os.environ.get("JOURNEY_STATE") or HOME / ".local" / "state" / "journey")
-# Where lomem's `<app> journey publish` writes each app's canvas (one folder per app).
-CANVASES = Path(os.environ.get("JOURNEY_CANVASES") or HOME / ".local" / "share" / "lomem" / "journey-canvas")
 WC_STATE = HOME / ".claude" / "webcompanion"
 HOST = "petros-main"
 MACHINE = "main"
 
-APPS = {
-    "mealy": {"name": "Mealy", "frontend": "apps/mealy/frontend", "scopes": {"app": "This app", "both": "Both apps"}},
-    "billpod": {"name": "Billpod", "frontend": "apps/billpod/frontend", "scopes": {"app": "This app", "both": "Both apps"}},
-    "tunatutor": {"name": "tunatutor", "frontend": "apps/tunatutor/frontend", "scopes": None},
-}
+# The journey apps, as data: where each one's checkout and canvas are, how its features are listed and run.
+APPS_FILE = Path(os.environ.get("JOURNEY_APPS") or HERE / "apps.json")
+APPS = {k: v for k, v in json.loads(APPS_FILE.read_text()).items() if not k.startswith("_")}
 
 LISTENING_S = 90  # a watcher heartbeat younger than this is someone listening
 LOCK_WAIT_S = 15 * 60
@@ -110,23 +109,27 @@ def on_main() -> bool:
 
 def need_main() -> None:
     if not on_main():
+        first, *rest = APPS
         raise Refused("journey sessions live only on petros-main. From here:\n"
-                      "  @claude on main journey-mealy      (or journey-billpod, journey-tunatutor)\n"
+                      f"  @claude on main journey-{first}      (or {', '.join('journey-' + a for a in rest)})\n"
                       "or in the Claude app on the phone: the session main-journey-<app>.")
 
 
 def checkout(app: str) -> Path:
-    """The app's journey checkout: `main journey-<app> <dir>` in env's machines/claude-sessions."""
-    need_app(app)
-    f = ENV_HOME / "machines" / "claude-sessions"
+    """The app's journey checkout (apps.json)."""
+    return Path(os.path.expanduser(need_app(app)["checkout"]))
+
+
+def sessions_line(app: str) -> str | None:
+    """The folder env's machines/claude-sessions gives `main journey-<app>`, for `apps` to check against apps.json."""
     try:
-        for line in f.read_text().splitlines():
+        for line in (ENV_HOME / "machines" / "claude-sessions").read_text().splitlines():
             parts = line.split()
             if len(parts) >= 3 and not line.lstrip().startswith("#") and parts[0] == MACHINE and parts[1] == f"journey-{app}":
-                return Path(os.path.expanduser(parts[2]))
+                return str(Path(os.path.expanduser(parts[2])))
     except OSError:
         pass
-    raise Refused(f"{f} names no `{MACHINE} journey-{app} <dir>`: the app has no journey checkout")
+    return None
 
 
 def state_dir(app: str) -> Path:
@@ -136,7 +139,7 @@ def state_dir(app: str) -> Path:
 
 
 def canvas_dir(app: str) -> Path:
-    return CANVASES / app
+    return Path(os.path.expanduser(need_app(app)["canvas"]))
 
 
 def stable_link(app: str) -> str:
@@ -434,10 +437,15 @@ def watch(app: str, session_id: str) -> int:
 # ── pending work, comments, replies, acks ──────────────────────────────────
 
 def board_files(app: str, board) -> list[str]:
-    if not isinstance(board, str) or "/" not in board:
-        return []
-    base = canvas_dir(app) / board
-    return [str(p) for p in (base.with_suffix(".png"), base.parent / f"{base.name}.phone.png") if p.exists()]
+    """The image files of the board a comment is on, from the published canvas's manifest: by the board's
+    id, or by its number on a canvas without ids (Claude Voice's boards are its state numbers)."""
+    folder = canvas_dir(app)
+    m = read_json(folder / "canvas.json", {})
+    for g in m.get("groups") or []:
+        for b in g.get("boards") or []:
+            if str(b.get("id", b.get("number"))) == str(board):
+                return [str(folder / s["file"]) for s in b.get("shots") or [] if (folder / s["file"]).exists()]
+    return []
 
 
 def board_link(app: str, board) -> str:
@@ -514,8 +522,18 @@ def feature_id(name: str) -> str:
 
 
 def features(app: str) -> list[dict]:
-    """journey.feature's features in order: {id, name, skip} (lomem's features.ts parseFeatures)."""
-    f = checkout(app) / APPS[app]["frontend"] / "e2e" / "journey" / "journey.feature"
+    """The app's features in order: {id, name, skip}. apps.json says where from: a journey.feature's
+    Scenarios (lomem's features.ts parseFeatures), or a command that prints them as JSON."""
+    src = need_app(app)["features"]
+    if "command" in src:
+        out = subprocess.run(src["command"], cwd=checkout(app), capture_output=True, text=True, timeout=120)
+        if out.returncode:
+            raise Refused(f"{app}'s feature list failed: {out.stderr.strip()[-400:]}")
+        return [{"id": f["id"], "name": f["name"], "skip": bool(f.get("skip"))} for f in json.loads(out.stdout)]
+    return gherkin(checkout(app) / src["gherkin"])
+
+
+def gherkin(f: Path) -> list[dict]:
     out, tags = [], []
     for line in f.read_text().splitlines():
         t = line.strip()
@@ -533,12 +551,31 @@ def features(app: str) -> list[dict]:
 
 
 def out_dir(app: str) -> Path:
-    return checkout(app) / APPS[app]["frontend"] / "e2e" / "journey" / ".out"
+    return checkout(app) / need_app(app)["results"]
+
+
+def argv_of(app: str, template: list[str] | None, chosen: list[str] | None = None) -> list[str]:
+    """An apps.json argv with {features} spread out (nothing for every feature) and {checkout} filled in;
+    a first word that names a file of the checkout is that file."""
+    if not template:
+        return []
+    co = str(checkout(app))
+    argv = []
+    for a in template:
+        if a == "{features}":
+            argv += chosen or []
+        else:
+            argv.append(a.replace("{checkout}", co))
+    argv[0] = os.path.expanduser(argv[0])
+    if "/" in argv[0] and not argv[0].startswith("/"):
+        argv[0] = str(checkout(app) / argv[0])
+    return argv
 
 
 def rerun(app: str, wanted: list[str], event_id: str | None = None) -> dict:
-    """Run the features in the journey checkout (`<app> journey <ids> --publish`), with each one's
-    state on the canvas, then bring the dev stack down. Only ids journey.feature has are run."""
+    """Run the features in the journey checkout (apps.json's `run`: `<app> journey <ids> --publish` for a
+    lomem app), with each one's state on the canvas, then its `after` (a lomem app's dev stack down).
+    Only ids the app's feature list has are run."""
     need_main()
     known = [f for f in features(app) if not f["skip"]]
     ids = [f["id"] for f in known]
@@ -554,24 +591,26 @@ def rerun(app: str, wanted: list[str], event_id: str | None = None) -> dict:
     started = now_iso()
     for f in chosen:
         put_item(sid, f"run/{f}", {"state": "running", "at": started, "event": event_id})
-    bin_ = co / "tools" / "lomem" / "bin" / app
-    argv = [str(bin_), "journey", *([] if chosen == ids else chosen), "--publish"]
+    spec = APPS[app]
+    argv = argv_of(app, spec["run"], [] if chosen == ids else chosen)
+    after = argv_of(app, spec.get("after"))
     logs = state_dir(app) / "runs"
     logs.mkdir(exist_ok=True)
     logf = logs / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
-    env = {**os.environ, "LOMEM_HOME": str(co), "FORCE_COLOR": "0"}
+    env = {**os.environ, "FORCE_COLOR": "0", **{k: v.replace("{checkout}", str(co)) for k, v in (spec.get("env") or {}).items()}}
     log(app, f"rerun {' '.join(chosen)}: {' '.join(argv)} > {logf}")
     t0 = time.time()
     with open(logf, "w") as lf:
         code = subprocess.run(argv, cwd=co, stdout=lf, stderr=subprocess.STDOUT, env=env).returncode
-        subprocess.run([str(bin_), "kill"], cwd=co, stdout=lf, stderr=subprocess.STDOUT, env=env)
+        if after:
+            subprocess.run(after, cwd=co, stdout=lf, stderr=subprocess.STDOUT, env=env)
     tail = logf.read_text(errors="replace").splitlines()[-25:]
     results = {}
     for f in chosen:
         man = read_json(out_dir(app) / f / "manifest.json", {})
         ok = man.get("status") == "passed" and (man.get("finishedAt") or "") >= started[:19]
         state = "passed" if ok else "failed"
-        err = None if ok else (man.get("error") or f"`{app} journey` exited {code}; see {logf}")
+        err = None if ok else (man.get("error") or f"`{' '.join(spec['run'][:3])}` exited {code}; see {logf}")
         results[f] = {"state": state, "boards": len(man.get("boards") or []), **({"error": err} if err else {})}
         put_item(sid, f"run/{f}", {"state": state, "at": now_iso(), "event": event_id, **({"error": err} if err else {})})
     ensure(app)
@@ -927,8 +966,12 @@ def main(argv: list[str] | None = None) -> int:
             rows = []
             for app in APPS:
                 row = find_session(app) if on_main() else None
-                rows.append({"app": app, "checkout": str(checkout(app)), "session": (row or {}).get("sid"),
-                             "claude": claude_session(app), "owner": owner(app).get("mode"), "link": stable_link(app)})
+                line = sessions_line(app)
+                rows.append({"app": app, "checkout": str(checkout(app)), "canvas": str(canvas_dir(app)),
+                             "session": (row or {}).get("sid"), "claude": claude_session(app),
+                             "owner": owner(app).get("mode"), "link": stable_link(app),
+                             **({} if line == str(checkout(app)) else
+                                {"warning": f"machines/claude-sessions gives journey-{app} {line or 'no line'}"})})
             show(rows, a.json)
         elif a.cmd == "ensure":
             need_main()

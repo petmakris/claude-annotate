@@ -421,10 +421,10 @@ canvas.addEventListener('click', function (e) {
 }, true);
 canvas.addEventListener('dragstart', function (e) { e.preventDefault(); });
 
-// Group links, #board-36, #c-3 and #failure move the view there.
+// Group links, #board-36 (or #36), #c-3 and #failure move the view there.
 var hit = null;
 function go(hash, instant) {
-  var m = /^#(?:board-|b-)(.+)$/.exec(hash), c = /^#c-(\d+)$/.exec(hash), t = null, v;
+  var m = /^#(?:board-|b-)(.+)$/.exec(hash) || /^#(\d+)$/.exec(hash), c = /^#c-(\d+)$/.exec(hash), t = null, v;
   if (m) {
     var want = decodeURIComponent(m[1]);
     t = boardEls.filter(function (o) { return o.box && o.data.status !== 'failure' && String(boardKey(o.data)) === want; })[0];

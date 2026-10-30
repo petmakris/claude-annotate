@@ -31,7 +31,7 @@ Manifest:
     }
 
 A board's `number` is shown beside its title. Without ids it must be unique on the canvas: #board-<n>
-links and comments go by it. A board's `id` (letters, digits and - _ . /, up to 160) is its lasting
+(or #<n>) links and comments go by it. A board's `id` (letters, digits and - _ . /, up to 160) is its lasting
 name instead, unique on the canvas: #board-<id> links and comments go by it, so a canvas whose
 groups each number their boards from 1 can give every board an id and repeat numbers.
 

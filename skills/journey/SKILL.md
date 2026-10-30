@@ -1,7 +1,7 @@
 ---
 name: journey
-description: Answer an app's journey canvas (Mealy, Billpod, tunatutor) as its one Claude session on petros-main — the canvas's comments, Send to Claude and Re-run buttons arrive here as events. Use when the user types "/journey <app>" (open or reattach that app's journey session) or "/journey <app> resume" (the doorman's headless wake-up), or when a task-notification's first line is `WEBCOMPANION_EVENT skill=journey`, `WEBCOMPANION_FINISHED skill=journey`, `WEBCOMPANION_CANCELLED skill=journey` or `JOURNEY_SUPERSEDED`. Knows the journey commands (`<app> journey`, `--list`, `publish`) so the user never types them. Never ships and never pushes to main.
-argument-hint: "<mealy|billpod|tunatutor> [resume]"
+description: Answer an app's journey canvas (Mealy, Billpod, tunatutor, Claude Voice) as its one Claude session on petros-main — the canvas's comments, Send to Claude and Re-run buttons arrive here as events. Use when the user types "/journey <app>" (open or reattach that app's journey session) or "/journey <app> resume" (the doorman's headless wake-up), or when a task-notification's first line is `WEBCOMPANION_EVENT skill=journey`, `WEBCOMPANION_FINISHED skill=journey`, `WEBCOMPANION_CANCELLED skill=journey` or `JOURNEY_SUPERSEDED`. Knows the journey commands (`<app> journey`, `--list`, `publish`) so the user never types them. Never ships and never pushes to main.
+argument-hint: "<mealy|billpod|tunatutor|voice> [resume]"
 allowed-tools:
   - Bash
   - Read
@@ -16,13 +16,23 @@ allowed-tools:
 `python3 "$SKILL_DIR/journey.py" <command> <app> …` — written `J <command>` here; always type the
 full form. It talks to webcompanion on this machine and needs no exported variables.
 
-An app's **journey canvas** is a webcompanion session (kind `journey`, slug = the app) whose page is
-the canvas lomem publishes to `~/.local/share/lomem/journey-canvas/<app>`. Its one link is
-`https://webcompanion.main.okimotus.com/s/<app>/` (mealy, billpod, tunatutor). Petros comments on its boards, presses
-**Send to Claude** (the comments Claude has not answered, as one event), **Re-run** on a feature or
-**Re-run all**. This session answers. One Claude session per app; it lives only on petros-main, in
-the app's **journey checkout** (`J apps` lists them: `~/projects/lomem-checkouts/<nn>-petros-journey-<app>`,
-branch `petros/journey-<app>`).
+The journey apps are data: `apps.json` beside `journey.py` gives each one's name, journey checkout,
+canvas folder, how its features are listed and run, and where a run's results are. An app's
+**journey canvas** is a webcompanion session (kind `journey`, slug = the app) whose page is the
+app's canvas folder. Its one link is `https://webcompanion.main.okimotus.com/s/<app>/` (mealy,
+billpod, tunatutor, voice). Petros comments on its boards, presses **Send to Claude** (the comments
+Claude has not answered, as one event), **Re-run** on a feature or **Re-run all**. This session
+answers. One Claude session per app; it lives only on petros-main, in the app's **journey
+checkout** (`J apps` lists them):
+
+- **mealy, billpod, tunatutor** (lomem): `~/projects/lomem-checkouts/<nn>-petros-journey-<app>`,
+  branch `petros/journey-<app>`; features are journey.feature's Scenarios; the canvas is
+  `~/.local/share/lomem/journey-canvas/<app>`.
+- **voice** (Claude Voice): `~/projects/claude-voice-worktrees/journey-voice`, branch
+  `voice/journey`; features are the flows of `States.kt` (`turn`, `fix`, `send`, `answer`,
+  `choice`, `connection`, `settings`), each board a state, numbered by its stable state number
+  ("state 14" is `#14` or `#board-14`); the canvas is `~/.local/share/journey-canvas/voice`. Never
+  touch `next-deploy`, never publish an APK, never deploy: the journey only captures.
 
 ## Refuse anywhere but petros-main
 
@@ -82,8 +92,9 @@ Each event is one of:
   Reply with `J reply <app> <comment-id> --event <event_id> -` and the text on stdin (a heredoc). One
   reply per comment per event; keep it short, plain, and about the screen.
 - **`{"type": "rerun", "features": [...]}`** — Re-run (one feature) or Re-run all (every feature).
-  `J rerun <app> <feature ids…> --event <event_id>` (Bash `timeout` 600000; a full run takes 2–5
-  minutes). It refuses an id journey.feature does not have, shows each feature queued → running →
+  `J rerun <app> <feature ids…> --event <event_id>` (Bash `timeout` 600000; a full lomem run takes
+  2–5 minutes. Claude Voice: one flow about 2 minutes, every flow about 10 to 15, so run Re-run all
+  with `run_in_background` and wait for it). It refuses an id journey.feature does not have, shows each feature queued → running →
   passed or failed on the canvas, publishes, and the canvas reloads its boards. Nothing else to say
   unless a feature failed: then reply nothing, but say in this session what failed (`log` in the output).
 - **Anything else** (`{"type": "text"}`) — read it as a comment with no board and answer nothing; ack.
@@ -92,7 +103,23 @@ After an event is handled: `J ack <app> <event_id>`. Never ack an event you did 
 
 ## The journey commands, so Petros never types them
 
-All run in the journey checkout (`cd` there first). The dev stack is the checkout's own; never the
+All run in the journey checkout (`cd` there first).
+
+### Claude Voice
+
+| What | Command |
+|---|---|
+| The flows and their states | `python3 android/tools/states/journey.py features` |
+| Capture flows and publish (prefer `J rerun`) | `~/.local/bin/uv run -q --with pillow python android/tools/states/journey.py run <flow…> --publish` |
+| Faster, JVM renders only (never for the shared canvas: every emulator shot would read as changed) | add `--source jvm` and `VOICE_JOURNEY_CANVAS=<scratch dir>` |
+| Publish what this checkout captured | `… journey.py publish` |
+
+A capture renders the flow's states with the JVM rig, then shoots on the emulator (`voice34`) every
+state whose `Scene.jvm` does not name the JVM render; it waits for `/tmp/voice-gradle.lock`, lomem's
+APK build lock and any other emulator, and stops the emulator after. Each board's caption says
+which source its shot came from. The server is the stub, never the real one.
+
+### Mealy, Billpod, tunatutor The dev stack is the checkout's own; never the
 shared dev environments (dev.mealy.fit, dev.billpod.app, checkouts 01, 07, 08).
 
 | What | Command |
