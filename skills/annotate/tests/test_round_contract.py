@@ -411,12 +411,21 @@ def test_pushing_no_longer_asks_for_data_annotate_id_on_prose():
     assert "any words" in para and "no markup" in para
 
 
-def test_pushing_names_the_three_html_exceptions():
+def test_pushing_names_the_html_exceptions_and_no_table():
     para = _paragraph(PUSHING.read_text(encoding="utf-8"),
                       "HTML only where markdown cannot say it")
-    assert "merged table cells" in para
+    assert "table" not in para
     assert "callout" in para
     assert '`kind: "mockup"`' in para
+
+
+def test_skill_forbids_tables_in_the_text():
+    # The reader edits by selecting words, which a table does not allow, so
+    # the router itself says no tables and the digest says never a table row.
+    skill = (PUSHING.parent.parent / "SKILL.md").read_text(encoding="utf-8")
+    assert "**No tables, in any block, in either mode, in any rewrite.**" in skill
+    digest = _paragraph(PUSHING.read_text(encoding="utf-8"), "**Digest block**")
+    assert "never a table row" in digest
 
 
 def test_compact_triage_and_digest_are_markdown_lists():
