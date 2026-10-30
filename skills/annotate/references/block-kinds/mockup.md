@@ -9,7 +9,7 @@ interactive interface communicates better than prose or a static diagram.
 - A picture of the UI is the point, and it benefits from interaction.
 
 ## When NOT to use
-- Anything a markdown block already does (a table, a list) or an inline-`style="…"`
+- Anything a markdown block already does (a list, a code block) or an inline-`style="…"`
   callout does. Don't escalate to a sandbox for static styling.
 - Static structure / architecture → a `flowchart` block when it has a shape, otherwise prose.
 - More than ~one screen of UI. Keep a mock focused.

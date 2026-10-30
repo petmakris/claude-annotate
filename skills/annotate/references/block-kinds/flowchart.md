@@ -21,7 +21,7 @@ the shape of a decision, regardless of how many actors are involved.
 
 There is no separate block kind for static structure (system architecture, state
 machines, ER models, class hierarchies): draw it as a flowchart when it has a
-shape worth boxing, otherwise say it in prose or a table.
+shape worth boxing, otherwise say it in prose or a list.
 
 **Do NOT use a flowchart block for:**
 

@@ -179,8 +179,8 @@ At most **5 blocks**, a ~2-minute read:
    the decisions, blockers, and questions that require the reader's judgment,
    one short item each, as a markdown list.
 2. **Digest block** — everything else, **one line per item**, each line a
-   markdown list item or table row. A row is a claim plus its consequence,
-   not a summary of a section.
+   markdown list item, never a table row. An item is a claim plus its
+   consequence, not a summary of a section.
 3. **"What you do NOT need to re-check" block** (only when you verified work) —
    ≤ 4 bullets naming what was already confirmed, so the reader can skip it
    with confidence.
@@ -252,19 +252,17 @@ Fenced code blocks are syntax-highlighted by Shiki (VS Code's grammars, GitHub D
 
 ## Markdown first, HTML only where markdown can't say it
 
-Write text sections in markdown: headings, lists, tables, bold, code and links. The reader sees a readable Source view, and your later rewrites diff cleanly. A reader can comment on any words they select, so you do not mark sub-units: the selection menu needs no markup, and a comment arrives with `step_id: null` unless the words sit inside an element you gave a `data-annotate-id`.
+Write text sections in markdown: headings, lists, bold, code and links. Not tables: the reader edits by selecting words, and a table cannot be edited that way (SKILL.md § No tables in the page's text). The reader sees a readable Source view, and your later rewrites diff cleanly. A reader can comment on any words they select, so you do not mark sub-units: the selection menu needs no markup, and a comment arrives with `step_id: null` unless the words sit inside an element you gave a `data-annotate-id`.
 
-Use HTML only where markdown cannot say it: merged table cells, a callout with no markdown form, and `kind: "mockup"`. Rows, columns, steps and ordinary tables are markdown. The renderer (`markdown-it`) is configured with `html: true`; after render, a conservative client-side sanitizer strips `<script>`, `<iframe>`, `<style>`, `<form>`, `on*` event-handler attributes, and `javascript:` URLs. Everything else passes through.
+Use HTML only where markdown cannot say it: a callout with no markdown form, and `kind: "mockup"`. Steps are markdown lists. The renderer (`markdown-it`) is configured with `html: true`; after render, a conservative client-side sanitizer strips `<script>`, `<iframe>`, `<style>`, `<form>`, `on*` event-handler attributes, and `javascript:` URLs. Everything else passes through.
 
 Example of a comparison, in markdown:
 
 ```markdown
-Three migration strategies considered:
+Two migration strategies considered:
 
-| | Big-bang | Incremental |
-|---|---|---|
-| Risk | High: single window | Low |
-| Rollback | Restore the backup | Revert one batch |
+- **Big-bang.** High risk, because everything moves in one window. Rollback means restoring the backup.
+- **Incremental.** Low risk. Rollback means reverting one batch.
 ```
 
 When you do need HTML:
@@ -273,7 +271,7 @@ When you do need HTML:
 
 2. **Reuse the existing CSS variables.** `var(--accent)`, `var(--surface)`, `var(--surface-soft)`, `var(--border)`, `var(--text)`, `var(--text-strong)`, `var(--text-dim)`, `color-mix(...)` against them. Don't invent palettes; the page already has one. Inline `style="..."` is acceptable; a `<style>` block is not (the sanitizer strips it).
 
-3. **`data-annotate-id="<slug>"` is optional and for HTML only.** An element that carries it reports its slug as `step_id` when the reader selects words inside it. Older pages still carry them, so keep handling it: **preserve the slugs on sub-units that still exist** when you rewrite such a section (`references/handling-events.md` § "Diagram block-rewrite contract"). Do not add it to prose, lists or tables.
+3. **`data-annotate-id="<slug>"` is optional and for HTML only.** An element that carries it reports its slug as `step_id` when the reader selects words inside it. Older pages still carry them, so keep handling it: **preserve the slugs on sub-units that still exist** when you rewrite such a section (`references/handling-events.md` § "Diagram block-rewrite contract"). Do not add it to prose or lists.
 
 For a **high-fidelity** mock that needs `<style>`/`<script>`/Tailwind, hover, or interaction, use `kind: "mockup"` instead — it renders in a sandboxed iframe with the sanitizer lifted. Its `data-annotate-id` region convention is unchanged. See `references/block-kinds/mockup.md`.
 
