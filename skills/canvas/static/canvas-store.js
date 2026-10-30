@@ -13,7 +13,7 @@
 // (`answeredAt`) and when the page last sent it to Claude (`sentAt`), so the
 // page can count what waits for Claude and what was sent.
 //
-// A comment belongs to one canvas (`app`: "mealy", "billpod", "voice-states")
+// A comment belongs to one canvas (`app`: "mealy", "billpod", "voice")
 // and one shot of a board (`shot`: its label in lower case, "desktop",
 // "phone"). The board is its number, or its id on a canvas whose boards have
 // ids ("plan-setup/03-plan-setup-3-method"); `move` puts a comment on another

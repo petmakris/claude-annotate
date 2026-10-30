@@ -93,8 +93,9 @@ Each event is one of:
   reply per comment per event; keep it short, plain, and about the screen.
 - **`{"type": "rerun", "features": [...]}`** — Re-run (one feature) or Re-run all (every feature).
   `J rerun <app> <feature ids…> --event <event_id>` (Bash `timeout` 600000; a full lomem run takes
-  2–5 minutes. Claude Voice: one flow about 2 minutes, every flow about 10 to 15, so run Re-run all
-  with `run_in_background` and wait for it). It refuses an id journey.feature does not have, shows each feature queued → running →
+  2–5 minutes). Claude Voice: one flow takes 2 to 6 minutes, so for Re-run all (or several flows) run
+  `J rerun voice <flow> --event <event_id>` once per flow, in the order the event lists them, each its
+  own Bash call; never one call for all seven, which outlasts the Bash timeout. It refuses an id journey.feature does not have, shows each feature queued → running →
   passed or failed on the canvas, publishes, and the canvas reloads its boards. Nothing else to say
   unless a feature failed: then reply nothing, but say in this session what failed (`log` in the output).
 - **Anything else** (`{"type": "text"}`) — read it as a comment with no board and answer nothing; ack.
