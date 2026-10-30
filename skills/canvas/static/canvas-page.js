@@ -22,6 +22,8 @@ var DATA = JSON.parse(document.getElementById('canvas-data').textContent);
 var root = document.documentElement;
 function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function save(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+// A board's lasting name: its id when the canvas gives boards ids, else its number.
+function boardKey(b) { return b.id != null ? b.id : b.number; }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 // 'changed' or 'new' for a board marked so, else ''.
 function changeOf(b) { return b.status !== 'failure' && (b.change === 'changed' || b.change === 'new') ? b.change : ''; }
@@ -67,7 +69,7 @@ DATA.groups.forEach(function (g, gi) {
   g.boards.forEach(function (b, bi) {
     var chg = changeOf(b);
     var fig = el('figure', 'board' + (b.status === 'failure' ? ' failure' : '') + (chg ? ' chg chg-' + chg : ''));
-    fig.id = b.status === 'failure' ? 'failure' : 'b-' + b.number;
+    fig.id = b.status === 'failure' ? 'failure' : 'b-' + boardKey(b);
     var title = b.status === 'failure' ? '<strong>Failed here</strong>' :
       (chg ? '<span class="chg-tag chg-tag-' + chg + '">' + esc(b.changeLabel || chg) + '</span> ' : '') +
       '<span class="num">' + esc(b.number) + '</span> ' + esc(b.title);
@@ -81,7 +83,8 @@ DATA.groups.forEach(function (g, gi) {
       var caption = b.number + ' · ' + b.title + (b.shots.length > 1 ? ' · ' + s.label : '');
       btn.setAttribute('data-file', s.file);
       btn.setAttribute('data-caption', caption);
-      btn.setAttribute('data-board', b.number);
+      btn.setAttribute('data-board', boardKey(b));
+      if (b.id == null) btn.setAttribute('data-board-num', '');
       btn.setAttribute('data-shot', s.key);
       btn.setAttribute('data-title', b.title);
       btn.setAttribute('data-chapter', g.name);
@@ -419,8 +422,11 @@ canvas.addEventListener('dragstart', function (e) { e.preventDefault(); });
 // Group links, #board-36, #c-3 and #failure move the view there.
 var hit = null;
 function go(hash, instant) {
-  var m = /^#(?:board-|b-)(\d+)$/.exec(hash), c = /^#c-(\d+)$/.exec(hash), t = null, v;
-  if (m) t = boardEls.filter(function (o) { return o.box && String(o.data.number) === String(parseInt(m[1], 10)) && o.data.status !== 'failure'; })[0];
+  var m = /^#(?:board-|b-)(.+)$/.exec(hash), c = /^#c-(\d+)$/.exec(hash), t = null, v;
+  if (m) {
+    var want = decodeURIComponent(m[1]);
+    t = boardEls.filter(function (o) { return o.box && o.data.status !== 'failure' && String(boardKey(o.data)) === want; })[0];
+  }
   else if (hash === '#failure') t = boardEls.filter(function (o) { return o.box && o.data.status === 'failure'; })[0];
   if (t) {
     v = M.fitView(t.box.x, t.box.y, t.box.w, t.box.h, box.w, box.h, 48, 1);
@@ -575,7 +581,7 @@ window.canvasView = {
   layout: function () { return { w: layout.w, h: layout.h, groups: layout.groups.length }; },
   shots: function () {
     return shotEls.filter(function (s) { return !!s.box; }).map(function (s) {
-      return { board: s.data && s.board.data.number, key: s.data.key, box: s.box, tier: s.tier, src: s.img.getAttribute('src') || '' };
+      return { board: s.data && boardKey(s.board.data), key: s.data.key, box: s.box, tier: s.tier, src: s.img.getAttribute('src') || '' };
     });
   }
 };

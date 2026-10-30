@@ -68,6 +68,8 @@ def test_a_good_manifest_has_no_problems(tmp_path):
     (lambda m: m["groups"][0]["boards"][0]["shots"][0].update(change="same"), "shots[0].change"),
     (lambda m: m["groups"][0]["boards"][0]["shots"][0].update(diff={"x": 1, "y": 2}), "diff"),
     (lambda m: m.update(changes={"since": "today", "removed": [{"number": 3}]}), "changes.removed"),
+    (lambda m: m["groups"][0]["boards"][0].update(id="../x y"), "boards[0].id: letters"),
+    (lambda m: [b.update(id="account/01-a") for b in m["groups"][0]["boards"]], "account/01-a is also groups[0].boards[0]"),
 ])
 def test_check_names_what_is_wrong(tmp_path, change, problem):
     m = json.loads(journey(tmp_path).read_text())
@@ -184,3 +186,25 @@ def test_a_canvas_without_changes_carries_no_change_data(tmp_path):
     d = page_data(canvas.build(journey(tmp_path), tmp_path))
     assert "changes" not in d
     assert not any(k in b for b in d["groups"][0]["boards"] for k in ("change", "changeLabel", "changeNote"))
+
+
+def test_boards_with_ids_may_repeat_numbers_and_carry_their_id_to_the_page(tmp_path):
+    """A canvas whose groups each number from 1 (lomem's feature journeys) names each board by its id."""
+    man = journey(tmp_path)
+    m = json.loads(man.read_text())
+    second = json.loads(json.dumps(m["groups"][0]))
+    second["name"] = "Settings"
+    m["groups"].append(second)
+    for g in m["groups"]:
+        for b in g["boards"]:
+            b["id"] = f"{g['name'].lower()}/{b['number']:02d}"
+    assert canvas.check(m, tmp_path) == []
+    man.write_text(json.dumps(m))
+    d = page_data(canvas.build(man, tmp_path))
+    assert [(b["number"], b["id"]) for g in d["groups"] for b in g["boards"]] == [
+        (1, "account/01"), (2, "account/02"), (1, "settings/01"), (2, "settings/02")]
+    # Without ids the numbers still have to be unique.
+    for g in m["groups"]:
+        for b in g["boards"]:
+            del b["id"]
+    assert any("1 is also" in e for e in canvas.check(m, tmp_path))

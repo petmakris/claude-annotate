@@ -7,13 +7,16 @@
 //
 // A comment belongs to one canvas (`app`: "mealy", "billpod", "voice-states")
 // and one shot of a board (`shot`: its label in lower case, "desktop",
-// "phone"). Ops are idempotent where a replay could repeat them: a create
+// "phone"). The board is its number, or its id on a canvas whose boards have
+// ids ("plan-setup/03-plan-setup-3-method"); `move` puts a comment on another
+// board when the canvas renames or renumbers them. Ops are idempotent where a replay could repeat them: a create
 // whose id is already there and a delete of what is gone change nothing.
 var CanvasStore = (function () {
   var MAX_TEXT = 10000;
-  var ID_OK = /^[A-Za-z0-9_-]{1,64}$/, APP_OK = /^[a-z0-9][a-z0-9-]{0,39}$/, SHOT_OK = /^[a-z0-9][a-z0-9-]{0,19}$/;
+  var ID_OK = /^[A-Za-z0-9_-]{1,64}$/, BOARD_ID_OK = /^[A-Za-z0-9][A-Za-z0-9\/._-]{0,159}$/, APP_OK = /^[a-z0-9][a-z0-9-]{0,39}$/, SHOT_OK = /^[a-z0-9][a-z0-9-]{0,19}$/;
 
   function refuse(store, error, status) { return { store: store, error: error, status: status }; }
+  function boardOk(b) { return (typeof b === 'number' && b >= 0 && Math.floor(b) === b) || (typeof b === 'string' && BOARD_ID_OK.test(b)); }
   function copy(o) { var r = {}; for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) r[k] = o[k]; return r; }
 
   // The store after op, or the same store and why not. now is an ISO time.
@@ -50,7 +53,7 @@ var CanvasStore = (function () {
       for (k = 0; k < list.length; k++) if (list[k].id === c.id) return { store: store };
       if (typeof c.app !== 'string' || !APP_OK.test(c.app)) return refuse(store, 'app must be a canvas id (a-z, 0-9 and -).', 400);
       if (typeof c.shot !== 'string' || !SHOT_OK.test(c.shot)) return refuse(store, 'shot must be a shot label (a-z, 0-9 and -).', 400);
-      if (!(typeof c.board === 'number' && c.board >= 0 && Math.floor(c.board) === c.board)) return refuse(store, 'board must be a board number.', 400);
+      if (!boardOk(c.board)) return refuse(store, 'board must be a board number or id.', 400);
       if (!(typeof c.fx === 'number' && c.fx >= 0 && c.fx <= 1 && typeof c.fy === 'number' && c.fy >= 0 && c.fy <= 1)) {
         return refuse(store, 'The point must be fractions of the shot, from 0 to 1.', 400);
       }
@@ -72,7 +75,7 @@ var CanvasStore = (function () {
       if (i < 0) return { store: store };
       return { store: { version: 1, comments: list.slice(0, i).concat(list.slice(i + 1)) } };
     }
-    if (o.kind !== 'update' && o.kind !== 'reply' && o.kind !== 'editReply' && o.kind !== 'deleteReply') {
+    if (o.kind !== 'update' && o.kind !== 'move' && o.kind !== 'reply' && o.kind !== 'editReply' && o.kind !== 'deleteReply') {
       return refuse(store, 'Unknown op ' + JSON.stringify(o.kind) + '.', 400);
     }
     if (i < 0) {
@@ -98,6 +101,11 @@ var CanvasStore = (function () {
         if (o.status === 'resolved') next.resolvedAt = at; else delete next.resolvedAt;
       }
       next.updatedAt = at;
+    } else if (o.kind === 'move') {
+      if (!boardOk(o.board)) return refuse(store, 'board must be a board number or id.', 400);
+      next.board = o.board;
+      if (o.boardTitle !== undefined) next.boardTitle = String(o.boardTitle).slice(0, 300);
+      if (o.chapter !== undefined) next.chapter = String(o.chapter).slice(0, 300);
     } else if (o.kind === 'reply') {
       var r = o.reply;
       if (!r || typeof r.id !== 'string' || !ID_OK.test(r.id)) return refuse(store, 'The reply id is not valid.', 400);

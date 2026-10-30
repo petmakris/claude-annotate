@@ -19,6 +19,7 @@ Manifest:
         {"name": "Account", "status": "passed", "note": "2 min", "empty": "Not run.",
          "boards": [
            {"number": 1, "title": "Sign in", "caption": "How it is reached …",
+            "id": "account/01-sign-in",                           optional, see below
             "status": "failure", "error": "…",                    a failure board, optional
             "shots": [
               {"label": "Desktop", "file": "01-sign-in.png", "width": 1600, "height": 1000,
@@ -26,6 +27,11 @@ Manifest:
               {"label": "Phone", "file": "01-sign-in.phone.png", "width": 390, "height": 844,
                "viewport": {"width": 390, "height": 844}}]}]}]
     }
+
+A board's `number` is shown beside its title. Without ids it must be unique on the canvas: #board-<n>
+links and comments go by it. A board's `id` (letters, digits and - _ . /, up to 160) is its lasting
+name instead, unique on the canvas: #board-<id> links and comments go by it, so a canvas whose
+groups each number their boards from 1 can give every board an id and repeat numbers.
 
 A shot's file is relative to the manifest. Its width and height are its size in CSS pixels (a 2x
 PNG of a 390 px window is 390 wide); left out, they are the image's own. With a viewport the shot
@@ -61,6 +67,7 @@ DATA_MARK = "/*CANVAS:DATA*/"
 SCRIPTS = ["canvas-math.js", "canvas-store.js", "canvas-chrome.js"]
 CLOSURE = ["canvas-page.js", "canvas-comments.js"]
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+BOARD_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9/._-]{0,159}$")
 SHOT_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,19}$")
 CHANGES = ("changed", "unchanged", "new")
 # Captions are drawn under their board, in this much of the surface (canvas-math.js).
@@ -145,9 +152,17 @@ def check(m: Any, base: Path | None = None) -> list[str]:
                 errs.append(f"{bat}: must be an object.")
                 continue
             n = b.get("number")
+            bid = b.get("id")
+            if bid is not None:
+                if not (isinstance(bid, str) and BOARD_ID.match(bid)):
+                    errs.append(f"{bat}.id: letters, digits and - _ . /, up to 160.")
+                elif "id:" + bid in seen:
+                    errs.append(f"{bat}.id: {bid} is also {seen['id:' + bid]}; #board-{bid} links and comments need it once.")
+                else:
+                    seen["id:" + bid] = bat
             if not (isinstance(n, int) and not isinstance(n, bool) and n >= 0):
                 errs.append(f"{bat}.number: a whole number from 0 is required.")
-            elif b.get("status") != "failure":
+            elif b.get("status") != "failure" and bid is None:
                 if str(n) in seen:
                     errs.append(f"{bat}.number: {n} is also {seen[str(n)]}; #board-{n} links and comments need it once.")
                 seen[str(n)] = bat
@@ -297,6 +312,8 @@ def data_for(m: dict, base: Path, out: Path, thumbs: Callable = make_thumbs) -> 
                         shot[k] = s[k]
                 shots.append(shot)
             board = {"number": b["number"], "title": b.get("title", ""), "shots": shots}
+            if b.get("id"):
+                board["id"] = b["id"]
             for k, dk in (("caption", "caption"), ("status", "status"), ("error", "error"), ("change", "change"),
                           ("change_label", "changeLabel"), ("change_note", "changeNote")):
                 if b.get(k):

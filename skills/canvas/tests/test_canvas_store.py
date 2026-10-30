@@ -78,3 +78,14 @@ def test_refuses_what_is_not_a_comment_and_leaves_the_store_as_it_was():
       return cases.map(function (c) { var x = S.applyOp(s, c[0], T0);
         return x.status === c[1] && (x.error || '').indexOf(c[2]) >= 0 && x.store === s; });""")
     assert r == [True] * 12
+
+
+def test_a_board_is_a_number_or_an_id_and_move_puts_a_comment_on_another_board():
+    r = js(PRELUDE + """
+      var s = run([create('a'), create('b', { board: 'plan-setup/03-plan-setup-3-method' })]);
+      var moved = run([{ kind: 'move', id: 'a', board: 'sign-in/01-sign-in', boardTitle: 'Sign in', chapter: 'Sign in' }], s);
+      var bad = [create('c', { board: '../x' }), create('c', { board: -1 }), create('c', { board: '' }),
+        { kind: 'move', id: 'a', board: 'a b' }, { kind: 'move', id: 'nope', board: 'x/01-y' }];
+      return [s.comments[1].board, moved.comments[0].board, moved.comments[0].chapter, moved.comments[0].number, moved.comments[0].updatedAt === undefined,
+        bad.map(function (op) { var x = S.applyOp(s, op, T0); return x.store === s && !!x.error; })];""")
+    assert r == ["plan-setup/03-plan-setup-3-method", "sign-in/01-sign-in", "Sign in", 1, True, [True] * 5]

@@ -48,7 +48,7 @@ if (DATA.comments) {
       shotBox = {};
       shotEls.forEach(function (s) {
         var b = s.box, o = b ? { el: s.el, x: b.x, y: b.y, w: b.w, h: b.h, frameH: b.frameH, shown: true } : { el: s.el, shown: false };
-        shotBox[s.board.data.number + '|' + s.data.key] = o;
+        shotBox[boardKey(s.board.data) + '|' + s.data.key] = o;
       });
     }
 
@@ -188,7 +188,7 @@ if (DATA.comments) {
       if (!p) return;
       closePop();
       draft = {
-        id: uid('c'), board: parseInt(shot.getAttribute('data-board'), 10), shot: shot.getAttribute('data-shot'),
+        id: uid('c'), board: shot.hasAttribute('data-board-num') ? parseInt(shot.getAttribute('data-board'), 10) : shot.getAttribute('data-board'), shot: shot.getAttribute('data-shot'),
         boardTitle: shot.getAttribute('data-title'), chapter: shot.getAttribute('data-chapter'), fx: p.fx, fy: p.fy,
         scope: 'app', audio: []
       };
@@ -205,7 +205,12 @@ if (DATA.comments) {
         '<button type="button" data-cscope-pick="both" aria-pressed="' + (scope === 'both') + '">' + escHtml(SCOPES.both) + '</button></span>';
     }
     function scopeText(c) { return SCOPES ? '<span>' + escHtml(c.scope === 'both' ? SCOPES.both : SCOPES.app) + '</span>' : ''; }
-    function whereText(c) { return 'Board ' + c.board + ' ' + (c.boardTitle || '') + (LABELS.length > 1 ? ' · ' + c.shot : ''); }
+    function whereText(c) {
+      var where = typeof c.board === 'number' ? 'Board ' + c.board + ' ' + (c.boardTitle || '') : (c.boardTitle || c.board) + (c.chapter ? ' · ' + c.chapter : '');
+      return where + (LABELS.length > 1 ? ' · ' + c.shot : '');
+    }
+    // A comment whose board this canvas no longer has (renamed, or its feature dropped it) stays listed, marked.
+    function gone(c) { return !shotBox[c.board + '|' + c.shot]; }
     function openDraft() {
       thread = null;
       pop.innerHTML = '<div class="c-where">' + escHtml(whereText(draft)) + '</div>' +
@@ -502,7 +507,8 @@ if (DATA.comments) {
           '<div class="c-text">' + escHtml(c.text) + '</div>' +
           '<div class="c-meta">' + scopeText(c) + '<span>' + escHtml(when(c.createdAt)) + '</span>' +
           (c.replies.length ? '<span>' + c.replies.length + (c.replies.length === 1 ? ' reply' : ' replies') + '</span>' : '') +
-          (c.status === 'resolved' ? '<span>resolved</span>' : '') + (c._unsent ? '<span>unsent</span>' : '') + '</div></button>';
+          (c.status === 'resolved' ? '<span>resolved</span>' : '') + (c._unsent ? '<span>unsent</span>' : '') +
+          (gone(c) ? '<span class="c-gone">board no longer on this canvas</span>' : '') + '</div></button>';
       }).join('');
     }
     // Fly the canvas to a pin: its shot fills the window (at most 100 %), the
