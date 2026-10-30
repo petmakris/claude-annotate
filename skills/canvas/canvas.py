@@ -12,11 +12,13 @@ Manifest:
       "status": {"kind": "passed", "label": "Passed"},          optional chip by the title
       "meta": ["Run 29 Oct 2026, 18:10", "12 min"],              optional lines under it
       "banner": "The run failed in …",                            optional alert
-      "comments": {"url": "https://journey-comments.main.okimotus.com", "canvas": "mealy",
-                   "name": "Mealy", "scopes": {"app": "This app", "both": "Both apps"}},
+      "session": {"kind": "journey", "slug": "mealy", "cwd": "/path/to/the/app's/checkout",
+                  "title": "Mealy journey", "reruns": true},              optional, see below
+      "comments": {"canvas": "mealy", "name": "Mealy",
+                   "scopes": {"app": "This app", "both": "Both apps"}},   only with a session
       "board_width": 480,                                         the first shot's drawn width
       "groups": [
-        {"name": "Account", "status": "passed", "note": "2 min", "empty": "Not run.",
+        {"name": "Account", "id": "account", "status": "passed", "note": "2 min", "empty": "Not run.",
          "boards": [
            {"number": 1, "title": "Sign in", "caption": "How it is reached …",
             "id": "account/01-sign-in",                           optional, see below
@@ -32,6 +34,17 @@ A board's `number` is shown beside its title. Without ids it must be unique on t
 links and comments go by it. A board's `id` (letters, digits and - _ . /, up to 160) is its lasting
 name instead, unique on the canvas: #board-<id> links and comments go by it, so a canvas whose
 groups each number their boards from 1 can give every board an id and repeat numbers.
+
+A canvas with a `session` lives in a webcompanion session (contract in ~/projects/webcompanion/
+docs/contract.md): `build` finds the live session of that kind and slug, or reopens or creates it
+(in `cwd`), registers the built folder as its page (`wc-boot.js`, which opens `assets/index.html`),
+and puts its sid and link in the page. The page then keeps its comments in the session's threads
+(one thread per board, each message one op of canvas-store.js), and a copy of the page opened
+anywhere else (files.main.okimotus.com) goes to the session's. With `reruns`, every group whose
+`id` is set gets a Re-run button and the toolbar Re-run all and Send to Claude: each is an event
+on the session for the Claude session that owns it (claude-annotate's /journey), and the group shows
+the run's state from the session's `run/<group id>` item. Without the daemon the canvas builds
+without its session and says so.
 
 A shot's file is relative to the manifest. Its width and height are its size in CSS pixels (a 2x
 PNG of a 390 px window is 390 wide); left out, they are the image's own. With a viewport the shot
@@ -63,12 +76,18 @@ from typing import Any, Callable
 
 STATIC = Path(__file__).resolve().parent / "static"
 DATA_MARK = "/*CANVAS:DATA*/"
-# Read in this order into the page's one script: maths, store, chrome, page, comments.
+# Read in this order into the page's one script: maths, store, chrome, page, session, comments.
 SCRIPTS = ["canvas-math.js", "canvas-store.js", "canvas-chrome.js"]
-CLOSURE = ["canvas-page.js", "canvas-comments.js"]
+CLOSURE = ["canvas-page.js", "canvas-session.js", "canvas-comments.js"]
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 BOARD_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9/._-]{0,159}$")
 SHOT_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,19}$")
+KIND = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
+# The page a canvas session's shell opens (registered as the session's renderer entry).
+BOOT = "wc-boot.js"
+BOOT_JS = "// The session's shell page opens the canvas itself (skills/canvas/canvas.py).\nlocation.replace('assets/index.html' + location.hash);\n"
+# Azure's browser speech SDK, for spoken comments (vendored by the annotate skill).
+SPEECH_SDK = Path(__file__).resolve().parents[1] / "annotate" / "static" / "vendor" / "speech-sdk.min.js"
 CHANGES = ("changed", "unchanged", "new")
 # Captions are drawn under their board, in this much of the surface (canvas-math.js).
 CAPTION_H = 128
@@ -111,10 +130,18 @@ def check(m: Any, base: Path | None = None) -> list[str]:
         errs.append("title: a non-empty string is required.")
     if "id" in m and not (isinstance(m["id"], str) and SLUG.match(m["id"])):
         errs.append("id: lower-case letters, digits and -, up to 40.")
+    se = m.get("session")
+    if se is not None:
+        if not isinstance(se, dict) or not (isinstance(se.get("kind"), str) and KIND.match(se["kind"])):
+            errs.append("session.kind: a webcompanion kind (a-z, 0-9, - and _).")
+        elif not (isinstance(se.get("slug"), str) and SLUG.match(se["slug"])):
+            errs.append("session.slug: lower-case letters, digits and -, up to 40.")
+        elif not (isinstance(se.get("cwd"), str) and se["cwd"].startswith("/")):
+            errs.append("session.cwd: the absolute folder the session belongs to.")
     c = m.get("comments")
     if c is not None:
-        if not isinstance(c, dict) or not isinstance(c.get("url"), str) or not re.match(r"^https?://", c.get("url", "")):
-            errs.append("comments.url: the comments service's http(s) address is required.")
+        if not isinstance(c, dict):
+            errs.append('comments: {"canvas", "name", "scopes"}.')
         elif not (isinstance(c.get("canvas"), str) and SLUG.match(c["canvas"])):
             errs.append("comments.canvas: lower-case letters, digits and -, up to 40.")
         sc = c.get("scopes") if isinstance(c, dict) else None
@@ -142,6 +169,8 @@ def check(m: Any, base: Path | None = None) -> list[str]:
             continue
         if not isinstance(g.get("name"), str) or not g["name"].strip():
             errs.append(f"{at}.name: a non-empty string is required.")
+        if "id" in g and not (isinstance(g["id"], str) and SLUG.match(g["id"])):
+            errs.append(f"{at}.id: lower-case letters, digits and -, up to 40.")
         boards = g.get("boards", [])
         if not isinstance(boards, list):
             errs.append(f"{at}.boards: must be a list.")
@@ -321,7 +350,7 @@ def data_for(m: dict, base: Path, out: Path, thumbs: Callable = make_thumbs) -> 
             captions = captions or bool(b.get("caption") or b.get("error"))
             boards.append(board)
         grp = {"name": g["name"], "boards": boards}
-        for k, dk in (("status", "status"), ("status_label", "statusLabel"), ("note", "note"), ("empty", "empty")):
+        for k, dk in (("id", "id"), ("status", "status"), ("status_label", "statusLabel"), ("note", "note"), ("empty", "empty")):
             if g.get(k):
                 grp[dk] = g[k]
         out_groups.append(grp)
@@ -330,7 +359,64 @@ def data_for(m: dict, base: Path, out: Path, thumbs: Callable = make_thumbs) -> 
     for k in ("subtitle", "status", "meta", "banner", "comments", "changes"):
         if m.get(k):
             data[k] = m[k]
+    data["built"] = _now_iso()
     return data
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+class SessionUnavailable(Exception):
+    """The canvas names a session and the webcompanion daemon could not give one."""
+
+
+def ensure_session(se: dict, out: Path) -> dict:
+    """The live webcompanion session of `se`'s kind and slug, reopened or made if need be, with
+    `out` registered as its page. Returns {sid, slug, kind, url}: url is the session's page on its
+    devdomains name (https://webcompanion.<machine>…/s/<sid>/) when it has one."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from _shared import webcompanion_client as wc  # noqa: WPS433
+
+    kind, slug = se["kind"], se["slug"]
+    if os.environ.get("CANVAS_NO_SESSION"):
+        raise SessionUnavailable("CANVAS_NO_SESSION is set")
+    try:
+        rows = wc.all_sessions(kind)
+        mine = [r for r in rows if r.get("slug") == slug]
+        row = next((r for r in mine if r.get("state", "live") == "live"), None)
+        if row is None and mine:
+            wc.request("POST", f"/s/{mine[0]['sid']}/api/unfinish")
+            row = mine[0]
+        if row is None:
+            row = wc.request("POST", "/api/sessions", {"kind": kind, "cwd": se["cwd"], "slug": slug,
+                                                       "title": se.get("title") or slug})
+            if row.get("slug") != slug:
+                raise SessionUnavailable(f"asked for {kind} session {slug} and got {row.get('slug')}")
+        (out / BOOT).write_text(BOOT_JS)
+        wc.register_assets(row["sid"], str(out.resolve()), BOOT, kind=kind)
+    except wc.DaemonError as e:
+        raise SessionUnavailable(str(e)) from None
+    return {"sid": row["sid"], "slug": slug, "kind": kind, "url": public_url(row["sid"])}
+
+
+def public_url(sid: str) -> str:
+    """The session page's link from every machine: webcompanion's devdomains name, else loopback."""
+    import shutil
+    import subprocess
+    base = os.environ.get("WEBCOMPANION_PUBLIC_URL", "")
+    if not base:
+        tool = shutil.which("@devdomains") or str(Path.home() / "projects" / "env" / "bin" / "@devdomains")
+        try:
+            base = subprocess.run([tool, "url", "webcompanion"], capture_output=True, text=True,
+                                  timeout=20).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            base = ""
+    if not base.startswith("http"):
+        base = "http://127.0.0.1:3080"
+    return f"{base.rstrip('/')}/s/{sid}/"
 
 
 def build(manifest: Path, out: Path) -> Path:
@@ -342,6 +428,22 @@ def build(manifest: Path, out: Path) -> Path:
         raise ValueError("\n".join(errs))
     out.mkdir(parents=True, exist_ok=True)
     data = data_for(m, base, out)
+    se = m.get("session")
+    if not se:
+        # Comments live only in a canvas's session. A manifest from before sessions (its comments
+        # named the journey-comments service, `comments.url`) builds without them.
+        data.pop("comments", None)
+    if se:
+        try:
+            data["session"] = {**ensure_session(se, out), "reruns": bool(se.get("reruns"))}
+        except SessionUnavailable as e:
+            data.pop("comments", None)
+            data["banner"] = ((data.get("banner") or "") + " " +
+                              f"Built without its webcompanion session ({e}), so it takes no comments.").strip()
+        else:
+            if data.get("comments") and SPEECH_SDK.is_file():
+                (out / "vendor").mkdir(exist_ok=True)
+                shutil.copy2(SPEECH_SDK, out / "vendor" / "speech-sdk.min.js")
     page = out / "index.html"
     tmp = page.with_name(f".index.{os.getpid()}.html")
     tmp.write_text(fill(template(), data))

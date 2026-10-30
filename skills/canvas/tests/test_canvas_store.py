@@ -1,5 +1,5 @@
-"""The page's copy of the comment store (canvas-store.js), ported from lomem's comment-store.test.ts.
-lomem's suite checks that its applyOp and this one give the same stores (journey canvas vendor test)."""
+"""The page's comment store (canvas-store.js), first ported from lomem's comment-store.test.ts.
+skills/journey/tests check that its Python twin (skills/journey/store.py) gives the same stores."""
 from __future__ import annotations
 
 import json
@@ -29,7 +29,7 @@ def test_a_comment_has_its_board_shot_point_scope_and_time_numbered_per_canvas()
            "create('v', { app: 'voice-states', shot: 'shot' })]);")
     assert s["comments"][0] == {"id": "a", "number": 1, "app": "mealy", "board": 5, "boardTitle": "Sign in", "chapter": "Account",
                                 "shot": "desktop", "fx": 0.25, "fy": 0.5, "text": "The button is too small", "scope": "app",
-                                "status": "open", "createdAt": T0, "replies": []}
+                                "status": "open", "createdAt": T0, "askedAt": T0, "replies": []}
     assert [[c["id"], c["app"], c["number"], c["shot"], c["scope"]] for c in s["comments"]] == [
         ["a", "mealy", 1, "desktop", "app"], ["b", "billpod", 1, "phone", "both"], ["c", "mealy", 2, "desktop", "app"],
         ["v", "voice-states", 1, "shot", "app"]]
@@ -89,3 +89,35 @@ def test_a_board_is_a_number_or_an_id_and_move_puts_a_comment_on_another_board()
       return [s.comments[1].board, moved.comments[0].board, moved.comments[0].chapter, moved.comments[0].number, moved.comments[0].updatedAt === undefined,
         bad.map(function (op) { var x = S.applyOp(s, op, T0); return x.store === s && !!x.error; })];""")
     assert r == ["plan-setup/03-plan-setup-3-method", "sign-in/01-sign-in", "Sign in", 1, True, [True] * 5]
+
+
+def test_who_wrote_last_sent_to_claude_and_answered():
+    r = js(PRELUDE + """
+      var s = run([Object.assign(create('a'), { at: '2026-10-29T17:00:00Z' })]);
+      var asked = [S.waiting(s.comments[0]), s.comments[0].askedAt];
+      s = run([{ kind: 'update', id: 'a', sentAt: '2026-10-29T17:05:00Z', at: '2026-10-29T17:05:00Z' }], s);
+      var sent = [s.comments[0].sentAt, s.comments[0].updatedAt === undefined, S.waiting(s.comments[0])];
+      s = run([{ kind: 'reply', id: 'a', at: '2026-10-29T17:06:00Z', reply: { id: 'r1', text: 'Noted.', by: 'claude' } }], s);
+      var answered = [S.waiting(s.comments[0]), s.comments[0].answeredAt, s.comments[0].replies[0].by];
+      s = run([{ kind: 'reply', id: 'a', at: '2026-10-29T17:07:00Z', reply: { id: 'r2', text: 'And the phone?' } }], s);
+      return [asked, sent, answered, S.waiting(s.comments[0]), s.comments[0].replies[1].by === undefined];""")
+    assert r == [[True, "2026-10-29T17:00:00.000Z"], ["2026-10-29T17:05:00.000Z", True, True],
+                 [False, "2026-10-29T17:06:00.000Z", "claude"], True, True]
+
+
+def test_a_carried_over_comment_keeps_its_number():
+    r = js(PRELUDE + "return run([create('a', { number: 7 }), create('b')]).comments.map(function (c) { return c.number; });")
+    assert r == [7, 8]
+
+
+def test_fold_orders_every_threads_ops_by_their_time_and_skips_plain_messages():
+    r = js(PRELUDE + """
+      var threads = {
+        'b/02': { messages: [{ ts: 5, text: 'hi' },
+                             { ts: 9, op: { kind: 'reply', id: 'a', at: '2026-10-29T17:03:00Z', reply: { id: 'r', text: 'Yes', by: 'claude' } } }] },
+        'a/01': { messages: [{ ts: 1, op: Object.assign(create('a', { board: 'a/01' }), { at: '2026-10-29T17:01:00Z' }) },
+                             { ts: 2, op: { kind: 'update', id: 'nope', status: 'resolved', at: '2026-10-29T17:02:00Z' } }] }
+      };
+      var f = S.fold(threads, T0);
+      return [f.store.comments.map(function (c) { return [c.id, c.replies.length, c.answeredAt]; }), f.refused.map(function (x) { return x.error; })];""")
+    assert r == [[["a", 1, "2026-10-29T17:03:00.000Z"]], ['No comment "nope".']]

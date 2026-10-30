@@ -20,7 +20,8 @@
         "./skills/slides",
         "./skills/stage",
         "./skills/talk",
-        "./skills/canvas"
+        "./skills/canvas",
+        "./skills/journey"
       ]
     },
     {

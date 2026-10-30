@@ -62,7 +62,9 @@ DATA.groups.forEach(function (g, gi) {
     (g.status ? '<span class="chip chip-' + esc(g.status) + '">' + esc(g.statusLabel || g.status) + '</span>' : '') +
     (g.note ? '<span class="muted">' + esc(g.note) + '</span>' : '') +
     '<span class="muted">' + g.boards.length + ' board' + (g.boards.length === 1 ? '' : 's') + '</span>' +
-    (g.empty && !g.boards.length ? '<span class="muted">' + esc(g.empty) + '</span>' : '');
+    (g.empty && !g.boards.length ? '<span class="muted">' + esc(g.empty) + '</span>' : '') +
+    (DATA.session && DATA.session.reruns && g.id ? '<span class="run-chip" data-run="' + esc(g.id) + '" hidden></span>' +
+      '<button type="button" class="rerun" data-rerun="' + esc(g.id) + '" title="Run this feature again and publish its boards">Re-run</button>' : '');
   var lbl = el('div', 'lbl lbl-row', head);
   layer.appendChild(lbl);
   groupEls.push({ g: g, bg: bg, lbl: lbl, id: 'c-' + (gi + 1) });

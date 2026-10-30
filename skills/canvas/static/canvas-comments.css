@@ -73,3 +73,26 @@
   .c-pop { left: 8px !important; right: 8px; bottom: 8px; top: auto !important; width: auto; max-height: 60vh; }
   .c-panel { width: 100%; }
 }
+/* A canvas in its webcompanion session: Send to Claude, Claude's state,
+   Re-run on each group's title row, and Claude's answers in a thread. */
+.tools .s-send { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.tools .s-send:disabled { background: var(--panel); border-color: var(--line); color: var(--muted); font-weight: 400; cursor: default; }
+.s-claude { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.s-claude.s-listening { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+.s-claude.s-answering, .s-claude.s-waking { color: var(--warn); background: var(--warn-bg); border-color: transparent; }
+.s-claude.s-failing { color: var(--bad); background: var(--bad-bg); border-color: transparent; }
+.lbl-row .rerun { pointer-events: auto; font: inherit; font-size: 12px; line-height: 18px; color: var(--text); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; cursor: pointer; }
+.lbl-row .rerun:hover { border-color: var(--accent); }
+.lbl-row .rerun:disabled { color: var(--muted); cursor: default; border-color: var(--line); }
+.run-chip { font-size: 12px; border-radius: 999px; padding: 1px 8px; line-height: 18px; }
+.run-chip[hidden] { display: none; }
+.run-queued { color: var(--idle); background: var(--idle-bg); }
+.run-running { color: var(--warn); background: var(--warn-bg); }
+.run-passed { color: var(--ok); background: var(--ok-bg); }
+.run-failed { color: var(--bad); background: var(--bad-bg); }
+.c-msg.c-claude { border-left: 3px solid var(--accent); padding-left: 8px; }
+.c-msg .c-text a, .c-item .c-text a { color: var(--accent); word-break: break-all; }
+.c-waiting { color: var(--warn); }
+.c-answered { color: var(--ok); }
+.c-unsent-claude { color: var(--muted); }

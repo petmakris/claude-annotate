@@ -8,38 +8,53 @@
 // this canvas's comments, filtered by status (and scope, on a canvas that
 // shares its comments), and flies to a pin.
 //
-// The comments live in the journey-comments service on main (lomem's
-// `lomem journey comments serve`), reached from the phone and tablet too. The
-// page runs the store's own applyOp (canvas-store.js) on what the service last
-// sent plus the ops not sent yet, which wait in localStorage while the service
-// is down and are sent, in order, once it answers again. A spoken comment is
-// recorded as 16 kHz mono PCM and sent to the service, which turns it into text
-// (no key in the page).
+// The comments live in the canvas's webcompanion session (canvas-session.js):
+// every change is one message in the thread of the board it is about, carrying
+// its op, and the page folds every thread through canvas-store.js. An op made
+// while the daemon cannot be reached waits in localStorage and is sent, in
+// order, once it answers again; each carries its own id as source_event_id,
+// so a resend is never stored twice. Send to Claude sends the comments Claude
+// has not answered as one event to the Claude session that owns the canvas
+// (claude-annotate's /journey), which answers in the same threads. A spoken
+// comment is written down in the browser by Azure's speech SDK, with a
+// ten-minute token from the daemon's /api/speech/token (no key in the page).
 //
 // This fragment runs inside the page's closure (canvas-page.js) and uses its
-// view, box, shotEls, setView, animateTo, setShown and hooks. It runs only on
-// a canvas whose manifest names a comments service.
-if (DATA.comments) {
+// view, box, shotEls, setView, animateTo, setShown, hooks and session. It runs
+// only on a canvas whose data names comments and that is open in its session.
+if (DATA.comments && session) {
   (function () {
-    var CFG = DATA.comments, APP = CFG.canvas, SERVICE = String(CFG.url).replace(/\/+$/, '');
+    var CFG = DATA.comments, APP = CFG.canvas, SID = DATA.session.sid;
     var APP_NAME = CFG.name || DATA.title;
     // A canvas that shares its comments with others (Mealy's and Billpod's) has a scope choice.
     var SCOPES = CFG.scopes || null;
-    var applyOp = CanvasStore.applyOp, pointInBox = M.pointInBox, pinOnScreen = M.pinOnScreen, fitView = M.fitView;
-    var QUEUE_KEY = 'journey-comments-queue', CACHE_KEY = 'journey-comments-cache';
+    var applyOp = CanvasStore.applyOp, fold = CanvasStore.fold, waiting = CanvasStore.waiting;
+    var pointInBox = M.pointInBox, pinOnScreen = M.pinOnScreen, fitView = M.fitView;
+    var QUEUE_KEY = 'canvas-queue:' + SID;
     var pinsEl = document.getElementById('pins'), pop = document.getElementById('c-pop'), hoverEl = document.getElementById('c-hover');
     var panel = document.getElementById('c-panel'), list = document.getElementById('c-list');
     var modeBtn = document.getElementById('c-mode'), panelBtn = document.getElementById('c-panel-btn');
     var statusEl = document.getElementById('c-status'), countEl = document.getElementById('c-count');
+    var sendBtn = document.getElementById('c-send');
 
     function readJson(k, fallback) { try { var v = JSON.parse(load(k) || 'null'); return v === null ? fallback : v; } catch (e) { return fallback; } }
-    var server = readJson(CACHE_KEY, { version: 1, comments: [] });
+    // Every thread as the daemon last sent it, and the ops not sent yet ({anchor, op}).
+    var threads = {};
     var queue = readJson(QUEUE_KEY, []);
-    var online = null, flushing = false, lastError = '';
-    var store = server, mine = [];
+    var online = null, flushing = false, lastError = '', loaded = false;
+    var store = { version: 1, comments: [] }, mine = [];
     function uid(p) { return p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
     function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    // Claude's answers link mockups and boards: links open, everything else stays text.
+    function richText(s) {
+      return escHtml(s).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]|#board-[A-Za-z0-9\/._-]+)/g, function (u) {
+        var ext = u.charAt(0) !== '#';
+        return '<a href="' + u + '"' + (ext ? ' target="_blank" rel="noopener"' : '') + '>' + u + '</a>';
+      });
+    }
     function when(iso) { var d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+    // The thread a comment's ops go in: its board's.
+    function anchorOf(board) { return typeof board === 'number' ? 'board-' + board : String(board); }
 
     // What sits where: each shot's image on the surface, by board and size.
     var shotBox = {};
@@ -52,13 +67,14 @@ if (DATA.comments) {
       });
     }
 
-    // ── State: what the service last sent, plus the ops not sent yet ──
+    // ── State: every thread's ops, plus the ops not sent yet ──
     function rebuild() {
-      var s = server, unsent = {};
+      var s = fold(threads).store, unsent = {};
       for (var i = 0; i < queue.length; i++) {
-        var r = applyOp(s, queue[i], queue[i].at || new Date().toISOString());
+        var q = queue[i].op;
+        var r = applyOp(s, q, q.at || new Date().toISOString());
         s = r.store;
-        var id = queue[i].id || (queue[i].comment && queue[i].comment.id);
+        var id = q.id || (q.comment && q.comment.id);
         if (id) unsent[id] = true;
       }
       store = s;
@@ -66,6 +82,9 @@ if (DATA.comments) {
       mine.forEach(function (c) { c._unsent = !!unsent[c.id]; });
       var open = mine.filter(function (c) { return c.status === 'open'; }).length;
       countEl.textContent = open ? '(' + open + ')' : '';
+      var toSend = unanswered();
+      sendBtn.disabled = !toSend.length || online === false;
+      sendBtn.textContent = 'Send to Claude' + (toSend.length ? ' (' + toSend.length + ')' : '');
       showStatus();
       drawPins();
       if (panel.classList.contains('open')) drawList();
@@ -73,56 +92,88 @@ if (DATA.comments) {
       else if (thread && !editing) drawThread();
     }
     function byId(id) { for (var i = 0; i < mine.length; i++) if (mine[i].id === id) return mine[i]; return null; }
+    // Waiting for Claude and not sent since Petros last wrote on it.
+    function unanswered() { return mine.filter(function (c) { return waiting(c) && !c._unsent && !(c.sentAt && c.sentAt >= c.askedAt); }); }
     function showStatus() {
       var n = queue.length, text = '';
-      if (online === false) text = 'Comments service down' + (n ? ' · ' + n + ' unsent, kept here' : '');
+      if (online === false) text = 'Cannot reach webcompanion' + (n ? ' · ' + n + ' unsent, kept here' : '');
       else if (n) text = n + ' unsent';
       if (lastError) text = (text ? text + ' · ' : '') + lastError;
       statusEl.textContent = text;
       statusEl.classList.toggle('on', !!text);
-      statusEl.title = online === false ? 'Cannot reach ' + SERVICE + '. Comments made now are kept in this browser and sent when it is back.' : '';
+      statusEl.title = online === false ? 'Comments made now are kept in this browser and sent when the daemon answers again.' : '';
     }
     function saveQueue() { save(QUEUE_KEY, JSON.stringify(queue)); }
-    function send(op) {
+    // What a message says to anyone reading the thread without the canvas.
+    function summary(op) {
+      var c = byId(op.id || (op.comment && op.comment.id)), n = c ? '#' + c.number : 'a comment';
+      if (op.kind === 'create') return op.comment.text;
+      if (op.kind === 'reply') return op.reply.text;
+      if (op.kind === 'editReply') return 'Edited a reply on ' + n + ': ' + op.text;
+      if (op.kind === 'deleteReply') return 'Deleted a reply on ' + n;
+      if (op.kind === 'delete') return 'Deleted ' + n;
+      if (op.kind === 'move') return 'Moved ' + n + ' to ' + op.board;
+      if (op.status === 'resolved') return 'Resolved ' + n;
+      if (op.status === 'open') return 'Reopened ' + n;
+      if (op.text) return 'Edited ' + n + ': ' + op.text;
+      if (op.sentAt) return 'Sent ' + n + ' to Claude';
+      return 'Changed ' + n;
+    }
+    function send(op, board) {
       op.at = new Date().toISOString();
-      queue.push(op);
+      op.uid = uid('o');
+      queue.push({ anchor: anchorOf(board), op: op, text: summary(op) });
       saveQueue();
       rebuild();
       flush();
     }
-    function got(s) {
-      if (s && Array.isArray(s.comments)) { server = s; save(CACHE_KEY, JSON.stringify(s)); }
-    }
     function flush() {
       if (flushing || !queue.length) return;
       flushing = true;
-      var batch = queue.slice();
-      fetch(SERVICE + '/ops', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ops: batch }) })
-        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(function (body) {
+      var q = queue[0];
+      session.call('POST', 'threads/' + session.enc(q.anchor), { text: q.text || 'op', role: 'user', op: q.op, source_event_id: q.op.uid })
+        .then(function () {
           online = true;
-          got(body.store);
-          // Sent: drop them, also the refused ones, which could never succeed.
-          queue = queue.slice(batch.length);
+          lastError = '';
+          return session.call('GET', 'threads/' + session.enc(q.anchor)).then(function (t) { threads[q.anchor] = t; });
+        }, function (e) {
+          if (!e.status || e.status >= 500) throw e;
+          // Refused (4xx): it could never succeed, so it is dropped and said.
+          lastError = 'Not saved: ' + e.message;
+        })
+        .then(function () {
+          queue.shift();
           saveQueue();
-          var refused = (body.results || []).filter(function (x) { return x.error; });
-          lastError = refused.length ? 'Not saved: ' + refused[0].error : '';
           flushing = false;
           rebuild();
           if (queue.length) flush();
         })
-        .catch(function () { online = false; flushing = false; showStatus(); });
+        .catch(function () { online = false; flushing = false; rebuild(); });
     }
-    function refresh() {
-      fetch(SERVICE + '/comments', { cache: 'no-store' })
-        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(function (s) { online = true; if (!queue.length) got(s); rebuild(); flush(); })
-        .catch(function () { online = false; showStatus(); });
+    function refresh(anchor) {
+      var got = anchor
+        ? session.call('GET', 'threads/' + session.enc(anchor)).then(function (t) {
+          if (t && t.messages && t.messages.length) threads[anchor] = t; else delete threads[anchor];
+        })
+        : session.call('GET', 'threads').then(function (all) { threads = all || {}; });
+      got.then(function () { online = true; loaded = true; rebuild(); flush(); }, function () { online = false; showStatus(); });
     }
-    // Every 15 s while down, every 60 s while up, and whenever the tab comes back.
-    setInterval(function () { if (online === false || document.visibilityState === 'visible') { if (queue.length) flush(); else refresh(); } }, 15000);
-    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') refresh(); });
-    window.addEventListener('online', refresh);
+    session.on('thread', function (anchor) { refresh(anchor); });
+    session.on('online', function (up) { if (up && online === false) { online = true; flush(); rebuild(); } });
+    window.addEventListener('online', function () { refresh(null); });
+
+    // ── Send to Claude: the comments it has not answered, as one event ──
+    sendBtn.addEventListener('click', function () {
+      var ids = unanswered().map(function (c) { return c.id; });
+      if (!ids.length) return;
+      sendBtn.disabled = true;
+      var at = new Date().toISOString();
+      session.call('POST', 'api/submit', { anchor: '__general__', text: JSON.stringify({ type: 'comments', canvas: APP, ids: ids, at: at }) })
+        .then(function () {
+          lastError = '';
+          ids.forEach(function (id) { var c = byId(id); if (c) send({ kind: 'update', id: id, sentAt: at }, c.board); });
+        }, function (e) { lastError = 'Not sent to Claude: ' + e.message; rebuild(); });
+    });
 
     // ── Pins ──
     var pinEls = {}, draft = null, thread = null, editing = false, filterStatus = 'open', filterScope = 'all';
@@ -190,7 +241,7 @@ if (DATA.comments) {
       draft = {
         id: uid('c'), board: shot.hasAttribute('data-board-num') ? parseInt(shot.getAttribute('data-board'), 10) : shot.getAttribute('data-board'), shot: shot.getAttribute('data-shot'),
         boardTitle: shot.getAttribute('data-title'), chapter: shot.getAttribute('data-chapter'), fx: p.fx, fy: p.fy,
-        scope: 'app', audio: []
+        scope: 'app'
       };
       drawPins();
       openDraft();
@@ -208,6 +259,13 @@ if (DATA.comments) {
     function whereText(c) {
       var where = typeof c.board === 'number' ? 'Board ' + c.board + ' ' + (c.boardTitle || '') : (c.boardTitle || c.board) + (c.chapter ? ' · ' + c.chapter : '');
       return where + (LABELS.length > 1 ? ' · ' + c.shot : '');
+    }
+    // Where the comment stands with Claude: sent and waiting, not sent yet, or answered.
+    function claudeState(c) {
+      if (c.status !== 'open') return '';
+      if (!waiting(c)) return '<span class="c-answered">Claude answered</span>';
+      if (c.sentAt && c.sentAt >= c.askedAt) return '<span class="c-waiting">Sent to Claude · waiting</span>';
+      return '<span class="c-unsent-claude">Not sent to Claude</span>';
     }
     // A comment whose board this canvas no longer has (renamed, or its feature dropped it) stays listed, marked.
     function gone(c) { return !shotBox[c.board + '|' + c.shot]; }
@@ -231,7 +289,7 @@ if (DATA.comments) {
       draft = null;
       closePop();
       send({ kind: 'create', comment: { id: c.id, app: APP, board: c.board, boardTitle: c.boardTitle, chapter: c.chapter, shot: c.shot,
-        fx: c.fx, fy: c.fy, text: text, scope: c.scope, audio: c.audio.length ? c.audio : undefined } });
+        fx: c.fx, fy: c.fy, text: text, scope: c.scope } }, c.board);
     }
 
     // ── The thread: a comment and its replies ──
@@ -257,7 +315,7 @@ if (DATA.comments) {
         '<button type="button" data-c="close" aria-label="Close">✕</button></div>';
       var meta = '<div class="c-meta"><span class="c-chip ' + c.status + '">' + c.status + '</span>' +
         scopeText(c) + '<span>' + escHtml(when(c.createdAt)) + '</span>' +
-        (c.chapter ? '<span>' + escHtml(c.chapter) + '</span>' : '') + (c._unsent ? '<span>unsent</span>' : '') + '</div>';
+        (c.chapter ? '<span>' + escHtml(c.chapter) + '</span>' : '') + (c._unsent ? '<span>unsent</span>' : '') + claudeState(c) + '</div>';
       var body;
       if (editTarget === 'comment') {
         body = '<div class="c-msg">' + meta + '<textarea id="c-edit">' + escHtml(c.text) + '</textarea>' +
@@ -274,9 +332,10 @@ if (DATA.comments) {
             '<div class="c-row"><span class="c-note" id="c-note"></span><span class="grow"></span>' + micButton() +
             '<button type="button" data-c="edit-cancel">Cancel</button><button type="button" class="primary" data-c="reply-save">Save</button></div></div>';
         } else {
-          body += '<div class="c-msg" data-reply="' + escHtml(r.id) + '"><div class="c-meta"><span>Reply · ' + escHtml(when(r.createdAt)) + (r.updatedAt ? ' · edited' : '') + '</span></div>' +
-            '<div class="c-text">' + escHtml(r.text) + '</div>' +
-            '<div class="c-meta"><button type="button" data-c="reply-edit">Edit</button><button type="button" data-c="reply-delete">Delete</button></div></div>';
+          var claude = r.by === 'claude';
+          body += '<div class="c-msg' + (claude ? ' c-claude' : '') + '" data-reply="' + escHtml(r.id) + '"><div class="c-meta"><span>' + (claude ? '<b>Claude</b>' : 'Reply') + ' · ' + escHtml(when(r.createdAt)) + (r.updatedAt ? ' · edited' : '') + '</span></div>' +
+            '<div class="c-text">' + richText(r.text) + '</div>' +
+            (claude ? '' : '<div class="c-meta"><button type="button" data-c="reply-edit">Edit</button><button type="button" data-c="reply-delete">Delete</button></div>') + '</div>';
         }
       });
       var reply = editTarget ? '' : '<textarea id="c-reply" placeholder="Reply" aria-label="Reply"></textarea>' +
@@ -329,34 +388,31 @@ if (DATA.comments) {
       if (k === 'post') return post();
       if (!c) return;
       var replyEl = b.closest('[data-reply]'), rid = replyEl && replyEl.getAttribute('data-reply');
-      if (k === 'resolve') send({ kind: 'update', id: c.id, status: c.status === 'open' ? 'resolved' : 'open' });
-      else if (k === 'delete') { if (confirm('Delete comment ' + c.number + ' and its replies?')) { send({ kind: 'delete', id: c.id }); closePop(); } }
-      else if (k === 'edit') { pendingAudio = []; drawThread('comment'); }
+      if (k === 'resolve') send({ kind: 'update', id: c.id, status: c.status === 'open' ? 'resolved' : 'open' }, c.board);
+      else if (k === 'delete') { if (confirm('Delete comment ' + c.number + ' and its replies?')) { send({ kind: 'delete', id: c.id }, c.board); closePop(); } }
+      else if (k === 'edit') { drawThread('comment'); }
       else if (k === 'edit-cancel') drawThread();
       else if (k === 'edit-save') {
         var t = document.getElementById('c-edit').value.trim();
         if (!t || recording) return;
         editing = false;
-        send({ kind: 'update', id: c.id, text: t, scope: editScope, audio: pendingAudio.length ? pendingAudio : undefined });
-        pendingAudio = [];
+        send({ kind: 'update', id: c.id, text: t, scope: editScope }, c.board);
         drawThread();
       }
-      else if (k === 'reply-edit') { pendingAudio = []; drawThread(rid); }
+      else if (k === 'reply-edit') { drawThread(rid); }
       else if (k === 'reply-save') {
         var rt = document.getElementById('c-edit').value.trim();
         if (!rt || recording) return;
         editing = false;
-        send({ kind: 'editReply', id: c.id, replyId: rid, text: rt, audio: pendingAudio.length ? pendingAudio : undefined });
-        pendingAudio = [];
+        send({ kind: 'editReply', id: c.id, replyId: rid, text: rt }, c.board);
         drawThread();
       }
-      else if (k === 'reply-delete') { if (confirm('Delete this reply?')) send({ kind: 'deleteReply', id: c.id, replyId: rid }); }
+      else if (k === 'reply-delete') { if (confirm('Delete this reply?')) send({ kind: 'deleteReply', id: c.id, replyId: rid }, c.board); }
       else if (k === 'reply') {
         var input = document.getElementById('c-reply'), text = input.value.trim();
         if (!text || recording) return;
         input.value = '';
-        send({ kind: 'reply', id: c.id, reply: { id: replyId || uid('r'), text: text, audio: pendingAudio.length ? pendingAudio : undefined } });
-        pendingAudio = []; replyId = null;
+        send({ kind: 'reply', id: c.id, reply: { id: uid('r'), text: text } }, c.board);
       }
     });
     // Enter posts, Shift+Enter is a new line; Esc closes.
@@ -370,89 +426,88 @@ if (DATA.comments) {
       if (b) b.click();
     });
 
-    // ── Speaking: record 16 kHz mono PCM, the service turns it into text ──
-    var recording = null, pendingAudio = [], replyId = null;
+    // ── Speaking: Azure's browser SDK writes it down, English or Greek per phrase ──
+    // The SDK (378 KB, vendor/ next to the page) loads the first time the mic is pressed.
+    var recording = null, sdkP = null, tok = null, tokUntil = 0;
     function note(text, bad) {
       var n = document.getElementById('c-note');
       if (n) { n.textContent = text; n.classList.toggle('bad', !!bad); }
     }
     function target() { return document.getElementById('c-edit') || document.getElementById('c-text') || document.getElementById('c-reply'); }
+    function loadSdk() {
+      if (window.SpeechSDK) return Promise.resolve(window.SpeechSDK);
+      if (!sdkP) {
+        sdkP = new Promise(function (resolve, reject) {
+          var sc = document.createElement('script');
+          sc.src = 'vendor/speech-sdk.min.js';
+          sc.onload = function () { if (window.SpeechSDK) resolve(window.SpeechSDK); else { sdkP = null; reject(new Error('the speech SDK did not load')); } };
+          sc.onerror = function () { sdkP = null; sc.remove(); reject(new Error('the speech SDK is missing next to the page')); };
+          document.head.appendChild(sc);
+        });
+      }
+      return sdkP;
+    }
+    // A ten-minute token from the daemon (the key stays on main), kept until a minute before it ends.
+    function token() {
+      if (tok && Date.now() < tokUntil) return Promise.resolve(tok);
+      return fetch('/api/speech/token', { method: 'POST', headers: { 'X-WebCompanion-Contract': '1' }, cache: 'no-store' })
+        .then(function (r) {
+          if (!r.ok) return r.text().then(function (t) { var e = new Error((t || '').trim() || 'HTTP ' + r.status); e.status = r.status; throw e; });
+          return r.json();
+        })
+        .then(function (t) { tok = t; tokUntil = Date.now() + (t.expires_in || 540) * 1000; return t; });
+    }
+    function joined(base, parts) { var t = parts.filter(Boolean).join(' '); return base ? base.replace(/\s*$/, ' ') + t : t; }
     function toggleRecording(btn) {
       if (recording) return stopRecording(false);
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { note('This browser cannot record here.', true); return; }
       note('Starting the microphone…');
-      navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } }).then(function (stream) {
-        var Ctx = window.AudioContext || window.webkitAudioContext;
-        var ctx = new Ctx();
-        var src = ctx.createMediaStreamSource(stream);
-        var proc = ctx.createScriptProcessor(4096, 1, 1);
-        var chunks = [];
-        proc.onaudioprocess = function (ev) { chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0))); };
-        src.connect(proc);
-        proc.connect(ctx.destination);
-        recording = { stream: stream, ctx: ctx, proc: proc, src: src, chunks: chunks, btn: btn, started: Date.now() };
-        btn.classList.add('rec');
-        btn.textContent = '■';
-        btn.title = 'Stop and write it down';
-        note('Recording… press ■ to stop');
-      }).catch(function (err) { note('No microphone: ' + (err && err.message || err), true); });
+      btn.disabled = true;
+      Promise.all([loadSdk(), token()]).then(function (x) {
+        var SDK = x[0], t = x[1];
+        var cfg = SDK.SpeechConfig.fromAuthorizationToken(t.token, t.region);
+        cfg.setProperty(SDK.PropertyId.SpeechServiceConnection_LanguageIdMode, 'Continuous');
+        var auto = SDK.AutoDetectSourceLanguageConfig.fromLanguages(['en-US', 'el-GR']);
+        var rec = SDK.SpeechRecognizer.FromConfig(cfg, auto, SDK.AudioConfig.fromDefaultMicrophoneInput());
+        var field = target(), base = field ? field.value : '', parts = [], heard = {};
+        function put(extra) { if (field && document.body.contains(field)) field.value = joined(base, parts.concat(extra ? [extra] : [])); }
+        rec.recognizing = function (_r, e) { put(e.result.text); };
+        rec.recognized = function (_r, e) {
+          if (e.result.reason !== SDK.ResultReason.RecognizedSpeech || !e.result.text) return;
+          parts.push(e.result.text);
+          var lang = '';
+          try { lang = SDK.AutoDetectSourceLanguageResult.fromResult(e.result).language || ''; } catch (err) { lang = ''; }
+          heard[lang] = (heard[lang] || 0) + e.result.text.length;
+          put();
+        };
+        rec.canceled = function (_r, e) {
+          if (e.reason === SDK.CancellationReason.Error) { tok = null; note('Speech failed: ' + (e.errorDetails || 'Azure refused'), true); }
+          stopRecording(true);
+        };
+        recording = { rec: rec, btn: btn, heard: heard, field: field };
+        rec.startContinuousRecognitionAsync(function () {
+          btn.disabled = false;
+          btn.classList.add('rec');
+          btn.textContent = '■';
+          btn.title = 'Stop';
+          note('Listening… press ■ to stop');
+        }, function (err) { btn.disabled = false; recording = null; note('No microphone: ' + err, true); });
+      }).catch(function (e) {
+        btn.disabled = false;
+        note(e.status === 503 ? 'Speech is not set up on main (webcompanion speech.env). Type instead.' : 'Speech is off: ' + e.message, true);
+      });
     }
     function stopRecording(discard) {
       var r = recording;
       if (!r) return;
       recording = null;
-      try { r.proc.disconnect(); r.src.disconnect(); } catch (e) {}
-      r.stream.getTracks().forEach(function (t) { t.stop(); });
-      var rate = r.ctx.sampleRate;
-      r.ctx.close();
-      if (r.btn) { r.btn.classList.remove('rec'); r.btn.textContent = '🎤'; r.btn.title = 'Speak: press to record, press again to stop'; }
+      var done = function () { try { r.rec.close(); } catch (e) {} };
+      r.rec.stopContinuousRecognitionAsync(done, done);
+      if (r.btn) { r.btn.disabled = false; r.btn.classList.remove('rec'); r.btn.textContent = '🎤'; r.btn.title = 'Speak: press to record, press again to stop'; }
       if (discard) return;
-      var wav = toWav(r.chunks, rate);
-      if (!wav) { note('Nothing was recorded.', true); return; }
-      var forId = draft ? draft.id : thread || uid('c');
-      if (!draft && thread && !editing && !replyId) replyId = uid('r');
-      var recId = forId + (replyId && !editing ? '-' + replyId : '') + '-' + Date.now().toString(36);
-      var btn = r.btn, field = target();
-      if (btn) btn.disabled = true;
-      note('Writing it down…');
-      fetch(SERVICE + '/transcribe?id=' + encodeURIComponent(recId), { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: wav })
-        .then(function (res) { return res.json().then(function (j) { return { ok: res.ok, j: j }; }); })
-        .then(function (x) {
-          online = true;
-          if (btn) btn.disabled = false;
-          if (x.j.audio) { if (draft && draft.id === forId) draft.audio.push(x.j.audio); else pendingAudio.push(x.j.audio); }
-          if (!x.ok) { note(x.j.error || 'Speech failed.', true); return; }
-          if (!x.j.text) { note('No words heard.', true); return; }
-          if (field && document.body.contains(field)) {
-            field.value = field.value ? field.value.replace(/\s*$/, ' ') + x.j.text : x.j.text;
-            field.focus();
-            field.setSelectionRange(field.value.length, field.value.length);
-          }
-          note(x.j.language === 'el-GR' ? 'Heard in Greek. Check it, then send.' : 'Check it, then send.');
-        })
-        .catch(function () { if (btn) btn.disabled = false; online = false; showStatus(); note('The comments service is down, so speech is off. Type instead.', true); });
-    }
-    function toWav(chunks, rate) {
-      var n = 0, i, j;
-      for (i = 0; i < chunks.length; i++) n += chunks[i].length;
-      if (n < rate * 0.2) return null;
-      var ratio = rate / 16000, out = Math.floor(n / ratio);
-      var all = new Float32Array(n), at = 0;
-      for (i = 0; i < chunks.length; i++) { all.set(chunks[i], at); at += chunks[i].length; }
-      var buf = new ArrayBuffer(44 + out * 2), v = new DataView(buf);
-      function str(o, s) { for (var k = 0; k < s.length; k++) v.setUint8(o + k, s.charCodeAt(k)); }
-      str(0, 'RIFF'); v.setUint32(4, 36 + out * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
-      v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 16000, true);
-      v.setUint32(28, 32000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, out * 2, true);
-      // Each output sample is the mean of the input samples it covers.
-      for (i = 0; i < out; i++) {
-        var a = Math.floor(i * ratio), b = Math.min(n, Math.floor((i + 1) * ratio)), s = 0;
-        for (j = a; j < b; j++) s += all[j];
-        s = b > a ? s / (b - a) : all[a];
-        s = Math.max(-1, Math.min(1, s));
-        v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-      }
-      return new Blob([buf], { type: 'audio/wav' });
+      var greek = (r.heard['el-GR'] || 0) > (r.heard['en-US'] || 0);
+      if (r.field && document.body.contains(r.field)) { r.field.focus(); r.field.setSelectionRange(r.field.value.length, r.field.value.length); }
+      note(greek ? 'Heard in Greek. Check it, then send.' : 'Check it, then send.');
     }
 
     // ── Hover ──
@@ -507,7 +562,7 @@ if (DATA.comments) {
           '<div class="c-text">' + escHtml(c.text) + '</div>' +
           '<div class="c-meta">' + scopeText(c) + '<span>' + escHtml(when(c.createdAt)) + '</span>' +
           (c.replies.length ? '<span>' + c.replies.length + (c.replies.length === 1 ? ' reply' : ' replies') + '</span>' : '') +
-          (c.status === 'resolved' ? '<span>resolved</span>' : '') + (c._unsent ? '<span>unsent</span>' : '') +
+          (c.status === 'resolved' ? '<span>resolved</span>' : '') + (c._unsent ? '<span>unsent</span>' : '') + claudeState(c) +
           (gone(c) ? '<span class="c-gone">board no longer on this canvas</span>' : '') + '</div></button>';
       }).join('');
     }
@@ -552,10 +607,13 @@ if (DATA.comments) {
       return false;
     };
     // For the checks: the state and the pin layer, read-only.
-    window.canvasComments = { state: function () { return { online: online, queue: queue.length, comments: mine.length }; }, flyTo: flyTo, refresh: refresh };
+    window.canvasComments = {
+      state: function () { return { online: online, loaded: loaded, queue: queue.length, comments: mine.length, unanswered: unanswered().length }; },
+      comments: function () { return JSON.parse(JSON.stringify(mine)); }, flyTo: flyTo, refresh: refresh, open: openThread
+    };
 
     measureShots();
     rebuild();
-    refresh();
+    refresh(null);
   })();
 }

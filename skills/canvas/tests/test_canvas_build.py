@@ -12,6 +12,7 @@ from skills.canvas import canvas
 
 PIL = pytest.importorskip("PIL.Image")
 TOOL = Path(__file__).resolve().parents[3] / "tools" / "canvas.py"
+REAL_ENSURE = canvas.ensure_session
 
 
 def png(path: Path, w: int, h: int, colour=(200, 220, 240)) -> None:
@@ -26,9 +27,9 @@ def journey(tmp: Path) -> Path:
     png(tmp / "02-b.png", 1600, 1748)
     m = {
         "title": "Mealy journey", "id": "mealy", "subtitle": "petros-journey",
-        "comments": {"url": "https://journey-comments.main.okimotus.com", "canvas": "mealy", "name": "Mealy",
-                     "scopes": {"app": "This app", "both": "Both apps"}},
-        "groups": [{"name": "Account", "status": "passed", "boards": [
+        "session": {"kind": "journey", "slug": "mealy", "cwd": "/home/x/mealy", "reruns": True},
+        "comments": {"canvas": "mealy", "name": "Mealy", "scopes": {"app": "This app", "both": "Both apps"}},
+        "groups": [{"name": "Account", "id": "account", "status": "passed", "boards": [
             {"number": 1, "title": "Sign in </script><b>", "caption": "Reached: start",
              "shots": [{"label": "Desktop", "file": "01-a.png", "viewport": {"width": 1600, "height": 1000}},
                        {"label": "Phone", "file": "01-a.phone.png", "width": 390, "height": 1904,
@@ -37,6 +38,21 @@ def journey(tmp: Path) -> Path:
     }
     (tmp / "canvas.json").write_text(json.dumps(m))
     return tmp / "canvas.json"
+
+
+@pytest.fixture(autouse=True)
+def no_daemon(monkeypatch):
+    """No test reaches webcompanion: the session a build would find or make is a stand-in."""
+    made = []
+
+    def fake(se, out):
+        made.append((se, out))
+        (out / canvas.BOOT).write_text(canvas.BOOT_JS)
+        return {"sid": "s-1", "slug": se["slug"], "kind": se["kind"], "url": "https://wc.example/s/s-1/"}
+
+    monkeypatch.setattr(canvas, "ensure_session", fake)
+    monkeypatch.setenv("CANVAS_NO_SESSION", "1")
+    return made
 
 
 def page_data(page: Path) -> dict:
@@ -58,7 +74,9 @@ def test_a_good_manifest_has_no_problems(tmp_path):
     (lambda m: m["groups"][0]["boards"][0]["shots"][0].update(file="nope.png"), "nope.png does not exist"),
     (lambda m: m["groups"][0]["boards"][0]["shots"][1].update(label="Desktop"), "Desktop twice on one board"),
     (lambda m: m["comments"].update(canvas="Mealy App"), "comments.canvas"),
-    (lambda m: m["comments"].update(url="journey-comments"), "comments.url"),
+    (lambda m: m["session"].update(kind="Journey!"), "session.kind"),
+    (lambda m: m["session"].update(cwd="relative"), "session.cwd"),
+    (lambda m: m["groups"][0].update(id="Account Feature"), "groups[0].id"),
     (lambda m: m["groups"][0]["boards"][0].update(status="broken"), "status"),
     (lambda m: m["groups"][0]["boards"][0]["shots"][0].update(viewport={"width": 0}), "viewport"),
     (lambda m: m["groups"][0]["boards"][0].update(change="moved"), "change: one of changed, unchanged, new"),
@@ -123,7 +141,7 @@ def test_a_rebuild_keeps_thumbnails_newer_than_their_image(tmp_path):
 def test_the_page_runs_the_tested_scripts_and_names_its_shots_the_way_comments_need():
     page = canvas.template()
     static = Path(canvas.__file__).parent / "static"
-    for f in ("canvas-math.js", "canvas-store.js", "canvas-page.js", "canvas-comments.js"):
+    for f in ("canvas-math.js", "canvas-store.js", "canvas-page.js", "canvas-session.js", "canvas-comments.js"):
         assert (static / f).read_text() in page
     assert page.count(canvas.DATA_MARK) == 1
     assert "loading=" not in page
@@ -208,3 +226,40 @@ def test_boards_with_ids_may_repeat_numbers_and_carry_their_id_to_the_page(tmp_p
         for b in g["boards"]:
             del b["id"]
     assert any("1 is also" in e for e in canvas.check(m, tmp_path))
+
+
+def test_a_session_canvas_carries_its_session_group_ids_and_build_time_to_the_page(tmp_path, no_daemon):
+    page = canvas.build(journey(tmp_path), tmp_path / "out")
+    d = page_data(page)
+    assert d["session"] == {"sid": "s-1", "slug": "mealy", "kind": "journey", "url": "https://wc.example/s/s-1/", "reruns": True}
+    assert d["groups"][0]["id"] == "account"
+    assert d["comments"]["canvas"] == "mealy"
+    assert d["built"].endswith("Z")
+    assert no_daemon[0][0]["cwd"] == "/home/x/mealy" and no_daemon[0][1] == tmp_path / "out"
+    assert (tmp_path / "out" / "wc-boot.js").read_text() == canvas.BOOT_JS
+
+
+def test_without_its_session_a_canvas_builds_with_no_comments_and_says_why(tmp_path, monkeypatch):
+    def down(se, out):
+        raise canvas.SessionUnavailable("cannot reach the webcompanion daemon")
+
+    monkeypatch.setattr(canvas, "ensure_session", down)
+    d = page_data(canvas.build(journey(tmp_path), tmp_path / "out"))
+    assert "comments" not in d and "session" not in d
+    assert "Built without its webcompanion session (cannot reach the webcompanion daemon)" in d["banner"]
+
+
+def test_the_real_ensure_session_stops_at_once_when_told_there_is_no_daemon(tmp_path):
+    with pytest.raises(canvas.SessionUnavailable):
+        REAL_ENSURE({"kind": "journey", "slug": "mealy", "cwd": "/x"}, tmp_path)
+
+
+def test_comments_without_a_session_are_left_out_so_an_old_manifest_still_builds(tmp_path):
+    p = journey(tmp_path)
+    m = json.loads(p.read_text())
+    m.pop("session")
+    m["comments"]["url"] = "https://journey-comments.main.okimotus.com"
+    p.write_text(json.dumps(m))
+    assert canvas.check(m, tmp_path) == []
+    d = page_data(canvas.build(p, tmp_path / "out"))
+    assert "comments" not in d and "session" not in d and "banner" not in d

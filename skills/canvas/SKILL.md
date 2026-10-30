@@ -27,7 +27,8 @@ the same way.
         "shots": [
           {"label": "Desktop", "file": "01-overview.png", "width": 1600, "height": 1000, "viewport": {"width": 1600, "height": 1000}},
           {"label": "Phone", "file": "01-overview.phone.png", "width": 390, "height": 1240, "viewport": {"width": 390, "height": 844}}]}]}],
-     "comments": {"url": "https://journey-comments.main.okimotus.com", "canvas": "billpod", "name": "Billpod"}
+     "session": {"kind": "journey", "slug": "billpod", "cwd": "/home/me/checkout", "reruns": true},
+     "comments": {"canvas": "billpod", "name": "Billpod"}
    }
    ```
 
@@ -37,8 +38,11 @@ the same way.
    The page then outlines changed and new boards, adds Changed only and a count to the toolbar, and
    opens a changed shot now, before or side by side. The project does the comparing.
 
-   Leave `comments` out unless pins on the shots are wanted. Its `canvas` id is where they are kept
-   in the journey-comments service on main; never reuse another canvas's id.
+   Leave `session` and `comments` out unless pins on the shots are wanted. With a `session` the
+   canvas lives in a webcompanion session (found or made at build, the folder registered as its
+   page) and its comments are that session's threads; a copy of the page opened elsewhere goes to
+   the session's. `reruns` adds Send to Claude, Re-run per group (its `id`) and Re-run all, for a
+   canvas a Claude session answers (`/journey`). Never reuse another canvas's `canvas` id.
 
 2. **Check and build** (Pillow makes the thumbnails):
 

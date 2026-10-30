@@ -4,6 +4,12 @@
 // for every canvas, so a project can vendor it and only put its data in.
 (function () {
   var D = JSON.parse(document.getElementById('canvas-data').textContent);
+  // A canvas that lives in a webcompanion session is that session's page: a
+  // copy opened anywhere else (the shared folder on files.main) goes there.
+  if (D.session && D.session.url && !/^\/s\/[^\/]+\/assets\//.test(location.pathname)) {
+    location.replace(D.session.url.replace(/\/?$/, '/') + 'assets/index.html' + location.hash);
+    return;
+  }
   function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   document.title = D.title;
   var labels = D.labels || [];
@@ -15,10 +21,17 @@
       '</span>';
   }
   var comments = '';
-  if (D.comments) {
+  if (D.comments && D.session) {
     comments = '<button type="button" id="c-mode" class="c-toggle" aria-pressed="false" title="Comment on a screenshot (C)">Comment</button>' +
       '<button type="button" id="c-panel-btn" class="c-toggle" aria-pressed="false" title="Every comment on this canvas">Comments <span id="c-count"></span></button>' +
+      '<button type="button" id="c-send" class="primary s-send" disabled title="Send the comments Claude has not answered to the Claude session of this canvas">Send to Claude</button>' +
       '<span class="c-status" id="c-status" role="status"></span>';
+  }
+  // A journey canvas: Claude's state, and Re-run all (each group has its own Re-run).
+  var session = '';
+  if (D.session) {
+    session = '<span class="s-claude" id="s-claude" role="status" title="The Claude session that answers this canvas"></span>' +
+      (D.session.reruns ? '<button type="button" id="s-rerun-all" title="Run every feature again and publish the canvas">Re-run all</button>' : '');
   }
   // What changed since an earlier capture: a count and the Changed only button.
   // A board with no `change` counts as unchanged; the failure board is no board.
@@ -52,7 +65,7 @@
     '<button type="button" data-zoom="in" aria-label="Zoom in" title="Zoom in (+)">+</button>' +
     '<button type="button" data-zoom="fit" title="Every board in the window (Shift+1)">Fit all</button>' +
     '<button type="button" data-zoom="actual" title="Boards at their drawn size (Shift+0)">100%</button>' +
-    '<button type="button" id="theme" title="Light or dark">◐</button>' + comments + '</div></div>' +
+    '<button type="button" id="theme" title="Light or dark">◐</button>' + session + comments + '</div></div>' +
     ((D.meta || []).length ? '<div class="meta">' + D.meta.map(function (m) { return '<span>' + esc(m) + '</span>'; }).join('') + '</div>' : '') +
     (CH && (CH.removed || []).length ? '<div class="meta chg-removed"><span><strong>' + CH.removed.length + ' removed</strong>' +
       (CH.since ? ' since ' + esc(CH.since) : '') + ':</span>' + CH.removed.map(function (r) {
@@ -64,7 +77,7 @@
       ? ' <a href="#failure">See where it stopped</a>.' : '');
     banner.hidden = false;
   }
-  if (D.comments) {
+  if (D.comments && D.session) {
     var scopes = D.comments.scopes;
     document.getElementById('canvas').insertAdjacentHTML('beforeend',
       '<div class="pins" id="pins"></div>' +
