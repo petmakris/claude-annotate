@@ -306,9 +306,17 @@ def test_a_long_answer_for_one_app_never_holds_another_apps_wake(monkeypatch):
 
 
 def test_the_build_item_carries_the_published_pages_own_time_so_a_reload_lands_on_it(tmp_path, monkeypatch):
-    monkeypatch.setattr(journey, "OUTBOX", tmp_path)
-    (tmp_path / "mealy-journey").mkdir()
-    (tmp_path / "mealy-journey" / "index.html").write_text(
+    monkeypatch.setattr(journey, "CANVASES", tmp_path)
+    (tmp_path / "mealy").mkdir()
+    (tmp_path / "mealy" / "index.html").write_text(
         '<script type="application/json" id="canvas-data">{"title":"x","built":"2026-10-30T08:00:41.454Z","groups":[]}</script>')
     assert journey.page_built("mealy") == "2026-10-30T08:00:41.454Z"
     assert journey.page_built("billpod") is None
+
+
+def test_the_published_canvas_lives_outside_the_outbox_and_its_link_is_the_sessions_by_slug(monkeypatch):
+    monkeypatch.setattr(journey, "public_base", lambda: "https://webcompanion.main.okimotus.com")
+    assert journey.canvas_dir("billpod") == journey.HOME / ".local" / "share" / "lomem" / "journey-canvas" / "billpod"
+    assert journey.stable_link("mealy") == "https://webcompanion.main.okimotus.com/s/mealy/"
+    assert journey.board_link("tunatutor", "today/01-today") == \
+        "https://webcompanion.main.okimotus.com/s/tunatutor/#board-today/01-today"

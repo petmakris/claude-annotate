@@ -39,8 +39,8 @@ A canvas with a `session` lives in a webcompanion session (contract in ~/project
 docs/contract.md): `build` finds the live session of that kind and slug, or reopens or creates it
 (in `cwd`), registers the built folder as its page (`wc-boot.js`, which opens `assets/index.html`),
 and puts its sid and link in the page. The page then keeps its comments in the session's threads
-(one thread per board, each message one op of canvas-store.js), and a copy of the page opened
-anywhere else (files.main.okimotus.com) goes to the session's. With `reruns`, every group whose
+(one thread per board, each message one op of canvas-store.js); its link is the session's page,
+so build it outside ~/Outbox. With `reruns`, every group whose
 `id` is set gets a Re-run button and the toolbar Re-run all and Send to Claude: each is an event
 on the session for the Claude session that owns it (claude-annotate's /journey), and the group shows
 the run's state from the session's `run/<group id>` item. Without the daemon the canvas builds

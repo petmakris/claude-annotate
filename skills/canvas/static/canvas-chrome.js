@@ -4,12 +4,6 @@
 // for every canvas, so a project can vendor it and only put its data in.
 (function () {
   var D = JSON.parse(document.getElementById('canvas-data').textContent);
-  // A canvas that lives in a webcompanion session is that session's page: a
-  // copy opened anywhere else (the shared folder on files.main) goes there.
-  if (D.session && D.session.url && !/^\/s\/[^\/]+\/assets\//.test(location.pathname)) {
-    location.replace(D.session.url.replace(/\/?$/, '/') + 'assets/index.html' + location.hash);
-    return;
-  }
   function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   document.title = D.title;
   var labels = D.labels || [];

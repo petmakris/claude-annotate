@@ -40,8 +40,8 @@ the same way.
 
    Leave `session` and `comments` out unless pins on the shots are wanted. With a `session` the
    canvas lives in a webcompanion session (found or made at build, the folder registered as its
-   page) and its comments are that session's threads; a copy of the page opened elsewhere goes to
-   the session's. `reruns` adds Send to Claude, Re-run per group (its `id`) and Re-run all, for a
+   page) and its comments are that session's threads. Its link is the session's page
+   (`https://webcompanion.main.okimotus.com/s/<slug>/`), so build it outside `~/Outbox`. `reruns` adds Send to Claude, Re-run per group (its `id`) and Re-run all, for a
    canvas a Claude session answers (`/journey`). Never reuse another canvas's `canvas` id.
 
 2. **Check and build** (Pillow makes the thumbnails):

@@ -17,7 +17,8 @@ allowed-tools:
 full form. It talks to webcompanion on this machine and needs no exported variables.
 
 An app's **journey canvas** is a webcompanion session (kind `journey`, slug = the app) whose page is
-the canvas lomem publishes to `~/Outbox/<app>-journey`. Petros comments on its boards, presses
+the canvas lomem publishes to `~/.local/share/lomem/journey-canvas/<app>`. Its one link is
+`https://webcompanion.main.okimotus.com/s/<app>/` (mealy, billpod, tunatutor). Petros comments on its boards, presses
 **Send to Claude** (the comments Claude has not answered, as one event), **Re-run** on a feature or
 **Re-run all**. This session answers. One Claude session per app; it lives only on petros-main, in
 the app's **journey checkout** (`J apps` lists them: `~/projects/lomem-checkouts/<nn>-petros-journey-<app>`,
@@ -44,7 +45,7 @@ If `hostname` is not `petros-main`, do nothing else. Say, in one line each:
    `JOURNEY_SUPERSEDED`, do not: another session owns the app now (say so, one line).
 3. `J pending <app>` — events waiting, comments waiting for Claude, run states. Handle every event
    (below), oldest first. A comment that waits but is in no event was not sent yet: leave it.
-4. Tell Petros the canvas link (`J link <app>`, the first line: one stable link per app) and what you
+4. Tell Petros the canvas link (`J link <app>`: `https://webcompanion.main.okimotus.com/s/<app>/`) and what you
    answered, in a few lines. Then end the turn; the watcher brings the next event.
 
 ## `/journey <app> resume` — the doorman woke you

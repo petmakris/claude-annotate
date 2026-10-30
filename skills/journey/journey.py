@@ -4,9 +4,10 @@
 Every app with a journey (mealy, billpod, tunatutor) has, on petros-main only:
 
   * a webcompanion session of kind `journey`, slug = the app, whose page is the
-    app's published canvas (~/Outbox/<app>-journey, built by lomem's
-    `<app> journey publish` with claude-annotate's canvas viewer). Comments are
-    its threads, one per board; Send to Claude and Re-run are events on it.
+    app's published canvas (~/.local/share/lomem/journey-canvas/<app>, built by
+    lomem's `<app> journey publish` with claude-annotate's canvas viewer), at
+    https://webcompanion.main.okimotus.com/s/<app>/. Comments are its threads,
+    one per board; Send to Claude and Re-run are events on it.
   * a journey checkout, ~/projects/lomem-checkouts/<nn>-petros-journey-<app>
     (env's machines/claude-sessions, line `main journey-<app> <dir>`).
   * one Claude session, whose id is ~/.local/state/journey/<app>/claude-session.
@@ -72,7 +73,8 @@ KIND = "journey"
 HOME = Path.home()
 ENV_HOME = Path(os.environ.get("ENV_HOME") or HOME / "projects" / "env")
 STATE_ROOT = Path(os.environ.get("JOURNEY_STATE") or HOME / ".local" / "state" / "journey")
-OUTBOX = Path(os.environ.get("JOURNEY_OUTBOX") or HOME / "Outbox")
+# Where lomem's `<app> journey publish` writes each app's canvas (one folder per app).
+CANVASES = Path(os.environ.get("JOURNEY_CANVASES") or HOME / ".local" / "share" / "lomem" / "journey-canvas")
 WC_STATE = HOME / ".claude" / "webcompanion"
 HOST = "petros-main"
 MACHINE = "main"
@@ -133,12 +135,13 @@ def state_dir(app: str) -> Path:
     return d
 
 
-def outbox(app: str) -> Path:
-    return OUTBOX / f"{app}-journey"
+def canvas_dir(app: str) -> Path:
+    return CANVASES / app
 
 
 def stable_link(app: str) -> str:
-    return f"https://files.main.okimotus.com/{app}-journey/index.html"
+    """The canvas's one link: its session's page by slug, which opens the canvas."""
+    return f"{public_base().rstrip('/')}/s/{app}/"
 
 
 def now_iso() -> str:
@@ -274,13 +277,13 @@ def ensure(app: str) -> dict:
                                                    "title": f"{APPS[app]['name']} journey"})
         if row.get("slug") != app:
             raise Refused(f"asked webcompanion for journey session {app} and got {row.get('slug')}")
-    folder = outbox(app)
+    folder = canvas_dir(app)
     if folder.is_dir():
         boot = folder / "wc-boot.js"
         if not boot.exists():
             boot.write_text("location.replace('assets/index.html' + location.hash);\n")
         wc.register_assets(row["sid"], str(folder), "wc-boot.js", kind=KIND)
-    return {"sid": row["sid"], "slug": app, "url": session_url(row["sid"])}
+    return {"sid": row["sid"], "slug": app, "url": stable_link(app)}
 
 
 def sid_of(app: str) -> str:
@@ -297,10 +300,6 @@ def public_base() -> str:
     except (OSError, subprocess.SubprocessError):
         out = ""
     return out if out.startswith("http") else "http://127.0.0.1:3080"
-
-
-def session_url(sid: str) -> str:
-    return f"{public_base().rstrip('/')}/s/{sid}/"
 
 
 def session_dirs(sid: str) -> dict:
@@ -437,12 +436,12 @@ def watch(app: str, session_id: str) -> int:
 def board_files(app: str, board) -> list[str]:
     if not isinstance(board, str) or "/" not in board:
         return []
-    base = outbox(app) / board
+    base = canvas_dir(app) / board
     return [str(p) for p in (base.with_suffix(".png"), base.parent / f"{base.name}.phone.png") if p.exists()]
 
 
-def board_link(app: str, sid: str, board) -> str:
-    return f"{session_url(sid)}assets/index.html#board-{board}"
+def board_link(app: str, board) -> str:
+    return f"{stable_link(app)}#board-{board}"
 
 
 def describe(app: str, sid: str, c: dict) -> dict:
@@ -451,7 +450,7 @@ def describe(app: str, sid: str, c: dict) -> dict:
         "feature": c.get("chapter"), "shot": c["shot"], "point": [c["fx"], c["fy"]], "scope": c["scope"],
         "status": c["status"], "text": c["text"], "createdAt": c["createdAt"],
         "replies": [{"by": r.get("by", "petros"), "text": r["text"], "at": r["createdAt"]} for r in c["replies"]],
-        "waiting": store.waiting(c), "images": board_files(app, c["board"]), "link": board_link(app, sid, c["board"]),
+        "waiting": store.waiting(c), "images": board_files(app, c["board"]), "link": board_link(app, c["board"]),
     }
 
 
@@ -466,7 +465,7 @@ def pending(app: str) -> dict:
         if anchor.startswith("run/"):
             runs[anchor[4:]] = env.get("body")
     return {"app": app, "sid": sid, "checkout": str(checkout(app)), "events": events,
-            "waiting_comments": waiting, "runs": runs, "canvas": session_url(sid) + "assets/index.html"}
+            "waiting_comments": waiting, "runs": runs, "canvas": stable_link(app)}
 
 
 def reply(app: str, comment_id: str, event_id: str, text: str) -> dict:
@@ -578,8 +577,8 @@ def rerun(app: str, wanted: list[str], event_id: str | None = None) -> dict:
     ensure(app)
     put_item(sid, "canvas/build", {"built": page_built(app) or now_iso(), "features": chosen})
     return {"app": app, "features": results, "exit": code, "seconds": round(time.time() - t0),
-            "log": str(logf), "canvas": session_url(sid) + "assets/index.html",
-            "boards": {f: f"{session_url(sid)}assets/index.html#c-{ids.index(f) + 1}" for f in chosen},
+            "log": str(logf), "canvas": stable_link(app),
+            "boards": {f: f"{stable_link(app)}#c-{ids.index(f) + 1}" for f in chosen},
             "tail": tail if code else []}
 
 
@@ -587,7 +586,7 @@ def page_built(app: str) -> str | None:
     """When the published page was built (its data's `built`): an open canvas older than it reloads,
     and the page it reloads into is this one, so it never reloads again."""
     try:
-        html = (outbox(app) / "index.html").read_text()
+        html = (canvas_dir(app) / "index.html").read_text()
     except OSError:
         return None
     m = re.search(r'"built":"([0-9T:.\-]+Z)"', html)
@@ -935,8 +934,8 @@ def main(argv: list[str] | None = None) -> int:
             need_main()
             show(ensure(a.app), a.json)
         elif a.cmd == "link":
-            sid = sid_of(a.app)
-            print(f"{stable_link(a.app)}\n{session_url(sid)}assets/index.html")
+            sid_of(a.app)
+            print(stable_link(a.app))
         elif a.cmd == "claim":
             need_main()
             res = claim(a.app, a.session, a.pid, a.mode, a.cwd)

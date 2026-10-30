@@ -147,6 +147,11 @@ def test_the_page_runs_the_tested_scripts_and_names_its_shots_the_way_comments_n
     assert "loading=" not in page
 
 
+def test_the_page_stays_at_the_link_it_was_opened_at():
+    # A session's canvas is opened only at its session's link; no copy elsewhere is sent there.
+    assert "location.replace" not in canvas.template()
+
+
 def test_the_cli_checks_and_builds(tmp_path):
     man = journey(tmp_path)
     ok = subprocess.run([sys.executable, str(TOOL), "check", str(man)], capture_output=True, text=True)
