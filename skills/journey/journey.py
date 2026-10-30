@@ -576,11 +576,22 @@ def rerun(app: str, wanted: list[str], event_id: str | None = None) -> dict:
         results[f] = {"state": state, "boards": len(man.get("boards") or []), **({"error": err} if err else {})}
         put_item(sid, f"run/{f}", {"state": state, "at": now_iso(), "event": event_id, **({"error": err} if err else {})})
     ensure(app)
-    put_item(sid, "canvas/build", {"built": now_iso(), "features": chosen})
+    put_item(sid, "canvas/build", {"built": page_built(app) or now_iso(), "features": chosen})
     return {"app": app, "features": results, "exit": code, "seconds": round(time.time() - t0),
             "log": str(logf), "canvas": session_url(sid) + "assets/index.html",
             "boards": {f: f"{session_url(sid)}assets/index.html#c-{ids.index(f) + 1}" for f in chosen},
             "tail": tail if code else []}
+
+
+def page_built(app: str) -> str | None:
+    """When the published page was built (its data's `built`): an open canvas older than it reloads,
+    and the page it reloads into is this one, so it never reloads again."""
+    try:
+        html = (outbox(app) / "index.html").read_text()
+    except OSError:
+        return None
+    m = re.search(r'"built":"([0-9T:.\-]+Z)"', html)
+    return m.group(1) if m else None
 
 
 # ── the interactive session ────────────────────────────────────────────────

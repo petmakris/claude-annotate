@@ -303,3 +303,12 @@ def test_a_long_answer_for_one_app_never_holds_another_apps_wake(monkeypatch):
     assert sorted(started) == ["billpod", "mealy", "tunatutor"]  # all began while mealy still ran
     release.set()
     t.join(5)
+
+
+def test_the_build_item_carries_the_published_pages_own_time_so_a_reload_lands_on_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(journey, "OUTBOX", tmp_path)
+    (tmp_path / "mealy-journey").mkdir()
+    (tmp_path / "mealy-journey" / "index.html").write_text(
+        '<script type="application/json" id="canvas-data">{"title":"x","built":"2026-10-30T08:00:41.454Z","groups":[]}</script>')
+    assert journey.page_built("mealy") == "2026-10-30T08:00:41.454Z"
+    assert journey.page_built("billpod") is None
