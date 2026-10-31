@@ -6,7 +6,7 @@
 :root {
   --bg: #f6f6f4; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e2e2dd; --group: #ececea;
   --accent: #2f6fde; --ok: #1f8a4c; --ok-bg: #e3f4ea; --bad: #c8322b; --bad-bg: #fbe6e4;
-  --warn: #9a6400; --warn-bg: #fbf0d9; --idle: #7a7a74; --idle-bg: #ececea; --shadow: 0 1px 3px rgba(0,0,0,.12);
+  --warn: #9a6400; --warn-bg: #fbf0d9; --idle: #7a7a74; --idle-bg: #ececea; --shadow: 0 1px 3px rgba(0,0,0,.12); --float-shadow: 0 4px 16px rgba(0,0,0,.14);
   --chg-changed: #c2410c; --chg-new: #6d28d9; --chg-on: #ffffff; --on-accent: #ffffff;
   color-scheme: light;
 }
@@ -14,7 +14,7 @@
   :root:not([data-theme="light"]) {
     --bg: #282826; --panel: #474745; --text: #f2f2ee; --muted: #bbbbb9; --line: #636361; --group: #3b3b39;
     --accent: #8fb6ff; --on-accent: #141413; --ok: #6fdc9a; --ok-bg: #1f4a31; --bad: #ff8f87; --bad-bg: #5a2420;
-    --warn: #f0c060; --warn-bg: #4a3a14; --idle: #bbbbb9; --idle-bg: #3b3b39; --shadow: 0 1px 3px rgba(0,0,0,.5);
+    --warn: #f0c060; --warn-bg: #4a3a14; --idle: #bbbbb9; --idle-bg: #3b3b39; --shadow: 0 1px 3px rgba(0,0,0,.5); --float-shadow: 0 4px 16px rgba(0,0,0,.5);
     --chg-changed: #fb923c; --chg-new: #b9a3ff; --chg-on: #141413;
     color-scheme: dark;
   }
@@ -22,41 +22,61 @@
 :root[data-theme="dark"] {
   --bg: #282826; --panel: #474745; --text: #f2f2ee; --muted: #bbbbb9; --line: #636361; --group: #3b3b39;
   --accent: #8fb6ff; --on-accent: #141413; --ok: #6fdc9a; --ok-bg: #1f4a31; --bad: #ff8f87; --bad-bg: #5a2420;
-  --warn: #f0c060; --warn-bg: #4a3a14; --idle: #bbbbb9; --idle-bg: #3b3b39; --shadow: 0 1px 3px rgba(0,0,0,.5);
+  --warn: #f0c060; --warn-bg: #4a3a14; --idle: #bbbbb9; --idle-bg: #3b3b39; --shadow: 0 1px 3px rgba(0,0,0,.5); --float-shadow: 0 4px 16px rgba(0,0,0,.5);
   --chg-changed: #fb923c; --chg-new: #b9a3ff; --chg-on: #141413;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
   font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-body { display: flex; flex-direction: column; }
-.top { flex: none; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); padding: 12px 16px 8px; }
-.title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.title h1 { font-size: 18px; margin: 0; }
-.meta { color: var(--muted); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
-.tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; }
-.tools button { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
-  border-radius: 6px; padding: 4px 10px; cursor: pointer; min-width: 32px; }
-.tools button:hover { border-color: var(--accent); }
+body { display: flex; flex-direction: column; position: relative; }
+/* No bar: the canvas takes the window and the chrome floats on it (canvas-chrome.js). */
+.top { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+.float { position: absolute; display: flex; align-items: center; gap: 8px; pointer-events: auto; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; padding: 5px 6px 5px 10px; box-shadow: var(--float-shadow); }
+.float-tl { top: 10px; left: 10px; max-width: calc(100% - 20px); }
+.float-tr { top: 10px; right: 10px; }
+.float-bc { bottom: 12px; left: 50%; transform: translateX(-50%); padding: 5px 6px; }
+.title h1 { font-size: 15px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.meta { color: var(--muted); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 13px; }
+.float button, .pop button { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; min-width: 32px; white-space: nowrap; }
+.float button:hover, .pop button:hover { border-color: var(--accent); }
+.menu-btn { font-size: 16px; line-height: 1.15; }
 .zoom-label { color: var(--muted); min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
 .seg { display: inline-flex; }
 .seg button { border-radius: 0; margin-left: -1px; }
 .seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
 .seg button:last-child { border-radius: 0 6px 6px 0; }
 .seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); position: relative; }
-nav { display: flex; gap: 6px; overflow-x: auto; padding-top: 8px; scrollbar-width: thin; }
-.nav-link { white-space: nowrap; color: var(--text); text-decoration: none; padding: 2px 8px; border-radius: 999px;
-  border: 1px solid var(--line); font-size: 12px; }
-.nav-link:hover { border-color: var(--accent); }
-.nav-failed { border-color: var(--bad); color: var(--bad); }
-.nav-not-run, .nav-skipped { color: var(--muted); border-style: dashed; }
-.nav-interrupted { border-color: var(--warn); color: var(--warn); }
+.pop-host { position: relative; }
+.pop { display: none; position: absolute; top: calc(100% + 10px); z-index: 7; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; box-shadow: var(--float-shadow); padding: 4px 14px; width: 380px; max-width: calc(100vw - 20px);
+  max-height: calc(100vh - 80px); overflow: auto; cursor: default; }
+.pop-host.open > .pop { display: block; }
+.pop-left { left: 0; } .pop-right { right: -6px; }
+.pop-groups { width: 560px; padding: 8px; }
+.pop-sec { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.pop-sec:last-child { border-bottom: 0; }
+.pop-h { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 6px; }
+.pop-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 4px 0; }
+.pop .meta:first-of-type { margin-top: 0; }
+nav { columns: 3 150px; column-gap: 8px; }
+.nav-link { display: block; break-inside: avoid; color: var(--text); text-decoration: none; padding: 4px 8px; border-radius: 6px; }
+.nav-link .num { color: var(--muted); font-variant-numeric: tabular-nums; }
+.nav-link:hover { background: var(--group); }
+.nav-failed { color: var(--bad); }
+.nav-not-run, .nav-skipped { color: var(--muted); }
+.nav-interrupted { color: var(--warn); }
+.chg-n { font-variant-numeric: tabular-nums; margin-left: 2px; opacity: .85; }
 .chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; }
 .chip-passed { color: var(--ok); background: var(--ok-bg); }
 .chip-failed { color: var(--bad); background: var(--bad-bg); }
 .chip-interrupted, .chip-running, .chip-incomplete { color: var(--warn); background: var(--warn-bg); }
 .chip-not-run, .chip-skipped, .chip-info { color: var(--idle); background: var(--idle-bg); }
-.banner { flex: none; margin: 0; padding: 10px 16px; background: var(--bad-bg); color: var(--bad); }
+.banner { position: absolute; top: 58px; left: 10px; right: 10px; pointer-events: auto; margin: 0; padding: 10px 16px; border-radius: 10px;
+  background: var(--bad-bg); color: var(--bad); box-shadow: var(--float-shadow); }
+.banner[hidden] { display: none; }
 .banner a { color: inherit; font-weight: 600; }
 .muted { color: var(--muted); }
 /* The canvas: one surface (the world) under a transform, panned and zoomed as
@@ -90,8 +110,7 @@ nav { display: flex; gap: 6px; overflow-x: auto; padding-top: 8px; scrollbar-wid
 .chg-tag { display: inline-block; font-size: 11px; font-weight: 700; line-height: 14px; padding: 0 5px; border-radius: 4px;
   color: var(--chg-on); background: var(--chg-changed); vertical-align: 1px; }
 .chg-tag-new { background: var(--chg-new); }
-.tools .chg-only[aria-pressed="true"] { background: var(--chg-changed); border-color: var(--chg-changed); color: var(--chg-on); }
-.chg-count { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
+.float .chg-only[aria-pressed="true"] { background: var(--chg-changed); border-color: var(--chg-changed); color: var(--chg-on); }
 .chg-removed strong { color: var(--text); font-weight: 600; }
 .chg-empty { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); color: var(--muted); font-size: 16px; }
 /* Titles and captions stay one size on screen, like Figma's frame names:
@@ -136,14 +155,20 @@ nav { display: flex; gap: 6px; overflow-x: auto; padding-top: 8px; scrollbar-wid
 .lb-bar .seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
 .lb-bar .seg button:last-child { border-radius: 0 6px 6px 0; }
 .lb-cmp[hidden] { display: none; }
-/* A phone: the bar stays a few short lines, so the canvas keeps the screen. */
+/* A phone: the groups shrink, the name gives way first, Claude's state is a dot. */
 @media (max-width: 600px) {
-  .top { padding: 6px 8px 4px; }
-  .title { gap: 4px 8px; }
-  .title h1 { font-size: 16px; }
-  .tools { margin-left: 0; gap: 4px; }
-  .tools button { padding: 2px 7px; font-size: 13px; min-width: 28px; }
+  .float { gap: 4px; padding: 3px 4px 3px 8px; }
+  .float-tl { max-width: calc(100% - 180px); top: 8px; left: 8px; }
+  .chg-only-word { display: none; }
+  .float-tr { top: 8px; right: 8px; }
+  .title h1 { font-size: 14px; }
+  .title .chip { display: none; }
+  .float button { padding: 2px 7px; font-size: 13px; min-width: 28px; }
+  .float-tr .s-claude { font-size: 0; width: 12px; height: 12px; padding: 0; border-radius: 6px; background: var(--muted); }
+  .float-tr .s-claude.s-listening { background: var(--ok); }
+  .float-tr .s-claude.s-answering, .float-tr .s-claude.s-waking { background: var(--warn); }
+  .float-tr .s-claude.s-failing { background: var(--bad); }
   .zoom-label { min-width: 36px; font-size: 13px; }
-  .meta { font-size: 11px; margin-top: 2px; }
-  nav { padding-top: 4px; }
+  .pop-groups { width: calc(100vw - 16px); }
+  .banner { top: 50px; left: 8px; right: 8px; }
 }

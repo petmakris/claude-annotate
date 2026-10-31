@@ -35,8 +35,13 @@ the same way.
    To mark what changed since an earlier capture, give each board a `change` (`changed`,
    `unchanged`, `new`), each shot its `previous` image (and `diff`, the box that differs), and the
    manifest `changes` with `since` and the `removed` boards; the format is in `$SKILL_DIR/canvas.py`.
-   The page then outlines changed and new boards, adds Changed only and a count to the toolbar, and
-   opens a changed shot now, before or side by side. The project does the comparing.
+   The page then outlines changed and new boards, adds Changed only (with the count) at the top
+   right, and opens a changed shot now, before or side by side. The project does the comparing.
+
+   The page has no bar: the canvas fills the window and the controls float on it. Top left: the
+   title, the status and a list of the groups. Top right: Changed only, Claude's state and a ☰
+   menu with the rest (Send to Claude, Comment, Re-run all, the meta lines, Both/Desktop/Phone,
+   100%, the theme). Bottom: zoom and Fit all.
 
    Leave `session` and `comments` out unless pins on the shots are wanted. With a `session` the
    canvas lives in a webcompanion session (found or made at build, the folder registered as its

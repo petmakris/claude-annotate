@@ -159,7 +159,25 @@ function measureBox() {
   box = { w: r.width, h: r.height, left: r.left, top: r.top };
 }
 
-function fitAll() { return M.fitView(-48, -48, layout.w + 96, layout.h + 96, box.w, box.h, 16, 1); }
+// The chrome floats on the canvas: the screen pixels its top groups (and a
+// banner) cover, and the zoom group's at the bottom, which a view keeps clear.
+function topRoom() {
+  var r = 0;
+  document.querySelectorAll('.float-tl, .float-tr, .banner:not([hidden])').forEach(function (e) {
+    r = Math.max(r, e.getBoundingClientRect().bottom - box.top);
+  });
+  return Math.max(0, r);
+}
+function bottomRoom() {
+  var z = document.querySelector('.float-bc');
+  return z ? Math.max(0, box.top + box.h - z.getBoundingClientRect().top) : 0;
+}
+// fitView in the part of the window the chrome leaves free.
+function fitFree(bx, by, bw, bh, pad) {
+  var t = topRoom(), v = M.fitView(bx, by, bw, bh, box.w, Math.max(1, box.h - t - bottomRoom()), pad, 1);
+  return { x: v.x, y: v.y + t, z: v.z };
+}
+function fitAll() { return fitFree(-48, -48, layout.w + 96, layout.h + 96, 16); }
 function minZoom() { return Math.min(M.MIN_ZOOM, fitAll().z); }
 
 // ── Drawing a view ──
@@ -282,7 +300,7 @@ function animateTo(t) {
 function zoomCentre(z) {
   animateTo(M.zoomAt(view, box.w / 2, box.h / 2, M.clampZoom(z, minZoom(), M.MAX_ZOOM)));
 }
-function first() { return M.firstView(layout, box.w, box.h, box.w < 600 ? 16 : 48, 44); }
+function first() { return M.firstView(layout, box.w, box.h, box.w < 600 ? 16 : 48, topRoom() + 44); }
 function actions(k) {
   if (k === 'in') zoomCentre(view.z * 2);
   else if (k === 'out') zoomCentre(view.z / 2);
@@ -431,7 +449,7 @@ function go(hash, instant) {
   }
   else if (hash === '#failure') t = boardEls.filter(function (o) { return o.box && o.data.status === 'failure'; })[0];
   if (t) {
-    v = M.fitView(t.box.x, t.box.y, t.box.w, t.box.h, box.w, box.h, 48, 1);
+    v = fitFree(t.box.x, t.box.y, t.box.w, t.box.h, 48);
     if (hit) hit.classList.remove('hit');
     hit = t.el; hit.classList.add('hit');
   } else if (c && groupEls[parseInt(c[1], 10) - 1] && groupEls[parseInt(c[1], 10) - 1].box) {
@@ -440,7 +458,7 @@ function go(hash, instant) {
     var z = M.clampZoom(Math.min(1, (box.w - pad * 2) / Math.max(1, g.w)), minZoom(), M.MAX_ZOOM);
     if (g.boards[0]) z = Math.max(z, box.w < 600 ? (box.w - pad * 2) / g.boards[0].w : Math.min(0.35, (box.w - pad * 2) / g.boards[0].w));
     z = Math.min(1, z);
-    v = { x: pad - g.x * z, y: 44 + (TITLE_ROOM - g.y) * z, z: z };
+    v = { x: pad - g.x * z, y: topRoom() + 44 + (TITLE_ROOM - g.y) * z, z: z };
   } else return false;
   if (instant) setView(v); else animateTo(v);
   return true;
@@ -464,8 +482,8 @@ if (!go(location.hash, true)) {
   else setView(first());
 }
 window.addEventListener('resize', function () { measureBox(); setView(view); });
-// The toolbar can wrap again (the zoom label's width changes), which moves the
-// canvas: zooming round a point needs where it is now.
+// The banner or a phone's rotation can move the canvas: zooming round a point
+// needs where it is now.
 if (window.ResizeObserver) new ResizeObserver(function () { measureBox(); }).observe(canvas);
 
 // ── The viewer a click opens: the full image ──
