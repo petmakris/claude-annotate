@@ -1,27 +1,29 @@
 /* The canvas viewer's look: a neutral scaffold (system font, greys, one
    accent) with light and dark modes, lifted from lomem's journey canvas. It is
-   a tool's page, not an app screen, so it wears no project's design system. */
+   a tool's page, not an app screen, so it wears no project's design system.
+   Dark greys come from L* targets: page 16, group 25, card 30 (a lift of 14
+   over the page); text 8:1, muted 4.8:1 and accent 4.6:1 on the card. */
 :root {
   --bg: #f6f6f4; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e2e2dd; --group: #ececea;
   --accent: #2f6fde; --ok: #1f8a4c; --ok-bg: #e3f4ea; --bad: #c8322b; --bad-bg: #fbe6e4;
   --warn: #9a6400; --warn-bg: #fbf0d9; --idle: #7a7a74; --idle-bg: #ececea; --shadow: 0 1px 3px rgba(0,0,0,.12);
-  --chg-changed: #c2410c; --chg-new: #6d28d9; --chg-on: #ffffff;
+  --chg-changed: #c2410c; --chg-new: #6d28d9; --chg-on: #ffffff; --on-accent: #ffffff;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #141413; --panel: #1e1e1c; --text: #ecece8; --muted: #9a9a94; --line: #30302d; --group: #1b1b1a;
-    --accent: #7aa7ff; --ok: #5fcf8c; --ok-bg: #173323; --bad: #ff7b72; --bad-bg: #3d1a18;
-    --warn: #e8b44c; --warn-bg: #3a2d10; --idle: #a3a39c; --idle-bg: #2a2a27; --shadow: 0 1px 3px rgba(0,0,0,.5);
-    --chg-changed: #fb923c; --chg-new: #a78bfa; --chg-on: #141413;
+    --bg: #282826; --panel: #474745; --text: #f2f2ee; --muted: #bbbbb9; --line: #636361; --group: #3b3b39;
+    --accent: #8fb6ff; --on-accent: #141413; --ok: #6fdc9a; --ok-bg: #1f4a31; --bad: #ff8f87; --bad-bg: #5a2420;
+    --warn: #f0c060; --warn-bg: #4a3a14; --idle: #bbbbb9; --idle-bg: #3b3b39; --shadow: 0 1px 3px rgba(0,0,0,.5);
+    --chg-changed: #fb923c; --chg-new: #b9a3ff; --chg-on: #141413;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #141413; --panel: #1e1e1c; --text: #ecece8; --muted: #9a9a94; --line: #30302d; --group: #1b1b1a;
-  --accent: #7aa7ff; --ok: #5fcf8c; --ok-bg: #173323; --bad: #ff7b72; --bad-bg: #3d1a18;
-  --warn: #e8b44c; --warn-bg: #3a2d10; --idle: #a3a39c; --idle-bg: #2a2a27; --shadow: 0 1px 3px rgba(0,0,0,.5);
-  --chg-changed: #fb923c; --chg-new: #a78bfa; --chg-on: #141413;
+  --bg: #282826; --panel: #474745; --text: #f2f2ee; --muted: #bbbbb9; --line: #636361; --group: #3b3b39;
+  --accent: #8fb6ff; --on-accent: #141413; --ok: #6fdc9a; --ok-bg: #1f4a31; --bad: #ff8f87; --bad-bg: #5a2420;
+  --warn: #f0c060; --warn-bg: #4a3a14; --idle: #bbbbb9; --idle-bg: #3b3b39; --shadow: 0 1px 3px rgba(0,0,0,.5);
+  --chg-changed: #fb923c; --chg-new: #b9a3ff; --chg-on: #141413;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -41,7 +43,7 @@ body { display: flex; flex-direction: column; }
 .seg button { border-radius: 0; margin-left: -1px; }
 .seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
 .seg button:last-child { border-radius: 0 6px 6px 0; }
-.seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; position: relative; }
+.seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); position: relative; }
 nav { display: flex; gap: 6px; overflow-x: auto; padding-top: 8px; scrollbar-width: thin; }
 .nav-link { white-space: nowrap; color: var(--text); text-decoration: none; padding: 2px 8px; border-radius: 999px;
   border: 1px solid var(--line); font-size: 12px; }
