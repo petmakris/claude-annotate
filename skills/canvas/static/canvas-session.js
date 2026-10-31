@@ -129,10 +129,14 @@ if (DATA.session && /^\/s\/[^\/]+\/assets\//.test(location.pathname)) {
     }
     on('item', function (a, body) { if (a.indexOf('run/') === 0) showRun(a.slice(4), body); });
     var lastError = '';
-    function rerun(ids) {
+    // Re-run all also says `all`: the session then runs every feature the app
+    // has now, new ones the canvas does not show yet included.
+    function rerun(ids, every) {
       var at = new Date().toISOString();
       ids.forEach(function (id) { showRun(id, { state: 'queued', at: at }); });
-      return call('POST', 'api/submit', { anchor: '__general__', text: JSON.stringify({ type: 'rerun', features: ids, at: at }) })
+      var ev = { type: 'rerun', features: ids, at: at };
+      if (every) ev.all = true;
+      return call('POST', 'api/submit', { anchor: '__general__', text: JSON.stringify(ev) })
         .then(function () {
           return Promise.all(ids.map(function (id) { return call('PUT', 'items/' + enc('run/' + id), { state: 'queued', at: at }); }));
         })
@@ -146,7 +150,7 @@ if (DATA.session && /^\/s\/[^\/]+\/assets\//.test(location.pathname)) {
     if (RERUNS) {
       var all = document.getElementById('s-rerun-all');
       if (all) all.addEventListener('click', function () {
-        if (confirm('Run all ' + groupIds.length + ' features again and publish the canvas?')) rerun(groupIds);
+        if (confirm('Run every feature again, new ones too, and publish the canvas?')) rerun(groupIds, true);
       });
     }
 

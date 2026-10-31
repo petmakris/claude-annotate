@@ -95,7 +95,10 @@ Each event is one of:
   `J rerun <app> <feature ids…> --event <event_id>` (Bash `timeout` 600000; a full lomem run takes
   2–5 minutes). Claude Voice: one flow takes 2 to 6 minutes, so for Re-run all (or several flows) run
   `J rerun voice <flow> --event <event_id>` once per flow, in the order the event lists them, each its
-  own Bash call; never one call for all seven, which outlasts the Bash timeout. It refuses an id journey.feature does not have, shows each feature queued → running →
+  own Bash call; never one call for all seven, which outlasts the Bash timeout. An event with
+  `"all": true` (Re-run all) means every feature the app has now, also those its canvas does not
+  show yet: `J rerun <app> all`, and for Voice each flow `android/tools/states/journey.py features
+  --json` lists, one per call. It refuses an id journey.feature does not have, shows each feature queued → running →
   passed or failed on the canvas, publishes, and the canvas reloads its boards. Nothing else to say
   unless a feature failed: then reply nothing, but say in this session what failed (`log` in the output).
 - **Anything else** (`{"type": "text"}`) — read it as a comment with no board and answer nothing; ack.
