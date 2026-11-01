@@ -32,7 +32,7 @@ checkout** (`J apps` lists them):
   `voice/journey`; features are the flows of `States.kt` (`turn`, `fix`, `send`, `answer`,
   `choice`, `connection`, `settings`), each board a state, numbered by its stable state number
   ("state 14" is `#14` or `#board-14`); the canvas is `~/.local/share/journey-canvas/voice`. Never
-  touch `next-deploy`, never publish an APK, never deploy: the journey only captures.
+  touch the deploy worktree (`~/projects/claude-voice-worktrees/deploy`), never publish an APK, never deploy: the journey only captures.
 
 ## Refuse anywhere but petros-main
 
