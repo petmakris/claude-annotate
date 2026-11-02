@@ -67,6 +67,13 @@ PROBE = r"""
     const r = c.r.baseVal.value, cx = c.cx.baseVal.value, cy = c.cy.baseVal.value;
     for (const el of [...svg.querySelectorAll('.ar')].filter(shown)) {
       const len = el.getTotalLength();
+      // a map draws a step badge on its own arrow: that arrow runs through the badge's centre
+      let own = false;
+      for (let d = 0; d <= len && !own; d += 1) {
+        const p = el.getPointAtLength(d);
+        if (Math.hypot(p.x - cx, p.y - cy) < 1.5) own = true;
+      }
+      if (own) continue;
       for (let d = 0; d <= len; d += 2) {
         const p = el.getPointAtLength(d);
         if (Math.hypot(p.x - cx, p.y - cy) < r + 3) {   // an arrow starts 4px clear of its badge
