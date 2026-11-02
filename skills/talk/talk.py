@@ -3166,8 +3166,20 @@ def launch(args) -> int:
     if args.url_base:
         say(f"Calls {args.url_base.rstrip('/')}/")
     if not args.no_open:
-        webbrowser.open(local)
+        open_page(local)
     return 0
+
+
+def open_page(url: str) -> None:
+    """Open the page the way the session's own `open` would. On macOS, Python's
+    webbrowser goes through AppleScript to whichever Chrome window had focus,
+    which skips the Claude launcher's browser-shim (env libexec/claude/
+    browser-shim/open) and could land in another account's Chrome. The `open`
+    first on PATH is that shim inside a launched session."""
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
+    webbrowser.open(url)
 
 
 # ---------------------------------------------------------------------------
