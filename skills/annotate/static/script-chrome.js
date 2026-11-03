@@ -334,6 +334,66 @@ wireViewControls();
 })();
 
 
+// ── The settings drawer ──────────────────────────────────────────────────
+// Every setting at once, opened from the menu's Settings tile. It is not one
+// of initTopPanels' panels: those close each other, and the drawer must stay
+// open while the menu or the composer is used, since it sits beside the page
+// rather than over it. Its own Esc runs only when no panel took the key first.
+(function initSettingsDrawer() {
+  const drawer = document.getElementById("settings-drawer");
+  const tile = document.getElementById("settings-open");
+  if (!drawer || !tile) return;
+  const scrim = document.getElementById("settings-scrim");
+  const closeBtn = document.getElementById("settings-close");
+  const menuBtn = document.getElementById("menu-toggle");
+  const menu = document.getElementById("menu-pop");
+
+  const isOpen = () => !drawer.hidden;
+  function open() {
+    drawer.hidden = false;
+    if (scrim) scrim.hidden = false;
+    document.body.classList.add("settings-open");
+    tile.setAttribute("aria-expanded", "true");
+    // The theme previews are painted when the drawer opens, not when it is
+    // built: the code painter may not have been ready at parse time.
+    repaintThemePreviews();
+    // The tile sits in the menu, so the menu goes away and the drawer takes
+    // the keyboard.
+    if (menu && !menu.hidden && menuBtn) menuBtn.click();
+    closeBtn?.focus();
+  }
+  function close() {
+    if (!isOpen()) return;
+    const inside = drawer.contains(document.activeElement);
+    drawer.hidden = true;
+    if (scrim) scrim.hidden = true;
+    document.body.classList.remove("settings-open", "width-dragging");
+    tile.setAttribute("aria-expanded", "false");
+    if (inside) menuBtn?.focus();
+  }
+  tile.addEventListener("click", (e) => { e.preventDefault(); isOpen() ? close() : open(); });
+  closeBtn?.addEventListener("click", close);
+  scrim?.addEventListener("click", close);
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || e.defaultPrevented || !isOpen()) return;
+    e.preventDefault();
+    close();
+  });
+
+  // The highlighter's switch is a proxy for the bar's toggle, like the
+  // menu's tile, so highlighter.js stays the one owner of "is it on".
+  const sw = document.getElementById("settings-highlighter");
+  const hlBtn = document.getElementById("highlighter-toggle");
+  if (sw && hlBtn) {
+    sw.addEventListener("click", () => hlBtn.click());
+    const sync = () => {
+      sw.setAttribute("aria-checked", hlBtn.getAttribute("aria-pressed") === "true" ? "true" : "false");
+    };
+    new MutationObserver(sync).observe(hlBtn, { attributes: true, attributeFilter: ["aria-pressed"] });
+    sync();
+  }
+})();
+
 // ── Keyboard review (j / k / c / f) ──────────────────────────────────────
 // Everything that decides anything in this page started with the mouse: the
 // controls live in a strip that only exists while the pointer is over a

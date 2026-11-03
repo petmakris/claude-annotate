@@ -263,7 +263,7 @@ class TestPageWidth(unittest.TestCase):
         shell = (Path(__file__).resolve().parents[1] / "static" / "shell.js").read_text()
         self.assertNotIn("width-toggle", shell,
                          "the width button is back in the bar")
-        self.assertIn('data-pane-to="settings"', shell)
+        self.assertIn('id="settings-drawer"', shell)
         self.assertIn('{ key: WIDTH_KEY, attr: "width", label: "Page width"', JS,
                       "the settings panel no longer offers a width")
         self.assertIn('slider.type = "range";', JS)

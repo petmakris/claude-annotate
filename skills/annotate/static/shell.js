@@ -25,6 +25,9 @@ export const SHELL_HTML = `\
 <button id="highlighter-toggle" type="button" class="icon-btn hl-btn" aria-pressed="false" title="Reading highlighter — drag over text to mark it read" aria-label="Reading highlighter">\
 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 4.5l4 4L10 18H6v-4z"/>\
 <line x1="4" y1="21" x2="20" y2="21"/></svg></button>\
+<button id="fullscreen-toggle" type="button" class="icon-btn fs-btn" aria-pressed="false" title="Full screen — hide the browser chrome" aria-label="Full screen — hide the browser chrome">\
+<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>\
+<line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>\
 <span class="icon-btn-wrap">\
 <button id="menu-toggle" type="button" class="icon-btn menu-btn" aria-expanded="false" aria-controls="menu-pop" title="Menu" aria-label="Menu">\
 <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/>\
@@ -54,12 +57,7 @@ export const SHELL_HTML = `\
 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5l7-7 6.5 6.5-4 4H7z"/>\
 <line x1="12.5" y1="8" x2="19" y2="14.5"/><line x1="4" y1="21" x2="20" y2="21"/></svg>\
 <span class="menu-tile-label">Clear marks</span></button>\
-<button id="fullscreen-toggle" type="button" class="menu-tile" aria-pressed="false" title="Full screen — hide the browser chrome" aria-label="Full screen — hide the browser chrome">\
-<span class="menu-tile-icon" data-icon><svg viewBox="0 0 24 24" aria-hidden="true">\
-<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>\
-<line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></span>\
-<span class="menu-tile-label" data-label>Full screen</span></button>\
-<button type="button" class="menu-tile" data-pane-to="settings" title="Settings" aria-label="Settings">\
+<button id="settings-open" type="button" class="menu-tile" aria-expanded="false" aria-controls="settings-drawer" title="Settings — every setting in a drawer" aria-label="Settings">\
 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/>\
 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>\
 </svg><span class="menu-tile-label">Settings</span></button>\
@@ -73,26 +71,6 @@ export const SHELL_HTML = `\
 <span class="menu-tile-label">Keys</span></button>\
 </div>\
 </div>\
-<div class="menu-pane" data-pane-name="settings">\
-<button type="button" class="menu-back" data-pane-to="root">\
-<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>\
-<span>Settings</span></button>\
-<div id="settings-pop" class="settings-pop">\
-<div id="settings-groups"></div><div class="set-group" id="set-group-highlight">\
-<span class="set-label">Highlight colour</span>\
-<div id="palette-pop" class="palette-pop" role="group" aria-label="Highlight colour">\
-<button type="button" data-color="yellow" aria-pressed="false" title="Yellow" aria-label="Yellow highlight">\
-</button>\
-<button type="button" data-color="green" aria-pressed="false" title="Green" aria-label="Green highlight">\
-</button>\
-<button type="button" data-color="orange" aria-pressed="false" title="Orange" aria-label="Orange highlight">\
-</button>\
-<button type="button" data-color="blue" aria-pressed="false" title="Blue" aria-label="Blue highlight">\
-</button>\
-<button type="button" data-color="pink" aria-pressed="false" title="Pink" aria-label="Pink highlight">\
-</button></div></div>\
-<button id="settings-reset" type="button" class="set-reset" title="Back to defaults. Page theme, code font and reading size are shared with every annotate document.">Reset</button>\
-</div></div>\
 <div class="menu-pane" data-pane-name="help">\
 <button type="button" class="menu-back" data-pane-to="root">\
 <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>\
@@ -129,6 +107,33 @@ export const SHELL_HTML = `\
 </div></div>\
 </div></div></span>\
 <button id="done-btn" type="button" class="done-btn">Done</button></div></header>\
+<aside id="settings-drawer" class="settings-drawer" aria-label="Settings" hidden>\
+<div class="sd-head"><h2 class="sd-title">Settings</h2>\
+<button id="settings-close" type="button" class="sd-close" title="Close settings (Esc)" aria-label="Close settings">\
+<svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button></div>\
+<div id="settings-pop" class="settings-pop">\
+<div id="settings-groups"></div>\
+<section class="set-sec" id="set-group-highlight" data-section="highlight">\
+<h3 class="set-sec-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 4.5l4 4L10 18H6v-4z"/><line x1="4" y1="21" x2="20" y2="21"/></svg>Reading highlighter</h3>\
+<div class="set-group set-inline"><div class="set-top"><span class="set-label">Mark text as read</span>\
+<span class="set-note">Drag over text to mark it. Drag over it again to rub it out.</span><span class="set-scope" data-scope="doc">This document</span></div>\
+<button id="settings-highlighter" type="button" class="set-switch" role="switch" aria-checked="false" aria-label="Reading highlighter"></button></div>\
+<div class="set-group"><div class="set-top"><span class="set-label">Colour</span><span class="set-scope" data-scope="doc">This document</span></div>\
+<div id="palette-pop" class="palette-pop" role="group" aria-label="Highlight colour">\
+<button type="button" data-color="yellow" aria-pressed="false" title="Yellow" aria-label="Yellow highlight">\
+</button>\
+<button type="button" data-color="green" aria-pressed="false" title="Green" aria-label="Green highlight">\
+</button>\
+<button type="button" data-color="orange" aria-pressed="false" title="Orange" aria-label="Orange highlight">\
+</button>\
+<button type="button" data-color="blue" aria-pressed="false" title="Blue" aria-label="Blue highlight">\
+</button>\
+<button type="button" data-color="pink" aria-pressed="false" title="Pink" aria-label="Pink highlight">\
+</button></div></div></section>\
+</div>\
+<div class="sd-foot"><span class="sd-legend">Kept for this document only</span>\
+<button id="settings-reset" type="button" class="set-reset" title="Back to defaults. Every setting not marked as this document&rsquo;s is shared with every annotate document.">Reset all</button></div>\
+</aside><div id="settings-scrim" class="settings-scrim" hidden></div>\
 <section id="general-composer" class="general-composer" hidden>  <textarea id="general-input" class="general-input" rows="2"    placeholder="Comment on the whole response (not a specific part)…">\
 </textarea>  <div class="general-composer-bar">    <span class="general-hint"><kbd>⌘</kbd>\
 <kbd>↩</kbd> to send      &middot; <kbd>Esc</kbd> to close</span>    <span id="general-status" class="general-status" aria-live="polite">\

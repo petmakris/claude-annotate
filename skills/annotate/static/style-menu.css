@@ -12,8 +12,7 @@
    shortcut description; the help pane is that same list and reads the same
    at 318, just with shorter wrapping. Much wider than this and a menu stops
    reading as a menu and starts reading as a dialog. max-height + scroll for
-   the same reason .settings-pop had them: the settings pane holds seven
-   sections and the next preference is a row in script.js's SETTINGS spec. */
+   the help pane is a long list of keys. */
 .menu-pop {
   position: absolute; top: calc(100% + 9px); right: 0; z-index: 60;
   display: flex; flex-direction: column;
@@ -31,7 +30,6 @@
    height of the pane you are on, not of the tallest one. */
 .menu-pane { display: none; flex-direction: column; gap: 2px; padding: 6px; }
 .menu-pop[data-pane="root"] [data-pane-name="root"],
-.menu-pop[data-pane="settings"] [data-pane-name="settings"],
 .menu-pop[data-pane="help"] [data-pane-name="help"] { display: flex; }
 
 /* === The root pane: tiles ==============================================

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-/* The page width is a slider: 600px to 1600px, then Full. It runs the real
+/* The page width is a slider: 600px to 1600px, then Full. It is the reader's,
+ * one value for every annotate document. It runs the real
  * script-settings.js on the shared DOM shim, which lays nothing out, so this
  * checks what the page paints (data-width, --content-max, the slider and its
  * words), never a measured width.
@@ -19,7 +20,9 @@ document.body.append(groups);
 vm.runInThisContext(readFileSync(path.join(here, "..", "static", "script-settings.js"), "utf8")
   + "\n;globalThis.__w = { widthFromStored, wireViewControls, applyViewControls };");
 const { widthFromStored, wireViewControls, applyViewControls } = globalThis.__w;
-const KEY = "annotate.view:r1:pagewidth";
+const KEY = "annotate.view:pagewidth";
+// Where a width was kept when it was one per document.
+const OLD_KEY = "annotate.view:r1:pagewidth";
 
 let failures = 0, ran = 0;
 function test(name, fn) {
@@ -96,11 +99,37 @@ test("a saved Wide opens at Full and a saved Normal at 760px", () => {
   eq(slider().value, "760");
 });
 
-test("Reset puts the width back to 760px", () => {
+test("a width chosen in one document opens every other one at that width", () => {
+  drag(1180);
+  document.body.focus();
+  document.body.dataset.responseId = "r2";
+  applyViewControls();
+  eq(painted(), ["1180", "1180px"]);
+  eq(slider().value, "1180");
+  document.body.dataset.responseId = "r1";
+});
+
+test("a width this document kept before is used until one is chosen for all", () => {
+  document.body.focus();
+  localStorage.removeItem(KEY);
+  localStorage.setItem(OLD_KEY, "1300");
+  applyViewControls();
+  eq(painted(), ["1300", "1300px"]);
+  drag(900);
+  eq(localStorage.getItem(KEY), "900");
+  document.body.focus();
+  localStorage.setItem(OLD_KEY, "1300");
+  applyViewControls();
+  eq(painted(), ["900", "900px"]);
+});
+
+test("Reset puts the width back to 760px, the old per-document one too", () => {
   drag(1200);
+  localStorage.setItem(OLD_KEY, "1300");
   document.body.focus();
   vm.runInThisContext("resetSettings()");
   eq(localStorage.getItem(KEY), null);
+  eq(localStorage.getItem(OLD_KEY), null);
   eq(painted(), ["760", "760px"]);
   eq(shown(), "760 px");
 });

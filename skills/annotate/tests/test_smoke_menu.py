@@ -52,7 +52,8 @@ class TestTheBarIsThreeControls(unittest.TestCase):
         # Deliberately an inventory, not a count: a count passes while one
         # control is swapped for another, which is exactly how a bar grows.
         allowed = {"block-search", "block-search-clear", "highlighter-toggle",
-                   "menu-toggle", "done-btn", "hdr-title", "hdr-respid", "fold-all"}
+                   "fullscreen-toggle", "menu-toggle", "done-btn", "hdr-title",
+                   "hdr-respid", "fold-all"}
         found = set(re.findall(r'id="([^"]+)"', bar_html()))
         self.assertEqual(found - allowed, set(),
                          "a control came back into the bar")
@@ -115,8 +116,10 @@ class TestThePanesAreOnePanel(unittest.TestCase):
         self.assertIn('id="menu-pop"', SHELL)
         self.assertIn('data-pane="root"', SHELL)
 
-    def test_settings_and_help_are_panes_of_it(self):
-        self.assertIn('data-pane-to="settings"', SHELL)
+    def test_help_is_a_pane_of_it_and_settings_is_not(self):
+        # Settings is a drawer beside the page now (TestTheSettingsDrawer).
+        self.assertNotIn('data-pane-to="settings"', SHELL)
+        self.assertNotIn('data-pane-name="settings"', SHELL)
         self.assertIn('data-pane-to="help"', SHELL)
         self.assertIn('data-pane-to="root"', SHELL)
 
@@ -193,8 +196,8 @@ class TestTheHighlighterRowIsAProxy(unittest.TestCase):
 
 def root_pane_html():
     m = re.search(r'<div class="menu-pane" data-pane-name="root">(.*?)'
-                  r'<div class="menu-pane" data-pane-name="settings">', SHELL, re.S)
-    assert m, "the root pane is not followed by the settings pane any more"
+                  r'<div class="menu-pane" data-pane-name="help">', SHELL, re.S)
+    assert m, "the root pane is not followed by the help pane any more"
     return m.group(1)
 
 
@@ -204,8 +207,8 @@ class TestTheRootPaneIsTiles(unittest.TestCase):
     these are the deletion guards."""
 
     ORDER = ['id="composer-toggle"', 'id="menu-highlighter"',
-             'id="highlighter-clear"', 'id="fullscreen-toggle"',
-             'data-pane-to="settings"', 'id="export-btn"', 'data-pane-to="help"']
+             'id="highlighter-clear"', 'id="settings-open"',
+             'id="export-btn"', 'data-pane-to="help"']
 
     def test_the_section_headings_are_gone(self):
         self.assertNotIn("menu-sec", SHELL)
@@ -215,9 +218,10 @@ class TestTheRootPaneIsTiles(unittest.TestCase):
         root = root_pane_html()
         self.assertLess(root.index('id="menu-status"'), root.index('class="menu-tiles"'))
 
-    def test_seven_tiles_in_the_agreed_order(self):
+    def test_six_tiles_in_the_agreed_order(self):
+        # Full screen left for the bar; Settings opens the drawer.
         tiles = re.findall(r'<button [^>]*class="menu-tile"[^>]*>', root_pane_html())
-        self.assertEqual(len(tiles), 7, tiles)
+        self.assertEqual(len(tiles), 6, tiles)
         for tag, want in zip(tiles, self.ORDER):
             self.assertIn(want, tag)
 

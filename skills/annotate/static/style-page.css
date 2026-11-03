@@ -526,70 +526,187 @@ body .page-header {
   padding: 10px var(--content-gutter);
 }
 
-/* === Settings pane ====================================================
-   Was a popover with its own toggle; it is the settings PANE's body now.
-   The panel around it owns the position, the shadow and the scroll, so this
-   keeps only what is about the settings themselves. */
-.settings-pop {
-  display: flex; flex-direction: column; gap: 12px;
-  padding: 12px;
+/* === Settings drawer ==================================================
+   Every setting at once, in a drawer on the right. It used to be a pane of
+   the 318px menu, which held seven rows in a scroll and showed none of them
+   beside the page they change. On a window wide enough to keep a column
+   beside it the drawer pushes the page left (body.settings-open), so each
+   change shows on the document while it is made. On a phone it is a sheet
+   from the bottom over a shade. */
+:root { --drawer-w: 400px; }
+.settings-drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 75;
+  width: var(--drawer-w);
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -10px 0 30px rgba(20, 22, 28, .10);
+  color: var(--text); font-size: 13px; line-height: 1.45;
 }
-#settings-groups { display: flex; flex-direction: column; gap: 12px; }
-.set-group { display: flex; flex-direction: column; gap: 5px; }
+.settings-drawer[hidden] { display: none; }
+body.settings-open { padding-right: var(--drawer-w); }
+.settings-scrim { position: fixed; inset: 0; z-index: 74; background: rgba(20, 22, 28, .32); }
+.settings-scrim[hidden] { display: none; }
+@media (max-width: 759px) {
+  body.settings-open { padding-right: 0; }
+  .settings-drawer {
+    top: 56px; left: 0; width: auto; border-left: 0;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -12px 40px rgba(20, 22, 28, .25);
+  }
+  .sd-head { position: relative; padding-top: 18px; }
+  .sd-head::before {
+    content: ""; position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+    width: 38px; height: 4px; border-radius: 2px; background: var(--control-border);
+  }
+  /* The column already fills a phone, so no width can change it. */
+  [data-setting="pagewidth"] { opacity: .45; pointer-events: none; }
+}
+@media (min-width: 760px) { .settings-scrim { display: none; } }
+
+.sd-head {
+  flex: none; display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px 12px; border-bottom: 1px solid var(--border);
+}
+.sd-title { margin: 0; font-size: 16px; font-weight: 650; color: var(--text-strong); }
+.sd-close {
+  width: 30px; height: 30px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); cursor: pointer;
+}
+.sd-close:hover { border-color: var(--accent); color: var(--accent); }
+.sd-close svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.settings-pop { flex: 1; min-height: 0; overflow-y: auto; padding: 0 18px 18px; }
+.sd-foot {
+  flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 11px 18px; border-top: 1px solid var(--border); background: var(--surface-soft);
+}
+.sd-legend { font-size: 11.5px; color: var(--text-dim); }
+.sd-legend::before, .set-scope[data-scope="doc"]::before {
+  content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: #d97706; margin-right: 5px; vertical-align: 1px;
+}
+
+.set-sec { padding: 14px 0 4px; border-bottom: 1px solid var(--border); }
+.set-sec:last-child { border-bottom: 0; }
+.set-sec[hidden] { display: none; }
+.set-sec-title {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 10px;
+  font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--text-dim);
+}
+.set-sec-title svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#settings-groups { display: flex; flex-direction: column; }
+.set-group { margin-bottom: 14px; }
 .set-group[hidden] { display: none; }
-.set-label {
-  font-size: 10px; font-weight: 700; letter-spacing: .06em;
-  text-transform: uppercase; color: var(--text-dim);
-}
-/* Wrapping rows, not a fixed grid: the labels are words of different lengths
-   ("High contrast light" beside "Dark"), and a grid would either clip the long
-   ones or leave the short ones swimming. */
-.set-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.set-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 7px; }
+.set-label { font-size: 13.5px; font-weight: 600; color: var(--text-strong); }
+.set-scope { font-size: 11.5px; color: var(--text-dim); white-space: nowrap; }
+.set-note { display: block; font-size: 12px; color: var(--text-dim); }
+.set-inline { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.set-inline .set-top { display: block; margin: 0; }
+.set-inline .set-scope { display: block; margin-top: 2px; }
+
+/* Chips: the default row, for choices that are words. The chosen one is
+   filled, not merely outlined, so it reads at a glance. */
+.set-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .set-row button {
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 4px 9px;
-  background: none; border: 1px solid var(--border); border-radius: 7px;
-  cursor: pointer; font-family: inherit; font-size: 12px;
+  padding: 5px 10px;
+  background: none; border: 1px solid var(--border); border-radius: 8px;
+  cursor: pointer; font-family: inherit; font-size: 12.5px;
   color: var(--text); white-space: nowrap;
   transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
 }
 .set-row button:hover { background: var(--hover-tint); border-color: var(--text-dim); }
-/* The chosen one is filled, not merely outlined. An outline-only state is
-   what the old theme popover used, and inside a panel of six rows of
-   outlined buttons there was no way to see at a glance which was live. */
 .set-row button[aria-pressed="true"] {
   background: var(--accent); border-color: var(--accent); color: var(--accent-fg);
 }
 .set-row button[aria-pressed="true"] .pt-name { color: var(--accent-fg); }
+.pt-name { font-weight: 500; }
+.set-row button[aria-pressed="true"] .pt-name { font-weight: 600; }
+
+/* Segments: two or three choices of one thing, side by side in one well. */
+.set-row.set-seg {
+  flex-wrap: nowrap; gap: 3px; padding: 3px;
+  background: var(--surface-soft); border: 1px solid var(--border); border-radius: 9px;
+}
+.set-seg button { flex: 1; justify-content: center; border-color: transparent; border-radius: 6px; padding: 6px 8px; }
+
+/* Code themes: each choice is lines of code in that theme. */
+.set-row.set-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.set-preview button {
+  flex-direction: column; align-items: stretch; gap: 0; padding: 0; overflow: hidden;
+  border-radius: 9px; white-space: normal; text-align: left;
+}
+.set-preview button[aria-pressed="true"] {
+  background: none; color: var(--text);
+  border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent);
+}
+.set-preview button[aria-pressed="true"] .pt-name { color: var(--accent); }
+.set-preview .pt-name { padding: 5px 9px 6px; border-top: 1px solid var(--border); font-size: 12px; }
+.pt-preview {
+  display: flex; flex-direction: column; padding: 8px 9px;
+  font-family: var(--font-code); font-size: 10.5px; line-height: 1.5;
+  white-space: pre; overflow: hidden;
+}
+.pt-preview .sk { color: var(--shiki-daylight); }
+.pt-preview[data-pane-theme="midnight"] .sk { color: var(--shiki-midnight); }
+.pt-preview[data-pane-theme="contrast"] .sk { color: var(--shiki-contrast); }
+.pt-preview[data-pane-theme="contrast-dark"] .sk { color: var(--shiki-contrast-dark); }
+
+/* Code fonts: a line of code set in each one, its name on the right. */
+.set-row.set-sample { flex-direction: column; gap: 0; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.set-sample button {
+  justify-content: space-between; border: 0; border-bottom: 1px solid var(--border); border-radius: 0;
+  padding: 7px 11px;
+}
+.set-sample button:last-child { border-bottom: 0; }
+.set-sample button[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--text-strong); }
+.set-sample button[aria-pressed="true"] .pt-name { color: var(--accent); }
+.pt-sample { font-size: 13px; color: var(--text-strong); }
+.set-sample .pt-name { color: var(--text-dim); font-size: 12px; }
+
 /* The page width's slider, and the width it reads beside it. The value has
    a fixed width so the track does not shift as "960 px" becomes "Full". */
-.set-row.set-range { flex-wrap: nowrap; align-items: center; gap: 10px; }
+.set-row.set-range { flex-wrap: nowrap; align-items: center; gap: 12px; }
 .set-range input[type="range"] {
   flex: 1; min-width: 0; margin: 0;
   accent-color: var(--accent); cursor: pointer;
 }
 .set-range .set-value {
-  flex: none; min-width: 52px; text-align: right;
-  font-family: inherit; font-size: 12px; font-variant-numeric: tabular-nums;
-  color: var(--text);
+  flex: none; min-width: 58px; text-align: right;
+  font-family: inherit; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
 }
-/* At the foot of the panel, under a hairline, and deliberately NOT styled as
-   a seventh row: the rows are choices that stay chosen, and this is an action
-   that fires once. Quiet by default — it undoes work, however cheaply, so it
-   must not be the most eye-catching thing in a panel full of preferences —
-   and it turns warning-red only under the pointer, where the tooltip
-   explaining that it reaches every document is already showing. */
+/* While the thumb is held, the column's edges show on the page. */
+body.width-dragging main.prose { outline: 2px dashed var(--accent); outline-offset: 4px; }
+
+/* The highlighter's switch mirrors the bar's toggle (initSettingsDrawer). */
+.set-switch {
+  flex: none; position: relative; width: 38px; height: 22px; padding: 0;
+  border: 0; border-radius: 999px; background: var(--control-border); cursor: pointer;
+}
+.set-switch::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  transition: left 140ms ease;
+}
+.set-switch[aria-checked="true"] { background: var(--accent); }
+.set-switch[aria-checked="true"]::after { left: 19px; }
+
+/* Reset sits in the footer, not as a row: the rows are choices that stay
+   chosen, and this is an action that fires once. Quiet until hovered, where
+   the tooltip saying it reaches every document is already showing. */
 .set-reset {
-  margin-top: 2px;
-  padding: 5px 9px;
+  padding: 6px 11px;
   background: none;
   border: 1px solid var(--border);
-  border-top: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 8px;
   cursor: pointer;
   font-family: inherit;
-  font-size: 11px; font-weight: 600;
-  letter-spacing: .04em; text-transform: uppercase;
+  font-size: 12px; font-weight: 600;
   color: var(--text-dim);
   transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
 }
@@ -603,23 +720,9 @@ body .page-header {
    here — highlighter.js finds it by id and keeps its handlers. Only the
    geometry it had as a free-floating popover is undone. */
 .settings-pop .palette-pop {
-  position: static; padding: 0; gap: 6px;
+  position: static; padding: 0; gap: 10px;
   background: none; border: 0; border-radius: 0; box-shadow: none;
 }
-
-/* The code theme is a named list, not a row of bare swatches: "Midnight" says
-   what you are choosing in a way a dark square next to a light one does not,
-   and the chip shows the actual ground and ink of the theme it names. It had
-   its own popover in the header once; it is a section of the settings panel
-   now, and script.js builds its buttons out of these two classes. */
-.pt-chip {
-  flex: none; width: 30px; height: 22px; border-radius: 5px;
-  border: 1px solid rgba(0, 0, 0, .18);
-  display: inline-flex; align-items: center; justify-content: center;
-  font-family: var(--font-code);
-  font-size: 11px;
-}
-.pt-name { font-weight: 600; }
 
 /* === The resume command ================================================
    Populated by entry.js, which knows this session's slug and cwd. It lives in

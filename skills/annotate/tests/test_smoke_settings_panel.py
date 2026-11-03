@@ -42,22 +42,65 @@ class TestTheBarIsSmaller(unittest.TestCase):
                      "highlighter-palette"):
             self.assertNotIn(gone, SHELL, f"{gone} is back in the header")
 
-    def test_the_gear_and_its_panel_are_there(self):
-        # The gear lost its own slot in the bar and became a row of the menu,
-        # so what identifies it is the pane it opens rather than an id.
-        self.assertIn('data-pane-to="settings"', SHELL)
-        self.assertIn('id="settings-pop"', SHELL)
-        self.assertIn('id="settings-groups"', SHELL)
+    def test_the_tile_and_its_drawer_are_there(self):
+        self.assertIn('id="settings-open"', SHELL)
+        self.assertIn('aria-controls="settings-drawer"', SHELL)
+        drawer = SHELL[SHELL.index('id="settings-drawer"'):SHELL.index("</aside>")]
+        self.assertIn('id="settings-pop"', drawer)
+        self.assertIn('id="settings-groups"', drawer)
+        self.assertIn('id="settings-close"', drawer)
 
-    def test_the_panel_is_wired_into_the_one_panel_machinery(self):
-        # Esc, click-outside and one-panel-at-a-time all come from initTopPanels.
-        # The panel it opens is the menu now; settings is a pane inside it, so
-        # the machinery reaches this panel through #menu-pop.
-        panels = JS[JS.index("function initTopPanels()"):]
-        panels = panels[:panels.index("const isOpen")]
-        self.assertIn('getElementById("menu-toggle")', panels)
-        self.assertIn('getElementById("menu-pop")', panels)
-        self.assertIn('data-pane-name="settings"', SHELL)
+
+class TestTheSettingsDrawer(unittest.TestCase):
+    """Every setting at once, beside the page. Checked in a browser: on a wide
+    window the page column moves left and stays whole; under 760px the drawer
+    is a sheet from the bottom over a shade."""
+
+    def _fn(self):
+        body = JS[JS.index("function initSettingsDrawer()"):]
+        return body[:body.index("\n})();")]
+
+    def test_it_is_outside_the_menu(self):
+        self.assertLess(SHELL.index("</header>"), SHELL.index('id="settings-drawer"'))
+
+    def test_a_wide_window_pushes_the_page_rather_than_covering_it(self):
+        self.assertIn("body.settings-open { padding-right: var(--drawer-w); }", CSS)
+        self.assertIn('document.body.classList.add("settings-open")', self._fn())
+
+    def test_a_phone_gets_a_sheet_and_a_shade(self):
+        phone = CSS[CSS.index("@media (max-width: 759px)"):]
+        phone = phone[:phone.index("\n}\n")]
+        self.assertIn("body.settings-open { padding-right: 0; }", phone)
+        self.assertIn("border-radius: 16px 16px 0 0", phone)
+        self.assertIn('id="settings-scrim"', SHELL)
+
+    def test_it_closes_with_its_button_the_shade_the_tile_and_esc(self):
+        fn = self._fn()
+        self.assertIn("closeBtn?.addEventListener(\"click\", close)", fn)
+        self.assertIn("scrim?.addEventListener(\"click\", close)", fn)
+        self.assertIn("isOpen() ? close() : open()", fn)
+        self.assertIn('e.key !== "Escape"', fn)
+
+    def test_opening_it_puts_the_menu_away(self):
+        self.assertIn("menuBtn.click()", self._fn())
+
+    def test_the_highlighter_switch_is_a_proxy_for_the_bar_toggle(self):
+        fn = self._fn()
+        self.assertIn('getElementById("settings-highlighter")', fn)
+        self.assertIn("hlBtn.click()", fn)
+        self.assertIn('"aria-pressed"', fn)
+
+    def test_every_row_says_whose_choice_it_is(self):
+        fn = JS[JS.index("function settingRow(s)"):]
+        fn = fn[:fn.index("\n}")]
+        self.assertIn('"This document" : "All documents"', fn)
+
+    def test_the_sections_cover_every_setting(self):
+        spec = JS[JS.index("const SETTINGS = ["):JS.index("// The drawer's sections")]
+        sections = re.findall(r'section: "([a-z]+)"', spec)
+        self.assertEqual(len(sections), spec.count("scope:"),
+                         "a setting has no section, so the drawer never shows it")
+        self.assertEqual(set(sections), {"page", "code", "voice"})
 
 
 class TestTheSettingsSpec(unittest.TestCase):
@@ -84,11 +127,13 @@ class TestTheSettingsSpec(unittest.TestCase):
                           spec, re.S)
         self.assertEqual(len(rows), spec.count("scope:"))
         for key, scope in rows:
-            expected = ("global" if key in ("pagetheme", "codefont", "textsize", "speechvoice", "dictationlang")
+            # The page width is the reader's too: one width for every document.
+            expected = ("global" if key in ("pagetheme", "WIDTH_KEY", "codefont", "textsize",
+                                            "speechvoice", "dictationlang")
                         else "doc")
             self.assertEqual(scope, expected,
-                             f"{key} changed scope: a typeface is the reader's "
-                             f"and a measure is the document's")
+                             f"{key} changed scope: a typeface and a measure are "
+                             f"the reader's, a code theme is the document's")
 
     def test_a_global_key_carries_no_response_id(self):
         fn = JS[JS.index("function settingKey(s)"):]
@@ -150,12 +195,10 @@ class TestTheHighlighterPaletteMoved(unittest.TestCase):
         # Inside the panel, not merely present somewhere in the header. Located
         # by position: the panel's own markup nests spans and divs, so slicing
         # to the first closing tag stops at the section label, well short of it.
-        # Bounded by where the settings pane ends — the help pane's start —
-        # because the panel is a pane of the menu now and the controls that
-        # used to follow it in the bar sit before it in the document.
+        # Bounded by the drawer's end.
         panel_starts = SHELL.index('id="settings-pop"')
         palette_at = SHELL.index('id="palette-pop"')
-        pane_ends = SHELL.index('data-pane-name="help"')
+        pane_ends = SHELL.index("</aside>")
         self.assertTrue(panel_starts < palette_at < pane_ends,
                         "the palette is no longer inside the settings panel")
 
@@ -184,10 +227,10 @@ class TestNothingWasLeftBehind(unittest.TestCase):
             self.assertNotIn(f".{cls}", CORE_CSS, f".{cls} is dead in core.css")
 
     def test_the_classes_the_panel_still_builds_survived(self):
-        # .pt-chip / .pt-name came from the old theme popover and script.js
-        # builds the theme buttons out of them; .palette-pop is the moved
-        # element itself. Deleting these with the rest would have been easy.
-        for cls in (".pt-chip", ".pt-name", ".palette-pop"):
+        # .pt-name names every choice the drawer builds, .pt-preview is a code
+        # theme's lines and .pt-sample a code font's; .palette-pop is the
+        # moved element itself.
+        for cls in (".pt-preview", ".pt-sample", ".pt-name", ".palette-pop"):
             self.assertIn(cls, CSS, f"{cls} is still used and was deleted")
 
     def test_the_removed_rows_left_nothing_behind(self):
@@ -228,10 +271,10 @@ class TestReset(unittest.TestCase):
         self.assertIn('id="settings-reset"', SHELL)
         panel_at = SHELL.index('id="settings-pop"')
         reset_at = SHELL.index('id="settings-reset"')
-        pane_ends = SHELL.index('data-pane-name="help"')
+        pane_ends = SHELL.index("</aside>")
         self.assertTrue(panel_at < reset_at < pane_ends,
                         "Reset is not inside the settings panel")
-        self.assertIn("shared with every", SHELL,
+        self.assertIn("shared with every annotate document", SHELL,
                       "the button no longer warns that it reaches other documents")
 
     def test_it_clears_every_setting_the_panel_shows(self):

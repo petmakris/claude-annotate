@@ -9,8 +9,9 @@
 // opening a comment box for people reaching for a file.
 
 // ── Page-wide view controls ───────────────────────────────────────────
-// How wide the column is, stored per response, because a preference you
-// must re-set on every reload is worse than not having one.
+// How wide the column is. It is the reader's, kept once for every annotate
+// document: a width set on one page used to be lost on the next session's
+// page, which opened at 760px again.
 // A slider, not stops. It had two, Normal (760px) and Wide (no cap), and
 // neither fitted: Normal was too narrow for a document with code and Wide
 // ran the full window. The slider goes from WIDTH_MIN to WIDTH_MAX in
@@ -55,8 +56,12 @@ function widthFromStored(stored) {
   const n = Math.round(Number(stored) / WIDTH_STEP) * WIDTH_STEP;
   return String(Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, n)));
 }
+// The width is stored without a response id. A width chosen before that,
+// under this document's own key, still counts until one is chosen for all.
 function effectiveWidth() {
-  return widthFromStored(readStored(WIDTH_KEY));
+  let stored = null;
+  try { stored = localStorage.getItem(`annotate.view:${WIDTH_KEY}`); } catch (_) {}
+  return widthFromStored(stored != null ? stored : readStored(WIDTH_KEY));
 }
 // What a width paints into --content-max ("none" is main.prose's no cap),
 // and the words shown beside the slider.
@@ -106,36 +111,52 @@ const SETTINGS = [
   // First row, and "global": a reader who works in the dark does so in every
   // document, the same way they read in one typeface. Light is the default
   // because it is what shipped and what every existing reader already has.
-  { key: "pagetheme", attr: "pageTheme", label: "Page", scope: "global",
-    def: "light",
+  { key: "pagetheme", attr: "pageTheme", label: "Theme", scope: "global",
+    section: "page", kind: "seg", def: "light",
     options: [["light", "Light"], ["dark", "Dark"]] },
   // The one row that is a slider rather than buttons: `range` builds it, and
   // it has no options. Its value is "full" or a number of pixels.
-  { key: WIDTH_KEY, attr: "width", label: "Page width", scope: "doc",
-    read: effectiveWidth, range: true },
+  { key: WIDTH_KEY, attr: "width", label: "Page width", scope: "global",
+    section: "page", read: effectiveWidth, range: true },
   { key: "panetheme", attr: "paneTheme", label: "Code theme", scope: "doc",
-    read: effectivePaneTheme,
+    section: "code", kind: "preview", read: effectivePaneTheme,
     // Each is a standard editor theme, used as it ships (code-paint.js).
     options: [["daylight", "Light (VS Code Light+)", "#ffffff", "#000000"],
               ["midnight", "Dark (GitHub Dark)", "#0d1117", "#e6edf3"],
               ["contrast", "High contrast light", "#ffffff", "#0e1116"],
               ["contrast-dark", "High contrast dark", "#0a0c10", "#f0f3f6"]] },
   { key: "codefont", attr: "codeFont", label: "Code font", scope: "global",
-    def: "jetbrains",
-    options: [["jetbrains", "JetBrains"], ["monaspace", "Monaspace"],
-              ["system", "System"]] },
+    section: "code", kind: "sample", def: "jetbrains",
+    // The third field is the family the sample line is drawn in, the same
+    // stacks style-page.css paints for each choice.
+    options: [["jetbrains", "JetBrains Mono", "'JetBrains Mono', monospace"],
+              ["monaspace", "Monaspace", "'Monaspace Radon', monospace"],
+              ["system", "System", "ui-monospace, SFMono-Regular, Menlo, monospace"]] },
   { key: "textsize", attr: "textSize", label: "Reading size", scope: "global",
-    def: "medium",
+    section: "page", kind: "seg", def: "medium",
     options: [["small", "Small"], ["medium", "Medium"], ["large", "Large"]] },
   { key: "speechvoice", attr: "speechVoice", label: "Read-aloud voice", scope: "global",
-    def: "ava",
+    section: "voice", def: "ava",
     options: [["ava", "Ava (US)"], ["andrew", "Andrew (US)"], ["emma", "Emma (US)"],
               ["brian", "Brian (US)"], ["sonia", "Sonia (UK)"], ["ryan", "Ryan (UK)"]] },
   { key: "dictationlang", attr: "dictationLang", label: "Dictation language", scope: "global",
-    def: "auto",
+    section: "voice", def: "auto",
     options: [["auto", "Browser's"], ["en-US", "English (US)"], ["en-GB", "English (UK)"],
               ["el-GR", "Greek"], ["fr-FR", "French"]] },
 ];
+
+// The drawer's sections, in order. The highlighter's section is not built
+// here: its controls ship in the shell (#set-group-highlight), because
+// highlighter.js finds the palette by id, and it is moved into its place.
+const SETTING_SECTIONS = [
+  ["page", "Page", '<rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/>'],
+  ["code", "Code", '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>'],
+  ["highlight"],
+  ["voice", "Voice", '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/>'],
+];
+// The three lines each code theme's preview shows, coloured by CodePaint
+// when it is there and plain otherwise.
+const THEME_PREVIEW = ["// Widest capped width", "const WIDTH_MAX = 1600;", "const WIDTH_STEP = 20;"];
 
 // A global setting drops the response id from the key, which is the whole
 // difference between "this document is wide" and "I read in this typeface".
@@ -175,6 +196,9 @@ function resetSettings() {
   for (const s of SETTINGS) {
     try { localStorage.removeItem(settingKey(s)); } catch (_) {}
   }
+  // A width this document kept before the width was the reader's would
+  // otherwise come back the moment the shared one is gone.
+  try { localStorage.removeItem(viewKey(WIDTH_KEY)); } catch (_) {}
   try { localStorage.removeItem(viewKey("highlightcolor")); } catch (_) {}
   applyViewControls();
   // The colour lives on <body> and the swatches' pressed state is painted
@@ -210,60 +234,137 @@ function applyViewControls() {
   }
 }
 
+// A row's name, the line saying whose choice it is, and its control below.
+function settingRow(s) {
+  const group = document.createElement("div");
+  group.className = "set-group";
+  group.dataset.setting = s.key;
+  const top = document.createElement("div");
+  top.className = "set-top";
+  const label = document.createElement("span");
+  label.className = "set-label";
+  label.textContent = s.label;
+  const scope = document.createElement("span");
+  scope.className = "set-scope";
+  scope.dataset.scope = s.scope;
+  scope.textContent = s.scope === "doc" ? "This document" : "All documents";
+  top.append(label, scope);
+  group.appendChild(top);
+  return group;
+}
+
+function settingSection(id, title, iconPath) {
+  const sec = document.createElement("section");
+  sec.className = "set-sec";
+  sec.dataset.section = id;
+  const h = document.createElement("h3");
+  h.className = "set-sec-title";
+  h.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${iconPath}</svg>`;
+  h.appendChild(document.createTextNode(title));
+  sec.appendChild(h);
+  return sec;
+}
+
+// One choice of a button row. Every kind is a button with data-value and
+// aria-pressed, so applyViewControls paints them all the same way.
+function optionButton(s, value, text, extra) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.dataset.value = value;
+  b.setAttribute("aria-pressed", "false");
+  if (s.kind === "preview") {
+    // The theme's own ground and ink, on lines of code painted in it.
+    const [bg, fg] = extra;
+    const pre = document.createElement("span");
+    pre.className = "pt-preview";
+    pre.dataset.paneTheme = value;
+    pre.style.background = bg;
+    pre.style.color = fg;
+    THEME_PREVIEW.forEach((line) => {
+      const row = document.createElement("span");
+      row.className = "pt-line";
+      row.textContent = line;
+      pre.appendChild(row);
+    });
+    b.appendChild(pre);
+  } else if (s.kind === "sample") {
+    const sample = document.createElement("span");
+    sample.className = "pt-sample";
+    sample.style.fontFamily = extra[0];
+    sample.textContent = "const width = 960;";
+    b.appendChild(sample);
+  }
+  const name = document.createElement("span");
+  name.className = "pt-name";
+  name.textContent = text;
+  b.appendChild(name);
+  b.addEventListener("click", () => setSetting(s, value));
+  return b;
+}
+
+// Colours each theme preview that was built plain because the code painter
+// was not ready yet. Safe to call again: a painted preview is left alone.
+function repaintThemePreviews() {
+  if (!window.CodePaint) return;
+  const paint = () => {
+    const painted = CodePaint.rows(THEME_PREVIEW, { file: "x.js" });
+    if (!painted) return;
+    document.querySelectorAll(".pt-preview:not([data-painted])").forEach((pre) => {
+      pre.querySelectorAll(".pt-line").forEach((row, i) => { row.innerHTML = painted[i]; });
+      pre.dataset.painted = "1";
+    });
+  };
+  // The JavaScript grammar may not be loaded on a page with no JavaScript
+  // in it, so it is asked for first.
+  Promise.resolve(CodePaint.prepare({ file: "x.js" })).then(paint);
+}
+
 function wireViewControls() {
   const groups = document.getElementById("settings-groups");
   if (groups && !groups.childElementCount) {
-    for (const s of SETTINGS) {
-      const group = document.createElement("div");
-      group.className = "set-group";
-      group.dataset.setting = s.key;
-      const label = document.createElement("span");
-      label.className = "set-label";
-      label.textContent = s.label;
-      const row = document.createElement("div");
-      row.className = "set-row";
-      if (s.range) {
-        // Painted and stored on every input event, so the column follows the
-        // thumb while it is dragged and a reload keeps where it stopped.
-        row.classList.add("set-range");
-        const slider = document.createElement("input");
-        slider.type = "range";
-        slider.min = String(WIDTH_MIN);
-        slider.max = String(WIDTH_FULL_AT);
-        slider.step = String(WIDTH_STEP);
-        slider.setAttribute("aria-label", s.label);
-        slider.addEventListener("input", () => setSetting(s, sliderToWidth(slider.value)));
-        const out = document.createElement("output");
-        out.className = "set-value";
-        row.append(slider, out);
-        group.append(label, row);
-        groups.appendChild(group);
+    for (const [id, title, iconPath] of SETTING_SECTIONS) {
+      if (id === "highlight") {
+        // Moved, not rebuilt: highlighter.js has its handlers on it.
+        const hl = document.getElementById("set-group-highlight");
+        if (hl) groups.appendChild(hl);
         continue;
       }
-      for (const [value, text, chipBg, chipFg] of s.options) {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.dataset.value = value;
-        b.setAttribute("aria-pressed", "false");
-        // The code themes keep the chip the old popover gave them: "Midnight"
-        // names the choice, and the chip shows the ground and ink it means.
-        if (chipBg) {
-          const chip = document.createElement("span");
-          chip.className = "pt-chip";
-          chip.style.background = chipBg;
-          chip.style.color = chipFg;
-          chip.textContent = "Aa";
-          b.appendChild(chip);
+      const sec = settingSection(id, title, iconPath);
+      for (const s of SETTINGS.filter((x) => x.section === id)) {
+        const group = settingRow(s);
+        const row = document.createElement("div");
+        row.className = "set-row";
+        if (s.range) {
+          // Painted and stored on every input event, so the column follows the
+          // thumb while it is dragged and a reload keeps where it stopped.
+          row.classList.add("set-range");
+          const slider = document.createElement("input");
+          slider.type = "range";
+          slider.min = String(WIDTH_MIN);
+          slider.max = String(WIDTH_FULL_AT);
+          slider.step = String(WIDTH_STEP);
+          slider.setAttribute("aria-label", s.label);
+          slider.addEventListener("input", () => setSetting(s, sliderToWidth(slider.value)));
+          // While the thumb is held the page shows the column's edges.
+          const holding = (on) => { document.body.classList.toggle("width-dragging", on); };
+          slider.addEventListener("pointerdown", () => holding(true));
+          slider.addEventListener("pointerup", () => holding(false));
+          slider.addEventListener("blur", () => holding(false));
+          const out = document.createElement("output");
+          out.className = "set-value";
+          row.append(slider, out);
+          group.appendChild(row);
+          sec.appendChild(group);
+          continue;
         }
-        const name = document.createElement("span");
-        name.className = "pt-name";
-        name.textContent = text;
-        b.appendChild(name);
-        b.addEventListener("click", () => setSetting(s, value));
-        row.appendChild(b);
+        if (s.kind) row.classList.add(`set-${s.kind}`);
+        for (const [value, text, ...extra] of s.options) {
+          row.appendChild(optionButton(s, value, text, extra));
+        }
+        group.appendChild(row);
+        sec.appendChild(group);
       }
-      group.append(label, row);
-      groups.appendChild(group);
+      groups.appendChild(sec);
     }
   }
   // The highlighter's own controls are hidden when the browser has no

@@ -28,26 +28,16 @@
     '<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/>' +
     '<line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
 
-  // Same reason as export.js's label slot: this element used to be an icon and
-  // nothing else, so innerHTML was its icon. In a menu tile it is an icon and a
-  // label, and the label must survive the swap.
+  // The button is an icon in the bar. It was a menu tile with a caption for a
+  // while, and a caller that gives it an icon slot still gets only that slot
+  // rewritten.
   const iconSlot = btn.querySelector("[data-icon]") || btn;
-  // And the label must FOLLOW it. As an icon-only button there was nothing to
-  // keep in step; as a row it said "Full screen" while announcing itself as
-  // "Exit full screen", so the two states of the same control disagreed about
-  // which one you were in. Null when there is no slot, exactly like the icon's
-  // fallback, so an icon-only caller is unchanged.
-  const labelSlot = btn.querySelector("[data-label]");
 
   function sync() {
     const on = !!document.fullscreenElement;
     iconSlot.innerHTML = on ? ICON_EXIT : ICON_ENTER;
     btn.title = on ? "Exit full screen" : "Full screen — hide the browser chrome";
     btn.setAttribute("aria-label", btn.title);
-    // The visible words, not the tooltip's sentence: a tile's caption is a
-    // short caption under its icon (72px wide), and the accessible name above
-    // still contains it either way ("Exit full" is in "Exit full screen").
-    if (labelSlot) labelSlot.textContent = on ? "Exit full" : "Full screen";
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   }
 
