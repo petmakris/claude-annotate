@@ -314,11 +314,12 @@ async function boot() {
   function paintWatcherHealth(seenAt, stoppedAt) {
     lastSeenAt = seenAt;
     lastStoppedAt = stoppedAt == null ? null : stoppedAt;
-    const btn = document.getElementById("menu-toggle");
-    const block = document.getElementById("menu-status");
-    const title = document.getElementById("menu-status-title");
-    const sub = document.getElementById("menu-status-sub");
-    const resumeEl = document.getElementById("menu-resume");
+    const btn = document.getElementById("status-toggle");
+    const word = document.getElementById("status-word");
+    const block = document.getElementById("status-block");
+    const title = document.getElementById("status-title");
+    const sub = document.getElementById("status-sub");
+    const resumeEl = document.getElementById("status-resume");
     if (!btn || !title || !sub) return;
 
     const live = lastStoppedAt == null && seenAt != null
@@ -331,6 +332,9 @@ async function boot() {
       block.classList.add(cls);
     }
 
+    // The pill after the title says it in one word; its popover says what
+    // the word means.
+    if (word) word.textContent = live ? "Watching" : "Unwatched";
     if (live) {
       title.textContent = "Watching";
       sub.textContent = "A live Claude Code session is watching this page and "
@@ -356,17 +360,10 @@ async function boot() {
     // attached session needs no instructions for attaching one, and a
     // read-only viewer could not run the command anyway.
     if (resumeEl) resumeEl.hidden = live || !resumeCommand;
-    // The button says what it is for at a glance, in a tooltip, without
-    // opening the menu — and says the same thing to a screen reader, which is
-    // why aria-label is written here too rather than left static in the shell.
-    // A static aria-label WINS the accessible-name computation over title, so
-    // a button labelled "Menu" announced exactly that however the dot was
-    // painted: the pill this replaced was the page's only worded
-    // Watching/Unwatched signal, and its replacement is a colour. Its panel
-    // sibling is aria-hidden, so without this the state is unreachable without
-    // opening the menu, and a change is never announced at all.
-    btn.title = live ? "Menu — a session is watching this page"
-                     : "Menu — nothing is watching this page";
+    // The pill's name is the state, so a screen reader hears it too; a
+    // static name would win over the title and say nothing about it.
+    btn.title = live ? "Watching — a session answers comments here. Click for details."
+                     : "Unwatched — nothing answers comments here. Click for details."
     btn.setAttribute("aria-label", btn.title);
   }
 

@@ -34,7 +34,7 @@
     + ".sel-chip, .page-header, footer, #round-dock, .code-col";
   const OWN = ".sel-menu, .comment-window, .sp-card";
   // Focus inside one of these means the keys are the panel's, not the page's.
-  const PANELS = ".page-header, [role='dialog'], .menu-panel, #round-dock, .comment-window";
+  const PANELS = ".page-header, .toolbar, [role='dialog'], #round-dock, .comment-window";
 
   // A finger has no hover and no reliable mouseup: the menu becomes a sheet
   // at the bottom of the screen, opened from selectionchange.

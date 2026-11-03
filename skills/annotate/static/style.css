@@ -239,7 +239,7 @@ body.read-only .comment-card { display: none; }
 
 /* === Legend ==========================================================
    Reference material, not chrome the reader needs on every visit, so it lives
-   in the menu's help pane and paints as .legend-pop — see the pane rules
+   in the toolbar's Keys popover and paints as .legend-pop — see the pane rules
    further down. These inner rules are shared with the exported standalone
    HTML, which has no menu and renders the table inline.
    Open state persists nowhere on purpose: reopening is cheap. */
@@ -568,8 +568,6 @@ section.block.fold-hidden { display: none; }
    while a query is active, and parts that do not match stay search-hidden. */
 body.searching section.block.fold-hidden,
 body.searching section.block.collapsed .block-body { display: revert; }
-.fold-all-btn { font: 600 12.5px var(--font-prose); border: 1px solid var(--border); background: var(--surface); border-radius: 7px; padding: 6px 12px; color: var(--text); cursor: pointer; }
-.fold-all-btn[hidden] { display: none; }
 /* A plain 24px square in the margin left of the heading; a tint on hover
    says it is a button. The dashed circle it replaced read as a placeholder. */
 .fold-btn {

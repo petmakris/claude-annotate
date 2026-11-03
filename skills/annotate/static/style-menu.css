@@ -1,151 +1,67 @@
-/* annotate page styles, part 8 of 13 (see style.css): the menu, its tiles,
-   the status block and the header icons. */
+/* annotate page styles, part 8 of 13 (see style.css): the header's icons,
+   the status pill and its popover, and the toolbar under the header. */
 
-/* === The menu ==========================================================
-   Nine controls left the bar for this panel. It reuses .icon-btn-wrap for
-   anchoring and the initTopPanels machinery for opening and closing, so the
-   only genuinely new thing here is the pane switch.
+/* === The status pill ===================================================
+   Whether a Claude Code session is watching, said in one word after the
+   title, always in view. A click opens what the word means, and the resume
+   command when nothing is watching. entry.js paints the word, the colour
+   class and the name. */
+.status-wrap { margin-left: 4px; }
+.status-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 10px 2px 8px; border: 0; border-radius: 999px;
+  background: color-mix(in srgb, var(--text-dim) 14%, transparent);
+  color: var(--text-dim); cursor: pointer;
+  font: 600 12px var(--font-prose); white-space: nowrap;
+}
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.status-pill.watcher-live { background: var(--status-live-bg); color: var(--status-live-fg); }
+.status-pill.watcher-stale {
+  background: color-mix(in srgb, var(--type-reject-fg) 12%, transparent);
+  color: var(--type-reject-fg);
+}
+.status-pill:hover { filter: brightness(.96); }
+/* On a phone the title needs the room: the pill keeps its dot. */
+.status-wrap { flex: none; }
+@media (max-width: 599px) {
+  .status-word, .header-respid { display: none; }
+  .status-pill { padding: 5px; }
+}
 
-   318px because the root pane is a grid of four 72px tiles: 4 x 72, three
-   4px gaps, the pane's 6px padding each side and the 1px border come to
-   318. It used to be 288px, sized for a list of rows whose widest line was a
-   shortcut description; the help pane is that same list and reads the same
-   at 318, just with shorter wrapping. Much wider than this and a menu stops
-   reading as a menu and starts reading as a dialog. max-height + scroll for
-   the help pane is a long list of keys. */
-.menu-pop {
-  position: absolute; top: calc(100% + 9px); right: 0; z-index: 60;
-  display: flex; flex-direction: column;
+/* Both popovers hang under their button, over the page. */
+.status-pop, .keys-pop {
+  position: absolute; top: calc(100% + 8px); z-index: 60;
   width: 318px; max-height: 78vh; overflow-y: auto;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: 1px solid var(--border); border-radius: 10px;
   box-shadow: 0 12px 34px rgba(20, 22, 28, .20), 0 2px 6px rgba(20, 22, 28, .08);
-  font-size: 12.5px;
+  font-size: 12.5px; font-weight: 400; color: var(--text); white-space: normal;
 }
-.menu-pop[hidden] { display: none; }
+.status-pop { left: 0; }
+.keys-pop { right: 0; width: 340px; }
+.status-pop[hidden] { display: none; }
+.keys-pop[hidden] { display: none; }
 
-/* Exactly one pane at a time, chosen by the attribute initMenuPanes writes.
-   Panes are siblings rather than a scroller so the panel's height is the
-   height of the pane you are on, not of the tallest one. */
-.menu-pane { display: none; flex-direction: column; gap: 2px; padding: 6px; }
-.menu-pop[data-pane="root"] [data-pane-name="root"],
-.menu-pop[data-pane="help"] [data-pane-name="help"] { display: flex; }
-
-/* === The root pane: tiles ==============================================
-   Under the status block, every command is a tile: a 20px icon over a
-   one-word caption, four to a row. It replaced three headed lists of rows
-   ("This response", "View", "Document"), whose headings were doing the work
-   the icons now do, in a panel you had to read top to bottom to find one of
-   seven things.
-
-   The caption is deliberately short, so it is never the name: every tile
-   carries its full name as aria-label and its full sentence as title. Two
-   modules write THROUGH a tile — fullscreen.js swaps the icon in the
-   [data-icon] slot and the caption in [data-label]; export.js swaps the
-   caption for "Preparing…" / "Saved ✓" and back — so the caption clips
-   rather than wraps when one of those runs long.
-
-   The hover tint is mixed from --text into the panel's own surface rather
-   than taken from --hover-tint, which is one step off --surface in light and
-   IS --surface-soft in dark: on a tile with no border that is a hover you
-   cannot see. */
-.menu-tiles {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px;
-  margin-top: 2px; padding-top: 6px;
-  border-top: 1px solid var(--border);
-}
-.menu-tile {
-  position: relative;
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  min-width: 0; padding: 10px 2px 8px;
-  border: 0; border-radius: 8px; background: none;
-  font-family: inherit; font-size: 11px; font-weight: 500; line-height: 1.2;
-  color: var(--text); cursor: pointer;
-  /* Background only: a colour transition would leave a just-pressed tile
-     reading its old colour for 140ms, and the caption and icon would
-     disagree mid-flight. */
-  transition: background 140ms ease;
-}
-.menu-tile:hover {
-  background: color-mix(in srgb, var(--text) 8%, var(--surface));
-  color: var(--text-strong);
-}
-/* The same cascade trap as .icon-btn[hidden] in core.css: an author
-   `display: flex` beats the UA [hidden] rule at equal specificity. The
-   highlighter tile is hidden on a browser with no Highlight API. */
-.menu-tile[hidden] { display: none; }
-.menu-tile > svg, .menu-tile-icon svg {
-  width: 20px; height: 20px; flex: none;
-  fill: none; stroke: currentColor; stroke-width: 1.8;
-  stroke-linecap: round; stroke-linejoin: round;
-  color: var(--text-dim);
-}
-.menu-tile:hover > svg, .menu-tile:hover .menu-tile-icon svg { color: var(--text-strong); }
-.menu-tile-icon { display: inline-flex; flex: none; }
-.menu-tile-label {
-  max-width: 100%;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-/* The G shortcut, tucked into the Comment tile's corner: the row used to
-   say it in full, and the keys pane still does. */
-.menu-tile-kbd {
-  position: absolute; top: 5px; right: 6px;
-  font-family: var(--font-code); font-size: 9.5px; line-height: 1;
-  color: var(--text-dim);
-}
-/* A tile whose thing is currently ON (the highlighter; Full screen). Both
-   icon shapes, as the base rule above: an icon is a bare child svg on most
-   tiles and an svg inside the [data-icon] slot on the one a module rewrites
-   (Full screen). Naming only `> svg` lit the caption and left that icon grey
-   — measured, when these were rows, at rgb(131,134,143) beside a
-   rgb(0,113,227) label. */
-.menu-tile[aria-pressed="true"],
-.menu-tile[aria-pressed="true"]:hover {
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
-  color: var(--accent);
-}
-.menu-tile[aria-pressed="true"] > svg,
-.menu-tile[aria-pressed="true"] .menu-tile-icon svg,
-.menu-tile[aria-pressed="true"] .menu-tile-kbd { color: var(--accent); }
-
-.menu-back {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 8px 9px; border: 0; border-bottom: 1px solid var(--border);
-  background: none; cursor: pointer;
-  font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--text);
-}
-.menu-back svg {
-  width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2;
-  stroke-linecap: round; stroke-linejoin: round; color: var(--text-dim);
-}
-
-/* === The status block ==================================================
-   What the Watching pill said, with room to say what it means. The dot on
-   #menu-toggle is the same fact at a glance; this is the same fact in
-   words, plus the resume command when nothing is attached. */
-.menu-status { display: flex; gap: 9px; align-items: flex-start; padding: 10px; }
-.menu-status-dot {
-  width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex: none;
+.status-block { display: flex; gap: 9px; align-items: flex-start; padding: 12px; }
+.status-block-dot {
+  width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none;
   background: var(--text-dim);
 }
-.menu-status.watcher-live .menu-status-dot { background: var(--status-live-fg); }
-.menu-status.watcher-stale .menu-status-dot { background: var(--type-reject-fg); }
-.menu-status-text { min-width: 0; }
-.menu-status-title { font-weight: 600; font-size: 12.5px; color: var(--text); }
-.menu-status-sub {
-  font-size: 11.5px; color: var(--text-dim); line-height: 1.5; margin-top: 2px;
-}
-.menu-resume { margin-top: 8px; }
-.menu-resume[hidden] { display: none; }
-/* The read-only badge is the only thing in the menu that is not a control:
-   it describes what the page IS. Hidden unless the body says so. */
-.menu-readonly { display: none; margin-top: 8px; }
-body.read-only .menu-readonly { display: inline-flex; }
+.status-block.watcher-live .status-block-dot { background: var(--status-live-fg); }
+.status-block.watcher-stale .status-block-dot { background: var(--type-reject-fg); }
+.status-block-text { min-width: 0; }
+.status-block-title { font-weight: 600; font-size: 13px; color: var(--text-strong); }
+.status-block-sub { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-top: 2px; }
+.status-resume { margin-top: 8px; }
+.status-resume[hidden] { display: none; }
+/* The read-only badge describes what the page IS. Hidden unless the body
+   says so. */
+.status-readonly { display: none; margin-top: 8px; }
+body.read-only .status-readonly { display: inline-flex; }
 
 /* === Bare header icons =================================================
-   The search trigger, the menu button and (while armed) the highlighter are
-   bare 28px icons on the header's ground: no border, no background, a tint
+   Fold all, Full screen, the toolbar button and (while armed) the
+   highlighter are bare 28px icons on the header's ground: no border, no background, a tint
    on hover. core.css's .icon-btn is the shared, framed version — surface
    fill, --border outline, 26px — and three framed squares plus the resting
    search field's own outline read as one box drawn round the right end of
@@ -173,31 +89,103 @@ body.read-only .menu-readonly { display: inline-flex; }
   background: var(--header-hover);
   color: var(--text-strong);
 }
-/* Open, the menu button keeps core.css's accent fill — the one cue that the
-   panel below belongs to it. Restated because the bare rule above outranks
-   core.css's. */
+/* Open, a popover's button keeps core.css's accent fill — the one cue that
+   the panel below belongs to it. Restated because the bare rule above
+   outranks core.css's. */
 .page-header .icon-btn[aria-expanded="true"] {
   background: var(--accent);
   color: var(--accent-fg);
 }
 
-/* === The menu button ===================================================
-   The watcher's colour, absorbed. The button stays a menu button — a tinted
-   or filled button reads as "this control is active", which is a different
-   claim from "something is watching this page".
-
-   The dot's ring is the header's ground, not the button's: with no button
-   background behind it the ring is what separates the dot from the bar, and
-   anything else paints a visible halo. */
-.menu-btn { position: relative; overflow: visible; }
-.menu-btn::after {
-  content: ""; position: absolute; top: -2px; right: -2px;
-  width: 8px; height: 8px; border-radius: 50%;
-  border: 2px solid var(--surface-soft);
-  background: var(--text-dim);
+/* Fold all shows what a click will do: chevrons in to fold, out to unfold. */
+.fold-all-btn[hidden] { display: none; }
+.fold-all-btn .fold-out, .fold-all-btn[data-next="unfold"] .fold-in { display: none; }
+.fold-all-btn[data-next="unfold"] .fold-out { display: block; }
+/* Lit while the toolbar shows. */
+.page-header #toolbar-toggle[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
 }
-.menu-btn.watcher-live::after { background: var(--status-live-fg); }
-.menu-btn.watcher-stale::after { background: var(--type-reject-fg); }
+
+/* === The toolbar =======================================================
+   A second bar under the header with every command and the three settings
+   read most often, in three named groups. It replaced the ☰ menu, which put
+   one click in front of everything. The header's toolbar button hides it
+   (body[data-toolbar="hidden"]).
+
+   Below 1180px its words and group names go and every command is an icon,
+   named by its tooltip; below 600px the width slider goes too, since the
+   column already fills a phone. */
+.toolbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 5px var(--content-gutter);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px; white-space: nowrap;
+}
+body[data-toolbar="hidden"] .toolbar { display: none; }
+.tb-group { display: flex; align-items: center; gap: 4px; }
+.tb-view { display: flex; align-items: center; gap: 10px; margin-right: 4px; }
+.tb-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--text-dim); margin-right: 4px;
+}
+.tb-sep { width: 1px; height: 22px; background: var(--border); flex: none; }
+.tb-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 9px; border: 1px solid transparent; border-radius: 8px;
+  background: none; cursor: pointer;
+  font: 500 13px var(--font-prose); color: var(--text);
+}
+.tb-btn:hover { background: var(--hover-tint); color: var(--text-strong); }
+.tb-btn[hidden] { display: none; }
+.tb-btn svg, .tb-seg svg, .tb-width-icon svg {
+  width: 16px; height: 16px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.tb-kbd {
+  font: 600 10px var(--font-prose); color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 4px; padding: 0 4px;
+}
+/* On: the highlighter's amber, the colour of the marks it makes; an open
+   popover or panel, the accent. */
+.tb-btn[aria-pressed="true"] { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+:root:has(body[data-page-theme="dark"]) .tb-btn[aria-pressed="true"] {
+  background: rgba(245, 158, 11, .18); border-color: rgba(245, 158, 11, .5); color: #fbbf24;
+}
+.tb-btn[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent);
+}
+.tb-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.tb-seg button {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 9px; border: 0; background: none; cursor: pointer;
+  font: 500 12.5px var(--font-prose); color: var(--text);
+}
+.tb-seg button + button { border-left: 1px solid var(--border); }
+.tb-seg button:hover { background: var(--hover-tint); }
+.tb-seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+.tb-width { display: inline-flex; align-items: center; gap: 8px; color: var(--text-dim); }
+.tb-width-icon { display: inline-flex; }
+.tb-width input[type="range"] { width: 120px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.tb-width .set-value {
+  min-width: 38px; font: 600 12.5px var(--font-prose); font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+@media (max-width: 1179px) {
+  .tb-word, .tb-kbd, .tb-label { display: none; }
+  .tb-btn { padding: 6px 7px; }
+  .toolbar { gap: 8px; }
+  .tb-width input[type="range"] { width: 90px; }
+}
+@media (max-width: 599px) {
+  .toolbar { padding: 4px 8px; gap: 2px; justify-content: space-between; }
+  .tb-width, .tb-sep { display: none; }
+  .tb-view { gap: 4px; margin-right: 0; }
+  .tb-seg button { padding: 4px 7px; }
+  /* Anchored to their button they would run off the screen's edge. */
+  .keys-pop, .status-pop { position: fixed; top: 52px; left: 8px; right: 8px; width: auto; }
+}
 
 /* === The highlighter's escape ==========================================
    The one control allowed back into the bar, and only while it is armed.

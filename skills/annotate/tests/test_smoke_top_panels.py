@@ -71,7 +71,7 @@ def test_both_panel_toggles_are_rendered():
     sliced the source that way and failed against correct code.
     """
     server = SERVER_PY.read_text()
-    for ident in ("composer-toggle", "menu-toggle"):
+    for ident in ("composer-toggle", "status-toggle", "keys-toggle"):
         assert f'id="{ident}"' in server, (
             f"#{ident} is not rendered — the control it replaces was removed "
             "from the reading column, so nothing opens that panel at all"
@@ -89,17 +89,17 @@ def test_the_collapsed_composer_trigger_row_is_gone():
         "dead .composer-collapsed styling is still in style.css"
 
 
-def test_the_legend_is_a_pane_of_the_menu_not_a_details_in_the_reading_column():
+def test_the_legend_is_a_popover_not_a_details_in_the_reading_column():
     """The legend pill sat centred above the document. It became a popover
-    anchored to its own header button, and is now a pane of the menu; the
-    <details> wrapper went with the first of those moves and stays gone."""
+    anchored to its own button, the toolbar's Keys; the <details> wrapper
+    went with the first of those moves and stays gone."""
     server = SERVER_PY.read_text()
     assert '<details class="legend"' not in server, \
         "the legend is still a <details> block sitting in the reading column"
     assert "legend-pop" in server, "no legend popover is rendered"
 
 
-def test_the_menu_panel_hard_hides_when_hidden():
+def test_the_popovers_hard_hide_when_hidden():
     """The exact cascade bug that bit .general-composer and .composer-collapsed,
     now one element further on. A bare `hidden` attribute does NOTHING against
     an author `display: flex/block` rule — the author rule beats the UA's
@@ -107,15 +107,15 @@ def test_the_menu_panel_hard_hides_when_hidden():
     order. Without a rule targeting `[hidden]` explicitly, the panel paints
     over the document from the moment the page loads.
 
-    Asserted on .menu-pop rather than .legend-pop: the legend is a pane of the
-    menu now and is never hidden by its own attribute — the panel around it is
-    the element that carries `hidden`, so it is the one that has to hard-hide.
+    Asserted on the two popovers that carry `hidden`: the status pill's and
+    the toolbar's Keys.
     """
     css = STYLE_CSS.read_text()
-    assert _hides_when_hidden(css, ".menu-pop"), (
-        "nothing makes .menu-pop display:none when hidden — the panel "
-        "renders open on load, over the first block"
-    )
+    for sel in (".status-pop", ".keys-pop"):
+        assert _hides_when_hidden(css, sel), (
+            f"nothing makes {sel} display:none when hidden — the popover "
+            "renders open on load, over the first block"
+        )
 
 
 def test_the_composer_band_spans_the_header_gutters():

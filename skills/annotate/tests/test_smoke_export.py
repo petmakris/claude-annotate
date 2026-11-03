@@ -192,9 +192,9 @@ def test_share_survives_a_read_only_link():
     """Someone holding a shared link is exactly who wants a copy, and the
     export is built entirely from what their own page already shows.
 
-    Share is a tile of the menu now rather than a button of its own, so the
-    property to guard is that no read-only rule reaches .menu-tile -- the way
-    one deliberately reaches .done-btn, which a guest genuinely cannot use.
+    Share is a toolbar button, so the property to guard is that no read-only
+    rule reaches .tb-btn -- the way one deliberately reaches .done-btn, which
+    a guest genuinely cannot use.
     """
     shell = SERVER_PY.read_text()
     core = ANNOTATE_CORE_CSS.read_text()
@@ -202,9 +202,9 @@ def test_share_survives_a_read_only_link():
 
     # Check the element Share actually is. Naming a class it no longer carries
     # is how the previous version of this test stopped guarding anything.
-    assert re.search(r'id="export-btn"[^>]*class="menu-tile"', shell), \
-        "Share is not a menu tile -- this test is asserting about the wrong element"
-    assert ".menu-tile {" in style, "menu tiles have no styling"
+    assert re.search(r'id="export-btn"[^>]*class="tb-btn"', shell), \
+        "Share is not a toolbar button -- this test is asserting about the wrong element"
+    assert ".tb-btn {" in style, "toolbar buttons have no styling"
 
     reached = _read_only_selectors(core) + _read_only_selectors(style)
     # Control case: a read-only rule DOES reach Done. Without this, an
@@ -213,8 +213,8 @@ def test_share_survives_a_read_only_link():
         "no read-only rule reaches .done-btn -- _read_only_selectors is broken, " \
         "so the assertion below proves nothing"
     hides_share = [sel for sel in reached
-                   if ".menu-tile" in sel or "export-btn" in sel
-                   or ".menu-pop" in sel]
+                   if ".tb-btn" in sel or "export-btn" in sel
+                   or ".toolbar" in sel]
     assert hides_share == [], \
         f"Share is hidden on a read-only link, where it would be most " \
         f"useful: {hides_share}"

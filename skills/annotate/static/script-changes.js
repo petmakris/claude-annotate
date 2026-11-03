@@ -111,7 +111,9 @@ function renderChangeBar(changed) {
   dis.addEventListener("click", () => bar.remove());
   nav.appendChild(dis);
   bar.append(dot, txt, nav);
-  const header = document.querySelector(".page-header");
+  // Under the toolbar, which sits under the header: the bar of
+  // commands stays next to the header it belongs to.
+  const header = document.getElementById("toolbar") || document.querySelector(".page-header");
   if (header) header.insertAdjacentElement("afterend", bar);
 }
 

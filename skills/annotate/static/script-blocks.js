@@ -543,8 +543,11 @@ function applyFolds() {
     const heads = list.filter((b) => b.heading);
     all.hidden = !heads.length;
     const every = heads.length && heads.every((b) => folded.has(b.id));
-    all.textContent = every ? "Unfold all" : "Fold all";
+    // An icon button: the name and the tooltip carry what it will do next,
+    // and the stylesheet shows the icon for it (data-next).
     all.dataset.next = every ? "unfold" : "fold";
+    all.title = every ? "Unfold every heading (⌘K ⌘J)" : "Fold every heading (⌘K ⌘0)";
+    all.setAttribute("aria-label", every ? "Unfold all" : "Fold all");
   }
 }
 document.addEventListener("annotate:rendered", applyFolds);

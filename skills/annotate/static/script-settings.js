@@ -9,21 +9,19 @@
 // opening a comment box for people reaching for a file.
 
 // ── Page-wide view controls ───────────────────────────────────────────
-// How wide the column is. It is the reader's, kept once for every annotate
-// document: a width set on one page used to be lost on the next session's
-// page, which opened at 760px again.
-// A slider, not stops. It had two, Normal (760px) and Wide (no cap), and
-// neither fitted: Normal was too narrow for a document with code and Wide
-// ran the full window. The slider goes from WIDTH_MIN to WIDTH_MAX in
-// WIDTH_STEP steps, and its one stop past WIDTH_MAX is "full", no cap at
-// all, so the column is the window less the side gutters. Code panes
-// always sit under the prose, so no width has to make room for a second
-// column.
-const WIDTH_MIN = 600;
-const WIDTH_MAX = 1600;
-const WIDTH_STEP = 20;
-// Where "full" sits on the slider: one step past the widest capped width.
-const WIDTH_FULL_AT = WIDTH_MAX + WIDTH_STEP;
+// How wide the column is, as a share of the window: "70%" draws the column
+// at 70% of the window's width, so it grows and shrinks with the window and
+// fits every screen the same way. It is the reader's, kept once for every
+// annotate document.
+//
+// It used to be a number of pixels (600 to 1600, then "full"), which drew a
+// narrow column on a wide screen and a cramped one on a laptop. A column is
+// never drawn narrower than WIDTH_FLOOR px, so a phone or a narrow window
+// still reads at its full width; 100% is the window less the side gutters.
+const WIDTH_MIN = 40;
+const WIDTH_MAX = 100;
+const WIDTH_STEP = 5;
+const WIDTH_FLOOR = 600;
 
 function viewKey(name) {
   const rid = (document.body.dataset.responseId || "default");
@@ -32,29 +30,30 @@ function viewKey(name) {
 function readStored(name) {
   try { return localStorage.getItem(viewKey(name)); } catch (_) { return null; }
 }
-// Every new session opens at 760px, code or not. This used to be derived
-// from data-has-code, which made the opening measure depend on something
-// the reader never chose. One default, chosen once; anything else is the
-// reader's own choice, and that is what `stored` is for. It is also the
-// :root default in style.css, which is what an export with no width gets.
-const DEFAULT_WIDTH = "760";
-// The two stops the slider replaced, as the widths they drew, so a width
-// chosen before the slider still reads the same.
-const OLD_WIDTH_STOPS = { normal: "760", wide: "full" };
+// Every new session opens at 55%: on a 1440px window that is about the
+// 760px column the page opened at when widths were pixels.
+const DEFAULT_WIDTH = "55%";
 // `pagewidth`, not `width`: the stops have been renamed in place before,
 // and the older key's values all name columns narrower than 760px now.
 // AnnotateStorage retires that key rather than mapping it to the default.
 const WIDTH_KEY = "pagewidth";
-// A stored width as the page paints it: "full", or a number of pixels as a
-// string, clamped to the slider and snapped to its step. Anything else
-// (nothing stored, a value from some other build) is the default.
-function widthFromStored(stored) {
+function snapPercent(n) {
+  const v = Math.round(n / WIDTH_STEP) * WIDTH_STEP;
+  return `${Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, v))}%`;
+}
+// A stored width as the page paints it: a share of the window, "NN%",
+// clamped to the slider and snapped to its step. A width kept as pixels
+// before (a number, the old "full", or the older stops Normal and Wide) is
+// read as the share of this window it drew. Anything else is the default.
+function widthFromStored(stored, windowWidth) {
   if (stored == null) return DEFAULT_WIDTH;
-  if (stored === "full") return "full";
-  if (Object.prototype.hasOwnProperty.call(OLD_WIDTH_STOPS, stored)) return OLD_WIDTH_STOPS[stored];
-  if (!/^\d+$/.test(stored)) return DEFAULT_WIDTH;
-  const n = Math.round(Number(stored) / WIDTH_STEP) * WIDTH_STEP;
-  return String(Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, n)));
+  const m = /^(\d+)%$/.exec(stored);
+  if (m) return snapPercent(Number(m[1]));
+  if (stored === "full" || stored === "wide") return "100%";
+  const px = stored === "normal" ? 760 : (/^\d+$/.test(stored) ? Number(stored) : null);
+  if (px == null) return DEFAULT_WIDTH;
+  const ww = windowWidth || (typeof window !== "undefined" && window.innerWidth) || 1440;
+  return snapPercent(px / ww * 100);
 }
 // The width is stored without a response id. A width chosen before that,
 // under this document's own key, still counts until one is chosen for all.
@@ -65,13 +64,14 @@ function effectiveWidth() {
 }
 // What a width paints into --content-max ("none" is main.prose's no cap),
 // and the words shown beside the slider.
-function widthCss(w) { return w === "full" ? "none" : `${w}px`; }
-function widthText(w) { return w === "full" ? "Full" : `${w} px`; }
-// A width's position on the slider, and back.
-function widthToSlider(w) { return w === "full" ? WIDTH_FULL_AT : Number(w); }
-function sliderToWidth(v) {
-  return Number(v) >= WIDTH_FULL_AT ? "full" : widthFromStored(String(v));
+function widthCss(w) {
+  const n = parseInt(w, 10);
+  return n >= 100 ? "none" : `max(${n}vw, ${WIDTH_FLOOR}px)`;
 }
+function widthText(w) { return w; }
+// A width's position on the slider, and back.
+function widthToSlider(w) { return parseInt(w, 10); }
+function sliderToWidth(v) { return snapPercent(Number(v)); }
 // Pane themes. Daylight is the measured light palette the pane shipped
 // with; the others redeclare its variables. An unknown stored value falls
 // back rather than painting an undefined theme.
@@ -209,28 +209,102 @@ function resetSettings() {
 // Paints every setting onto <body> and syncs the panel to it. Idempotent,
 // and safe to call on every render: it reads state, it never advances it.
 function applyViewControls() {
-  const groups = document.getElementById("settings-groups");
   for (const s of SETTINGS) {
     const value = settingValue(s);
     document.body.dataset[s.attr] = value;
+    // A setting can have a control in the drawer and another in the toolbar;
+    // both are painted from the one stored value.
+    const groups = document.querySelectorAll(`[data-setting="${s.key}"]`);
     if (s.range) {
       // A stylesheet cannot carry a rule for every width, so the width goes
       // onto <body> as --content-max itself. data-width still names it, for
       // the export and for anyone reading the page.
       document.body.style.setProperty("--content-max", widthCss(value));
-      const group = groups && groups.querySelector(`[data-setting="${s.key}"]`);
-      if (!group) continue;
-      const slider = group.querySelector('input[type="range"]');
-      // Left alone while it is being dragged: what it holds is what painted.
-      if (slider && document.activeElement !== slider) slider.value = String(widthToSlider(value));
-      const out = group.querySelector(".set-value");
-      if (out) out.textContent = widthText(value);
+      groups.forEach((group) => {
+        const slider = group.querySelector('input[type="range"]');
+        // Left alone while it is being dragged: what it holds is what painted.
+        if (slider && document.activeElement !== slider) slider.value = String(widthToSlider(value));
+        const out = group.querySelector(".set-value");
+        if (out) out.textContent = widthText(value);
+      });
       continue;
     }
-    if (!groups) continue;
-    groups.querySelectorAll(`[data-setting="${s.key}"] [data-value]`).forEach((b) => {
-      b.setAttribute("aria-pressed", b.dataset.value === value ? "true" : "false");
+    groups.forEach((group) => {
+      group.querySelectorAll("[data-value]").forEach((b) => {
+        b.setAttribute("aria-pressed", b.dataset.value === value ? "true" : "false");
+      });
     });
+  }
+}
+
+// The width slider, in the drawer and in the toolbar alike. Painted and
+// stored on every input event, so the column follows the thumb while it is
+// dragged and a reload keeps where it stopped.
+function widthSlider(s) {
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = String(WIDTH_MIN);
+  slider.max = String(WIDTH_MAX);
+  slider.step = String(WIDTH_STEP);
+  slider.setAttribute("aria-label", s.label);
+  slider.addEventListener("input", () => setSetting(s, sliderToWidth(slider.value)));
+  // While the thumb is held the page shows the column's edges.
+  const holding = (on) => { document.body.classList.toggle("width-dragging", on); };
+  slider.addEventListener("pointerdown", () => holding(true));
+  slider.addEventListener("pointerup", () => holding(false));
+  slider.addEventListener("blur", () => holding(false));
+  const out = document.createElement("output");
+  out.className = "set-value";
+  return [slider, out];
+}
+
+// The toolbar's View group: page theme, page width and reading size, the
+// three settings read most often, one click away. Every other setting is in
+// the drawer. Each control carries data-setting, so applyViewControls paints
+// it with the drawer's.
+const TOOLBAR_SETTINGS = {
+  pagetheme: [["light", "Light", "Light page", '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'],
+              ["dark", "Dark", "Dark page", '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>']],
+  textsize: [["small", "S", "Small reading size"], ["medium", "M", "Medium reading size"],
+             ["large", "L", "Large reading size"]],
+};
+function buildToolbarView(view) {
+  for (const key of ["pagetheme", WIDTH_KEY, "textsize"]) {
+    const s = SETTINGS.find((x) => x.key === key);
+    const box = document.createElement("div");
+    box.dataset.setting = key;
+    if (s.range) {
+      box.className = "tb-width";
+      box.title = "Page width, as a share of the window";
+      const icon = document.createElement("span");
+      icon.className = "tb-width-icon";
+      icon.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="7 8 3 12 7 16"/><polyline points="17 8 21 12 17 16"/><line x1="3" y1="12" x2="21" y2="12"/></svg>';
+      box.append(icon, ...widthSlider(s));
+    } else {
+      box.className = "tb-seg";
+      box.setAttribute("role", "group");
+      box.setAttribute("aria-label", s.label);
+      for (const [value, word, title, iconPath] of TOOLBAR_SETTINGS[key]) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.dataset.value = value;
+        b.title = title;
+        b.setAttribute("aria-label", title);
+        b.setAttribute("aria-pressed", "false");
+        if (iconPath) {
+          b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${iconPath}</svg>`;
+          const w = document.createElement("span");
+          w.className = "tb-word";
+          w.textContent = word;
+          b.appendChild(w);
+        } else {
+          b.textContent = word;
+        }
+        b.addEventListener("click", () => setSetting(s, value));
+        box.appendChild(b);
+      }
+    }
+    view.appendChild(box);
   }
 }
 
@@ -338,20 +412,7 @@ function wireViewControls() {
           // Painted and stored on every input event, so the column follows the
           // thumb while it is dragged and a reload keeps where it stopped.
           row.classList.add("set-range");
-          const slider = document.createElement("input");
-          slider.type = "range";
-          slider.min = String(WIDTH_MIN);
-          slider.max = String(WIDTH_FULL_AT);
-          slider.step = String(WIDTH_STEP);
-          slider.setAttribute("aria-label", s.label);
-          slider.addEventListener("input", () => setSetting(s, sliderToWidth(slider.value)));
-          // While the thumb is held the page shows the column's edges.
-          const holding = (on) => { document.body.classList.toggle("width-dragging", on); };
-          slider.addEventListener("pointerdown", () => holding(true));
-          slider.addEventListener("pointerup", () => holding(false));
-          slider.addEventListener("blur", () => holding(false));
-          const out = document.createElement("output");
-          out.className = "set-value";
+          const [slider, out] = widthSlider(s);
           row.append(slider, out);
           group.appendChild(row);
           sec.appendChild(group);
@@ -367,6 +428,8 @@ function wireViewControls() {
       groups.appendChild(sec);
     }
   }
+  const view = document.getElementById("toolbar-view");
+  if (view && !view.childElementCount) buildToolbarView(view);
   // The highlighter's own controls are hidden when the browser has no
   // Highlight API (see highlighter.js), and its colour row must go with
   // them — a palette for a feature that cannot run is worse than no palette.

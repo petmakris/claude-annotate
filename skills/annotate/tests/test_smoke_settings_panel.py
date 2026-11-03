@@ -84,9 +84,6 @@ class TestTheSettingsDrawer(unittest.TestCase):
         self.assertIn("isOpen() ? close() : open()", fn)
         self.assertIn('e.key !== "Escape"', fn)
 
-    def test_opening_it_puts_the_menu_away(self):
-        self.assertIn("menuBtn.click()", self._fn())
-
     def test_the_highlighter_switch_is_a_proxy_for_the_bar_toggle(self):
         fn = self._fn()
         self.assertIn('getElementById("settings-highlighter")', fn)

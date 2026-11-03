@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-/* The page width is a slider: 600px to 1600px, then Full. It is the reader's,
- * one value for every annotate document. It runs the real
- * script-settings.js on the shared DOM shim, which lays nothing out, so this
- * checks what the page paints (data-width, --content-max, the slider and its
- * words), never a measured width.
+/* The page width is a slider from 40% to 100% of the window, in steps of 5.
+ * It is the reader's, one value for every annotate document. It runs the
+ * real script-settings.js on the shared DOM shim, which lays nothing out, so
+ * this checks what the page paints (data-width, --content-max, the slider
+ * and its words), never a measured width.
  * Run: node skills/annotate/tests/page_width.test.mjs */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -43,95 +43,84 @@ function drag(to) {
   slider().dispatchEvent(new ShimEvent("input", { bubbles: true }));
 }
 
-test("a stored width reads as itself, snapped to the step and clamped", () => {
-  eq(widthFromStored("960"), "960");
-  eq(widthFromStored("963"), "960");
-  eq(widthFromStored("100"), "600");
-  eq(widthFromStored("9000"), "1600");
-  eq(widthFromStored("full"), "full");
+test("a stored share reads as itself, snapped to the step and clamped", () => {
+  eq(widthFromStored("70%"), "70%");
+  eq(widthFromStored("72%"), "70%");
+  eq(widthFromStored("10%"), "40%");
+  eq(widthFromStored("150%"), "100%");
 });
 
-test("the old stops read as the widths they drew", () => {
-  eq(widthFromStored("normal"), "760");
-  eq(widthFromStored("wide"), "full");
+test("a width kept as pixels reads as the share of the window it drew", () => {
+  eq(widthFromStored("960", 1600), "60%");
+  eq(widthFromStored("1280", 1440), "90%");
+  eq(widthFromStored("full", 1440), "100%");
+  eq(widthFromStored("wide", 1440), "100%");
+  eq(widthFromStored("normal", 1520), "50%");
 });
 
-test("nothing stored, or something unknown, is 760px", () => {
-  eq(widthFromStored(null), "760");
-  eq(widthFromStored("narrow"), "760");
-  eq(widthFromStored("12em"), "760");
+test("nothing stored, or something unknown, is 55%", () => {
+  eq(widthFromStored(null), "55%");
+  eq(widthFromStored("narrow"), "55%");
+  eq(widthFromStored("12em"), "55%");
 });
 
-test("a page with no choice paints 760px and the slider says so", () => {
+test("a page with no choice paints 55% and the slider says so", () => {
   wireViewControls();
-  eq(painted(), ["760", "760px"]);
-  eq(slider().value, "760");
-  eq([slider().min, slider().max, slider().step], ["600", "1620", "20"]);
-  eq(shown(), "760 px");
+  eq(painted(), ["55%", "max(55vw, 600px)"]);
+  eq(slider().value, "55");
+  eq([slider().min, slider().max, slider().step], ["40", "100", "5"]);
+  eq(shown(), "55%");
 });
 
-test("dragging paints and stores each width as it goes", () => {
-  drag(1000);
-  eq(painted(), ["1000", "1000px"]);
-  eq(shown(), "1000 px");
-  eq(localStorage.getItem(KEY), "1000");
-  drag(640);
-  eq(painted(), ["640", "640px"]);
-  eq(localStorage.getItem(KEY), "640");
+test("dragging paints and stores each share as it goes", () => {
+  drag(70);
+  eq(painted(), ["70%", "max(70vw, 600px)"]);
+  eq(shown(), "70%");
+  eq(localStorage.getItem(KEY), "70%");
+  drag(45);
+  eq(painted(), ["45%", "max(45vw, 600px)"]);
+  eq(localStorage.getItem(KEY), "45%");
 });
 
-test("the slider's last stop is Full, with no cap", () => {
-  drag(1620);
-  eq(painted(), ["full", "none"]);
-  eq(shown(), "Full");
-  eq(localStorage.getItem(KEY), "full");
-});
-
-test("a saved Wide opens at Full and a saved Normal at 760px", () => {
-  document.body.focus();
-  localStorage.setItem(KEY, "wide");
-  applyViewControls();
-  eq(painted(), ["full", "none"]);
-  eq(slider().value, "1620");
-  localStorage.setItem(KEY, "normal");
-  applyViewControls();
-  eq(painted(), ["760", "760px"]);
-  eq(slider().value, "760");
+test("100% is the whole window, with no cap", () => {
+  drag(100);
+  eq(painted(), ["100%", "none"]);
+  eq(shown(), "100%");
+  eq(localStorage.getItem(KEY), "100%");
 });
 
 test("a width chosen in one document opens every other one at that width", () => {
-  drag(1180);
+  drag(80);
   document.body.focus();
   document.body.dataset.responseId = "r2";
   applyViewControls();
-  eq(painted(), ["1180", "1180px"]);
-  eq(slider().value, "1180");
+  eq(painted(), ["80%", "max(80vw, 600px)"]);
+  eq(slider().value, "80");
   document.body.dataset.responseId = "r1";
 });
 
 test("a width this document kept before is used until one is chosen for all", () => {
   document.body.focus();
   localStorage.removeItem(KEY);
-  localStorage.setItem(OLD_KEY, "1300");
+  localStorage.setItem(OLD_KEY, "65%");
   applyViewControls();
-  eq(painted(), ["1300", "1300px"]);
-  drag(900);
-  eq(localStorage.getItem(KEY), "900");
+  eq(painted(), ["65%", "max(65vw, 600px)"]);
+  drag(60);
+  eq(localStorage.getItem(KEY), "60%");
   document.body.focus();
-  localStorage.setItem(OLD_KEY, "1300");
   applyViewControls();
-  eq(painted(), ["900", "900px"]);
+  eq(painted(), ["60%", "max(60vw, 600px)"]);
 });
 
-test("Reset puts the width back to 760px, the old per-document one too", () => {
-  drag(1200);
-  localStorage.setItem(OLD_KEY, "1300");
+test("Reset puts the width back to 55%, the old per-document one too", () => {
+  drag(90);
+  localStorage.setItem(OLD_KEY, "65%");
   document.body.focus();
   vm.runInThisContext("resetSettings()");
   eq(localStorage.getItem(KEY), null);
   eq(localStorage.getItem(OLD_KEY), null);
-  eq(painted(), ["760", "760px"]);
-  eq(shown(), "760 px");
+  eq(painted(), ["55%", "max(55vw, 600px)"]);
+  eq(shown(), "55%");
 });
 
 process.stdout.write(`\n${ran - failures}/${ran} passed\n`);

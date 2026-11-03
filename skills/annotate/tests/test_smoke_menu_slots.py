@@ -47,4 +47,4 @@ class TestFullscreenWritesToItsIcon(unittest.TestCase):
         tag = re.search(r'<button id="fullscreen-toggle"[^>]*>', SHELL).group(0)
         self.assertIn('class="icon-btn', tag)
         self.assertNotIn("menu-tile", tag)
-        self.assertLess(SHELL.index('id="fullscreen-toggle"'), SHELL.index('id="menu-pop"'))
+        self.assertLess(SHELL.index('id="fullscreen-toggle"'), SHELL.index("</header>"))

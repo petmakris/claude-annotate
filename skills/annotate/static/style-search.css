@@ -190,14 +190,15 @@ main.prose mark.search-hit {
    touched it. Overridden here rather than in core.css, per this file's
    header rules being the place that already undoes core.css's box geometry
    (see .general-composer above). min-width: 0 lets `.header-title` shrink
-   under pressure, overflow: hidden clips what no longer fits, and the
-   ellipsis on #hdr-title turns that clipping into a legible "title
-   truncated" instead of a mid-character cut. At rest there's no pressure
+   under pressure, and the title text itself shrinks and ends in an
+   ellipsis, a legible "title truncated" instead of a mid-character cut.
+   The block does not clip: the status pill's popover hangs out of it. At rest there's no pressure
    (the field is 28px) and while typing `.header-title` is `display: none`
    two rules up, so this is inert in both of those states and only bites in
    `filtered`, which is where the overflow was measured. */
-.header-title { min-width: 0; overflow: hidden; }
+.header-title { min-width: 0; }
 .header-title #hdr-title {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -205,6 +206,6 @@ main.prose mark.search-hit {
 /* The `/` hint has nowhere to live at rest: the field is 28px wide and the
    magnifier already occupies it. It was a hint about how to OPEN search, so
    it is useless once search is open — which is the only state with room for
-   it. Hidden here rather than deleted from the shell; the keyboard pane in
-   the menu still teaches `/`, and that is now its only home. */
+   it. Hidden here rather than deleted from the shell; the toolbar's Keys
+   popover still teaches `/`, and that is now its only home. */
 .page-header:not([data-searching="1"]) .search-kbd { display: none; }

@@ -1,10 +1,8 @@
 """The watcher signal, split in two.
 
-The pill said "Watching" and had room for nothing else — not what watching
-means, not how long ago the session was last seen, and not the command that
-would attach one. The dot on the menu icon carries the state at a glance; the
-status block at the top of the menu carries the sentence, and absorbs the
-resume popover, which was the same subject behind a second button.
+The pill after the title carries the state in one word, always in view. A
+click opens its popover, which carries the sentence: what watching means, how
+long ago the session was last seen, and the command that would attach one.
 """
 import unittest
 from pathlib import Path
@@ -25,14 +23,15 @@ class TestTheBadgeIsGone(unittest.TestCase):
 
 
 class TestTheDotCarriesTheState(unittest.TestCase):
-    def test_it_paints_the_menu_button(self):
-        self.assertIn('getElementById("menu-toggle")', ENTRY)
+    def test_it_paints_the_status_pill(self):
+        self.assertIn('getElementById("status-toggle")', ENTRY)
+        self.assertIn('getElementById("status-word")', ENTRY)
         self.assertIn("watcher-live", ENTRY)
         self.assertIn("watcher-stale", ENTRY)
 
     def test_the_dot_has_a_rule_for_each_state(self):
-        self.assertIn(".menu-btn.watcher-live::after", CSS)
-        self.assertIn(".menu-btn.watcher-stale::after", CSS)
+        self.assertIn(".status-pill.watcher-live {", CSS)
+        self.assertIn(".status-pill.watcher-stale {", CSS)
 
     def test_the_state_reaches_the_buttons_accessible_name(self):
         # A colour is not a signal for everyone, and the dot's only worded
@@ -43,13 +42,15 @@ class TestTheDotCarriesTheState(unittest.TestCase):
         self.assertIn('btn.setAttribute("aria-label", btn.title)', ENTRY)
 
     def test_a_change_of_state_is_announced(self):
-        self.assertIn('id="menu-status-title" aria-live="polite"', SHELL)
+        # On the word in the pill, which is always in view; the popover's
+        # title is hidden until opened, and a hidden live region says nothing.
+        self.assertIn('id="status-word" aria-live="polite"', SHELL)
 
 
 class TestTheBlockCarriesTheSentence(unittest.TestCase):
     def test_it_writes_a_title_and_a_subtitle(self):
-        self.assertIn('getElementById("menu-status-title")', ENTRY)
-        self.assertIn('getElementById("menu-status-sub")', ENTRY)
+        self.assertIn('getElementById("status-title")', ENTRY)
+        self.assertIn('getElementById("status-sub")', ENTRY)
 
     def test_the_staleness_threshold_did_not_move(self):
         # 180s is the daemon's own convention and the IntelliJ plugin's
@@ -75,7 +76,7 @@ class TestTheResumeCommandCameWithIt(unittest.TestCase):
         self.assertNotIn(".resume-pop {", CSS)
 
     def test_the_command_renders_in_the_status_block(self):
-        self.assertIn('getElementById("menu-resume")', ENTRY)
+        self.assertIn('getElementById("status-resume")', ENTRY)
         self.assertIn('getElementById("resume-cmd")', ENTRY)
 
     def test_it_is_shown_only_when_nothing_is_attached(self):

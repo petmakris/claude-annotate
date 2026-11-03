@@ -89,7 +89,9 @@
     });
     // Same anchor the busy ribbon uses: directly under the header, so it pins
     // flush to the top of the screen when the page scrolls.
-    const header = document.querySelector(".page-header");
+    // Under the toolbar, which sits under the header: the bar of
+    // commands stays next to the header it belongs to.
+    const header = document.getElementById("toolbar") || document.querySelector(".page-header");
     if (header) header.insertAdjacentElement("afterend", el);
     else document.body.insertBefore(el, document.body.firstChild);
     return el;

@@ -72,7 +72,9 @@ function setBusy(busy) {
       // Place the lock ribbon at the top of the content (just under the
       // header, above the composer) so it pins flush to the top of the
       // screen when the page scrolls — not buried below the composer.
-      const header = document.querySelector(".page-header");
+      // Under the toolbar, which sits under the header: the bar of
+      // commands stays next to the header it belongs to.
+      const header = document.getElementById("toolbar") || document.querySelector(".page-header");
       if (header) header.insertAdjacentElement("afterend", banner);
       // Fallback for a shell with no header at all. It used to anchor on
       // .general-composer, which is now a band of the top bar — landing the
@@ -132,7 +134,9 @@ function setWatcherDead(dead) {
         "Run `/annotate resume` from a Claude session to continue. " +
         "Don't resubmit; it would apply the same round twice.";
       banner.append(label);
-      const header = document.querySelector(".page-header");
+      // Under the toolbar, which sits under the header: the bar of
+      // commands stays next to the header it belongs to.
+      const header = document.getElementById("toolbar") || document.querySelector(".page-header");
       if (header) header.insertAdjacentElement("afterend", banner);
       else document.body.insertBefore(banner, document.body.firstChild);
     }

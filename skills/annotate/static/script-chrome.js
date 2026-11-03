@@ -1,5 +1,5 @@
 // annotate page code, part 6 of 9 (see script.js): the page around the
-// blocks — Done, the general composer, the top-bar panels, the menu, the
+// blocks — Done, the general composer, the top-bar panels, the toolbar, the
 // keyboard review and the fold chords.
 
 // ── Done button ────────────────────────────────────────────────────────────
@@ -152,13 +152,13 @@ wireViewControls();
     { btn: document.getElementById("composer-toggle"),
       el: document.getElementById("general-composer"),
       focus: () => document.getElementById("general-input") },
-    // One panel where there were four: settings, the legend and the resume
-    // command are panes of this one now, not popovers of their own. The
-    // pane machinery is initMenuPanes below; everything else about opening
-    // and closing — Esc, click-outside, one-at-a-time, aria-expanded — is
-    // this function's and is unchanged.
-    { btn: document.getElementById("menu-toggle"),
-      el: document.getElementById("menu-pop"),
+    // The two popovers: the status pill's (what Watching means, and the
+    // resume command when nothing watches) and the toolbar's Keys.
+    { btn: document.getElementById("status-toggle"),
+      el: document.getElementById("status-pop"),
+      focus: () => null, dismissOnOutsideClick: true },
+    { btn: document.getElementById("keys-toggle"),
+      el: document.getElementById("keys-pop"),
       focus: () => null, dismissOnOutsideClick: true },
   ].filter((p) => p.btn && p.el);
   if (!panels.length) return;
@@ -255,77 +255,22 @@ wireViewControls();
   });
 })();
 
-// ── Menu panes ───────────────────────────────────────────────────────────
-// Settings and the legend used to be popovers with their own toggles in the
-// bar. They are panes of the one menu now, pushed and popped by a data
-// attribute; the stylesheet shows exactly one pane at a time.
-//
-// The reset-to-root hangs off the panel being HIDDEN rather than off the
-// toggle being clicked, and deliberately: initTopPanels closes this panel
-// from four different places (its own toggle, Esc, a click outside, another
-// panel opening), and only one of them is a click on the button. Watching
-// the attribute catches all four without knowing about any of them.
-(function initMenuPanes() {
-  const pop = document.getElementById("menu-pop");
-  if (!pop) return;
-  //
-  // The panel is a DISCLOSURE, not a dialog. It carried role="dialog" with
-  // no aria-modal and no focus move on open, which is a role claiming three
-  // things none of which were true. The honest options were to make it a
-  // real dialog or to stop saying it was one; it is a panel hung off a
-  // button that already carries aria-expanded and aria-controls, and that
-  // needs no role at all. So the role is gone rather than the behaviour
-  // being grown to match it.
-  //
-  // Focus does move between PANES, which is a different question: switching
-  // one used to write the attribute and nothing else, so the row you clicked
-  // went display:none under the caret and activeElement stayed on a hidden
-  // element. Tab recovered (it landed on .menu-back) so nothing was
-  // stranded, but nothing announced the pane either.
-  pop.querySelectorAll("[data-pane-to]").forEach((b) => {
-    b.addEventListener("click", (e) => {
-      e.preventDefault();
-      const to = b.dataset.paneTo;
-      const from = pop.dataset.pane;
-      pop.dataset.pane = to;
-      if (to === "root") {
-        // Back where you came from: the root row that pushed the pane just
-        // left, found by the pane it points at rather than by remembering
-        // it, so the two can never drift.
-        pop.querySelector('.menu-pane[data-pane-name="root"] '
-          + '[data-pane-to="' + from + '"]')?.focus();
-      } else {
-        // The new pane's own header, which is both the first thing in it
-        // and the way out of it.
-        pop.querySelector('.menu-pane[data-pane-name="' + to + '"] '
-          + '.menu-back')?.focus();
-      }
-    });
-  });
-  new MutationObserver(() => {
-    if (pop.hidden) pop.dataset.pane = "root";
-  }).observe(pop, { attributes: true, attributeFilter: ["hidden"] });
-})();
-
-// ── The highlighter's menu tile ──────────────────────────────────────────
-// The one proxy in the menu, and a proxy precisely because its real element
-// cannot come here: the highlighter is a MODE, so its button stays in the
-// bar as the only indicator that dragging over text now marks it. This tile
-// clicks that button and mirrors it, which keeps highlighter.js the single
-// owner of the state — a second copy of "is it on" would be one more thing
-// to keep in step, and this page has been bitten by that before.
-(function initHighlighterMenuRow() {
-  const row = document.getElementById("menu-highlighter");
+// ── The highlighter's toolbar button ─────────────────────────────────────
+// A proxy, because the real element stays in the header: the highlighter is
+// a MODE, and its header button is the indicator that dragging over text now
+// marks it, even with the toolbar hidden. This button clicks that one and
+// mirrors it, which keeps highlighter.js the single owner of the state.
+(function initHighlighterToolbarButton() {
+  const row = document.getElementById("toolbar-highlighter");
   const btn = document.getElementById("highlighter-toggle");
   if (!row || !btn) return;
   row.addEventListener("click", (e) => { e.preventDefault(); btn.click(); });
-  // The row is a tile now, and a tile says "on" with colour alone (the
-  // stylesheet reads aria-pressed): there is no on/off word to keep in step.
+  // It says "on" with colour alone (the stylesheet reads aria-pressed).
   function sync() {
     const on = btn.getAttribute("aria-pressed") === "true";
     row.setAttribute("aria-pressed", on ? "true" : "false");
     // highlighter.js hides the toggle when the browser has no Highlight
-    // API. A menu tile for a feature that cannot run is worse than none.
+    // API. A button for a feature that cannot run is worse than none.
     row.hidden = btn.hidden;
   }
   new MutationObserver(sync).observe(
@@ -335,18 +280,15 @@ wireViewControls();
 
 
 // ── The settings drawer ──────────────────────────────────────────────────
-// Every setting at once, opened from the menu's Settings tile. It is not one
+// Every setting at once, opened from the toolbar's All settings. It is not one
 // of initTopPanels' panels: those close each other, and the drawer must stay
-// open while the menu or the composer is used, since it sits beside the page
-// rather than over it. Its own Esc runs only when no panel took the key first.
+// open while a popover or the composer is used. Its own Esc runs only when no panel took the key first.
 (function initSettingsDrawer() {
   const drawer = document.getElementById("settings-drawer");
   const tile = document.getElementById("settings-open");
   if (!drawer || !tile) return;
   const scrim = document.getElementById("settings-scrim");
   const closeBtn = document.getElementById("settings-close");
-  const menuBtn = document.getElementById("menu-toggle");
-  const menu = document.getElementById("menu-pop");
 
   const isOpen = () => !drawer.hidden;
   function open() {
@@ -357,9 +299,6 @@ wireViewControls();
     // The theme previews are painted when the drawer opens, not when it is
     // built: the code painter may not have been ready at parse time.
     repaintThemePreviews();
-    // The tile sits in the menu, so the menu goes away and the drawer takes
-    // the keyboard.
-    if (menu && !menu.hidden && menuBtn) menuBtn.click();
     closeBtn?.focus();
   }
   function close() {
@@ -369,7 +308,7 @@ wireViewControls();
     if (scrim) scrim.hidden = true;
     document.body.classList.remove("settings-open", "width-dragging");
     tile.setAttribute("aria-expanded", "false");
-    if (inside) menuBtn?.focus();
+    if (inside) tile.focus();
   }
   tile.addEventListener("click", (e) => { e.preventDefault(); isOpen() ? close() : open(); });
   closeBtn?.addEventListener("click", close);
@@ -380,8 +319,8 @@ wireViewControls();
     close();
   });
 
-  // The highlighter's switch is a proxy for the bar's toggle, like the
-  // menu's tile, so highlighter.js stays the one owner of "is it on".
+  // The highlighter's switch is a proxy for the header's toggle, like the
+  // toolbar's button, so highlighter.js stays the one owner of "is it on".
   const sw = document.getElementById("settings-highlighter");
   const hlBtn = document.getElementById("highlighter-toggle");
   if (sw && hlBtn) {
@@ -392,6 +331,31 @@ wireViewControls();
     new MutationObserver(sync).observe(hlBtn, { attributes: true, attributeFilter: ["aria-pressed"] });
     sync();
   }
+})();
+
+// ── The toolbar ──────────────────────────────────────────────────────────
+// The second bar holds every command and the three settings read most often.
+// The header's toolbar button shows or hides it, and the choice is the
+// reader's, kept for every annotate document. It shows until hidden.
+(function initToolbar() {
+  const bar = document.getElementById("toolbar");
+  const btn = document.getElementById("toolbar-toggle");
+  if (!bar || !btn) return;
+  const KEY = "annotate.view:toolbar";
+  const shown = () => {
+    try { return localStorage.getItem(KEY) !== "hidden"; } catch (_) { return true; }
+  };
+  function paint() {
+    const on = shown();
+    document.body.dataset.toolbar = on ? "shown" : "hidden";
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    btn.title = on ? "Hide the toolbar" : "Show the toolbar";
+  }
+  btn.addEventListener("click", () => {
+    try { localStorage.setItem(KEY, shown() ? "hidden" : "shown"); } catch (_) {}
+    paint();
+  });
+  paint();
 })();
 
 // ── Keyboard review (j / k / c / f) ──────────────────────────────────────

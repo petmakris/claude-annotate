@@ -13,7 +13,22 @@
 // the source is ~90 diffable lines. Break lines only between tags.
 export const SHELL_HTML = `\
 <header class="page-header"><div class="header-title"><span class="header-emoji">📝</span>\
-<span class="header-text" id="hdr-title"></span><span class="header-respid" id="hdr-respid"></span></div>\
+<span class="header-text" id="hdr-title"></span><span class="header-respid" id="hdr-respid"></span>\
+<span class="icon-btn-wrap status-wrap">\
+<button id="status-toggle" type="button" class="status-pill" aria-expanded="false" aria-controls="status-pop" title="Checking whether a session is watching" aria-label="Checking whether a session is watching">\
+<span class="status-dot" aria-hidden="true"></span><span class="status-word" id="status-word" aria-live="polite">Checking…</span></button>\
+<div id="status-pop" class="status-pop" hidden>\
+<div class="status-block" id="status-block"><span class="status-block-dot" aria-hidden="true"></span>\
+<div class="status-block-text"><div class="status-block-title" id="status-title">Checking…</div>\
+<div class="status-block-sub" id="status-sub"></div>\
+<div class="status-resume" id="status-resume" hidden>\
+<p class="resume-hint">Paste this in any terminal to open <code id="resume-cwd"></code> and attach a live session here:</p>\
+<div class="resume-cmd-row"><code id="resume-cmd" class="resume-cmd"></code>\
+<button id="resume-copy" type="button" class="resume-copy-btn" title="Copy the command">Copy</button></div>\
+<p class="resume-status" id="resume-status" aria-live="polite"></p></div>\
+<div class="status-readonly read-only-badge" title="This link can read the document but not change it.">&#128065; Read-only</div>\
+</div></div>\
+</div></span></div>\
 <div class="header-actions"><div class="header-search">\
 <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">\
 <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>\
@@ -21,60 +36,39 @@ export const SHELL_HTML = `\
 <span class="search-kbd">/</span>\
 <button id="block-search-clear" type="button" class="search-clear" aria-label="Clear search" tabindex="-1">&times;</button>\
 </div>\
-<button id="fold-all" type="button" class="text-btn fold-all-btn" title="Fold every heading (⌘K ⌘0)" hidden>Fold all</button>\
+<button id="fold-all" type="button" class="icon-btn fold-all-btn" data-next="fold" title="Fold every heading (⌘K ⌘0)" aria-label="Fold all" hidden>\
+<svg class="fold-in" viewBox="0 0 24 24" aria-hidden="true"><polyline points="7 4 12 9 17 4"/><polyline points="7 20 12 15 17 20"/></svg>\
+<svg class="fold-out" viewBox="0 0 24 24" aria-hidden="true"><polyline points="7 9 12 4 17 9"/><polyline points="7 15 12 20 17 15"/></svg></button>\
 <button id="highlighter-toggle" type="button" class="icon-btn hl-btn" aria-pressed="false" title="Reading highlighter — drag over text to mark it read" aria-label="Reading highlighter">\
 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 4.5l4 4L10 18H6v-4z"/>\
 <line x1="4" y1="21" x2="20" y2="21"/></svg></button>\
 <button id="fullscreen-toggle" type="button" class="icon-btn fs-btn" aria-pressed="false" title="Full screen — hide the browser chrome" aria-label="Full screen — hide the browser chrome">\
 <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>\
 <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>\
-<span class="icon-btn-wrap">\
-<button id="menu-toggle" type="button" class="icon-btn menu-btn" aria-expanded="false" aria-controls="menu-pop" title="Menu" aria-label="Menu">\
-<svg viewBox="0 0 24 24" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/>\
-<line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>\
-<div id="menu-pop" class="menu-pop" data-pane="root" hidden>\
-<div class="menu-pane" data-pane-name="root">\
-<div class="menu-status" id="menu-status"><span class="menu-status-dot" aria-hidden="true"></span>\
-<div class="menu-status-text"><div class="menu-status-title" id="menu-status-title" aria-live="polite">Checking…</div>\
-<div class="menu-status-sub" id="menu-status-sub"></div>\
-<div class="menu-resume" id="menu-resume" hidden>\
-<p class="resume-hint">Paste this in any terminal to open <code id="resume-cwd"></code> and attach a live session here:</p>\
-<div class="resume-cmd-row"><code id="resume-cmd" class="resume-cmd"></code>\
-<button id="resume-copy" type="button" class="resume-copy-btn" title="Copy the command">Copy</button></div>\
-<p class="resume-status" id="resume-status" aria-live="polite"></p></div>\
-<div class="menu-readonly read-only-badge" title="This link can read the document but not change it.">&#128065; Read-only</div>\
-</div></div>\
-<div class="menu-tiles">\
-<button id="composer-toggle" type="button" class="menu-tile" aria-expanded="false" aria-controls="general-composer" title="Comment on the whole response (G)" aria-label="Comment on the whole response">\
-<svg viewBox="0 0 24 24" aria-hidden="true">\
-<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>\
-</svg><span class="menu-tile-label">Comment</span><kbd class="menu-tile-kbd" aria-hidden="true">G</kbd></button>\
-<button id="menu-highlighter" type="button" class="menu-tile" aria-pressed="false" title="Reading highlighter — drag over text to mark it read" aria-label="Reading highlighter">\
-<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 4.5l4 4L10 18H6v-4z"/>\
-<line x1="4" y1="21" x2="20" y2="21"/></svg>\
-<span class="menu-tile-label">Highlight</span></button>\
-<button id="highlighter-clear" type="button" class="menu-tile" title="Clear every highlight on this page" aria-label="Clear every highlight">\
-<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5l7-7 6.5 6.5-4 4H7z"/>\
-<line x1="12.5" y1="8" x2="19" y2="14.5"/><line x1="4" y1="21" x2="20" y2="21"/></svg>\
-<span class="menu-tile-label">Clear marks</span></button>\
-<button id="settings-open" type="button" class="menu-tile" aria-expanded="false" aria-controls="settings-drawer" title="Settings — every setting in a drawer" aria-label="Settings">\
-<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/>\
-<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>\
-</svg><span class="menu-tile-label">Settings</span></button>\
-<button id="export-btn" type="button" class="menu-tile" title="Save this document as a single standalone HTML file you can send to anyone" aria-label="Share a copy">\
-<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/>\
-<polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>\
-<span class="menu-tile-label" data-label>Share</span></button>\
-<button type="button" class="menu-tile" data-pane-to="help" title="Buttons &amp; keyboard shortcuts" aria-label="Buttons &amp; keyboard">\
-<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/>\
-<path d="M9.2 9.3a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.4-2.8 4"/><path d="M12 17.2h.01"/></svg>\
-<span class="menu-tile-label">Keys</span></button>\
-</div>\
-</div>\
-<div class="menu-pane" data-pane-name="help">\
-<button type="button" class="menu-back" data-pane-to="root">\
-<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>\
-<span>Buttons &amp; keyboard</span></button>\
+<button id="toolbar-toggle" type="button" class="icon-btn" aria-pressed="true" aria-controls="toolbar" title="Hide the toolbar" aria-label="Toolbar">\
+<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>\
+<button id="done-btn" type="button" class="done-btn">Done</button></div></header>\
+<nav id="toolbar" class="toolbar" aria-label="Toolbar">\
+<div class="tb-group" data-group="review"><span class="tb-label">Review</span>\
+<button id="composer-toggle" type="button" class="tb-btn" aria-expanded="false" aria-controls="general-composer" title="Comment on the whole response (G)" aria-label="Comment on the whole response">\
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg><span class="tb-word" data-label>Comment</span><kbd class="tb-kbd" aria-hidden="true">G</kbd></button>\
+<button id="toolbar-highlighter" type="button" class="tb-btn" aria-pressed="false" title="Reading highlighter — drag over text to mark it read" aria-label="Reading highlighter">\
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 4.5l4 4L10 18H6v-4z"/><line x1="4" y1="21" x2="20" y2="21"/></svg><span class="tb-word" data-label>Highlight</span></button>\
+<button id="highlighter-clear" type="button" class="tb-btn" title="Clear every highlight on this page" aria-label="Clear every highlight">\
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5l7-7 6.5 6.5-4 4H7z"/><line x1="12.5" y1="8" x2="19" y2="14.5"/><line x1="4" y1="21" x2="20" y2="21"/></svg><span class="tb-word" data-label>Clear marks</span></button>\
+</div><span class="tb-sep" aria-hidden="true"></span>\
+<div class="tb-group" data-group="view"><span class="tb-label">View</span>\
+<div id="toolbar-view" class="tb-view"></div>\
+<button id="settings-open" type="button" class="tb-btn" aria-expanded="false" aria-controls="settings-drawer" title="Settings — every setting in a drawer" aria-label="Settings">\
+<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="tb-word" data-label>All settings</span></button>\
+</div><span class="tb-sep" aria-hidden="true"></span>\
+<div class="tb-group" data-group="document"><span class="tb-label">Document</span>\
+<button id="export-btn" type="button" class="tb-btn" title="Save this document as a single standalone HTML file you can send to anyone" aria-label="Share a copy">\
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg><span class="tb-word" data-label>Share</span></button>\
+<span class="icon-btn-wrap keys-wrap">\
+<button id="keys-toggle" type="button" class="tb-btn" aria-expanded="false" aria-controls="keys-pop" title="Buttons &amp; keyboard shortcuts" aria-label="Buttons &amp; keyboard">\
+<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.2 9.3a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.4-2.8 4"/><path d="M12 17.2h.01"/></svg><span class="tb-word" data-label>Keys</span></button>\
+<div id="keys-pop" class="keys-pop" hidden>\
 <div id="legend-pop" class="legend-pop">\
 <div class="legend-body"><div class="legend-entry"><div class="legend-entry-name">\
 <svg class="legend-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/>\
@@ -104,9 +98,8 @@ export const SHELL_HTML = `\
 <td>Fold every part (<kbd>&#8984;K</kbd> <kbd>&#8984;J</kbd> unfolds)</td></tr><tr><td><kbd>Esc</kbd></td>\
 <td>Close what is open, then drop the cursor</td></tr></tbody></table></div>\
 <p class="legend-note">Select any words &mdash; or double-click a part&rsquo;s title for the whole part &mdash; and a menu offers Comment, Delete and Compact. All of these are feedback, and none of them does anything until you submit the round. Until then every mark is local and clicking the same button again takes it back.</p>\
-</div></div>\
-</div></div></span>\
-<button id="done-btn" type="button" class="done-btn">Done</button></div></header>\
+</div></div></div></span>\
+</div></nav>\
 <aside id="settings-drawer" class="settings-drawer" aria-label="Settings" hidden>\
 <div class="sd-head"><h2 class="sd-title">Settings</h2>\
 <button id="settings-close" type="button" class="sd-close" title="Close settings (Esc)" aria-label="Close settings">\

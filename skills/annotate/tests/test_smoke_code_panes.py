@@ -217,10 +217,10 @@ class TestPageWidth(unittest.TestCase):
     and Wide (no cap), of which neither fitted. What the slider paints is
     run under node in page_width.test.mjs."""
 
-    def test_the_slider_runs_600_to_1600_then_full(self):
-        self.assertIn("const WIDTH_MIN = 600;", JS)
-        self.assertIn("const WIDTH_MAX = 1600;", JS)
-        self.assertIn('return w === "full" ? "none" : `${w}px`;', JS)
+    def test_the_slider_runs_40_to_100_percent_of_the_window(self):
+        self.assertIn("const WIDTH_MIN = 40;", JS)
+        self.assertIn("const WIDTH_MAX = 100;", JS)
+        self.assertIn('return n >= 100 ? "none" : `max(${n}vw, ${WIDTH_FLOOR}px)`;', JS)
         # No rule answers the width any more: the page paints it on <body>.
         self.assertNotIn('body[data-width=', CSS)
         for gone in ("VIEW_WIDTHS", "VIEW_LABELS"):
@@ -239,8 +239,9 @@ class TestPageWidth(unittest.TestCase):
         self.assertIn("padding: 10px var(--content-gutter);",
                       CSS[i:CSS.index("}", i)])
 
-    def test_760_is_the_default(self):
-        self.assertIn('const DEFAULT_WIDTH = "760"', JS)
+    def test_55_percent_is_the_default(self):
+        # About the 760px column a 1440px window opened at before.
+        self.assertIn('const DEFAULT_WIDTH = "55%"', JS)
 
     def test_the_export_carries_the_width_as_a_style(self):
         # data-width="960" matches no rule, so an export with only the

@@ -359,11 +359,10 @@ section.block[data-diff="open"] .diff-pane { display: block; }
 .attr-chip.a-you   { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent); }
 .attr-chip.a-sweep { background: #fef3c7; color: #92400e; }
 
-/* ── Legend pane ────────────────────────────────────────────────────── */
-/* A pane of the menu now, not a popover of its own. It keeps the clamp it
-   grew when the keyboard section took it from ~430px to 621px, measured —
-   the menu's own max-height would otherwise let it push the panel past the
-   viewport edge on a laptop. */
+/* ── Legend ─────────────────────────────────────────────────────────── */
+/* The body of the toolbar's Keys popover. It keeps the clamp it grew when
+   the keyboard section took it from ~430px to 621px, measured, so it never
+   runs past the viewport edge on a laptop. */
 .legend-pop {
   padding: 10px;
   max-height: 62vh;
@@ -528,7 +527,7 @@ body .page-header {
 
 /* === Settings drawer ==================================================
    Every setting at once, in a drawer on the right. It used to be a pane of
-   the 318px menu, which held seven rows in a scroll and showed none of them
+   the old 318px menu, which held seven rows in a scroll and showed none of them
    beside the page they change. It lies over the page and never moves it:
    pushing the column left to make room was tried and rejected. On a wide
    window there is no shade, so the page stays in view while a setting
@@ -724,8 +723,7 @@ body.width-dragging main.prose { outline: 2px dashed var(--accent); outline-offs
 
 /* === The resume command ================================================
    Populated by entry.js, which knows this session's slug and cwd. It lives in
-   the menu's status block now: the popover it used to have was a second button
-   about the same subject as the watcher pill. */
+   the status pill's popover, beside what the pill's word means. */
 .resume-hint { margin: 0; font-size: 12.5px; color: var(--text-dim); }
 /* A path has no spaces, so normal wrapping has nowhere to break it — it just
    runs past the panel's fixed 288px instead. `anywhere` lets it break at any
