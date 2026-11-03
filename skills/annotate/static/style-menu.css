@@ -117,7 +117,7 @@ body.read-only .status-readonly { display: inline-flex; }
    named by its tooltip; below 600px the width slider goes too, since the
    column already fills a phone. */
 .toolbar {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
   padding: 5px var(--content-gutter);
   background: var(--surface);
   border-bottom: 1px solid var(--border);

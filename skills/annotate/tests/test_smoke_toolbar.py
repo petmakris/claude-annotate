@@ -97,6 +97,11 @@ class TestTheToolbar(unittest.TestCase):
     def test_it_sits_right_under_the_header(self):
         self.assertTrue(SHELL.split("</header>", 1)[1].lstrip("\\").startswith('<nav id="toolbar"'))
 
+    def test_its_groups_sit_in_the_middle(self):
+        rule = CSS[CSS.index(".toolbar {"):]
+        rule = rule[:rule.index("}")]
+        self.assertIn("justify-content: center", rule)
+
     def test_three_named_groups_in_order(self):
         groups = re.findall(r'class="tb-group" data-group="([a-z]+)"><span class="tb-label">', toolbar_html())
         self.assertEqual(groups, self.ORDER)
