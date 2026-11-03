@@ -204,13 +204,13 @@ class TestTheViewGroup(unittest.TestCase):
         self.assertIn('document.querySelectorAll(`[data-setting="${s.key}"]`)', body)
 
 
-class TestCardsMountUnderTheToolbar(unittest.TestCase):
-    """The "Claude worked" card, the change bar and the two banners used to
-    mount right after the header, which put them between the header and the
-    toolbar."""
+class TestBarsMountUnderTheToolbar(unittest.TestCase):
+    """The change bar and the two banners used to mount right after the
+    header, which put them between the header and the toolbar. (Claude's
+    progress floats now; see test_smoke_progress_panel.py.)"""
 
     def test_each_one_anchors_on_the_toolbar_first(self):
-        for name, count in (("progress.js", 1), ("script-changes.js", 1), ("script-poll.js", 2)):
+        for name, count in (("script-changes.js", 1), ("script-poll.js", 2)):
             src = (STATIC / name).read_text()
             self.assertEqual(
                 src.count('document.getElementById("toolbar") || document.querySelector(".page-header")'),

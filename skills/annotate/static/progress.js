@@ -17,10 +17,17 @@
   const PANEL_ID = "progress-panel";
   const FEED_ID = "progress-feed";
 
-  // Open while working, because the complaint this answers is silence: a panel
-  // that needs a click to reveal that anything is happening does not answer
-  // it. The reader's own choice wins once they make one.
+  // It floats in the bottom right, out of the page's flow, so it never moves
+  // the text. At rest it is a pill (a spinner and the clock while Claude
+  // works, how long it took once done); a click opens it into a card with
+  // the trail. The reader's own choice of pill or card holds for the page.
   let openPref = null;
+  // ✕ hides the trail until Claude's next round. A round is known by when it
+  // started, kept per page so a reload does not bring a dismissed one back.
+  const DISMISS_KEY = "annotate.progress.dismissed:" + location.pathname;
+  function dismissedRound() {
+    try { return localStorage.getItem(DISMISS_KEY); } catch (_) { return null; }
+  }
 
   function writable() {
     const wc = window.WebCompanion;
@@ -63,37 +70,54 @@
     el = document.createElement("section");
     el.id = PANEL_ID;
     el.className = "pg-panel";
-    // The live region is the CURRENT LINE, not the panel and not the feed.
-    // With `role="status"` on the section, every repaint rebuilds the whole
-    // feed inside a live region, so a screen reader re-announces the entire
-    // trail — nine lines read out again to deliver the tenth. Announcing only
-    // `.pg-now`, atomically, says the one thing that changed. The feed is
-    // explicitly `aria-live="off"` so it cannot inherit a live region later,
-    // and it stays reachable to read at leisure.
+    const close = '<button type="button" class="pg-close" aria-label="Dismiss until Claude\'s next round"' +
+        ' title="Dismiss until Claude\'s next round">' +
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"></line>' +
+        '<line x1="18" y1="6" x2="6" y2="18"></line></svg></button>';
+    // The live region is its own hidden line, not the pill or the card: only
+    // one of those shows at a time, and a live region inside a hidden element
+    // says nothing. It carries the CURRENT LINE only, atomically, so a
+    // repaint never re-announces the whole trail. The feed is explicitly
+    // `aria-live="off"` so it cannot inherit a live region later.
     el.innerHTML =
-      '<div class="pg-head">' +
-        '<span class="pg-mark"></span>' +
-        '<span class="pg-now" role="status" aria-live="polite" aria-atomic="true"></span>' +
-        '<span class="pg-count"></span>' +
-        '<span class="pg-timer"></span>' +
-        '<button type="button" class="pg-caret" aria-expanded="true"' +
-          ' aria-controls="' + FEED_ID + '" aria-label="Show what Claude has done">' +
-          '<svg viewBox="0 0 24 24" aria-hidden="true">' +
-          '<polyline points="18 15 12 9 6 15"></polyline></svg>' +
-        '</button>' +
+      '<span class="pg-live sr-only" role="status" aria-live="polite" aria-atomic="true"></span>' +
+      '<div class="pg-pill-row">' +
+        '<button type="button" class="pg-pill" aria-expanded="false" aria-controls="progress-card"' +
+          ' title="Show what Claude has done">' +
+          '<span class="pg-mark"></span><span class="pg-pill-text"></span>' +
+          '<span class="pg-pill-meta"></span>' +
+        '</button>' + close +
       '</div>' +
-      '<div class="pg-feed" id="' + FEED_ID + '" aria-live="off"></div>';
-    el.querySelector(".pg-caret").addEventListener("click", () => {
-      openPref = el.dataset.open !== "1";
+      '<div class="pg-card" id="progress-card">' +
+        '<div class="pg-head">' +
+          '<span class="pg-mark"></span>' +
+          '<span class="pg-now"></span>' +
+          '<span class="pg-count"></span>' +
+          '<span class="pg-timer"></span>' +
+          '<button type="button" class="pg-caret" aria-expanded="true"' +
+            ' aria-controls="progress-card" aria-label="Fold into the pill" title="Fold into the pill">' +
+            '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+            '<polyline points="6 9 12 15 18 9"></polyline></svg>' +
+          '</button>' + close +
+        '</div>' +
+        '<div class="pg-feed" id="' + FEED_ID + '" aria-live="off"></div>' +
+      '</div>';
+    el.querySelector(".pg-pill").addEventListener("click", () => {
+      openPref = true;
       paintOpen(el);
+      el.querySelector(".pg-caret").focus();
     });
-    // Same anchor the busy ribbon uses: directly under the header, so it pins
-    // flush to the top of the screen when the page scrolls.
-    // Under the toolbar, which sits under the header: the bar of
-    // commands stays next to the header it belongs to.
-    const header = document.getElementById("toolbar") || document.querySelector(".page-header");
-    if (header) header.insertAdjacentElement("afterend", el);
-    else document.body.insertBefore(el, document.body.firstChild);
+    el.querySelector(".pg-caret").addEventListener("click", () => {
+      openPref = false;
+      paintOpen(el);
+      el.querySelector(".pg-pill").focus();
+    });
+    el.querySelectorAll(".pg-close").forEach((b) => b.addEventListener("click", () => {
+      try { localStorage.setItem(DISMISS_KEY, el.dataset.startedAt || ""); } catch (_) {}
+      el.hidden = true;
+    }));
+    // Floating, so it hangs off <body> and takes no room in the page.
+    document.body.appendChild(el);
     return el;
   }
 
@@ -104,12 +128,10 @@
   }
 
   function paintOpen(el) {
-    const open = openPref === null ? el.dataset.state === "working" : openPref;
+    const open = openPref === true;
     el.dataset.open = open ? "1" : "0";
-    const caret = el.querySelector(".pg-caret");
-    caret.setAttribute("aria-expanded", open ? "true" : "false");
-    caret.setAttribute("aria-label",
-                       open ? "Hide what Claude has done" : "Show what Claude has done");
+    el.querySelector(".pg-pill").setAttribute("aria-expanded", open ? "true" : "false");
+    el.querySelector(".pg-caret").setAttribute("aria-expanded", open ? "true" : "false");
   }
 
   function paint(body) {
@@ -128,23 +150,30 @@
     // The clock reads this rather than re-fetching the item every second.
     el.dataset.startedAt = String(started);
 
-    el.querySelector(".pg-mark").className = "pg-mark " + (done ? "pg-tick" : "pg-spin");
-    el.querySelector(".pg-mark").textContent = done ? "✓" : "";
-    el.querySelector(".pg-count").textContent =
-      steps.length + (steps.length === 1 ? " step" : " steps");
-
+    // Dismissed for this round only: a new round has a new start.
+    el.hidden = dismissedRound() === String(started);
+    el.querySelectorAll(".pg-mark").forEach((m) => {
+      m.className = "pg-mark " + (done ? "pg-tick" : "pg-spin");
+      m.textContent = done ? "✓" : "";
+    });
+    const count = steps.length + (steps.length === 1 ? " step" : " steps");
+    el.querySelector(".pg-count").textContent = count;
     if (done) {
-      say(el.querySelector(".pg-now"),
-          "Claude worked for " + spoken(ended - started) + " across " +
-          steps.length + (steps.length === 1 ? " step" : " steps"));
+      const summary = "Claude worked for " + spoken(ended - started) + " across " + count;
+      say(el.querySelector(".pg-now"), summary);
+      say(el.querySelector(".pg-live"), summary);
+      say(el.querySelector(".pg-pill-text"), "Done in " + spoken(ended - started));
+      el.querySelector(".pg-pill-meta").textContent = count;
       el.querySelector(".pg-count").textContent = "";
       el.querySelector(".pg-timer").textContent = "";
     } else {
       say(el.querySelector(".pg-now"), last ? last.text : "");
-      el.querySelector(".pg-timer").textContent =
-        clock((Date.now() / 1000) - started);
+      say(el.querySelector(".pg-live"), last ? last.text : "");
+      say(el.querySelector(".pg-pill-text"), "Claude is working");
+      const t = clock((Date.now() / 1000) - started);
+      el.querySelector(".pg-timer").textContent = t;
+      el.querySelector(".pg-pill-meta").textContent = t;
     }
-
     const feed = document.getElementById(FEED_ID);
     feed.textContent = "";
     steps.forEach((s, i) => {
@@ -189,8 +218,9 @@
     if (!p || p.dataset.state !== "working") {
       clearInterval(ticking); ticking = null; return;
     }
-    const t = p.querySelector(".pg-timer");
-    if (t) t.textContent = clock((Date.now() / 1000) - Number(p.dataset.startedAt || 0));
+    const t = clock((Date.now() / 1000) - Number(p.dataset.startedAt || 0));
+    p.querySelector(".pg-timer").textContent = t;
+    p.querySelector(".pg-pill-meta").textContent = t;
   }
 
   async function refresh() {

@@ -2,54 +2,89 @@
    (progress.js). */
 
 /* === The narration panel ===============================================
-   What Claude is doing, while the page waits. Same anchor and sticky
-   behaviour as .busy-banner (it sits directly under the header and pins to
-   the top of the screen), but deliberately NOT the accent ribbon: this is
-   information to read, not an alarm. The accent survives as a left edge,
-   because the ribbon's colour was the only thing saying "you cannot submit
-   another round" and that meaning must not be lost with its background. */
+   What Claude is doing, while the page waits. It floats in the bottom right,
+   out of the page's flow, so it never pushes the text down: it used to sit
+   under the toolbar and take a band of the page for as long as it was open.
+
+   At rest it is a pill: a spinner, "Claude is working" and the clock, or once
+   done "Done in 20 s" and the step count. A click opens it upward into a card
+   with the trail; the card's caret folds it back. ✕ on either hides it until
+   Claude's next round. The accent edge stays while Claude works, because the
+   lock ribbon it replaces said "you cannot submit another round" in that
+   colour; green says the round is done. */
 #progress-panel {
-  position: sticky;
-  top: 0;
-  z-index: 19;
-  width: 100%;
-  max-width: var(--content-max);
-  margin: 0 auto 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
-  border-radius: 0 0 10px 10px;
-  color: var(--text);
-  font-size: 13px;
+  position: fixed; right: 20px; bottom: 20px; z-index: 45;
+  display: flex; flex-direction: column; align-items: flex-end;
+  max-width: calc(100vw - 24px);
+  color: var(--text); font-size: 13px;
 }
-#progress-panel[data-state="done"] { border-left-color: var(--status-live-fg); }
+#progress-panel[hidden] { display: none; }
 body.read-only #progress-panel { display: none; }
 
-/* The panel replaces the lock ribbon while it is working, rather than sharing
-   the top of the screen with it. Both are `position: sticky; top: 0` siblings
-   in the same containing block and the ribbon's z-index 20 beats the panel's
-   19, so they do not stack — they overlap. Measured in Chromium at
-   scrollY 600 with both present: the ribbon occupied 0–45.4px and .pg-head
-   1–41.8px, and `elementFromPoint` at the head's own centre (701, 21)
-   returned `busy-banner` — the current line, the step count, the elapsed
-   timer and the caret were all behind it. They coexist by construction: the
-   panel exists only while Claude is working, which is exactly when the page
-   is locked.
+.pg-pill-row, .pg-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 34px rgba(20, 22, 28, .20), 0 2px 8px rgba(20, 22, 28, .08);
+}
+.pg-pill-row {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 3px 4px 3px 3px; border-radius: 999px;
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+#progress-panel[data-state="done"] .pg-pill-row {
+  border-color: color-mix(in srgb, var(--status-live-fg) 45%, var(--border));
+}
+.pg-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 5px 6px 5px 10px; border: 0; border-radius: 999px;
+  background: none; cursor: pointer;
+  font: 500 13px var(--font-prose); color: var(--text-strong);
+}
+.pg-pill:hover { background: var(--hover-tint); }
+.pg-pill-meta {
+  font-family: var(--font-code); font-size: 11px; color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.pg-close {
+  flex: none; width: 26px; height: 26px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 999px; background: none; cursor: pointer;
+  color: var(--text-dim);
+}
+.pg-close:hover { background: var(--hover-tint); color: var(--text-strong); }
+.pg-close svg { width: 14px; height: 14px; fill: none; stroke: currentColor;
+                stroke-width: 2; stroke-linecap: round; }
 
-   The panel wins because it says everything the ribbon says and more. The
-   ribbon is a spinner, "Claude is applying your round…" and an elapsed timer;
-   the panel is a spinner, the line Claude is actually on, a step count, the
-   same elapsed timer, and the trail — with the accent left edge that carries
-   the ribbon's "you cannot submit another round" (decision 5). Offsetting one
-   below the other would pin two spinners and two timers to the top of the
-   screen to say one thing. The moment the trail closes, `data-state` flips to
-   `done`, this rule stops matching, and the ribbon comes back for whatever is
-   left of the lock — including the case where Claude never narrates at all
-   and no panel is ever built. */
+/* Pill or card, never both. */
+.pg-card { display: none; }
+#progress-panel[data-open="1"] .pg-pill-row { display: none; }
+#progress-panel[data-open="1"] .pg-card {
+  display: block; width: 400px; max-width: 100%;
+  border-left: 3px solid var(--accent); border-radius: 12px; overflow: hidden;
+}
+#progress-panel[data-open="1"][data-state="done"] .pg-card { border-left-color: var(--status-live-fg); }
+
+/* On a phone it keeps the corner, and the card takes the screen's width.
+   The round's own dock spans the bottom there, so the panel sits above it. */
+@media (max-width: 599px) {
+  #progress-panel { right: 10px; bottom: 10px; left: 10px; }
+  #progress-panel[data-open="1"] .pg-card { width: 100%; }
+  body:has(#round-dock) #progress-panel { bottom: 84px; }
+}
+
+/* The panel replaces the lock ribbon while it is working. The ribbon is a
+   spinner, "Claude is applying your round…" and an elapsed timer; the pill
+   is a spinner and the same timer, and opens to the line Claude is on and
+   the trail. Showing both would put two spinners and two timers on screen to
+   say one thing. The moment the trail closes, `data-state` flips to `done`,
+   this rule stops matching, and the ribbon comes back for whatever is left
+   of the lock — including the case where Claude never narrates at all and no
+   panel is ever built. A pill dismissed while working keeps the ribbon away
+   too: the reader chose not to watch. */
 body:has(#progress-panel[data-state="working"]) .busy-banner { display: none; }
 
-.pg-head { display: flex; align-items: center; gap: 9px; padding: 10px 13px; }
-.pg-now { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+.pg-head { display: flex; align-items: center; gap: 9px; padding: 8px 8px 8px 13px; }
+.pg-now { flex: 1; min-width: 0; color: var(--text-strong); font-weight: 500; overflow: hidden; text-overflow: ellipsis;
           white-space: nowrap; }
 .pg-count, .pg-timer {
   font-family: var(--font-code); font-size: 11px; color: var(--text-dim);
@@ -68,7 +103,6 @@ body:has(#progress-panel[data-state="working"]) .busy-banner { display: none; }
 }
 .pg-caret svg { width: 14px; height: 14px; fill: none; stroke: currentColor;
                 stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-#progress-panel[data-open="0"] .pg-caret svg { transform: rotate(180deg); }
 
 #progress-feed {
   border-top: 1px solid var(--border);
@@ -78,7 +112,6 @@ body:has(#progress-panel[data-state="working"]) .busy-banner { display: none; }
   display: flex;
   flex-direction: column;
 }
-#progress-panel[data-open="0"] #progress-feed { display: none; }
 .pg-line {
   display: flex; align-items: baseline; gap: 10px;
   padding: 3px 0; color: var(--text-dim); line-height: 1.5;

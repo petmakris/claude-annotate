@@ -143,13 +143,47 @@ class TestTheFeedPinsToTheNewestLine(unittest.TestCase):
 
 
 class TestItIsQuietButStillReadsAsALock(unittest.TestCase):
-    def test_the_panel_keeps_an_accent_edge(self):
+    def test_the_panel_keeps_the_accent_while_working(self):
         # The accent ribbon was the only thing saying "you cannot submit
-        # another round". The panel is quiet; the edge keeps the lock legible.
+        # another round". The pill's edge and the card's left edge keep it.
+        pill = CSS[CSS.index(".pg-pill-row {"):]
+        pill = pill[:pill.index("}")]
+        self.assertIn("var(--accent)", pill)
+        card = CSS[CSS.index('#progress-panel[data-open="1"] .pg-card {'):]
+        card = card[:card.index("}")]
+        self.assertIn("border-left: 3px solid var(--accent)", card)
+
+
+class TestItFloats(unittest.TestCase):
+    """It used to sit under the toolbar and push the text down while open.
+    Checked in a browser: the text starts right under the toolbar with the
+    panel up, the pill sits in the bottom right, a click opens the card, ✕
+    hides it and a reload keeps it hidden until the next round."""
+
+    def test_it_is_fixed_in_the_bottom_right(self):
         rule = CSS[CSS.index("#progress-panel {"):]
         rule = rule[:rule.index("}")]
-        self.assertIn("border-left", rule)
-        self.assertIn("var(--accent)", rule)
+        self.assertIn("position: fixed; right: 20px; bottom: 20px;", rule)
+        self.assertIn("document.body.appendChild(el);", JS)
+        self.assertNotIn("insertAdjacentElement", JS)
+
+    def test_it_rests_as_a_pill_and_opens_into_the_card(self):
+        self.assertIn("const open = openPref === true;", JS)
+        self.assertIn('#progress-panel[data-open="1"] .pg-pill-row { display: none; }', CSS)
+        self.assertIn(".pg-card { display: none; }", CSS)
+
+    def test_dismissing_holds_until_the_next_round(self):
+        self.assertIn('const DISMISS_KEY = "annotate.progress.dismissed:" + location.pathname;', JS)
+        self.assertIn("el.hidden = dismissedRound() === String(started);", JS)
+        self.assertIn("#progress-panel[hidden] { display: none; }", CSS)
+
+    def test_on_a_phone_it_clears_the_round_dock(self):
+        self.assertIn("body:has(#round-dock) #progress-panel { bottom: 84px; }", CSS)
+
+    def test_the_live_line_is_outside_what_hides(self):
+        # Only one of pill and card shows; a live region inside the hidden
+        # one would say nothing.
+        self.assertIn('class="pg-live sr-only" role="status"', JS)
 
     def test_nothing_was_added_to_the_shared_core_stylesheet(self):
         self.assertNotIn("#progress-panel", CORE)
