@@ -63,14 +63,17 @@ class TestTheSettingsDrawer(unittest.TestCase):
     def test_it_is_outside_the_menu(self):
         self.assertLess(SHELL.index("</header>"), SHELL.index('id="settings-drawer"'))
 
-    def test_a_wide_window_pushes_the_page_rather_than_covering_it(self):
-        self.assertIn("body.settings-open { padding-right: var(--drawer-w); }", CSS)
-        self.assertIn('document.body.classList.add("settings-open")', self._fn())
+    def test_it_lies_over_the_page_and_never_moves_it(self):
+        # Pushing the column left to make room was tried and rejected: the
+        # drawer is an overlay at every width.
+        self.assertNotRegex(CSS, r"body\.settings-open\s*\{[^}]*padding")
+        rule = CSS[CSS.index(".settings-drawer {"):]
+        rule = rule[:rule.index("}")]
+        self.assertIn("position: fixed", rule)
 
     def test_a_phone_gets_a_sheet_and_a_shade(self):
         phone = CSS[CSS.index("@media (max-width: 759px)"):]
         phone = phone[:phone.index("\n}\n")]
-        self.assertIn("body.settings-open { padding-right: 0; }", phone)
         self.assertIn("border-radius: 16px 16px 0 0", phone)
         self.assertIn('id="settings-scrim"', SHELL)
 
