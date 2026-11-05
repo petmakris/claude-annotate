@@ -8,7 +8,7 @@
 
    The SVGs are laid out on the server and measured by visuals/text_metrics.py ("vz-*" styles, stage
    face: Inter and JetBrains Mono). Sizes here must stay in sync with those styles. */
-.vz-player, svg.vz {
+.vz-sheet, .vz-player, svg.vz {
   --vz-fg: #161c1a; --vz-dim: #56615b; --vz-line: #d6dbd5; --vz-card: #ffffff; --vz-sunk: #eceee9;
   --vz-accent: #b2570a; --vz-accent-soft: #fbeedd;
   --vz-blue: #2c5d8f; --vz-blue-soft: #e8eff8; --vz-red: #a33b30; --vz-red-soft: #f9e6e2;
@@ -19,16 +19,22 @@
 svg.vz {
   display: block; width: 100%; height: auto; font-family: var(--vz-sans); overflow: visible;
 }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .vz-player, :root:not([data-theme="light"]) svg.vz {
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .vz-sheet, :root:not([data-theme="light"]) .vz-player, :root:not([data-theme="light"]) svg.vz {
   --vz-fg: #e9edea; --vz-dim: #a3aca7; --vz-line: #313936; --vz-card: #1c2220; --vz-sunk: #161b19;
   --vz-accent: #f3a957; --vz-accent-soft: #3a2a14;
   --vz-blue: #8fb8e6; --vz-blue-soft: #1b2634; --vz-red: #f0928a; --vz-red-soft: #2f1c1a;
   --vz-green: #93c897; --vz-green-soft: #1b2a1e; --vz-amber: #e3b860; --vz-amber-soft: #2b2415 } }
-:root[data-theme="dark"] .vz-player, :root[data-theme="dark"] svg.vz {
+:root[data-theme="dark"] .vz-sheet, :root[data-theme="dark"] .vz-player, :root[data-theme="dark"] svg.vz {
   --vz-fg: #e9edea; --vz-dim: #a3aca7; --vz-line: #313936; --vz-card: #1c2220; --vz-sunk: #161b19;
   --vz-accent: #f3a957; --vz-accent-soft: #3a2a14;
   --vz-blue: #8fb8e6; --vz-blue-soft: #1b2634; --vz-red: #f0928a; --vz-red-soft: #2f1c1a;
   --vz-green: #93c897; --vz-green-soft: #1b2a1e; --vz-amber: #e3b860; --vz-amber-soft: #2b2415 }
+/* High contrast, a light theme for a page that fixes it: text at 7:1 or more, box edges and arrows at 3:1 or more. */
+:root[data-contrast="high"] .vz-sheet, :root[data-contrast="high"] .vz-player, :root[data-contrast="high"] svg.vz {
+  --vz-fg: #0a0d0c; --vz-dim: #2a312e; --vz-line: #59635e; --vz-card: #ffffff; --vz-sunk: #e3e6e2;
+  --vz-accent: #8a3f00; --vz-accent-soft: #fbeedd;
+  --vz-blue: #0f3f75; --vz-blue-soft: #e3edf9; --vz-red: #8b1a10; --vz-red-soft: #fbe4e0;
+  --vz-green: #12532a; --vz-green-soft: #e0f1e4; --vz-amber: #6a4300; --vz-amber-soft: #fbf0d9 }
 
 /* Text */
 svg.vz .ttl { font-size: 22px; font-weight: 700; fill: var(--vz-fg) }
