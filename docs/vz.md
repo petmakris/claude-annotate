@@ -13,11 +13,14 @@ Both read three ways from one SVG: whole, for a page, a PNG or a slide; built up
 
     python3 tools/vz.py svg SPEC.json -o out.svg          # the drawing alone
     python3 tools/vz.py html A.json B.json -o page.html   # one self-contained page with the player
+    python3 tools/vz.py html A.json --theme high-contrast -o page.html   # fixes the theme: light, dark or high-contrast
     python3 tools/vz.py fragment SPEC.json                # the player, for a page that loads vz.css and vz-reveal.js
     uv run tools/vz_check.py check out.svg                # Chromium: every fault, in every frame, light and dark PNGs
     uv run tools/vz_check.py frames out.svg --out DIR --mode build|route   # one PNG per step, for slides
 
 A drawing is done when `vz_check.py check` reports 0 faults and its light and dark PNGs look right.
+
+`vz_check.py` checks the drawing alone. Open a page from `vz.py html` in a browser as well, because the page adds its own background.
 
 ## Rules for every diagram
 

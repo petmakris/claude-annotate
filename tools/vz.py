@@ -39,6 +39,7 @@ def main() -> int:
     ap.add_argument("specs", nargs="+")
     ap.add_argument("--uid")
     ap.add_argument("--title", default="Diagrams")
+    ap.add_argument("--theme", choices=["light", "dark", "high-contrast"], default="", help="html: fix the page's theme; without it the page follows the system")
     ap.add_argument("-o", "--out")
     a = ap.parse_args()
     outs = []
@@ -56,7 +57,7 @@ def main() -> int:
         except ValueError as e:
             print(f"{name}: {e}", file=sys.stderr)
             return 1
-    text = player.standalone(outs, a.title) if a.what == "html" else "\n".join(outs)
+    text = player.standalone(outs, a.title, a.theme) if a.what == "html" else "\n".join(outs)
     if a.out:
         Path(a.out).write_text(text)
     else:

@@ -217,3 +217,16 @@ def test_an_outcome_line_wider_than_the_lanes_widens_the_canvas():
     right = float(box.group(1)) + float(box.group(2))
     assert x + _width(line, "vz-sb") <= right - 18 + 1
     assert right <= width
+
+
+def test_a_standalone_sheet_takes_the_dark_colours_of_the_diagram_on_it():
+    page = player.standalone([player.render_any(MAP, "m1")], "One")
+    assert ':root[data-theme="dark"] .vz-sheet' in page
+    assert ':root:not([data-theme="light"]) .vz-sheet' in page
+
+
+def test_a_standalone_page_can_fix_its_theme():
+    fragments = [player.render_any(MAP, "m1")]
+    assert '<html lang="en">' in player.standalone(fragments, "One")
+    assert '<html lang="en" data-theme="light">' in player.standalone(fragments, "One", "light")
+    assert '<html lang="en" data-theme="light" data-contrast="high">' in player.standalone(fragments, "One", "high-contrast")

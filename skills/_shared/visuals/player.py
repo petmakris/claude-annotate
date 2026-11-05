@@ -117,13 +117,17 @@ def _frag(svg: str, key: str) -> str:
     return "".join(out)
 
 
-def standalone(fragments: list[str], title: str) -> str:
-    """One self-contained HTML page holding the given player fragments."""
+THEMES = {"": "", "light": ' data-theme="light"', "dark": ' data-theme="dark"',
+          "high-contrast": ' data-theme="light" data-contrast="high"'}
+
+
+def standalone(fragments: list[str], title: str, theme: str = "") -> str:
+    """One self-contained HTML page holding the given player fragments. With no theme it follows the reader's system."""
     css = (STATIC / "vz.css").read_text()
     js = (STATIC / "vz-reveal.js").read_text().replace("</", "<\\/")
     body = "".join(f'<section class="vz-sheet">{f}</section>' for f in fragments)
     return f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en"{THEMES[theme]}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{escape(title)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="{FONTS}">
@@ -131,6 +135,7 @@ def standalone(fragments: list[str], title: str) -> str:
 :root {{ --page: #f4f5f2; --ink: #161c1a }}
 @media (prefers-color-scheme: dark) {{ :root:not([data-theme="light"]) {{ --page: #0f1311; --ink: #e9edea; color-scheme: dark }} }}
 :root[data-theme="dark"] {{ --page: #0f1311; --ink: #e9edea; color-scheme: dark }}
+:root[data-contrast="high"] {{ --page: #ffffff; --ink: #0a0d0c }}
 body {{ margin: 0; background: var(--page); color: var(--ink); font: 16px/1.5 Inter, system-ui, sans-serif;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 56px }}
 .vz-sheet {{ max-width: 1240px; margin: 0 auto 32px; background: var(--vz-card, #fff); border: 1px solid var(--vz-line, #d6dbd5); border-radius: 14px; padding: 18px }}
