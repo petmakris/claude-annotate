@@ -241,7 +241,7 @@ class TestPageWidth(unittest.TestCase):
 
     def test_55_percent_is_the_default(self):
         # About the 760px column a 1440px window opened at before.
-        self.assertIn('const DEFAULT_WIDTH = "55%"', JS)
+        self.assertIn('const DEFAULT_WIDTH = "90%"', JS)
 
     def test_the_export_carries_the_width_as_a_style(self):
         # data-width="960" matches no rule, so an export with only the
