@@ -299,3 +299,63 @@ body .codepane .cp-row.is-context .sk {
 .cp-status[data-status="stale"],
 .cp-status[data-status="missing"],
 .cp-status[data-status="refused"] { color: var(--cp-bad-fg); }
+
+/* === compare: before and after, side by side ==========================
+   Two code panes in one grid (renderCompare in script-blocks.js). Row k of
+   the left pane must sit level with row k of the right one, so every row has
+   the same fixed height and no line wraps: a long line scrolls inside its
+   own pane. Removed lines are tinted red on the left, added lines green on
+   the right, each mixed into the pane theme's own ground so every theme keeps
+   its tokens readable; a hatched filler stands where a side has no line. */
+.cmp {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+.cmp[data-sides="1"] { grid-template-columns: minmax(0, 1fr); }
+.cmp-side {
+  --cmp-del:  #cf222e;
+  --cmp-add:  #1a7f37;
+  --cmp-tint: 12%;
+  border: 1px solid var(--cp-divider);
+  border-radius: 8px;
+  min-width: 0;
+}
+body[data-pane-theme="midnight"] .cmp-side,
+body[data-pane-theme="contrast-dark"] .cmp-side {
+  --cmp-del:  #f85149;
+  --cmp-add:  #3fb950;
+  --cmp-tint: 18%;
+}
+.cmp-label {
+  flex: 0 0 auto;
+  font-family: var(--font-prose); font-size: 11.5px; font-weight: 600;
+  color: var(--cp-text);
+}
+.codepane.cmp-side .cp-loc { cursor: default; }
+.codepane.cmp-side .cp-loc:hover { text-decoration: none; }
+.cmp-row { height: 1.62em; padding-left: 0; }
+.cmp-row::before {
+  content: attr(data-n);
+  flex: 0 0 auto; width: 4ch; padding-right: 1ch; margin-right: 1ch;
+  text-align: right; color: var(--cp-muted);
+  user-select: none;
+}
+.cmp-row.is-fill::before { content: ""; }
+.cmp-row.is-del { background: color-mix(in srgb, var(--cmp-del) var(--cmp-tint), var(--cp-ground)); }
+.cmp-row.is-add { background: color-mix(in srgb, var(--cmp-add) var(--cmp-tint), var(--cp-ground)); }
+.cmp-row.is-del::before { box-shadow: inset -2px 0 0 var(--cmp-del); }
+.cmp-row.is-add::before { box-shadow: inset -2px 0 0 var(--cmp-add); }
+.cmp-row.is-fill {
+  background: repeating-linear-gradient(-45deg, transparent 0 5px,
+    color-mix(in srgb, var(--cp-divider) 45%, transparent) 5px 6px);
+}
+.cmp-empty {
+  padding: 10px 12px;
+  color: var(--text-dim); font-style: italic;
+}
+/* Too narrow for two columns: the panes stack, and each reads as its own
+   file, so the fillers that only kept two columns level go. */
+@media (max-width: 759px) {
+  .cmp { grid-template-columns: minmax(0, 1fr); }
+  .cmp-row.is-fill { display: none; }
+}

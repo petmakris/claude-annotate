@@ -8,8 +8,7 @@ allowed-tools: Bash, Read, Write, Monitor, mcp__claude_ai_Atlassian_Rovo__create
 
 Long responses (multi-step plans, analyses, lists of findings) get pushed to a browser page where the user clicks any block to comment. Claude updates that block in place when it responds — no page reload, no re-push of the whole document.
 
-This SKILL.md is the **router**: it tells you whether to act and which detailed
-reference to load. The heavy procedure lives in `references/`, loaded only when you need it — keep this file lean as block kinds grow.
+This SKILL.md is the **router**: it tells you whether to act and which detailed reference to load. The heavy procedure lives in `references/`, loaded only when you need it — keep this file lean as block kinds grow.
 
 ## Phase map — read the matching reference, then follow it
 
@@ -72,6 +71,7 @@ Composing a push is a two-pass job: split the response into blocks, then run thi
 |------|----------|---------------|
 | `markdown` (default) | Prose, lists, code, callouts. Never tables (see above). | `references/pushing.md` (How to push + Markdown first) |
 | `explain` | **How a specific piece of code works** — the explanation rides on the code itself: spans marked in place, each label hanging off its own column, a bracket for a claim about a range of lines. Several notes on one line is the case it is for. The pane **walks** the notes one at a time in the order you write them, so `notes` is reading order, not file order; a note that is true in two places carries `spans` and marks both. Quote every span as a literal substring; never compute a column. Prefer this over `markdown` + a `code` anchor whenever the claims are *about named spans*, because that pairing makes the reader ping-pong between prose and pane. | `references/block-kinds/explain.md` |
+| `compare` | **How code changes, before vs after**: two versions of a snippet side by side as a split diff (lines that stayed level, removed lines red on the left, added green on the right), painted like all page code. Use it instead of two fenced blocks; prose about the change goes in a markdown block beside it. | `references/block-kinds/compare.md` |
 | `map` | **Architecture**: the parts of a system, where each caller comes in, where the rules live. Boxes on a grid of columns, arrows that route themselves, and a request's path the reader can follow step by step. | `references/block-kinds/map.md` |
 | `sequence` | **A request over time**: ≥2 named entities interacting in temporal order, where who-talks-to-whom matters (code flows, request/response, event lifecycles). Drawn as lanes, the words on the arrows, with ✓/✗ checks where a rule is applied; the reader can step through it. | `references/block-kinds/sequence.md` |
 | `flowchart` | **Branching logic**: decision/process-flow logic — guard clauses, validation pipelines, fan-in from multiple callers, success/error outcomes. Structured nodes/edges, role color, jump-to-source links. Give every `ref` an `href` — a ref is painted as a link whether or not it is one. Write `spec.source` (restricted Python, compiled) instead of nodes when the reader will want to change the flow — the source pane shows them which line draws which box, so they can name it. | `references/block-kinds/flowchart.md` |

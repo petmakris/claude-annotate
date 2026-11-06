@@ -33,7 +33,7 @@
   // Kinds where more width buys something. Prose is deliberately excluded: it
   // is set to a max measure, so a wider column only makes the lines harder to
   // track back to the left edge.
-  const MAXIMIZABLE = new Set(["sequence", "map", "flowchart", "mockup"]);
+  const MAXIMIZABLE = new Set(["sequence", "map", "flowchart", "mockup", "compare"]);
 
   const ICON_MAX =
     '<svg viewBox="0 0 24 24" aria-hidden="true">' +
@@ -168,6 +168,8 @@
     section.classList.add("is-maximized");
     titleEl.textContent = section.dataset.label || "Diagram";
     applyFit(section, wantFit);
+    // Code scrolls inside its own panes; there is no picture to scale.
+    fitBtn.hidden = section.dataset.kind === "compare";
   }
 
   // ── Fit-to-width ────────────────────────────────────────────────────────

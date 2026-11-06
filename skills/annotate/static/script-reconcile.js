@@ -291,11 +291,11 @@ function updateBlockContent(section, blk, srvVer) {
   // A kind flip (markdown↔sequence/diagram/choice) needs a fresh section:
   // the diagram click listener and hover wiring are bound at creation, so an
   // in-place innerHTML swap would leave them inconsistent with the new kind.
-  // choice, mockup and explain are always rebuilt: none has an in-place
+  // choice, mockup, explain and compare are always rebuilt: none has an in-place
   // repaint below, and the markdown fallback would render the `markdown`
   // field they do not have, leaving the card blank.
   if (newKind !== oldKind || newKind === "choice" || newKind === "mockup"
-      || newKind === "explain") {
+      || newKind === "explain" || newKind === "compare") {
     const focus = focusWithin(section);
     const fresh = createBlockSection(blk);
     clearUpdatingOverlay(section);

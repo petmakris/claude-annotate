@@ -204,7 +204,7 @@ evidence and code quotes inline. Use only when the mode resolved to `detailed`.
 
 ## How to push a response
 
-1. **Split, then capability-check every block.** (In `compact` mode the block list is the compact contract in § Verbosity mode above — the kind menu still applies to the blocks it produces.) Split the response into logical units (a paragraph, a heading + its prose, one bullet, one code block; aim for 3-15 lines — small enough to read one at a time, large enough to carry a self-contained thought). Then walk the kind menu (SKILL.md § Block-kind menu) over each unit and assign the first kind whose trigger matches — `map`, `sequence`, `flowchart`, `choice`, or `mockup` — with `kind: "markdown"` as the fallback for units no richer kind claims. Before writing the files, re-scan a block list that came out all-markdown against the menu once: a response about a system's architecture, interacting systems, branching logic, or a decision the user must make typically mixes kinds. **Independent of kind, also decide each block's `code` anchors** — see `references/code-anchors.md`.
+1. **Split, then capability-check every block.** (In `compact` mode the block list is the compact contract in § Verbosity mode above — the kind menu still applies to the blocks it produces.) Split the response into logical units (a paragraph, a heading + its prose, one bullet, one code block; aim for 3-15 lines — small enough to read one at a time, large enough to carry a self-contained thought). Then walk the kind menu (SKILL.md § Block-kind menu) over each unit and assign the first kind whose trigger matches — `explain`, `compare`, `map`, `sequence`, `flowchart`, `choice`, or `mockup` — with `kind: "markdown"` as the fallback for units no richer kind claims. Before writing the files, re-scan a block list that came out all-markdown against the menu once: a response about a system's architecture, interacting systems, branching logic, or a decision the user must make typically mixes kinds. **Independent of kind, also decide each block's `code` anchors** — see `references/code-anchors.md`.
 2. Write `blocks.json` anywhere convenient (your scratchpad). It is an input to
    the push, not a file a server reads, so its location no longer matters:
    ```json
@@ -218,7 +218,7 @@ evidence and code quotes inline. Use only when the mode resolved to `detailed`.
    ```
    Block ids are sequential `section-1`, `section-2`, ... from 1. Each block may carry a **`title`**, a 2–5 word noun phrase (e.g. `"What happens when you comment"`). A title is shown as a heading in the text, and a heading starts a part the reader can fold. Give one where a reader needs a heading, and leave it out where the text simply continues from the block above. Do not repeat a title as a leading `#`/`##` heading in the block's markdown. **Do not write a `version` field** — the daemon derives every item's version from its content hash, so a version you write is a second source of truth that will disagree.
 
-   For non-markdown blocks (`kind: "map"|"sequence"|"flowchart"|"choice"|"mockup"`), read the exact spec shape in `references/block-kinds/<kind>.md`.
+   For non-markdown blocks (`kind: "explain"|"compare"|"map"|"sequence"|"flowchart"|"choice"|"mockup"`), read the exact spec shape in `references/block-kinds/<kind>.md`.
 
 3. **Check the anchors** before pushing:
 

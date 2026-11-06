@@ -233,6 +233,30 @@ def _excerpt(row: dict[str, Any]) -> str:
             % (open_tag, escape(text), link))
 
 
+def _compare(spec: dict[str, Any]) -> str:
+    """A compare block: Confluence has no split diff, so each side is its own
+    code block under its label, before then after."""
+    out = []
+    for key, fallback in (("before", "Before"), ("after", "After")):
+        side = spec.get(key)
+        if not isinstance(side, dict):
+            continue
+        code = side.get("code")
+        if not isinstance(code, str) or not code:
+            continue
+        label = str(side.get("label") or fallback)
+        path = str(side.get("path") or "")
+        caption = "<strong>%s</strong>" % escape(label)
+        if path:
+            caption += " <code>%s</code>" % escape(path)
+        lang = str(side.get("lang") or "").lower()
+        lang = _LANGUAGES.get(lang, lang) if lang else _language_of(path)
+        open_tag = ('<code class="language-%s">' % escape(lang)) if lang else "<code>"
+        out.append("<p>%s</p><pre>%s%s</code></pre>"
+                   % (caption, open_tag, escape(code.rstrip("\n"))))
+    return "".join(out) or "<p><em>Nothing to compare.</em></p>"
+
+
 def _title_of(blk: dict[str, Any]) -> str:
     """The card's name, by the same priority the page uses (block-title.js):
     an authored title first, then the spec's own."""
@@ -279,6 +303,8 @@ def render_block(blk: dict[str, Any],
                    "when the page was published: <strong>%s</strong></p>"
                    "<ul>%s</ul></div>"
                    % (escape(str(spec.get("question", ""))), options))
+    elif kind == "compare":
+        out.append(_compare(blk.get("spec") or {}))
     elif kind == "mockup":
         out.append('<div data-type="panel-note"><p>This section is an '
                    "interactive mockup, which has no Confluence equivalent. "

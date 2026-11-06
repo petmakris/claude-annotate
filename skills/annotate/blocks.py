@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from skills.annotate.atomic import write_text_atomic
+from skills.annotate.explain import _languages
 
 
 # Every key the document format reads. A block with none of the content keys
@@ -46,6 +47,7 @@ BLOCK_KEYS = frozenset({
 # rendering as an empty card.
 BLOCK_KINDS = frozenset({
     "markdown", "sequence", "map", "flowchart", "choice", "mockup", "explain",
+    "compare",
 })
 RETIRED_KINDS = {"diagram": "removed — use `flowchart`, or a fenced code block "
                             "in `markdown` for anything it cannot draw"}
@@ -104,6 +106,48 @@ def _check_choice_specs(blocks: list[dict[str, Any]]) -> None:
             f"the field in silence — " + "; ".join(problems[:4]))
 
 
+class CompareSpecError(ValueError):
+    """A compare block's side has the wrong shape. The page reads `code`,
+    `label`, `path` and `lang` as strings; anything else would draw an empty
+    pane with no word of why."""
+
+
+COMPARE_SIDES = ("before", "after")
+COMPARE_SIDE_KEYS = ("label", "path", "lang", "code")
+
+
+def _check_compare_specs(blocks: list[dict[str, Any]]) -> None:
+    problems = []
+    for b in blocks:
+        if b.get("kind") != "compare":
+            continue
+        bid = b.get("id", "?")
+        spec = b.get("spec") or {}
+        for side in COMPARE_SIDES:
+            if side not in spec or spec[side] is None:
+                continue
+            v = spec[side]
+            if not isinstance(v, dict):
+                problems.append(f"{bid}: `{side}` must be an object")
+                continue
+            for k in COMPARE_SIDE_KEYS:
+                if k in v and not isinstance(v[k], str):
+                    problems.append(f"{bid}: `{side}.{k}` must be a string")
+            lang = v.get("lang")
+            if isinstance(lang, str) and lang.strip():
+                known = _languages()
+                if known and lang.strip().lower() not in known:
+                    problems.append(f"{bid}: `{side}.lang: {lang!r}` has no "
+                                    f"highlighter (static/code-languages.json); "
+                                    f"leave it out to go by `path`")
+        if "code" in spec or "left" in spec or "right" in spec:
+            problems.append(f"{bid}: the sides are `before` and `after`, each "
+                            f"with its own `code`")
+    if problems:
+        raise CompareSpecError(
+            f"{len(problems)} compare spec problem(s) — " + "; ".join(problems[:4]))
+
+
 @dataclass
 class BlocksDoc:
     response_id: str = ""
@@ -158,6 +202,7 @@ def load(path: Path) -> BlocksDoc:
             f"`markdown`, and an unknown key holding the content — {detail}. "
             f"Prose goes in `markdown`.")
     _check_choice_specs(blocks)
+    _check_compare_specs(blocks)
     return BlocksDoc(
         response_id=raw.get("response_id", ""),
         title=raw.get("title", ""),
@@ -224,7 +269,7 @@ def _canonical_spec(spec: dict[str, Any]) -> str:
 
 
 def update_spec_block(doc: BlocksDoc, block_id: str, new_spec: dict[str, Any]) -> bool:
-    """Update a spec-bearing block's spec (sequence/map/choice/explain/mockup).
+    """Update a spec-bearing block's spec (sequence/map/choice/explain/mockup/compare).
 
     Returns True if changed. Kind-agnostic on purpose: it swaps `spec` and
     nothing else, so a new spec-bearing kind needs no change here.

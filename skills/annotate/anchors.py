@@ -95,6 +95,11 @@ def block_problems(blk: dict) -> list:
             "a mockup block takes no anchors — its sandboxed iframe has "
             "nowhere to put a pane"
         )
+    if (blk.get("kind") or "markdown") == "compare":
+        problems.append(
+            "a compare block takes no anchors — its two panes already are "
+            "the code; put prose and anchors in a markdown block beside it"
+        )
     if len(code) > MAX_ANCHORS:
         problems.append(
             "at most %d anchors per block (found %d) — past that the block "

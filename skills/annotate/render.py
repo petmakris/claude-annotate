@@ -275,6 +275,9 @@ _RENDERERS: dict[str, Callable[[dict, dict], None]] = {
     "choice": _forward_spec,
     "mockup": _forward_spec,
     "explain": _render_explain,
+    # The line diff is computed on the page (static/compare.js), beside the
+    # highlighter that paints it.
+    "compare": _forward_spec,
 }
 
 
@@ -288,7 +291,7 @@ def render_block(blk: dict) -> dict:
     - markdown blocks → pass markdown through
     - sequence / map → the player fragment (in `svg`) + spec
     - flowchart → rendered svg + spec
-    - choice / mockup → spec forwarded verbatim
+    - choice / mockup / compare → spec forwarded verbatim
     """
     kind = blk.get("kind") or "markdown"
     base = {"id": blk["id"], "kind": kind}
@@ -321,6 +324,7 @@ def render_block(blk: dict) -> dict:
     # `explain` joins `mockup` in refusing the side column: this kind's whole
     # premise is that the code and its explanation are one object, so a second
     # pane of the same file beside it would restate the split it deletes.
-    if kind not in ("mockup", "explain") and isinstance(code, list) and code:
+    # `compare` too: its two panes are the code.
+    if kind not in ("mockup", "explain", "compare") and isinstance(code, list) and code:
         base["code"] = code
     return base

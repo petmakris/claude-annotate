@@ -150,15 +150,15 @@
   }
 
   // Every language a document (or anything JSON-shaped) will ask for: fence
-  // tags, explicit `lang`s, the extensions of anchored files, and Python for
-  // a flowchart's pflow source. A superset is harmless — a name with no
-  // grammar loads nothing.
+  // tags, explicit `lang`s, the extensions of anchored files and compared
+  // paths, and Python for a flowchart's pflow source. A superset is harmless —
+  // a name with no grammar loads nothing.
   function namesIn(doc) {
     const s = JSON.stringify(doc || {});
     const out = new Set();
     for (const m of s.matchAll(/(?:```|~~~)[ \t]*([\w#+.-]+)/g)) out.add(m[1].toLowerCase());
     for (const m of s.matchAll(/"lang":"([^"\\]+)"/g)) out.add(m[1].toLowerCase());
-    for (const m of s.matchAll(/"file":"([^"\\]+)"/g)) {
+    for (const m of s.matchAll(/"(?:file|path)":"([^"\\]+)"/g)) {
       const n = fileLanguage(m[1]);
       if (n) out.add(n);
     }

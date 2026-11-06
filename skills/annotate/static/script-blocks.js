@@ -303,7 +303,92 @@ function linkSequenceKey(content) {
 // Kinds that work differently from prose — a picture you can maximise, a
 // question waiting for a pick, code walked note by note — sit in a light
 // frame with their title on it, so the reader sees where prose stops.
-const FRAMED = ["sequence", "map", "flowchart", "mockup", "choice", "explain"];
+const FRAMED = ["sequence", "map", "flowchart", "mockup", "choice", "explain", "compare"];
+
+// ── kind: compare ─────────────────────────────────────────────────────
+// Before and after code side by side, a split diff. compare.js computes the
+// rows; each side is a code pane painted through CodePaint.rows like explain,
+// one pass over that side's whole snippet so multi-line constructs colour
+// right. Every row has one fixed height and nothing wraps, so row k of the
+// left pane sits level with row k of the right one; a filler row stands where
+// a side has no counterpart. A side with no code is not drawn: the other one
+// takes the width, every line marked added (or removed).
+function compareSide(spec) {
+  const s = spec && typeof spec === "object" ? spec : {};
+  const code = typeof s.code === "string" ? s.code : "";
+  return { label: s.label || "", path: s.path || "", lang: s.lang || "", code };
+}
+
+function comparePane(which, side, cells) {
+  const pane = document.createElement("div");
+  pane.className = "codepane cmp-side";
+  pane.dataset.side = which;
+  const head = document.createElement("div");
+  head.className = "cp-head";
+  const label = document.createElement("span");
+  label.className = "cmp-label";
+  label.textContent = side.label || (which === "before" ? "Before" : "After");
+  head.appendChild(label);
+  if (side.path) {
+    const loc = document.createElement("span");
+    loc.className = "cp-loc";
+    loc.textContent = side.path;
+    loc.title = side.path;
+    head.appendChild(loc);
+  }
+  pane.appendChild(head);
+  const body = document.createElement("div");
+  body.className = "cp-body cmp-body";
+  cells.forEach((row) => body.appendChild(row));
+  pane.appendChild(body);
+  return pane;
+}
+
+function renderCompare(content, blk) {
+  const spec = blk.spec || {};
+  const before = compareSide(spec.before), after = compareSide(spec.after);
+  const wrap = document.createElement("div");
+  wrap.className = "cmp";
+  if (!before.code && !after.code) {
+    const empty = document.createElement("div");
+    empty.className = "cmp-empty";
+    empty.textContent = "Nothing to compare: both sides are empty.";
+    wrap.appendChild(empty);
+    content.appendChild(wrap);
+    return;
+  }
+  const rows = AnnotateCompare.alignLines(before.code, after.code);
+  const sides = [["before", before, "left"], ["after", after, "right"]].filter(([, s]) => s.code);
+  wrap.dataset.sides = String(sides.length);
+  for (const [which, side, key] of sides) {
+    const lines = AnnotateCompare.splitLines(side.code);
+    const opts = { lang: side.lang, file: side.path };
+    const misses = codeMisses();
+    const painted = window.CodePaint ? CodePaint.rows(lines, opts) : null;
+    const byLine = [];
+    const rowEls = rows.map((r) => {
+      const cell = r[key];
+      const div = document.createElement("div");
+      div.className = "cp-row cmp-row";
+      if (!cell) { div.classList.add("is-fill"); return div; }
+      div.classList.add(`is-${cell.t}`);
+      div.dataset.n = String(cell.n);
+      const text = document.createElement("span");
+      text.className = "cp-line";
+      if (painted) text.innerHTML = painted[cell.n - 1];
+      else text.textContent = cell.text;
+      byLine[cell.n - 1] = text;
+      div.appendChild(text);
+      return div;
+    });
+    const pane = comparePane(which, side, rowEls);
+    if (!painted && codeMisses() > misses) {
+      later(pane, paintRowsLater(byLine, lines, opts));
+    }
+    wrap.appendChild(pane);
+  }
+  content.appendChild(wrap);
+}
 
 function createBlockSection(blk) {
   const section = document.createElement("section");
@@ -377,6 +462,8 @@ function createBlockSection(blk) {
     renderMockup(content, blk);
   } else if (kind === "explain") {
     renderExplain(content, blk);
+  } else if (kind === "compare") {
+    renderCompare(content, blk);
   } else {
     // Markdown path — markdown-it now allows inline HTML (`html: true`);
     // sanitize the rendered tree before glossary decoration.

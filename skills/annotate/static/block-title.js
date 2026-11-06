@@ -33,6 +33,7 @@
     map:       { keys: ["title"],    fallback: "Diagram" },
     flowchart: { keys: ["title"],    fallback: "Diagram" },
     choice:    { keys: ["question"], fallback: "Decision" },
+    compare:   { keys: ["title"],    fallback: "Comparison" },
   };
 
   const MAX_LEN = 60;

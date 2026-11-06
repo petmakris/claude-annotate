@@ -77,6 +77,8 @@ const JS = [
   "code-paint.js",
   "markdown-it.min.js",
   "diff.js",
+  // The compare kind's line diff; pure, read by script-blocks.js.
+  "compare.js",
   // Before script.js: the selection menu and the highlighter both count prose
   // through its one walker.
   "anchors.js",
