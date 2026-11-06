@@ -58,18 +58,18 @@ test("a width kept as pixels reads as the share of the window it drew", () => {
   eq(widthFromStored("normal", 1520), "50%");
 });
 
-test("nothing stored, or something unknown, is 55%", () => {
-  eq(widthFromStored(null), "55%");
-  eq(widthFromStored("narrow"), "55%");
-  eq(widthFromStored("12em"), "55%");
+test("nothing stored, or something unknown, is 90%", () => {
+  eq(widthFromStored(null), "90%");
+  eq(widthFromStored("narrow"), "90%");
+  eq(widthFromStored("12em"), "90%");
 });
 
-test("a page with no choice paints 55% and the slider says so", () => {
+test("a page with no choice paints 90% and the slider says so", () => {
   wireViewControls();
-  eq(painted(), ["55%", "max(55vw, 600px)"]);
-  eq(slider().value, "55");
+  eq(painted(), ["90%", "max(90vw, 600px)"]);
+  eq(slider().value, "90");
   eq([slider().min, slider().max, slider().step], ["40", "100", "5"]);
-  eq(shown(), "55%");
+  eq(shown(), "90%");
 });
 
 test("dragging paints and stores each share as it goes", () => {
@@ -112,15 +112,15 @@ test("a width this document kept before is used until one is chosen for all", ()
   eq(painted(), ["60%", "max(60vw, 600px)"]);
 });
 
-test("Reset puts the width back to 55%, the old per-document one too", () => {
+test("Reset puts the width back to 90%, the old per-document one too", () => {
   drag(90);
   localStorage.setItem(OLD_KEY, "65%");
   document.body.focus();
   vm.runInThisContext("resetSettings()");
   eq(localStorage.getItem(KEY), null);
   eq(localStorage.getItem(OLD_KEY), null);
-  eq(painted(), ["55%", "max(55vw, 600px)"]);
-  eq(shown(), "55%");
+  eq(painted(), ["90%", "max(90vw, 600px)"]);
+  eq(shown(), "90%");
 });
 
 process.stdout.write(`\n${ran - failures}/${ran} passed\n`);

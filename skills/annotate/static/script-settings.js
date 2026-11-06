@@ -30,9 +30,8 @@ function viewKey(name) {
 function readStored(name) {
   try { return localStorage.getItem(viewKey(name)); } catch (_) { return null; }
 }
-// Every new session opens at 55%: on a 1440px window that is about the
-// 760px column the page opened at when widths were pixels.
-const DEFAULT_WIDTH = "55%";
+// Every new session opens at 90% of the window (decided 6 November 2026).
+const DEFAULT_WIDTH = "90%";
 // `pagewidth`, not `width`: the stops have been renamed in place before,
 // and the older key's values all name columns narrower than 760px now.
 // AnnotateStorage retires that key rather than mapping it to the default.
