@@ -239,8 +239,8 @@ class TestPageWidth(unittest.TestCase):
         self.assertIn("padding: 10px var(--content-gutter);",
                       CSS[i:CSS.index("}", i)])
 
-    def test_55_percent_is_the_default(self):
-        # About the 760px column a 1440px window opened at before.
+    def test_90_percent_is_the_default(self):
+        # Decided 6 November 2026: pages open wide.
         self.assertIn('const DEFAULT_WIDTH = "90%"', JS)
 
     def test_the_export_carries_the_width_as_a_style(self):
