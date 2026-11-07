@@ -1,6 +1,7 @@
 ---
 name: annotate-doctor
-description: Check that this machine can run claude-annotate and claude-ide-review — python3 and its version, bash, curl, node, leftover per-skill server files, and the separately-installed webcompanion daemon that every migrated skill (annotate, deck, dataflow, specimen, walkthrough, ask_diff, show-diff) depends on. Invoked only when the user types `/annotate-doctor`, or when a skill's preflight has just failed and the user asks why. Never self-triggers. Reports problems and prints the command the user should run; for webcompanion specifically, offers to run that command itself once the user confirms — every other remedy stays report-only.
+description: Check that this machine can run claude-annotate and claude-ide-review — python3 and its version, bash, curl, node, leftover per-skill server files, and the separately-installed webcompanion daemon that every migrated skill (annotate, deck, dataflow, specimen, walkthrough, ask_diff, show-diff) depends on. Invoked only when the user types `/annotate-doctor`; a failed preflight tells the user to type it. Never self-triggers. Reports problems and prints the command the user should run; for webcompanion specifically, offers to run that command itself once the user confirms — every other remedy stays report-only.
+disable-model-invocation: true
 allowed-tools:
   - Bash
   - Read
