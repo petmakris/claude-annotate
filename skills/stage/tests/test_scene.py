@@ -1,0 +1,697 @@
+import json
+import re
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from skills.stage import scene
+
+EXAMPLE = """flowchart LR
+  subgraph adv[":advisory"]
+    pws[ProposalWorkflowServiceImpl]
+    legacy[web.workflows.legacy]
+  end
+  wf[":workflows"]
+  engine[(Flowable engine)]
+  pws -->|imports 3 types| wf
+  wf --> engine
+  pws --> legacy"""
+
+
+def _flow(body):
+    """A Mermaid graph as the stage models it: turned into a flowchart spec, as a talk call draws it."""
+    spec = scene.mermaid_spec(body)
+    return None if spec is None else scene.flowchart_spec_model(spec)
+
+
+def test_a_flowchart_names_its_groups_nodes_and_edges_in_declaration_order():
+    m = _flow(EXAMPLE)
+    assert m.keys == ["group:adv", "node:pws", "node:legacy", "node:wf", "node:engine",
+                      "edge:pws->wf#0", "edge:wf->engine#0", "edge:pws->legacy#0"]
+    assert m.order == m.keys[1:5]
+    assert m.up["edge:pws->wf#0"] == ["node:pws", "node:wf"] and "node:pws" not in m.up  # a group has no box to bring
+    assert m.down == {"group:adv": ["node:pws", "node:legacy"]}
+    assert m.names["flowable engine"] == "node:engine" and m.names[":advisory"] == "group:adv"
+
+
+def test_chains_ampersands_repeated_edges_and_text_links_are_all_edges():
+    m = _flow("graph TD\n  A[Start] --> B & C\n  B --> D --> E\n  A --> B\n"
+                              "  A -- text --> B\n  A -.-> B\n  X:::cls --> Y")
+    assert [k for k in m.keys if k.startswith("edge:")] == [
+        "edge:A->B#0", "edge:A->C#0", "edge:B->D#0", "edge:D->E#0", "edge:A->B#1", "edge:A->B#2", "edge:A->B#3",
+        "edge:X->Y#0"]
+
+
+def test_labels_with_brackets_shapes_and_nested_groups_are_read():
+    m = _flow('graph TD\nA["f(x)"] --> B[(Store)]\nB --> C{Decide?}\nC -- Yes --> D>flag]\n'
+                              "subgraph outer [Outer]\n  subgraph inner_one [Inner]\n    F\n  end\n  G\nend\nF --> outer")
+    assert m.names["f(x)"] == "node:A" and m.names["store"] == "node:B"
+    assert m.down == {"group:outer": ["node:F", "node:G"], "group:inner_one": ["node:F"]}  # nested groups name their nodes
+    assert m.up["edge:F->G#0"] == ["node:F", "node:G"]  # an arrow into a group joins the parts in it
+
+
+def test_ids_with_dashes_dots_and_greek_letters_and_every_link_style_are_read():
+    m = _flow("flowchart TD\n  a-b[Dash id] --> c_d\n  c_d --> e.f\n  A1 --o B1\n  B1 --x C1\n"
+                              "  C1 <--> D1\n  D1 ~~~ E1\n  style B1 fill:#f9f\n  class A1 hot")
+    assert [k for k in m.keys if k.startswith("edge:")] == [
+        "edge:a-b->c_d#0", "edge:c_d->e.f#0", "edge:A1->B1#0", "edge:B1->C1#0", "edge:C1->D1#0"]  # ~~~ is no arrow
+    greek = _flow("graph LR\n  αρχή[Αρχή] --> τέλος[Τέλος]")
+    assert greek.keys == ["node:αρχή", "node:τέλος", "edge:αρχή->τέλος#0"] and greek.names["αρχη"] == "node:αρχή"
+
+
+def test_only_a_graph_or_flowchart_has_a_model():
+    assert _flow("sequenceDiagram\nAlice->>Bob: hi") is None
+    assert _flow("graph TD; P[Page]-->Q[Queue]").keys == ["node:P", "node:Q", "edge:P->Q#0"]
+
+
+def test_code_lines_are_always_shown_and_table_rows_can_be_hidden():
+    lines = scene.lines_model(range(40, 43))
+    assert lines.keys == ["line:40", "line:41", "line:42"] and not lines.can_hide and lines.order == []
+    rows = scene.rows_model(["Azure", "Straße", "azure"])
+    assert rows.keys == ["row#1", "row#2", "row#3"] and rows.can_hide and rows.order == rows.keys
+    assert rows.names == {"azure": "row#1", "straße": "row#2"}
+
+
+def verbs(*tags):
+    return [scene.parse_verb(t) for t in tags]
+
+
+def test_verbs_read_their_scene_title_and_targets():
+    v = scene.parse_verb
+    assert (v("+ pws").name, v("+ pws").title, v("+ pws").targets) == ("+", "", ["pws"])
+    assert v("+ legacy, pws->legacy").targets == ["legacy", "pws->legacy"]
+    assert (v("+ deps: port").title, v("+ deps: port").targets) == ("deps", ["port"])
+    assert (v("focus Request path: page: node Queue").title, v("focus Request path: page: node Queue").targets) == (
+        "Request path: page", ["node Queue"])
+    assert v("FOCUS none").targets == ["none"] and v("focus 42-45").targets == ["42-45"]
+    assert (v("next").count, v("next 2").count, v("next step").count) == (1, 2, 1)
+    assert v("all").name == "all" and v("strike pws->wf").name == "strike" and v("- k").name == "-"
+    for other in ("point: x", "note: x", "key: y", "show table | T", "/show", "nextstep"):
+        assert v(other) is None, other
+
+
+def test_a_target_that_names_nothing_exactly_is_repaired_and_said():
+    m = _flow(EXAMPLE)
+    assert scene.resolve(m, "pws", "T") == (["node:pws"], None)
+    assert scene.resolve(m, "node wf", "T") == (["node:wf"], None)
+    assert scene.resolve(m, "ProposalWorkflowServiceImp", "T") == (
+        ["node:pws"], '"ProposalWorkflowServiceImp" in "T" read as node:pws')
+    assert scene.resolve(m, ":advisory", "T") == (["group:adv"], None)
+    assert scene.resolve(m, '"Flowable engine"', "T") == (["node:engine"], None)
+    assert scene.resolve(m, ":advisor", "T") == (["group:adv"], '":advisor" in "T" read as group:adv')
+    assert scene.resolve(m, "wf->pws", "T") == (
+        ["edge:pws->wf#0"], '"wf->pws" in "T" read as pws->wf: that edge only goes the other way')
+    assert scene.resolve(m, "nope", "T") == ([], '"nope" in "T" matches nothing; dropped')
+    dotted = _flow("graph TD\n  c_d --> e.f")
+    assert scene.resolve(dotted, "c_d->e.f", "T") == (["edge:c_d->e.f#0"], None)
+    lines = scene.lines_model(range(10, 15))
+    assert scene.resolve(lines, "lines 12-13", "C") == (["line:12", "line:13"], None)
+    assert scene.resolve(lines, "13-11", "C") == (["line:11", "line:12", "line:13"], None)
+    assert scene.resolve(lines, "40", "C") == ([], '"40" is outside the lines of "C"; dropped')
+    rows = scene.rows_model(["Azure", "Straße"])
+    assert scene.resolve(rows, "row 2", "P") == (["row#2"], None)
+    assert scene.resolve(rows, 'row "Azur"', "P") == (["row#1"], '"row "Azur"" in "P" read as row#1')
+    assert scene.resolve(rows, 'row "STRASSE"', "P") == ([], '"row "STRASSE"" in "P" matches nothing; dropped')
+    assert scene.resolve(rows, "row azure", "P") == (["row#1"], None)
+    assert scene.resolve(rows, "row 3", "P") == ([], '"P" has 2 rows, not row 3; dropped')
+
+
+def test_a_row_named_in_words_never_matches_a_column_header():
+    table = scene.rows_model(["statement", "breach question", "examples"], ["Field", "Description"])
+    assert scene.resolve(table, "row description", "T") == ([], '"row description" in "T" matches nothing; dropped')
+    assert scene.resolve(table, "descriptio", "T") == ([], '"descriptio" in "T" matches nothing; dropped')
+    assert scene.resolve(table, "row example", "T") == (["row#3"], '"row example" in "T" read as row#3')
+    assert scene.resolve(table, "cell examples / Description", "T") == (["cell#3.2"], None)  # a header still names its column
+
+
+WORKED = [["+ pws"], ["+ pws->wf"], ["+ wf->engine"], ["focus pws->wf"], ["focus none"],
+          ["+ legacy, pws->legacy", "focus legacy"]]
+
+
+def test_the_worked_example_compiles_to_frames_a0_to_a6_and_a_rest_frame():
+    model = _flow(EXAMPLE)
+    built, notes = scene.compile_scene(model, [verbs(*g) for g in WORKED], "advisory drops :workflows")
+    assert notes == []
+    frames = built["frames"]
+    assert (built["steps"], built["rest"], built["start"], built["repairs"]) == (6, 7, "empty", 0)
+    assert frames[0] == {"show": [], "focus": [], "cur": []}
+    assert frames[1] == {"show": ["node:pws"], "focus": [], "cur": ["node:pws"]}  # a group has no box to bring
+    assert frames[2]["show"] == ["node:pws", "node:wf", "edge:pws->wf#0"]
+    assert frames[2]["cur"] == ["node:wf", "edge:pws->wf#0"]  # an arrow said with the end it brought in
+    assert frames[3]["show"] == ["node:pws", "node:wf", "node:engine", "edge:pws->wf#0", "edge:wf->engine#0"]
+    assert frames[4] == {"show": frames[3]["show"], "focus": ["edge:pws->wf#0"], "cur": ["edge:pws->wf#0"]}
+    assert frames[5] == {"show": frames[3]["show"], "focus": [], "cur": []}
+    assert frames[6] == {"show": model.keys[1:], "focus": ["node:legacy"], "cur": ["node:legacy", "edge:pws->legacy#0"]}
+    assert frames[7] == {"show": model.keys, "focus": [], "cur": []}
+
+
+def test_a_scene_that_only_focuses_starts_with_everything_shown():
+    model = scene.lines_model(range(1, 6))
+    built, notes = scene.compile_scene(model, [verbs("focus 2-3"), verbs("focus none")], "C")
+    assert built["start"] == "full" and notes == []
+    assert [f["focus"] for f in built["frames"]] == [[], ["line:2", "line:3"], [], []]
+    assert all(f["show"] == model.keys for f in built["frames"])
+    table = scene.rows_model(["a", "b", "c", "d"])
+    built, _ = scene.compile_scene(table, [verbs("focus row 2")], "T")
+    assert built["frames"][0]["show"] == table.keys and built["frames"][1]["focus"] == ["row#2"]
+
+
+def test_a_group_brings_its_children_and_a_focused_group_lights_them():
+    model = _flow(EXAMPLE)
+    built, _ = scene.compile_scene(model, [verbs("+ adv"), verbs("focus adv"), verbs("all")], "T")
+    assert built["frames"][1]["show"] == ["group:adv", "node:pws", "node:legacy", "edge:pws->legacy#0"]
+    assert built["frames"][2]["focus"] == ["group:adv", "node:pws", "node:legacy"]
+    assert built["frames"][3]["show"] == model.keys
+
+
+def test_repairs_are_counted_and_what_is_never_revealed_comes_in_with_the_rest_frame():
+    model = _flow(EXAMPLE)
+    built, notes = scene.compile_scene(model, [verbs("+ pwss"), verbs("+ ghost")], "T")
+    assert built["repairs"] == 2
+    assert notes == ['"pwss" in "T" read as node:pws', '"ghost" in "T" matches nothing; dropped',
+                     '3 of 4 elements of "T" are never revealed; they come in with the rest frame']
+    assert built["frames"][-1]["show"] == model.keys
+
+
+def test_a_board_whose_every_reveal_names_nothing_starts_whole_instead_of_blank():
+    table = scene.rows_model(["Speed", "Cost", "Needs"], ["", "Azure", "VoiceStudio"])
+    built, notes = scene.compile_scene(table, [verbs("+ row 7"), verbs("focus row 2")], "Engines")
+    assert built["start"] == "full" and notes == ['"Engines" has 3 rows, not row 7; dropped']
+    assert [len(f["show"]) for f in built["frames"]] == [12, 12, 12, 12]
+    assert built["frames"][2]["focus"] == ["row#2"] and built["frames"][2]["cur"] == ["row#2"]
+    # one reveal that does name a part: the board starts empty, and that part comes in with it
+    built, _ = scene.compile_scene(table, [verbs("+ row 7"), verbs("+ row 2")], "Engines")
+    assert built["start"] == "empty" and [f["show"][:1] for f in built["frames"]] == [[], [], ["row#2"], ["row#1"]]
+
+
+def test_next_reveals_in_declaration_order_and_says_when_nothing_is_left():
+    model = _flow("graph TD; P[Page]-->Q[Queue]")
+    built, notes = scene.compile_scene(model, [verbs("next"), verbs("next 2"), verbs("next")], "F")
+    assert [f["show"] for f in built["frames"][1:4]] == [["node:P"], model.keys, model.keys]
+    assert notes == ['next in "F": everything is shown already']
+
+
+def test_a_board_with_more_than_three_elements_and_no_verbs_is_stepped_per_sentence():
+    model = _flow(EXAMPLE)
+    plan, later = scene.auto_steps(model, ["One.", "Two.", "Three."])
+    assert plan == {0: [["node:pws"]], 1: [["node:legacy"]], 2: [["node:wf", "node:engine"]]} and later == model.order
+    # more sentences than parts, none naming one: the first is the board's introduction and brings nothing
+    plan, _ = scene.auto_steps(model, [f"S{i}." for i in range(20)])
+    assert plan == {1: [["node:pws"]], 2: [["node:legacy"]], 3: [["node:wf"]], 4: [["node:engine"]]}
+    assert scene.auto_steps(_flow("graph TD; P-->Q"), ["a."] * 5) == ({}, [])
+    assert scene.auto_steps(scene.lines_model(range(1, 30)), ["a."] * 5) == ({}, [])
+    assert scene.auto_steps(model, []) == ({}, [])
+    assert scene.compile_scene(model, [], "T") == (None, [])
+
+
+SEQ_SPEC = {"actors": [{"id": "c", "label": "Contract"}, {"id": "m", "label": "Ledger"}],
+            "steps": [{"id": "s1", "from": "c", "to": "c", "arrow": "self", "label": "dev build published"},
+                      {"id": "s2", "from": "c", "to": "m", "arrow": "request", "label": "draft pins build 139"}]}
+FLOW_SPEC = {"nodes": [{"id": "a", "role": "entry", "label": "Turn arrives"}, {"id": "b", "role": "decision", "label": "Floor free?"},
+                       {"id": "c", "role": "success", "label": "Played"}],
+             "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": "c", "label": "yes"}, {"from": "b", "to": "c"}]}
+
+
+def _shown(frame):
+    return set(frame["show"])
+
+
+def test_an_arrow_shows_once_both_its_ends_do_even_when_only_the_boxes_were_named():
+    m = _flow("graph LR; P[Page] --> Q[Queue]; Q --> S[Session]")
+    built, _ = scene.compile_scene(m, [[scene.Verb("+", targets=["P"])], [scene.Verb("+", targets=["Q"])],
+                                       [scene.Verb("+", targets=["S"])]], "Turn path")
+    assert "edge:P->Q#0" not in _shown(built["frames"][1])
+    assert "edge:P->Q#0" in _shown(built["frames"][2]) and "edge:Q->S#0" not in _shown(built["frames"][2])
+    assert {"edge:P->Q#0", "edge:Q->S#0"} <= _shown(built["frames"][3])
+
+
+def test_a_sequence_spec_reveals_its_steps_in_order_and_each_brings_its_actors():
+    m = scene.sequence_model(SEQ_SPEC)
+    assert m.kind == "sequence" and m.can_hide
+    assert m.keys == ["actor:c", "actor:m", "step:s1", "step:s2"] and m.order == ["step:s1", "step:s2"]
+    assert m.up["step:s2"] == ["actor:c", "actor:m"]
+    built, notes = scene.compile_scene(m, [[scene.Verb("next")], [scene.Verb("next")]], "Pins")
+    assert _shown(built["frames"][1]) == {"actor:c", "step:s1"}
+    assert _shown(built["frames"][2]) == set(m.keys) and notes == []
+
+
+def test_a_flowchart_spec_steps_through_its_nodes_and_its_arrows_follow():
+    m = scene.flowchart_spec_model(FLOW_SPEC)
+    assert m.keys == ["node:a", "node:b", "node:c", "edge:a->b#0", "edge:b->c#0", "edge:b->c#1"]
+    assert m.order == ["node:a", "node:b", "node:c"]
+    assert m.edges[("b", "c")] == ["edge:b->c#0", "edge:b->c#1"]
+    built, _ = scene.compile_scene(m, [[scene.Verb("next", count=2)], [scene.Verb("next")]], "Floor")
+    assert _shown(built["frames"][1]) == {"node:a", "node:b", "edge:a->b#0"}
+    assert {"edge:b->c#0", "edge:b->c#1"} <= _shown(built["frames"][2])
+
+
+def test_steps_actors_and_nodes_are_found_by_id_by_word_or_by_label():
+    seq = scene.sequence_model(SEQ_SPEC)
+    for raw, want in (("s2", ["step:s2"]), ("step s2", ["step:s2"]), ("actor m", ["actor:m"]),
+                      ("Ledger", ["actor:m"]), ("draft pins build 139", ["step:s2"])):
+        assert scene.resolve(seq, raw, "Pins")[0] == want, raw
+    flow = scene.flowchart_spec_model(FLOW_SPEC)
+    assert scene.resolve(flow, "b->c", "Floor")[0] == ["edge:b->c#0", "edge:b->c#1"]
+    assert scene.resolve(flow, "Floor free?", "Floor")[0] == ["node:b"]
+
+
+def test_auto_steps_spread_evenly_and_never_end_on_an_empty_sentence():
+    model = _flow("graph TD; A-->B; B-->C; C-->D; D-->E")
+    plan, _ = scene.auto_steps(model, ["One.", "Two.", "Three.", "Four."])
+    assert [len(steps[0]) for _, steps in sorted(plan.items())] == [1, 1, 1, 2]
+    groups = [[scene.Verb("+", keys=keys) for keys in steps] for _, steps in sorted(plan.items())]
+    built, notes = scene.compile_scene(model, groups, "T")
+    assert notes == [] and built["frames"][4]["show"] == model.keys
+
+
+def test_next_and_all_name_their_board_by_title():
+    assert (scene.parse_verb("next Turn path").title, scene.parse_verb("next Turn path").count) == ("Turn path", 1)
+    assert (scene.parse_verb("next Turn path: 2").title, scene.parse_verb("next Turn path: 2").count) == ("Turn path", 2)
+    assert (scene.parse_verb("next 3").title, scene.parse_verb("next 3").count) == ("", 3)
+    assert scene.parse_verb("all: Turn path").title == "Turn path"
+
+
+def test_an_edge_between_ids_with_spaces_is_the_edge():
+    model = scene.flowchart_spec_model({"nodes": [{"id": "Order service"}, {"id": "db"}],
+                                        "edges": [{"from": "Order service", "to": "db"}]})
+    assert scene.resolve(model, "Order service->db", "T") == (["edge:Order service->db#0"], None)
+
+
+def test_mermaid_graphs_and_state_diagrams_become_map_specs():
+    from skills.stage import scene as sc
+    states = sc.mermaid_spec("stateDiagram-v2\n  [*] --> Idle\n  Idle --> Busy: work\n  Busy --> Idle: done\n  Busy --> [*]")
+    assert [(n["id"], n["role"]) for n in states["nodes"]] == [("Idle", "entry"), ("Busy", "success")]
+    assert states["edges"] == [{"from": "Idle", "to": "Busy", "label": "work"}, {"from": "Busy", "to": "Idle", "label": "done"}]
+    graph = sc.mermaid_spec("graph LR; P[Page] -->|words| Q{Queue?} -- yes --> R(Run)")
+    assert [(n["id"], n["label"], n["role"]) for n in graph["nodes"]] == [("P", "Page", "entry"), ("Q", "Queue?", "decision"), ("R", "Run", "code")]
+    assert [e.get("label") for e in graph["edges"]] == ["words", "yes"]
+    assert sc.mermaid_spec("sequenceDiagram\n  A->>B: hi") is None
+
+
+def test_a_mermaid_label_becomes_the_words_it_shows_not_its_markup():
+    from skills.stage import scene as sc
+    graph = sc.mermaid_spec('graph LR\n  a[first<br/>second] --> b@{ shape: rect, label: "Store" }\n'
+                            '  b --> c["a #quot;quoted#quot; word"]\n  c --> d["`**bold** text`"]\n'
+                            '  d -->|"yes<br>no &amp; #35;1"| e@{ shape: circle }\n  e --> f["List<String> R&D"]')
+    assert [(n["id"], n["label"]) for n in graph["nodes"]] == [
+        ("a", "first second"), ("b", "Store"), ("c", 'a "quoted" word'), ("d", "bold text"), ("e", "e"), ("f", "List<String> R&D")]
+    quoted = sc.mermaid_spec("graph LR\n  a@{ label: 'Queue' } --> b@{ shape: rect, label: Store }")
+    assert [n["label"] for n in quoted["nodes"]] == ["Queue", "Store"]  # a v11 label in single quotes, or bare
+    assert [e.get("label") for e in graph["edges"]] == [None, None, None, "yes no & #1", None]
+    states = sc.mermaid_spec('stateDiagram-v2\n  [*] --> A\n  state "Wait<br/>here" as A\n  A --> B: go #amp; see\n  B: does #quot;x#quot;')
+    assert states["nodes"] == [{"id": "A", "role": "entry", "label": "Wait here"}, {"id": "B", "role": "code", "label": "B", "sub": 'does "x"'}]
+    assert states["edges"] == [{"from": "A", "to": "B", "label": "go & see"}]
+
+
+def test_a_mermaid_choice_is_a_decision_and_each_link_keeps_its_direction_and_line():
+    from skills.stage import scene as sc
+    states = sc.mermaid_spec("stateDiagram-v2\n  [*] --> c\n  state c <<choice>>\n  c --> A: yes\n  c --> B: no\n"
+                             "  state f <<fork>>\n  A --> f\n  f --> B")
+    assert [(n["id"], n["role"], n.get("sub")) for n in states["nodes"]] == [
+        ("c", "decision", None), ("A", "code", None), ("B", "code", None), ("f", "code", "splits into paths that run at once")]
+    graph = sc.mermaid_spec("graph LR; A <--> B; B -.-> C; C ==> D; D --x E; F --- G; G ~~~ H; H -. maybe .-> I; I <-- both --> J")
+    assert [(e["from"], e["to"], e.get("line"), e.get("heads")) for e in graph["edges"]] == [
+        ("A", "B", None, "both"), ("B", "C", "dashed", None), ("C", "D", None, None), ("D", "E", None, None),
+        ("F", "G", None, "none"), ("H", "I", "dashed", None), ("I", "J", None, "both")]  # ~~~ is no arrow at all
+
+
+HEAR_PATH = ("graph LR; subgraph speech [Azure speech]\n stt[Speech to text] --> tts[Text to speech]\n end\n"
+             " page[Call page] --> speech; speech --> claude[Claude session]")
+
+
+def test_a_mermaid_subgraph_on_a_map_joins_its_parts_and_names_them_rather_than_making_up_a_part():
+    from skills.stage import scene as sc
+    spec = sc.mermaid_spec(HEAR_PATH)
+    assert [(n["id"], n["label"], n["role"], n.get("sub")) for n in spec["nodes"]] == [
+        ("stt", "Speech to text", "code", "in Azure speech"), ("tts", "Text to speech", "code", "in Azure speech"),
+        ("page", "Call page", "entry", None), ("claude", "Claude session", "code", None)]
+    assert [(e["from"], e["to"]) for e in spec["edges"]] == [("stt", "tts"), ("page", "stt"), ("tts", "claude")]
+    assert spec["groups"] == [{"id": "speech", "label": "Azure speech", "nodes": ["stt", "tts"]}]
+    # nested: an arrow into the outer box reaches each part nothing inside leads to; an empty box stays a part
+    nested = sc.mermaid_spec("graph TD\n subgraph outer [Outer]\n subgraph inner [Inner]\n a --> b\n end\n c\n end\n"
+                             " x --> outer\n inner --> y\n subgraph later [Not built]\n end\n y --> later")
+    assert [(e["from"], e["to"]) for e in nested["edges"]] == [("a", "b"), ("x", "a"), ("x", "c"), ("b", "y"), ("y", "later")]
+    # only the box's own arrows decide where an arrow into the box lands: one from outside to a part does not
+    side = sc.mermaid_spec("graph LR\n subgraph s [Pair]\n a\n b\n end\n x --> a\n w --> s")
+    assert [(e["from"], e["to"]) for e in side["edges"]] == [("x", "a"), ("w", "a"), ("w", "b")]
+    assert [(n["id"], n["label"]) for n in nested["nodes"]][-1] == ("later", "Not built")
+    # a verb names the subgraph by its id or its label, and it brings and lights its parts
+    model = sc.flowchart_spec_model(spec)
+    assert sc.resolve(model, "speech", "T") == (["group:speech"], None) == sc.resolve(model, "Azure speech", "T")
+    built, _ = sc.compile_scene(model, [verbs("+ page"), verbs("+ speech"), verbs("focus speech")], "T")
+    assert built["frames"][2]["show"] == ["group:speech", "node:stt", "node:tts", "node:page", "edge:stt->tts#0", "edge:page->stt#0"]
+    assert built["frames"][3]["focus"] == ["group:speech", "node:stt", "node:tts"]
+
+
+# -- what each frame says is being said (cur) -------------------------------------------------------
+# The boards below are real: the stage demo's (skills/talk/demo.md) and boards from saved calls, with
+# the verbs their tags compiled to.
+
+TIMELINE = scene.rows_model(["before", "13 Jan", "21 Jan", "26 Jan", "2 Feb"], ["When", "Contract repo", "Service"])
+ENGINES = scene.rows_model(["Speed", "Cost", "Runs on", "Needs", "Picked"], ["", "Azure", "VoiceStudio"])
+LIVE_SPEC = {"nodes": [{"id": "listening", "role": "entry", "label": "Listening"}, {"id": "hearing", "label": "Hearing you"},
+                       {"id": "sending", "label": "Sending"}, {"id": "working", "label": "Working"},
+                       {"id": "speaking", "role": "success", "label": "Speaking"}],
+             "edges": [{"from": "listening", "to": "hearing", "label": "you speak"}, {"from": "hearing", "to": "sending", "label": "you pause"},
+                       {"from": "sending", "to": "working", "label": "a turn went"}, {"from": "working", "to": "speaking", "label": "it is ready"},
+                       {"from": "sending", "to": "listening", "label": "nothing said"}, {"from": "speaking", "to": "hearing", "label": "you cut in"},
+                       {"from": "speaking", "to": "listening", "label": "it ends"}]}
+CALLS_SPEC = {"actors": [{"id": "app", "label": "Application (advisory)"}, {"id": "port", "label": "Interfaces in advisory legacy"},
+                         {"id": "fl", "label": "Flowable module (workflows)"}],
+              "steps": [{"id": "s1", "from": "app", "to": "port", "arrow": "request", "label": "asks for tasks"},
+                        {"id": "s2", "from": "port", "to": "fl", "arrow": "request", "label": "Spring injects the Flowable implementation"},
+                        {"id": "s3", "from": "fl", "to": "port", "arrow": "event", "label": "BPMN step needs orders sent"},
+                        {"id": "s4", "from": "port", "to": "app", "arrow": "event", "label": "Spring injects the app implementation"}]}
+
+
+def _cur(built):
+    return [f["cur"] for f in built["frames"]]
+
+
+def test_frame_0_and_the_rest_frame_of_a_full_board_name_nothing_as_being_said():
+    # "Timeline, simply" (saved call IzwEEFZT6): a table that starts full and is pointed at row by row
+    built, _ = scene.compile_scene(TIMELINE, [verbs(f"focus row {n}") for n in range(1, 6)] + [verbs("focus none")],
+                                   "Timeline, simply")
+    assert built["start"] == "full"
+    assert _cur(built) == [[], ["row#1"], ["row#2"], ["row#3"], ["row#4"], ["row#5"], [], []]
+    # a frame that brings nothing and points at nothing names nothing either
+    built, _ = scene.compile_scene(TIMELINE, [verbs("next 5"), verbs("next")], "T")
+    assert _cur(built)[2] == []
+
+
+def test_a_reveal_with_no_point_of_its_own_clears_the_focus_and_is_what_is_said():
+    # the demo's "Two speech engines": a cell pointed at, then the rows that follow with [[next]]
+    tags = [["next", 'focus cell "Speed" / "Azure"'], ['focus cell "Speed" / "VoiceStudio"'], ["next"], ["next"], ["next"],
+            ["next", 'focus cell "Picked" / "Azure"']]
+    built, notes = scene.compile_scene(ENGINES, [verbs(*g) for g in tags], "Two speech engines")
+    assert notes == []
+    assert [f["focus"] for f in built["frames"]] == [[], ["cell#1.2"], ["cell#1.3"], [], [], [], ["cell#5.2"], []]
+    assert _cur(built) == [[], ["row#1"], ["row#1"], ["row#2"], ["row#3"], ["row#4"], ["row#5"], []]
+
+
+def test_a_point_wins_over_a_reveal_in_its_own_frame():
+    # "Calls in both directions" (saved call WM4mN6) as the old automatic steps compiled it: each sentence
+    # brought the next step in and pointed at the one before
+    m = scene.sequence_model(CALLS_SPEC)
+    built, _ = scene.compile_scene(m, [[scene.Verb("next")]] + [[scene.Verb("next"), scene.Verb("focus", keys=[f"step:s{i}"])]
+                                                               for i in range(1, 4)], "Calls in both directions")
+    assert _cur(built) == [[], ["step:s1"], ["step:s1"], ["step:s2"], ["step:s3"], []]
+    assert built["frames"][2]["focus"] == ["step:s1"]
+    built, _ = scene.compile_scene(m, [verbs("focus actor port")], "Calls")
+    assert _cur(built)[1] == ["actor:port"]  # an actor pointed at is what is said; the lanes light its chip
+
+
+def test_the_arrow_said_is_the_one_that_arrived_into_the_part_being_said():
+    # the demo's "Live mode's states": a node can bring an arrow in and an arrow back at once
+    m = scene.flowchart_spec_model(LIVE_SPEC)
+    tags = [["+ listening"], ["+ hearing"], ["+ sending"], ["+ working"], ["+ speaking"],
+            ["+ sending->listening, speaking->hearing, speaking->listening"]]
+    built, notes = scene.compile_scene(m, [verbs(*g) for g in tags], "Live mode's states")
+    assert notes == []
+    assert _cur(built) == [
+        [], ["node:listening"], ["node:hearing", "edge:listening->hearing#0"],
+        ["node:sending", "edge:hearing->sending#0"],  # not sending->listening, which arrived with it
+        ["node:working", "edge:sending->working#0"],
+        ["node:speaking", "edge:working->speaking#0"],  # not the two arrows back that arrived with it
+        ["edge:sending->listening#0", "edge:speaking->hearing#0", "edge:speaking->listening#0"], []]
+
+
+ONE_TURN_SPEC = {"actors": [{"id": "p", "label": "Call page"}, {"id": "t", "label": "Talk server"}, {"id": "a", "label": "Azure speech"},
+                            {"id": "c", "label": "Claude session"}],
+                 "steps": [{"id": "s1", "from": "p", "to": "t", "label": "sends what you said as a WAV"},
+                           {"id": "s2", "from": "t", "to": "a", "label": "turns the recording into words"},
+                           {"id": "s3", "from": "a", "to": "t", "label": "returns the words it heard"},
+                           {"id": "s4", "from": "c", "to": "t", "label": "the doorbell collects the turn"},
+                           {"id": "s5", "from": "c", "to": "c", "label": "reads the code and writes the answer"},
+                           {"id": "s6", "from": "c", "to": "t", "label": "sends the answer and its boards"},
+                           {"id": "s7", "from": "t", "to": "a", "label": "reads the whole answer aloud"},
+                           {"id": "s8", "from": "t", "to": "p", "label": "the answer is ready on the next poll"}]}
+# the sentences said over it in call NtQA_iUv88X6oZvdr_zCxw (entry 21), the demo as it was then
+ONE_TURN_SAID = ["A sequence comes in a step at a time, here the path of one turn.",
+                 "When you stop talking, the call page sends what you said to the talk server.",
+                 "The server hands the recording to Azure.", "Azure sends back the words it heard.",
+                 "Your Claude session collects the turn on its doorbell.", "It reads the code and writes the answer.",
+                 "Then it sends the answer and its boards back.", "The server has Azure read the whole answer aloud.",
+                 "And the page picks it up on its next poll.", "The slow part is always this one: Claude reading and writing.",
+                 "Next is a map."]
+
+
+def test_each_part_arrives_with_the_sentence_that_names_it_and_an_introduction_brings_nothing():
+    m = scene.sequence_model(ONE_TURN_SPEC)
+    plan, later = scene.auto_steps(m, ONE_TURN_SAID, {9: ["step:s5"]})
+    # s2 and s8 are named by no sentence: they fill the sentences between the named steps around them
+    assert plan == {1: [["step:s1"]], 2: [["step:s2"]], 3: [["step:s3"]], 4: [["step:s4"]], 5: [["step:s5"]],
+                    6: [["step:s6"]], 7: [["step:s7"]], 8: [["step:s8"]]}
+    assert later == ["step:s2", "step:s8"]
+    assert scene.names_part(scene._words("Then it sends the answer and its boards back."),
+                            scene.part_names(m)["step:s6"])
+
+
+def test_a_point_is_the_reveal_for_its_sentence_and_parts_named_nowhere_ride_with_a_named_one():
+    m = scene.sequence_model(CALLS_SPEC)
+    said = ["The two engines still talk in both directions, and that is why the interfaces live in advisory.",
+            "When the application wants a proposal's Flowable tasks, it calls the WorkflowsRepository interface.",
+            "At runtime Spring hands it the Flowable implementation, AdvisoryWorkflowsRepository, which now sits inside the workflows module.",
+            "The other way round, when a BPMN step must send orders, Flowable calls the SendOrdersDelegate interface.",
+            "The application implements that one, in OrdersSyncService."]
+    plan, later = scene.auto_steps(m, said, {1: ["step:s1"], 2: ["step:s2"], 3: ["step:s3"], 4: ["step:s4"]})
+    assert plan == {1: [["step:s1"]], 2: [["step:s2"]], 3: [["step:s3"]], 4: [["step:s4"]]} and later == []
+    # with fewer sentences: s1 fills the sentence before the named ones, and s4, named nowhere and with no
+    # sentence left after them, comes in with them (before them, so they are what is said)
+    plan, later = scene.auto_steps(m, said[:3], {2: ["step:s3"]})
+    assert plan == {1: [["step:s1"]], 2: [["step:s4"], ["step:s2", "step:s3"]]} and later == ["step:s1", "step:s4"]
+
+
+def test_rows_take_a_range_as_lines_do():
+    assert scene.resolve(TIMELINE, "rows 2-4", "T") == (["row#2", "row#3", "row#4"], None)
+    assert scene.resolve(TIMELINE, "rows 4-6", "T") == ([], '"T" has 5 rows, not rows 4-6; dropped')
+    built, _ = scene.compile_scene(TIMELINE, [verbs("focus rows 1-2")], "T")
+    assert built["frames"][1]["focus"][:2] == ["row#1", "row#2"] and _cur(built)[1] == ["row#1", "row#2"]
+
+
+# the first hunk of "Cells and the current one", the stage demo's change board: one line removed for four
+CELLS_HUNK = [{"lines": [{"op": " ", "old": 16, "new": 16}, {"op": " ", "old": 17, "new": 17}, {"op": "-", "old": 18, "new": None},
+                         {"op": "+", "old": None, "new": 18}, {"op": "+", "old": None, "new": 19}, {"op": "+", "old": None, "new": 20},
+                         {"op": "+", "old": None, "new": 21}, {"op": " ", "old": 19, "new": 22}]}]
+
+
+def test_a_change_board_keys_its_removed_lines_and_a_range_takes_the_ones_inside_it():
+    change = scene.change_model(CELLS_HUNK)
+    assert change.keys == ["line:16", "line:17", "old:18", "line:18", "line:19", "line:20", "line:21", "line:22"]
+    assert scene.resolve(change, "17-18", "C") == (["line:17", "old:18", "line:18"], None)
+    assert scene.resolve(change, "lines 18-21", "C") == (["line:18", "line:19", "line:20", "line:21"], None)
+    assert scene.resolve(change, "old line 18", "C") == (["old:18"], None)
+    assert scene.resolve(change, "old 19", "C") == ([], '"old 19" is not a removed line of "C"; dropped')
+    built, notes = scene.compile_scene(change, [verbs("focus old 18")], "C")
+    assert (built["frames"][1]["focus"], built["frames"][1]["cur"], notes) == (["old:18"], ["old:18"], [])
+
+
+SCENE_JS = Path(__file__).resolve().parents[1] / "static" / "scene.js"
+
+
+def _scene_js(expr, scene_):
+    """`expr` over `s`, the scene, with the page's scene.js imported, run under node."""
+    js = (f"import * as S from {json.dumps(SCENE_JS.as_uri())};\n"
+          f"const s = {json.dumps(scene_)};\n"
+          f"process.stdout.write(JSON.stringify({expr}));")
+    out = subprocess.run(["node", "--input-type=module", "-e", js], capture_output=True, text=True, check=True)
+    return json.loads(out.stdout)
+
+
+def _being_said(scene_, frames):
+    """What the page's scene.js draws as being said in each of `frames`."""
+    return _scene_js(f"{json.dumps(frames)}.map((n) => S.beingSaid(s, n))", scene_)
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_a_scene_saved_before_frames_named_what_is_said_draws_the_new_part_with_the_arrow_into_it_else_out_of_it():
+    keys = ["node:a", "node:b", "node:c", "edge:a->b#0", "edge:c->a#0"]
+    saved = {"kind": "flowchart", "keys": keys, "steps": 3, "rest": 4, "start": "empty",
+             "frames": [{"show": [], "focus": []}, {"show": ["node:a"], "focus": []},
+                        {"show": ["node:a", "node:b", "edge:a->b#0"], "focus": []},
+                        {"show": ["node:a", "node:b", "node:c", "edge:a->b#0", "edge:c->a#0"], "focus": []},
+                        {"show": keys, "focus": []}]}
+    # b arrives with the arrow into it; c with only an arrow out of it; nothing at frame 0 or at rest
+    assert _being_said(saved, [0, 1, 2, 3, 4]) == [
+        [], ["node:a"], ["node:b", "edge:a->b#0"], ["node:c", "edge:c->a#0"], []]
+
+
+def test_a_word_names_a_part_by_any_form_of_it_but_not_by_a_word_it_merely_starts_like():
+    same = [("share", "sharing"), ("sends", "send"), ("implement", "implementation"), ("queue", "queued"),
+            ("list", "last"), ("stage", "stack"), ("cat", "category")]
+    assert [scene._same(a, b) for a, b in same] == [True, True, True, True, False, False, False]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_a_saved_scene_lights_an_arrow_between_ids_that_hold_an_arrow_once_both_its_ends_show():
+    # the edge from "a->b" to "c": its first split names a part ("a") but not the other end ("b->c")
+    keys = ["node:a", "node:a->b", "node:c", "edge:a->b->c#0"]
+    saved = {"kind": "flowchart", "keys": keys, "steps": 2, "rest": 3, "start": "empty",
+             "frames": [{"show": [], "focus": []}, {"show": ["node:a->b"], "focus": []},
+                        {"show": ["node:a->b", "node:c"], "focus": []}, {"show": keys, "focus": []}]}
+    assert _scene_js("S.settled(s).frames.map((f) => f.show)", saved) == [
+        [], ["node:a->b"], ["node:a->b", "node:c", "edge:a->b->c#0"], keys]
+
+
+# -- scenes: an HTML page made of parts the voice reveals ---------------------------------------------
+
+from skills.stage import model as stage_model  # noqa: E402
+
+BEN = """<div class="cols">
+  <section class="box" data-part="data" data-name="the data the server sends"><p class="cap">Data</p>
+    <div data-part="old">K&amp;EProductType: Investment Grade Bonds</div>
+    <div data-part="v2">K&amp;EProductTypeV2: Fixed Income</div></section>
+  <section class="box" data-part="rule"><h4>The template rule</h4><pre>find('K&amp;EProductType')</pre></section>
+  <section class="box" data-part="pdf"><br><img src="x.png">What the PDF prints in the Product cell for Ben</section>
+</div>"""
+
+
+def test_a_scene_is_read_as_its_parts_in_page_order_with_their_names_and_nesting():
+    src = stage_model.scene_source(BEN)
+    assert src["type"] == "inline" and src["format"] == "scene" and src["html"] == BEN
+    assert [(p["id"], p["parent"]) for p in src["parts"]] == [
+        ("data", None), ("old", "data"), ("v2", "data"), ("rule", None), ("pdf", None)]
+    # data-name first, else the part's first heading, else its first eight words
+    assert [p["name"] for p in src["parts"]] == [
+        "the data the server sends", "K&EProductType: Investment Grade Bonds", "K&EProductTypeV2: Fixed Income",
+        "The template rule", "What the PDF prints in the Product cell"]
+
+
+def test_a_scene_with_no_parts_a_repeated_part_a_bad_id_or_a_javascript_link_is_refused():
+    for html, why in [("<div><p>All at once</p></div>", "no parts: mark each part with data-part"),
+                      ('<p data-part="a">x</p><p data-part="a">y</p>', 'part "a" is marked twice'),
+                      ('<p data-part="a b">x</p>', 'part id "a b" must be letters, digits, - or _'),
+                      ('<a data-part="a" href=" JavaScript:go()">x</a>', "a javascript: link never runs in a scene; use a button with a handler")]:
+        with pytest.raises(stage_model.SourceError, match=re.escape(why)):
+            stage_model.scene_source(html)
+
+
+def test_a_scene_with_a_script_or_a_handler_is_kept_whole_for_a_sealed_frame():
+    plain = stage_model.scene_source('<p data-part="a">x</p>')
+    scripted = stage_model.scene_source('<div data-part="a"><script>const words = "not a name";</script>'
+                                        '<style>p { color: red }</style>The <b>row</b></div>')
+    handler = stage_model.scene_source('<button data-part="a" onclick="go()">Buy</button>')
+    assert "sandboxed" not in plain and scripted["sandboxed"] is True and handler["sandboxed"] is True
+    assert "<script>" in scripted["html"]  # kept whole: the stage runs it, never sanitizes it
+    assert [p["name"] for p in scripted["parts"]] == ["The row"]  # a script's text names no part
+
+
+def test_a_part_brings_its_parent_and_a_parent_brings_the_parts_no_verb_reveals_on_its_own():
+    m = scene.parts_model(stage_model.scene_source(BEN)["parts"])
+    assert m.kind == "parts" and m.keys == ["part:data", "part:old", "part:v2", "part:rule", "part:pdf"]
+    assert m.order == m.keys and m.up["part:old"] == ["part:data"] and m.down["part:data"] == ["part:old", "part:v2"]
+    built, notes = scene.compile_scene(m, [[scene.parse_verb("+ data")], [scene.parse_verb("+ v2")], [scene.parse_verb("focus old")]], "Ben")
+    shows = [f["show"] for f in built["frames"]]
+    # data comes alone, because v2 and old are revealed on their own; the point at old brings it in and lights it
+    assert shows[1] == ["part:data"] and shows[2] == ["part:data", "part:v2"]
+    assert shows[3] == ["part:data", "part:old", "part:v2"] and built["frames"][3]["focus"] == ["part:old"]
+    assert built["frames"][3]["cur"] == ["part:old"] and notes == ['2 of 5 elements of "Ben" are never revealed; they come in with the rest frame']
+    built, _ = scene.compile_scene(m, [[scene.parse_verb("+ data")]], "Ben")
+    assert built["frames"][1]["show"] == ["part:data", "part:old", "part:v2"]  # nothing named its parts alone
+
+
+def test_part_targets_read_by_id_by_prefix_and_by_name():
+    m = scene.parts_model(stage_model.scene_source(BEN)["parts"])
+    assert scene.resolve(m, "old", "Ben") == (["part:old"], None)
+    assert scene.resolve(m, "part rule", "Ben") == (["part:rule"], None)
+    assert scene.resolve(m, "the template rule", "Ben") == (["part:rule"], None)
+
+
+def test_a_scene_with_no_verbs_comes_in_part_by_part_with_the_sentences_that_name_them():
+    m = scene.parts_model(stage_model.scene_source(BEN)["parts"])
+    plan, by_order = scene.auto_steps(m, ["Follow one value.", "First the data the server sends.",
+                                          "Then the template rule.", "Then what the PDF prints."])
+    # the parts inside the data box, named by no sentence, ride in with it
+    assert plan == {1: [["part:data", "part:old", "part:v2"]], 2: [["part:rule"]], 3: [["part:pdf"]]}
+    # even two parts never come up at once: a scene always steps
+    two = scene.parts_model(stage_model.scene_source('<p data-part="a">Apples</p><p data-part="b">Pears</p>')["parts"])
+    plan, _ = scene.auto_steps(two, ["Here are apples.", "And pears."])
+    assert plan == {0: [["part:a"]], 1: [["part:b"]]}
+
+
+# -- an architecture map (map_svg) -------------------------------------------------------------------------
+
+BILL_MAP = {"columns": ["Who asks", "Entry", "Service"],
+            "boxes": [{"id": "svc", "col": 2, "row": 0, "tone": "green", "name": "Ledger services", "b": 3, "r": 2},
+                      {"id": "chat", "col": 0, "row": 0, "name": "A person in the chat", "b": 1, "r": 1},
+                      {"id": "ask", "col": 1, "row": 0, "name": "Ask Ledger", "b": 2, "r": 1,
+                       "children": [{"id": "gemini", "name": "Gemini"}, {"id": "card", "name": "A card first", "b": 4}]}],
+            "zones": [{"label": "defined once", "boxes": ["ask"]}],
+            "arrows": [{"from": "chat", "to": "ask", "b": 2}, {"from": "ask", "to": "svc", "b": 3},
+                       {"layer": "route", "from": "chat", "to": "ask", "n": 1, "r": 1, "label": "`mark_paid`, said in words"},
+                       {"layer": "route", "from": "gemini", "to": "svc", "n": 2, "r": 2, "label": "runs the tool"}],
+            "captions": {"route": [{"title": "The person asks"}, {"title": "The service decides"}]}}
+
+
+def test_a_map_keys_its_parts_in_build_order_then_the_steps_of_its_route():
+    m = scene.map_model(BILL_MAP)
+    assert m.kind == "map"
+    assert m.order == ["box:chat", "box:ask", "box:gemini", "zone:0", "box:svc", "box:card", "route:1", "route:2"]
+    assert m.keys == ["zone:0", "box:chat", "box:ask", "box:gemini", "box:svc", "box:card",
+                      "edge:chat->ask#0", "edge:ask->svc#0", "route:1", "route:2"]
+    # a child rides with its box unless its own step is later; a zone brings its boxes
+    assert m.down == {"box:ask": ["box:gemini"], "zone:0": ["box:ask"]}
+    assert m.up["box:card"] == ["box:ask"] and m.up["edge:ask->svc#0"] == ["box:ask", "box:svc"]
+    # a route step brings the boxes its arrows join, and is said with the box it arrives at
+    assert m.up["route:2"] == ["box:gemini", "box:svc"] and m.said_with["route:2"] == ["box:svc"]
+    assert m.names["mark_paid, said in words"] == "route:1" and m.names["the service decides"] == "route:2"
+    assert m.names["defined once"] == "zone:0" and m.names["ask ledger"] == "box:ask"
+
+
+def test_a_map_target_is_a_box_a_zone_a_route_step_or_an_arrow_by_its_boxes():
+    m = scene.map_model(BILL_MAP)
+    assert scene.resolve(m, "box ask", "B") == (["box:ask"], None)
+    assert scene.resolve(m, "gemini", "B") == (["box:gemini"], None)
+    assert scene.resolve(m, "route 2", "B") == (["route:2"], None)
+    assert scene.resolve(m, "zone 0", "B") == (["zone:0"], None)
+    assert scene.resolve(m, "chat->ask", "B") == (["edge:chat->ask#0"], None)
+    assert scene.resolve(m, "Ledger services", "B") == (["box:svc"], None)
+
+
+def test_next_builds_a_map_up_and_then_walks_its_route_and_all_never_starts_the_route():
+    m = scene.map_model(BILL_MAP)
+    built, notes = scene.compile_scene(m, [[scene.parse_verb("next 2")], [scene.parse_verb("next 3")],
+                                           [scene.parse_verb("next")], [scene.parse_verb("next")]], "B")
+    f = built["frames"]
+    assert notes == [] and built["start"] == "empty"
+    assert f[1]["show"] == ["box:chat", "box:ask", "box:gemini", "edge:chat->ask#0"]  # gemini rides in with its box
+    assert f[3]["cur"] == ["route:1", "box:ask"] and "route:2" not in f[3]["show"]
+    assert f[4]["cur"] == ["route:2", "box:svc"]
+    whole, notes = scene.compile_scene(m, [[scene.parse_verb("all")]], "B")
+    assert notes == [] and [k for k in whole["frames"][1]["show"] if k.startswith("route:")] == []
+
+
+def test_a_route_step_pointed_at_lights_the_box_it_arrives_at_with_it():
+    m = scene.map_model(BILL_MAP)
+    built, _ = scene.compile_scene(m, [[scene.parse_verb("focus route 2")]], "B")
+    assert built["frames"][1]["focus"] == ["box:svc", "route:2"] and built["frames"][1]["cur"] == ["route:2", "box:svc"]
+
+
+def test_with_no_verbs_a_map_follows_its_route_only_when_a_sentence_names_a_step_of_it():
+    m = scene.map_model(BILL_MAP)
+    built = ["A person in the chat starts it.", "Ask Ledger reads it.", "Ledger services hold the rule."]
+    plan, _ = scene.auto_steps(m, built)
+    assert sorted({k for steps in plan.values() for s in steps for k in s if k.startswith("route:")}) == []
+    plan, _ = scene.auto_steps(m, built + ["Now the person asks.", "And the service decides."])
+    assert plan[3][-1] == ["route:1"] and plan[4][-1] == ["route:2"]
+
+
+def _two_parts():
+    return scene.flowchart_spec_model({"nodes": [{"id": "a", "role": "entry", "label": "Alpha"}, {"id": "b", "role": "success", "label": "Beta"}],
+                                       "edges": [{"from": "a", "to": "b"}]})
+
+
+def test_a_diagram_of_two_parts_still_marks_the_part_each_sentence_names():
+    model = _two_parts()
+    assert scene.said_parts(model, ["Alpha starts it.", "Nothing here.", "Beta ends it."]) == {0: ["node:a"], 2: ["node:b"]}
+
+
+def test_a_diagram_of_one_part_marks_nothing():
+    one = scene.flowchart_spec_model({"nodes": [{"id": "a", "role": "entry", "label": "Alpha"}], "edges": []})
+    assert scene.said_parts(one, ["Alpha starts it."]) == {}
+
+
+def test_a_sentence_naming_two_parts_equally_marks_the_later_one():
+    assert scene.said_parts(_two_parts(), ["Alpha then Beta."]) == {0: ["node:b"]}

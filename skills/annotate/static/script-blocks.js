@@ -1,0 +1,667 @@
+// annotate page code, part 4 of 9 (see script.js): one block's part of
+// the document — the code column, the pflow source pane, diagram layouts and
+// views, and the section itself, with its heading and fold.
+
+// The band of panes under one block's prose, or null when the block cites
+// no code. An anchorless block renders exactly as annotate does today:
+// full-width prose, nothing under it.
+function renderCodeColumn(blk) {
+  // I4: check_anchors already refuses a mockup block's anchors at push
+  // time, but the render path serves strangers on the read-only link --
+  // defence in depth belongs here too, not only in the check. A mockup
+  // renders in a sandboxed iframe and has nowhere to put a pane.
+  if (blk.kind === "mockup") return null;
+  const panes = Array.isArray(blk.code) ? blk.code : [];
+  if (!panes.length) return null;
+
+  const col = document.createElement("div");
+  col.className = "code-col";
+  panes.forEach((p) => col.appendChild(renderCodePane(p)));
+  return col;
+}
+
+// The reading highlighter paints ranges over block prose from outside the
+// DOM, so it has to be re-applied whenever that prose is replaced. Called
+// from here rather than from a MutationObserver inside the highlighter: this
+// is the point where a render is FINISHED, which an observer cannot know.
+function repaintHighlights() {
+  const hl = window.annotateHighlighter;
+  if (hl && typeof hl.repaint === "function") hl.repaint();
+}
+
+// Run on every full render and every poll: re-reads the settings (another
+// tab may have changed a global one) and repaints the highlighter.
+function refreshPageState() {
+  applyViewControls();
+  repaintHighlights();
+}
+
+// A flowchart authored as pflow ships the source it was compiled from. Render
+// it under the chart, line-addressable: every line that produced a node
+// carries that node's id, so hovering either view lights the other and the
+// reader can see which line drew which shape. The line used to be a comment
+// target too; it is not any more (see the createBlockSection note on why the
+// granular scope was withdrawn from pictures).
+function renderPflowSource(blk) {
+  const spec = blk.spec || {};
+  const src = String(spec.source || "").replace(/\n+$/, "");
+  if (!src) return null;
+
+  const wrap = document.createElement("div");
+  wrap.className = "pflow";
+
+  const head = document.createElement("div");
+  head.className = "pflow-head";
+  const label = document.createElement("span");
+  label.className = "pflow-label";
+  label.textContent = "source";
+  const hint = document.createElement("span");
+  hint.className = "pflow-hint";
+  hint.textContent = "hover a line to light the step it draws";
+  head.append(label, hint);
+
+  const byLine = new Map();
+  (spec.nodes || []).forEach((n) => {
+    if (n && n.line) byLine.set(Number(n.line), n.id);
+  });
+
+  const lines = src.split("\n");
+  const misses = codeMisses();
+  const painted = highlightPflow(src);
+  const paintedLines = painted ? CodePaint.splitRows(painted) : null;
+  const cells = [];
+
+  // `.sk-fence` on the body, not on a <pre><code>: it takes the fence ground
+  // and base colour (each token carries its own colour regardless), and it
+  // keeps `main.prose pre code.sk-fence` — which sets its own font-size and
+  // line-height for fenced code — from reaching in here and breaking the rows.
+  const body = document.createElement("div");
+  body.className = "pflow-body sk-fence";
+
+  lines.forEach((line, i) => {
+    const row = document.createElement("div");
+    row.className = "pflow-row";
+    const num = document.createElement("span");
+    num.className = "pflow-num";
+    num.setAttribute("aria-hidden", "true");
+    num.textContent = String(i + 1);
+    const text = document.createElement("span");
+    text.className = "pflow-line";
+    if (paintedLines) text.innerHTML = paintedLines[i] || "";
+    else text.textContent = line;
+    cells.push(text);
+    // A line that produced a node carries its id, which is what pairs the
+    // row with the shape on hover. Lines that produced nothing stay inert.
+    // Neither is clickable: the comment on a picture is whole-block now.
+    const nodeId = byLine.get(i + 1);
+    if (nodeId) {
+      row.dataset.nodeId = nodeId;
+      row.classList.add("is-live");
+    }
+    row.append(num, text);
+    body.appendChild(row);
+  });
+
+  wrap.append(head, body);
+  if (!paintedLines && codeMisses() > misses) {
+    later(body, () => {
+      const html = highlightPflow(src);
+      if (!html) return false;
+      const rows = CodePaint.splitRows(html);
+      cells.forEach((cell, i) => { cell.innerHTML = rows[i] || ""; });
+      return true;
+    });
+  }
+  return wrap;
+}
+
+// A block that laid out cleanly in more than one way ships every rendering
+// and lets the reader pick. The choice is theirs alone: it lives in
+// localStorage, is never sent to the daemon, and never reaches another
+// viewer. Storage can throw outright in a private window or with site data
+// blocked, so every access is guarded and an unreadable store simply means
+// the block opens on its default.
+//
+// Keyed by response as well as block. Block ids repeat across documents
+// (every document's first block is section-1), so a key of the block id
+// alone carried a layout picked in one document into every other one.
+const FLAVOUR_KEY = "annotate.flavour";
+const VIEW_KEY = "annotate.flowview";
+
+function choiceKey(prefix, blockId) {
+  const rid = document.body.dataset.responseId || "default";
+  return `${prefix}:${rid}:${blockId}`;
+}
+
+function readChoice(prefix, blockId) {
+  try {
+    return window.localStorage.getItem(choiceKey(prefix, blockId));
+  } catch (e) {
+    return null;
+  }
+}
+
+function writeChoice(prefix, blockId, name) {
+  try {
+    window.localStorage.setItem(choiceKey(prefix, blockId), name);
+  } catch (e) {
+    /* per-viewer convenience only — losing it costs nothing */
+  }
+}
+
+function flavourLabel(name) {
+  if (name === "all") return "All";
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+// Paint a flowchart block: the server SVG, plus the source pane when the
+// block was authored as pflow, plus the layout control when it shipped more
+// than one rendering. Shared by create and update so an in-place refresh
+// cannot leave one without the others.
+function paintFlowchart(content, blk) {
+  const svgs = blk.svgs || {};
+  // Views win over layout flavours when a block ships both: a view changes
+  // which edges are drawn, which is a question the reader asked, while a
+  // flavour only changes how the same edges are arranged.
+  const viewNames = blk.views || [];
+  const isViews = viewNames.length > 1;
+  const names = isViews ? viewNames : blk.flavours || [];
+  const key = isViews ? VIEW_KEY : FLAVOUR_KEY;
+  const label = isViews ? "Diagram view" : "Diagram layout";
+
+  function buildControl(current) {
+    const wrap = document.createElement("div");
+    wrap.className = isViews ? "flow-flavours flow-views" : "flow-flavours";
+    wrap.setAttribute("role", "group");
+    wrap.setAttribute("aria-label", label);
+    names.forEach((name) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = flavourLabel(name);
+      if (isViews) b.dataset.view = name;
+      else b.dataset.flavour = name;
+      if (name === current) b.setAttribute("aria-pressed", "true");
+      else b.setAttribute("aria-pressed", "false");
+      b.addEventListener("click", () => {
+        writeChoice(key, blk.id, name);
+        paint(name);
+      });
+      wrap.appendChild(b);
+    });
+    return wrap;
+  }
+
+  const paint = (name) => {
+    // Trusted server output — deliberately bypasses sanitizeFreeHtml so the
+    // class/data-* hit targets survive.
+    content.innerHTML = (name && svgs[name]) || blk.svg || "";
+    if (names.length > 1) content.prepend(buildControl(name));
+    const source = renderPflowSource(blk);
+    if (source) content.appendChild(source);
+  };
+
+  let chosen = names.length > 1 ? readChoice(key, blk.id) : null;
+  if (names.indexOf(chosen) === -1) chosen = names[0] || null;
+  paint(chosen);
+}
+
+// Hovering either view lights the other: the id lives on the SVG node and on
+// the source line alike, so one selector reaches both.
+function linkPflowHover(content) {
+  const clear = () => {
+    content.querySelectorAll(".is-node-active").forEach((el) => {
+      el.classList.remove("is-node-active");
+    });
+  };
+  content.addEventListener("mouseover", (ev) => {
+    const el = ev.target.closest && ev.target.closest("[data-node-id]");
+    clear();
+    if (!el || !content.contains(el)) return;
+    content.querySelectorAll(`[data-node-id="${cssEsc(el.dataset.nodeId)}"]`)
+      .forEach((m) => m.classList.add("is-node-active"));
+  });
+  content.addEventListener("mouseleave", clear);
+}
+
+// A sequence or a map. Since the lane sequence, `blk.svg` is the player
+// fragment render.py stores (visuals/player.py): the drawing, built from a
+// validated spec with every word escaped, and its captions as JSON text that
+// vz-reveal.js writes only as text. The subtitle is painted here, as text,
+// because the drawing leaves out the title and subtitle the heading already
+// carries (render.py's _drawn).
+//
+// A body stored before the lane sequence is two halves: the grid (`blk.svg`)
+// and the numbered key beneath it (`blk.key`). The grid carries arrows and
+// badges and no words at all, so painting the svg alone leaves a picture of
+// unexplained circles — both halves go in together, always.
+function paintVz(content, blk) {
+  content.innerHTML = (blk.svg || "") + (blk.key || "");
+  // At its own size, as every picture on this page is: a wide drawing
+  // scrolls inside its player rather than shrinking its words. Maximize's
+  // Fit width lets it fill the width instead (diagram.css, is-fit).
+  content.querySelectorAll(".vz-stage > svg.vz").forEach((svg) => {
+    const box = svg.viewBox && svg.viewBox.baseVal;
+    if (box && box.width) svg.style.setProperty("--vz-w", box.width + "px");
+  });
+  const spec = blk.spec || {};
+  const sub = typeof spec.subtitle === "string" ? spec.subtitle.trim() : "";
+  if (sub && content.querySelector(".vz-player")) {
+    const p = document.createElement("p");
+    p.className = "vz-subtitle";
+    p.textContent = sub;
+    content.prepend(p);
+  }
+}
+
+// The players get their controls once their sections are in the document:
+// both render paths and a rewrite dispatch "annotate:rendered" after that.
+// boot() skips a player it has already set up, and a repaint makes a new one.
+function bootPlayers() {
+  if (window.vzReveal) window.vzReveal.boot();
+}
+document.addEventListener("annotate:rendered", bootPlayers);
+
+// Badge ⇄ key pairing. They pair on data-step-id, which is also what a
+// comment anchors to, so lighting a step lights whatever a comment marked.
+// Delegated from .block-content, which survives updateBlockContent's
+// innerHTML swap — binding to the badges themselves would go stale on the
+// first repaint.
+function linkSequenceKey(content) {
+  const clear = () => {
+    content.querySelectorAll(".is-linked").forEach((el) => el.classList.remove("is-linked"));
+  };
+  const select = (stepId, scroll) => {
+    const row = content.querySelector(`.seq-key-row[data-step-id="${cssEsc(stepId)}"]`);
+    const grid = content.querySelector(`.step-row[data-step-id="${cssEsc(stepId)}"]`);
+    // A second click on the same step lets go, so a reader is never stuck
+    // with a highlight they cannot dismiss from the thing they clicked.
+    if (row && row.classList.contains("is-linked")) { clear(); return; }
+    clear();
+    if (row) row.classList.add("is-linked");
+    if (grid) grid.classList.add("is-linked");
+    if (scroll && row) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  };
+  const handle = (ev, el) => {
+    ev.stopPropagation();
+    select(el.dataset.stepId, el.classList.contains("badge-hit"));
+  };
+  content.addEventListener("click", (ev) => {
+    const el = ev.target.closest && ev.target.closest(".badge-hit, .seq-key-row");
+    if (el && content.contains(el)) handle(ev, el);
+    else clear();
+  });
+  content.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") { clear(); return; }
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    const el = ev.target.closest && ev.target.closest(".badge-hit, .seq-key-row");
+    if (!el || !content.contains(el)) return;
+    ev.preventDefault();
+    handle(ev, el);
+  });
+}
+
+// Kinds that work differently from prose — a picture you can maximise, a
+// question waiting for a pick, code walked note by note — sit in a light
+// frame with their title on it, so the reader sees where prose stops.
+const FRAMED = ["sequence", "map", "flowchart", "mockup", "choice", "explain", "compare"];
+
+// ── kind: compare ─────────────────────────────────────────────────────
+// Before and after code side by side, a split diff. compare.js computes the
+// rows; each side is a code pane painted through CodePaint.rows like explain,
+// one pass over that side's whole snippet so multi-line constructs colour
+// right. Every row has one fixed height and nothing wraps, so row k of the
+// left pane sits level with row k of the right one; a filler row stands where
+// a side has no counterpart. A side with no code is not drawn: the other one
+// takes the width, every line marked added (or removed).
+function compareSide(spec) {
+  const s = spec && typeof spec === "object" ? spec : {};
+  const code = typeof s.code === "string" ? s.code : "";
+  return { label: s.label || "", path: s.path || "", lang: s.lang || "", code };
+}
+
+function comparePane(which, side, cells) {
+  const pane = document.createElement("div");
+  pane.className = "codepane cmp-side";
+  pane.dataset.side = which;
+  const head = document.createElement("div");
+  head.className = "cp-head";
+  const label = document.createElement("span");
+  label.className = "cmp-label";
+  label.textContent = side.label || (which === "before" ? "Before" : "After");
+  head.appendChild(label);
+  if (side.path) {
+    const loc = document.createElement("span");
+    loc.className = "cp-loc";
+    loc.textContent = side.path;
+    loc.title = side.path;
+    head.appendChild(loc);
+  }
+  pane.appendChild(head);
+  const body = document.createElement("div");
+  body.className = "cp-body cmp-body";
+  cells.forEach((row) => body.appendChild(row));
+  pane.appendChild(body);
+  return pane;
+}
+
+function renderCompare(content, blk) {
+  const spec = blk.spec || {};
+  const before = compareSide(spec.before), after = compareSide(spec.after);
+  const wrap = document.createElement("div");
+  wrap.className = "cmp";
+  if (!before.code && !after.code) {
+    const empty = document.createElement("div");
+    empty.className = "cmp-empty";
+    empty.textContent = "Nothing to compare: both sides are empty.";
+    wrap.appendChild(empty);
+    content.appendChild(wrap);
+    return;
+  }
+  const rows = AnnotateCompare.alignLines(before.code, after.code);
+  const sides = [["before", before, "left"], ["after", after, "right"]].filter(([, s]) => s.code);
+  wrap.dataset.sides = String(sides.length);
+  for (const [which, side, key] of sides) {
+    const lines = AnnotateCompare.splitLines(side.code);
+    const opts = { lang: side.lang, file: side.path };
+    const misses = codeMisses();
+    const painted = window.CodePaint ? CodePaint.rows(lines, opts) : null;
+    const byLine = [];
+    const rowEls = rows.map((r) => {
+      const cell = r[key];
+      const div = document.createElement("div");
+      div.className = "cp-row cmp-row";
+      if (!cell) { div.classList.add("is-fill"); return div; }
+      div.classList.add(`is-${cell.t}`);
+      div.dataset.n = String(cell.n);
+      const text = document.createElement("span");
+      text.className = "cp-line";
+      if (painted) text.innerHTML = painted[cell.n - 1];
+      else text.textContent = cell.text;
+      byLine[cell.n - 1] = text;
+      div.appendChild(text);
+      return div;
+    });
+    const pane = comparePane(which, side, rowEls);
+    if (!painted && codeMisses() > misses) {
+      later(pane, paintRowsLater(byLine, lines, opts));
+    }
+    wrap.appendChild(pane);
+  }
+  content.appendChild(wrap);
+}
+
+function createBlockSection(blk) {
+  const section = document.createElement("section");
+  section.className = "block";
+  section.dataset.blockId = blk.id;
+  section.dataset.version = String(blk.version ?? 1);
+  const kind = blk.kind || "markdown";
+  section.dataset.kind = kind;
+  // The reader's own words in this block (edit.js paints them).
+  section._mine = Array.isArray(blk.mine) ? blk.mine : [];
+  // A part of one document: no box and no header bar. The derived title is
+  // kept for the round dock, the maximized bar and a comment's quote; what
+  // shows is only an authored one (blockLabel). It is not an aria-label: a
+  // named <section> is a region landmark, and a long answer would list one
+  // per part. Focus comes back here when a comment or the editor closes, so
+  // the section itself can take it.
+  section.dataset.label = blockTitle(blk);
+  section.tabIndex = -1;
+
+  const body = document.createElement("div");
+  body.className = "block-body";
+  const content = document.createElement("div");
+  content.className = "block-content";
+  if (kind === "sequence" || kind === "map") {
+    // Server pre-rendered; inject as-is.
+    paintVz(content, blk);
+    linkSequenceKey(content);
+    // Still no comment-on-click: a picture is commented as a whole, from its
+    // heading, for the same reason flowchart lost its node handler
+    // below. What linkSequenceKey binds is not a way into the composer — it
+    // pairs a badge with its key entry and nothing else. The `data-step-id`
+    // hit targets stay on the rows: they anchor comments made before that
+    // rule, and applyEngagedStyling still paints the row they target.
+  } else if (kind === "flowchart") {
+    // Server pre-rendered the hand-built SVG, plus the pflow source pane when
+    // the block carries one. Both views hang their hit targets off
+    // data-node-id, so the one listener below serves either.
+    paintFlowchart(content, blk);
+    linkPflowHover(content);
+    // A picture is commented as a whole, from its heading — never per
+    // node. The node click handler that used to live here was withdrawn
+    // because a node's `ref` line is painted accent-coloured and underlined
+    // whether or not the spec gave it an href (`.annotate-flow .flow-ref`),
+    // so a file reference with no href reads as a jump-to-source link and
+    // behaved as a comment target: the click missed the absent anchor and
+    // opened the composer instead. Reaching for a file and getting an
+    // editor is the whole complaint, and no amount of hit-target tuning
+    // fixes a link that isn't one.
+    //
+    // What survives is navigation: an in-page cross-block anchor
+    // (href="#<block-id>") smooth-scrolls to that block, and any other
+    // anchor (e.g. a jetbrains:// code ref) is left to navigate normally.
+    // Listener lives on content so updateBlockContent's innerHTML swap
+    // doesn't drop it.
+    content.addEventListener("click", (ev) => {
+      const anchor = ev.target.closest && ev.target.closest("a[href]");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href");
+      if (!href.startsWith("#")) return;
+      ev.preventDefault();
+      const target = document.querySelector(
+        `[data-block-id="${cssEsc(href.slice(1))}"]`
+      );
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  } else if (kind === "choice") {
+    renderChoice(section, content, blk);
+  } else if (kind === "mockup") {
+    // Trusted Claude HTML in a sandboxed iframe; deliberately bypasses
+    // sanitizeFreeHtml (the sandbox is the isolation boundary instead).
+    renderMockup(content, blk);
+  } else if (kind === "explain") {
+    renderExplain(content, blk);
+  } else if (kind === "compare") {
+    renderCompare(content, blk);
+  } else {
+    // Markdown path — markdown-it now allows inline HTML (`html: true`);
+    // sanitize the rendered tree before glossary decoration.
+    content.innerHTML = blockMd ? blockMd.render(blk.markdown || "") : (blk.markdown || "");
+    sanitizeFreeHtml(content);
+    if (window.AnnotateGlossary) window.AnnotateGlossary.decorate(content);
+  }
+  body.appendChild(content);
+
+  const codeCol = renderCodeColumn(blk);
+  if (codeCol) {
+    section.dataset.hasCode = "1";
+    body.appendChild(codeCol);
+  }
+
+  const label = blockLabel(blk);
+  if (FRAMED.includes(kind)) {
+    const frame = document.createElement("div");
+    frame.className = "block-frame";
+    frame.append(label, body);
+    section.appendChild(frame);
+  } else {
+    section.append(label, body);
+  }
+  return section;
+}
+
+// The part's visible name. An authored title is an h2 with the fold button
+// before it. A part without one gets an empty line instead, which shows only
+// when a mark or a change chip needs a place to sit.
+function blockLabel(blk) {
+  if (FRAMED.includes(blk.kind || "markdown")) {
+    const head = document.createElement("div");
+    head.className = "block-label block-frame-head";
+    head.id = `block-label-${blk.id}`;
+    const t = visibleTitle(blk);
+    if (t) {
+      const text = document.createElement("span");
+      text.className = "block-heading-text";
+      text.setAttribute("role", "heading");
+      text.setAttribute("aria-level", "2");
+      text.textContent = t;
+      head.appendChild(text);
+    }
+    const space = document.createElement("span");
+    space.className = "block-frame-space";
+    head.appendChild(space);
+    return head;
+  }
+  const title = visibleTitle(blk);
+  const el = document.createElement(title ? "h2" : "div");
+  el.className = title ? "block-label block-heading" : "block-label block-meta";
+  el.id = `block-label-${blk.id}`;
+  if (!title) return el;
+  const fold = document.createElement("button");
+  fold.type = "button";
+  fold.className = "fold-btn";
+  fold.textContent = "▾";
+  fold.setAttribute("aria-label", "Fold");
+  fold.setAttribute("aria-expanded", "true");
+  fold.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    const section = el.closest("section.block");
+    setFolded(blk.id, !section.classList.contains("collapsed"));
+  });
+  const text = document.createElement("span");
+  text.className = "block-heading-text";
+  text.textContent = title;
+  el.append(fold, text);
+  return el;
+}
+
+// A label of the same shape is updated in place, so the chip and the "what
+// changed" toggle a change put on it (and the fold button) survive a
+// re-render. Only a title gained or lost replaces the element.
+function setBlockLabel(section, blk) {
+  const old = section.querySelector(".block-label");
+  const fresh = blockLabel(blk);
+  const frameHead = (el) => el.classList.contains("block-frame-head");
+  if (old && frameHead(old) && frameHead(fresh)) {
+    // A frame head keeps its maximise button and chips; only the title text
+    // is gained, lost or changed.
+    const had = old.querySelector(".block-heading-text");
+    const next = fresh.querySelector(".block-heading-text");
+    if (had && next) had.textContent = next.textContent;
+    else if (had) had.remove();
+    else if (next) old.prepend(next);
+    section.dataset.label = blockTitle(blk);
+    return;
+  }
+  const sameShape = old && !frameHead(old) && !frameHead(fresh)
+    && old.classList.contains("block-heading") === fresh.classList.contains("block-heading");
+  if (sameShape) {
+    const text = old.querySelector(".block-heading-text");
+    if (text) text.textContent = fresh.querySelector(".block-heading-text").textContent;
+  } else if (old) old.replaceWith(fresh);
+  else (section.querySelector(".block-frame") || section).prepend(fresh);
+  section.dataset.label = blockTitle(blk);
+}
+
+function focusHome(section) {
+  if (!section || !document.contains(section)) return;
+  (section.querySelector(".fold-btn") || section).focus({ preventScroll: true });
+}
+
+function visibleTitle(blk) {
+  return window.AnnotateBlockTitle.visibleTitle(blk);
+}
+
+function collapseKey(blockId) {
+  const rid = (document.body.dataset.responseId || "default");
+  return `annotate.collapsed:${rid}:${blockId}`;
+}
+
+function readFolded(blockId) {
+  try { return localStorage.getItem(collapseKey(blockId)) === "1"; } catch (_) { return false; }
+}
+
+function setFolded(blockId, on) {
+  try { localStorage.setItem(collapseKey(blockId), on ? "1" : "0"); } catch (_) {}
+  applyFolds();
+}
+
+// A jump to a part a fold keeps hidden scrolls to nothing, so every jump
+// (the change bar, the dock, maximize) unfolds the part's owner first. The
+// fold is stored, so clearing the class alone would be undone by the next
+// applyFolds.
+function unfoldFor(blockId) {
+  const section = document.querySelector(`section.block[data-block-id="${cssEsc(blockId)}"]`);
+  if (!section) return;
+  if (!section.classList.contains("collapsed") && !section.classList.contains("fold-hidden")) return;
+  const owner = window.AnnotateFolds.ownerOf(foldList(), blockId);
+  if (owner) setFolded(owner, false);
+}
+
+// Folding goes by heading (fold-groups.js): a heading folds its own part and
+// the untitled parts after it. Recomputed whole after every change and every
+// render, so a rewrite that adds or drops a heading regroups at once.
+function foldList() {
+  return [...document.querySelectorAll("main.prose section.block[data-block-id]")].map((s) => ({
+    id: s.dataset.blockId,
+    section: s,
+    heading: !!s.querySelector(".block-heading"),
+    collapsed: readFolded(s.dataset.blockId),
+  }));
+}
+
+function applyFolds() {
+  const list = foldList();
+  const { folded, hidden } = window.AnnotateFolds.foldPlan(list);
+  for (const b of list) {
+    const on = folded.has(b.id);
+    b.section.classList.toggle("collapsed", on);
+    b.section.classList.toggle("fold-hidden", hidden.has(b.id));
+    const btn = b.section.querySelector(".fold-btn");
+    if (btn) {
+      btn.textContent = on ? "▸" : "▾";
+      btn.setAttribute("aria-label", on ? "Unfold" : "Fold");
+      btn.setAttribute("aria-expanded", String(!on));
+    }
+  }
+  const all = document.getElementById("fold-all");
+  if (all) {
+    const heads = list.filter((b) => b.heading);
+    all.hidden = !heads.length;
+    const every = heads.length && heads.every((b) => folded.has(b.id));
+    // An icon button: the name and the tooltip carry what it will do next,
+    // and the stylesheet shows the icon for it (data-next).
+    all.dataset.next = every ? "unfold" : "fold";
+    all.title = every ? "Unfold every heading (⌘K ⌘J)" : "Fold every heading (⌘K ⌘0)";
+    all.setAttribute("aria-label", every ? "Unfold all" : "Fold all");
+  }
+}
+document.addEventListener("annotate:rendered", applyFolds);
+
+// A click on inline code copies its text: a class name, an id, a config key.
+// A drag still selects for a comment, so only a click with no selection
+// copies. Code inside a link or a fence is left alone.
+document.addEventListener("click", async (ev) => {
+  const code = ev.target.closest && ev.target.closest(".block-content code");
+  if (!code || code.closest("pre, a")) return;
+  const sel = window.getSelection();
+  if (sel && !sel.isCollapsed) return;
+  ev.stopPropagation();
+  const text = code.textContent.trim();
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (_) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { ok = document.execCommand("copy"); } catch (_) { ok = false; }
+    ta.remove();
+  }
+  if (!ok) return;
+  code.title = "Copied";
+  code.classList.add("is-copied");
+  setTimeout(() => { code.classList.remove("is-copied"); code.removeAttribute("title"); }, 1200);
+}, true);

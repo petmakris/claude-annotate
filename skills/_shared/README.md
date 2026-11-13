@@ -1,0 +1,42 @@
+# `skills/_shared`
+
+Code and page assets shared by more than one skill. Nothing here is a server,
+and nothing here starts one: every skill pushes to the separately installed
+**webcompanion daemon** through `webcompanion_client.py`.
+
+The one allowed server in this repository is talk's: `skills/talk/talk.py` runs an
+aiohttp server for the call page, because the call page is a long-lived speech
+server that launchd keeps up, one per machine, and not a push to the daemon.
+No other skill binds a port; `skills/tests/test_smoke_engine_status.py` fails if
+any does (its `SERVER_SKILLS` allowlist names talk only).
+
+| Path | What it is |
+|---|---|
+| `webcompanion_client.py` | The one Python client for the daemon, with the `DaemonError` hierarchy and the `run_cli` wrapper every push command uses. |
+| `atomic.py` | `write_text_atomic`: write a file whole under a unique temp name, then `os.replace` (with a `mode` for owner-only files). Annotate, journey, talk and the layout cache use it. |
+| `devdomains.py` | `webcompanion_url`: the daemon's public address from `@devdomains url webcompanion`. Canvas and journey use it. |
+| `visuals/` | The drawing tools: sequence diagrams and flowcharts, their layout (ELK through Node, with a Python fallback) and font metrics. Annotate draws them in its answers; stage and talk draw them on the stage, keyed for frames. `map_svg.py` (architecture maps) and `sequence_svg.py` (lane sequences), with `player.py`, are the two diagrams every project draws through; `docs/vz.md` is their guide. |
+| `static/` | The canonical page assets (`core.css`, `visuals.css`, `vz.css` and `vz-reveal.js` for maps and lane sequences, fonts with Inter and JetBrains Mono for the stage, `markdown-it.min.js`, `wc-threads.js`, `wc-boot.js`, `wc-open.js`). Each skill keeps a checked-in copy in its own `static/`, because the daemon serves one folder per session; `skills/tests/test_shared_static_copies.py` fails when a copy differs from its source here. |
+
+## The rule
+
+A module stays in `skills/_shared` only while at least two skills import it
+from production code. A package such as `visuals/` counts as one unit: its
+modules import each other, and what matters is how many skills import the
+package. With one importer it moves into that skill; with none it is deleted.
+Tests never count as importers.
+`skills/tests/test_smoke_engine_status.py` enforces this, and fails on any
+other file placed here: a script belongs to the skill that runs it. The only
+exceptions are a package's `vendor/` folder and a file one of its own modules
+names and runs or reads, such as `visuals/elk_driver.mjs`.
+
+## History
+
+`web_companion/` used to hold annotate's own HTTP server: the routes,
+sessions, uploads, the event stream, `ensure_server.sh` and `watcher.sh`.
+Every skill moved onto the daemon, and the server was deleted along with its
+tests; git history has it. The single-skill modules that sat beside it moved
+into their one consumer: `anchor_migrate.py` into `skills/ask_diff/`,
+`html_escape` into `skills/annotate/`, the workspace marker
+reader into `skills/annotate/check_anchors.py`. `doctor.sh` moved to
+`skills/annotate-doctor/`.

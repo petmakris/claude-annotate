@@ -1,0 +1,196 @@
+/* annotate page styles, part 8 of 13 (see style.css): the header's icons,
+   the status pill and its popover, and the toolbar under the header. */
+
+/* === The status pill ===================================================
+   Whether a Claude Code session is watching, said in one word after the
+   title, always in view. A click opens what the word means, and the resume
+   command when nothing is watching. entry.js paints the word, the colour
+   class and the name. */
+.status-wrap { margin-left: 4px; }
+.status-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 10px 2px 8px; border: 0; border-radius: 999px;
+  background: color-mix(in srgb, var(--text-dim) 14%, transparent);
+  color: var(--text-dim); cursor: pointer;
+  font: 600 12px var(--font-prose); white-space: nowrap;
+}
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.status-pill.watcher-live { background: var(--status-live-bg); color: var(--status-live-fg); }
+.status-pill.watcher-stale {
+  background: color-mix(in srgb, var(--type-reject-fg) 12%, transparent);
+  color: var(--type-reject-fg);
+}
+.status-pill:hover { filter: brightness(.96); }
+/* On a phone the title needs the room: the pill keeps its dot. */
+.status-wrap { flex: none; }
+@media (max-width: 599px) {
+  .status-word, .header-respid { display: none; }
+  .status-pill { padding: 5px; }
+}
+
+/* Both popovers hang under their button, over the page. */
+.status-pop, .keys-pop {
+  position: absolute; top: calc(100% + 8px); z-index: 60;
+  width: 318px; max-height: 78vh; overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 12px 34px rgba(20, 22, 28, .20), 0 2px 6px rgba(20, 22, 28, .08);
+  font-size: 12.5px; font-weight: 400; color: var(--text); white-space: normal;
+}
+.status-pop { left: 0; }
+.keys-pop { right: 0; width: 340px; }
+.status-pop[hidden] { display: none; }
+.keys-pop[hidden] { display: none; }
+
+.status-block { display: flex; gap: 9px; align-items: flex-start; padding: 12px; }
+.status-block-dot {
+  width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none;
+  background: var(--text-dim);
+}
+.status-block.watcher-live .status-block-dot { background: var(--status-live-fg); }
+.status-block.watcher-stale .status-block-dot { background: var(--type-reject-fg); }
+.status-block-text { min-width: 0; }
+.status-block-title { font-weight: 600; font-size: 13px; color: var(--text-strong); }
+.status-block-sub { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-top: 2px; }
+.status-resume { margin-top: 8px; }
+.status-resume[hidden] { display: none; }
+/* The read-only badge describes what the page IS. Hidden unless the body
+   says so. */
+.status-readonly { display: none; margin-top: 8px; }
+body.read-only .status-readonly { display: inline-flex; }
+
+/* === Bare header icons =================================================
+   Fold all, Full screen, the toolbar button and (while armed) the
+   highlighter are bare 28px icons on the header's ground: no border, no background, a tint
+   on hover. core.css's .icon-btn is the shared, framed version — surface
+   fill, --border outline, 26px — and three framed squares plus the resting
+   search field's own outline read as one box drawn round the right end of
+   the bar. Done keeps its frame and is now the only framed control, which is
+   what makes it read as THE action of the bar rather than one of four.
+
+   Overridden here rather than in core.css, the same way this file's search
+   rules already undo core.css's header geometry: core.css is a per-skill
+   copy of a shared file, and the frame is right for the other skills that
+   use it.
+
+   --header-hover is mixed from --text into the header's own ground
+   (--surface-soft), so it is a visible step in both page themes: #e0e2e7 on
+   light's #eef0f4, #404040 on dark's #313131. --hover-tint would not do —
+   in dark it IS --surface-soft, a hover of nothing. */
+.page-header { --header-hover: color-mix(in srgb, var(--text) 8%, var(--surface-soft)); }
+.page-header .icon-btn {
+  width: 28px; height: 28px;
+  border: 0; border-radius: 7px;
+  background: transparent;
+  color: var(--text-dim);
+}
+.page-header .icon-btn svg { width: 16px; height: 16px; }
+.page-header .icon-btn:hover {
+  background: var(--header-hover);
+  color: var(--text-strong);
+}
+/* Open, a popover's button keeps core.css's accent fill — the one cue that
+   the panel below belongs to it. Restated because the bare rule above
+   outranks core.css's. */
+.page-header .icon-btn[aria-expanded="true"] {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+/* Fold all shows what a click will do: chevrons in to fold, out to unfold. */
+.fold-all-btn[hidden] { display: none; }
+.fold-all-btn .fold-out, .fold-all-btn[data-next="unfold"] .fold-in { display: none; }
+.fold-all-btn[data-next="unfold"] .fold-out { display: block; }
+/* Lit while the toolbar shows. */
+.page-header #toolbar-toggle[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+/* === The toolbar =======================================================
+   A second bar under the header with every command and the three settings
+   read most often, in three named groups. It replaced the ☰ menu, which put
+   one click in front of everything. The header's toolbar button hides it
+   (body[data-toolbar="hidden"]).
+
+   Below 1180px its words and group names go and every command is an icon,
+   named by its tooltip; below 600px the width slider goes too, since the
+   column already fills a phone. */
+.toolbar {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 5px var(--content-gutter);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px; white-space: nowrap;
+}
+body[data-toolbar="hidden"] .toolbar { display: none; }
+.tb-group { display: flex; align-items: center; gap: 4px; }
+.tb-view { display: flex; align-items: center; gap: 10px; margin-right: 4px; }
+.tb-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--text-dim); margin-right: 4px;
+}
+.tb-sep { width: 1px; height: 22px; background: var(--border); flex: none; }
+.tb-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 9px; border: 1px solid transparent; border-radius: 8px;
+  background: none; cursor: pointer;
+  font: 500 13px var(--font-prose); color: var(--text);
+}
+.tb-btn:hover { background: var(--hover-tint); color: var(--text-strong); }
+.tb-btn[hidden] { display: none; }
+.tb-btn svg, .tb-seg svg, .tb-width-icon svg {
+  width: 16px; height: 16px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.tb-kbd {
+  font: 600 10px var(--font-prose); color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 4px; padding: 0 4px;
+}
+/* On: the highlighter's amber, the colour of the marks it makes; an open
+   popover or panel, the accent. */
+.tb-btn[aria-pressed="true"] { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+:root:has(body[data-page-theme="dark"]) .tb-btn[aria-pressed="true"] {
+  background: rgba(245, 158, 11, .18); border-color: rgba(245, 158, 11, .5); color: #fbbf24;
+}
+.tb-btn[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent);
+}
+.tb-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.tb-seg button {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 9px; border: 0; background: none; cursor: pointer;
+  font: 500 12.5px var(--font-prose); color: var(--text);
+}
+.tb-seg button + button { border-left: 1px solid var(--border); }
+.tb-seg button:hover { background: var(--hover-tint); }
+.tb-seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+.tb-width { display: inline-flex; align-items: center; gap: 8px; color: var(--text-dim); }
+.tb-width-icon { display: inline-flex; }
+.tb-width input[type="range"] { width: 120px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.tb-width .set-value {
+  min-width: 38px; font: 600 12.5px var(--font-prose); font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+@media (max-width: 1179px) {
+  .tb-word, .tb-kbd, .tb-label { display: none; }
+  .tb-btn { padding: 6px 7px; }
+  .toolbar { gap: 8px; }
+  .tb-width input[type="range"] { width: 90px; }
+}
+@media (max-width: 599px) {
+  .toolbar { padding: 4px 8px; gap: 2px; justify-content: space-between; }
+  .tb-width, .tb-sep { display: none; }
+  .tb-view { gap: 4px; margin-right: 0; }
+  .tb-seg button { padding: 4px 7px; }
+  /* Anchored to their button they would run off the screen's edge. */
+  .keys-pop, .status-pop { position: fixed; top: 52px; left: 8px; right: 8px; width: auto; }
+}
+
+/* === The highlighter's escape ==========================================
+   The one control allowed back into the bar, and only while it is armed.
+   The highlighter is a MODE: it changes what dragging over text does, and a
+   mode whose only indicator is buried in a menu is a mode nobody can see.
+   highlighter.js already maintains aria-pressed here, so this rule is the
+   entire feature — no JavaScript knows about it. */
+#highlighter-toggle:not([aria-pressed="true"]) { display: none; }

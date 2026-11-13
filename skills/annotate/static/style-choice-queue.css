@@ -1,0 +1,41 @@
+/* annotate page styles, part 10 of 13 (see style.css): choice queues
+   (choice-queue.js). */
+
+/* === Choice queues ===================================================== */
+.cq-hidden { display: none !important; }
+.cq-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 16px;
+  margin: 0 0 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.cq-ring { width: 34px; height: 34px; flex: none; }
+.cq-ring-track { fill: none; stroke: var(--surface-soft); stroke-width: 4; }
+.cq-ring-fill { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round; }
+.cq-heading { margin-right: auto; min-width: 0; }
+.cq-title { font-weight: 600; color: var(--text-strong); }
+.cq-count { font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.cq-nav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cq-nav[hidden] { display: none; }
+.cq-all { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); cursor: pointer; }
+.cq-btn {
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  border: 1px solid var(--control-border);
+  background: var(--surface);
+  color: var(--text-strong);
+  border-radius: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.cq-btn:hover:not(:disabled) { border-color: var(--accent); }
+.cq-btn:disabled { opacity: 0.45; cursor: default; }
+.cq-btn.cq-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.cq-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

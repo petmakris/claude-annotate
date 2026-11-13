@@ -1,0 +1,97 @@
+/* annotate page styles, part 11 of 13 (see style.css): the selection menu
+   (selection.js). */
+
+/* ── The selection menu ─────────────────────────────────────────────────
+   One dark bar above whatever is selected. Icon buttons, then whatever later
+   features register (Explain, Edit) after a divider. Dark on the light theme and light on the dark one, so
+   it reads as floating above the page in both. */
+.sel-menu {
+  position: absolute; z-index: 60; display: flex; align-items: center; gap: 2px;
+  padding: 4px; border-radius: 10px; white-space: nowrap; font-size: 12.5px;
+  background: var(--text-strong); color: var(--surface);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .28);
+}
+.sel-menu button {
+  border: 0; background: transparent; color: inherit; font: inherit; font-weight: 500;
+  padding: 6px 7px; border-radius: 7px; display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer;
+}
+.sel-menu button:hover, .sel-menu button:focus-visible {
+  background: color-mix(in srgb, var(--surface) 16%, transparent); outline: none;
+}
+.sel-menu svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; }
+.sel-menu .sel-state { padding: 0 8px; font-weight: 600; }
+.sel-menu .sel-sep { width: 1px; align-self: stretch; margin: 4px 3px;
+  background: color-mix(in srgb, var(--surface) 35%, transparent); }
+
+/* A whole part is the scope: the part says so, not just the menu. */
+section.block[data-sel-scope] { box-shadow: 0 0 0 2px var(--accent); }
+::highlight(annotate-scope) { background-color: color-mix(in srgb, var(--accent) 10%, transparent); }
+
+/* Marks on the selected words. The same three meanings as the dock. */
+::highlight(annotate-delete) {
+  color: var(--type-reject-fg); text-decoration: line-through;
+  background-color: color-mix(in srgb, var(--type-reject-fg) 10%, transparent);
+}
+::highlight(annotate-compact) {
+  background-color: color-mix(in srgb, #7c3aed 14%, transparent);
+  text-decoration: underline 2px color-mix(in srgb, #7c3aed 65%, transparent);
+}
+/* Your words: a quiet green rule and a light wash, under marks made on them. */
+::highlight(annotate-mine) {
+  background-color: var(--mine-wash);
+  text-decoration: underline 2px var(--mine-rule);
+  text-underline-offset: 3px;
+}
+::highlight(annotate-comment) {
+  background-color: color-mix(in srgb, var(--accent) 14%, transparent);
+  text-decoration: underline 2px var(--accent);
+}
+
+.sel-quote { font-size: 12px; font-style: italic; color: var(--text-dim);
+  border-left: 2px solid var(--accent); padding-left: 8px; margin-bottom: 8px; }
+.sel-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.sel-chip {
+  display: block; margin: 6px 0 2px; padding: 4px 9px; font-size: 13px; border-radius: 8px;
+  color: var(--type-comment-fg); background: var(--type-comment-wash);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+.sel-chip-x { margin-left: 6px; padding: 0 4px; border: none; border-radius: 4px;
+  background: transparent; color: inherit; font: inherit; line-height: 1;
+  cursor: pointer; opacity: .65; }
+.sel-chip-x:hover, .sel-chip-x:focus-visible { opacity: 1; background: var(--hover-tint); }
+body.read-only .sel-chip-x { display: none; }
+body.read-only .sel-menu { display: none; }
+
+/* The title is how a whole part is chosen: selecting any of it opens the
+   menu on the part. It stays selectable, and only the fold button folds, so
+   a selectable title folds nothing away. */
+section.block .block-label { user-select: text; }
+
+/* Inside a maximised card or a full-screen element, the menu is that
+   element's child and must sit above its content. */
+.sel-menu.sel-menu-layered { z-index: 1300; }
+
+/* On a phone the menu is a sheet on the bottom edge, with full-size targets. */
+.sel-menu.sel-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; top: auto; border-radius: 16px 16px 0 0;
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px;
+  padding: 10px 12px calc(14px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface); color: var(--text); white-space: normal;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, .18);
+}
+.sel-sheet .sel-quote { grid-column: 1 / -1; font-size: 12px; font-style: italic; color: var(--text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel-sheet .sel-state { grid-column: 1 / -1; }
+.sel-sheet .sel-sep { display: none; }
+.sel-sheet button { min-height: 48px; justify-content: center; flex-direction: column; gap: 2px;
+  border: 1px solid var(--border); background: var(--surface-soft); color: var(--text); grid-column: span 2; }
+/* Explain aloud and Read as written lead the sheet, two to a row. */
+.sel-sheet button.sp-wide { grid-column: span 3; flex-direction: row; gap: 8px; font-weight: 600; }
+.sel-sheet, .sel-sheet * { user-select: none; -webkit-user-select: none; }
+.sel-sheet { position: fixed; }
+.sel-sheet .sel-close { position: absolute; top: 0; right: 4px; width: 44px; height: 44px; min-height: 44px;
+  padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; }
+.sel-sheet .sel-quote, .sel-sheet .sel-state { min-height: 34px; box-sizing: border-box; padding-right: 44px;
+  display: flex; align-items: center; }

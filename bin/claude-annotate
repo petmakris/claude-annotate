@@ -1,0 +1,90 @@
+#!/bin/sh
+# claude-annotate <command> [args...] — run any skill's helpers from the plugin.
+#
+# Claude Code puts <plugin root>/bin on PATH for --plugin-dir and marketplace
+# installs alike, and both plugins of this marketplace share one root, so this
+# is callable by name from any directory, in a fresh shell, with nothing
+# exported beforehand. That matters: the Bash tool keeps no shell variables
+# between calls, and the one-liner this replaced found the plugin root inline
+# on every call — fourteen times over in one reference, and once more in every
+# other skill's SKILL.md.
+#
+# It never changes directory. The helpers take the user's repo root from
+# --cwd "$PWD", and the old `cd "$PLUGIN_ROOT" && ... --cwd "$PWD"` handed
+# them the plugin's own directory instead.
+#
+# annotate's own helpers, by bare name:
+#   claude-annotate push --blocks <file> --cwd "$PWD" [--slug <slug>] --eval
+#   claude-annotate pull --sid <sid|slug> --out <file>
+#   claude-annotate progress --sid <sid> --text "<line>" | --done
+#   claude-annotate session show | set ... | forget --sid <sid>
+#   claude-annotate check-anchors <blocks.json> "$PWD"
+#   claude-annotate confluence.prepare ...
+#
+# Any other skill's module, as <skill>.<module>:
+#   claude-annotate ask_diff.push --pr <ref> --cwd "$PWD" ...
+#   claude-annotate dataflow.fields.render spec.json --check out.html
+#
+# The plugin root, for a skill that runs a file by path:
+#   "$(claude-annotate root)/skills/show-diff/show-diff.sh" ...
+#
+# python3 with the plugin root importable, for a -c snippet or a heredoc:
+#   claude-annotate python -c 'from skills._shared import webcompanion_client'
+#
+# A dash in the command is an underscore in the module name, and a dot reaches
+# a subpackage: check-anchors -> skills.annotate.check_anchors. A bare name
+# resolves inside skills/annotate first, so annotate's commands keep working
+# unchanged; anything else is looked up from skills/.
+
+if ! command -v python3 >/dev/null 2>&1; then
+  # printf is a shell builtin; cat would itself be missing on a bare PATH.
+  printf '%s\n' \
+    'claude-annotate: python3 was not found on PATH.' \
+    'claude-annotate is the marketplace that ships this plugin and claude-ide-review.' \
+    '' \
+    'This plugin needs Python 3.9 or newer (standard library only — nothing to' \
+    'pip install).' \
+    '' \
+    '  macOS:  xcode-select --install     # or: brew install python' \
+    '  Linux:  install python3 with your distribution'"'"'s package manager' \
+    '' \
+    'Run /annotate-doctor for a full check of this machine.' >&2
+  exit 127
+fi
+
+# Parameter expansion, not dirname: this has to work before PATH is trusted.
+here=${0%/*}
+[ "$here" = "$0" ] && here=.
+root=$(CDPATH='' cd -- "$here/.." && pwd -P) || exit 1
+
+commands="root python push pull progress session check-anchors confluence.prepare confluence.finalize confluence.state <skill>.<module>"
+cmd=$1
+case $cmd in
+  ''|-h|--help)
+    echo "usage: claude-annotate <command> [args...]" >&2
+    echo "commands: $commands" >&2
+    [ -n "$cmd" ]; exit $? ;;
+  root)
+    printf '%s\n' "$root"
+    exit 0 ;;
+  python)
+    shift
+    PYTHONPATH="$root${PYTHONPATH:+:$PYTHONPATH}" exec python3 "$@" ;;
+  *[!a-z0-9._-]*|.*|*.|*..*)
+    echo "claude-annotate: not a command: $cmd (commands: $commands)" >&2
+    exit 2 ;;
+esac
+shift
+
+module=$(printf '%s' "$cmd" | tr '-' '_')
+path=$(printf '%s' "$module" | tr '.' '/')
+if [ -f "$root/skills/annotate/$path.py" ]; then
+  module="skills.annotate.$module"
+elif [ "${module#*.}" != "$module" ] && [ -f "$root/skills/$path.py" ]; then
+  module="skills.$module"
+else
+  echo "claude-annotate: not a command: $cmd (commands: $commands)" >&2
+  exit 2
+fi
+
+PYTHONPATH="$root${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m "$module" "$@"

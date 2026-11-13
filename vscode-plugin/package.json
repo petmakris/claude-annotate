@@ -1,0 +1,99 @@
+{
+  "name": "petros-makris-vscode",
+  "displayName": "Petros Makris",
+  "description": "Personal VS Code customizations: dark color theme, markdown preview theme switcher, and branch-diff URI handler.",
+  "version": "1.8.3",
+  "publisher": "petros-makris",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Themes",
+    "Other"
+  ],
+  "main": "./src/extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onUri"
+  ],
+  "contributes": {
+    "themes": [
+      {
+        "label": "Petros Makris",
+        "uiTheme": "vs-dark",
+        "path": "./themes/Petros-Makris-color-theme.json"
+      }
+    ],
+    "markdown.previewStyles": [
+      "./dist/markdown-themes/active.css"
+    ],
+    "commands": [
+      {
+        "command": "petrosMakris.setMarkdownTheme",
+        "title": "Set Markdown Preview Theme",
+        "category": "Petros"
+      },
+      {
+        "command": "petrosMakris.clearDiff",
+        "title": "Clear Diff",
+        "category": "Petros"
+      },
+      {
+        "command": "petrosMakris.submitReviewComment",
+        "title": "Ask Claude"
+      }
+    ],
+    "configuration": {
+      "title": "Petros Makris",
+      "properties": {
+        "petrosMakris.markdownPreviewMaxWidth": {
+          "type": "integer",
+          "default": 1100,
+          "minimum": 600,
+          "maximum": 2400,
+          "description": "Maximum content width (in pixels) for the markdown preview theme. Defaults to 1100 to match the value the theme CSS falls back to in IntelliJ, which has no equivalent setting \u2014 change it and the two IDEs stop agreeing. Re-open the preview after changing this."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "petrosMakrisDiff",
+          "title": "Diff",
+          "icon": "$(diff-multiple)"
+        }
+      ]
+    },
+    "views": {
+      "petrosMakrisDiff": [
+        {
+          "id": "petrosMakris.diffFiles",
+          "name": "Files",
+          "contextualTitle": "Diff"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "petrosMakris.clearDiff",
+          "when": "view == petrosMakris.diffFiles",
+          "group": "navigation"
+        }
+      ],
+      "comments/commentThread/context": [
+        {
+          "command": "petrosMakris.submitReviewComment",
+          "group": "inline",
+          "when": "commentController == petrosMakrisReview"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "test": "mocha test/**/*.test.js"
+  },
+  "devDependencies": {
+    "mocha": "^11.8.0"
+  }
+}

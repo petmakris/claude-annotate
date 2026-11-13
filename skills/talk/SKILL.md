@@ -1,0 +1,190 @@
+---
+name: talk
+description: Start a spoken discussion with this Claude Code session in a browser page. The user presses Talk, speaks, presses Done, checks the words and presses Send; Azure speech (or VoiceStudio on this Mac, without an Azure key) turns it into text, this session answers with its full history and tools, and the answer is read aloud while it shows in a side panel beside the stage. Code, diagrams and tables go on that stage, which keeps the page's full height. Use when the user says "/talk", "let's talk about X", "voice discussion", or wants to discuss something out loud.
+user-invocable: true
+argument-hint: optional — the topic (defaults to what the conversation is about)
+---
+
+# /talk — a spoken discussion with this session
+
+`$SKILL_DIR` is this skill's base directory, as shown when the skill loads. It holds `talk.py` (the server and call page), `speech.py` (which engine speaks: `azure_speech.py` or `voicestudio.py`) and `talk_client.py` (this session's side of the call).
+
+One talk server on this machine holds the calls of every session, each at its own link. The user keeps several open and talks in one at a time. Pressing Talk, sending text or playing an answer in a call gives it the **floor**: every other call's page pauses its voice at once. Answers that arrive in another call are shown but not played, and they show as new on the strip of other calls at the top of every call page, and on the list of calls at the root of the talk address. Nothing changes for this session: it answers its own call by its call id.
+
+How it works: the page records the user while they hold the floor, one turn at a time: they press **Talk**, speak, and press **Done**, or type instead. `talk.py` sends the recording to speech to text and the words land in the text field, added to anything already typed. The user checks or changes them and presses **Send**, which queues them as a turn. Nothing reaches this session before Send. A background "doorbell" command in this session exits with the turn, which wakes this session. This session answers with `talk_client.py reply`. The page shows the answer at once in its side panel, which holds the whole conversation as a chat, with a progress bar while its whole reading is made in one request, then plays it without a pause between sentences, highlighting each word as it is said (a tap on a word plays from there, and the panel keeps that word in view until the user scrolls away). Under the conversation sit the player (pause, back 10 seconds, a seek bar), the text field and the mic; Space pauses and plays, and ← and → move to the start of the previous or next sentence, wherever nothing is being typed. The panel sits on the left or the right, is as wide as it is dragged, and collapses to a rail that keeps the mic and the player; a gear holds speed, language, light or dark, and whether the stage follows the voice. A board the reader picks on the stage stays in front whatever they play, until they press **Follow the voice** on the stage or the next answer starts. With Azure the gear also picks the voice, with a short sample of each; the choice is kept in that browser and the answers after it are read in it. A new answer that arrives while the call's tab is hidden waits, and plays when the tab is seen again. Nothing listens between turns, so nothing is said by accident, unless the user picks **Live** under Talking in the gear: then the microphone stays open, what they say is sent after a short pause (0.8, 1.2 or 2 s), and speaking over an answer interrupts it, either by talking (“mm-hm”, “yeah” and coughs let it go on); a gear setting, **Screen: TV**, enlarges the panel, its words and the stage for reading across a room or only with words that start with a cue such as “wait”, “hold on”, “sorry” or “listen”. Speech runs on Azure when its key is found (`AZURE_SPEECH_KEY`, else the output of `TALK_AZURE_KEY_COMMAND`; the region comes from `AZURE_SPEECH_REGION` or `TALK_AZURE_REGION`), which takes a second or two per answer and is billed per character. Without a key it runs in the local VoiceStudio app: free and private, but an answer takes about as long to make as to play. `TALK_SPEECH=azure` or `TALK_SPEECH=voicestudio` picks one by hand.
+
+## 1. Preconditions (check silently; fix what you can)
+
+1. **A browser with a microphone.** The page records through the browser, so it must be opened on `localhost` or over https. In a cloud session with no way to reach the page, stop and say so.
+2. **uv.** `command -v uv`; if missing, install it (https://docs.astral.sh/uv/).
+3. **Speech.** With Azure, nothing to start. Without it, **VoiceStudio**, the local speech app, answering at `VOICESTUDIO_URL` (default `http://127.0.0.1:3900`). Its server runs only while the app is open; on a Mac `talk.py` opens it with `open -a VoiceStudio` and waits, which takes about a minute from cold. If the user asks to check the setup, or a call fails, run `uv run --script "$SKILL_DIR/talk.py" --doctor` and relay its `[ok]`/`[FAIL]` lines; it names the engine, speaks a sentence through it and checks it is heard back.
+4. **webcompanion.** The stage needs the daemon. `python3 "$SKILL_DIR/../stage/stage.py" link --cwd "<repo root>"` must print a URL. If it fails, relay its message.
+
+The topic is one line naming what the call is about, from the argument or the conversation. No briefing is written: this session already has the context.
+
+## 2. Launch
+
+1. Open the call, **`run_in_background: true`**. This starts the server when none runs, or joins the one that does, then exits:
+   ```
+   uv run --script "$SKILL_DIR/talk.py" --topic "<topic>" --out "${TMPDIR:-/tmp}/talk/<slug>-<HHMMSS>" --code "<repo root>" --no-open [--language en|el]
+   ```
+   `--code` is the repository this session works in; the board reads code from it. The page's address comes from `TALK_URL_BASE` and the stage's from `TALK_STAGE_BASE` when they are set: the https addresses that reach talk's port 8766 and the webcompanion daemon's port 3080 from other machines. https is what lets the browser use the microphone from any machine. `--url-base` and `--stage-base` override them. `--no-open` because the user is often at another machine. `--language` fixes the language the page listens for first; the default, `auto`, detects English or Greek, and the page can switch between Auto, English and Greek at any time. Answers are read in the language they are written in. `--voice` names an Azure neural voice (default `en-US-AvaMultilingualNeural`), or with VoiceStudio a voice profile by name or id (default the profile named `Talk`). Without a VoiceStudio profile, OmniVoice draws a different random speaker for every answer, so the server prints a `speech:` warning; relay it.
+2. Wait for the task to finish (seconds, or about a minute when VoiceStudio had to be opened). Its output holds `Open http://127.0.0.1:<port>/c/<call id>`, a `Link <TALK_URL_BASE>/c/<call id>` line when `TALK_URL_BASE` is set, and `Call <call id>`: keep the call id exactly, since every `talk_client.py` command names it with `--call=<call id>` (with `=`: an id may start with a character the parser would read as an option). The line `Stage <url> (folder <path>, slug <slug>, sid <sid>)` names the stage's folder, slug and sid: every call has a stage of its own, so keep the folder and the sid exactly for every `stage.py` call during the call. A line starting `talk:` instead means no call was opened: relay it. Then arm the doorbell, **`run_in_background: true`**:
+   ```
+   python3 "$SKILL_DIR/talk_client.py" doorbell --call="<call id>"
+   ```
+3. Give the `Link` line's address, always whole: the call id in `/c/<call id>` is its key. With no `Link` line, give the `Open` address, and say that it opens only on this machine: the microphone needs `localhost` or https, so another machine needs `TALK_URL_BASE` and `TALK_STAGE_BASE` set to https addresses that reach those ports. In two lines, say the page is ready: press Talk, speak, press Done, check the words, press Send. Then end the turn.
+
+## 3. Answering a turn
+
+A background task that exits with a line starting `TALK_TURN` is the user speaking. Its JSON holds the turn `id` and `said`, the lines since the previous turn. `you` lines are what speech recognition heard, so read them charitably; two turns sent before you collect them arrive together. A `you` line with `interrupted` is the user cutting into answer `answer` in live mode: `heard` is its last words before they spoke, and `rest_unheard` says the rest was never played. Answer what they asked, as a person who was interrupted would; if something they did not hear still matters, say it briefly, never the whole rest again. A `you` line with `while_working: true` was said while you were still working on their previous turn: treat it as an addition to that question (a correction, an afterthought, "and also…"), fold it into the one answer, and do not answer the two separately. In live mode some words never reach you: spoken commands ("go on", "pause", "repeat that", "go back", "never mind", "stop listening") are acted on by the page, and "never mind" or the Undo button take back a turn you have not collected yet; if you see a plain "never mind", you already had the turn, so drop what you were doing with it and say so in a few words. A sentence that stops mid-thought ("so what about the… um") is held a few seconds for its end, so a turn can arrive a moment after the user stopped talking. A `you` line that starts `About "<part>": ` was asked from that part of a board on the stage: answer about that part.
+
+For every turn:
+
+1. If the turn needs any tool call, send a status, which the page shows while you work. It goes in the same message as the first work call, not before it:
+   `python3 "$SKILL_DIR/talk_client.py" reply <id> --call="<call id>" --status "<a few words, e.g. checking Jira>"`
+2. Do the work. Read anything: code, git history, Jira, Confluence, Slack search, the wiki, MCP reads. Edit and create local files the user asks for, such as a deck, notes or code.
+3. Send the answer:
+   ```
+   python3 "$SKILL_DIR/talk_client.py" reply <id> --call="<call id>" <<'EOF'
+   <what you say>
+   EOF
+   ```
+4. Re-arm the doorbell in the same message as the reply, as two parallel calls. The doorbell is always this command with **`run_in_background: true`**, never with `&`, `nohup` or `disown`:
+   ```
+   python3 "$SKILL_DIR/talk_client.py" doorbell --call="<call id>"
+   ```
+   End the turn with one short line in the terminal, such as "Answered, listening." Everything meant for the user goes through `reply`.
+
+`reply` exit codes: 0 sent (a status for a turn already answered prints `ignored` and is not shown); 2 refused, unreachable or no such turn; 4 the call has ended, so nothing was shown and you do not re-arm; when it names a transcript, write the recap from it as for `TALK_END`. `board:` lines after `sent` name a tag that was not shown as asked, or was shown only after a fix: fix it in the next answer. A doorbell that prints `doorbell superseded` was replaced by a newer one: do not re-arm for it.
+
+**An answer with no turn.** A turn takes one reply. When that reply went wrong (a board not shown, a wrong board), or the user asks in the terminal for something on the call, send another answer with `python3 "$SKILL_DIR/talk_client.py" say --call="<call id>"`, the answer on stdin in the same tag language as a reply. It is shown and read aloud like a reply and prints the same `sent` and `board:` lines; it exits 4 when the call is over. Never tell the user to speak or type on the call so that you can answer: say it.
+
+### Writing the answer
+
+- **The stage reads your words aloud with you.** Every answer shows on the stage in large type: each sentence appears as it is said, and the word being said is lit. So the words on the stage are always the words being spoken, never a second text beside them. When the voice reaches a board's tag, the board takes the stage for the rest of the answer, and the sentence being said stays under it on one line. So say the plain part first, then put up the diagram and walk through it. Never show a board the voice is not talking about.
+- **Short.** One idea per sentence, under 20 words; `reply` prints a `board:` line for a sentence over 30 words or an answer over 220. Plain sentences, with no markdown, lists or symbols. Never read identifiers or values aloud one by one: put them on the stage and say what they mean.
+- **One step at a time.** Explain three to six steps, then end the answer and let the user ask for more. A user who asks for another example gets the same thing another way (another example, a picture, smaller steps), never the same words again.
+- **Start where the user is.** Never assume they have seen the thing: show the whole first (the report, the screen, the file), then zoom into the part that matters. Carry one concrete example through the whole explanation, with real or made-up values, and say which.
+- **Key facts first.** The first sentence carries what matters.
+- **Say what you changed** when you edited a file, in a few words, and show the edit with a `change` board.
+- **Teach with the board** (next section): what hearing cannot carry goes on the stage.
+- `[[note: ...]]` saves a note to the transcript and shows it on the page.
+- **Anything the user is working on goes on the stage by name**: `python3 "$SKILL_DIR/../stage/stage.py" show deck path/to/deck.html#slide-3 --cwd "<folder>" --slug "<sid>"`, both from the Stage line. Pass both on every `stage.py` call during the call: without them it lands on a different stage the call page does not show, and with a wrong one `stage.py` fails instead of making a new stage. A name a board of the call already holds is refused: pick another. Do it in the same message as the status and the first work call, so it is on screen while you work. A file view reloads by itself on every save, so after editing the deck you only say what changed.
+- **Stopping.** When the user wants to stop, send a two or three sentence wrap-up with `reply <id> --call="<call id>" --end` (never together with `--status`), and re-arm once, in the same message, to collect the `TALK_END` for the recap. When they ask in the terminal instead, with no turn left to answer, send the wrap-up with `python3 "$SKILL_DIR/talk_client.py" end --call="<call id>"` (the wrap-up on stdin, as for a reply) and re-arm the same way; it exits 4 when the call was already over. The page keeps the answers playable after the end.
+
+### Teaching with the board
+
+To see every board move with the voice without a session answering, `uv run --script "$SKILL_DIR/talk.py" --demo` opens a call that plays `demo.md`: one answer per thing the user says or types (next, again, back, start over), written exactly as you write yours, so it is also a working example of every tag below.
+
+Board tags are taken out of the speech and drawn on the stage beside the conversation, one board per title, with the latest in front and the rest one click back. A relative path is read inside `--code`. A `code` or `change` board also takes an absolute or `~` path to a file in any git work tree, such as another checkout or a branch cloned into the scratchpad: its change is read in that file's own repository, and the board names it `<repo folder>/<path>`. A file git ignores, a path through `.git` and a hidden folder of the home folder (`~/.ssh`, `~/.config`) are refused, since the stage is served to other machines. A `page` file still has to be inside `--code`.
+
+| Board | Use it for | Tag |
+|---|---|---|
+| code | existing code you are explaining | `[[show code: talk/live_turns.py:40-58 \| How a turn waits]]` |
+| change | after you edit a file, instead of describing the edit | `[[show change: talk/talk.py \| What I changed]]` |
+| sequence | who talks to whom, in time: a request's path, a release, an event's life | `[[show sequence \| Turn path]]` a JSON spec `[[/show]]` |
+| before / after | how a request flowed before a change and how it flows after it, side by side, row for row | `[[show sequence | Report path]]` a spec with `compare` `[[/show]]` |
+| flowchart | how parts connect, a decision or process that branches, joins or ends in outcomes, or a state machine (loops are fine): drawn as a map | `[[show flowchart \| Floor rule]]` a JSON spec `[[/show]]` |
+| map | an architecture: the parts of a system in columns, where each caller comes in, where the rules live, and one request followed across it | `[[show map \| Where pay lives]]` a map spec `[[/show]]` |
+| table | a comparison or a list of facts | `[[show table \| Ports]]` a markdown table `[[/show]]` |
+| page | a page you made or a link: a file in `--code`, an address, or `session:<kind>/<slug>` | `[[show page: docs/walkthrough.html \| Report data walkthrough]]` |
+
+**Map.** An architecture map is the map spec of `$SKILL_DIR/../../docs/vz.md` (`columns`, `boxes` on a grid, `zones`, `arrows`, each part's build step `b` and route step `r`, `"layer": "route"` arrows with a badge `n`), drawn in the same look as everywhere else. Give it a title that states the claim. It comes in as you say it: with no verbs, each box or zone arrives with the first sentence that names it (its `name`, a zone's `label`), and the parts no sentence names fill the sentences that name nothing in build order (`b`); a box inside another rides in with it unless its own `b` is later. Then, when the answer follows a request, the map follows its route: the structure stays, the route's arrows arrive a step at a time, each with the sentences that name it (its arrow's `label`, or the step's caption title in `captions.route`), the box it arrives at is said with it, and the parts the request has not reached yet are faint. An answer that never names a route step leaves the route alone. The verbs work too: `[[next]]` builds the map in its build order and then walks the route, `[[all]]` shows the whole structure, and `[[+ box ask]]`, `[[+ zone 0]]` (a zone by its place in `zones`, from 0), `[[+ route 2]]` and `[[+ ask->svc]]` (a structure arrow by its two boxes) bring one thing. Point with `[[point: box ask]]`, `[[point: zone 0]]` or `[[point: route 2]]`. The reader can tap any part shown for Ask about this and Play from here.
+
+**Sequence and flowchart** are annotate's spec formats: the stage draws them itself in its own type, they keep long names and versions on one line, and they step in time with your voice. Pick one by the question: two or more actors exchanging things in order is a sequence; how parts connect, a branch, a join or several outcomes is a flowchart; facts side by side are a table. A call draws no Mermaid: a Mermaid graph or state diagram you write is turned into a map, and any other kind is not shown, so write the JSON spec. On the map a Mermaid subgraph has no box: each of its parts says under its label which subgraph it is in, an arrow to or from the subgraph joins the parts at its ends, and a verb or a point can name the subgraph to bring or light all its parts. A Mermaid link keeps its look (a dotted one is dashed, `<-->` has a head at both ends, `---` none, and `~~~` is no arrow), and a `<<choice>>` state is a decision. On the stage a flowchart is a **map**: the whole of it shows from the start as faint dashed ghosts, and each part lights up as you reach it, the one being said drawn large with its `ref` or `method` and its `sub` under its label, so give every node a short `label` (2 to 4 words), its file or call in `ref` or `method`, and one line on what it does in `sub`. A map reads left to right, or top to bottom on a narrow board, and a long name wraps inside its card. A state machine, one with more than one loop or with its entry inside a loop, is drawn as a ring; a single way back (a retry) runs under the map, and an arrow from a part to itself is a small loop over that part. A table is a wide grid: rows arrive with the sentences that name them, the row being said is drawn large, and you can point at one cell or a range of rows.
+
+The spec is annotate's: `$SKILL_DIR/../annotate/references/block-kinds/sequence.md` and `flowchart.md` beside it hold every field. The body is only the inner `spec` object, never annotate's `{"id", "kind", "spec"}` wrapper; annotate's `source` form, `views`, layout flavours and `href` do not apply here. In short:
+
+```
+[[show sequence | Release path]] {"actors": [{"id": "c", "label": "Contract"}, {"id": "m", "label": "Service"}],
+ "steps": [{"id": "s1", "from": "c", "to": "c", "arrow": "self", "label": "dev build published", "sub": "2026-R1-dev-139", "note": "13 Jan"},
+           {"id": "s2", "from": "c", "to": "m", "arrow": "request", "label": "pins build 139", "tone": "internal"}],
+ "legend": [{"tone": "internal", "label": "the service pins a build"}]} [[/show]]
+[[show flowchart | Floor rule]] {"nodes": [{"id": "a", "role": "entry", "label": "Turn arrives"},
+ {"id": "b", "role": "decision", "label": "Floor free?"}, {"id": "c", "role": "success", "label": "Played"}],
+ "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": "c", "label": "yes"}]} [[/show]]
+```
+
+**Before and after.** To show a change, write one sequence whose spec holds `compare` instead of `actors` and `steps`: `{"title": "...", "legend": [...], "compare": {"before": {"label": "master", "actors": [...], "steps": [...]}, "after": {"label": "with the PR", "actors": [...], "steps": [...]}}}`. Each side is a sequence of its own (the same fields and checks as above, so every step is a real call), and its `label` names it over its diagram; `title` and `legend` sit beside `compare`. `phases`, `groups`, `outcome` and `captions` are not supported with it. The stage draws the two flows side by side, the before on the left and the after on the right, each a whole lane diagram with its own actors and numbers, lined up row by row: a step in both flows sits level with itself, and a side with no step in a row shows a hatched gap there. A gutter between them marks each row: `=` the same, `~` changed, `+` new, `−` removed, `↕` moved. The stage pairs steps by id, else by the same `label` and `arrow`, so give a step the same id on both sides when it is the same step. A pair is the **same** row when only a replaced actor tells them apart (an actor on one side only, such as a client the PR replaced, standing where the actor new on the other side stands), **changed** when its words differ too (the words that changed are bold, red on the left and green on the right), and **moved** when it runs between other actors that are on both sides or stands out of order (two rows, each facing a gap). An actor on one side only is red and "removed" on the left or green and "new" on the right. Your voice can point at a side: `[[point: before]]` or `[[point: after]]` dims the other side (on a phone, where one side shows at a time, it switches the side), and `[[point: both]]` brings both back (`merged` still means both); the board stays so until a later tag points elsewhere. `[[point: step b2]]` lights that row on both sides; the before row of a moved step is `step was~b2`. Parts arrive with the sentences that name them, as on any sequence, and a sentence that names the words a step had before brings its row too, so tell the before story first and the after story second. A malformed `compare` (a side missing, a side with fewer than two actors, a step naming an unknown actor) is not shown and a `board:` line quotes why; `[[point: before]]` on a board with no `compare` is a `board:` line too. A short example (the demo's "Backtesting before and after" has a whole answer):
+
+```
+[[show sequence | Report path]] {"compare": {
+ "before": {"label": "master", "actors": [{"id": "svc", "label": "Report service"}, {"id": "cl", "label": "Service client"}, {"id": "rc", "label": "Service"}],
+  "steps": [{"id": "a1", "from": "svc", "to": "cl", "arrow": "request", "label": "asks for its data"},
+            {"id": "a2", "from": "cl", "to": "rc", "arrow": "request", "label": "sends requests with fixed lists"}]},
+ "after": {"label": "with the PR", "actors": [{"id": "svc", "label": "Report service"}, {"id": "sm", "label": "Shared module", "tone": "amber"}, {"id": "rc", "label": "Service"}],
+  "steps": [{"id": "a1", "from": "svc", "to": "sm", "arrow": "request", "label": "asks for its data"},
+            {"id": "a2", "from": "sm", "to": "rc", "arrow": "request", "label": "sends requests with the lists it is given"}]}}} [[/show]]
+[[point: before]] Before, the service asks the client for its data. ... [[point: after]] Now the shared module takes its place. ...
+```
+
+On the stage a sequence unfolds as **lanes**, drawn whole from the start in the look of the lane sequence (`docs/vz.md`): the steps not said yet are faint, and the step being said lies on an accent band. Each actor is a box over its lifeline, kept on top while the rows scroll, in its `tone`: `blue` the AI or model path, `red` the central mechanism, `green` a rule that holds, `amber` a cost or a warning (the older tones still work); an actor with no tone is plain, since a colour carries a meaning. Under its name go its `role` (what it is, in its tone) and its `sub` (its file or service, such as `talk.py`). A call carries its `label` and its `sub` in a chip on its arrow; a reply's words sit bare over its dashed arrow. `checks` on a step (`[{"label": "scopes", "ok": true}, {"label": "already paid", "ok": false}]`) are ✓ / ✗ badges under its arrow, a phase is a band behind its steps, `n` numbers the walkthrough (several arrows may share one), and an `outcome` (`{"tone", "title", "lines"}`) is a box that closes the diagram once the last step is shown. Three fields make it a real diagram, so use them: `reply_to` on an `event` names the `request` it answers (it must go back the way the call came), and the call then holds a bar open on its receiver until the reply, with calls made inside it nesting their bars; `groups` puts boxes round runs of steps, each `{"id", "kind": "alt" | "par", "branches": [conditions]}` or `{"id", "kind": "loop" | "opt", "label": condition}`, and a step joins one with `"group"` (and `"branch": 0, 1, …` in an `alt` or `par`; a branch written `else` or `otherwise` reads as else); `ref` on a step (`talk/talk.py:2213`, relative to `--code`) gives its popup the source lines round that line. A box's steps follow one another and stay inside one phase. The reader can click any step for its popup (the call, those source lines, the step it answers, and Play from here, which plays your answer from the sentence that says it), click an actor's card to follow it, and fold a box or a phase. So write every `label` as a short phrase that reads on its own, about 3 to 8 words with the sender as its implied subject ("turns the recording into words"), and put a call, a path or a version in `sub`. A sequence step's `arrow` is `request`, `event` (dashed), `self` or `band` (a sentence laid across actors); `sub` is a monospace line under its label, the place for a version or a path, and `note` a short right-hand value such as a date. Each actor's chip is as wide as the space between two columns and wraps its `label` inside it; on a phone a board of many actors puts every other chip on a second line, so keep actor labels to two or three words. A flowchart node's `role` is `entry`, `code`, `call`, `decision`, `success` or `error`; an edge may set `"line": "dashed"` and `"heads": "both"` or `"none"`. With no verbs, each step or node comes in with the first sentence that names it (more than half the words of its `label`, or its id), each arrow arriving with its second end; a sentence that names nothing, such as an introduction, brings nothing, and a `[[point ...]]` brings in what it lights. Parts no sentence names fill the sentences that name nothing, in order, and a `board:` line counts them. That is usually what you want, so verbs are optional here: label each part with the words you will say about it. A spec the tool refuses is not shown, and a `board:` line quotes why.
+
+`code` shows at most 60 lines you read in this turn; `highlight 44-47` before the bar marks lines. `change` is read from git: the file against HEAD, or against another revision with `since <rev>` (`talk/talk.py since HEAD~2`). A new file shows as all added.
+
+**Pointing while you talk.**
+
+- `[[point: lines 12-14]]` before a sentence lights up those lines and dims the rest. It also takes `line N`, `row N` (counted under the header), `rows A-B`, `row "name"` (by its first cell), `cell "row" / "column"` (one cell, by its row's first cell and its column's header, or by numbers: `cell 2 / 3`), `node X` (a flowchart node id), `step S` (a sequence step id) and on a map `box X`, `zone N` or `route N`; a lit step or node is drawn as the one being said. On a change board, line numbers are the new ones and a range takes any line removed inside it; `old line N` (or `old lines A-B`) points at a removed line, by its number before the change. It points at the last board shown; name another one by its title: `[[point Turn path: node Q]]`. Use two to four in an explanation, not one per sentence.
+- `[[key: one short line]]` after the sentence it sums up. It is not said. It goes on the **Key points** board, which is pinned first, keeps every key point of the call, and lights each one up as the voice reaches it.
+
+**Building a board up while you talk.** A sequence, a flowchart or a table can come in one thing at a time. Write the board once, whole, then put a verb just before the word that names each thing. Tags with no spoken word between them make one step.
+
+| Verb | Effect |
+|---|---|
+| `[[+ api]]`, `[[+ api->db, db]]`, `[[+ s3]]` | reveal; an edge brings its two nodes, a node its subgraph box, a step its two actors; an edge also comes in by itself once both its nodes are shown |
+| `[[next]]`, `[[next 2]]` | reveal the next one or two things, in the order the board declares them |
+| `[[all]]` | reveal everything still hidden |
+| `[[focus api->db]]`, `[[focus 42-45]]`, `[[focus rows 2-3]]`, `[[focus none]]` | light these and dim the rest; `point` does the same. The next reveal with no point of its own turns the light off |
+
+Targets are node and subgraph ids, edges as `a->b`, sequence step and actor ids, a map's `box X`, `zone N` and `route N`, code lines and table rows, or their labels. Name another board by its title first: `[[+ Turn path: Q]]`. At most three things before the first verb. A table or diagram of more than three things with no verbs comes in with the sentences that name each thing, and a `board:` line says so. A target that names nothing exactly is read as the nearest id or label, or dropped; each such repair is a `board:` line and is counted on the board's header. A board none of whose reveals names anything shows whole from the start. A page is shown whole, all at once, so it is for showing a thing that already exists (a README, a running app, a document the user asked to see), never for an explanation you built: say that in plain sentences, with a diagram board where it needs one. A page goes in the answer with `[[show page: ... | title]]`, before the sentence about it: the voice brings it forward there and on every replay. A page put up with `stage.py show` during a call opens behind the board in front and the voice can never bring it forward; the tag takes over a copy of the same page already put up by hand. A page has nothing to point at. Never show a page from a site that refuses to be framed (Jira, Confluence, GitHub, sign-in pages): it draws as an empty board, so give the link in the answer instead (`skills/stage/SKILL.md`).
+
+**No scenes and no stops.** The stage reads your text, so a page of cards beside it splits the user's attention, and a card of buttons in the middle of an answer breaks it. Write plain sentences, and use a board only for what hearing cannot carry: code, a change, a sequence, a flowchart, a map or a table. The scene tag and the four stop tags (check, guess, say back, deeper) are retired: never write them.
+
+**Rules.**
+
+- One board per idea. Titles are 2 to 5 plain words, because they are the boards' names in the stage's header and list.
+- The same title updates its board in place, and the changed rows light up. A new title makes a new board. Each answer keeps the steps it said a board with, so a replay of an earlier answer unfolds the board as that answer did.
+- Put each show and point tag before the sentence about it: the stage fronts it when the voice gets there.
+- Prefer a change board over describing an edit line by line.
+- At most 3 key points per answer, in the user's words.
+- Greek titles and text are fine.
+- Close a table or diagram with `[[/show]]`. Tags are forgiving (`show: table`, `mermaid`, `diff`), and a markdown table or mermaid fence without a tag is still moved to the stage (a Mermaid graph or state diagram as a map; any other Mermaid is not shown). `reply` prints a `board:` line for anything it could not show as asked: fix it in the next answer.
+
+For example, after editing a file:
+```
+[[show change: talk/live_turns.py | Longer wait]] I raised how long the doorbell waits, from 30 to 90 seconds. [[point: line 47]] This is the one line that changed. [[key: the doorbell now waits 90 seconds]] A slow tool call no longer looks like a stalled session. [[key: slow tools no longer look stalled]] Nothing else in the file moved, so the tests did not need to change.
+```
+
+### What a turn may do
+
+**A spoken turn counts like a typed message.** A turn may do anything a message typed in the terminal could, and a spoken yes is a yes. The user's own rules apply exactly as they do in the terminal: before anything destructive or outward-facing (`rm`, `git reset --hard`, a commit, a push, a post), show the state and the exact commands in an answer, and run them once the user says go on the call.
+
+Speech recognition does not prove who is speaking. If a request sounds odd or out of context, ask before acting on it.
+
+## A call stays open while this session listens
+
+A call has no time limit while its doorbell is armed. The user can stay silent for hours, or close the page, and open the same link later to carry on with the whole conversation and stage. Closing the page never ends the call; only End call, `--end`, or an hour with no turn and no doorbell does. So always re-arm the doorbell after an answer, and the call lasts as long as this session.
+
+## 4. After it ends
+
+A background task that exits with `TALK_END` means the call is over: the user pressed End call, you sent `--end`, or for an hour nothing was said and no doorbell waited (this session had gone). Do not re-arm, and ignore a second `TALK_END` in the same call. Read the `transcript` path it names and write a short recap:
+
+- **Key points**: start from the transcript's `Key point:` lines, in order, merging any that repeat.
+- **What we covered**, three to five bullets in the user's terms, beyond the key points.
+- **What is still open**: unsettled questions, and anything prepared but still waiting for the user's go.
+- **Notes saved** during the call, with an offer to act on each.
+
+The conversation then continues in this session.
+
+## Restarting the server
+
+A call outlives the server process that holds it. When the server stops (a crash, a `kill`, or a restart to load new code), its open calls are not ended: the next server on the port carries each one on with the same link, call id, conversation and stage. The page shows "Reconnecting to the call…" and then "Reconnected.", and `talk_client.py` waits up to 90 seconds for that server, starting one itself after a few seconds if nobody else has. So a doorbell or reply keeps its `--call` id through a restart, and you do not open a new call.
+
+On a Mac the server can run as a launchd agent, `dev.talk`: `uv run --script "$SKILL_DIR/talk.py" --install-service`, run from a shell that has the speech settings. The plist keeps `TALK_AZURE_KEY_COMMAND`, the region and the addresses, and refuses to install without a key command unless `TALK_SPEECH=voicestudio`. From then on no launch or doorbell starts a server itself: each asks launchd, so a session opened before the speech settings changed cannot start a server without them. Install it again after those settings change; `--uninstall-service` goes back to servers started by launches.
+
+To load new code into a server that holds calls, run `uv run --script "$SKILL_DIR/talk.py" --restart`. With the service installed, `--restart` and a launch that finds older code restart it through launchd, handing the calls over the same way. It hands the calls over to a new server. A server on code from before this hand-over cannot hand its calls over, so `--restart` leaves it running while it holds an open call and says so.
+
+## The activity hook
+
+`hooks/talk-activity.sh` lists this session's tool calls on the call page while it works. The plugin registers it through its `hooks/hooks.json`, so nothing needs installing; remove any older copy registered in `~/.claude/settings.json`, or every event shows twice. It exits at once when no call is running and never fails a tool call. Each session shows only on the call its doorbell names, so other sessions on the machine never appear.

@@ -1,0 +1,228 @@
+{
+ "title": "Signup Request Wire",
+ "eyebrow": "example · accounts service",
+ "lede": "How a signup form becomes the <code>POST /accounts</code> request. Left to right: the form, the command built from it, the message envelope, and what goes over the wire.",
+ "caption": "<code>body</code> collects three command fields. <code>tenantId</code>, <code>avatar</code> and <code>locale</code> skip columns. <code>AuditLog</code> is drawn but nothing reaches it.",
+ "legend": [
+  {
+   "tone": "group",
+   "text": "URL or header"
+  },
+  {
+   "tone": "raw",
+   "text": "bytes, passed through untouched"
+  }
+ ],
+ "cards": [
+  {
+   "id": "form",
+   "stage": "FORM",
+   "name": "SignupForm",
+   "sub": "web · SignupController:40",
+   "fields": [
+    {
+     "id": "email",
+     "label": "String email"
+    },
+    {
+     "id": "displayName",
+     "label": "String displayName"
+    },
+    {
+     "id": "avatar",
+     "label": "MultipartFile avatar",
+     "tone": "raw"
+    },
+    {
+     "id": "optIn",
+     "label": "boolean marketingOptIn"
+    }
+   ]
+  },
+  {
+   "id": "ctx",
+   "stage": "CONTEXT",
+   "name": "not arguments",
+   "sub": "session beans",
+   "fields": [
+    {
+     "id": "tenantId",
+     "label": "session.tenantId()"
+    },
+    {
+     "id": "locale",
+     "label": "request.locale()"
+    }
+   ]
+  },
+  {
+   "id": "cmd",
+   "stage": "COMMAND",
+   "name": "CreateAccountCommand",
+   "sub": "SignupMapper.toCommand",
+   "fields": [
+    {
+     "id": "email",
+     "label": "email"
+    },
+    {
+     "id": "profile",
+     "label": "profile"
+    },
+    {
+     "id": "consent",
+     "label": "consent"
+    }
+   ]
+  },
+  {
+   "id": "env",
+   "stage": "ENVELOPE",
+   "name": "MessageEnvelope",
+   "sub": "EnvelopeFactory.wrap",
+   "rows": "follow",
+   "fields": [
+    {
+     "id": "ctype",
+     "label": "contentType = json",
+     "muted": true
+    },
+    {
+     "id": "body",
+     "label": "body = serialize(cmd)"
+    },
+    {
+     "id": "tenant",
+     "label": "header tenant"
+    },
+    {
+     "id": "attachment",
+     "label": "attachment"
+    }
+   ]
+  },
+  {
+   "id": "req",
+   "stage": "ON THE WIRE",
+   "name": "POST /accounts",
+   "sub": "multipart/form-data",
+   "fields": [
+    {
+     "id": "tenant",
+     "label": "/{tenant}/accounts",
+     "tone": "group"
+    },
+    {
+     "id": "body",
+     "label": "part body",
+     "tone": "raw"
+    },
+    {
+     "id": "attachment",
+     "label": "part avatar",
+     "tone": "raw"
+    },
+    {
+     "id": "locale",
+     "label": "Accept-Language",
+     "tone": "group"
+    },
+    {
+     "id": "dry",
+     "label": "?dryRun=false",
+     "tone": "group"
+    }
+   ]
+  },
+  {
+   "id": "audit",
+   "stage": "SIDE EFFECT",
+   "name": "AuditLog",
+   "sub": "written later",
+   "fields": [
+    {
+     "id": "entry",
+     "label": "entry"
+    }
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": "form.email",
+   "to": "cmd.email",
+   "label": "trimmed"
+  },
+  {
+   "from": "form.displayName",
+   "to": "cmd.profile"
+  },
+  {
+   "from": "ctx.locale",
+   "to": "cmd.profile",
+   "label": "for formatting"
+  },
+  {
+   "from": "form.optIn",
+   "to": "cmd.consent"
+  },
+  {
+   "from": "cmd.email",
+   "to": "env.body",
+   "label": "serialised"
+  },
+  {
+   "from": "cmd.profile",
+   "to": "env.body"
+  },
+  {
+   "from": "cmd.consent",
+   "to": "env.body"
+  },
+  {
+   "from": "ctx.tenantId",
+   "to": "env.tenant",
+   "label": "String.valueOf"
+  },
+  {
+   "from": "form.avatar",
+   "to": "env.attachment",
+   "tone": "raw",
+   "label": "untouched"
+  },
+  {
+   "from": "env.tenant",
+   "to": "req.tenant"
+  },
+  {
+   "from": "env.body",
+   "to": "req.body",
+   "tone": "raw"
+  },
+  {
+   "from": "env.attachment",
+   "to": "req.attachment",
+   "tone": "raw"
+  },
+  {
+   "from": "ctx.locale",
+   "to": "req.locale",
+   "lane": "below",
+   "label": "copied"
+  }
+ ],
+ "sources": {
+  "head": [
+   "Stage",
+   "File",
+   "Detail"
+  ],
+  "rows": [
+   [
+    "Form",
+    "web/SignupController.java:40",
+    "made-up example"
+   ]
+  ]
+ }
+}

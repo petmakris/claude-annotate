@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Fleet</title>
+<!-- Favicon: Lucide "users" (0.460.0, ISC) in white on the status line's cyan fleet square. -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http%3A//www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Crect%20width='24'%20height='24'%20rx='6'%20fill='%2300d7d7'/%3E%3Cg%20transform='translate%283.6%203.6%29%20scale%28.7%29'%20fill='none'%20stroke='%23fff'%20stroke-width='2.6'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M16%2021v-2a4%204%200%200%200-4-4H6a4%204%200%200%200-4%204v2'/%3E%3Ccircle%20cx='9'%20cy='7'%20r='4'/%3E%3Cpath%20d='M22%2021v-2a4%204%200%200%200-3-3.87'/%3E%3Cpath%20d='M16%203.13a4%204%200%200%201%200%207.75'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="top">
+  <h1>Fleet</h1>
+  <nav id="tabs" aria-label="Views"></nav>
+  <div class="status"><span id="stamp">loading</span> <button id="theme" type="button" aria-label="Switch theme">Theme</button></div>
+</header>
+<div id="notices" role="status"></div>
+<main id="views">
+  <!-- One <section class="view" data-view="..."> per view, and one entry in the VIEWS list in app.js. -->
+  <section class="view" id="view-fleet" data-view="fleet">
+    <div class="panel">
+      <h2>Members <span class="count" id="n-members"></span></h2>
+      <div id="m-msg" role="status" class="h-msg"></div>
+      <div id="members"></div>
+    </div>
+    <div class="panel">
+      <h2>Backlog <span class="count" id="n-todos"></span></h2>
+      <form id="todo-form" class="h-bar" aria-label="Add a to-do">
+        <input id="todo-title" type="text" placeholder="Add a to-do" aria-label="To-do title" autocomplete="off" required>
+        <input id="todo-ref" type="text" class="narrow" placeholder="Reference (optional)" aria-label="Reference, a path or link" autocomplete="off">
+        <input id="todo-notes" type="text" placeholder="Notes (optional)" aria-label="Notes" autocomplete="off">
+        <button class="act primary" type="submit">Add to-do</button>
+      </form>
+      <div id="todo-msg" role="status" class="h-msg"></div>
+      <div id="todos"></div>
+    </div>
+    <div class="panel">
+      <h2>Recent threads <span class="count" id="n-threads"></span></h2>
+      <div id="threads"></div>
+    </div>
+  </section>
+  <section class="view" id="view-foryou" data-view="foryou" hidden>
+    <div class="panel">
+      <h2>For you <span class="count" id="n-foryou"></span></h2>
+      <p class="dim h-note">What sessions asked you, told you or flagged, on every machine. An answer goes straight to the session that asked.</p>
+      <div id="fy-msg" role="status" class="h-msg"></div>
+      <div id="foryou"></div>
+    </div>
+  </section>
+  <section class="view" id="view-history" data-view="history" hidden>
+    <div class="panel">
+      <h2>History <span class="count" id="n-history"></span></h2>
+      <form id="h-search" class="h-bar" role="search">
+        <input id="h-q" type="search" placeholder="Filter by name or folder, or describe what you remember" aria-label="Filter sessions, or describe one to search by meaning" autocomplete="off">
+        <button class="act" type="submit" id="h-meaning">Search by meaning</button>
+        <button class="act" type="button" id="h-clear" hidden>Clear</button>
+      </form>
+      <p class="dim h-note" id="h-note"></p>
+      <div id="h-msg" role="status" class="h-msg"></div>
+      <div class="hist">
+        <details class="h-tree" id="h-tree-box" open><summary>Folders</summary><div id="h-tree"></div></details>
+        <div id="h-rows" class="h-rows"></div>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

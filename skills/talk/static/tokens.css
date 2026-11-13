@@ -1,0 +1,22 @@
+/* tokens:start */
+/* One token set for talk and stage, kept byte-identical in talk.py and stage.css (talk/tests/test_tokens.py).
+   Material's colours: every text colour reads at 4.5:1 or more on its card, ink at 12:1 or more. */
+:root{color-scheme:light dark;
+  --bg:#E9EBEE;--panel:#FFFFFF;--ink:#202124;--muted:#5F6368;--faint:#80868B;--line:#DADCE0;--row-alt:#F1F3F4;
+  --acc:#1967D2;--on-acc:#FFFFFF;--acc-soft:#E8F0FE;--acc-mid:#AECBFA;--you:#1967D2;--you-soft:#E8F0FE;--claude:#1967D2;--claude-soft:#E8F0FE;
+  --hl-soft:#E8F0FE;--word:#C6DAFC;--bad:#C5221F;--bad-soft:#FCE8E6;--bad-line:#F6AEA9;--warn:#B06000;--warn-soft:#FEF7E0;
+  --good:#188038;--add-bg:#E6F4EA;--del-bg:#FCE8E6;--code-bg:#F8F9FA;--code-ink:#202124;--code-faint:#80868B;--code-line:#DADCE0;
+  --sans:"Inter",system-ui,-apple-system,sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121212;--panel:#262626;--ink:#E8EAED;--muted:#A8ABB0;--faint:#80868B;--line:#3C4043;--row-alt:#303134;
+  --acc:#8AB4F8;--on-acc:#0B1A33;--acc-soft:rgba(138,180,248,.14);--acc-mid:rgba(138,180,248,.40);--you:#8AB4F8;--you-soft:rgba(138,180,248,.16);
+  --claude:#8AB4F8;--claude-soft:rgba(138,180,248,.10);--hl-soft:rgba(138,180,248,.12);--word:rgba(138,180,248,.32);
+  --bad:#F28B82;--bad-soft:rgba(242,139,130,.12);--bad-line:rgba(242,139,130,.4);--warn:#FDD663;--warn-soft:rgba(253,214,99,.10);
+  --good:#81C995;--add-bg:rgba(129,201,149,.15);--del-bg:rgba(242,139,130,.15);--code-bg:#1B1B1B;--code-ink:#E8EAED;--code-faint:#80868B;--code-line:#3C4043}}
+:root[data-theme="dark"]{
+  --bg:#121212;--panel:#262626;--ink:#E8EAED;--muted:#A8ABB0;--faint:#80868B;--line:#3C4043;--row-alt:#303134;
+  --acc:#8AB4F8;--on-acc:#0B1A33;--acc-soft:rgba(138,180,248,.14);--acc-mid:rgba(138,180,248,.40);--you:#8AB4F8;--you-soft:rgba(138,180,248,.16);
+  --claude:#8AB4F8;--claude-soft:rgba(138,180,248,.10);--hl-soft:rgba(138,180,248,.12);--word:rgba(138,180,248,.32);
+  --bad:#F28B82;--bad-soft:rgba(242,139,130,.12);--bad-line:rgba(242,139,130,.4);--warn:#FDD663;--warn-soft:rgba(253,214,99,.10);
+  --good:#81C995;--add-bg:rgba(129,201,149,.15);--del-bg:rgba(242,139,130,.15);--code-bg:#1B1B1B;--code-ink:#E8EAED;--code-faint:#80868B;--code-line:#3C4043}
+/* tokens:end */

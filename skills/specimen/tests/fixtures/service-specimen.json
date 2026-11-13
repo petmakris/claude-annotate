@@ -1,0 +1,214 @@
+{
+  "root": "com.example.reporting.AnalyticsQueryService",
+  "instance": {
+    "kind": "object",
+    "type": "com.example.analytics.model.AnalyticsResult",
+    "fields": {
+      "totalWealth": {
+        "kind": "object",
+        "type": "com.example.analytics.model.AnalyticsResult$MarketValue",
+        "fields": {
+          "amount": {
+            "kind": "scalar",
+            "value": "1250000.00",
+            "provenance": "chosen"
+          },
+          "currency": {
+            "kind": "scalar",
+            "value": "CHF",
+            "provenance": "chosen"
+          }
+        }
+      },
+      "totalWealthAfter": {
+        "kind": "null"
+      },
+      "charts": {
+        "kind": "list",
+        "element": "com.example.analytics.model.AnalyticsResult$Chart",
+        "items": [
+          {
+            "kind": "object",
+            "type": "com.example.analytics.model.AnalyticsResult$Chart",
+            "fields": {
+              "filteringCategoryId": {
+                "kind": "null"
+              },
+              "groupingClassificationId": {
+                "kind": "scalar",
+                "value": "54",
+                "provenance": "captured"
+              },
+              "allocations": {
+                "kind": "list",
+                "element": "com.example.analytics.model.AnalyticsResult$CategoryAllocation",
+                "items": [
+                  {
+                    "kind": "object",
+                    "type": "com.example.analytics.model.AnalyticsResult$CategoryAllocation",
+                    "fields": {
+                      "category": {
+                        "kind": "scalar",
+                        "value": "1294",
+                        "provenance": "captured"
+                      },
+                      "strategy": {
+                        "kind": "null"
+                      },
+                      "current": {
+                        "kind": "object",
+                        "type": "com.example.analytics.model.AnalyticsResult$Allocation",
+                        "fields": {
+                          "allocationInPortfolio": {
+                            "kind": "scalar",
+                            "value": "0.5200",
+                            "provenance": "chosen"
+                          },
+                          "allocationInGroup": {
+                            "kind": "scalar",
+                            "value": "0.5200",
+                            "provenance": "chosen"
+                          },
+                          "marketValue": {
+                            "kind": "object",
+                            "type": "com.example.analytics.model.AnalyticsResult$MarketValue",
+                            "fields": {
+                              "amount": {
+                                "kind": "scalar",
+                                "value": "1300000.00",
+                                "provenance": "chosen"
+                              },
+                              "currency": {
+                                "kind": "scalar",
+                                "value": "CHF",
+                                "provenance": "chosen"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "proposed": {
+                        "kind": "object",
+                        "type": "com.example.analytics.model.AnalyticsResult$Allocation",
+                        "fields": {
+                          "allocationInPortfolio": {
+                            "kind": "scalar",
+                            "value": "0.6000",
+                            "provenance": "chosen"
+                          },
+                          "allocationInGroup": {
+                            "kind": "scalar",
+                            "value": "0.6000",
+                            "provenance": "chosen"
+                          },
+                          "marketValue": {
+                            "kind": "object",
+                            "type": "com.example.analytics.model.AnalyticsResult$MarketValue",
+                            "fields": {
+                              "amount": {
+                                "kind": "scalar",
+                                "value": "1500000.00",
+                                "provenance": "chosen"
+                              },
+                              "currency": {
+                                "kind": "scalar",
+                                "value": "CHF",
+                                "provenance": "chosen"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "kind": "object",
+                    "type": "com.example.analytics.model.AnalyticsResult$CategoryAllocation",
+                    "fields": {
+                      "category": {
+                        "kind": "scalar",
+                        "value": "1295",
+                        "provenance": "captured"
+                      },
+                      "current": {
+                        "kind": "object",
+                        "type": "com.example.analytics.model.AnalyticsResult$Allocation",
+                        "fields": {
+                          "allocationInPortfolio": {
+                            "kind": "scalar",
+                            "value": "0.3100",
+                            "provenance": "chosen"
+                          },
+                          "allocationInGroup": {
+                            "kind": "scalar",
+                            "value": "0.3100",
+                            "provenance": "chosen"
+                          },
+                          "marketValue": {
+                            "kind": "object",
+                            "type": "com.example.analytics.model.AnalyticsResult$MarketValue",
+                            "fields": {
+                              "amount": {
+                                "kind": "scalar",
+                                "value": "775000.00",
+                                "provenance": "chosen"
+                              },
+                              "currency": {
+                                "kind": "scalar",
+                                "value": "CHF",
+                                "provenance": "chosen"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "proposed": {
+                        "kind": "null"
+                      }
+                    }
+                  }
+                ]
+              },
+              "riskContributions": {
+                "kind": "list",
+                "element": "com.example.analytics.model.AnalyticsResult$CategoryRiskContribution",
+                "items": [
+                  {
+                    "kind": "object",
+                    "type": "com.example.analytics.model.AnalyticsResult$CategoryRiskContribution",
+                    "fields": {
+                      "category": {
+                        "kind": "scalar",
+                        "value": "1294",
+                        "provenance": "captured"
+                      },
+                      "proposed": {
+                        "kind": "null"
+                      }
+                    }
+                  },
+                  {
+                    "kind": "object",
+                    "type": "com.example.analytics.model.AnalyticsResult$CategoryRiskContribution",
+                    "fields": {
+                      "category": {
+                        "kind": "scalar",
+                        "value": "1295",
+                        "provenance": "captured"
+                      },
+                      "proposed": {
+                        "kind": "scalar",
+                        "value": "0.3100",
+                        "provenance": "chosen"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
