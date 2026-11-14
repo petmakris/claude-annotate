@@ -470,6 +470,9 @@ def claude_state(app: str, dirs: dict) -> dict:
         return {"state": "open", "label": "open in a terminal, not listening · /journey " + app}
     if failing:
         return {"state": "failing", "label": "could not answer · see the doorman log on main"}
+    if CONFIG.get("doorman") is False:
+        # No doorman on this machine (the Mac): Send waits until a Claude session runs /journey <app>.
+        return {"state": "asleep", "label": f"not listening · Send waits for /journey {app} in a Claude session"}
     return {"state": "asleep", "label": "asleep · Send wakes it"}
 
 
@@ -512,8 +515,16 @@ def watch(app: str, session_id: str) -> int:
     sid = sid_of(app)
     wcbin = shutil.which("webcompanion") or str(HOME / ".local" / "bin" / "webcompanion")
     child = subprocess.Popen([wcbin, "watch", "--kind", KIND, "--sid", sid], stdout=sys.stdout)
+    # The canvas's Claude pill follows the watcher: with no doorman (the Mac) nothing else refreshes it.
+    last_state = 0.0
     try:
         while child.poll() is None:
+            if time.time() - last_state >= 30:
+                last_state = time.time()
+                try:
+                    publish_state(app, sid, session_dirs(sid))
+                except (Refused, wc.DaemonError, OSError):
+                    pass
             now_owner = claude_session(app)
             if session_id and now_owner and now_owner != session_id:
                 child.terminate()
@@ -525,6 +536,11 @@ def watch(app: str, session_id: str) -> int:
     finally:
         if child.poll() is None:
             child.terminate()
+        try:
+            (Path(session_dirs(sid)["state_dir"]) / "watcher_stopped").touch()
+            publish_state(app, sid, session_dirs(sid))
+        except (Refused, wc.DaemonError, OSError):
+            pass
 
 
 # ── pending work, comments, replies, acks ──────────────────────────────────
@@ -694,6 +710,10 @@ def rerun(app: str, wanted: list[str], event_id: str | None = None) -> dict:
     argv = argv_of(p["run"], p["folder"], [] if chosen == ids else chosen)
     if argv and argv[0] == str(app_cli()):
         argv[0] = str(cli)
+    # A run whose first word is the canvas checkout's own CLI (a relative path in the apps file, as on a machine
+    # with no sandboxes) runs from that checkout, for the same reason.
+    if argv and p["folder"] and Path(argv[0]).is_relative_to(p["folder"]):
+        cwd = p["folder"]
     after = argv_of(p["after"], p["folder"])
     logs = state_dir(app) / "runs"
     logs.mkdir(exist_ok=True)

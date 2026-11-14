@@ -41,7 +41,7 @@ if (DATA.comments && session) {
     // Every thread as the daemon last sent it, and the ops not sent yet ({anchor, op}).
     var threads = {};
     var queue = readJson(QUEUE_KEY, []);
-    var online = null, flushing = false, lastError = '', loaded = false;
+    var online = null, flushing = false, lastError = '', lastSent = '', loaded = false;
     var store = { version: 1, comments: [] }, mine = [];
     function uid(p) { return p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
     function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -99,6 +99,7 @@ if (DATA.comments && session) {
       if (online === false) text = 'Cannot reach webcompanion' + (n ? ' · ' + n + ' unsent, kept here' : '');
       else if (n) text = n + ' unsent';
       if (lastError) text = (text ? text + ' · ' : '') + lastError;
+      else if (lastSent) text = (text ? text + ' · ' : '') + lastSent;
       statusEl.textContent = text;
       statusEl.classList.toggle('on', !!text);
       statusEl.title = online === false ? 'Comments made now are kept in this browser and sent when the daemon answers again.' : '';
@@ -171,7 +172,11 @@ if (DATA.comments && session) {
       session.call('POST', 'api/submit', { anchor: '__general__', text: JSON.stringify({ type: 'comments', canvas: APP, ids: ids, at: at }) })
         .then(function () {
           lastError = '';
+          // Say so: the button only greys out, which read as "nothing happened".
+          lastSent = 'Sent ' + ids.length + (ids.length === 1 ? ' comment' : ' comments') + ' to Claude';
+          setTimeout(function () { lastSent = ''; showStatus(); }, 15000);
           ids.forEach(function (id) { var c = byId(id); if (c) send({ kind: 'update', id: id, sentAt: at }, c.board); });
+          showStatus();
         }, function (e) { lastError = 'Not sent to Claude: ' + e.message; rebuild(); });
     });
 
@@ -284,6 +289,7 @@ if (DATA.comments && session) {
     }
     function post() {
       var t = document.getElementById('c-text'), text = t ? t.value.trim() : '';
+      if (draft && !text && !recording) { note('Write something first', true); return; }
       if (!draft || !text || recording) return;
       var c = draft;
       draft = null;

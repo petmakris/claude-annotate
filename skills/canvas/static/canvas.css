@@ -141,6 +141,7 @@ nav { columns: 3 150px; column-gap: 8px; }
   .float-tr .s-claude.s-answering, .float-tr .s-claude.s-waking { background: var(--warn); }
   .float-tr .s-claude.s-failing { background: var(--bad); }
   .zoom-label { min-width: 36px; font-size: 13px; }
-  .pop-groups { width: calc(100vw - 16px); }
+  /* Fixed to the screen's edges: anchored to its button, the list ran off the right edge. */
+  .pop-groups { position: fixed; top: 48px; left: 8px; right: 8px; width: auto; max-width: none; max-height: calc(100vh - 64px); }
   .banner { top: 50px; left: 8px; right: 8px; }
 }

@@ -495,6 +495,17 @@ def test_until_main_knows_named_journeys_a_rerun_uses_the_canvas_sandboxs_cli_or
         (str(own), str(appenv["sandbox"]), ["sandbox", "journey", "shop", "sign-in", "--publish"])]
 
 
+def test_a_rerun_of_a_checkouts_own_cli_runs_from_that_checkout(appenv, canvas_stubs, monkeypatch):
+    """With no sandboxes (the Mac), the apps file runs the canvas checkout's CLI: run it from that checkout, or the
+    CLI shim runs the session home's checkout instead."""
+    make_sandbox(appenv)
+    own = fake_cli(appenv["sandbox"], named=True)
+    monkeypatch.setitem(journey.APPS, "shop", {**journey.APPS["shop"], "run": ["tools/app/bin/app", "shop", "journey", "{features}", "--publish"]})
+    journey.rerun("shop", ["sign-in"])
+    assert [(c["cli"], c["cwd"], c["argv"]) for c in appenv["calls"]()] == [
+        (str(own), str(appenv["sandbox"]), ["shop", "journey", "sign-in", "--publish"])]
+
+
 def test_the_session_folder_is_the_main_checkout_and_no_sandbox_is_made(appenv):
     make_sandbox(appenv)
     assert journey.session_folder("shop") == appenv["home"]
