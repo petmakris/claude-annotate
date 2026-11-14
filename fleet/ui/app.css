@@ -125,6 +125,18 @@ main { padding: 16px 16px 40px; display: grid; grid-template-columns: minmax(0, 
 .fy-item.k-notify { border-left-color: var(--warn); }
 .fy-item.k-tell { border-left-color: var(--dim); }
 .fy-item.done { opacity: .75; border-left-color: var(--line); }
+.fy-item.k-lungo { border-left-color: var(--warn); }
+.kind.k-lungo { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, var(--card)); }
+.fy-source { margin: 0 0 10px; font-size: 13.5px; }
+.fy-source.bad { color: var(--bad); font-weight: 600; }
+
+/* a member's live state: one wrapping line under its row */
+.pill.ok { color: var(--ok); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); } .pill.dimc { color: var(--dim); }
+.ml-now { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.ml-now .tag { white-space: normal; overflow-wrap: anywhere; }
+.tag.free { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.tag.gone { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+.td-holder { display: flex; flex-wrap: wrap; gap: 4px; }
 .fy-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin-bottom: 4px; }
 .fy-head .dim:last-child { margin-left: auto; font-size: 13px; }
 .fy-answer { display: grid; gap: 6px; margin-top: 10px; }
@@ -174,6 +186,7 @@ div.actions { display: flex; flex-wrap: nowrap; gap: 4px; justify-content: flex-
 @media (max-width: 900px) {
   .ml-row { grid-template-columns: auto minmax(0, 1fr) auto; }
   .ml-folder { grid-column: 1 / -1; } .ml-when { grid-column: 2; } .m-actions { grid-column: 1 / -1; justify-content: flex-start; }
+  .ml-now { grid-column: 1 / -1; }
   .hs-row { grid-template-columns: minmax(0, 1fr) auto; }
   .hs-about, .hs-folder { grid-column: 1 / -1; } .hs-row div.actions { grid-column: 1 / -1; justify-content: flex-start; }
   .td-row { grid-template-columns: 36px minmax(0, 1fr) auto; } .td-ref, .td-machine { grid-column: 2 / -1; }

@@ -173,8 +173,11 @@ if a[:1] == ["agents"]:
         except ValueError:
             continue
         if i.get("pid") and alive(i["pid"]) and i.get("name") not in hide + stopped:
-            out.append({"pid": i["pid"], "sessionId": i["sessionId"], "cwd": i.get("cwd"), "name": i.get("name"),
-                        "kind": "interactive", "status": "idle", "startedAt": 1})
+            e = {"pid": i["pid"], "sessionId": i["sessionId"], "cwd": i.get("cwd"), "name": i.get("name"),
+                 "kind": "interactive", "status": "idle", "startedAt": 1}
+            over = load("status.json")  # {name: {"status": ..., "state": ...}}: what a test says a session is doing
+            e.update(over.get(i.get("name"), {}) if isinstance(over, dict) else {})
+            out.append(e)
     print(json.dumps(out + load("agents.json") + [e for e in load("started.json") if e["name"] not in stopped]))
     sys.exit(0)
 if d:

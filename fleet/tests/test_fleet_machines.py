@@ -204,6 +204,18 @@ def test_broadcast_reaches_every_machine_and_names_the_unreachable_one(world):
     assert code == 0 and "not me" in out and "me\n" in out
 
 
+def test_broadcast_skips_a_job_on_another_machine(world):
+    a, b, bee = duo(world)
+    j = bee.session("job:remote-1")
+    world.member(j, "job:remote-1")
+    world.here_env()
+    code, out, _ = world.run(a, "tell", "*", "heads up")
+    assert code == 0 and "to beta@bee: delivered" in out
+    assert "skipped 1 job (a broadcast never reaches a job; name it to reach it): job:remote-1@bee" in out
+    assert wait_for(lambda: b.messages())
+    assert j.messages() == []
+
+
 def test_a_message_with_quotes_newlines_and_shell_characters_arrives_exactly(world):
     a, b, bee = duo(world)
     out = world.run(a, "ask", "beta@bee", NASTY)[1]

@@ -20,23 +20,25 @@ The CLI is `fleet`, on `PATH` while this plugin is installed. `/fleet <verb> ...
 | `leave` | Leave the fleet. |
 | `forget <glob>... [--live]` | Delete this machine's member rows whose name matches, e.g. `forget 'job:*'`. A live member is kept unless `--live`. Messages stay. |
 | `ls [--json] [--all] [--local]` | Members, alive or dead, with their folder. With `machines.json`, every machine's members (`name@machine`), and a line for each machine that did not answer. `--local` asks this machine only. |
-| `tell <name\|*\|petros> "..." [--as petros]` | Instruct one member, or every live member. Prints a thread id. `name@machine` targets another machine; a bare name not found here is looked up there; `*` reaches every machine. |
+| `ls --state` | What each member is doing now, read live (see "Before you tell the user what he can do"): the status Claude Code reports (`busy`, `idle`, `waiting` when a prompt is open, `unknown` when it cannot say), the to-dos it holds, the asks and tells it has not answered, and `free` only when it is idle and owes nothing. Each machine's line says when it was read. Nothing of it is stored. |
+| `tell <name\|*\|petros> "..." [--as petros]` | Instruct one member, or every live member. Prints a thread id. `name@machine` targets another machine; a bare name not found here is looked up there; `*` reaches every machine but skips members named `job:...` (it says which); name a job to reach it. |
 | `ask <name\|*> "..."` | Ask. Every recipient answers once. Prints a thread id. |
 | `answer <msg-id> "..."` | Answer an ask you received. |
 | `ack <msg-id>` | Acknowledge a tell you received. |
 | `wait <thread> [--timeout S]` | Block until every recipient has answered or acknowledged, then print the answers. Exit 3 on timeout. |
 | `thread <id> [--json]` | Show a thread. A message id works too. |
 | `spawn [--on <machine>] <name> <cwd> "<prompt>" [--json]` | Start a background session in `<cwd>` that joins as `<name>` before it reads the prompt. Prints its id and `claude attach <name>`. A live name is refused; an untrusted folder is refused with the fix. |
-| `todo add "<title>" [--ref <path\|url>] [--notes "..."]` | Park work in the shared backlog, for any member to pick up. |
-| `todo ls [--all] [--json]` | Open and claimed to-dos (`--all` adds done ones). |
-| `todo claim <id>` | Take a to-do. Atomic: one holder. Needs `join` first. Prints its ref and notes. |
+| `todo add "<title>" [--ref <path\|url>] [--notes "..."] [--owner NAME] [--after IDS]` | Park work in the shared backlog. `--owner` says which member it is meant for (`name`, `name@machine` or `petros`); `--after 3,4` says which to-dos must be done first. An unknown id, a to-do waiting on itself and a loop are refused. |
+| `todo set <id> [--owner NAME] [--after IDS]` | Change who a to-do is for or what it waits on (an empty value clears it). |
+| `todo ls [--all] [--json]` | Open and claimed to-dos (`--all` adds done ones), with `{for X; waits on #3}` or `{...; ready}`, and `(gone)` after an owner with no live member. |
+| `todo claim <id>` | Take a to-do. Atomic: one holder. Needs `join` first. Prints its ref and notes. Refused while it waits on a to-do not done, or when it is meant for another member. |
 | `todo done <id>` / `todo release <id>` | The holder finishes it, or hands it back to open. |
 | `todo spawn <id> [--name N] [--cwd D] [--on <machine>]` | Start a new session (default name `todo-<id>`) told to claim and do that to-do. The to-do is reserved for that name, so no one else claims it first. |
 | `stop <name>` | Stop a background member (`claude stop`). An interactive member is never killed: it is told to wrap up and leave. Works across machines (`name@machine`). |
 | `respawn <name>` | Start a dead or left member again in the background, with its conversation (`claude respawn`, or `--resume` in its folder for one that ran in a terminal). A live member is refused. Anything still unanswered for it is sent again when it joins. |
 | `attach <name>` | Print the command that steps into a member (`claude attach <id>`, or `ssh -t <host> ...`). For an interactive member it says so and prints the resume command. |
 | `notify "<text>"` | Tell the user something. Stored in his inbox. See "Telling the user". |
-| `inbox [--json] [--all]` | The user's inbox on every machine. An item on another machine is `12@machine`. |
+| `inbox [--json] [--all]` | The user's inbox on every machine. An item on another machine is `12@machine`. With `lungo.json` in the fleet's folder it also lists what Lungo (the job runner) says waits on him, read live, as `lungo:<machine>/<job>`: act on those in Lungo, never with `answer` or `dismiss`. When Lungo cannot be read it says so; it never shows that as nothing to do. |
 | `answer <id> "..." --as petros` / `dismiss <id> --as petros` | Answer or clear an inbox item, as the user. Only from a session outside the fleet. |
 | `history ls [--folder F] [--json]` / `show <id>` / `resume <id>` | Every session this machine has run (recorded by a hook, joined or not), newest first; one session's details; the command that resumes it. An id may be a prefix. |
 | `history rename <id> "<name>"` / `delete <id>` | Give a session a name of your own (empty clears it); remove its row (never its transcript). |
@@ -57,6 +59,16 @@ The CLI is `fleet`, on `PATH` while this plugin is installed. `/fleet <verb> ...
 - You are a spawned session whose prompt starts `/fleet todo claim <id>`: run it, do the work, then `fleet todo done <id>`
   (or `todo release <id>` with the reason if you cannot).
 - `spawn` needs a folder Claude Code already trusts; if it says it does not, open `claude` once there and accept.
+- When you hand out work across members, write it down as to-dos: `todo add "..." --owner <member> --after <ids>`. The
+  owner and the order are the record of who was given what; a tell is not (it may be an FYI). `todo spawn` of a to-do with
+  an owner starts that member.
+
+## Before you tell the user what he can do
+
+Never answer "can I test X", "is Y free", "what is waiting on me" from memory or from message previews. First run
+`fleet ls --state` and `fleet inbox`, and read the whole thread of anything you rely on (`fleet thread <id>`). Then say
+what you checked and when it was read. A member that is `busy`, `waiting`, `unknown`, holds a to-do or owes an answer is
+not free. A machine or Lungo that could not be read means you do not know; say that.
 
 ## The user is `petros`
 
@@ -87,7 +99,8 @@ member of the user's fleet. Only the user joins sessions, so a member speaks for
   your own context: say yes or no, and what you are doing in one or two sentences. Do not search other sessions.
 - A line `Fleet answer ... to your ask` is a reply to a question you asked. Read it with `fleet thread <thread>`.
 
-The line carries a short preview. When it says the text was cut, read the whole message with `fleet thread <thread>`.
+The line carries the whole message up to 2,000 characters. A longer one is cut there and names the command that shows
+the rest (`fleet thread <thread>`).
 
 ## Sending
 

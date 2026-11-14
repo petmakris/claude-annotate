@@ -51,7 +51,7 @@ if a[:2] == ["mcp", "list"]:
     sys.exit(0)
 if a[:2] == ["agents", "--json"]:
     pid = int(open(os.path.join(%(base)r, "alive.pid")).read())  # a real sleeping process stands in for the session
-    print(json.dumps([{"sessionId": "s-builder", "pid": pid, "name": "builder", "kind": "background", "state": "idle"}]))
+    print(json.dumps([{"sessionId": "s-builder", "pid": pid, "name": "builder", "kind": "background", "state": "working", "status": "busy"}]))
     sys.exit(0)
 if "-p" in a:
     prompt = sys.stdin.read()
@@ -149,6 +149,7 @@ con.executemany("INSERT INTO todos(title, ref, notes, created_by, state, claimed
     ("Write the export job", "docs/export.md", "after the schema lands", "builder", "open", None, now - 500),
     ("Review the schema", None, None, "builder", "claimed", "reviewer", now - 400),
     ("Old cleanup", None, None, "builder", "done", "builder", now - 9000)])
+con.execute("UPDATE todos SET owner='builder', after='2' WHERE title='Write the export job'")
 for i, (sid, cwd, name, prompt) in enumerate([
         ("aaaa1111-0000-0000-0000-000000000001", APP, "Export plan", "Plan the billing export"),
         ("aaaa1111-0000-0000-0000-000000000002", APP, None, "Fix the flaky test"),
@@ -162,6 +163,13 @@ for i, (sid, cwd, name, prompt) in enumerate([
                                               "Planned the billing export job." if i == 0 else None))
 con.commit()
 con.close()
+
+# Lungo, the job runner: a command that prints a brief with one item that waits on the user
+write(os.path.join(BASE, "brief.json"), json.dumps({"ok": True, "data": {
+    "schema": "lungo.brief/1", "as_of": time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime(now - 300)),
+    "counts": {"needs_petros": 1}, "jobs": [{"machine": "main", "name": "watch-check", "say": "The watch sync",
+                                             "attention": "hands", "kind": "action", "step": "Plug the watch in."}]}}))
+write(os.path.join(FH, "lungo.json"), json.dumps({"command": ["cat", os.path.join(BASE, "brief.json")]}))
 
 sleeper = subprocess.Popen(["sleep", "3600"])
 write(os.path.join(BASE, "alive.pid"), str(sleeper.pid))
@@ -215,9 +223,9 @@ try:
         def shell():
             expect(page.locator("#tabs button")).to_have_count(4)
             expect(page.locator("#stamp")).to_contain_text("Live")
-            expect(page.locator('#tabs button[data-view="foryou"] .badge')).to_have_text("2")
-            assert page.title() == "(2) Fleet", page.title()
-        check("App bar: four tabs, live status, the For you badge counts the open ask", shell)
+            expect(page.locator('#tabs button[data-view="foryou"] .badge')).to_have_text("3")
+            assert page.title() == "(3) Fleet", page.title()
+        check("App bar: four tabs, live status, the For you badge counts the open ask, the notice and Lungo's item", shell)
 
         # ---- Fleet view
         view("fleet")
@@ -225,7 +233,7 @@ try:
         def members():
             rows = page.locator(".ml-row")
             expect(rows.nth(0)).to_contain_text("builder")
-            expect(rows.nth(0).locator(".pill")).to_have_text("alive")
+            expect(rows.nth(0).locator(".ml-status .pill")).to_have_text("alive")
             expect(rows.nth(0).locator(".ml-folder")).to_have_text("~/projects/app")
             expect(page.locator("#n-members .n")).to_have_text("1")  # the left member is not counted
             expect(page.locator("#n-members")).to_contain_text("1 alive")
@@ -240,6 +248,25 @@ try:
             toggle.click()
             expect(page.locator(".ml-row.left")).not_to_be_visible()
         check("Members: alive first, home folder shown as ~, left members behind a Show N left toggle that survives a poll", members)
+
+        def live_state():
+            row = page.locator(".ml-row").nth(0)
+            pill = row.locator(".ml-now .pill")
+            expect(pill).to_have_text("busy")
+            assert "Working on a turn" in pill.get_attribute("title"), pill.get_attribute("title")
+            expect(row.locator(".ml-now .tag.free")).to_have_count(0)
+            expect(page.locator("#n-members")).to_contain_text("state read")
+            color = pill.evaluate("e => getComputedStyle(e).color")
+            ok = page.evaluate("() => getComputedStyle(document.documentElement).getPropertyValue('--ok').trim()")
+            print("      (busy pill color %s, --ok %s)" % (color, ok))
+            assert color != "rgb(0, 0, 0)", color
+        check("Members: each live member shows the status Claude Code reports, read when the page asked, and is not free while busy", live_state)
+
+        def backlog_order():
+            row = page.locator(".td-row", has_text="Write the export job")
+            expect(row).to_contain_text("for builder")
+            expect(row).to_contain_text("waits on #2")
+        check("Backlog: a to-do shows its owner and the to-dos it waits on", backlog_order)
 
         def compose():
             row = page.locator(".ml-row").nth(0)
@@ -314,6 +341,17 @@ try:
         # ---- For you
         view("foryou")
 
+        def lungo():
+            expect(page.locator(".fy-source")).to_contain_text("Lungo, as of")
+            expect(page.locator(".fy-source")).to_contain_text("1 needs you")
+            item = page.locator(".fy-item.k-lungo")
+            expect(item).to_contain_text("The watch sync")
+            expect(item).to_contain_text("Plug the watch in.")
+            expect(item).to_contain_text("Act on it in Lungo")
+            expect(item.locator("textarea")).to_have_count(0)
+            expect(item.get_by_role("button")).to_have_count(0)
+        check("For you: Lungo's item is listed read-only, with a line saying when Lungo wrote it", lungo)
+
         def dismiss():
             item = page.locator(".fy-item", has_text="nightly build")
             item.get_by_role("button", name="Dismiss").click()
@@ -329,13 +367,14 @@ try:
             item.locator("textarea").fill("Yes, after the backup.")
             item.get_by_role("button", name="Answer").click()
             expect(page.locator("#fy-msg")).to_contain_text("Answered")
-            expect(page.locator(".empty-box")).to_contain_text("Nothing is waiting")
+            expect(page.locator(".fy-item:not(.done)", has_text="May I delete")).to_have_count(0)
+            expect(page.locator(".fy > .fy-item:not(.done)")).to_have_count(1)  # only Lungo's item is left
             r = db().execute("SELECT answered_at FROM messages WHERE thread='t0bb2' AND kind='ask'").fetchone()
             assert r["answered_at"], "ask not marked answered"
             reply = db().execute("SELECT body FROM messages WHERE thread='t0bb2' AND kind='answer'").fetchone()
             assert reply and reply["body"] == "Yes, after the backup.", reply
-            expect(page.locator('#tabs button[data-view="foryou"] .badge')).to_have_count(0)
-        check("For you: answering stores the reply, clears the item and the badge", foryou)
+            expect(page.locator('#tabs button[data-view="foryou"] .badge')).to_have_text("1")
+        check("For you: answering stores the reply, clears the item, and the badge counts only Lungo's item", foryou)
 
         # ---- History
         view("history")

@@ -109,17 +109,29 @@ def test_tell_posts_the_exact_wire_format(world):
     assert "`/fleet ack %d`" % mid in c
 
 
-def test_ask_wake_line_says_how_to_answer_and_long_bodies_are_cut(world):
+def test_ask_wake_line_says_how_to_answer_and_carries_the_whole_text_up_to_2000_characters(world):
     a, b = two(world)
-    long = "word " * 200
+    long = "line one\n" + "word " * 397 + "last"  # 1,998 characters
     code, out, _ = world.run(a, "ask", "beta", long)
     mid = msg_id(out, "beta")
     assert wait_for(lambda: b.messages())
     c = b.messages()[0]["message"]["content"]
     assert 'Reply once with `/fleet answer %d "YOUR ANSWER"`' % mid in c
-    assert "cut; the full text is in `fleet thread`" in c
-    assert long.strip() not in c
-    body = json.loads(world.run(a, "thread", thread_id(out), "--json")[1])[0]["body"]
+    assert "Fleet ask %d from alpha: %s\n" % (mid, long.strip()) in c  # whole, its line breaks kept
+    assert "cut" not in c
+
+
+def test_a_body_over_2000_characters_is_cut_there_and_names_its_thread(world):
+    a, b = two(world)
+    long = "x" * 1990 + "0123456789" + "TAIL-NOT-SENT"
+    code, out, _ = world.run(a, "tell", "beta", long)
+    th = thread_id(out)
+    assert wait_for(lambda: b.messages())
+    c = b.messages()[0]["message"]["content"]
+    assert "x" * 1990 + "0123456789... (cut at 2000 characters; the whole text: `fleet thread %s`)" % th in c
+    assert "TAIL-NOT-SENT" not in c
+    assert c.index("(delivery check: fleet-ref-") > c.index("cut at 2000")  # the marker stays last
+    body = json.loads(world.run(a, "thread", th, "--json")[1])[0]["body"]
     assert body == long
 
 
@@ -174,6 +186,30 @@ def test_broadcast_fans_out_to_every_live_member_but_the_sender(world):
     th = thread_id(out)
     rows = json.loads(world.run(a, "thread", th, "--json")[1])
     assert len(rows) == 2 and {r["thread"] for r in rows} == {th}
+
+
+def test_broadcast_skips_jobs_and_says_so_but_a_tell_by_name_reaches_a_job(world):
+    a, b = two(world)
+    j = world.session("job:build-1")
+    world.member(j, "job:build-1")
+    code, out, _ = world.run(a, "tell", "*", "heads up")
+    assert code == 0
+    assert [ln.split()[3].rstrip(":") for ln in out.splitlines() if ln.startswith("message")] == ["beta"]
+    assert "skipped 1 job (a broadcast never reaches a job; name it to reach it): job:build-1" in out
+    assert wait_for(lambda: b.messages())
+    assert j.messages() == []
+    code, out, _ = world.run(a, "tell", "job:build-1", "you in particular")
+    assert code == 0 and wait_for(lambda: j.messages())
+
+
+def test_a_broadcast_with_only_jobs_to_reach_is_refused(world):
+    a = world.session("alpha")
+    world.member(a)
+    j = world.session("job:x")
+    world.member(j, "job:x")
+    code, _, err = world.run(a, "tell", "*", "hi")
+    assert code == 1 and "no other live member to send to but jobs" in err
+    assert j.messages() == []
 
 
 def test_broadcast_wait_collects_every_answer(world):

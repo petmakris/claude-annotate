@@ -179,6 +179,23 @@ function composeBox(m) {
 }
 
 let lastMembers = null;
+// What a member is doing now, worked out by the server when it read the page's data (never stored): the raw status
+// Claude Code gives it, what it holds and what it owes, and "free" only when all of that is known and empty.
+const ACTIVITY = { busy: ["ok", "Working on a turn"], idle: ["dimc", "Between turns"], waiting: ["warn", "A prompt is open: it waits for an answer or a permission"], unknown: ["bad", "Claude Code did not say; treat it as busy"] };
+function nowLine(m, now) {
+  const kids = [];
+  if (m.status === "alive") {
+    const a = m.activity || "unknown";
+    const [cls, what] = ACTIVITY[a] || ["dimc", "Status reported by Claude Code"];
+    const read = m.as_of ? "Read at " + new Date(m.as_of * 1000).toLocaleTimeString() + (m.machine ? " on " + m.machine : "") : "";
+    kids.push(el("span", { class: "pill " + cls, title: what + (read ? ". " + read : "") }, el("span", { class: "dot" }), a));
+    if (m.free) kids.push(el("span", { class: "tag free" }, "free"));
+  }
+  for (const t of m.held || []) kids.push(el("span", { class: "tag", title: t.title }, "holds #" + t.id + " " + t.title));
+  for (const u of m.unanswered || []) kids.push(el("span", { class: "tag ghost", title: when(u.created_at) }, u.kind + " " + u.id + " from " + u.sender + " unanswered, " + ago(u.created_at, now)));
+  return kids.length ? el("div", { class: "ml-now" }, kids) : null;
+}
+
 function renderMembersNow() { if (lastMembers) renderMembers(lastMembers.data, lastMembers.now, true); }
 
 function renderMembers(data, now, force) {
@@ -190,7 +207,9 @@ function renderMembers(data, now, force) {
   const rows = data.members.slice().sort((a, b) => order[a.status] - order[b.status] || (b.joined_at || 0) - (a.joined_at || 0));
   const here = rows.filter((m) => m.status !== "left"), left = rows.filter((m) => m.status === "left");
   const alive = here.filter((m) => m.status === "alive").length;
-  headCount("n-members", here.length, rows.length ? [el("span", { class: "dim" }, alive + " alive")] : []);
+  const read = rows.find((m) => m.as_of && (!m.machine || m.machine === SELF.machine));
+  headCount("n-members", here.length, rows.length ? [el("span", { class: "dim" }, alive + " alive"),
+    read ? el("span", { class: "dim" }, "· state read " + new Date(read.as_of * 1000).toLocaleTimeString()) : null].filter(Boolean) : []);
   const box = document.getElementById("members");
   if (!rows.length) return box.replaceChildren(empty("users", "No sessions have joined this fleet yet. Run /fleet join in a session."));
   const row = (m) => {
@@ -200,7 +219,7 @@ function renderMembers(data, now, force) {
       el("span", { class: "ml-machine" }, machineTag(m.machine)),
       el("code", { class: "ml-folder", title: m.cwd }, !m.machine || m.machine === SELF.machine ? tilde(m.cwd || "") : homeless(m.cwd)),
       el("span", { class: "ml-when dim", title: when(m.joined_at) }, ago(m.joined_at, now)),
-      memberActions(m));
+      memberActions(m), nowLine(m, now));
     if (M.open && M.open.key === m.machine + "/" + m.session_id) li.append(composeBox(m));
     return li;
   };
@@ -228,7 +247,10 @@ function renderTodos(data) {
     el("span", { class: "td-id dim" }, "#" + t.id),
     el("span", { class: "td-main" }, el("span", { class: "td-title" }, t.title),
       t.notes ? el("details", { class: "td-notes" }, el("summary", { class: "dim" }, "Notes"), el("div", { class: "dim" }, t.notes)) : null),
-    el("span", { class: "td-holder" }, t.claimed_by ? el("span", { class: "tag" }, t.claimed_by) : t.reserved_for ? el("span", { class: "tag ghost" }, "for " + t.reserved_for) : null),
+    el("span", { class: "td-holder" }, t.claimed_by ? el("span", { class: "tag" }, t.claimed_by) : t.reserved_for ? el("span", { class: "tag ghost" }, "for " + t.reserved_for) : null,
+      t.owner && t.owner !== t.claimed_by ? el("span", { class: "tag" + (t.owner_gone ? " gone" : ""), title: t.owner_gone ? "No live member has this name" : "Meant for this member" }, "for " + t.owner + (t.owner_gone ? " (gone)" : "")) : null,
+      t.state !== "done" && (t.waits_on || []).length ? el("span", { class: "tag ghost" }, "waits on " + t.waits_on.map((i) => "#" + i).join(", "))
+        : t.state === "open" && (t.after || []).length ? el("span", { class: "tag free" }, "ready") : null),
     t.ref ? el("code", { class: "td-ref dim", title: t.ref }, t.ref) : el("span", {}),
     el("span", { class: "td-machine" }, machineTag(t.machine)));
   const group = (state, label) => {
@@ -265,7 +287,17 @@ function setBadge(n) {
   document.title = n ? "(" + n + ") Fleet" : "Fleet";
 }
 
+function lungoItem(i, now) {  // read from Lungo when the page loaded; acted on in Lungo, never here
+  return el("li", { class: "fy-item k-lungo" },
+    el("div", { class: "fy-head" }, el("span", { class: "kind k-lungo" }, i.lungo_kind || i.attention),
+      el("strong", {}, i.title), machineTag(i.machine),
+      i.created_at ? el("span", { class: "dim", title: when(i.created_at) }, ago(i.created_at, now)) : null),
+    el("div", { class: "msg-body" }, i.body),
+    el("div", { class: "fy-reply" }, "From Lungo (job " + i.job + "). Act on it in Lungo."));
+}
+
 function fyItem(i, now) {
+  if (i.kind === "lungo") return lungoItem(i, now);
   const done = i.answered_at !== null;
   const kind = i.kind === "notify" ? "notice" : i.kind;
   const kids = [el("div", { class: "fy-head" }, el("span", { class: "kind k-" + i.kind }, kind),
@@ -300,7 +332,9 @@ function renderInbox(data) {
   const now = Date.now();
   const open = data.items.filter((i) => i.answered_at === null), done = data.items.filter((i) => i.answered_at !== null);
   const kids = [];
-  kids.push(open.length ? el("ul", { class: "list fy" }, open.map((i) => fyItem(i, now))) : empty("inbox", "Nothing is waiting for you."));
+  if (data.lungo) kids.push(el("p", { class: "fy-source " + (data.lungo.ok ? "dim" : "bad") }, data.lungo.line));
+  kids.push(open.length ? el("ul", { class: "list fy" }, open.map((i) => fyItem(i, now)))
+    : empty("inbox", data.lungo && !data.lungo.ok ? "Nothing from the fleet. Lungo could not be read." : "Nothing is waiting for you."));
   if (done.length) kids.push(el("details", { class: "group" }, el("summary", {}, "Answered or dismissed", el("span", { class: "dim" }, String(done.length))), el("ul", { class: "list fy" }, done.map((i) => fyItem(i, now)))));
   box.replaceChildren(...kids);
 }

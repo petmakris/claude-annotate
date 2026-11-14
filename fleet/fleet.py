@@ -31,7 +31,8 @@ from urllib.parse import parse_qs, urlparse
 import fleet_history as hist
 import fleet_profiles as prof
 
-PREVIEW = 300
+PREVIEW = 300  # a message as one line of a list (`fleet inbox`)
+WAKE_MAX = 2000  # the text a message carries into the receiver's conversation; longer is cut, naming its thread
 PETROS = "petros"  # the user: a reserved member name with no session, only an inbox
 INBOX_KINDS = ("ask", "tell", "notify")
 PAGE = "petros:page"  # as_name of a write that comes from the fleet page
@@ -68,7 +69,7 @@ CREATE INDEX IF NOT EXISTS messages_thread ON messages(thread);
 CREATE TABLE IF NOT EXISTS todos (
   id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, ref TEXT, notes TEXT,
   created_by TEXT, state TEXT NOT NULL DEFAULT 'open', claimed_by TEXT, claimed_session TEXT,
-  reserved_for TEXT, created_at REAL, claimed_at REAL, done_at REAL);
+  reserved_for TEXT, created_at REAL, claimed_at REAL, done_at REAL, owner TEXT, after TEXT);
 """
 
 
@@ -138,6 +139,7 @@ def db():
     for table, cols in (("messages", (("machine", "TEXT"), ("remote_id", "INTEGER"), ("delivery", "TEXT"),
                                       ("nonce", "TEXT"), ("scan_from", "INTEGER"), ("confirmed_at", "REAL"), ("wake", "TEXT"))),
                         ("members", (("transcript_path", "TEXT"),)),
+                        ("todos", (("owner", "TEXT"), ("after", "TEXT"))),
                         ("conversations", (("unreadable", "INTEGER"),))):  # a store made by an older version
         have = {r["name"] for r in con.execute("PRAGMA table_info(%s)" % table)}
         for col, typ in cols:
@@ -464,6 +466,16 @@ def preview(body):
     return flat[:PREVIEW] + "... (cut; the full text is in `fleet thread`)"
 
 
+def whole(body, thread):
+    """The text a message carries into the receiver's conversation: all of it up to WAKE_MAX characters (a test
+    with a real session on 14 November 2026 got 2,000 through the inbox socket whole), else cut there with the
+    command that shows the rest. The store always keeps the whole body."""
+    body = body.strip()
+    if len(body) <= WAKE_MAX:
+        return body
+    return body[:WAKE_MAX] + "... (cut at %d characters; the whole text: `fleet thread %s`)" % (WAKE_MAX, thread)
+
+
 # ---------------------------------------------------------------- members
 
 def row_self(con, info):
@@ -564,17 +576,70 @@ def member_status(m, agents=_UNSET):
     return "alive" if is_alive(m, agents) else "dead"
 
 
+# A member's live state is worked out each time it is read, never stored, so it cannot go stale:
+# - `activity`: the raw `status` that `claude agents --json` gives the session (busy, idle, waiting), else its
+#   `state`; "unknown" when that command does not answer. A test on 14 November 2026 with a scratch background
+#   session showed `status: waiting` (`state: blocked`) while a permission prompt was open, and `done`/`idle` after
+#   a finished turn; a `blocked` entry with no pid is a stopped background job, never a live one.
+# - `held`: the to-dos it holds; `unanswered`: asks and tells to it not yet answered or acknowledged.
+# - `free`: only when every source answered, it is idle, and it holds nothing and owes nothing.
+# - `as_of`: when this machine read it. The store is read in one read transaction, so the rows agree.
+
+WAITING = "waiting"
+
+
 def local_members(show_all=False):
     con = db()
-    out = []
     agents = agents_list()
-    for m in con.execute("SELECT * FROM members ORDER BY joined_at").fetchall():
+    con.execute("BEGIN")
+    try:
+        members = con.execute("SELECT * FROM members ORDER BY joined_at").fetchall()
+        held = con.execute("SELECT id, title, claimed_session FROM todos WHERE state='claimed'").fetchall()
+        owed = con.execute("SELECT id, kind, sender, recipient_session, created_at FROM messages WHERE kind IN"
+                           " ('ask','tell') AND answered_at IS NULL AND recipient_session IS NOT NULL ORDER BY id").fetchall()
+    finally:
+        con.execute("COMMIT")
+    as_of = time.time()
+    out = []
+    for m in members:
         st = member_status(m, agents)
         if st == "left" and not show_all:
             continue
-        out.append({"name": m["name"], "session_id": m["session_id"], "host": m["host"], "cwd": m["cwd"],
-                    "branch": m["branch"], "status": st, "respawn": m["respawn"], "joined_at": m["joined_at"]})
+        sid = m["session_id"]
+        entry = agent_for(agents, sid) if agents is not None else None
+        activity = None
+        if st == "alive":
+            activity = "unknown" if not entry else str(entry.get("status") or entry.get("state") or "unknown")
+        mine = [{"id": t["id"], "title": t["title"]} for t in held if t["claimed_session"] == sid]
+        due = [{"id": x["id"], "kind": x["kind"], "sender": x["sender"], "created_at": x["created_at"]}
+               for x in owed if x["recipient_session"] == sid]
+        out.append({"name": m["name"], "session_id": sid, "host": m["host"], "cwd": m["cwd"],
+                    "branch": m["branch"], "status": st, "respawn": m["respawn"], "joined_at": m["joined_at"],
+                    "activity": activity, "agent_kind": entry.get("kind") if entry else None,
+                    "held": mine, "unanswered": due,
+                    "free": st == "alive" and activity == "idle" and not mine and not due, "as_of": as_of})
     return out
+
+
+def state_words(m, now=None):
+    """One member's live state in a few words, for `fleet ls --state`."""
+    now = now or time.time()
+    if m["status"] != "alive":
+        words = [m["status"]]
+    elif m.get("activity") is None:
+        words = ["unknown (that machine's fleet does not report state)"]
+    elif m["activity"] == WAITING:
+        words = ["waiting (a prompt is open)"]
+    else:
+        words = [m["activity"]]
+    if m.get("held"):
+        words.append("holds " + ", ".join("#%d %s" % (t["id"], t["title"]) for t in m["held"]))
+    if m.get("unanswered"):
+        words.append("unanswered: " + ", ".join("%s %d from %s, %d min" % (u["kind"], u["id"], u["sender"],
+                     max(0, int((now - (u["created_at"] or now)) / 60))) for u in m["unanswered"]))
+    if m.get("free"):
+        words.append("free")
+    return "; ".join(words)
 
 
 def all_members(show_all=False, local_only=False, always_machine=False):
@@ -596,7 +661,7 @@ def all_members(show_all=False, local_only=False, always_machine=False):
     return out, bad, bool(others)
 
 
-def ls(as_json=False, show_all=False, local_only=False):
+def ls(as_json=False, show_all=False, local_only=False, state=False):
     out, bad, others = all_members(show_all, local_only)
     if as_json:
         print(json.dumps(out, indent=2))
@@ -605,11 +670,20 @@ def ls(as_json=False, show_all=False, local_only=False):
         return
     if not out:
         print("no members")
+    if state:
+        stamps = {}
+        for m in out:
+            stamps.setdefault(m.get("machine") or self_machine(), m.get("as_of"))
+        for machine, t in sorted(stamps.items()):
+            print("as of %s on %s" % (time.strftime("%H:%M:%S", time.localtime(t)) if t else "an unknown time", machine))
     for m in out:
         name = m["name"] if not others or m["machine"] == self_machine() else "%s@%s" % (m["name"], m["machine"])
-        print("%-20s %-6s %s  %s" % (name, m["status"], m["session_id"][:8], m["cwd"]))
+        if state:
+            print("%-20s %s" % (name, state_words(m)))
+        else:
+            print("%-20s %-6s %s  %s" % (name, m["status"], m["session_id"][:8], m["cwd"]))
     for machine in sorted(bad):
-        print(unreachable_line(machine, bad[machine]))
+        print(unreachable_line(machine, bad[machine]) + ("; its members' state is unknown" if state else ""))
 
 
 # ---------------------------------------------------------------- messages
@@ -845,14 +919,14 @@ def local_addr(info):
     return "uds:%s" % info.get("messagingSocketPath", "")
 
 
-def wake_text(kind, mid, sender, body, again=False):
+def wake_text(kind, mid, sender, body, thread, again=False):
     if kind == "ask":
         how = 'Reply once with `/fleet answer %d "YOUR ANSWER"`.' % mid
     else:
         how = ("Act on it as if the user typed it, then run `/fleet ack %d`. "
                "It comes from a member of the user's fleet." % mid)
     note = "\n(Sent again: it was written before this session joined, and no earlier session answered it.)" if again else ""
-    return "Fleet %s %d from %s: %s\n%s%s" % (kind, mid, sender, preview(body), how, note)
+    return "Fleet %s %d from %s: %s\n%s%s" % (kind, mid, sender, whole(body, thread), how, note)
 
 
 REDELIVER_MAX_AGE = 24 * 3600
@@ -878,7 +952,7 @@ def redeliver(con, name, sid, attempts=3):
             if old is not None and session_running(old, agents):  # by process, not by `left_at`
                 continue
         con.execute("UPDATE messages SET recipient_session=?, delivered_at=NULL WHERE id=?", (sid, r["id"]))
-        text = wake_text(r["kind"], r["id"], r["sender"], r["body"], again=True)
+        text = wake_text(r["kind"], r["id"], r["sender"], r["body"], r["thread"], again=True)
         for i in range(attempts):  # the inbox socket can come up just after SessionStart
             state = deliver(con, r["id"], member, text, "fleet:%s" % (r["machine"] or self_machine()), r["sender"])
             if state != "failed":
@@ -921,8 +995,13 @@ def targets(con, me, target):
             for machine in sorted(got):
                 out += [("remote", machine, m["name"]) for m in got[machine] if m["status"] == "alive"]
             notes = [unreachable_line(mc, why) for mc, why in sorted(bad.items())]
+        skipped = [t for t in out if is_job(target_name(t))]
+        out = [t for t in out if not is_job(target_name(t))]
+        if skipped:
+            notes.append("skipped %d job%s (a broadcast never reaches a job; name it to reach it): %s"
+                         % (len(skipped), "" if len(skipped) == 1 else "s", ", ".join(target_label(t) for t in skipped)))
         if not out:
-            raise FleetError("fleet: no other live member to send to.")
+            raise FleetError("fleet: no other live member to send to%s." % (" but jobs" if skipped else ""))
         return out, notes
     name, machine = split_target(target)
     if machine and machine != self_machine():
@@ -938,6 +1017,21 @@ def targets(con, me, target):
     if machine or not other_machines():
         raise FleetError("fleet: no member named %r. `fleet ls` lists them." % target)
     return [("remote", find_remote(name), name)], notes
+
+
+JOB_PREFIX = "job:"  # a member that is a job of a job runner: a broadcast (`*`) skips it, a tell by name reaches it
+
+
+def is_job(name):
+    return name.startswith(JOB_PREFIX)
+
+
+def target_name(t):
+    return t[1]["name"] if t[0] == "local" else t[2]
+
+
+def target_label(t):
+    return t[1]["name"] if t[0] == "local" else "%s@%s" % (t[2], t[1])
 
 
 def send_remote(con, me, kind, thread, machine, name, body):
@@ -1014,7 +1108,7 @@ def send(kind, target, body, as_name=None):
             continue
         m = t[1]
         mid = insert_message(con, thread, kind, me, m, body)
-        state = deliver(con, mid, m, wake_text(kind, mid, me["name"], body),
+        state = deliver(con, mid, m, wake_text(kind, mid, me["name"], body, thread),
                         local_addr(info) if info else "fleet:%s" % PETROS, me["name"])
         print("message %d to %s: %s%s" % (mid, m["name"], state, " (dead; it will wait)" if state == "waiting"
                                        else delivery_note(delivery_of(con, mid))))
@@ -1044,12 +1138,15 @@ def cmd_deliver():
                          remote_id=p["origin_id"])
     if mid is None:  # the same message sent twice
         raise FleetError("fleet: message already stored.")
-    state = deliver(con, mid, m, wake_text(p["kind"], mid, shown, p["body"]), "fleet:%s" % p["sender_machine"], shown)
+    state = deliver(con, mid, m, wake_text(p["kind"], mid, shown, p["body"], p["thread"]), "fleet:%s" % p["sender_machine"],
+                    shown)
     print(json.dumps({"id": mid, "state": state, "session": m["session_id"], "delivery": delivery_of(con, mid)}))
 
 
 def parse_ref(ref):
     """'12' or '12@machine' -> (12, machine or None)."""
+    if str(ref).startswith("lungo:"):
+        raise FleetError("fleet: %s is Lungo's; the fleet only shows it. Act on it in Lungo." % ref)
     num, _, machine = str(ref).partition("@")
     if not num.isdigit():
         raise FleetError("fleet: %r is not a message id (12, or 12@machine for another machine)." % ref)
@@ -1125,7 +1222,7 @@ def reply(kind, ref, body, as_name=None):
     asker = con.execute("SELECT * FROM members WHERE session_id=?", (orig["sender_session"],)).fetchone()
     if kind == "answer" and asker:
         text = "Fleet answer %d to your %s %d from %s: %s\nThe whole thread: `fleet thread %s`." % (
-            rid, NOUN.get(orig["kind"], "ask"), msg_id, me["name"], preview(body), orig["thread"])
+            rid, NOUN.get(orig["kind"], "ask"), msg_id, me["name"], whole(body, orig["thread"]), orig["thread"])
         print("asker: %s" % deliver(con, rid, asker, text, local_addr(info) if info else "fleet:%s" % PETROS, me["name"]))
 
 
@@ -1163,41 +1260,183 @@ def inbox_local(show_all=False, limit=200):
     return out
 
 
+# ---------------------------------------------------------------- Lungo: what a job runner needs from the user
+#
+# Lungo, the user's job runner, keeps its own list of what waits on him. The fleet reads it when the inbox is read
+# (`fleet inbox`, the page's For you) and never stores it: there is one source of truth, and each item is shown
+# with the time Lungo wrote it. The command that prints Lungo's brief is configured per machine in
+# $FLEET_HOME/lungo.json, {"command": ["ssh", "<host>", "<path>/@lungo status --short --json"], "ttl": 60}, so no
+# host is named here. Without the file, nothing is read. A read that fails, or a brief of another shape, is shown
+# as "Lungo unreachable", never as nothing to do. Only the asking machine reads it (a fan-out asks `--local`).
+
+LUNGO_SCHEMA = "lungo.brief/1"
+LUNGO_TTL = 60.0
+LUNGO_ERROR_TTL = 10.0
+_LUNGO = {"at": 0.0, "val": None, "key": None}
+_LUNGO_LOCK = threading.Lock()
+
+
+def lungo_config():
+    """lungo.json as a dict, None when there is none, or {"error": ...} when it is not usable."""
+    path = os.path.join(fleet_home(), "lungo.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path) as f:
+            conf = json.load(f)
+    except (OSError, ValueError) as e:
+        return {"error": "cannot read %s (%s)" % (path, e)}
+    cmd = conf.get("command") if isinstance(conf, dict) else None
+    if not (isinstance(cmd, list) and cmd and all(isinstance(w, str) for w in cmd)):
+        return {"error": "%s needs \"command\" as a list of words" % path}
+    return conf
+
+
+def iso_epoch(s):
+    """'2026-11-14T15:41:50+01:00' -> seconds, or None."""
+    if not isinstance(s, str) or not s:
+        return None
+    try:
+        import datetime
+        return datetime.datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def lungo_items(doc):
+    """The needs-you rows of a Lungo brief -> (items, count). The brief lists its rows group by group, needs-you
+    first, and never cuts those (Lungo's SPEC, "The brief says where each plan is"); each such row has `attention`.
+    Anything else raises ValueError, so a changed brief is reported, never misread."""
+    if not isinstance(doc, dict) or doc.get("ok") is not True or not isinstance(doc.get("data"), dict):
+        raise ValueError("it did not answer ok (%s)" % str((doc or {}).get("error") if isinstance(doc, dict) else doc)[:120])
+    data = doc["data"]
+    if data.get("schema") != LUNGO_SCHEMA:
+        raise ValueError("its brief has schema %r, not %s" % (data.get("schema"), LUNGO_SCHEMA))
+    n = (data.get("counts") or {}).get("needs_petros")
+    jobs = data.get("jobs")
+    if not isinstance(n, int) or not isinstance(jobs, list) or len(jobs) < n:
+        raise ValueError("its brief has no needs_petros count or fewer rows than it counts")
+    items = []
+    for row in jobs[:n]:
+        if not isinstance(row, dict) or not row.get("attention") or not row.get("name"):
+            raise ValueError("a needs-you row of its brief has no attention or name")
+        machine = str(row.get("machine") or "")
+        text = row.get("step") or row.get("question") or row.get("line") or row.get("say") or row["name"]
+        items.append({"id": None, "ref": "lungo:%s/%s" % (machine, row["name"]), "machine": machine,
+                      "thread": None, "kind": "lungo", "sender": "Lungo", "title": row.get("say") or row["name"],
+                      "job": row["name"], "attention": row["attention"], "lungo_kind": row.get("kind"),
+                      "body": str(text), "created_at": iso_epoch(row.get("asked") or row.get("ended")),
+                      "answered_at": None, "reply": None})
+    return items, n
+
+
+def lungo_read(conf):
+    now = time.time()
+    try:
+        r = subprocess.run(conf["command"], capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                           timeout=float(conf.get("timeout") or 30))
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "it did not answer in time", "read_at": now}
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"ok": False, "error": str(e)[:160], "read_at": now}
+    try:
+        doc = parse_remote_json(r.stdout)
+        items, n = lungo_items(doc)
+    except (RemoteError, ValueError) as e:
+        why = str(e) if r.returncode == 0 else "exit %d: %s" % (r.returncode, ((r.stderr or r.stdout).strip().splitlines()
+                                                                                 or [str(e)])[-1][:160])
+        return {"ok": False, "error": why, "read_at": now}
+    return {"ok": True, "items": items, "count": n, "as_of": doc["data"].get("as_of"), "read_at": now}
+
+
+def lungo_needs():
+    """What Lungo says waits on the user, read live and kept in this process for `ttl` seconds (10 after a failure)
+    -> None when lungo.json does not exist, else {ok, items, count, as_of, read_at} or {ok: False, error, read_at}."""
+    conf = lungo_config()
+    if conf is None:
+        return None
+    if conf.get("error"):
+        return {"ok": False, "error": conf["error"], "read_at": time.time()}
+    key = json.dumps(conf, sort_keys=True)
+    with _LUNGO_LOCK:
+        hit = _LUNGO["val"]
+        ttl = env_float("FLEET_LUNGO_TTL", float(conf.get("ttl") or LUNGO_TTL))
+        if hit and _LUNGO["key"] == key and time.time() - _LUNGO["at"] < (ttl if hit["ok"] else min(ttl, LUNGO_ERROR_TTL)):
+            return hit
+        val = lungo_read(conf)
+        _LUNGO.update(at=time.time(), val=val, key=key)
+        return val
+
+
+def lungo_line(lz):
+    """One line about Lungo for the inbox: how many items and as of when, or why they are not shown."""
+    if not lz["ok"]:
+        return "Lungo: unreachable (%s); what it needs from you is not shown" % lz["error"]
+    when = time.strftime("%H:%M", time.localtime(iso_epoch(lz.get("as_of")) or lz["read_at"]))
+    return "Lungo, as of %s: %d need%s you" % (when, lz["count"], "s" if lz["count"] == 1 else "")
+
+
 def inbox_all(show_all=False, local_only=False):
-    """The user's inbox on every machine, newest first: (items, {machine: error})."""
+    """The user's inbox on every machine, newest first, with what Lungo needs from him:
+    (items, {machine: error}, Lungo's answer or None)."""
     items, bad = inbox_local(show_all), {}
     me = self_machine()
-    if not local_only and other_machines():
-        def one(machine):
-            return run_remote_json(machine, ["inbox", "--json", "--local"] + (["--all"] if show_all else []),
-                                         timeout=30, kind=list)
-        for machine, res in fan_out(sorted(other_machines()), one).items():
-            if isinstance(res, RemoteError):
-                bad[machine] = str(res)
-            else:
-                items += res
+    lz = None
+    if not local_only:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            lungo_future = ex.submit(lungo_needs)  # read beside the other machines, not after them
+            if other_machines():
+                def one(machine):
+                    return run_remote_json(machine, ["inbox", "--json", "--local"] + (["--all"] if show_all else []),
+                                           timeout=30, kind=list)
+                for machine, res in fan_out(sorted(other_machines()), one).items():
+                    if isinstance(res, RemoteError):
+                        bad[machine] = str(res)
+                    else:
+                        items += res
+            lz = lungo_future.result()
     for i in items:
         i["ref"] = str(i["id"]) if i["machine"] == me else "%s@%s" % (i["id"], i["machine"])
+    if lz and lz["ok"]:
+        items += [dict(i) for i in lz["items"]]
     items.sort(key=lambda i: -(i["created_at"] or 0))
-    return items, bad
+    return items, bad, lz
 
 
 def inbox(as_json=False, show_all=False, local_only=False):
-    items, bad = inbox_all(show_all, local_only)
+    items, bad, lz = inbox_all(show_all, local_only)
     if as_json:
         print(json.dumps(items, indent=2))
         for machine in sorted(bad):
             print(unreachable_line(machine, bad[machine]), file=sys.stderr)
+        if lz and not lz["ok"]:
+            print(lungo_line(lz), file=sys.stderr)
         return
-    if not items:
-        print("nothing for %s" % PETROS)
+    fleet_items = [i for i in items if i["kind"] != "lungo"]
+    if not fleet_items:
+        print("nothing for %s in the fleet" % PETROS if lz else "nothing for %s" % PETROS)
     now = time.time()
-    for i in items:
+    for i in fleet_items:
         state = "" if i["answered_at"] is None else " (answered)" if i["reply"] else " (cleared)"
         print("[%s] %s from %s, %d min ago%s: %s" % (i["ref"], i["kind"], i["sender"],
               max(0, int((now - (i["created_at"] or now)) / 60)), state, preview(i["body"])))
+    if lz:
+        print(lungo_line(lz))
+        for i in items:
+            if i["kind"] == "lungo":
+                age = "" if i["created_at"] is None else ", %s ago" % ago_words(now - i["created_at"])
+                print("[%s] %s%s: %s: %s" % (i["ref"], i["lungo_kind"] or i["attention"], age, i["title"], preview(i["body"])))
     for machine in sorted(bad):
         print(unreachable_line(machine, bad[machine]))
+
+
+def ago_words(s):
+    s = max(0, int(s))
+    if s < 3600:
+        return "%d min" % (s // 60)
+    if s < 2 * 86400:
+        return "%d h" % (s // 3600)
+    return "%d days" % (s // 86400)
 
 
 def cmd_answer():
@@ -1215,7 +1454,7 @@ def cmd_answer():
     asker = con.execute("SELECT * FROM members WHERE session_id=?", (orig["sender_session"],)).fetchone()
     if rid and p["kind"] == "answer" and asker:
         text = "Fleet answer %d to your ask %d from %s: %s\nThe whole thread: `fleet thread %s`." % (
-            rid, orig["id"], shown, preview(p["body"]), orig["thread"])
+            rid, orig["id"], shown, whole(p["body"], orig["thread"]), orig["thread"])
         state = deliver(con, rid, asker, text, "fleet:%s" % p["sender_machine"], shown)
     print(json.dumps({"id": rid, "state": state}))
 
@@ -1570,18 +1809,174 @@ def caller_name(con):
         return None
 
 
-def todo_add(title, ref=None, notes=None, by=None):
+# A to-do's order: `owner` names the member it is meant for (name, name@machine, or petros), `after` the to-dos it
+# waits on, stored as "3,4". Both change only inside one BEGIN IMMEDIATE that refuses an unknown id, a to-do
+# waiting on itself and a loop, so the stored order is always a valid one. Whether a to-do is ready (every to-do it
+# waits on is done) and whether its owner is gone are worked out on read, never stored.
+
+def after_ids(text):
+    """'3, 4' or '#3 #4' -> [3, 4]; '' -> []. An id on another machine (12@bee) is refused: order is per store."""
+    out = []
+    for part in re.split(r"[\s,]+", (text or "").strip()):
+        part = part.lstrip("#")
+        if not part:
+            continue
+        if "@" in part:
+            raise FleetError("fleet: %r is a to-do on another machine; a to-do can wait only on to-dos of its own "
+                             "machine." % part)
+        if not part.isdigit():
+            raise FleetError("fleet: %r is not a to-do id." % part)
+        if int(part) not in out:
+            out.append(int(part))
+    return out
+
+
+def stored_after(r):
+    return [int(x) for x in (r["after"] or "").split(",") if x]
+
+
+def check_order(con, tid, after):
+    """Inside the caller's transaction: every id exists, none is `tid` itself, and no loop forms."""
+    edges = {r["id"]: stored_after(r) for r in con.execute("SELECT id, after FROM todos")}
+    for a in after:
+        if a == tid:
+            raise FleetError("fleet: to-do %d cannot wait on itself." % tid)
+        if a not in edges:
+            raise FleetError("fleet: no to-do %d. `fleet todo ls --all` lists them." % a)
+    edges[tid] = after
+    seen, stack = set(), list(after)
+    while stack:
+        n = stack.pop()
+        if n == tid:
+            raise FleetError("fleet: to-do %d cannot wait on %s: that would make a loop."
+                             % (tid, ", ".join("#%d" % a for a in after)))
+        if n not in seen:
+            seen.add(n)
+            stack.extend(edges.get(n, []))
+
+
+def owner_name(owner):
+    owner = (owner or "").strip()
+    if owner and not re.match(r"^[^\s@]+(@[^\s@]+)?$", owner):
+        raise FleetError("fleet: %r is not a member name (name, or name@machine)." % owner)
+    return owner or None
+
+
+def waits_on(con, r):
+    """The to-dos `r` waits on that are not done yet."""
+    ids = stored_after(r)
+    if not ids:
+        return []
+    done = {x["id"] for x in con.execute("SELECT id FROM todos WHERE state='done' AND id IN (%s)"
+                                        % ",".join("?" * len(ids)), ids)}
+    return [i for i in ids if i not in done]
+
+
+def in_write(con, fn):
+    """fn() inside BEGIN IMMEDIATE: all of it is stored, or none of it."""
+    con.execute("BEGIN IMMEDIATE")
+    try:
+        res = fn()
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+    return res
+
+
+def todo_add(title, ref=None, notes=None, by=None, owner=None, after=None):
     con = db()
-    cur = con.execute("INSERT INTO todos (title,ref,notes,created_by,created_at) VALUES (?,?,?,?,?)",
-                      (title, ref, notes, by or caller_name(con) or "user", time.time()))
-    print("todo %d added" % cur.lastrowid)
-    return cur.lastrowid
+    who = by or caller_name(con) or "user"
+    owner, ids = owner_name(owner), after_ids(after)
+
+    def write():
+        cur = con.execute("INSERT INTO todos (title,ref,notes,created_by,created_at,owner,after) VALUES (?,?,?,?,?,?,?)",
+                          (title, ref, notes, who, time.time(), owner, ",".join(map(str, ids)) or None))
+        check_order(con, cur.lastrowid, ids)
+        return cur.lastrowid
+    tid = in_write(con, write)
+    print("todo %d added" % tid)
+    return tid
+
+
+def todo_set(tid, owner=None, after=None):
+    """Change a to-do's owner or what it waits on ("" clears either). A done to-do keeps its order."""
+    if owner is None and after is None:
+        raise FleetError("fleet: say --owner NAME or --after IDS (an empty value clears it).")
+    con = db()
+    new_owner = owner_name(owner) if owner is not None else None
+    ids = after_ids(after) if after is not None else None
+
+    def write():
+        r = todo_row(con, tid)
+        if r["state"] == "done":
+            raise FleetError("fleet: to-do %d is done; its order no longer changes." % tid)
+        if owner is not None:
+            if r["state"] == "claimed" and new_owner and r["claimed_by"] != new_owner:
+                raise FleetError("fleet: to-do %d is claimed by %s; it must be released before it can be for %s."
+                                 % (tid, r["claimed_by"], new_owner))
+            con.execute("UPDATE todos SET owner=? WHERE id=?", (new_owner, tid))
+        if ids is not None:
+            check_order(con, tid, ids)
+            con.execute("UPDATE todos SET after=? WHERE id=?", (",".join(map(str, ids)) or None, tid))
+    in_write(con, write)
+    r = todo_row(con, tid)
+    print("todo %d: %s" % (tid, order_words(con, r) or "no owner, waits on nothing"))
+
+
+def order_words(con, r):
+    """'for X; waits on #3' or 'for X; ready' for a to-do with an order, '' without."""
+    parts = []
+    if r["owner"]:
+        parts.append("for %s" % r["owner"])
+    if r["after"] and r["state"] != "done":
+        w = waits_on(con, r)
+        parts.append("waits on %s" % ", ".join("#%d" % i for i in w) if w else "ready")
+    return "; ".join(parts)
+
+
+def owner_gone(owner, live_names):
+    """An owner on this machine with no live member of that name. None when this machine cannot tell (an owner on
+    another machine, the user, or no answer about who is alive)."""
+    if not owner or "@" in owner or owner == PETROS or live_names is None:
+        return None
+    return owner not in live_names
+
+
+def todo_rows(con, show_all=False, live_names=None):
+    """The backlog with its order worked out: `after` as a list, `waits_on` (not done yet), `ready`, `owner_gone`.
+    One read transaction, so a to-do and the ones it waits on are read at the same moment."""
+    con.execute("BEGIN")
+    try:
+        rows = con.execute("SELECT * FROM todos ORDER BY id").fetchall()
+    finally:
+        con.execute("COMMIT")
+    done = {r["id"] for r in rows if r["state"] == "done"}
+    out = []
+    for r in rows:
+        if not show_all and r["state"] == "done":
+            continue
+        d = dict(r)
+        d["after"] = stored_after(r)
+        d["waits_on"] = [i for i in d["after"] if i not in done] if r["state"] != "done" else []
+        d["ready"] = r["state"] == "open" and not d["waits_on"]
+        d["owner_gone"] = owner_gone(r["owner"], live_names)
+        out.append(d)
+    return out
+
+
+def live_member_names(con, agents=_UNSET):
+    """Names of this machine's live members, or None when `claude agents --json` cannot say."""
+    if agents is _UNSET:
+        agents = agents_list()
+    if agents is None:
+        return None
+    return {m["name"] for m in con.execute("SELECT * FROM members WHERE left_at IS NULL") if is_alive(m, agents)}
 
 
 def todo_ls(as_json=False, show_all=False):
     con = db()
-    rows = con.execute("SELECT * FROM todos ORDER BY id").fetchall()
-    rows = [dict(r) for r in rows if show_all or r["state"] != "done"]
+    rows = todo_rows(con, show_all, live_member_names(con))
     if as_json:
         print(json.dumps(rows, indent=2))
         return
@@ -1589,19 +1984,35 @@ def todo_ls(as_json=False, show_all=False):
         print("no to-dos")
     for r in rows:
         who = r["claimed_by"] or ("reserved for %s" % r["reserved_for"] if r["reserved_for"] else "")
-        print("%-4d %-8s %s%s%s" % (r["id"], r["state"], r["title"], "  [%s]" % who if who else "",
-                                    "  (%s)" % r["ref"] if r["ref"] else ""))
+        order = []
+        if r["owner"]:
+            order.append("for %s%s" % (r["owner"], " (gone)" if r["owner_gone"] else ""))
+        if r["waits_on"]:
+            order.append("waits on %s" % ", ".join("#%d" % i for i in r["waits_on"]))
+        elif r["after"] and r["state"] == "open":
+            order.append("ready")
+        print("%-4d %-8s %s%s%s%s" % (r["id"], r["state"], r["title"], "  [%s]" % who if who else "",
+                                      "  {%s}" % "; ".join(order) if order else "",
+                                      "  (%s)" % r["ref"] if r["ref"] else ""))
 
 
 def todo_claim(tid):
     con = db()
     info, me = need_member(con)
     todo_row(con, tid)
-    cur = con.execute(
-        "UPDATE todos SET state='claimed', claimed_by=?, claimed_session=?, claimed_at=?"
-        " WHERE id=? AND state='open' AND (reserved_for IS NULL OR reserved_for=?)",
-        (me["name"], me["session_id"], time.time(), tid, me["name"]))
-    if cur.rowcount != 1:
+
+    def write():  # the order is checked and the claim stored in one step: no to-do it waits on can change between
+        r = todo_row(con, tid)
+        if r["state"] == "open" and r["owner"] and r["owner"] != me["name"]:
+            raise FleetError("fleet: to-do %d is for %s." % (tid, r["owner"]))
+        w = waits_on(con, r) if r["state"] == "open" else []
+        if w:
+            raise FleetError("fleet: to-do %d waits on %s, not done yet." % (tid, ", ".join("#%d" % i for i in w)))
+        return con.execute(
+            "UPDATE todos SET state='claimed', claimed_by=?, claimed_session=?, claimed_at=?"
+            " WHERE id=? AND state='open' AND (reserved_for IS NULL OR reserved_for=?)",
+            (me["name"], me["session_id"], time.time(), tid, me["name"])).rowcount
+    if in_write(con, write) != 1:
         r = todo_row(con, tid)
         if r["state"] == "open" and r["reserved_for"]:
             raise FleetError("fleet: to-do %d is reserved for %s." % (tid, r["reserved_for"]))
@@ -1665,11 +2076,24 @@ def todo_spawn_on(con, r, machine, name, cwd):
 
 def todo_spawn(tid, name=None, cwd=None, on=None):
     con = db()
-    name = name or "todo-%d" % tid
-    cur = con.execute("UPDATE todos SET reserved_for=? WHERE id=? AND state='open' AND reserved_for IS NULL",
-                      (name, tid))
     r = todo_row(con, tid)
-    if cur.rowcount != 1:
+    if r["owner"]:  # a to-do meant for a member starts as that member
+        o_name, _, o_machine = r["owner"].partition("@")
+        if name and name != o_name or on and o_machine and on != o_machine:
+            raise FleetError("fleet: to-do %d is for %s; spawn it as that member, or change its owner first."
+                             % (tid, r["owner"]))
+        name, on = o_name, on or o_machine or None
+    name = name or "todo-%d" % tid
+
+    def reserve():  # the order is checked and the reservation stored in one step
+        w = waits_on(con, todo_row(con, tid))
+        if w:
+            raise FleetError("fleet: to-do %d waits on %s, not done yet." % (tid, ", ".join("#%d" % i for i in w)))
+        return con.execute("UPDATE todos SET reserved_for=? WHERE id=? AND state='open' AND reserved_for IS NULL",
+                           (name, tid)).rowcount
+    reserved = in_write(con, reserve)
+    r = todo_row(con, tid)
+    if reserved != 1:
         raise FleetError("fleet: to-do %d is %s." % (tid, "reserved for %s" % r["reserved_for"]
                                                        if r["state"] == "open" else r["state"]))
     if on and on != self_machine():
@@ -2083,7 +2507,7 @@ def ui_members():
 def ui_todos():
     me = self_machine()
     con = db()
-    rows = [dict(r, machine=me) for r in con.execute("SELECT * FROM todos ORDER BY id").fetchall()]
+    rows = [dict(r, machine=me) for r in todo_rows(con, True, live_member_names(con))]
     bad = {}
 
     def one(machine):
@@ -2303,9 +2727,13 @@ def ui_history_write(path, body):
 
 
 def ui_inbox():
-    items, bad = inbox_all(True)
+    items, bad, lz = inbox_all(True)
+    lungo = None
+    if lz:
+        lungo = {"ok": lz["ok"], "line": lungo_line(lz), "count": lz.get("count"), "as_of": lz.get("as_of"),
+                 "read_at": lz["read_at"], "error": lz.get("error")}
     return {"items": items, "open": sum(1 for i in items if i["answered_at"] is None), "notices": notices(bad),
-            "machine": self_machine()}
+            "machine": self_machine(), "lungo": lungo}
 
 
 # ---------------------------------------------------------------- launch profiles (fleet_profiles.py)
@@ -2680,6 +3108,7 @@ def main(argv=None):
     s = sub.add_parser("forget", help="delete this machine's members whose name matches a glob (live ones only with --live)")
     s.add_argument("patterns", nargs="+"); s.add_argument("--live", action="store_true")
     s = sub.add_parser("ls", help="list members"); s.add_argument("--json", action="store_true"); s.add_argument("--all", action="store_true")
+    s.add_argument("--state", action="store_true", help="what each member is doing now, read live, with the time read")
     s.add_argument("--local", action="store_true", help="this machine only")
     as_help = "send as the user (only a session outside the fleet; also FLEET_AS=petros)"
     for k in ("tell", "ask"):
@@ -2711,6 +3140,10 @@ def main(argv=None):
     s.add_argument("--on", metavar="MACHINE", help="start it on another machine")
     t = sub.add_parser("todo", help="the backlog").add_subparsers(dest="todo_cmd", required=True)
     s = t.add_parser("add"); s.add_argument("title"); s.add_argument("--ref"); s.add_argument("--notes")
+    s.add_argument("--owner", help="the member it is meant for (name, name@machine, or petros)")
+    s.add_argument("--after", help="the to-dos it waits on, e.g. 3,4")
+    s = t.add_parser("set", help="change a to-do's owner or what it waits on (an empty value clears it)")
+    s.add_argument("id", type=int); s.add_argument("--owner"); s.add_argument("--after")
     s = t.add_parser("ls"); s.add_argument("--json", action="store_true"); s.add_argument("--all", action="store_true")
     for k in ("claim", "done", "release"):
         s = t.add_parser(k); s.add_argument("id", type=int)
@@ -2744,7 +3177,7 @@ def main(argv=None):
         if a.cmd == "join": join(a.name)
         elif a.cmd == "leave": leave()
         elif a.cmd == "forget": forget(a.patterns, a.live)
-        elif a.cmd == "ls": ls(a.json, a.all, a.local)
+        elif a.cmd == "ls": ls(a.json, a.all, a.local, a.state)
         elif a.cmd == "statusline": cmd_statusline(a.session_id)
         elif a.cmd in ("tell", "ask"): send(a.cmd, a.target, " ".join(a.text), a.as_name)
         elif a.cmd == "notify": notify(" ".join(a.text))
@@ -2762,7 +3195,8 @@ def main(argv=None):
         elif a.cmd == "thread": thread(a.id, a.json)
         elif a.cmd == "spawn": spawn(a.name, a.cwd, " ".join(a.prompt), a.json, a.on)
         elif a.cmd == "todo":
-            if a.todo_cmd == "add": todo_add(a.title, a.ref, a.notes)
+            if a.todo_cmd == "add": todo_add(a.title, a.ref, a.notes, owner=a.owner, after=a.after)
+            elif a.todo_cmd == "set": todo_set(a.id, a.owner, a.after)
             elif a.todo_cmd == "ls": todo_ls(a.json, a.all)
             elif a.todo_cmd == "claim": todo_claim(a.id)
             elif a.todo_cmd == "done": todo_done(a.id)
