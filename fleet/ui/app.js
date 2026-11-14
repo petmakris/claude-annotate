@@ -213,7 +213,8 @@ function renderTodos(data) {
   if (!rows.length) return box.replaceChildren(empty("list-todo", "The backlog is empty."));
   const item = (t) => el("li", { class: "row td-row " + t.state },
     el("span", { class: "td-id dim" }, "#" + t.id),
-    el("span", { class: "td-main" }, el("span", { class: "td-title" }, t.title), t.notes ? el("span", { class: "td-notes dim" }, t.notes) : null),
+    el("span", { class: "td-main" }, el("span", { class: "td-title" }, t.title),
+      t.notes ? el("details", { class: "td-notes" }, el("summary", { class: "dim" }, "Notes"), el("div", { class: "dim" }, t.notes)) : null),
     el("span", { class: "td-holder" }, t.claimed_by ? el("span", { class: "tag" }, t.claimed_by) : t.reserved_for ? el("span", { class: "tag ghost" }, "for " + t.reserved_for) : null),
     t.ref ? el("code", { class: "td-ref dim", title: t.ref }, t.ref) : el("span", {}),
     el("span", { class: "td-machine" }, machineTag(t.machine)));
@@ -224,21 +225,6 @@ function renderTodos(data) {
   const done = rows.filter((t) => t.state === "done");
   box.replaceChildren(...[group("open", "Open"), group("claimed", "Claimed"),
     done.length ? el("details", { class: "group" }, el("summary", {}, pill("done", "Done"), el("span", { class: "dim" }, String(done.length))), el("ul", { class: "list" }, done.map(item))) : null].filter(Boolean));
-}
-
-function renderThreads(data, now) {
-  const rows = data.threads;
-  headCount("n-threads", rows.length);
-  const box = document.getElementById("threads");
-  if (!rows.length) return box.replaceChildren(empty("messages-square", "No messages have been sent yet."));
-  box.replaceChildren(...rows.map((t) => el("article", { class: "thread" },
-    el("div", { class: "thread-head" }, el("code", {}, t.thread),
-      t.open ? pill("claimed", t.open + " waiting") : pill("done", "answered"),
-      el("span", { class: "dim", title: when(t.updated) }, ago(t.updated, now))),
-    t.messages.map((m) => el("div", { class: "msg " + m.kind },
-      el("div", { class: "msg-meta" }, el("span", { class: "kind k-" + m.kind }, m.kind), el("strong", {}, m.sender), el("span", { class: "dim" }, "to"), el("strong", {}, m.recipient),
-        el("span", { class: "dim", title: when(m.created_at) }, ago(m.created_at, now))),
-      el("div", { class: "msg-body" }, m.body))))));
 }
 
 function initTodoForm() {
@@ -850,9 +836,9 @@ async function refresh(withInbox) {
   busy = true;
   const stamp = document.getElementById("stamp");
   try {
-    const [m, t, th] = await Promise.all([getJSON("/api/members"), getJSON("/api/todos"), getJSON("/api/threads")]);
+    const [m, t] = await Promise.all([getJSON("/api/members"), getJSON("/api/todos")]);
     const now = Date.now();
-    renderMembers(m, now); renderTodos(t, now); renderThreads(th, now); renderNotices([m, t, th]);
+    renderMembers(m, now); renderTodos(t, now); renderNotices([m, t]);
     loadInbox();
     stamp.className = "live"; stamp.title = "Refreshed every " + REFRESH / 1000 + " s";
     stamp.textContent = "Live, updated " + new Date(now).toLocaleTimeString();

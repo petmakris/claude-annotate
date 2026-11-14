@@ -291,12 +291,15 @@ try:
             print("      (page said: %s)" % page.inner_text("#m-msg")[:160])
         check("Members: Respawn needs a second press, runs claude, and reports what happened", respawn)
 
-        def threads():
-            t = page.locator(".thread", has_text="t0aa1")
-            expect(t.locator(".msg")).to_have_count(2)
-            expect(t.locator(".pill")).to_have_text("answered")
-            expect(t.locator(".msg.answer")).to_contain_text("feature/export")
-        check("Threads: a thread shows its ask and answer, marked answered", threads)
+        def backlog_notes():
+            row = page.locator(".td-row", has_text="Write the export job")
+            notes = row.locator(".td-notes")
+            expect(notes.locator("summary")).to_have_text("Notes")
+            assert not notes.evaluate("d => d.open"), "notes start closed"
+            notes.locator("summary").click()
+            assert notes.evaluate("d => d.open"), "a click opens the notes"
+            expect(page.locator("#threads")).to_have_count(0)
+        check("Backlog: a to-do shows its title, its notes behind a Notes toggle; no threads panel", backlog_notes)
 
         # ---- For you
         view("foryou")
