@@ -514,30 +514,47 @@ function initHistory() {
 
 // ---------------------------------------------------------------- Profiles
 
-// P.folder: a listed folder's absolute path, or null for every folder. P.editing: the profile the switches show.
-// P.draft: the switches as edited and not yet saved, or null.
-const P = { data: null, folder: null, editing: null, draft: null, busy: false };
-const GROUPS = [{ kind: "pluginDir", title: "Plugin folders" }, { kind: "mcp", title: "MCP servers" }, { kind: "plugin", title: "Marketplace plugins" }];
+// P.folder: a listed folder's absolute path, or null for every folder. P.editing: the profile whose switches show.
+// P.draft: the switches as edited and not yet saved, or null. P.closed: tree nodes folded by hand (or by default).
+const P = { data: null, folder: null, editing: null, draft: null, busy: false, closed: null };
+const GROUPS = [
+  { kind: "pluginDir", title: "Plugin folders", icon: "folder", note: "Loaded with --plugin-dir: skills, commands and hooks from a local checkout." },
+  { kind: "mcp", title: "MCP servers", icon: "server", note: "Off means denied in the profile's settings." },
+  { kind: "plugin", title: "Marketplace plugins", icon: "package", note: "Installed plugins; off means disabled for this profile." },
+];
+// Lucide 0.460.0 (ISC) path data, as the icons above.
+Object.assign(ICONS, {
+  "folder": [["path", { d: "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" }]],
+  "chevron-down": [["path", { d: "m6 9 6 6 6-6" }]],
+  "chevron-right": [["path", { d: "m9 18 6-6-6-6" }]],
+  "lock": [["rect", { width: "18", height: "11", x: "3", y: "11", rx: "2", ry: "2" }], ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4" }]],
+  "server": [["rect", { width: "20", height: "8", x: "2", y: "2", rx: "2", ry: "2" }], ["rect", { width: "20", height: "8", x: "2", y: "14", rx: "2", ry: "2" }], ["line", { x1: "6", x2: "6.01", y1: "6", y2: "6" }], ["line", { x1: "6", x2: "6.01", y1: "18", y2: "18" }]],
+  "package": [["path", { d: "M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" }], ["path", { d: "M12 22V12" }], ["path", { d: "m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7" }], ["path", { d: "m7.5 4.27 9 5.15" }]],
+  "layers": [["path", { d: "m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" }], ["path", { d: "m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" }], ["path", { d: "m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" }]],
+  "refresh-cw": [["path", { d: "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" }], ["path", { d: "M21 3v5h-5" }], ["path", { d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" }], ["path", { d: "M8 16H3v5" }]],
+});
+const sicon = (name, cls) => { const s = icon(name); s.setAttribute("class", "ic" + (cls ? " " + cls : "")); return s; };
 
 function pmsg(text, bad) {
   const m = document.getElementById("p-msg");
-  m.className = "h-msg" + (bad ? " bad" : "");
+  m.className = "h-msg p-toast" + (bad ? " bad" : "") + (text ? " on" : "");
   m.textContent = text || "";
 }
 
 const isOn = (d, t) => (t.kind === "pluginDir" ? d.pluginDirs.includes(t.id) : t.kind === "mcp" ? !d.denied.includes(t.id) : !d.disabledPlugins.includes(t.id));
 const flip = (list, id) => (list.includes(id) ? list.filter((x) => x !== id) : list.concat([id]));
-const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
 const draftOf = (p) => ({ pluginDirs: p.pluginDirs.slice(), denied: p.denied.slice(), disabledPlugins: p.disabledPlugins.slice() });
 const profileNamed = (name) => (P.data ? P.data.profiles.find((p) => p.name === name) || null : null);
 const usersOf = (name) => P.data.folders.filter((f) => f.source.profile === name);
 
-function isDirty() {
+// The tools whose switch differs between the saved profile and the draft.
+function changed() {
   const p = profileNamed(P.editing);
-  return !!(p && P.draft) && !(sameSet(p.pluginDirs, P.draft.pluginDirs) && sameSet(p.denied, P.draft.denied) && sameSet(p.disabledPlugins, P.draft.disabledPlugins));
+  if (!p || !P.draft) return [];
+  return P.data.tools.filter((t) => isOn(p, t) !== isOn(P.draft, t));
 }
+const isDirty = () => changed().length > 0;
 
-// Leaving unsaved switches asks first.
 function leaveDraft() {
   if (!isDirty()) return true;
   if (!confirm("Discard unsaved changes to " + P.editing + "?")) return false;
@@ -545,47 +562,97 @@ function leaveDraft() {
   return true;
 }
 
-function sourceText(s) {
-  if (s.kind === "here") return "Runs " + s.profile + ", set here.";
-  if (s.kind === "inherited") return s.profile ? "Runs " + s.profile + ", inherited from " + s.from + "." : "A hand-written file in " + s.from + " decides.";
-  if (s.kind === "custom") return "A hand-written .claude-launch decides this folder's tools.";
-  return "No profile applies here, so new sessions get the launcher's defaults.";
+// A profile's colour: a hue from its name, so "evooq" is the same colour everywhere and forever.
+function hue(name) { let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0; return (h % 24) * 15; }
+const chip = (name, cls) => el("span", { class: "chip" + (cls ? " " + cls : ""), style: "--h:" + hue(name) }, name);
+
+// A select that is not the browser's: a button showing the choice, and a list that opens under it.
+// options: [{ value, title, sub, chip }]. Arrow keys move, Enter or Space picks, Escape closes.
+function dropdown(label, value, options, onPick, disabled) {
+  const box = el("div", { class: "dd" });
+  const cur = options.find((o) => o.value === value) || options[0];
+  const face = (o) => [o.chip ? chip(o.chip) : el("span", { class: "dd-title" }, o.title), o.sub ? el("span", { class: "dd-sub" }, o.sub) : null];
+  const btn = el("button", { type: "button", class: "dd-btn", "aria-haspopup": "listbox", "aria-expanded": "false", "aria-label": label + ": " + cur.title, disabled }, ...face(cur), sicon("chevron-down", "dd-chev"));
+  const menu = el("ul", { class: "dd-menu", role: "listbox", "aria-label": label, hidden: true });
+  const items = options.map((o) => {
+    const li = el("li", { role: "option", tabindex: "-1", "aria-selected": o.value === value ? "true" : "false", class: o.value === value ? "sel" : "" },
+      el("span", { class: "dd-check" }, o.value === value ? sicon("check") : null), el("span", { class: "dd-col" }, ...face(o)));
+    li.addEventListener("click", () => { close(); if (o.value !== value) onPick(o.value); });
+    menu.append(li);
+    return li;
+  });
+  const outside = (e) => { if (!box.contains(e.target)) close(); };
+  function open() {
+    menu.hidden = false; btn.setAttribute("aria-expanded", "true"); box.classList.add("open");
+    (items.find((li) => li.classList.contains("sel")) || items[0]).focus();
+    document.addEventListener("mousedown", outside);
+  }
+  function close(focus) {
+    menu.hidden = true; btn.setAttribute("aria-expanded", "false"); box.classList.remove("open");
+    document.removeEventListener("mousedown", outside);
+    if (focus) btn.focus();
+  }
+  btn.addEventListener("click", () => (menu.hidden ? open() : close()));
+  btn.addEventListener("keydown", (e) => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); open(); } });
+  menu.addEventListener("keydown", (e) => {
+    const i = items.indexOf(document.activeElement);
+    if (e.key === "ArrowDown") { e.preventDefault(); items[Math.min(items.length - 1, i + 1)].focus(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); items[Math.max(0, i - 1)].focus(); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (i >= 0) items[i].click(); }
+    else if (e.key === "Escape") { e.preventDefault(); close(true); }
+    else if (e.key === "Tab") close();
+  });
+  box.append(btn, menu);
+  return box;
 }
+
+function sourceLine(s) {
+  if (s.kind === "here") return [el("span", {}, "New sessions here run"), chip(s.profile), el("span", { class: "dim" }, "set in this folder")];
+  if (s.kind === "inherited" && s.profile) return [el("span", {}, "New sessions here run"), chip(s.profile), el("span", { class: "dim" }, "inherited from "), el("code", {}, s.from)];
+  if (s.kind === "inherited") return [el("span", {}, "A hand-written file in "), el("code", {}, s.from), el("span", {}, " decides.")];
+  if (s.kind === "custom") return [el("span", {}, "A hand-written .claude-launch in this folder decides its tools.")];
+  return [el("span", {}, "No profile applies here, so new sessions get the launcher's defaults.")];
+}
+
+// ---- the folder tree: connector lines, a folder icon per row, the profile as a coloured chip
 
 function renderProfilesTree() {
   const box = document.getElementById("p-tree");
   const folders = P.data.folders;
   const byKey = new Map(folders.map((f) => [folderKey({ folder: f.path }), f]));
   const { top, base } = folderTree(folders.map((f) => ({ folder: f.path })));
-  // busiest first, by the sessions at or below a node, as History orders its tree
   const used = (n) => folders.reduce((sum, x) => { const k = folderKey({ folder: x.path }); return sum + (k === n.path || k.startsWith(n.path + "/") ? x.sessions : 0); }, 0);
   const byUse = (list) => list.map((n) => [used(n), n]).sort((a, b) => b[0] - a[0] || a[1].seg.localeCompare(b[1].seg)).map((x) => x[1]);
-  const keyOf = (path) => { const f = folders.find((x) => folderKey({ folder: x.path }) === path); return f ? f.path : null; };
-  const sel = (n) => {
-    const f = byKey.get(n.path);
-    if (!f || !leaveDraft()) return;
-    P.folder = f.path; P.editing = f.source.profile; P.draft = null; renderProfiles();
-  };
-  const node = (n, depth) => {
+  if (!P.closed) {  // a folder with many subfolders (a pile of scratch runs) starts folded
+    P.closed = new Set();
+    const walk = (n) => { if (n.kids.size > 8) P.closed.add(n.path); n.kids.forEach(walk); };
+    walk(base);
+  }
+  const selKey = P.folder ? folderKey({ folder: P.folder }) : null;
+  const pick = (f) => { if (!f || !leaveDraft()) return; P.folder = f.path; P.editing = f.source.profile; P.draft = null; renderProfiles(); };
+  const item = (n) => {
     const f = byKey.get(n.path);
     const kids = byUse([...n.kids.values()]);
-    const on = f && P.folder === f.path;
-    const head = el("button", { type: "button", class: "f-node" + (on ? " on" : "") + (f ? "" : " f-pass"), "aria-pressed": on ? "true" : "false", disabled: !f, title: f ? f.display : null },
-      el("span", { class: "f-name mono" }, ...slashBreaks(n.seg || "/")), el("span", { class: "f-count" }, f && f.source.profile ? f.source.profile : ""));
-    head.addEventListener("click", () => sel(n));
-    if (!kids.length) return el("div", { class: "f-leaf" }, head);
-    // a folder with many subfolders (a pile of scratch runs) starts folded, unless the selection is inside it
-    const d = el("details", { class: "f-dir", open: kids.length <= 8 || (P.folder && folderKey({ folder: P.folder }).startsWith(n.path + "/")) }, el("summary", {}, head));
-    d.append(...kids.map((k) => node(k, depth + 1)));
-    return d;
+    const closed = P.closed.has(n.path) && !(selKey && selKey.startsWith(n.path + "/"));
+    const onPath = selKey && (selKey === n.path || selKey.startsWith(n.path + "/"));
+    const tog = kids.length ? el("button", { type: "button", class: "t-tog", "aria-label": (closed ? "Open " : "Fold ") + n.seg, "aria-expanded": closed ? "false" : "true" }, sicon(closed ? "chevron-right" : "chevron-down"))
+      : el("span", { class: "t-tog t-none" });
+    if (kids.length) tog.addEventListener("click", () => { P.closed.has(n.path) ? P.closed.delete(n.path) : P.closed.add(n.path); renderProfilesTree(); });
+    const s = f ? f.source : null;
+    const right = s && s.profile ? chip(s.profile, s.kind === "here" ? "" : "ghost") : kids.length && closed ? el("span", { class: "t-n" }, String(kids.length)) : null;
+    const row = el("button", { type: "button", class: "t-row" + (f && P.folder === f.path ? " sel" : "") + (f ? "" : " pass"), disabled: !f, title: f ? f.display + (s.kind === "inherited" && s.profile ? ", inherits " + s.profile : "") : null, "aria-current": f && P.folder === f.path ? "true" : null },
+      sicon("folder", "t-ic"), el("span", { class: "t-name" }, ...slashBreaks(n.seg)), right);
+    row.addEventListener("click", () => pick(f));
+    return el("li", { class: onPath ? "on-path" : "" }, el("div", { class: "t-line" }, tog, row), kids.length && !closed ? el("ul", {}, kids.map(item)) : null);
   };
-  const all = el("button", { type: "button", class: "f-node" + (P.folder === null ? " on" : ""), "aria-pressed": P.folder === null ? "true" : "false" },
-    el("span", { class: "f-name" }, "All folders"), el("span", { class: "f-count" }, P.data.profiles.length + " profiles"));
+  const all = el("button", { type: "button", class: "t-row t-all" + (P.folder === null ? " sel" : ""), "aria-current": P.folder === null ? "true" : null },
+    sicon("layers", "t-ic"), el("span", { class: "t-name" }, "All folders"), el("span", { class: "t-n" }, P.data.profiles.length + " profiles"));
   all.addEventListener("click", () => { if (!leaveDraft()) return; P.folder = null; P.editing = null; P.draft = null; renderProfiles(); });
-  const prefix = base.seg && base !== top ? el("div", { class: "f-prefix dim mono", title: base.seg }, "/" + base.seg) : null;
-  const ownBase = keyOf(base.path) ? [node(Object.assign({}, base, { kids: new Map() }), 1)] : [];
-  box.replaceChildren(...[all, prefix, ...ownBase, ...byUse([...base.kids.values()]).map((k) => node(k, 1))].filter(Boolean));
+  const rootLabel = base.seg && base !== top ? el("div", { class: "t-root mono", title: base.seg }, base.seg.replace(/^\/?/, "")) : null;
+  box.replaceChildren(all, ...(rootLabel ? [rootLabel] : []), el("ul", { class: "t-tree" }, byUse([...base.kids.values()]).map(item)));
 }
+
+// ---- writes
 
 async function setFolderProfile(name) {
   if (P.busy) return;
@@ -602,7 +669,7 @@ async function setFolderProfile(name) {
 async function saveProfile(btn) {
   if (P.busy || !P.draft) return;
   const p = profileNamed(P.editing);
-  P.busy = true; btn.disabled = true; pmsg("Saving " + p.name + ", then committing and pushing it");
+  P.busy = true; btn.disabled = true; btn.textContent = "Saving"; pmsg("");
   try {
     const tools = P.data.tools;
     const r = await post("/api/profiles/save", { name: p.name, denied: P.draft.denied, disabledPlugins: P.draft.disabledPlugins,
@@ -613,42 +680,87 @@ async function saveProfile(btn) {
     else pmsg("Committed " + r.commit + ", but the push failed: " + r.pushError, true);
     P.draft = null;
     await loadProfiles();
-  } catch (e) { pmsg(e.message, true); } finally { P.busy = false; btn.disabled = false; }
+  } catch (e) { pmsg(e.message, true); btn.disabled = false; btn.textContent = "Save and push"; } finally { P.busy = false; }
 }
 
-function switchesPanel(p) {
+// ---- the right-hand side
+
+const profileOptions = () => P.data.profiles.map((p) => {
+  const n = usersOf(p.name).length;
+  return { value: p.name, title: p.name, chip: p.name, sub: p.repo + " · " + (n ? n + (n === 1 ? " folder" : " folders") : "no folder") };
+});
+
+function scopeCard() {
+  const d = P.data;
+  const f = P.folder ? d.folders.find((x) => x.path === P.folder) : null;
+  if (!f) {
+    const rows = d.profiles.map((p) => {
+      const users = usersOf(p.name);
+      const li = el("li", { class: "pl-row" + (P.editing === p.name ? " sel" : "") },
+        el("button", { type: "button", class: "pl-pick", "aria-pressed": P.editing === p.name ? "true" : "false" },
+          chip(p.name), el("code", { class: "pl-repo" }, p.repo),
+          el("span", { class: "pl-n" }, users.length ? users.length + (users.length === 1 ? " folder" : " folders") : "unused")),
+        users.length ? el("div", { class: "pl-users" }, users.map((u) => el("span", { class: "tag mono" }, u.display))) : null);
+      li.querySelector("button").addEventListener("click", () => { if (!leaveDraft()) return; P.editing = p.name; P.draft = null; renderProfiles(); });
+      return li;
+    });
+    return el("section", { class: "card" }, el("div", { class: "card-head" }, el("h3", {}, "Every profile"), el("span", { class: "dim" }, "Pick one to see and change its switches.")),
+      el("ul", { class: "pl" }, rows));
+  }
+  const s = f.source;
+  const crumbs = f.display.split("/").filter(Boolean);
+  const head = el("div", { class: "card-head" }, el("h3", { class: "crumb mono" }, crumbs.map((c, i) => el("span", { class: i === crumbs.length - 1 ? "last" : "" }, (i ? "/" : "") + c))),
+    el("span", { class: "dim" }, f.sessions ? f.sessions + (f.sessions === 1 ? " session" : " sessions") : "no session yet"));
+  const body = el("div", { class: "src" }, el("div", { class: "src-line" }, sourceLine(s)));
+  if (s.kind !== "custom") {
+    const opts = [{ value: "", title: "inherit", sub: "use the profile of the nearest folder above" }].concat(profileOptions());
+    body.append(el("div", { class: "src-set" }, el("span", { class: "dim" }, "Profile for this folder"),
+      dropdown("Profile for this folder", s.kind === "here" ? s.profile : "", opts, (v) => { if (leaveDraft()) setFolderProfile(v || null); }, P.busy)));
+  }
+  if (s.content) body.append(el("pre", { class: "mono p-pre" }, s.content));
+  return el("section", { class: "card" }, head, body);
+}
+
+function editorCard(p) {
   if (!P.draft) P.draft = draftOf(p);
   const users = usersOf(p.name);
-  const pick = el("select", { class: "p-select", "aria-label": "Profile to edit" }, P.data.profiles.map((x) => el("option", { value: x.name, selected: x.name === p.name }, x.name)));
-  pick.addEventListener("change", () => { if (!leaveDraft()) { pick.value = p.name; return; } P.editing = pick.value; P.draft = null; renderProfiles(); });
-  const kids = [el("div", { class: "p-head" }, pick,
-    el("span", { class: "dim" }, "Kept in ", el("code", {}, p.repo), ", where a save commits. ",
-      users.length ? "Used by " + users.length + (users.length === 1 ? " folder: " : " folders: ") + users.map((f) => f.display).join(", ") + "." : "No listed folder uses it."))];
+  const head = el("div", { class: "card-head" }, el("h3", {}, "Switches of"),
+    dropdown("Profile to edit", p.name, profileOptions(), (v) => { if (!leaveDraft()) return; P.editing = v; P.draft = null; renderProfiles(); }),
+    el("span", { class: "dim" }, "kept in ", el("code", {}, p.repo)));
+  const kids = [head];
+  if (users.length > 1) kids.push(el("p", { class: "shared" }, "Shared by " + users.length + " folders: a change here applies to all of them."));
+  const diff = new Set(changed().map((t) => t.id));
   for (const g of GROUPS) {
     const tools = P.data.tools.filter((t) => t.kind === g.kind);
     if (!tools.length) continue;
-    kids.push(el("h3", { class: "p-group" }, g.title));
-    const list = el("div", { class: "p-tools" });
+    const on = tools.filter((t) => isOn(P.draft, t)).length;
+    const list = el("ul", { class: "tl" });
     for (const t of tools) {
-      const on = isOn(P.draft, t);
-      const sw = el("button", { type: "button", role: "switch", class: "sw" + (on ? " on" : ""), "aria-checked": on ? "true" : "false", "aria-label": t.label, disabled: t.locked, title: t.locked ? "Always on" : t.id }, el("span", { class: "sw-knob" }), on ? "On" : "Off");
+      const v = isOn(P.draft, t);
+      const sw = el("button", { type: "button", role: "switch", class: "sw" + (v ? " on" : ""), "aria-checked": v ? "true" : "false", "aria-label": t.label, disabled: t.locked },
+        el("span", { class: "sw-track" }, el("span", { class: "sw-knob" })), el("span", { class: "sw-text" }, v ? "On" : "Off"));
       sw.addEventListener("click", () => {
         if (t.kind === "pluginDir") P.draft.pluginDirs = flip(P.draft.pluginDirs, t.id);
         else if (t.kind === "mcp") P.draft.denied = flip(P.draft.denied, t.id);
         else P.draft.disabledPlugins = flip(P.draft.disabledPlugins, t.id);
         renderProfiles();
       });
-      list.append(el("div", { class: "p-tool" }, el("span", { class: "p-label", title: t.id }, t.label), t.locked ? el("span", { class: "dim p-lock" }, "always on") : null, sw));
+      list.append(el("li", { class: "tl-row" + (v ? "" : " off") + (diff.has(t.id) ? " changed" : "") },
+        el("span", { class: "tl-label" }, t.label),
+        el("code", { class: "tl-id" }, t.id),
+        t.locked ? el("span", { class: "badge-lock", title: "Always on" }, sicon("lock"), "always on") : diff.has(t.id) ? el("span", { class: "badge-chg" }, "changed") : el("span", {}),
+        sw));
     }
-    kids.push(list);
+    kids.push(el("div", { class: "tg" }, el("div", { class: "tg-head" }, sicon(g.icon, "tg-ic"), el("h4", {}, g.title), el("span", { class: "tg-n" }, on + " of " + tools.length + " on")),
+      el("p", { class: "tg-note dim" }, g.note), list));
   }
-  const dirty = isDirty();
-  const revert = el("button", { type: "button", class: "act", disabled: !dirty }, "Revert");
+  const n = diff.size;
+  const revert = el("button", { type: "button", class: "act", disabled: !n }, "Revert");
   revert.addEventListener("click", () => { P.draft = null; renderProfiles(); });
-  const save = el("button", { type: "button", class: "act primary", disabled: !dirty }, "Save and push");
+  const save = el("button", { type: "button", class: "act primary", disabled: !n }, "Save and push");
   save.addEventListener("click", () => saveProfile(save));
-  kids.push(el("div", { class: "row-actions p-actions" }, revert, save));
-  return el("section", { class: "p-panel" }, kids);
+  kids.push(el("div", { class: "savebar" + (n ? " dirty" : "") }, el("span", {}, n ? n + (n === 1 ? " unsaved change" : " unsaved changes") + " to " + p.name : "No unsaved changes"), el("span", { class: "grow" }), revert, save));
+  return el("section", { class: "card editor" }, kids);
 }
 
 function renderProfiles() {
@@ -656,48 +768,28 @@ function renderProfiles() {
   const d = P.data;
   if (!d.configured) {
     document.getElementById("p-tree").replaceChildren();
-    return main.replaceChildren(el("p", {}, "Profiles are not set up on this machine. Write profiles.json in the fleet's folder, for example:"),
+    return main.replaceChildren(el("section", { class: "card" }, el("p", {}, "Profiles are not set up on this machine. Write profiles.json in the fleet's folder, for example:"),
       el("pre", { class: "mono p-pre" }, '{"roots": ["~/projects/my-env"], "default_dirs": [], "locked": {}, "hidden": []}'),
-      el("p", { class: "dim" }, "roots are the repositories whose claude/profiles/ hold <name>.args and <name>.json."));
+      el("p", { class: "dim" }, "roots are the repositories whose claude/profiles/ hold <name>.args and <name>.json.")));
   }
-  document.getElementById("n-profiles").textContent = d.folders.length ? String(d.folders.length) : "";
+  document.getElementById("n-profiles").textContent = d.folders.length ? d.folders.length + " folders" : "";
+  if (P.folder && !d.folders.some((x) => x.path === P.folder)) P.folder = null;
+  if (!P.editing && !P.folder) P.editing = d.profiles.length ? d.profiles[0].name : null;
   renderProfilesTree();
-  const kids = [];
-  const f = P.folder ? d.folders.find((x) => x.path === P.folder) : null;
-  if (P.folder && !f) P.folder = null;
-  if (f) {
-    const s = f.source;
-    const head = el("div", { class: "p-source" }, el("strong", { class: "mono" }, f.display), el("span", {}, sourceText(s)));
-    if (s.kind !== "custom") {
-      const pick = el("select", { class: "p-select", "aria-label": "Profile for " + f.display, disabled: P.busy },
-        el("option", { value: "" }, "inherit"), d.profiles.map((p) => el("option", { value: p.name, selected: s.kind === "here" && s.profile === p.name }, p.name)));
-      pick.addEventListener("change", () => { if (!leaveDraft()) { pick.value = s.kind === "here" ? s.profile : ""; return; } setFolderProfile(pick.value || null); });
-      head.append(pick);
-    }
-    kids.push(head);
-    if (s.content) kids.push(el("pre", { class: "mono p-pre" }, s.content));
-  } else {
-    const list = el("div", { class: "p-list" });
-    for (const p of d.profiles) {
-      const b = el("button", { type: "button", class: "link" }, p.name);
-      b.addEventListener("click", () => { if (!leaveDraft()) return; P.editing = p.name; P.draft = null; renderProfiles(); });
-      const users = usersOf(p.name);
-      list.append(el("div", { class: "p-row" + (P.editing === p.name ? " on" : "") }, b, el("code", { class: "dim" }, p.repo),
-        el("span", { class: "dim" }, users.length ? users.map((x) => x.display).join(", ") : "No listed folder uses it.")));
-    }
-    kids.push(list);
-  }
-  const refreshBtn = el("button", { type: "button", class: "act" }, "Refresh tools");
-  refreshBtn.addEventListener("click", async () => { refreshBtn.disabled = true; refreshBtn.textContent = "Refreshing"; await loadProfiles(true); });
-  kids.push(el("div", { class: "p-bar" },
-    d.auditFindings ? el("span", { class: "dim" }, d.auditFindings + (d.auditFindings === 1 ? " cleanup finding" : " cleanup findings") + (d.auditHint ? ": run " + d.auditHint : "")) : el("span", {}),
-    refreshBtn));
+  const refreshBtn = el("button", { type: "button", class: "act ic-btn" }, sicon("refresh-cw"), "Refresh tools");
+  refreshBtn.addEventListener("click", async () => { refreshBtn.disabled = true; await loadProfiles(true); });
+  const kids = [el("div", { class: "p-bar" },
+    el("span", { class: "dim" }, "Running sessions keep their tools until restarted."),
+    d.auditFindings ? el("span", { class: "warn-chip" }, d.auditFindings + (d.auditFindings === 1 ? " cleanup finding" : " cleanup findings") + (d.auditHint ? ": run " + d.auditHint : "")) : null,
+    el("span", { class: "grow" }), refreshBtn)];
   if (d.toolsError) kids.push(el("p", { class: "h-msg bad" }, "MCP servers unavailable: " + d.toolsError));
-  if (!P.editing && !f) P.editing = d.profiles.length ? d.profiles[0].name : null;
+  kids.push(scopeCard());
   const p = profileNamed(P.editing);
-  if (p) kids.push(switchesPanel(p));
-  else if (P.editing) kids.push(el("p", { class: "h-msg bad" }, "No " + P.editing + ".args was found in any root, so new sessions here fail to start until it exists."));
+  if (p) kids.push(editorCard(p));
+  else if (P.editing) kids.push(el("section", { class: "card" }, el("p", { class: "h-msg bad" }, "No " + P.editing + ".args was found in any root, so new sessions here fail to start until it exists.")));
+  const focused = document.activeElement && document.activeElement.getAttribute("aria-label");
   main.replaceChildren(...kids);
+  if (focused) { const again = [...main.querySelectorAll("[aria-label]")].find((x) => x.getAttribute("aria-label") === focused); if (again) again.focus(); }
 }
 
 async function loadProfiles(refresh) {
@@ -711,7 +803,6 @@ async function loadProfiles(refresh) {
 }
 
 function initProfiles() {
-  if (matchMedia("(max-width: 720px)").matches) document.getElementById("p-tree-box").open = false;
   addEventListener("beforeunload", (e) => { if (isDirty()) { e.preventDefault(); e.returnValue = ""; } });
 }
 

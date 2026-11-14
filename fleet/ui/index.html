@@ -65,14 +65,14 @@
     </div>
   </section>
   <section class="view" id="view-profiles" data-view="profiles" hidden>
-    <div class="panel">
+    <div class="p-title">
       <h2>Profiles <span class="count" id="n-profiles"></span></h2>
-      <p class="dim h-note">Which tools new sessions get in each folder. The nearest <code>.claude-launch</code> above a folder names its profile; a profile's switches apply to every folder that uses it. Running sessions keep their tools until restarted.</p>
-      <div id="p-msg" role="status" class="h-msg"></div>
-      <div class="hist">
-        <details class="h-tree" id="p-tree-box" open><summary>Folders</summary><div id="p-tree"></div></details>
-        <div id="p-main"></div>
-      </div>
+      <p class="dim">Which tools new Claude sessions get in each folder. The nearest <code>.claude-launch</code> above a folder names its profile.</p>
+    </div>
+    <div id="p-msg" role="status" class="h-msg p-toast"></div>
+    <div class="p-layout">
+      <aside class="p-side" aria-label="Folders"><div class="p-side-head">Folders</div><div id="p-tree"></div></aside>
+      <div id="p-main" class="p-main"></div>
     </div>
   </section>
 </main>
