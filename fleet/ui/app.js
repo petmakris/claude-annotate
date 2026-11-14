@@ -5,7 +5,7 @@
 // "For you" inbox.
 // Every value reaches the page through textContent, never as markup.
 const REFRESH = 5000;
-const VIEWS = [{ id: "fleet", label: "Fleet" }, { id: "foryou", label: "For you" }, { id: "history", label: "History" }];
+const VIEWS = [{ id: "fleet", label: "Fleet" }, { id: "foryou", label: "For you" }, { id: "history", label: "History" }, { id: "profiles", label: "Profiles" }];
 
 function el(tag, attrs, ...kids) {
   const n = document.createElement(tag);
@@ -512,6 +512,209 @@ function initHistory() {
   });
 }
 
+// ---------------------------------------------------------------- Profiles
+
+// P.folder: a listed folder's absolute path, or null for every folder. P.editing: the profile the switches show.
+// P.draft: the switches as edited and not yet saved, or null.
+const P = { data: null, folder: null, editing: null, draft: null, busy: false };
+const GROUPS = [{ kind: "pluginDir", title: "Plugin folders" }, { kind: "mcp", title: "MCP servers" }, { kind: "plugin", title: "Marketplace plugins" }];
+
+function pmsg(text, bad) {
+  const m = document.getElementById("p-msg");
+  m.className = "h-msg" + (bad ? " bad" : "");
+  m.textContent = text || "";
+}
+
+const isOn = (d, t) => (t.kind === "pluginDir" ? d.pluginDirs.includes(t.id) : t.kind === "mcp" ? !d.denied.includes(t.id) : !d.disabledPlugins.includes(t.id));
+const flip = (list, id) => (list.includes(id) ? list.filter((x) => x !== id) : list.concat([id]));
+const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+const draftOf = (p) => ({ pluginDirs: p.pluginDirs.slice(), denied: p.denied.slice(), disabledPlugins: p.disabledPlugins.slice() });
+const profileNamed = (name) => (P.data ? P.data.profiles.find((p) => p.name === name) || null : null);
+const usersOf = (name) => P.data.folders.filter((f) => f.source.profile === name);
+
+function isDirty() {
+  const p = profileNamed(P.editing);
+  return !!(p && P.draft) && !(sameSet(p.pluginDirs, P.draft.pluginDirs) && sameSet(p.denied, P.draft.denied) && sameSet(p.disabledPlugins, P.draft.disabledPlugins));
+}
+
+// Leaving unsaved switches asks first.
+function leaveDraft() {
+  if (!isDirty()) return true;
+  if (!confirm("Discard unsaved changes to " + P.editing + "?")) return false;
+  P.draft = null;
+  return true;
+}
+
+function sourceText(s) {
+  if (s.kind === "here") return "Runs " + s.profile + ", set here.";
+  if (s.kind === "inherited") return s.profile ? "Runs " + s.profile + ", inherited from " + s.from + "." : "A hand-written file in " + s.from + " decides.";
+  if (s.kind === "custom") return "A hand-written .claude-launch decides this folder's tools.";
+  return "No profile applies here, so new sessions get the launcher's defaults.";
+}
+
+function renderProfilesTree() {
+  const box = document.getElementById("p-tree");
+  const folders = P.data.folders;
+  const byKey = new Map(folders.map((f) => [folderKey({ folder: f.path }), f]));
+  const { top, base } = folderTree(folders.map((f) => ({ folder: f.path })));
+  // busiest first, by the sessions at or below a node, as History orders its tree
+  const used = (n) => folders.reduce((sum, x) => { const k = folderKey({ folder: x.path }); return sum + (k === n.path || k.startsWith(n.path + "/") ? x.sessions : 0); }, 0);
+  const byUse = (list) => list.map((n) => [used(n), n]).sort((a, b) => b[0] - a[0] || a[1].seg.localeCompare(b[1].seg)).map((x) => x[1]);
+  const keyOf = (path) => { const f = folders.find((x) => folderKey({ folder: x.path }) === path); return f ? f.path : null; };
+  const sel = (n) => {
+    const f = byKey.get(n.path);
+    if (!f || !leaveDraft()) return;
+    P.folder = f.path; P.editing = f.source.profile; P.draft = null; renderProfiles();
+  };
+  const node = (n, depth) => {
+    const f = byKey.get(n.path);
+    const kids = byUse([...n.kids.values()]);
+    const on = f && P.folder === f.path;
+    const head = el("button", { type: "button", class: "f-node" + (on ? " on" : "") + (f ? "" : " f-pass"), "aria-pressed": on ? "true" : "false", disabled: !f, title: f ? f.display : null },
+      el("span", { class: "f-name mono" }, ...slashBreaks(n.seg || "/")), el("span", { class: "f-count" }, f && f.source.profile ? f.source.profile : ""));
+    head.addEventListener("click", () => sel(n));
+    if (!kids.length) return el("div", { class: "f-leaf" }, head);
+    // a folder with many subfolders (a pile of scratch runs) starts folded, unless the selection is inside it
+    const d = el("details", { class: "f-dir", open: kids.length <= 8 || (P.folder && folderKey({ folder: P.folder }).startsWith(n.path + "/")) }, el("summary", {}, head));
+    d.append(...kids.map((k) => node(k, depth + 1)));
+    return d;
+  };
+  const all = el("button", { type: "button", class: "f-node" + (P.folder === null ? " on" : ""), "aria-pressed": P.folder === null ? "true" : "false" },
+    el("span", { class: "f-name" }, "All folders"), el("span", { class: "f-count" }, P.data.profiles.length + " profiles"));
+  all.addEventListener("click", () => { if (!leaveDraft()) return; P.folder = null; P.editing = null; P.draft = null; renderProfiles(); });
+  const prefix = base.seg && base !== top ? el("div", { class: "f-prefix dim mono", title: base.seg }, "/" + base.seg) : null;
+  const ownBase = keyOf(base.path) ? [node(Object.assign({}, base, { kids: new Map() }), 1)] : [];
+  box.replaceChildren(...[all, prefix, ...ownBase, ...byUse([...base.kids.values()]).map((k) => node(k, 1))].filter(Boolean));
+}
+
+async function setFolderProfile(name) {
+  if (P.busy) return;
+  P.busy = true; pmsg("");
+  try {
+    const d = await post("/api/profiles/folder", { folder: P.folder, profile: name });
+    const f = P.data.folders.find((x) => x.path === P.folder);
+    pmsg((f ? f.display : P.folder) + (name ? " now uses " + name + "." : " now inherits."));
+    P.editing = d.source.profile; P.draft = null;
+    await loadProfiles();
+  } catch (e) { pmsg(e.message, true); } finally { P.busy = false; }
+}
+
+async function saveProfile(btn) {
+  if (P.busy || !P.draft) return;
+  const p = profileNamed(P.editing);
+  P.busy = true; btn.disabled = true; pmsg("Saving " + p.name + ", then committing and pushing it");
+  try {
+    const tools = P.data.tools;
+    const r = await post("/api/profiles/save", { name: p.name, denied: P.draft.denied, disabledPlugins: P.draft.disabledPlugins,
+      pluginDirs: tools.filter((t) => t.kind === "pluginDir" && isOn(P.draft, t)).map((t) => t.id).concat(P.draft.pluginDirs.filter((d) => !tools.some((t) => t.id === d))) });
+    if (!r.committed) pmsg("No change to save.");
+    else if (r.pushed) pmsg("Saved and pushed: " + r.message);
+    else if (!r.hasRemote) pmsg("Saved and committed " + r.commit + ". The repository has no remote to push to.");
+    else pmsg("Committed " + r.commit + ", but the push failed: " + r.pushError, true);
+    P.draft = null;
+    await loadProfiles();
+  } catch (e) { pmsg(e.message, true); } finally { P.busy = false; btn.disabled = false; }
+}
+
+function switchesPanel(p) {
+  if (!P.draft) P.draft = draftOf(p);
+  const users = usersOf(p.name);
+  const pick = el("select", { class: "p-select", "aria-label": "Profile to edit" }, P.data.profiles.map((x) => el("option", { value: x.name, selected: x.name === p.name }, x.name)));
+  pick.addEventListener("change", () => { if (!leaveDraft()) { pick.value = p.name; return; } P.editing = pick.value; P.draft = null; renderProfiles(); });
+  const kids = [el("div", { class: "p-head" }, pick,
+    el("span", { class: "dim" }, "Kept in ", el("code", {}, p.repo), ", where a save commits. ",
+      users.length ? "Used by " + users.length + (users.length === 1 ? " folder: " : " folders: ") + users.map((f) => f.display).join(", ") + "." : "No listed folder uses it."))];
+  for (const g of GROUPS) {
+    const tools = P.data.tools.filter((t) => t.kind === g.kind);
+    if (!tools.length) continue;
+    kids.push(el("h3", { class: "p-group" }, g.title));
+    const list = el("div", { class: "p-tools" });
+    for (const t of tools) {
+      const on = isOn(P.draft, t);
+      const sw = el("button", { type: "button", role: "switch", class: "sw" + (on ? " on" : ""), "aria-checked": on ? "true" : "false", "aria-label": t.label, disabled: t.locked, title: t.locked ? "Always on" : t.id }, el("span", { class: "sw-knob" }), on ? "On" : "Off");
+      sw.addEventListener("click", () => {
+        if (t.kind === "pluginDir") P.draft.pluginDirs = flip(P.draft.pluginDirs, t.id);
+        else if (t.kind === "mcp") P.draft.denied = flip(P.draft.denied, t.id);
+        else P.draft.disabledPlugins = flip(P.draft.disabledPlugins, t.id);
+        renderProfiles();
+      });
+      list.append(el("div", { class: "p-tool" }, el("span", { class: "p-label", title: t.id }, t.label), t.locked ? el("span", { class: "dim p-lock" }, "always on") : null, sw));
+    }
+    kids.push(list);
+  }
+  const dirty = isDirty();
+  const revert = el("button", { type: "button", class: "act", disabled: !dirty }, "Revert");
+  revert.addEventListener("click", () => { P.draft = null; renderProfiles(); });
+  const save = el("button", { type: "button", class: "act primary", disabled: !dirty }, "Save and push");
+  save.addEventListener("click", () => saveProfile(save));
+  kids.push(el("div", { class: "row-actions p-actions" }, revert, save));
+  return el("section", { class: "p-panel" }, kids);
+}
+
+function renderProfiles() {
+  const main = document.getElementById("p-main");
+  const d = P.data;
+  if (!d.configured) {
+    document.getElementById("p-tree").replaceChildren();
+    return main.replaceChildren(el("p", {}, "Profiles are not set up on this machine. Write profiles.json in the fleet's folder, for example:"),
+      el("pre", { class: "mono p-pre" }, '{"roots": ["~/projects/my-env"], "default_dirs": [], "locked": {}, "hidden": []}'),
+      el("p", { class: "dim" }, "roots are the repositories whose claude/profiles/ hold <name>.args and <name>.json."));
+  }
+  document.getElementById("n-profiles").textContent = d.folders.length ? String(d.folders.length) : "";
+  renderProfilesTree();
+  const kids = [];
+  const f = P.folder ? d.folders.find((x) => x.path === P.folder) : null;
+  if (P.folder && !f) P.folder = null;
+  if (f) {
+    const s = f.source;
+    const head = el("div", { class: "p-source" }, el("strong", { class: "mono" }, f.display), el("span", {}, sourceText(s)));
+    if (s.kind !== "custom") {
+      const pick = el("select", { class: "p-select", "aria-label": "Profile for " + f.display, disabled: P.busy },
+        el("option", { value: "" }, "inherit"), d.profiles.map((p) => el("option", { value: p.name, selected: s.kind === "here" && s.profile === p.name }, p.name)));
+      pick.addEventListener("change", () => { if (!leaveDraft()) { pick.value = s.kind === "here" ? s.profile : ""; return; } setFolderProfile(pick.value || null); });
+      head.append(pick);
+    }
+    kids.push(head);
+    if (s.content) kids.push(el("pre", { class: "mono p-pre" }, s.content));
+  } else {
+    const list = el("div", { class: "p-list" });
+    for (const p of d.profiles) {
+      const b = el("button", { type: "button", class: "link" }, p.name);
+      b.addEventListener("click", () => { if (!leaveDraft()) return; P.editing = p.name; P.draft = null; renderProfiles(); });
+      const users = usersOf(p.name);
+      list.append(el("div", { class: "p-row" + (P.editing === p.name ? " on" : "") }, b, el("code", { class: "dim" }, p.repo),
+        el("span", { class: "dim" }, users.length ? users.map((x) => x.display).join(", ") : "No listed folder uses it.")));
+    }
+    kids.push(list);
+  }
+  const refreshBtn = el("button", { type: "button", class: "act" }, "Refresh tools");
+  refreshBtn.addEventListener("click", async () => { refreshBtn.disabled = true; refreshBtn.textContent = "Refreshing"; await loadProfiles(true); });
+  kids.push(el("div", { class: "p-bar" },
+    d.auditFindings ? el("span", { class: "dim" }, d.auditFindings + (d.auditFindings === 1 ? " cleanup finding" : " cleanup findings") + (d.auditHint ? ": run " + d.auditHint : "")) : el("span", {}),
+    refreshBtn));
+  if (d.toolsError) kids.push(el("p", { class: "h-msg bad" }, "MCP servers unavailable: " + d.toolsError));
+  if (!P.editing && !f) P.editing = d.profiles.length ? d.profiles[0].name : null;
+  const p = profileNamed(P.editing);
+  if (p) kids.push(switchesPanel(p));
+  else if (P.editing) kids.push(el("p", { class: "h-msg bad" }, "No " + P.editing + ".args was found in any root, so new sessions here fail to start until it exists."));
+  main.replaceChildren(...kids);
+}
+
+async function loadProfiles(refresh) {
+  const main = document.getElementById("p-main");
+  if (!P.data) main.replaceChildren(el("p", { class: "dim" }, "Reading the profiles. The MCP server list can take a few seconds."));
+  try {
+    P.data = await getJSON("/api/profiles" + (refresh ? "?refresh=1" : ""));
+    if (!H.home) H.home = P.data.home;
+    renderProfiles();
+  } catch (e) { pmsg("Cannot load the profiles: " + e.message, true); }
+}
+
+function initProfiles() {
+  if (matchMedia("(max-width: 720px)").matches) document.getElementById("p-tree-box").open = false;
+  addEventListener("beforeunload", (e) => { if (isDirty()) { e.preventDefault(); e.returnValue = ""; } });
+}
+
 function renderNotices(lists) {
   const seen = new Map();
   for (const l of lists) for (const n of (l && l.notices) || []) seen.set(n.text, n);
@@ -547,6 +750,7 @@ async function refresh(withInbox) {
 function showView(id) {
   if (!VIEWS.some((v) => v.id === id)) id = VIEWS[0].id;
   if (id === "history" && !H.loaded) loadHistory();
+  if (id === "profiles" && !P.data) loadProfiles();
   document.querySelectorAll(".view").forEach((s) => (s.hidden = s.dataset.view !== id));
   document.querySelectorAll("#tabs button").forEach((b) => (b.dataset.view === id ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current")));
 }
@@ -568,6 +772,7 @@ function initTheme() {
 function start() {
   initTheme();
   initHistory();
+  initProfiles();
   initTodoForm();
   const tabs = document.getElementById("tabs");
   VIEWS.forEach((v) => tabs.append(el("button", { type: "button", "data-view": v.id, onclick: null }, v.label)));

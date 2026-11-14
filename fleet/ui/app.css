@@ -166,3 +166,28 @@ tr.compose td { border-bottom: 1px solid var(--line); }
 .ib.confirming, .ib.confirming:hover:not(:disabled), .ib.danger-hover.confirming:hover:not(:disabled) { padding: 0 10px; color: var(--card); background: var(--bad); border-color: var(--bad); }
 div.actions .ib, .row-actions .ib { margin: 0; }
 @media (max-width: 720px) { .ib { min-width: 36px; height: 36px; } }
+
+/* Profiles: the source line, the profile list, and the switches of one profile. */
+.p-source { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 0 10px; }
+.p-select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+.p-pre { white-space: pre-wrap; background: var(--bg); border-radius: 6px; padding: 8px 10px; margin: 0 0 10px; }
+.p-list { display: grid; gap: 2px; margin: 0 0 10px; }
+.p-row { display: grid; grid-template-columns: minmax(90px, 140px) minmax(120px, 220px) minmax(0, 1fr); gap: 4px 12px; padding: 4px 8px; border-radius: 6px; }
+.p-row.on { background: var(--chip); box-shadow: inset 3px 0 0 var(--accent); }
+.p-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+.p-panel { border-top: 1px solid var(--line); padding-top: 10px; }
+.p-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 4px; }
+.p-group { font-size: 13px; color: var(--dim); font-weight: 500; margin: 14px 0 4px; }
+.p-tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 16px; }
+.p-tool { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.p-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-lock { font-size: 12.5px; }
+.sw { display: inline-flex; align-items: center; gap: 6px; flex: none; width: 64px; font-size: 12.5px; color: var(--dim); background: var(--chip); border: 1px solid var(--line); border-radius: 99px; padding: 2px 8px 2px 3px; cursor: pointer; }
+.sw-knob { width: 14px; height: 14px; border-radius: 50%; background: var(--dim); flex: none; }
+.sw.on { color: var(--card); background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.sw.on .sw-knob { background: var(--card); }
+.sw:disabled { opacity: .7; cursor: default; }
+.p-actions { margin-top: 12px; }
+.f-node.f-pass { cursor: default; color: var(--dim); }
+.f-node.f-pass:hover { background: none; }
+@media (max-width: 720px) { .p-row { grid-template-columns: minmax(0, 1fr); } }

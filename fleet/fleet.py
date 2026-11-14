@@ -29,6 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 import fleet_history as hist
+import fleet_profiles as prof
 
 PREVIEW = 300
 PETROS = "petros"  # the user: a reserved member name with no session, only an inbox
@@ -2238,6 +2239,94 @@ def ui_inbox():
             "machine": self_machine()}
 
 
+# ---------------------------------------------------------------- launch profiles (fleet_profiles.py)
+
+PROFILE_TOOLS = prof.ToolCache(claude_bin)
+
+
+def profile_config():
+    return prof.Config(prof.settings(fleet_home()))
+
+
+def profile_usage():
+    """[(folder, sessions, last seen)]: the folders the profile view lists, from the history and from Claude
+    Code's transcript folders, since the history holds only what its hook has recorded."""
+    con = db()
+    recorded = [(r[0], r[1], r[2]) for r in con.execute(
+        "SELECT cwd, COUNT(*), MAX(COALESCE(last_seen_at, started_at)) FROM conversations GROUP BY cwd")]
+    return prof.merge_usage(recorded, prof.transcript_usage())
+
+
+NOT_CONFIGURED = "fleet: profiles are not set up: write %s with at least \"roots\" (see fleet_profiles.py)."
+
+
+def ui_profiles(refresh=False):
+    return prof.read_config(profile_config(), PROFILE_TOOLS, profile_usage(), refresh)
+
+
+def ui_profiles_write(path, body):
+    """The profile view's writes. -> (status, json)."""
+    cfg = profile_config()
+    try:
+        if not cfg.configured:
+            raise prof.ProfileError(409, NOT_CONFIGURED % os.path.join(fleet_home(), "profiles.json"))
+        if path == "/api/profiles/folder":
+            profile = body.get("profile")
+            if profile is not None and not isinstance(profile, str):
+                raise prof.ProfileError(400, "profile must be a name or null")
+            return 200, prof.set_folder_profile(cfg, profile_usage(), body.get("folder"), profile)
+        if path == "/api/profiles/save":
+            return 200, prof.save_profile(cfg, PROFILE_TOOLS, body)
+    except prof.ProfileError as e:
+        return e.status, {"error": str(e)}
+    return 404, {"error": "not found"}
+
+
+def profile_cmd(cmd, folder=None, name=None, as_json=False):
+    """`fleet profile ls|show|set`."""
+    cfg = profile_config()
+    if not cfg.configured:
+        raise FleetError(NOT_CONFIGURED % os.path.join(fleet_home(), "profiles.json"))
+    label = lambda s: (s["profile"] or "custom file") if s["kind"] in ("here", "inherited") else (  # noqa: E731
+        "custom file" if s["kind"] == "custom" else "none (the launcher's defaults)")
+    where = lambda s: {"here": "set here", "inherited": "from %s" % s["from"], "none": "",  # noqa: E731
+                       "custom": "hand-written"}[s["kind"]]
+    if cmd == "ls":
+        folders = prof.scan_folders(profile_usage())
+        if as_json:
+            print(json.dumps({"folders": folders, "profiles": prof.read_profiles(cfg)}, indent=2))
+            return
+        for f in folders:
+            print("%-50s %-14s %s" % (f["display"], label(f["source"]), where(f["source"])))
+        return
+    path = os.path.abspath(os.path.expanduser(folder or "."))
+    if cmd == "show":
+        src = prof.resolve_source(path)
+        p = next((x for x in prof.read_profiles(cfg) if x["name"] == src["profile"]), None)
+        if as_json:
+            print(json.dumps({"folder": path, "source": src, "profile": p}, indent=2))
+            return
+        print("%s runs %s%s" % (prof.tilde(path), label(src), (", " + where(src)) if where(src) else ""))
+        if src["content"]:
+            print(src["content"].rstrip())
+        if p:
+            print("kept in %s" % p["repo"])
+            for d in p["pluginDirs"]:
+                print("  plugin dir  %s" % d)
+            for d in p["denied"]:
+                print("  denied      %s" % d)
+            for d in p["disabledPlugins"]:
+                print("  plugin off  %s" % d)
+        return
+    if cmd == "set":
+        try:
+            res = prof.set_folder_profile(cfg, None, path, None if name == "inherit" else name, any_folder=True)
+        except prof.ProfileError as e:
+            raise FleetError("fleet: %s" % e)
+        src = res["source"]
+        print("%s now runs %s%s" % (prof.tilde(path), label(src), (", " + where(src)) if where(src) else ""))
+
+
 OUT_LOCK = threading.Lock()
 
 
@@ -2293,14 +2382,16 @@ def ui_page_write(path, body):
     return 404, {"error": "not found"}
 
 
+PROFILE_WRITES = ("/api/profiles/folder", "/api/profiles/save")
 PAGE_WRITES = ("/api/todos/add", "/api/tell", "/api/inbox/answer", "/api/inbox/dismiss", "/api/members/stop",
                "/api/members/respawn", "/api/members/attach")
 
 
 def make_ui_handler(cache, token):
     api = {"/api/members": ui_members, "/api/todos": ui_todos, "/api/threads": ui_threads}
-    writes = ("/api/history/rename", "/api/history/delete", "/api/history/ask", "/api/history/search") + PAGE_WRITES
-    guarded = ("/api/history", "/api/inbox")  # served only on loopback, like the writes
+    writes = ("/api/history/rename", "/api/history/delete", "/api/history/ask", "/api/history/search") + PAGE_WRITES \
+        + PROFILE_WRITES
+    guarded = ("/api/history", "/api/inbox", "/api/profiles")  # served only on loopback, like the writes
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "fleet-ui"
@@ -2373,6 +2464,8 @@ def make_ui_handler(cache, token):
                 if path in PAGE_WRITES:
                     code, data = ui_page_write(path, body)
                     cache.items.clear()
+                elif path in PROFILE_WRITES:
+                    code, data = ui_profiles_write(path, body)
                 else:
                     code, data = ui_history_write(path, body)
             except Exception as e:
@@ -2391,6 +2484,9 @@ def make_ui_handler(cache, token):
                 return
             if path in guarded:
                 try:
+                    if path == "/api/profiles":
+                        refresh = (parse_qs(urlparse(self.path).query).get("refresh") or [""])[0] == "1"
+                        return self.send_json(200, ui_profiles(refresh))
                     data = ui_history() if path == "/api/history" else cache.get(path, ui_inbox)
                     return self.send_json(200, data)
                 except Exception as e:
@@ -2552,6 +2648,10 @@ def main(argv=None):
     s = h.add_parser("search", help="find a session by meaning"); s.add_argument("query", nargs="+"); s.add_argument("--json", action="store_true")
     s = h.add_parser("import", help="copy conversations from another store"); s.add_argument("path")
     s.add_argument("--descriptions", help="a store with a digests table, when it is not the same file")
+    pr = sub.add_parser("profile", help="which tools a folder's new sessions get").add_subparsers(dest="profile_cmd", required=True)
+    pr.add_parser("ls", help="every folder sessions ran in, with its profile").add_argument("--json", action="store_true")
+    s = pr.add_parser("show", help="a folder's profile and what it keeps"); s.add_argument("folder", nargs="?"); s.add_argument("--json", action="store_true")
+    s = pr.add_parser("set", help="set a folder's profile, or inherit"); s.add_argument("folder"); s.add_argument("name")
     a = p.parse_args(argv)
     try:
         if a.cmd == "join": join(a.name)
@@ -2601,6 +2701,8 @@ def main(argv=None):
             elif c == "describe": history_describe(a.limit, a.folder)
             elif c == "search": history_search(" ".join(a.query), a.json)
             elif c == "import": history_import(a.path, a.descriptions)
+        elif a.cmd == "profile":
+            profile_cmd(a.profile_cmd, getattr(a, "folder", None), getattr(a, "name", None), getattr(a, "json", False))
     except FleetError as e:
         print(e, file=sys.stderr)
         return e.code

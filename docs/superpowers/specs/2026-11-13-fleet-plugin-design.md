@@ -159,6 +159,18 @@ This is a view of an older tool, rebuilt as a plugin part that imports nothing f
 - **Removal from the older tool.** That happens in a separate change in its own repository, after the
   history view works here.
 
+### Launch profiles
+
+Added 14 November 2026: the older tool's profile view moves here too, so the fleet holds everything about sessions.
+
+- **What it edits.** Which tools new sessions get in each folder: the nearest `.claude-launch` names a profile, whose
+  `.args` and `.json` files switch plugin folders, MCP servers and marketplace plugins.
+- **The page.** A Profiles view beside History: the folder tree, each folder's profile and where it comes from with a
+  select to change it, and one profile's switches with Revert and Save and push.
+- **The CLI.** `fleet profile ls|show|set`.
+- **Privacy.** Every path and name of the user's own setup is in `profiles.json` under the fleet's folder, never in
+  the repository.
+
 ## Control and the user's inbox
 
 Added 13 November 2026, on top of the slices above.
