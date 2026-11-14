@@ -1,7 +1,7 @@
 
 /* Comments: pins over the surface at one screen size, a box to write in, a
    thread and a panel. */
-.tools button[aria-pressed="true"].c-toggle { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
 .c-status { font-size: 12px; color: var(--warn); background: var(--warn-bg); border-radius: 999px; padding: 2px 8px; display: none; }
 .c-status.on { display: inline-block; }
 .canvas.commenting .shot, .canvas.commenting .shot img { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='M2 26V13A11 11 0 1 1 13 24H4z' fill='%232f6fde' stroke='white' stroke-width='2'/%3E%3Cpath d='M9 12h9M9 16h6' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") 2 26, crosshair; }
@@ -75,8 +75,8 @@
 }
 /* A canvas in its webcompanion session: Send to Claude, Claude's state,
    Re-run on each group's title row, and Claude's answers in a thread. */
-.tools .s-send { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
-.tools .s-send:disabled { background: var(--panel); border-color: var(--line); color: var(--muted); font-weight: 400; cursor: default; }
+.strip .s-send:not(:disabled) { color: var(--on-accent); background: var(--accent); }
+
 .s-claude { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
 .s-claude.s-listening { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
 .s-claude.s-answering, .s-claude.s-waking { color: var(--warn); background: var(--warn-bg); border-color: transparent; }
@@ -87,7 +87,7 @@
 .lbl-row .rerun:disabled { color: var(--muted); cursor: default; border-color: var(--line); }
 .run-chip { font-size: 12px; border-radius: 999px; padding: 1px 8px; line-height: 18px; }
 .run-chip[hidden] { display: none; }
-.title .run-chip { white-space: nowrap; flex: none; }
+
 .run-queued { color: var(--idle); background: var(--idle-bg); }
 .run-running { color: var(--warn); background: var(--warn-bg); }
 .run-passed { color: var(--ok); background: var(--ok-bg); }

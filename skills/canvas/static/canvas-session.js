@@ -91,7 +91,9 @@ if (DATA.session && /^\/s\/[^\/]+\/assets\//.test(location.pathname)) {
       if (!claudeEl) return;
       var state = st && st.state || 'asleep';
       claudeEl.className = 's-claude s-' + state;
-      claudeEl.textContent = 'Claude: ' + (st && st.label || 'asleep · Send wakes it');
+      var label = st && st.label || 'asleep · Send wakes it';
+      claudeEl.textContent = 'Claude ' + label.split(/ · | in /)[0];
+      claudeEl.title = 'Claude: ' + label;
     }
     on('item', function (a, body) { if (a === 'claude/status') showClaude(body); });
     showClaude(null);

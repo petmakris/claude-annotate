@@ -6,31 +6,62 @@
   var D = JSON.parse(document.getElementById('canvas-data').textContent);
   function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   document.title = D.title;
+  // Lucide icons (ISC), drawn inline so the page needs nothing else.
+  var ICONS = {
+    both: '<path d="M18 8V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h8"/><path d="M10 19v-3.96 3.15"/><path d="M7 19h5"/><rect width="6" height="10" x="16" y="12" rx="2"/>',
+    desktop: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>',
+    phone: '<rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/>',
+    collapse: '<path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/>',
+    expand: '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>',
+    changed: '<path d="M12 3v14"/><path d="M5 10h14"/><path d="M5 21h14"/>',
+    out: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/>',
+    in: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/>',
+    fit: '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
+    theme: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+    info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+    comment: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v6"/><path d="M9 10h6"/>',
+    comments: '<path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/>',
+    send: '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+    rerun: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>'
+  };
+  function ic(name) {
+    return '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + '</svg>';
+  }
+  // An icon button: what it does is its tooltip and its accessible name.
+  // A class in `attrs` replaces the plain "ib" (an element keeps only its first class attribute).
+  function btn(attrs, icon, title, extra) {
+    if (!/class="/.test(attrs)) attrs = 'class="ib" ' + attrs;
+    return '<button type="button" ' + attrs + ' title="' + esc(title) + '" aria-label="' + esc(title) + '">' + ic(icon) + (extra || '') + '</button>';
+  }
+  var sep = '<span class="sep" aria-hidden="true"></span>';
+
+  // The page has one strip along its top, every control a click away: no menus.
+  // Left: the name, its status and the run. Then the sections (one button
+  // each, by number), the view, and the zoom. Right: Claude and the comments.
+  // Each id stays the same, so the scripts find what they did.
+  var status = D.status ? '<span class="chip chip-' + esc(D.status.kind) + '">' + esc(D.status.label) + '</span>' : '';
+  var noun = D.groupNoun || (D.session ? 'features' : 'groups');
+  var nav = D.groups.length > 1 ? '<span class="sections"><nav class="nums" aria-label="Go to a ' + esc(noun.replace(/s$/, '')) + '">' + D.groups.map(function (g, i) {
+    return '<a class="num-link nav-' + esc(g.status || 'none') + '" href="#c-' + (i + 1) + '" title="' + esc((i + 1) + ' ' + g.name) + '">' + (i + 1) + '</a>';
+  }).join('') + '</nav>' +
+    btn('id="fold-all"', 'collapse', 'Collapse every section') +
+    btn('id="unfold-all"', 'expand', 'Expand every section') + '</span>' : '';
+
   var labels = D.labels || [];
   var seg = '';
   if (labels.length > 1) {
+    var iconOf = function (l) { return /phone/i.test(l) ? 'phone' : /desk/i.test(l) ? 'desktop' : null; };
     seg = '<span class="seg" role="group" aria-label="Shots">' +
-      '<button type="button" data-shown="all" aria-pressed="true">' + (labels.length === 2 ? 'Both' : 'All') + '</button>' +
-      labels.map(function (l) { return '<button type="button" data-shown="' + esc(l) + '" aria-pressed="false">' + esc(l) + '</button>'; }).join('') +
-      '</span>';
+      btn('data-shown="all" aria-pressed="true"', 'both', labels.length === 2 ? 'Both: ' + labels.join(' and ') : 'All shots') +
+      labels.map(function (l) {
+        return iconOf(l) ? btn('data-shown="' + esc(l) + '" aria-pressed="false"', iconOf(l), l + ' only')
+          : '<button type="button" class="tb" data-shown="' + esc(l) + '" aria-pressed="false">' + esc(l) + '</button>';
+      }).join('') + '</span>';
   }
-  var comments = '';
-  if (D.comments && D.session) {
-    comments = '<button type="button" id="c-mode" class="c-toggle" aria-pressed="false" title="Comment on a screenshot (C)">Comment</button>' +
-      '<button type="button" id="c-panel-btn" class="c-toggle" aria-pressed="false" title="Every comment on this canvas">Comments <span id="c-count"></span></button>' +
-      '<button type="button" id="c-send" class="primary s-send" disabled title="Send the comments Claude has not answered to the Claude session of this canvas">Send to Claude</button>' +
-      '<span class="c-status" id="c-status" role="status"></span>';
-  }
-  // A journey canvas: Claude's state, and Re-run all (each group has its own Re-run).
-  var session = '';
-  if (D.session) {
-    session = '<span class="s-claude" id="s-claude" role="status" title="The Claude session that answers this canvas"></span>' +
-      (D.session.reruns ? '<button type="button" id="s-rerun-all" title="Run every feature again and publish the canvas">Re-run all</button>' : '');
-  }
-  // What changed since an earlier capture: a count and the Changed only button.
+
+  // What changed since an earlier capture: the Changed only button, its count on it.
   // A board with no `change` counts as unchanged; the failure board is no board.
-  var changed = '';
-  var CH = D.changes;
+  var CH = D.changes, changed = '', count = '';
   if (CH) {
     var all = 0, moved = 0, fresh = 0;
     D.groups.forEach(function (g) {
@@ -41,75 +72,43 @@
         if (b.change === 'new') fresh++;
       });
     });
-    var count = moved + ' of ' + all + ' board' + (all === 1 ? '' : 's') + ' changed' + (CH.since ? ' since ' + CH.since : '') +
+    count = moved + ' of ' + all + ' board' + (all === 1 ? '' : 's') + ' changed' + (CH.since ? ' since ' + CH.since : '') +
       (fresh ? ' (' + fresh + ' new)' : '');
-    changed = '<button type="button" id="chg-only" class="chg-only" aria-pressed="false" title="Show only the boards that changed">Changed only</button>' +
-      '<span class="chg-count" id="chg-count">' + esc(count) + '</span>';
+    changed = btn('id="chg-only" class="ib chg-only" aria-pressed="false"', 'changed', 'Changed only: ' + count, '<span class="n chg-n">' + moved + '</span>');
   }
-  var status = D.status ? '<span class="chip chip-' + esc(D.status.kind) + '">' + esc(D.status.label) + '</span>' : '';
-  // The page has no bar: the canvas takes the window, and the chrome floats on
-  // it in three groups. Top left: the name, its status and the groups. Top
-  // right: Changed only, Claude's state and the menu with everything else.
-  // Bottom: zoom. Each id stays the same, so the scripts find what they did.
-  var nav = D.groups.length > 1 ? '<nav aria-label="Groups">' + D.groups.map(function (g, i) {
-    return '<a class="nav-link nav-' + esc(g.status || 'none') + '" href="#c-' + (i + 1) + '"><span class="num">' + (i + 1) + '</span> ' + esc(g.name) + '</a>';
-  }).join('') + '</nav>' : '';
-  var groupsBtn = nav ? '<span class="pop-host"><button type="button" class="pop-btn" aria-expanded="false" aria-haspopup="true" title="Go to a group">' +
-    D.groups.length + ' ' + (D.groupNoun || (D.session ? 'features' : 'groups')) + ' ▾</button><div class="pop pop-left pop-groups" role="menu">' +
-    '<button type="button" class="unfold-all unfold-all-pop" hidden>Expand all</button>' + nav + '</div></span>' : '';
-  var removed = CH && (CH.removed || []).length ? '<div class="meta chg-removed"><span><strong>' + CH.removed.length + ' removed</strong>' +
-    (CH.since ? ' since ' + esc(CH.since) : '') + ':</span>' + CH.removed.map(function (r) {
-      return '<span>' + (r.number ? '<span class="num">' + esc(r.number) + '</span> ' : '') + esc(r.title) + (r.group ? ' <span class="muted">· ' + esc(r.group) + '</span>' : '') + '</span>';
-    }).join('') + '</div>' : '';
-  var capture = ((D.meta || []).length ? '<div class="meta">' + D.meta.map(function (m) { return '<span>' + esc(m) + '</span>'; }).join('') + '</div>' : '') +
-    (changed ? '<div class="meta">' + changed.replace(/^<button[^]*?<\/button>/, '') + '</div>' : '') + removed;
-  var claudeSec = session || comments ? '<div class="pop-sec"><div class="pop-h">Claude</div><div class="pop-row">' +
-    comments.replace(/<span class="c-status"[^]*?<\/span>/, '') + '</div>' +
-    (D.session && D.session.reruns ? '<div class="pop-row">' + session.replace(/<span class="s-claude"[^]*?<\/span>/, '') + '</div>' : '') + '</div>' : '';
-  var menu = '<span class="pop-host"><button type="button" class="pop-btn menu-btn" aria-expanded="false" aria-haspopup="true" aria-label="Menu" title="Menu">☰</button>' +
-    '<div class="pop pop-right" role="menu">' + claudeSec +
-    (capture || D.subtitle ? '<div class="pop-sec"><div class="pop-h">Capture</div>' + (D.subtitle ? '<div class="meta">' + esc(D.subtitle) + '</div>' : '') + capture + '</div>' : '') +
-    '<div class="pop-sec"><div class="pop-h">View</div><div class="pop-row">' + seg +
-    '<button type="button" data-zoom="actual" title="Boards at their drawn size (Shift+0)">100%</button>' +
-    '<button type="button" id="theme" title="Light or dark">◐ Theme</button></div></div></div></span>';
+
+  // Everything about the capture, on the info button's tooltip.
+  var info = [D.subtitle].concat(D.meta || []).concat(count ? [count] : []).filter(Boolean);
+  if (CH && (CH.removed || []).length) {
+    info.push(CH.removed.length + ' removed' + (CH.since ? ' since ' + CH.since : '') + ': ' +
+      CH.removed.map(function (r) { return (r.number ? r.number + ' ' : '') + r.title + (r.group ? ' (' + r.group + ')' : ''); }).join(', '));
+  }
+  var infoBtn = info.length ? '<span class="ib info" tabindex="0" role="note" title="' + esc(info.join('\n')) + '" aria-label="' + esc(info.join('. ')) + '">' + ic('info') + '</span>' : '';
+
+  var claude = '';
+  if (D.session) {
+    claude = '<span class="s-claude" id="s-claude" role="status" title="The Claude session that answers this canvas"></span>';
+    if (D.comments) {
+      claude += '<span class="c-status" id="c-status" role="status"></span>' +
+        btn('id="c-mode" class="ib c-toggle" aria-pressed="false"', 'comment', 'Comment on a screenshot (C)') +
+        btn('id="c-panel-btn" class="ib c-toggle" aria-pressed="false"', 'comments', 'Every comment on this canvas', '<span class="n" id="c-count"></span>') +
+        btn('id="c-send" class="ib s-send" disabled', 'send', 'Send the comments Claude has not answered to the Claude session of this canvas', '<span class="n" id="c-send-n"></span>');
+    }
+    if (D.session.reruns) claude += btn('id="s-rerun-all"', 'rerun', 'Re-run all: run every feature again and publish the canvas');
+  }
+
   document.getElementById('top').innerHTML =
-    '<div class="float float-tl title"><h1 title="' + esc(D.title) + '">' + esc(D.title) + '</h1>' + status +
-    (D.session && D.session.reruns ? '<span class="run-chip run-none" id="s-run" role="status" hidden></span>' : '') + groupsBtn +
-    (D.groups.length > 1 ? '<button type="button" id="unfold-all" class="unfold-all" hidden title="Expand every collapsed section"></button>' : '') + '</div>' +
-    '<div class="float float-tr tools" role="toolbar" aria-label="Canvas">' +
-    (CH ? changed.replace(/<span class="chg-count"[^]*?<\/span>/, '').replace('>Changed only</button>', '>Changed<span class="chg-only-word"> only</span> <span class="chg-n">' + moved + '</span></button>') : '') +
-    (D.session ? '<span class="s-claude" id="s-claude" role="status" title="The Claude session that answers this canvas"></span>' : '') +
-    (comments ? '<span class="c-status" id="c-status" role="status"></span>' : '') + menu + '</div>' +
-    '<div class="float float-bc tools" role="toolbar" aria-label="Zoom">' +
-    '<button type="button" data-zoom="out" aria-label="Zoom out" title="Zoom out (−)">−</button>' +
-    '<span class="zoom-label" id="zoom-label">100%</span>' +
-    '<button type="button" data-zoom="in" aria-label="Zoom in" title="Zoom in (+)">+</button>' +
-    '<button type="button" data-zoom="fit" title="Every board in the window (Shift+1)">Fit all</button></div>';
+    '<div class="strip" role="toolbar" aria-label="Canvas">' +
+    '<h1 title="' + esc(D.title) + '">' + esc(D.title) + '</h1>' + status +
+    (D.session && D.session.reruns ? '<span class="run-chip run-none" id="s-run" role="status" hidden></span>' : '') +
+    (nav ? sep + nav : '') + sep + changed + seg +
+    btn('class="ib zoom" data-zoom="out"', 'out', 'Zoom out (−)') +
+    '<button type="button" class="tb zoom zoom-label" id="zoom-label" data-zoom="actual" title="Boards at their drawn size (Shift+0)">100%</button>' +
+    btn('class="ib zoom" data-zoom="in"', 'in', 'Zoom in (+)') +
+    btn('class="ib zoom" data-zoom="fit"', 'fit', 'Every board in the window (Shift+1)') +
+    btn('id="theme"', 'theme', 'Light or dark') + infoBtn +
+    '<span class="grow"></span>' + claude + '</div>';
   document.getElementById('top').appendChild(document.getElementById('banner'));
-  // A menu opens on its button and closes on a second click, a click outside,
-  // Escape, or a pick inside it (the view's own buttons keep it open).
-  function closeAll(except) {
-    document.querySelectorAll('.pop-host.open').forEach(function (h) {
-      if (h === except) return;
-      h.classList.remove('open');
-      h.querySelector('.pop-btn').setAttribute('aria-expanded', 'false');
-    });
-  }
-  document.querySelectorAll('.pop-host').forEach(function (h) {
-    var b = h.querySelector('.pop-btn');
-    b.addEventListener('click', function (e) {
-      e.stopPropagation();
-      closeAll(h);
-      var open = h.classList.toggle('open');
-      b.setAttribute('aria-expanded', String(open));
-    });
-    h.querySelector('.pop').addEventListener('click', function (e) {
-      var t = e.target.closest('a, button');
-      if (t && !t.closest('.pop-row .seg') && !t.matches('[data-zoom], #theme')) closeAll(null);
-    });
-  });
-  document.addEventListener('click', function (e) { if (!e.target.closest('.pop')) closeAll(null); });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAll(null); });
   var banner = document.getElementById('banner');
   if (D.brief && D.brief.length && !D.banner) {
     banner.className = 'banner brief';

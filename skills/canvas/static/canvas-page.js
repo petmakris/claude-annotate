@@ -157,7 +157,9 @@ function relayout() {
     b.title = f ? 'Expand this section' : 'Collapse this section';
   });
   var nFolded = DATA.groups.filter(function (g, gi) { return isFolded(gi); }).length;
-  document.querySelectorAll('.unfold-all').forEach(function (b) { b.hidden = !nFolded; b.textContent = 'Expand all ' + nFolded; });
+  var ua = document.getElementById('unfold-all'), fa = document.getElementById('fold-all');
+  if (ua) ua.disabled = !nFolded;
+  if (fa) fa.disabled = nFolded === DATA.groups.length;
   // A group title's width, for coversGroup: measured once, while hidden but laid out.
   groupEls.forEach(function (ge) { if (!ge.lblW) ge.lblW = ge.lbl.offsetWidth; });
   world.style.width = layout.w + 'px';
@@ -178,14 +180,13 @@ function measureBox() {
 // banner) cover, and the zoom group's at the bottom, which a view keeps clear.
 function topRoom() {
   var r = 0;
-  document.querySelectorAll('.float-tl, .float-tr, .banner:not([hidden])').forEach(function (e) {
+  document.querySelectorAll('.banner:not([hidden])').forEach(function (e) {
     r = Math.max(r, e.getBoundingClientRect().bottom - box.top);
   });
   return Math.max(0, r);
 }
 function bottomRoom() {
-  var z = document.querySelector('.float-bc');
-  return z ? Math.max(0, box.top + box.h - z.getBoundingClientRect().top) : 0;
+  return 0;
 }
 // fitView in the part of the window the chrome leaves free.
 function fitFree(bx, by, bw, bh, pad) {
@@ -349,13 +350,17 @@ layer.addEventListener('click', function (e) {
   var gi = parseInt(b.getAttribute('data-fold'), 10);
   setFolded(gi, !isFolded(gi));
 });
-// Expand all: in the title on a wide window, at the top of the sections' menu on a phone.
-document.querySelectorAll('.unfold-all').forEach(function (b) { b.addEventListener('click', function () {
+// Collapse every section, or expand every one: then the view starts again at the top.
+function foldAll(on) {
   folded = {};
-  save(FOLD_KEY, '[]');
+  if (on) DATA.groups.forEach(function (g, gi) { folded[groupKey(gi)] = true; });
+  save(FOLD_KEY, JSON.stringify(Object.keys(folded)));
   relayout();
-  setView(view);
-}); });
+  animateTo(first());
+}
+var ua = document.getElementById('unfold-all'), fa = document.getElementById('fold-all');
+if (ua) ua.addEventListener('click', function () { foldAll(false); });
+if (fa) fa.addEventListener('click', function () { foldAll(true); });
 
 // All, or one shot label: which shots of a many-shot board are shown. The
 // grid is laid out again for what is shown.

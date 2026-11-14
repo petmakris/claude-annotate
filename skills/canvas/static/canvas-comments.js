@@ -81,10 +81,11 @@ if (DATA.comments && session) {
       mine = store.comments.filter(function (c) { return c.app === APP; }).sort(function (a, b) { return a.number - b.number; });
       mine.forEach(function (c) { c._unsent = !!unsent[c.id]; });
       var open = mine.filter(function (c) { return c.status === 'open'; }).length;
-      countEl.textContent = open ? '(' + open + ')' : '';
+      countEl.textContent = open ? String(open) : '';
       var toSend = unanswered();
       sendBtn.disabled = !toSend.length || online === false;
-      sendBtn.textContent = 'Send to Claude' + (toSend.length ? ' (' + toSend.length + ')' : '');
+      document.getElementById('c-send-n').textContent = toSend.length ? String(toSend.length) : '';
+      sendBtn.title = toSend.length ? 'Send ' + toSend.length + ' comment' + (toSend.length === 1 ? '' : 's') + ' to Claude' : 'Nothing to send to Claude';
       showStatus();
       drawPins();
       if (panel.classList.contains('open')) drawList();
