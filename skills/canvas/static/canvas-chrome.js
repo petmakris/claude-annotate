@@ -36,14 +36,12 @@
   var sep = '<span class="sep" aria-hidden="true"></span>';
 
   // The page has one strip along its top, every control a click away: no menus.
-  // Left: the name, its status and the run. Then the sections (one button
-  // each, by number), the view, and the zoom. Right: Claude and the comments.
+  // Left: the name, its status and the run. Then collapse and expand every section,
+  // the view, and the zoom. Right: Claude and the comments.
   // Each id stays the same, so the scripts find what they did.
   var status = D.status ? '<span class="chip chip-' + esc(D.status.kind) + '">' + esc(D.status.label) + '</span>' : '';
   var noun = D.groupNoun || (D.session ? 'features' : 'groups');
-  var nav = D.groups.length > 1 ? '<span class="sections"><nav class="nums" aria-label="Go to a ' + esc(noun.replace(/s$/, '')) + '">' + D.groups.map(function (g, i) {
-    return '<a class="num-link nav-' + esc(g.status || 'none') + '" href="#c-' + (i + 1) + '" title="' + esc((i + 1) + ' ' + g.name) + '">' + (i + 1) + '</a>';
-  }).join('') + '</nav>' +
+  var nav = D.groups.length > 1 ? '<span class="sections">' +
     btn('id="fold-all"', 'collapse', 'Collapse every section') +
     btn('id="unfold-all"', 'expand', 'Expand every section') + '</span>' : '';
 
