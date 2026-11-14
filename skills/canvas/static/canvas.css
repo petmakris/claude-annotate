@@ -107,6 +107,7 @@ body { display: flex; flex-direction: column; position: relative; }
 .lbl .num { color: var(--muted); font-variant-numeric: tabular-nums; }
 .lbl-row { display: flex; align-items: baseline; gap: 10px; padding: 2px 8px 2px 0; line-height: 20px; overflow: visible; }
 .lbl-row h2 { font-size: 15px; margin: 0; }
+.lbl-row.lbl-side .muted, .lbl-row.lbl-side .rerun, .lbl-row.lbl-side .run-chip { display: none; }
 .lbl-variant { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .lbl-fail strong { color: var(--bad); }
 .lbl-cap { white-space: pre-line; color: var(--muted); line-height: 16px; overflow: hidden; }

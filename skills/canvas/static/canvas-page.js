@@ -161,7 +161,14 @@ function relayout() {
   if (ua) ua.disabled = !nFolded;
   if (fa) fa.disabled = nFolded === DATA.groups.length;
   // A group title's width, for coversGroup: measured once, while hidden but laid out.
-  groupEls.forEach(function (ge) { if (!ge.lblW) ge.lblW = ge.lbl.offsetWidth; });
+  groupEls.forEach(function (ge) {
+    if (ge.lblW) return;
+    ge.lblW = ge.lbl.offsetWidth;
+    // Its width in the left margin, where it goes when there is no room above (zoomed out): name and status only.
+    ge.lbl.classList.add('lbl-side');
+    ge.sideW = ge.lbl.offsetWidth;
+    ge.lbl.classList.remove('lbl-side');
+  });
   world.style.width = layout.w + 'px';
   world.style.height = layout.h + 'px';
   labelsOff();
@@ -254,10 +261,12 @@ function render() {
     }
     show(o, 'lbl', on);
   }
-  // Group titles above their group; one that would overlap the one above, or
-  // another group's boards (short groups, zoomed far out), is left out. Each
-  // column of groups keeps its own: a title never hides one in the next column.
-  var below = {};
+  // Group titles above their group. One that would overlap the one above, or
+  // another group's boards (short groups, zoomed far out), moves into the left
+  // margin beside its group's top, name and status only; with no room there
+  // either it is left out. Each column of groups keeps its own: a title never
+  // hides one in the next column.
+  var below = {}, side = -Infinity;
   for (i = 0; i < groupEls.length; i++) {
     o = groupEls[i];
     if (!o.box) { show(o, 'lbl', false); continue; }
@@ -266,7 +275,16 @@ function render() {
     if (titles) sy = Math.min(sy, y + o.box.y * z - 48);
     on = sy < H && y + (o.box.y + o.box.h) * z > 0 && x + (o.box.x + o.box.w) * z > 0 && x + o.box.x * z < W && sy >= (o.box.x in below ? below[o.box.x] : -Infinity) &&
       !coversGroup(i, sx, sy, sx + (o.lblW || 0), sy + 26, x, y, z);
-    if (on) { below[o.box.x] = sy + 26; o.lbl.style.transform = 'translate(' + sx + 'px,' + sy + 'px)'; }
+    var inView = y + (o.box.y + o.box.h) * z > 0 && y + o.box.y * z < H;
+    var atSide = false;
+    if (on) below[o.box.x] = sy + 26;
+    else if (inView && o.sideW) {
+      sx = x + o.box.x * z - o.sideW - 12; sy = y + o.box.y * z;
+      atSide = on = sx >= 8 && sy >= side;
+      if (on) side = sy + 26;
+    }
+    if (on) o.lbl.style.transform = 'translate(' + sx + 'px,' + sy + 'px)';
+    o.lbl.classList.toggle('lbl-side', atSide);
     show(o, 'lbl', on);
   }
   loadInView();
