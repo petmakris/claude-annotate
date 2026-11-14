@@ -2050,7 +2050,7 @@ def notices(bad):
 
 def ui_members():
     rows, bad, _ = all_members(True, always_machine=True)
-    return {"members": rows, "notices": notices(bad), "machine": self_machine()}
+    return {"members": rows, "notices": notices(bad), "machine": self_machine(), "home": os.path.expanduser("~")}
 
 
 def ui_todos():
@@ -2369,12 +2369,16 @@ def ui_page_write(path, body):
         if path == "/api/inbox/dismiss":
             _, out = captured(dismiss, text_field(body, "ref", limit=40), PAGE)
             return 200, {"output": out}
+        # stop and respawn call `claude` and wait for it, so they run outside `captured`: its lock is process-wide,
+        # and holding it that long would stall every other write from the page (an answer, a tell, a to-do).
         if path == "/api/members/stop":
-            res, out = captured(stop, text_field(body, "target", limit=200), PAGE)
-            return 200, dict(res, output=out)
+            tgt = text_field(body, "target", limit=200)
+            res = control("stop", tgt)
+            if res["action"] != "stopped":
+                res["thread"], _ = captured(send, "tell", tgt, WRAP_UP_TELL, PAGE)
+            return 200, res
         if path == "/api/members/respawn":
-            res, out = captured(respawn, text_field(body, "target", limit=200))
-            return 200, dict(res, output=out)
+            return 200, control("respawn", text_field(body, "target", limit=200))
         if path == "/api/members/attach":
             return 200, control("attach", text_field(body, "target", limit=200))
     except FleetError as e:

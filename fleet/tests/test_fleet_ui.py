@@ -44,6 +44,7 @@ def test_members_endpoint_shape_across_machines(world, server):
     assert set(rows) == {"alpha", "beta"}
     assert set(rows["alpha"]) == {"name", "session_id", "host", "cwd", "branch", "status", "respawn", "machine", "joined_at"}
     assert (rows["alpha"]["machine"], rows["beta"]["machine"]) == ("here", "bee")
+    assert data["home"] == os.path.expanduser("~")  # the page shortens this machine's folders to ~
     assert rows["alpha"]["status"] == "alive" and rows["alpha"]["session_id"] == a.sid
     assert data["notices"] == [{"machine": "gone", "text":
         "machine gone: unreachable (ssh: connect to host no-such-host port 22: Operation timed out)"}]

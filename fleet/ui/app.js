@@ -104,10 +104,14 @@ const SELF = { machine: "" };
 const target = (m) => (!m.machine || m.machine === SELF.machine ? m.name : m.name + "@" + m.machine);
 const M = { open: null };  // { key, kind } of the compose row that is open
 
+// A notice above a view. A success fades after 6 s; an error stays until the next notice or a successful reload.
+const FLASH = {};
 function flash(id, text, bad) {
   const m = document.getElementById(id);
+  clearTimeout(FLASH[id]);
   m.className = "h-msg toast" + (bad ? " bad" : "") + (text ? " on" : "");
   m.textContent = text || "";
+  if (text && !bad) FLASH[id] = setTimeout(() => { if (m.textContent === text) flash(id, ""); }, 6000);
 }
 const mmsg = (text, bad) => flash("m-msg", text, bad);
 
@@ -160,7 +164,10 @@ function composeBox(m) {
     send.disabled = true;
     try {
       const d = await post("/api/tell", { target: target(m), text: t.value, kind: M.open.kind });
-      mmsg("Sent to " + m.name + " as you. " + (d.output || "").split("\n").pop());
+      const last = (d.output || "").split("\n").pop();
+      // the CLI ends with the delivery state; a failed post is not a success, whatever the request answered
+      if (/: failed\b/.test(last)) mmsg("Not delivered to " + m.name + " (" + last + "). The message is kept and sent again if " + m.name + " rejoins within a day.", true);
+      else mmsg("Sent to " + m.name + " as you. " + last);
       M.open = null; renderMembersNow(); refresh(true);
     } catch (e) { mmsg(e.message, true); send.disabled = false; }
   };
@@ -176,6 +183,7 @@ function renderMembersNow() { if (lastMembers) renderMembers(lastMembers.data, l
 
 function renderMembers(data, now, force) {
   if (data.machine) SELF.machine = data.machine;
+  if (data.home && !H.home) H.home = data.home;
   lastMembers = { data, now };
   if (!force && (document.querySelector("#members .compose textarea") || document.querySelector("#members button[data-sure]"))) return;  // never wipe what is being typed or a pending confirmation
   const order = { alive: 0, dead: 1, left: 2 };
@@ -189,7 +197,7 @@ function renderMembers(data, now, force) {
       el("span", { class: "ml-status" }, pill(m.status)),
       el("span", { class: "ml-name" }, el("strong", {}, m.name), el("code", { class: "dim" }, m.session_id.slice(0, 8))),
       el("span", { class: "ml-machine" }, machineTag(m.machine)),
-      el("code", { class: "ml-folder", title: m.cwd }, homeless(m.cwd)),
+      el("code", { class: "ml-folder", title: m.cwd }, !m.machine || m.machine === SELF.machine ? tilde(m.cwd || "") : homeless(m.cwd)),
       el("span", { class: "ml-when dim", title: when(m.joined_at) }, ago(m.joined_at, now)),
       memberActions(m));
     if (M.open && M.open.key === m.machine + "/" + m.session_id) li.append(composeBox(m));
@@ -672,8 +680,9 @@ async function setFolderProfile(name) {
     const f = P.data.folders.find((x) => x.path === P.folder);
     pmsg((f ? f.display : P.folder) + (name ? " now uses " + name + "." : " now inherits."));
     P.editing = d.source.profile; P.draft = null;
-    await loadProfiles();
-  } catch (e) { pmsg(e.message, true); } finally { P.busy = false; }
+  } catch (e) { pmsg(e.message, true); }
+  P.busy = false;  // before the reload, which draws the select: drawn while busy, it would stay disabled
+  await loadProfiles();
 }
 
 async function saveProfile(btn) {
@@ -689,6 +698,7 @@ async function saveProfile(btn) {
     else if (!r.hasRemote) pmsg("Saved and committed " + r.commit + ". The repository has no remote to push to.");
     else pmsg("Committed " + r.commit + ", but the push failed: " + r.pushError, true);
     P.draft = null;
+    P.busy = false;
     await loadProfiles();
   } catch (e) { pmsg(e.message, true); btn.disabled = false; btn.textContent = "Save and push"; } finally { P.busy = false; }
 }
@@ -807,6 +817,8 @@ async function loadProfiles(refresh) {
   if (!P.data) main.replaceChildren(el("p", { class: "dim" }, "Reading the profiles. The MCP server list can take a few seconds."));
   try {
     P.data = await getJSON("/api/profiles" + (refresh ? "?refresh=1" : ""));
+    const shown = document.getElementById("p-msg");
+    if (refresh && shown.classList.contains("bad")) pmsg("");  // a fresh tool list answers the old error
     if (!H.home) H.home = P.data.home;
     renderProfiles();
   } catch (e) { pmsg("Cannot load the profiles: " + e.message, true); }

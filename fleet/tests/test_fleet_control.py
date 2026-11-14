@@ -5,6 +5,7 @@ import os
 import stat
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 
@@ -469,3 +470,23 @@ def test_the_page_has_the_for_you_view_and_member_buttons():
     for label in ("Tell", "Ask", "Stop", "Respawn", "Copy attach", "Rename", "Copy resume", "Delete", "Dismiss"):
         assert 'ibtn(' in js and '"%s"' % label in js
     assert "const mk = ibtn" in js and '"aria-label": label, title: label' in js
+
+
+def test_a_slow_respawn_from_the_page_does_not_hold_up_its_other_writes(world, page, claude):
+    """Respawn waits on `claude` for seconds. It once ran inside `captured`, whose lock is process-wide, so an
+    answer, a tell or a to-do sent from the page meanwhile waited for it to finish."""
+    started = threading.Event()
+
+    def slow_control(verb, target):
+        started.set()
+        time.sleep(2.5)
+        return {"action": "respawned", "name": target, "id": "cafe0001", "cwd": "/w", "attach": "claude attach " + target}
+    world.mp.setattr(fleet, "control", slow_control)
+    t = threading.Thread(target=page, args=("POST", "/api/members/respawn", {"target": "beta"}))
+    t.start()
+    assert started.wait(5)
+    t0 = time.time()
+    code, d = page("POST", "/api/todos/add", {"title": "while a respawn runs"})
+    took = time.time() - t0
+    t.join()
+    assert code == 200 and took < 1.0, took
