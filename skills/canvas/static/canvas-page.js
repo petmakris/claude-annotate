@@ -43,8 +43,9 @@ var hooks = { measured: null, render: null, click: null, key: null };
 
 var canvas = document.getElementById('canvas'), world = document.getElementById('world');
 var layer = document.getElementById('labels'), zoomLabel = document.getElementById('zoom-label');
-// Each canvas remembers its own view.
-var VIEW_KEY = 'canvas-view:' + (DATA.id || location.pathname);
+// Each canvas remembers its own view. A canvas in a session (one per sandbox) keys it by the
+// session, so two sandboxes of one app never share a view.
+var VIEW_KEY = 'canvas-view:' + ((DATA.session && DATA.session.slug) || DATA.id || location.pathname);
 var view = { x: 0, y: 0, z: 1 };
 var box = { w: 0, h: 0, left: 0, top: 0 };
 var DPR = window.devicePixelRatio || 1;
@@ -542,12 +543,21 @@ document.querySelectorAll('a[href^="#"]').forEach(function (a) {
 });
 window.addEventListener('hashchange', function () { go(location.hash, false); });
 
+// A saved view from an older layout can point at empty space: then the page opens at the start.
+function showsABoard(v) {
+  for (var i = 0; i < shotEls.length; i++) {
+    var b = shotEls[i].box;
+    if (b && M.inView(v, b.x, b.y, b.w, b.frameH, box.w, box.h, 0)) return true;
+  }
+  return false;
+}
+
 measureBox();
 relayout();
 if (!go(location.hash, true)) {
   var saved = null;
   try { saved = JSON.parse(load(VIEW_KEY) || 'null'); } catch (e) {}
-  if (saved && isFinite(saved.x) && isFinite(saved.y) && saved.z > 0) setView(saved);
+  if (saved && isFinite(saved.x) && isFinite(saved.y) && saved.z > 0 && showsABoard(saved)) setView(saved);
   else setView(first());
 }
 window.addEventListener('resize', function () { measureBox(); setView(view); });
