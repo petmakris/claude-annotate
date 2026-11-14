@@ -11,7 +11,7 @@
 </head>
 <body>
 <header class="top">
-  <h1>Fleet</h1>
+  <div class="brand"><span class="logo" aria-hidden="true"></span><h1>Fleet</h1></div>
   <nav id="tabs" aria-label="Views"></nav>
   <div class="status"><span id="stamp">loading</span> <button id="theme" type="button" aria-label="Switch theme">Theme</button></div>
 </header>
@@ -19,59 +19,58 @@
 <main id="views">
   <!-- One <section class="view" data-view="..."> per view, and one entry in the VIEWS list in app.js. -->
   <section class="view" id="view-fleet" data-view="fleet">
-    <div class="panel">
-      <h2>Members <span class="count" id="n-members"></span></h2>
-      <div id="m-msg" role="status" class="h-msg"></div>
+    <div id="m-msg" role="status" class="h-msg toast"></div>
+    <section class="card">
+      <div class="card-head"><span class="head-ic" data-icon="users"></span><h3>Members</h3><span class="count" id="n-members"></span>
+        <span class="grow"></span><span class="dim">Sessions that ran /fleet join, on every machine</span></div>
       <div id="members"></div>
-    </div>
-    <div class="panel">
-      <h2>Backlog <span class="count" id="n-todos"></span></h2>
-      <form id="todo-form" class="h-bar" aria-label="Add a to-do">
-        <input id="todo-title" type="text" placeholder="Add a to-do" aria-label="To-do title" autocomplete="off" required>
-        <input id="todo-ref" type="text" class="narrow" placeholder="Reference (optional)" aria-label="Reference, a path or link" autocomplete="off">
-        <input id="todo-notes" type="text" placeholder="Notes (optional)" aria-label="Notes" autocomplete="off">
-        <button class="act primary" type="submit">Add to-do</button>
-      </form>
-      <div id="todo-msg" role="status" class="h-msg"></div>
-      <div id="todos"></div>
-    </div>
-    <div class="panel">
-      <h2>Recent threads <span class="count" id="n-threads"></span></h2>
-      <div id="threads"></div>
+    </section>
+    <div class="cols">
+      <section class="card">
+        <div class="card-head"><span class="head-ic" data-icon="list-todo"></span><h3>Backlog</h3><span class="count" id="n-todos"></span></div>
+        <form id="todo-form" class="add-bar" aria-label="Add a to-do">
+          <input id="todo-title" type="text" placeholder="Add a to-do" aria-label="To-do title" autocomplete="off" required>
+          <input id="todo-ref" type="text" placeholder="Reference (optional)" aria-label="Reference, a path or link" autocomplete="off">
+          <input id="todo-notes" type="text" placeholder="Notes (optional)" aria-label="Notes" autocomplete="off">
+          <button class="act primary" type="submit">Add to-do</button>
+        </form>
+        <div id="todo-msg" role="status" class="h-msg toast"></div>
+        <div id="todos" class="card-body"></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><span class="head-ic" data-icon="messages-square"></span><h3>Recent threads</h3><span class="count" id="n-threads"></span></div>
+        <div id="threads" class="card-body"></div>
+      </section>
     </div>
   </section>
   <section class="view" id="view-foryou" data-view="foryou" hidden>
-    <div class="panel">
-      <h2>For you <span class="count" id="n-foryou"></span></h2>
-      <p class="dim h-note">What sessions asked you, told you or flagged, on every machine. An answer goes straight to the session that asked.</p>
-      <div id="fy-msg" role="status" class="h-msg"></div>
-      <div id="foryou"></div>
-    </div>
+    <div id="fy-msg" role="status" class="h-msg toast"></div>
+    <section class="card narrow">
+      <div class="card-head"><span class="head-ic" data-icon="inbox"></span><h3>For you</h3><span class="count" id="n-foryou"></span>
+        <span class="grow"></span><span class="dim">What sessions asked you, told you or flagged, on every machine</span></div>
+      <div id="foryou" class="card-body"></div>
+    </section>
   </section>
   <section class="view" id="view-history" data-view="history" hidden>
-    <div class="panel">
-      <h2>History <span class="count" id="n-history"></span></h2>
-      <form id="h-search" class="h-bar" role="search">
-        <input id="h-q" type="search" placeholder="Filter by name or folder, or describe what you remember" aria-label="Filter sessions, or describe one to search by meaning" autocomplete="off">
-        <button class="act" type="submit" id="h-meaning">Search by meaning</button>
-        <button class="act" type="button" id="h-clear" hidden>Clear</button>
-      </form>
-      <p class="dim h-note" id="h-note"></p>
-      <div id="h-msg" role="status" class="h-msg"></div>
-      <div class="hist">
-        <details class="h-tree" id="h-tree-box" open><summary>Folders</summary><div id="h-tree"></div></details>
-        <div id="h-rows" class="h-rows"></div>
-      </div>
+    <div id="h-msg" role="status" class="h-msg toast"></div>
+    <div class="p-layout">
+      <aside class="p-side" aria-label="Folders"><div class="p-side-head">Folders</div><div id="h-tree"></div></aside>
+      <section class="card">
+        <div class="card-head"><span class="head-ic" data-icon="history"></span><h3 id="h-crumb">All sessions</h3><span class="count" id="n-history"></span></div>
+        <form id="h-search" class="add-bar" role="search">
+          <input id="h-q" type="search" placeholder="Filter by name or folder, or describe what you remember" aria-label="Filter sessions, or describe one to search by meaning" autocomplete="off">
+          <button class="act" type="submit" id="h-meaning">Search by meaning</button>
+          <button class="act" type="button" id="h-clear" hidden>Clear</button>
+        </form>
+        <p class="dim h-note" id="h-note"></p>
+        <div id="h-rows"></div>
+      </section>
     </div>
   </section>
   <section class="view" id="view-profiles" data-view="profiles" hidden>
-    <div class="p-title">
-      <h2>Profiles <span class="count" id="n-profiles"></span></h2>
-      <p class="dim">Which tools new Claude sessions get in each folder. The nearest <code>.claude-launch</code> above a folder names its profile.</p>
-    </div>
-    <div id="p-msg" role="status" class="h-msg p-toast"></div>
+    <div id="p-msg" role="status" class="h-msg toast"></div>
     <div class="p-layout">
-      <aside class="p-side" aria-label="Folders"><div class="p-side-head">Folders</div><div id="p-tree"></div></aside>
+      <aside class="p-side" aria-label="Folders"><div class="p-side-head">Folders <span class="count" id="n-profiles"></span></div><div id="p-tree"></div></aside>
       <div id="p-main" class="p-main"></div>
     </div>
   </section>

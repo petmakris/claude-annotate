@@ -74,21 +74,42 @@ function copy(text, btn) {
   }
 }
 
-function table(cols, rows) {
-  return el("table", {}, el("thead", {}, el("tr", {}, cols.map((c) => el("th", { style: c.w ? "width:" + c.w : null }, c.head)))),
-    el("tbody", {}, rows.map((r) => el("tr", {}, cols.map((c) => c.cell(r))))));
+// More Lucide 0.460.0 (ISC) icons for the views' headers, tabs and empty states.
+Object.assign(ICONS, {
+  "users": [["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" }], ["circle", { cx: "9", cy: "7", r: "4" }], ["path", { d: "M22 21v-2a4 4 0 0 0-3-3.87" }], ["path", { d: "M16 3.13a4 4 0 0 1 0 7.75" }]],
+  "inbox": [["polyline", { points: "22 12 16 12 14 15 10 15 8 12 2 12" }], ["path", { d: "M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" }]],
+  "history": [["path", { d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" }], ["path", { d: "M3 3v5h5" }], ["path", { d: "M12 7v5l4 2" }]],
+  "settings-2": [["path", { d: "M20 7h-9" }], ["path", { d: "M14 17H5" }], ["circle", { cx: "17", cy: "17", r: "3" }], ["circle", { cx: "7", cy: "7", r: "3" }]],
+  "list-todo": [["rect", { x: "3", y: "5", width: "6", height: "6", rx: "1" }], ["path", { d: "m3 17 2 2 4-4" }], ["path", { d: "M13 6h8" }], ["path", { d: "M13 12h8" }], ["path", { d: "M13 18h8" }]],
+  "messages-square": [["path", { d: "M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z" }], ["path", { d: "M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1" }]],
+  "search": [["circle", { cx: "11", cy: "11", r: "8" }], ["path", { d: "m21 21-4.3-4.3" }]],
+  "plus": [["path", { d: "M5 12h14" }], ["path", { d: "M12 5v14" }]],
+  "send": [["path", { d: "M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" }], ["path", { d: "m21.854 2.147-10.94 10.939" }]],
+  "moon": [["path", { d: "M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" }]],
+});
+const VIEW_ICONS = { fleet: "users", foryou: "inbox", history: "history", profiles: "settings-2" };
+
+// A list's empty state: an icon and one line.
+const empty = (ic, text) => el("div", { class: "empty-box" }, sicon(ic, "empty-ic"), el("p", {}, text));
+const pill = (state, text) => el("span", { class: "pill " + state }, el("span", { class: "dot" }), text || state);
+// A member may run on another machine with another home folder, so its own home is collapsed, whatever it is.
+const homeless = (p) => (p || "").replace(/^\/(?:Users|home)\/[^/]+(?=\/|$)/, "~");
+const machineTag = (m) => (m ? el("span", { class: "tag" }, m) : null);
+function headCount(id, n, extra) {
+  const c = document.getElementById(id);
+  if (c) c.replaceChildren(...(n ? [el("span", { class: "n" }, String(n))] : []), ...(extra || []));
 }
-const cell = (label, cls, f, w) => ({ head: label, w, cell: (r) => el("td", { "data-label": label, class: cls }, f(r)) });
 
 const SELF = { machine: "" };
 const target = (m) => (!m.machine || m.machine === SELF.machine ? m.name : m.name + "@" + m.machine);
 const M = { open: null };  // { key, kind } of the compose row that is open
 
-function mmsg(text, bad) {
-  const m = document.getElementById("m-msg");
-  m.className = "h-msg" + (bad ? " bad" : "");
+function flash(id, text, bad) {
+  const m = document.getElementById(id);
+  m.className = "h-msg toast" + (bad ? " bad" : "") + (text ? " on" : "");
   m.textContent = text || "";
 }
+const mmsg = (text, bad) => flash("m-msg", text, bad);
 
 async function control(path, m, okText) {
   try {
@@ -127,11 +148,12 @@ function memberActions(m) {
   return box;
 }
 
-function composeRow(m, cols) {
-  const t = el("textarea", { rows: "3", class: "h-input", "aria-label": (M.open.kind === "ask" ? "Question for " : "Instruction for ") + m.name, placeholder: M.open.kind === "ask" ? "Ask " + m.name + " a question" : "Tell " + m.name + " what to do" });
+function composeBox(m) {
+  const ask = M.open.kind === "ask";
+  const t = el("textarea", { rows: "3", class: "h-input", "aria-label": (ask ? "Question for " : "Instruction for ") + m.name, placeholder: ask ? "Ask " + m.name + " a question" : "Tell " + m.name + " what to do" });
   t.value = M.open.draft || "";
   t.addEventListener("input", () => { M.open.draft = t.value; });
-  const send = el("button", { type: "button", class: "act primary" }, M.open.kind === "ask" ? "Send question" : "Send instruction");
+  const send = el("button", { type: "button", class: "act primary ic-btn" }, sicon("send"), ask ? "Send question" : "Send instruction");
   const cancel = el("button", { type: "button", class: "act" }, "Cancel");
   const go = async () => {
     if (!t.value.trim() || send.disabled) return;
@@ -145,7 +167,8 @@ function composeRow(m, cols) {
   send.addEventListener("click", go);
   cancel.addEventListener("click", () => { M.open = null; renderMembersNow(); });
   t.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) go(); });
-  return el("tr", { class: "detail compose" }, el("td", { colspan: cols }, t, el("div", { class: "row-actions" }, send, cancel)));
+  return el("div", { class: "compose" }, el("div", { class: "compose-head" }, sicon(ask ? "message-circle-question" : "message-square"), ask ? "Ask " + m.name : "Tell " + m.name, el("span", { class: "dim" }, "as you, ⌘ Enter sends")),
+    t, el("div", { class: "row-actions" }, send, cancel));
 }
 
 let lastMembers = null;
@@ -157,97 +180,92 @@ function renderMembers(data, now, force) {
   if (!force && (document.querySelector("#members .compose textarea") || document.querySelector("#members button[data-sure]"))) return;  // never wipe what is being typed or a pending confirmation
   const order = { alive: 0, dead: 1, left: 2 };
   const rows = data.members.slice().sort((a, b) => order[a.status] - order[b.status] || (b.joined_at || 0) - (a.joined_at || 0));
-  document.getElementById("n-members").textContent = rows.length ? String(rows.length) : "";
+  const alive = rows.filter((m) => m.status === "alive").length;
+  headCount("n-members", rows.length, rows.length ? [el("span", { class: "dim" }, alive + " alive")] : []);
   const box = document.getElementById("members");
-  if (!rows.length) return box.replaceChildren(el("p", { class: "empty" }, "No sessions have joined this fleet yet."));
-  const heads = ["Name", "Status", "Machine", "Folder", "Session", "Joined", "Actions"];
-  const body = el("tbody", {});
-  for (const m of rows) {
-    body.append(el("tr", {},
-      el("td", { class: "name" }, m.name),
-      el("td", { "data-label": "Status" }, el("span", { class: "pill " + m.status }, m.status)),
-      el("td", { "data-label": "Machine" }, m.machine),
-      el("td", { "data-label": "Folder", class: "mono" }, m.cwd),
-      el("td", { "data-label": "Session", class: "mono" }, m.session_id.slice(0, 8)),
-      el("td", { "data-label": "Joined", class: "dim" }, el("span", { title: when(m.joined_at) }, ago(m.joined_at, now))),
-      el("td", {}, memberActions(m))));
-    if (M.open && M.open.key === m.machine + "/" + m.session_id) body.append(composeRow(m, heads.length));
-  }
-  box.replaceChildren(el("table", { class: "m-table" }, el("thead", {}, el("tr", {}, heads.map((h) => el("th", {}, h)))), body));
+  if (!rows.length) return box.replaceChildren(empty("users", "No sessions have joined this fleet yet. Run /fleet join in a session."));
+  box.replaceChildren(el("ul", { class: "list ml" }, rows.map((m) => {
+    const li = el("li", { class: "row ml-row " + m.status },
+      el("span", { class: "ml-status" }, pill(m.status)),
+      el("span", { class: "ml-name" }, el("strong", {}, m.name), el("code", { class: "dim" }, m.session_id.slice(0, 8))),
+      el("span", { class: "ml-machine" }, machineTag(m.machine)),
+      el("code", { class: "ml-folder", title: m.cwd }, homeless(m.cwd)),
+      el("span", { class: "ml-when dim", title: when(m.joined_at) }, ago(m.joined_at, now)),
+      memberActions(m));
+    if (M.open && M.open.key === m.machine + "/" + m.session_id) li.append(composeBox(m));
+    return li;
+  })));
 }
 
 function renderTodos(data) {
   const rows = data.todos;
-  document.getElementById("n-todos").textContent = rows.length ? String(rows.length) : "";
+  const live = rows.filter((t) => t.state !== "done").length;
+  headCount("n-todos", live, rows.length > live ? [el("span", { class: "dim" }, (rows.length - live) + " done")] : []);
   const box = document.getElementById("todos");
-  if (!rows.length) return box.replaceChildren(el("p", { class: "empty" }, "The backlog is empty."));
-  const cols = [
-    cell("State", "", (t) => el("span", { class: "pill " + t.state }, t.state), "90px"),
-    cell("Title", "", (t) => t.title),
-    cell("Holder", "", (t) => t.claimed_by || (t.reserved_for ? "reserved for " + t.reserved_for : ""), "170px"),
-    cell("Ref", "mono", (t) => t.ref || "", "110px"),
-    cell("Machine", "dim", (t) => t.machine, "110px"),
-  ];
-  const kids = [];
+  if (!rows.length) return box.replaceChildren(empty("list-todo", "The backlog is empty."));
+  const item = (t) => el("li", { class: "row td-row " + t.state },
+    el("span", { class: "td-id dim" }, "#" + t.id),
+    el("span", { class: "td-main" }, el("span", { class: "td-title" }, t.title), t.notes ? el("span", { class: "td-notes dim" }, t.notes) : null),
+    el("span", { class: "td-holder" }, t.claimed_by ? el("span", { class: "tag" }, t.claimed_by) : t.reserved_for ? el("span", { class: "tag ghost" }, "for " + t.reserved_for) : null),
+    t.ref ? el("code", { class: "td-ref dim", title: t.ref }, t.ref) : el("span", {}),
+    el("span", { class: "td-machine" }, machineTag(t.machine)));
   const group = (state, label) => {
     const g = rows.filter((t) => t.state === state);
-    if (!g.length) return null;
-    return el("div", {}, el("div", { class: "state-group" }, label + " (" + g.length + ")"), table(cols, g));
+    return g.length ? el("div", { class: "group" }, el("div", { class: "group-head" }, pill(state, label), el("span", { class: "dim" }, String(g.length))), el("ul", { class: "list" }, g.map(item))) : null;
   };
-  kids.push(group("open", "Open"), group("claimed", "Claimed"));
-  const done = group("done", "Done");
-  if (done) kids.push(el("details", {}, el("summary", {}, "Done (" + rows.filter((t) => t.state === "done").length + ")"), done));
-  box.replaceChildren(...kids.filter(Boolean));
+  const done = rows.filter((t) => t.state === "done");
+  box.replaceChildren(...[group("open", "Open"), group("claimed", "Claimed"),
+    done.length ? el("details", { class: "group" }, el("summary", {}, pill("done", "Done"), el("span", { class: "dim" }, String(done.length))), el("ul", { class: "list" }, done.map(item))) : null].filter(Boolean));
 }
 
 function renderThreads(data, now) {
   const rows = data.threads;
-  document.getElementById("n-threads").textContent = rows.length ? String(rows.length) : "";
+  headCount("n-threads", rows.length);
   const box = document.getElementById("threads");
-  if (!rows.length) return box.replaceChildren(el("p", { class: "empty" }, "No messages have been sent yet."));
-  box.replaceChildren(...rows.map((t) => el("div", { class: "thread" },
-    el("div", { class: "thread-head" }, el("span", { class: "mono" }, t.thread),
-      t.open ? el("span", { class: "pill claimed" }, t.open + " waiting") : el("span", { class: "pill done" }, "answered"),
+  if (!rows.length) return box.replaceChildren(empty("messages-square", "No messages have been sent yet."));
+  box.replaceChildren(...rows.map((t) => el("article", { class: "thread" },
+    el("div", { class: "thread-head" }, el("code", {}, t.thread),
+      t.open ? pill("claimed", t.open + " waiting") : pill("done", "answered"),
       el("span", { class: "dim", title: when(t.updated) }, ago(t.updated, now))),
     t.messages.map((m) => el("div", { class: "msg " + m.kind },
-      el("div", { class: "msg-meta" }, el("span", { class: "kind" }, m.kind), " " + m.sender + " to " + m.recipient,
-        " · ", el("span", { title: when(m.created_at) }, ago(m.created_at, now))),
+      el("div", { class: "msg-meta" }, el("span", { class: "kind k-" + m.kind }, m.kind), el("strong", {}, m.sender), el("span", { class: "dim" }, "to"), el("strong", {}, m.recipient),
+        el("span", { class: "dim", title: when(m.created_at) }, ago(m.created_at, now))),
       el("div", { class: "msg-body" }, m.body))))));
 }
 
 function initTodoForm() {
-  const msg = document.getElementById("todo-msg");
   document.getElementById("todo-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = (id) => document.getElementById(id);
     try {
       const d = await post("/api/todos/add", { title: f("todo-title").value, ref: f("todo-ref").value, notes: f("todo-notes").value });
-      msg.className = "h-msg"; msg.textContent = "Added to-do " + d.id + ".";
+      flash("todo-msg", "Added to-do " + d.id + ".");
       for (const id of ["todo-title", "todo-ref", "todo-notes"]) f(id).value = "";
       refresh(true);
-    } catch (err) { msg.className = "h-msg bad"; msg.textContent = err.message; }
+    } catch (err) { flash("todo-msg", err.message, true); }
   });
 }
 
 // ---------------------------------------------------------------- For you
 
 const Y = { items: [], drafts: new Map(), answering: null };
-const fymsg = (text, bad) => { const m = document.getElementById("fy-msg"); m.className = "h-msg" + (bad ? " bad" : ""); m.textContent = text || ""; };
+const fymsg = (text, bad) => flash("fy-msg", text, bad);
 
 function setBadge(n) {
   const b = document.querySelector('#tabs button[data-view="foryou"]');
   if (!b) return;
-  b.replaceChildren("For you", n ? el("span", { class: "badge", "aria-label": n + " waiting for you" }, String(n)) : "");
+  b.replaceChildren(sicon(VIEW_ICONS.foryou), "For you", n ? el("span", { class: "badge", "aria-label": n + " waiting for you" }, String(n)) : "");
   document.title = n ? "(" + n + ") Fleet" : "Fleet";
 }
 
 function fyItem(i, now) {
   const done = i.answered_at !== null;
-  const kids = [el("div", { class: "fy-head" }, el("span", { class: "pill " + (i.kind === "ask" ? "open" : i.kind === "notify" ? "claimed" : "left") }, i.kind === "notify" ? "notice" : i.kind),
-    el("strong", {}, i.sender), SELF.machine && i.machine !== SELF.machine ? el("span", { class: "dim" }, "on " + i.machine) : null,
+  const kind = i.kind === "notify" ? "notice" : i.kind;
+  const kids = [el("div", { class: "fy-head" }, el("span", { class: "kind k-" + i.kind }, kind),
+    el("strong", {}, i.sender), SELF.machine && i.machine !== SELF.machine ? machineTag(i.machine) : null,
     el("span", { class: "dim", title: when(i.created_at) }, ago(i.created_at, now))),
     el("div", { class: "msg-body" }, i.body)];
-  if (done) { kids.push(el("div", { class: "dim fy-reply" }, i.reply ? "You answered: " + i.reply : "Dismissed")); return el("div", { class: "fy-item done" }, kids); }
+  if (done) { kids.push(el("div", { class: "fy-reply" }, i.reply ? "You answered: " + i.reply : "Dismissed")); return el("li", { class: "fy-item done" }, kids); }
   const input = el("textarea", { rows: "2", class: "h-input", "aria-label": "Your answer to " + i.sender, placeholder: i.kind === "ask" ? "Your answer" : "Reply to " + i.sender + " (optional)" });
   input.value = Y.drafts.get(i.ref) || "";
   input.addEventListener("input", () => Y.drafts.set(i.ref, input.value));
@@ -261,34 +279,33 @@ function fyItem(i, now) {
   send.addEventListener("click", () => { if (input.value.trim()) run("/api/inbox/answer", { ref: i.ref, text: input.value }, "Answered. " + i.sender + " has it."); });
   dismiss.addEventListener("click", () => run("/api/inbox/dismiss", { ref: i.ref }, i.kind === "ask" ? "Dismissed. " + i.sender + " was told you did not answer." : "Dismissed."));
   input.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send.click(); });
-  kids.push(input, el("div", { class: "row-actions" }, send, dismiss));
-  return el("div", { class: "fy-item" }, kids);
+  kids.push(el("div", { class: "fy-answer" }, input, el("div", { class: "row-actions" }, send, dismiss)));
+  return el("li", { class: "fy-item k-" + i.kind }, kids);
 }
 
 function renderInbox(data) {
   if (data.machine) SELF.machine = data.machine;
-  Y.items = data.items;
+  Y.items = data.items; Y.open = data.open;
   setBadge(data.open);
-  document.getElementById("n-foryou").textContent = data.open ? String(data.open) : "";
+  headCount("n-foryou", data.open);
   const box = document.getElementById("foryou");
   if (box.querySelector("textarea:focus")) return;  // never wipe what is being typed
   const now = Date.now();
   const open = data.items.filter((i) => i.answered_at === null), done = data.items.filter((i) => i.answered_at !== null);
   const kids = [];
-  if (!open.length) kids.push(el("p", { class: "empty" }, "Nothing is waiting for you."));
-  kids.push(...open.map((i) => fyItem(i, now)));
-  if (done.length) kids.push(el("details", {}, el("summary", {}, "Answered or dismissed (" + done.length + ")"), ...done.map((i) => fyItem(i, now))));
+  kids.push(open.length ? el("ul", { class: "list fy" }, open.map((i) => fyItem(i, now))) : empty("inbox", "Nothing is waiting for you."));
+  if (done.length) kids.push(el("details", { class: "group" }, el("summary", {}, "Answered or dismissed", el("span", { class: "dim" }, String(done.length))), el("ul", { class: "list fy" }, done.map((i) => fyItem(i, now)))));
   box.replaceChildren(...kids);
 }
 
 async function loadInbox() {
-  try { renderInbox(await getJSON("/api/inbox")); fymsg(""); }
+  try { renderInbox(await getJSON("/api/inbox")); }
   catch (e) { fymsg("Cannot load your inbox: " + e.message, true); }
 }
 
 // ---------------------------------------------------------------- History
 
-const H = { rows: [], counts: { total: 0, described: 0 }, home: "", folder: null, q: "", found: null, open: null, shown: 100, loaded: false, busy: false };
+const H = { rows: [], counts: { total: 0, described: 0 }, home: "", folder: null, q: "", found: null, open: null, shown: 100, loaded: false, busy: false, closed: null, renaming: null };
 const PAGE = 100;
 
 async function post(path, body) {
@@ -299,11 +316,7 @@ async function post(path, body) {
   return data;
 }
 
-function say(text, bad) {
-  const m = document.getElementById("h-msg");
-  m.className = "h-msg" + (bad ? " bad" : "");
-  m.textContent = text || "";
-}
+const say = (text, bad) => flash("h-msg", text, bad);
 
 const tilde = (p) => (H.home && (p === H.home || p.startsWith(H.home.replace(/\/+$/, "") + "/")) ? "~" + p.slice(H.home.replace(/\/+$/, "").length) : p);
 
@@ -350,29 +363,38 @@ function slashBreaks(text) {
 // The last two segments of a folder, for a column that cannot hold the whole path.
 function shortFolder(p) {
   const parts = tilde(p || "").split("/").filter(Boolean);
-  return parts.length > 2 ? "\u2026/" + parts.slice(-2).join("/") : tilde(p || "") || "(none)";
+  return parts.length > 2 ? "…/" + parts.slice(-2).join("/") : tilde(p || "") || "(none)";
 }
 
+// The History tree draws like the Profiles tree: connector lines, a folder icon, and a session count per row.
 function renderTree() {
   const box = document.getElementById("h-tree");
   const { top, base } = folderTree(H.rows);
+  if (!H.closed) {
+    H.closed = new Set();
+    const walk = (n, depth) => { if (depth > 1) H.closed.add(n.path); n.kids.forEach((k) => walk(k, depth + 1)); };
+    base.kids.forEach((k) => walk(k, 0));
+  }
+  const sorted = (n) => [...n.kids.values()].sort((a, b) => b.count - a.count || a.seg.localeCompare(b.seg));
   const sel = (path) => { H.folder = H.folder === path ? null : path; H.shown = PAGE; renderHistory(); };
-  const node = (n, depth) => {
-    const kids = [...n.kids.values()].sort((a, b) => b.count - a.count || a.seg.localeCompare(b.seg));
-    const head = el("button", { type: "button", class: "f-node" + (H.folder === n.path ? " on" : ""), "aria-pressed": H.folder === n.path ? "true" : "false" },
-      el("span", { class: "f-name mono" }, ...slashBreaks(n.seg || "/")), el("span", { class: "f-count" }, n.count));
-    head.addEventListener("click", () => sel(n.path));
-    if (!kids.length) return el("div", { class: "f-leaf" }, head);
-    const d = el("details", { class: "f-dir", open: depth < 2 || (H.folder && H.folder.startsWith(n.path)) }, el("summary", {}, head));
-    d.append(...kids.map((k) => node(k, depth + 1)));
-    return d;
+  const item = (n) => {
+    const kids = sorted(n);
+    const inside = H.folder && H.folder.startsWith(n.path + "/");
+    const closed = H.closed.has(n.path) && !inside;
+    const tog = kids.length ? el("button", { type: "button", class: "t-tog", "aria-label": (closed ? "Open " : "Fold ") + n.seg, "aria-expanded": closed ? "false" : "true" }, sicon(closed ? "chevron-right" : "chevron-down"))
+      : el("span", { class: "t-tog t-none" });
+    if (kids.length) tog.addEventListener("click", () => { H.closed.has(n.path) ? H.closed.delete(n.path) : H.closed.add(n.path); renderTree(); });
+    const row = el("button", { type: "button", class: "t-row" + (H.folder === n.path ? " sel" : ""), "aria-pressed": H.folder === n.path ? "true" : "false", title: n.path.replace(/^\/~/, "~") },
+      sicon("folder", "t-ic"), el("span", { class: "t-name" }, ...slashBreaks(n.seg || "/")), el("span", { class: "t-n" }, String(n.count)));
+    row.addEventListener("click", () => sel(n.path));
+    return el("li", { class: inside || H.folder === n.path ? "on-path" : "" }, el("div", { class: "t-line" }, tog, row), kids.length && !closed ? el("ul", {}, kids.map(item)) : null);
   };
-  const all = el("button", { type: "button", class: "f-node" + (H.folder === null ? " on" : ""), "aria-pressed": H.folder === null ? "true" : "false" },
-    el("span", { class: "f-name" }, "All sessions"), el("span", { class: "f-count" }, top.count));
+  const all = el("button", { type: "button", class: "t-row t-all" + (H.folder === null ? " sel" : ""), "aria-pressed": H.folder === null ? "true" : "false" },
+    sicon("layers", "t-ic"), el("span", { class: "t-name" }, "All sessions"), el("span", { class: "t-n" }, String(top.count)));
   all.addEventListener("click", () => { H.folder = null; H.shown = PAGE; renderHistory(); });
-  const prefix = base.seg && base !== top ? el("div", { class: "f-prefix dim mono", title: base.seg }, "/" + base.seg) : null;
-  box.replaceChildren(...[all, prefix, ...[...base.kids.values()].sort((a, b) => b.count - a.count || a.seg.localeCompare(b.seg)).map((k) => node(k, 1)),
-    base.own ? el("div", { class: "dim f-own" }, base.own + " directly in " + base.path.replace(/^\/~/, "~")) : null].filter(Boolean));
+  const prefix = base.seg && base !== top ? el("div", { class: "t-root mono", title: base.seg }, base.seg) : null;
+  const own = base.own ? el("div", { class: "t-root" }, base.own + " directly in " + base.path.replace(/^\/~/, "~")) : null;
+  box.replaceChildren(...[all, prefix, el("ul", { class: "t-tree" }, sorted(base).map(item)), own].filter(Boolean));
 }
 
 function visibleRows() {
@@ -388,34 +410,33 @@ async function act(fn, okText) {
   try { await fn(); if (okText) say(okText); } catch (e) { say(e.message, true); } finally { H.busy = false; }
 }
 
-function nameCell(r) {
-  const td = el("td", { "data-label": "Name", class: "name" });
+function nameBox(r) {
+  const box = el("div", { class: "hs-name" });
+  if (H.renaming === r.id) {
+    const input = el("input", { type: "text", value: r.name, "aria-label": "New name", class: "h-input" });
+    const save = el("button", { type: "button", class: "act primary" }, "Save");
+    const cancel = el("button", { type: "button", class: "act" }, "Cancel");
+    const go = () => act(async () => { await post("/api/history/rename", { id: r.id, name: input.value }); H.renaming = null; await loadHistory(); });
+    save.addEventListener("click", go);
+    cancel.addEventListener("click", () => { H.renaming = null; renderRows(); });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); if (e.key === "Escape") { H.renaming = null; renderRows(); } });
+    box.append(input, el("div", { class: "row-actions" }, save, cancel));
+    setTimeout(() => { input.focus(); input.select(); });
+    return box;
+  }
   const label = r.name || r.about || "(unnamed)";
   const open = el("button", { type: "button", class: "link" + (r.name ? "" : " muted"), title: label, "aria-expanded": H.open === r.id ? "true" : "false" }, label);
   open.addEventListener("click", () => { H.open = H.open === r.id ? null : r.id; renderRows(); });
-  td.append(open, el("div", { class: "mono dim id" }, r.id.slice(0, 8)));
-  return td;
+  box.append(open, el("code", { class: "dim" }, r.id.slice(0, 8)));
+  return box;
 }
 
-function renameInto(td, r) {
-  const input = el("input", { type: "text", value: r.name, "aria-label": "New name", class: "h-input" });
-  const save = el("button", { type: "button", class: "act primary" }, "Save");
-  const cancel = el("button", { type: "button", class: "act" }, "Cancel");
-  const go = () => act(async () => { await post("/api/history/rename", { id: r.id, name: input.value }); await loadHistory(); });
-  save.addEventListener("click", go);
-  cancel.addEventListener("click", renderRows);
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); if (e.key === "Escape") renderRows(); });
-  td.replaceChildren(input, el("div", { class: "row-actions" }, save, cancel));
-  input.focus(); input.select();
-}
-
-function actionsCell(r, tr) {
-  const td = el("td", {});
+function historyActions(r) {
   const box = el("div", { class: "actions" });
   const mk = ibtn;
   box.append(
     mk("message-circle-question", "Ask", () => { H.open = r.id; renderRows(); const q = document.getElementById("ask-" + r.id); if (q) q.focus(); }),
-    mk("pencil", "Rename", () => renameInto(tr.querySelector("td.name"), r)),
+    mk("pencil", "Rename", () => { H.renaming = r.id; renderRows(); }),
     mk("copy", "Copy resume", (b) => copy(r.resume, b)),
     mk("trash-2", "Delete", (b) => {
       if (b.dataset.sure) return act(async () => { await post("/api/history/delete", { id: r.id }); if (H.open === r.id) H.open = null; await loadHistory(); }, "Removed from the history. The transcript is untouched.");
@@ -423,11 +444,10 @@ function actionsCell(r, tr) {
       b.setAttribute("aria-label", "Confirm delete"); b.title = "Press again to delete";
       setTimeout(() => { if (b.isConnected) { delete b.dataset.sure; b.classList.remove("confirming"); b.replaceChildren(icon("trash-2")); b.setAttribute("aria-label", "Delete"); b.title = "Delete"; } }, 4000);
     }, "danger-hover"));
-  td.append(box);
-  return td;
+  return box;
 }
 
-function detailRow(r, cols) {
+function detailBox(r) {
   const answer = el("div", { class: "h-answer", role: "status" });
   const q = el("input", { type: "text", id: "ask-" + r.id, class: "h-input", placeholder: "Ask a question about this session", "aria-label": "Question about this session" });
   const ask = el("button", { type: "button", class: "act primary" }, "Ask");
@@ -439,11 +459,11 @@ function detailRow(r, cols) {
   };
   ask.addEventListener("click", go);
   q.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
-  return el("tr", { class: "detail" }, el("td", { colspan: cols },
+  return el("div", { class: "detail" },
     r.description ? el("p", { class: "h-desc" }, r.description) : el("p", { class: "dim" }, "No description yet. fleet history describe writes one."),
     r.about ? el("p", { class: "dim" }, "Opened with: " + r.about) : null,
-    el("p", { class: "mono dim" }, r.transcript || "no transcript path"),
-    el("div", { class: "h-ask" }, q, ask), answer));
+    el("code", { class: "dim d-path" }, r.transcript || "no transcript path"),
+    el("div", { class: "h-ask" }, q, ask), answer);
 }
 
 function renderRows() {
@@ -452,37 +472,32 @@ function renderRows() {
   const found = H.found;
   const head = found ? el("p", { class: "h-found" }, found.hits.length ? "Matches by meaning, best first (" + found.hits.length + ")" : "No description matches that.") : null;
   if (!rows.length) {
-    return box.replaceChildren(...[head, el("p", { class: "empty" }, H.rows.length ? (found ? "" : "No session matches.") : "No sessions recorded yet. They appear as sessions run, or import an older store with fleet history import.")].filter(Boolean));
+    return box.replaceChildren(...[head, H.rows.length ? (found ? null : empty("search", "No session matches.")) : empty("history", "No sessions recorded yet. They appear as sessions run, or import an old store with fleet history import.")].filter(Boolean));
   }
-  const cols = [
-    { head: "Name" },
-    { head: found ? "Why" : "About" }, { head: "Folder" }, { head: "Started" }, { head: "Last seen" }, { head: "" },
-  ];
-  const body = el("tbody", {});
-  for (const r of rows.slice(0, H.shown)) {
-    const tr = el("tr", { class: H.open === r.id ? "expanded" : "" });
-    tr.append(nameCell(r),
-      el("td", { "data-label": found ? "Why" : "About" }, el("div", { class: "about" }, found ? r.why : (r.description || r.about))),
-      el("td", { "data-label": "Folder", class: "mono" }, el("span", { class: "folder", title: tilde(r.folder || "") }, shortFolder(r.folder))),
-      el("td", { "data-label": "Started", class: "dim nw" }, el("span", { title: when(r.started) }, ago(r.started, Date.now()))),
-      el("td", { "data-label": "Last seen", class: "dim nw" }, el("span", { title: when(r.last_seen) }, ago(r.last_seen, Date.now()))),
-      actionsCell(r, tr));
-    body.append(tr);
-    if (H.open === r.id) body.append(detailRow(r, cols.length));
-  }
+  const now = Date.now();
+  const list = el("ul", { class: "list hs" }, rows.slice(0, H.shown).map((r) => el("li", { class: "row hs-row" + (H.open === r.id ? " open" : "") },
+    nameBox(r),
+    el("div", { class: "hs-about dim" }, found ? r.why : (r.description || r.about)),
+    el("code", { class: "hs-folder", title: tilde(r.folder || "") }, shortFolder(r.folder)),
+    el("span", { class: "hs-when dim", title: "Started " + when(r.started) + ", last seen " + when(r.last_seen) }, ago(r.last_seen || r.started, now)),
+    historyActions(r),
+    H.open === r.id ? detailBox(r) : null)));
   const more = rows.length > H.shown ? el("button", { type: "button", class: "act more" }, "Show " + Math.min(PAGE, rows.length - H.shown) + " more of " + (rows.length - H.shown)) : null;
   if (more) more.addEventListener("click", () => { H.shown += PAGE; renderRows(); });
-  box.replaceChildren(...[head, el("table", { class: "h-table" }, el("thead", {}, el("tr", {}, cols.map((c) => el("th", {}, c.head)))), body), more].filter(Boolean));
+  box.replaceChildren(...[head, list, more].filter(Boolean));
 }
 
 function renderHistory() {
   const c = H.counts;
-  document.getElementById("n-history").textContent = c.total ? String(c.total) : "";
+  headCount("n-history", c.total);
   document.getElementById("h-note").textContent = c.total
     ? c.described + " of " + c.total + " sessions have a description, which search by meaning reads. fleet history describe writes the rest."
       + (c.unreadable ? " Warning: " + c.unreadable + " transcript" + (c.unreadable === 1 ? "" : "s") + " could not be read: has the transcript format changed?" : "")
     : "";
   document.getElementById("h-clear").hidden = !H.found;
+  const crumb = document.getElementById("h-crumb");
+  crumb.textContent = H.folder ? H.folder.replace(/^\/~/, "~") : "All sessions";
+  crumb.className = H.folder ? "mono" : "";
   renderTree(); renderRows();
 }
 
@@ -496,7 +511,6 @@ async function loadHistory() {
 }
 
 function initHistory() {
-  if (matchMedia("(max-width: 720px)").matches) document.getElementById("h-tree-box").open = false;  // the folders fold away on a phone
   const q = document.getElementById("h-q");
   q.addEventListener("input", () => { H.q = q.value; H.found = null; H.shown = PAGE; renderHistory(); });
   document.getElementById("h-clear").addEventListener("click", () => { H.found = null; H.q = ""; q.value = ""; say(""); renderHistory(); });
@@ -535,11 +549,7 @@ Object.assign(ICONS, {
 });
 const sicon = (name, cls) => { const s = icon(name); s.setAttribute("class", "ic" + (cls ? " " + cls : "")); return s; };
 
-function pmsg(text, bad) {
-  const m = document.getElementById("p-msg");
-  m.className = "h-msg p-toast" + (bad ? " bad" : "") + (text ? " on" : "");
-  m.textContent = text || "";
-}
+const pmsg = (text, bad) => flash("p-msg", text, bad);
 
 const isOn = (d, t) => (t.kind === "pluginDir" ? d.pluginDirs.includes(t.id) : t.kind === "mcp" ? !d.denied.includes(t.id) : !d.disabledPlugins.includes(t.id));
 const flip = (list, id) => (list.includes(id) ? list.filter((x) => x !== id) : list.concat([id]));
@@ -772,14 +782,14 @@ function renderProfiles() {
       el("pre", { class: "mono p-pre" }, '{"roots": ["~/projects/my-env"], "default_dirs": [], "locked": {}, "hidden": []}'),
       el("p", { class: "dim" }, "roots are the repositories whose claude/profiles/ hold <name>.args and <name>.json.")));
   }
-  document.getElementById("n-profiles").textContent = d.folders.length ? d.folders.length + " folders" : "";
+  document.getElementById("n-profiles").textContent = d.folders.length ? String(d.folders.length) : "";
   if (P.folder && !d.folders.some((x) => x.path === P.folder)) P.folder = null;
   if (!P.editing && !P.folder) P.editing = d.profiles.length ? d.profiles[0].name : null;
   renderProfilesTree();
   const refreshBtn = el("button", { type: "button", class: "act ic-btn" }, sicon("refresh-cw"), "Refresh tools");
   refreshBtn.addEventListener("click", async () => { refreshBtn.disabled = true; await loadProfiles(true); });
   const kids = [el("div", { class: "p-bar" },
-    el("span", { class: "dim" }, "Running sessions keep their tools until restarted."),
+    el("span", { class: "dim" }, "Which tools new sessions get in each folder. Running sessions keep theirs until restarted."),
     d.auditFindings ? el("span", { class: "warn-chip" }, d.auditFindings + (d.auditFindings === 1 ? " cleanup finding" : " cleanup findings") + (d.auditHint ? ": run " + d.auditHint : "")) : null,
     el("span", { class: "grow" }), refreshBtn)];
   if (d.toolsError) kids.push(el("p", { class: "h-msg bad" }, "MCP servers unavailable: " + d.toolsError));
@@ -832,9 +842,10 @@ async function refresh(withInbox) {
     const now = Date.now();
     renderMembers(m, now); renderTodos(t, now); renderThreads(th, now); renderNotices([m, t, th]);
     loadInbox();
-    stamp.textContent = "Updated " + new Date(now).toLocaleTimeString() + ", every " + REFRESH / 1000 + " s";
+    stamp.className = "live"; stamp.title = "Refreshed every " + REFRESH / 1000 + " s";
+    stamp.textContent = "Live, updated " + new Date(now).toLocaleTimeString();
   } catch (e) {
-    stamp.textContent = "Cannot reach the server (" + e.message + "), retrying";
+    stamp.className = "down"; stamp.textContent = "Cannot reach the server (" + e.message + "), retrying";
   } finally { busy = false; }
 }
 
@@ -843,6 +854,7 @@ function showView(id) {
   if (id === "history" && !H.loaded) loadHistory();
   if (id === "profiles" && !P.data) loadProfiles();
   document.querySelectorAll(".view").forEach((s) => (s.hidden = s.dataset.view !== id));
+  if (id !== "foryou") setBadge(Y.open || 0);
   document.querySelectorAll("#tabs button").forEach((b) => (b.dataset.view === id ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current")));
 }
 
@@ -861,12 +873,14 @@ function initTheme() {
 }
 
 function start() {
+  document.querySelectorAll(".head-ic[data-icon]").forEach((s) => s.replaceWith(sicon(s.dataset.icon, "head-svg")));
+  document.querySelector(".logo").append(sicon("users"));
   initTheme();
   initHistory();
   initProfiles();
   initTodoForm();
   const tabs = document.getElementById("tabs");
-  VIEWS.forEach((v) => tabs.append(el("button", { type: "button", "data-view": v.id, onclick: null }, v.label)));
+  VIEWS.forEach((v) => tabs.append(el("button", { type: "button", "data-view": v.id }, sicon(VIEW_ICONS[v.id]), v.label)));
   tabs.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { location.hash = b.dataset.view; }));
   addEventListener("hashchange", () => showView(location.hash.slice(1)));
   showView(location.hash.slice(1));
