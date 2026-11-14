@@ -1,7 +1,7 @@
 ---
 name: journey
 description: Answer an app's journey canvas (Shop, Ledger, tutor) as its one Claude session on the configured host — the canvas's comments, Send to Claude and Re-run buttons arrive here as events. Use when the user types "/journey <app>" (open or reattach that app's journey session) or "/journey <app> resume" (the doorman's headless wake-up), or when a task-notification's first line is `WEBCOMPANION_EVENT skill=journey`, `WEBCOMPANION_FINISHED skill=journey`, `WEBCOMPANION_CANCELLED skill=journey` or `JOURNEY_SUPERSEDED`. Knows the journey commands (`<app> journey`, `--list`, `publish`) so the user never types them. Never ships and never pushes to main.
-argument-hint: "<shop|ledger|tutor> [resume]"
+argument-hint: "<app>-<sandbox> [resume]"
 allowed-tools:
   - Bash
   - Read
@@ -23,6 +23,14 @@ app's canvas folder. Its one link is `https://<webcompanion host>/s/<app>/` (sho
 ledger, tutor). The user comments on its boards, presses **Send to Claude** (the comments
 Claude has not answered, as one event), **Re-run** on a feature or **Re-run all**. This session
 answers. One Claude session per app; it lives only on the configured host (`host` in `~/.config/claude-annotate/journey/config.json`), in the session home (`home`), never in a sandbox folder.
+
+**A journey belongs to a sandbox, not to an app** (14 November 2026). Each sandbox that runs its journey (on a
+machine with no sandboxes, each checkout) has its own canvas, registered by the app's CLI with `J register <app>
+--name <sandbox> --checkout <folder> --canvas <its .out>`. Its key is `<app>-<name>` (`mealy-petros-mealy-features`):
+its link is `/s/<key>/`, it has its own Claude session in that sandbox's folder, and `<app>` in every command
+below is that key (`/journey mealy-petros-mealy-features`). `J apps` lists every canvas. A removed sandbox's
+canvas is archived (`J archive <key> --to <dir>`): still open, still answered, but Re-run refuses. A bare app
+name is an app's shared canvas from before, still read.
 
 - **shop, ledger, tutor** (example apps): there is no journey sandbox. A journey runs in any
   sandbox of the app. The canvas is the apps file's `canvas` folder,

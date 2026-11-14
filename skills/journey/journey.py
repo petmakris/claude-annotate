@@ -27,8 +27,12 @@ answers every waiting event and exits.
 
 Commands (all print plain text unless --json):
 
-  apps                                   every app: folder, session, owner, state
-  ensure APP                             find or make the app's session and register its page
+  apps                                   every canvas: folder, session, owner, state
+  register APP --name N --checkout DIR --canvas DIR   a sandbox's canvas, key APP-N, as its session's page
+  archive CANVAS --to DIR                a removed sandbox's canvas: copied to DIR, its page, no Re-run
+  ensure CANVAS                          find or make the canvas's session and register its page
+
+CANVAS (written APP below) is a canvas key, `<app>-<sandbox name>`, or an app alone for its shared canvas from before.
   link APP                               the canvas links
   claim APP [--session ID --pid PID --mode interactive|headless] [--cwd DIR]
   watch APP [--session ID]               webcompanion watch, ended when another session claims the app
@@ -119,12 +123,72 @@ class Refused(Exception):
     """A command that cannot go on; its message is for the person."""
 
 
-# ── where things are ────────────────────────────────────────────────────────
+# ── canvases: one per sandbox (or checkout) of an app ───────────────────────
+#
+# A journey belongs to a sandbox, not to an app (Petros, 14 November 2026). Each sandbox (on a machine with no
+# sandboxes, each checkout) that runs its journey has its own canvas: the folder its run builds, registered by
+# `journey.py register APP --name NAME --checkout DIR --canvas DIR`. Its key is `<app>-<name>`: the slug of its
+# webcompanion session (/s/<key>/), its state folder and its Claude session. A key that is a bare app name is an
+# app's shared canvas from before, still read.
 
 def need_app(app: str) -> dict:
     if app not in APPS:
         raise Refused(f"no journey app {app!r}: one of {', '.join(APPS)}")
     return APPS[app]
+
+
+def name_slug(name: str) -> str:
+    return re.sub(r"^-+|-+$", "", re.sub(r"[^a-z0-9]+", "-", name.lower()))
+
+
+def canvas_key(app: str, name: str | None) -> str:
+    """A canvas's key: `<app>-<name>`, or the app alone for an app's shared canvas from before."""
+    need_app(app)
+    slug = name_slug(name or "")
+    return f"{app}-{slug}" if slug else app
+
+
+def canvas_record(key: str) -> dict:
+    """What `register` wrote for the canvas: {app, name, checkout, canvas, archived?, at}; {} for an app's shared one."""
+    return read_json(STATE_ROOT / key / "canvas.json", {}) if re.match(r"^[a-z0-9-]+$", key) else {}
+
+
+def app_of(key: str) -> str:
+    """The app a canvas belongs to; refused for a key no canvas has."""
+    rec = canvas_record(key)
+    app = rec.get("app") or key
+    if app not in APPS:
+        raise Refused(f"no journey canvas {key!r}: one of {', '.join(canvas_keys()) or 'none yet'}")
+    return app
+
+
+def canvas_keys() -> list[str]:
+    """Every canvas this machine knows: each app's shared one from before, then each registered one."""
+    return list(APPS) + sorted(p.parent.name for p in STATE_ROOT.glob("*/canvas.json") if p.parent.name not in APPS)
+
+
+def register(app: str, name: str, checkout: str, canvas: str) -> dict:
+    """Make (or move) a sandbox's canvas: its record, then its webcompanion session with the canvas as its page."""
+    key = canvas_key(app, name)
+    if key == app:
+        raise Refused("a canvas needs a name: the sandbox's, or on a machine with no sandboxes the checkout's")
+    rec = canvas_record(key)
+    write_json(state_dir(key) / "canvas.json", {"app": app, "name": name, "checkout": checkout, "canvas": canvas,
+                                                 "at": now_iso(), **({"since": rec["since"]} if rec.get("since") else
+                                                                     {"since": now_iso()})})
+    return {**ensure(key), "key": key}
+
+
+def archive(key: str, to: str) -> dict:
+    """A removed sandbox's canvas: copied to `to`, which becomes its page, and marked archived (no Re-run)."""
+    rec = canvas_record(key)
+    if not rec:
+        raise Refused(f"{key} is no sandbox's canvas")
+    src, dest = Path(rec["canvas"]), Path(os.path.expanduser(to))
+    if src.is_dir() and src.resolve() != dest.resolve():
+        shutil.copytree(src, dest, dirs_exist_ok=True)
+    write_json(state_dir(key) / "canvas.json", {**rec, "canvas": str(dest), "archived": now_iso()})
+    return {**ensure(key), "key": key, "archived": str(dest)}
 
 
 def on_main() -> bool:
@@ -147,12 +211,17 @@ def app_cli() -> Path:
 
 
 def canvas_source(app: str) -> dict:
-    """The published canvas's source.json: {app, sandbox, branch, path, head, ranAt, ended?}, or {}."""
+    """An app's shared canvas's source.json (from before): {app, sandbox, branch, path, head, ranAt, ended?}, or {}."""
     return read_json(canvas_dir(app) / "source.json", {})
 
 
 def sandbox_folder(app: str) -> Path | None:
-    """The folder of the sandbox the app's canvas was captured on, while it exists and has not ended, or None."""
+    """The folder of the sandbox (or checkout) the canvas belongs to, while it exists and is not archived, or None.
+    For an app's shared canvas from before: the sandbox its source.json names."""
+    rec = canvas_record(app)
+    if rec:
+        p = Path(rec.get("checkout") or "")
+        return p if not rec.get("archived") and p.is_absolute() and p.is_dir() else None
     src = canvas_source(app)
     path = src.get("path")
     if not isinstance(path, str) or not path or src.get("ended"):
@@ -164,9 +233,9 @@ def sandbox_folder(app: str) -> Path | None:
 def place(app: str) -> dict:
     """Where the app's journey ran last, and how it runs: {from, folder, run, after, env}. The folder is the
     sandbox the canvas was captured on (None: none yet, or it ended); the app CLI picks the sandbox."""
-    spec = need_app(app)
+    spec = need_app(app_of(app))
     return {"from": "sandbox", "folder": sandbox_folder(app), "run": spec["run"], "after": spec.get("after"),
-            "env": spec.get("env") or {}}
+            "env": spec.get("env") or {}, "name": canvas_record(app).get("name") or ""}
 
 
 def features_root(app: str) -> Path:
@@ -175,9 +244,9 @@ def features_root(app: str) -> Path:
 
 
 def session_folder(app: str) -> Path:
-    """The folder the app's Claude session runs in: the session home, never a sandbox, which a ship removes."""
-    need_app(app)
-    return APP_HOME
+    """The folder the canvas's Claude session runs in: its sandbox's (one session per canvas), else the session home."""
+    app_of(app)
+    return (sandbox_folder(app) if canvas_record(app) else None) or APP_HOME
 
 
 def knows_named_journeys(cli: Path) -> bool:
@@ -231,11 +300,13 @@ def state_dir(app: str) -> Path:
 
 
 def canvas_dir(app: str) -> Path:
-    return Path(os.path.expanduser(need_app(app)["canvas"]))
+    """The canvas's folder: the one registered (the sandbox's own, or its archive), else the app's shared one."""
+    rec = canvas_record(app)
+    return Path(os.path.expanduser(rec["canvas"] if rec.get("canvas") else need_app(app_of(app))["canvas"]))
 
 
 def stable_link(app: str) -> str:
-    """The canvas's one link: its session's page by slug, which opens the canvas."""
+    """The canvas's one link: its session's page by slug (the canvas key), which opens the canvas."""
     return f"{public_base().rstrip('/')}/s/{app}/"
 
 
@@ -368,14 +439,15 @@ def find_session(app: str) -> dict | None:
 
 
 def ensure(app: str) -> dict:
-    """The app's live session, reopened or made, with the published canvas as its page."""
-    need_app(app)
+    """The canvas's live session, reopened or made, with the canvas as its page."""
+    rec = canvas_record(app)
+    name = APPS[app_of(app)]["name"]
     row = find_session(app)
     if row is not None and row.get("state", "live") != "live":
         wc.request("POST", f"/s/{row['sid']}/api/unfinish")
     if row is None:
-        row = wc.request("POST", "/api/sessions", {"kind": KIND, "cwd": str(APP_HOME), "slug": app,
-                                                   "title": f"{APPS[app]['name']} journey"})
+        row = wc.request("POST", "/api/sessions", {"kind": KIND, "cwd": str(session_folder(app)), "slug": app,
+                                                   "title": f"{name} journey" + (f" · {rec['name']}" if rec else "")})
         if row.get("slug") != app:
             raise Refused(f"asked webcompanion for journey session {app} and got {row.get('slug')}")
     folder = canvas_dir(app)
@@ -390,7 +462,7 @@ def ensure(app: str) -> dict:
 def sid_of(app: str) -> str:
     row = find_session(app)
     if row is None:
-        raise Refused(f"{app} has no journey session yet: run `journey.py ensure {app}` (or publish its canvas)")
+        raise Refused(f"{app} has no journey session yet: run its journey with --publish (or `journey.py ensure {app}`)")
     return row["sid"]
 
 
@@ -451,7 +523,7 @@ def get_item(sid: str, anchor: str) -> dict | None:
 
 def comments_of(app: str, sid: str) -> dict[str, dict]:
     st, _ = store.fold(wc.get_threads(sid, kind=KIND))
-    return {c["id"]: c for c in st["comments"] if c["app"] == app}
+    return {c["id"]: c for c in st["comments"] if c["app"] == app_of(app)}
 
 
 # ── Claude's state, as the canvas shows it ─────────────────────────────────
@@ -649,7 +721,7 @@ def feature_id(name: str) -> str:
 def features(app: str) -> list[dict]:
     """The app's features in order: {id, name, skip}. apps.json says where from: a journey.feature's
     Scenarios (the Gherkin feature files' Scenario lines)."""
-    src = need_app(app)["features"]
+    src = need_app(app_of(app))["features"]
     return gherkin(features_root(app) / src["gherkin"])
 
 
@@ -673,17 +745,18 @@ def gherkin(f: Path) -> list[dict]:
 def out_dir(app: str) -> Path | None:
     """The folder the app's last run wrote its results into, in the sandbox the canvas was captured on (None: none)."""
     folder = sandbox_folder(app)
-    return folder / need_app(app)["results"] if folder else None
+    return folder / need_app(app_of(app))["results"] if folder else None
 
 
-def fill(text: str, folder: Path | None) -> str:
-    """{checkout}, {cli} and {home} of an apps-file word."""
+def fill(text: str, folder: Path | None, name: str = "") -> str:
+    """{checkout}, {cli}, {home} and {name} (the canvas's sandbox) of an apps-file word."""
     return (text.replace("{checkout}", str(folder or "")).replace("{home}", str(APP_HOME))
-            .replace("{cli}", str(app_cli())))
+            .replace("{cli}", str(app_cli())).replace("{name}", name))
 
 
-def argv_of(template: list[str] | None, folder: Path | None, chosen: list[str] | None = None) -> list[str]:
-    """An apps.json argv with {features} spread out (nothing for every feature) and its other fields
+def argv_of(template: list[str] | None, folder: Path | None, chosen: list[str] | None = None, name: str = "") -> list[str]:
+    """An apps.json argv with {features} spread out (nothing for every feature), {--name} as `--name <sandbox>`
+    (nothing without one) and its other fields
     filled in; a first word that names a file of the folder is that file."""
     if not template:
         return []
@@ -691,8 +764,11 @@ def argv_of(template: list[str] | None, folder: Path | None, chosen: list[str] |
     for a in template:
         if a == "{features}":
             argv += chosen or []
+        elif a == "{--name}":
+            # The canvas's sandbox, for a CLI that takes --name; nothing for an app's shared canvas from before.
+            argv += ["--name", name] if name else []
         else:
-            argv.append(fill(a, folder))
+            argv.append(fill(a, folder, name))
     argv[0] = os.path.expanduser(argv[0])
     if "/" in argv[0] and not argv[0].startswith("/") and folder:
         argv[0] = str(folder / argv[0])
@@ -705,6 +781,8 @@ def rerun(app: str, wanted: list[str], event_id: str | None = None) -> dict:
     state on the canvas, then its `after`.
     Only ids the app's feature list has are run."""
     need_main()
+    if canvas_record(app).get("archived"):
+        raise Refused(f"{app}'s sandbox was removed: its canvas is archived and runs nothing")
     known = [f for f in features(app) if not f["skip"]]
     ids = [f["id"] for f in known]
     if wanted == ["all"]:
@@ -723,18 +801,18 @@ def rerun(app: str, wanted: list[str], event_id: str | None = None) -> dict:
     started = now_iso()
     for f in chosen:
         put_item(sid, f"run/{f}", {"state": "running", "at": started, "event": event_id})
-    argv = argv_of(p["run"], p["folder"], [] if chosen == ids else chosen)
+    argv = argv_of(p["run"], p["folder"], [] if chosen == ids else chosen, p["name"])
     if argv and argv[0] == str(app_cli()):
         argv[0] = str(cli)
     # A run whose first word is the canvas checkout's own CLI (a relative path in the apps file, as on a machine
     # with no sandboxes) runs from that checkout, for the same reason.
     if argv and p["folder"] and Path(argv[0]).is_relative_to(p["folder"]):
         cwd = p["folder"]
-    after = argv_of(p["after"], p["folder"])
+    after = argv_of(p["after"], p["folder"], None, p["name"])
     logs = state_dir(app) / "runs"
     logs.mkdir(exist_ok=True)
     logf = logs / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
-    env = {**os.environ, "FORCE_COLOR": "0", **{k: fill(v, p["folder"]) for k, v in p["env"].items()}}
+    env = {**os.environ, "FORCE_COLOR": "0", **{k: fill(v, p["folder"], p["name"]) for k, v in p["env"].items()}}
     log(app, f"rerun {' '.join(chosen)}: {' '.join(argv)} in {cwd} > {logf}")
     t0 = time.time()
     with open(logf, "w") as lf:
@@ -898,7 +976,7 @@ def doorman_tick(app: str, now: float | None = None) -> str:
 
 def doorman(once: bool = False, period: float = 5.0) -> int:
     need_main()
-    log(None, f"doorman: watching {', '.join(APPS)}")
+    log(None, f"doorman: watching {', '.join(canvas_keys())}")
     import threading
     last: dict[str, str] = {}
     busy: dict[str, threading.Thread] = {}
@@ -913,8 +991,8 @@ def doorman(once: bool = False, period: float = 5.0) -> int:
             last[app] = what
 
     while True:
-        # One thread per app, so a long answer (a full re-run) never holds another app's wake-up.
-        for app in APPS:
+        # One thread per canvas, so a long answer (a full re-run) never holds another canvas's wake-up.
+        for app in canvas_keys():
             if app in busy and busy[app].is_alive():
                 continue
             busy[app] = threading.Thread(target=tick, args=(app,), daemon=True, name=f"doorman-{app}")
@@ -1063,6 +1141,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", action="store_true")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("apps")
+    p = sub.add_parser("register")
+    p.add_argument("app")
+    p.add_argument("--name", required=True)
+    p.add_argument("--checkout", required=True)
+    p.add_argument("--canvas", required=True)
+    p = sub.add_parser("archive")
+    p.add_argument("app")
+    p.add_argument("--to", required=True)
     for name in ("ensure", "link", "pending", "status", "launch"):
         sub.add_parser(name).add_argument("app")
     p = sub.add_parser("claim")
@@ -1105,11 +1191,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("comment_id")
     a = ap.parse_args(argv)
     try:
-        if a.cmd != "apps" and hasattr(a, "app"):
-            need_app(a.app)
-        if a.cmd == "apps":
+        if a.cmd not in ("apps", "register") and hasattr(a, "app"):
+            app_of(a.app)
+        if a.cmd == "register":
+            need_main()
+            show(register(a.app, a.name, str(Path(a.checkout).resolve()), str(Path(a.canvas).resolve())), a.json)
+        elif a.cmd == "archive":
+            need_main()
+            show(archive(a.app, a.to), a.json)
+        elif a.cmd == "apps":
             rows = []
-            for app in APPS:
+            for app in canvas_keys():
                 row = find_session(app) if on_main() else None
                 line = sessions_line(app)
                 p = place(app)
@@ -1117,7 +1209,7 @@ def main(argv: list[str] | None = None) -> int:
                              "canvas": str(canvas_dir(app)),
                              "session": (row or {}).get("sid"), "claude": claude_session(app),
                              "owner": owner(app).get("mode"), "link": stable_link(app),
-                             **({} if line == str(line_folder(app)) else
+                             **({} if canvas_record(app) or line == str(line_folder(app)) else
                                 {"warning": f"sessions file starts journey-{app} in {line or 'no line'}, "
                                             f"not {line_folder(app)}"})})
             show(rows, a.json)

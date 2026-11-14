@@ -13,7 +13,7 @@
     "scopes": {"app": "This app", "both": "Both apps"},
     "canvas": "~/.local/share/journey-canvas/shop",
     "features": {"gherkin": "apps/shop/frontend/e2e/journey/journey.feature"},
-    "run": ["{cli}", "sandbox", "journey", "shop", "{features}", "--publish"],
+    "run": ["{cli}", "sandbox", "journey", "shop", "{--name}", "{features}", "--publish"],
     "after": null,
     "env": {"APP_HOME": "{home}"},
     "results": "apps/shop/frontend/e2e/journey/.out"
@@ -23,7 +23,7 @@
     "scopes": {"app": "This app", "both": "Both apps"},
     "canvas": "~/.local/share/journey-canvas/ledger",
     "features": {"gherkin": "apps/ledger/frontend/e2e/journey/journey.feature"},
-    "run": ["{cli}", "sandbox", "journey", "ledger", "{features}", "--publish"],
+    "run": ["{cli}", "sandbox", "journey", "ledger", "{--name}", "{features}", "--publish"],
     "after": null,
     "env": {"APP_HOME": "{home}"},
     "results": "apps/ledger/frontend/e2e/journey/.out"
@@ -33,7 +33,7 @@
     "scopes": null,
     "canvas": "~/.local/share/journey-canvas/tutor",
     "features": {"gherkin": "apps/tutor/frontend/e2e/journey/journey.feature"},
-    "run": ["{cli}", "sandbox", "journey", "tutor", "{features}", "--publish"],
+    "run": ["{cli}", "sandbox", "journey", "tutor", "{--name}", "{features}", "--publish"],
     "after": null,
     "env": {"APP_HOME": "{home}"},
     "results": "apps/tutor/frontend/e2e/journey/.out"

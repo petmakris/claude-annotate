@@ -335,7 +335,7 @@ def test_every_app_names_its_canvas_features_run_and_results_and_no_sandbox_of_i
 def test_the_example_apps_run_the_app_cli_sandbox_journey_with_no_kill_after_and_no_old_checkout():
     for app in ("shop", "ledger", "tutor"):
         spec = journey.APPS[app]
-        assert spec["run"] == ["{cli}", "sandbox", "journey", app, "{features}", "--publish"]
+        assert spec["run"] == ["{cli}", "sandbox", "journey", app, "{--name}", "{features}", "--publish"]
         assert spec["after"] is None
         assert spec["env"] == {"APP_HOME": "{home}"}
         assert "fallback" not in spec
@@ -368,6 +368,9 @@ args = sys.argv[1:]
 open(os.environ["FAKE_LOG"], "a").write(json.dumps({"argv": args, "cli": sys.argv[0], "cwd": os.getcwd(), "home": os.environ.get("APP_HOME")}) + "\\n")
 if args[:2] == ["sandbox", "journey"]:
     assert args[-1] == "--publish"
+    if "--name" in args:
+        i = args.index("--name")
+        args = args[:i] + args[i + 2:]
     sb = os.environ["FAKE_SANDBOX"]
     at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     for f in args[3:-1] or ["sign-in", "today-s-log-and-more"]:
@@ -434,7 +437,7 @@ def test_an_apps_folder_is_the_sandbox_its_canvas_was_captured_on(appenv):
     make_sandbox(appenv)
     p = journey.place("shop")
     assert (p["from"], p["folder"]) == ("sandbox", appenv["sandbox"])
-    assert p["run"] == ["{cli}", "sandbox", "journey", "shop", "{features}", "--publish"]
+    assert p["run"] == ["{cli}", "sandbox", "journey", "shop", "{--name}", "{features}", "--publish"]
     assert appenv["calls"]() == []  # read from source.json: nothing runs
 
 
@@ -584,3 +587,41 @@ def test_progress_writes_run_items_only_and_nothing_without_a_session(monkeypatc
     monkeypatch.setattr(journey, "sid_of", no_session)
     assert journey.progress("shop", items)["written"] == 0
     assert len(sent) == 1
+
+
+# ── a journey belongs to a sandbox: one canvas each, keyed <app>-<name> ──
+
+def test_a_sandboxs_canvas_has_its_own_key_folder_session_and_link_and_reruns_with_its_name(appenv, canvas_stubs, monkeypatch):
+    make_sandbox(appenv)
+    own = appenv["sandbox"] / "apps" / "shop" / "frontend" / "e2e" / "journey" / ".out"
+    own.mkdir(parents=True)
+    monkeypatch.setattr(journey, "ensure", lambda key: {"sid": "s-" + key, "url": journey.stable_link(key)})
+    res = journey.register("shop", "Sandbox Events", str(appenv["sandbox"]), str(own))
+    assert (res["key"], res["url"]) == ("shop-sandbox-events", "https://wc.example.com/s/shop-sandbox-events/")
+    assert journey.app_of("shop-sandbox-events") == "shop"
+    assert journey.canvas_dir("shop-sandbox-events") == own
+    # One Claude session per canvas, in its sandbox; the app's shared canvas keeps the session home.
+    assert journey.session_folder("shop-sandbox-events") == appenv["sandbox"]
+    assert journey.session_folder("shop") == appenv["home"]
+    assert "shop-sandbox-events" in journey.canvas_keys()
+    journey.rerun("shop-sandbox-events", ["sign-in"])
+    assert [c["argv"] for c in appenv["calls"]()] == [["sandbox", "journey", "shop", "--name", "Sandbox Events", "sign-in", "--publish"]]
+    with pytest.raises(journey.Refused, match="no journey canvas 'shop-nothing'"):
+        journey.app_of("shop-nothing")
+
+
+def test_a_removed_sandboxs_canvas_is_archived_its_page_moves_and_it_runs_nothing(appenv, canvas_stubs, monkeypatch, tmp_path):
+    make_sandbox(appenv)
+    own = appenv["sandbox"] / ".out"
+    own.mkdir(parents=True)
+    (own / "index.html").write_text("canvas")
+    monkeypatch.setattr(journey, "ensure", lambda key: {"sid": "s-1", "url": journey.stable_link(key)})
+    journey.register("shop", "events", str(appenv["sandbox"]), str(own))
+    res = journey.archive("shop-events", str(tmp_path / "archive" / "shop-events"))
+    assert (tmp_path / "archive" / "shop-events" / "index.html").read_text() == "canvas"
+    assert journey.canvas_dir("shop-events") == tmp_path / "archive" / "shop-events"
+    assert res["url"] == "https://wc.example.com/s/shop-events/"
+    assert journey.place("shop-events")["folder"] is None
+    with pytest.raises(journey.Refused, match="archived"):
+        journey.rerun("shop-events", ["sign-in"])
+    assert appenv["calls"]() == []
