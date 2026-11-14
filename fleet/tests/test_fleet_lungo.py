@@ -58,6 +58,16 @@ def test_the_needs_you_rows_are_listed_with_lungos_time_and_the_running_row_is_n
         ("lungo:main/watch-sync-check", "lungo", None), ("lungo:main/ops-f1", "lungo", None)]
 
 
+def test_two_items_of_one_job_get_their_own_address_from_lungos_item_id(world):
+    doc = json.loads(json.dumps(BRIEF))
+    doc["data"]["jobs"][0]["id"] = "a7fe91aad2b0"
+    doc["data"]["jobs"][1].update(name="watch-sync-check", id="06ef4c7c35ce")
+    fake_lungo(world, doc)
+    items = json.loads(user(world, "inbox", "--json")[1])
+    assert sorted(i["ref"] for i in items) == ["lungo:main/watch-sync-check#06ef4c7c35ce",
+                                               "lungo:main/watch-sync-check#a7fe91aad2b0"]
+
+
 def test_an_unreachable_lungo_is_said_and_never_shown_as_nothing(world):
     fake_lungo(world, raw="", code=255)
     out = user(world, "inbox")[1]

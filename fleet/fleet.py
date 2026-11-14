@@ -1322,7 +1322,9 @@ def lungo_items(doc):
             raise ValueError("a needs-you row of its brief has no attention or name")
         machine = str(row.get("machine") or "")
         text = row.get("step") or row.get("question") or row.get("line") or row.get("say") or row["name"]
-        items.append({"id": None, "ref": "lungo:%s/%s" % (machine, row["name"]), "machine": machine,
+        # A job can wait on the user for more than one thing; each such row carries Lungo's own item id
+        ref = "lungo:%s/%s" % (machine, row["name"]) + ("#%s" % row["id"] if row.get("id") else "")
+        items.append({"id": None, "ref": ref, "machine": machine,
                       "thread": None, "kind": "lungo", "sender": "Lungo", "title": row.get("say") or row["name"],
                       "job": row["name"], "attention": row["attention"], "lungo_kind": row.get("kind"),
                       "body": str(text), "created_at": iso_epoch(row.get("asked") or row.get("ended")),
