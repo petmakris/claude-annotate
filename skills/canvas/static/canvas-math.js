@@ -128,34 +128,10 @@ var CanvasMath = (function () {
     return { groups: out, w: Math.max(worldW, o.emptyW), h: Math.max(0, y - o.groupGap) };
   }
 
-  // The groups, stacked by layoutAt, put into k columns side by side in
-  // reading order: down the first column, then the next, each about the same
-  // height.
-  function pack(l, k, o) {
-    var total = 0, i;
-    // A collapsed group is followed by the short gap, as layoutAt leaves it.
-    function gap(g) { return g.folded ? o.foldGap : o.groupGap; }
-    for (i = 0; i < l.groups.length; i++) total += l.groups[i].h + gap(l.groups[i]);
-    var target = total / k, colW = l.w + o.groupGap * 1.5, col = 0, y = 0, h = 0, w = 0, groups = [];
-    for (i = 0; i < l.groups.length; i++) {
-      var g = l.groups[i];
-      if (y > 0 && col < k - 1 && y + (g.h + gap(g)) / 2 > target) { col++; y = 0; }
-      var dx = col * colW - g.x, dy = y - g.y, boards = [];
-      for (var b = 0; b < g.boards.length; b++) {
-        var bd = g.boards[b];
-        boards.push({ i: bd.i, x: bd.x + dx, y: bd.y + dy, w: bd.w, h: bd.h, shots: bd.shots });
-      }
-      groups.push({ i: g.i, x: g.x + dx, y: g.y + dy, w: g.w, h: g.h, boards: boards, folded: g.folded });
-      y += g.h + gap(g);
-      if (y - gap(g) > h) h = y - gap(g);
-      if (col * colW + g.w > w) w = col * colW + g.w;
-    }
-    return { groups: groups, w: w, h: h };
-  }
-
-  // The layout whose surface is closest to as wide as it is tall: lines of 4
-  // to 6 typical boards (more makes each board a speck when a group fills the
-  // window's width), the groups in 1 to 4 columns.
+  // One column of groups, each under the one before, in reading order. Boards
+  // wrap at six typical boards a line (more makes each board a speck when a
+  // group fills the window's width), or the widest board when it is wider.
+  var LINE_BOARDS = 6;
   function layoutCanvas(groups, shown, opts) {
     var o = {
       height: opts.height, shotGap: opts.shotGap || 16, boardGap: opts.boardGap || 64,
@@ -178,17 +154,7 @@ var CanvasMath = (function () {
     if (!widths.length) return layoutAt(groups, shown, o, o.emptyW);
     widths.sort(function (p, q) { return p - q; });
     var typical = widths[Math.floor(widths.length / 2)] + o.boardGap, widest = widths[widths.length - 1];
-    var best = null, bestScore = Infinity;
-    for (var cols = 4; cols <= 6; cols++) {
-      var stacked = layoutAt(groups, shown, o, Math.max(widest, cols * typical - o.boardGap + 1));
-      for (var k = 1; k <= Math.min(4, groups.length); k++) {
-        var l = k === 1 ? stacked : pack(stacked, k, o);
-        // Fewer boards per line first, then fewer columns, when as square.
-        var score = Math.abs(Math.log((l.w || 1) / (l.h || 1))) + cols * 0.01 + k * 0.01;
-        if (score < bestScore) { best = l; bestScore = score; }
-      }
-    }
-    return best;
+    return layoutAt(groups, shown, o, Math.max(widest, LINE_BOARDS * typical - o.boardGap + 1));
   }
 
   // The first view: the first group fills the window's width, but never so

@@ -77,18 +77,17 @@ def test_a_full_page_shot_keeps_its_whole_height_for_pins_but_draws_its_first_sc
     assert abs(r[1]["w"] - 300 / 2.4) < 1e-9 and r[1]["h"] == 300
 
 
-def test_boards_wrap_four_to_six_a_line_and_the_groups_make_the_surface_about_square():
+def test_boards_wrap_six_a_line_and_the_groups_go_down_one_column():
     # Shop's shape: 14 groups, 126 boards.
     r = js(JOURNEY + "groups = groups.concat(groups.slice(0, 6)); var l = M.layoutCanvas(groups, all, { height: 300 });"
            "var perLine = l.groups.map(function (g) { var ys = {}; g.boards.forEach(function (b) { ys[b.y] = (ys[b.y] || 0) + 1; });"
            "  return Math.max.apply(null, Object.keys(ys).map(function (k) { return ys[k]; })); });"
-           "return { w: l.w, h: l.h, perLine: perLine, xs: l.groups.map(function (g) { return g.x; }) };")
-    # The widest line of every group of 4 or more boards holds 4 to 6.
-    assert all(4 <= n <= 6 for n, size in zip(r["perLine"], [5, 10, 8, 3, 12, 1, 7, 9, 5, 10, 8, 3, 12, 1]) if size >= 6)
-    assert 0.7 < r["w"] / r["h"] < 1.4
-    # Groups go down a column, then the next, in reading order.
-    assert r["xs"] == sorted(r["xs"])
-    assert len(set(r["xs"])) > 1
+           "return { perLine: perLine, xs: l.groups.map(function (g) { return g.x; }), ys: l.groups.map(function (g) { return g.y; }) };")
+    # A group of six or more boards fills its first line with six.
+    assert all(n == 6 for n, size in zip(r["perLine"], [5, 10, 8, 3, 12, 1, 7, 9, 5, 10, 8, 3, 12, 1]) if size >= 6)
+    # One column: every group starts at the left edge, each below the one before.
+    assert set(r["xs"]) == {0}
+    assert r["ys"] == sorted(r["ys"]) and len(set(r["ys"])) == len(r["ys"])
 
 
 def test_the_shot_toggle_lays_the_grid_out_again_for_what_is_shown():
@@ -146,13 +145,8 @@ def test_a_collapsed_group_keeps_its_place_and_title_with_no_boards_and_the_next
            "var o = { height: 300 }, a = M.layoutCanvas(g, all, o);"
            "var f = M.layoutCanvas(g, all, { height: 300, folded: function (i) { return i === 0; } });"
            "return { folded: f.groups.map(function (x) { return [x.i, x.boards.length, !!x.folded, x.h]; }),"
-           "  y1: f.groups[1].y, ay1: a.groups[1].y, groups: f.groups.length,"
-           "  packed: (function () { var p = M.layoutCanvas(groups.concat(groups), all, { height: 300, folded: function (i) { return i % 3 === 0; } }).groups, d = [];"
-           "    for (var k = 1; k < p.length; k++) if (p[k - 1].folded && p[k].x === p[k - 1].x && p[k].y > p[k - 1].y) d.push(p[k].y - p[k - 1].y);"
-           "    return d; })() };")
+           "  y1: f.groups[1].y, ay1: a.groups[1].y, groups: f.groups.length };")
     assert r["folded"][0] == [0, 0, True, 0]
     assert [x[:3] for x in r["folded"][1:]] == [[1, 3, False], [2, 2, False]]
     # The group below starts a short gap (120) under the collapsed one's title.
     assert r["groups"] == 3 and r["y1"] == 120 and r["ay1"] > 200
-    # Packed into columns too.
-    assert len(r["packed"]) >= 2 and set(r["packed"]) == {120}

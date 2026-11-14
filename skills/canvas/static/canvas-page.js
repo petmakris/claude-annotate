@@ -254,17 +254,18 @@ function render() {
     show(o, 'lbl', on);
   }
   // Group titles above their group; one that would overlap the one above, or
-  // another group's boards (short groups, zoomed far out), is left out.
-  var below = -Infinity;
+  // another group's boards (short groups, zoomed far out), is left out. Each
+  // column of groups keeps its own: a title never hides one in the next column.
+  var below = {};
   for (i = 0; i < groupEls.length; i++) {
     o = groupEls[i];
     if (!o.box) { show(o, 'lbl', false); continue; }
     // Above the group's panel (72 above its first line), never closer to the boards than their titles.
     sx = Math.max(x + (o.box.x - 48) * z, 8); sy = y + (o.box.y - 72) * z - 30;
     if (titles) sy = Math.min(sy, y + o.box.y * z - 48);
-    on = sy < H && y + (o.box.y + o.box.h) * z > 0 && x + (o.box.x + o.box.w) * z > 0 && x + o.box.x * z < W && sy >= below &&
+    on = sy < H && y + (o.box.y + o.box.h) * z > 0 && x + (o.box.x + o.box.w) * z > 0 && x + o.box.x * z < W && sy >= (o.box.x in below ? below[o.box.x] : -Infinity) &&
       !coversGroup(i, sx, sy, sx + (o.lblW || 0), sy + 26, x, y, z);
-    if (on) { below = sy + 26; o.lbl.style.transform = 'translate(' + sx + 'px,' + sy + 'px)'; }
+    if (on) { below[o.box.x] = sy + 26; o.lbl.style.transform = 'translate(' + sx + 'px,' + sy + 'px)'; }
     show(o, 'lbl', on);
   }
   loadInView();
