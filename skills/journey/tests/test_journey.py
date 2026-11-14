@@ -567,3 +567,20 @@ def test_a_command_that_runs_too_long_is_stopped_and_reported_as_timed_out(tmp_p
     assert code == 124
     assert seen == {"argv": ["npm", "test"], "timeout": 90}
     assert log.read_text() == "\nstopped: ran longer than 90s\n"
+
+
+def test_progress_writes_run_items_only_and_nothing_without_a_session(monkeypatch):
+    sent = []
+    monkeypatch.setattr(journey, "sid_of", lambda app: "s-1")
+    monkeypatch.setattr(journey.wc, "put_items", lambda sid, items, kind: sent.append((sid, items, kind)))
+    items = {"run/__journey__": {"state": "running", "done": 1, "total": 3}, "run/today": {"state": "running"}}
+    assert journey.progress("shop", items) == {"written": 2}
+    assert sent == [("s-1", items, "journey")]
+    with pytest.raises(journey.Refused, match="run/<id> items only"):
+        journey.progress("shop", {"claude/status": {"state": "listening"}})
+
+    def no_session(app):
+        raise journey.Refused("no session")
+    monkeypatch.setattr(journey, "sid_of", no_session)
+    assert journey.progress("shop", items)["written"] == 0
+    assert len(sent) == 1

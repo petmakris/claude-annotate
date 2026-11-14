@@ -87,6 +87,7 @@
 .lbl-row .rerun:disabled { color: var(--muted); cursor: default; border-color: var(--line); }
 .run-chip { font-size: 12px; border-radius: 999px; padding: 1px 8px; line-height: 18px; }
 .run-chip[hidden] { display: none; }
+.title .run-chip { white-space: nowrap; flex: none; }
 .run-queued { color: var(--idle); background: var(--idle-bg); }
 .run-running { color: var(--warn); background: var(--warn-bg); }
 .run-passed { color: var(--ok); background: var(--ok-bg); }

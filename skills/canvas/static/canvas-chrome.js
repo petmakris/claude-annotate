@@ -72,7 +72,8 @@
     '<button type="button" data-zoom="actual" title="Boards at their drawn size (Shift+0)">100%</button>' +
     '<button type="button" id="theme" title="Light or dark">◐ Theme</button></div></div></div></span>';
   document.getElementById('top').innerHTML =
-    '<div class="float float-tl title"><h1 title="' + esc(D.title) + '">' + esc(D.title) + '</h1>' + status + groupsBtn + '</div>' +
+    '<div class="float float-tl title"><h1 title="' + esc(D.title) + '">' + esc(D.title) + '</h1>' + status +
+    (D.session && D.session.reruns ? '<span class="run-chip run-none" id="s-run" role="status" hidden></span>' : '') + groupsBtn + '</div>' +
     '<div class="float float-tr tools" role="toolbar" aria-label="Canvas">' +
     (CH ? changed.replace(/<span class="chg-count"[^]*?<\/span>/, '').replace('>Changed only</button>', '>Changed<span class="chg-only-word"> only</span> <span class="chg-n">' + moved + '</span></button>') : '') +
     (D.session ? '<span class="s-claude" id="s-claude" role="status" title="The Claude session that answers this canvas"></span>' : '') +

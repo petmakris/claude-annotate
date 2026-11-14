@@ -602,6 +602,22 @@ def reply(app: str, comment_id: str, event_id: str, text: str) -> dict:
     return {"appended": res.get("appended"), "comment": c["number"], "board": c["board"]}
 
 
+def progress(app: str, items: dict) -> dict:
+    """Write a journey run's live state into the app's canvas session, as the app CLI sends it while it runs:
+    `run/<feature>` ({state: queued|running|passed|failed, at, error?}) and `run/__journey__` (the whole run:
+    {state, done, failed, total, startedAt, at}). Only those anchors are written; no session yet writes nothing."""
+    bad = [k for k in items if not re.match(r"^run/[a-z0-9_-]+$", k)]
+    if bad:
+        raise Refused(f"progress writes run/<id> items only, not {', '.join(bad)}")
+    try:
+        sid = sid_of(app)
+    except Refused:
+        return {"written": 0, "why": f"{app} has no canvas session on this machine"}
+    if items:
+        wc.put_items(sid, items, kind=KIND)
+    return {"written": len(items)}
+
+
 def ack(app: str, event_id: str) -> dict:
     if "/" in event_id or event_id in ("", ".", ".."):
         raise Refused(f"not an event id: {event_id!r}")
@@ -1069,6 +1085,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("comment_id")
     p.add_argument("--event", default="")
     p.add_argument("text", nargs="?", help="the answer; `-` or nothing reads it from stdin")
+    p = sub.add_parser("progress")
+    p.add_argument("app")
     p = sub.add_parser("ack")
     p.add_argument("app")
     p.add_argument("event_id")
@@ -1139,6 +1157,8 @@ def main(argv: list[str] | None = None) -> int:
         elif a.cmd == "reply":
             text = a.text if a.text not in (None, "-") else sys.stdin.read()
             show(reply(a.app, a.comment_id, a.event, text), a.json)
+        elif a.cmd == "progress":
+            show(progress(a.app, json.loads(sys.stdin.read() or "{}")), a.json)
         elif a.cmd == "ack":
             show(ack(a.app, a.event_id), a.json)
         elif a.cmd == "rerun":

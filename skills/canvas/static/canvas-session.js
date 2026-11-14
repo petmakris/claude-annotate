@@ -127,7 +127,30 @@ if (DATA.session && /^\/s\/[^\/]+\/assets\//.test(location.pathname)) {
         b.disabled = !!body && (body.state === 'queued' || body.state === 'running');
       });
     }
-    on('item', function (a, body) { if (a.indexOf('run/') === 0) showRun(a.slice(4), body); });
+    on('item', function (a, body) { if (a.indexOf('run/') === 0 && a !== 'run/__journey__') showRun(a.slice(4), body); });
+
+    // The whole run, beside the title, whoever started it (Re-run here, or `<app> journey` in a terminal):
+    // run/__journey__ {state: running|passed|failed, done, failed, total, startedAt, at}.
+    var runEl = document.getElementById('s-run'), runBody = null;
+    function minutes(from, to) { var m = Math.max(0, Math.round((to - Date.parse(from)) / 60000)); return m + ' min'; }
+    function showWhole() {
+      var b = runBody;
+      if (!runEl) return;
+      if (!b || !b.state) { runEl.hidden = true; return; }
+      var n = b.done + ' of ' + b.total + ' features';
+      var bad = b.failed ? ' · ' + b.failed + ' failed' : '';
+      var took = b.startedAt ? ' · ' + minutes(b.startedAt, b.state === 'running' ? Date.now() : Date.parse(b.at)) : '';
+      runEl.hidden = false;
+      runEl.className = 'run-chip run-' + (b.state === 'running' ? 'running' : b.failed ? 'failed' : 'passed');
+      // A phone has room for the short form only: "Running 9/16".
+      runEl.textContent = innerWidth <= 600
+        ? (b.state === 'running' ? 'Running ' : b.failed ? 'Failed ' : 'Passed ') + b.done + '/' + b.total
+        : (b.state === 'running' ? 'Running · ' + n : (b.failed ? 'Run failed · ' : 'Run passed · ') + n) + bad + took;
+      runEl.title = b.state === 'running' ? 'A journey run is going on: each feature\'s chip shows its state' : 'The last journey run, ended ' + when(b.at);
+    }
+    on('item', function (a, body) { if (a === 'run/__journey__') { runBody = body; showWhole(); } });
+    setInterval(function () { if (runBody && runBody.state === 'running') showWhole(); }, 30000);
+    addEventListener('resize', showWhole);
     var lastError = '';
     // Re-run all also says `all`: the session then runs every feature the app
     // has now, new ones the canvas does not show yet included.
