@@ -299,6 +299,7 @@ class World:
         os.makedirs(os.path.join(base, "sessions"))
         os.makedirs(os.path.join(base, "s"))
         monkeypatch.setenv("FLEET_HOME", os.path.join(base, "home"))
+        monkeypatch.setenv("FLEET_SHARED_TOKEN_FILE", os.path.join(base, "shared-token"))  # never the owner's
         monkeypatch.setenv("FLEET_SESSIONS_DIR", os.path.join(base, "sessions"))
         monkeypatch.setenv("FLEET_USER_SETTINGS", os.path.join(base, "settings.json"))
         monkeypatch.delenv("FLEET_JOIN_NAME", raising=False)

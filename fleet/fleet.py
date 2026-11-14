@@ -2110,13 +2110,28 @@ def ui_conf():
     return conf if isinstance(conf, dict) else {}
 
 
+def shared_token():
+    """The owner's one password for all their own services: the first line of ~/.config/shared-token
+    (FLEET_SHARED_TOKEN_FILE moves it), or "" when there is none."""
+    path = os.path.expanduser(os.environ.get("FLEET_SHARED_TOKEN_FILE") or "~/.config/shared-token")
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.readline().strip()
+    except (OSError, UnicodeDecodeError):
+        return ""
+
+
 def ui_token():
-    """The page's per-install secret, in $FLEET_HOME/ui.json (key `token`). Made on first use with
-    secrets.token_urlsafe and written 0600; the file's other keys (port, host, hosts) are kept."""
+    """The page's secret: `token` in $FLEET_HOME/ui.json when set, else the shared password (see
+    shared_token), else one made on first use with secrets.token_urlsafe and written 0600 into ui.json,
+    keeping its other keys (port, host, hosts)."""
     conf = ui_conf()
     tok = conf.get("token")
     if isinstance(tok, str) and len(tok) >= 20:
         return tok
+    shared = shared_token()
+    if shared:
+        return shared
     conf["token"] = secrets.token_urlsafe(32)
     path = os.path.join(private_home(), "ui.json")
     tmp = "%s.%d.tmp" % (path, os.getpid())
@@ -2126,6 +2141,33 @@ def ui_token():
         f.write("\n")
     os.replace(tmp, path)
     return conf["token"]
+
+
+def sign_in_page(wrong):
+    """The page's own sign-in form, shown at / until the browser holds the cookie. It posts the password
+    to /login, which sets the same cookie the `fleet ui url` link does."""
+    note = '<p class="bad">That password is not right.</p>' if wrong else ""
+    return (SIGN_IN_HTML % note).encode()
+
+
+SIGN_IN_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Fleet: sign in</title>
+<style>
+:root{--bg:#eef0f4;--card:#fff;--text:#1a1d2d;--dim:#5d6275;--line:#d5d8e0;--accent:#0c8299;--bad:#c2333a}
+@media (prefers-color-scheme: dark){:root{--bg:#14161d;--card:#1f222c;--text:#e8eaf0;--dim:#a2a7b8;--line:#343846;--accent:#3cc3da;--bad:#ff8087}}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);
+color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:16px}
+form{width:100%%;max-width:360px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px;
+box-shadow:0 12px 32px rgba(0,0,0,.12)}h1{margin:0 0 4px;font-size:22px}p{margin:0 0 18px;color:var(--dim)}
+label{display:block;font-weight:600;margin-bottom:6px}input{width:100%%;font:inherit;padding:10px 12px;border-radius:9px;
+border:1px solid var(--line);background:var(--bg);color:var(--text)}input:focus{outline:none;border-color:var(--accent);
+box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 30%%,transparent)}button{margin-top:16px;width:100%%;font:inherit;
+font-weight:650;padding:10px;border:0;border-radius:9px;background:var(--accent);color:#fff;cursor:pointer}
+.bad{color:var(--bad);font-weight:600;margin:12px 0 0}
+</style></head><body>
+<form method="post" action="/login"><h1>Fleet</h1><p>Sign in once in this browser; it stays signed in for a year.</p>
+<label for="pw">Password</label><input id="pw" name="password" type="password" autocomplete="current-password" autofocus required>
+%s<button type="submit">Sign in</button></form></body></html>"""
 
 
 def cookie_value(header, name=COOKIE):
@@ -2428,17 +2470,25 @@ def make_ui_handler(cache, token):
                 self.send_json(403, {"error": why})
                 return True
             if not request_token_ok(self.headers, token):
+                if urlparse(self.path).path == "/":
+                    self.send_body(401, "text/html; charset=utf-8", sign_in_page(False))
+                    return True
                 self.send_json(401, {"error": "not signed in: run `fleet ui url` on the machine that serves "
                                               "this page and open the link it prints"})
                 return True
             return False
 
-        def login(self):
+        def login(self, given=None):
             why = host_refusal(self.headers)
             if why:
                 return self.send_json(403, {"error": why})
-            given = (parse_qs(urlparse(self.path).query).get("t") or [""])[0]
+            form = given is not None
+            if not form:
+                given = (parse_qs(urlparse(self.path).query).get("t") or [""])[0]
             if not given or not hmac.compare_digest(given.encode(), token.encode()):
+                if form:
+                    time.sleep(1)  # a password typed from memory is short: make guessing slow
+                    return self.send_body(401, "text/html; charset=utf-8", sign_in_page(True))
                 return self.send_json(401, {"error": "wrong or missing token: run `fleet ui url` for a fresh link"})
             cookie = "%s=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000" % (COOKIE, token)
             if (self.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip().lower() == "https":
@@ -2451,6 +2501,10 @@ def make_ui_handler(cache, token):
 
         def handle_post(self):
             path = urlparse(self.path).path
+            if path == "/login":
+                n = int(self.headers.get("Content-Length") or 0)
+                fields = parse_qs(self.rfile.read(min(n, 4096)).decode("utf-8", "replace"))
+                return self.login((fields.get("password") or [""])[0])
             if path not in writes:
                 return self.send_json(404, {"error": "not found"})
             if self.refuse(True):

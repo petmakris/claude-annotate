@@ -190,7 +190,7 @@ def raw_get(srv, path, headers=None):
 
 
 def test_nothing_is_served_without_the_token_and_the_401_says_what_to_run(server):
-    for path in ("/", "/app.js", "/app.css", "/api/members", "/api/todos", "/api/threads", "/api/inbox", "/api/history",
+    for path in ("/app.js", "/app.css", "/api/members", "/api/todos", "/api/threads", "/api/inbox", "/api/history",
                  "/api/nope"):
         code, body = server(path, raw=True, headers={"Authorization": None})
         assert code == 401 and b"fleet ui url" in body, path
@@ -296,3 +296,41 @@ def test_the_page_has_an_inline_svg_favicon_and_the_title_fleet():
     assert href.startswith("data:image/svg+xml,")
     svg = urllib.parse.unquote(href.split(",", 1)[1])
     assert xml.dom.minidom.parseString(svg).documentElement.tagName == "svg" and "#00d7d7" in svg and "circle" in svg
+
+
+def raw_post_form(srv, path, body, headers=None):
+    import http.client
+    c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=10)
+    c.request("POST", path, body=body, headers=dict({"Content-Type": "application/x-www-form-urlencoded"}, **(headers or {})))
+    r = c.getresponse()
+    out = (r.status, dict(r.getheaders()), r.read())
+    c.close()
+    return out
+
+
+def test_the_page_without_the_cookie_is_a_sign_in_form(server):
+    code, h, body = raw_get(server.srv, "/")
+    assert code == 401 and h["Content-Type"].startswith("text/html")
+    assert b'<form method="post" action="/login">' in body and b'name="password"' in body
+    assert b"not right" not in body
+
+
+def test_typing_the_password_signs_in_and_a_wrong_one_says_so(server):
+    from urllib.parse import quote
+    code, h, body = raw_post_form(server.srv, "/login", "password=wrong")
+    assert code == 401 and "Set-Cookie" not in h and b"That password is not right." in body
+    code, h, _ = raw_post_form(server.srv, "/login", "password=" + quote(server.srv.fleet_token))
+    assert code == 303 and h["Location"] == "/" and h["Set-Cookie"].startswith("fleet_ui=")
+    assert raw_get(server.srv, "/api/members", {"Cookie": h["Set-Cookie"].split(";")[0]})[0] == 200
+
+
+def test_the_shared_password_file_is_the_token_unless_ui_json_names_one(world):
+    shared = os.environ["FLEET_SHARED_TOKEN_FILE"]
+    open(shared, "w").write("blue river\n")
+    os.makedirs(world.here.home, exist_ok=True)
+    path = os.path.join(world.here.home, "ui.json")
+    json.dump({"port": 8123}, open(path, "w"))
+    assert fleet.ui_token() == "blue river"
+    assert "token" not in json.load(open(path))  # the shared password is never copied into ui.json
+    json.dump({"token": "x" * 32}, open(path, "w"))
+    assert fleet.ui_token() == "x" * 32
