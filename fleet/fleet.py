@@ -531,6 +531,33 @@ def leave(session_id=None):
     print("left the fleet" if cur.rowcount else "not in the fleet")
 
 
+def forget(patterns, live=False):
+    """Delete this machine's member rows whose name matches a glob in `patterns`. A live member is kept
+    unless `live`. Messages stay; a forgotten session's history row just loses its fleet name."""
+    import fnmatch
+    con = db()
+    agents = agents_list()
+    rows = [m for m in con.execute("SELECT * FROM members ORDER BY joined_at").fetchall()
+            if any(fnmatch.fnmatchcase(m["name"], p) for p in patterns)]
+    if not rows:
+        print("no member matches %s" % " ".join(patterns))
+        return
+    gone, kept = [], []
+    for m in rows:
+        if not live and member_status(m, agents) == "alive":
+            kept.append(m["name"])
+            continue
+        con.execute("DELETE FROM members WHERE session_id=?", (m["session_id"],))
+        gone.append(m["name"])
+    plural = lambda n: "%d member%s" % (n, "" if n == 1 else "s")
+    if gone:
+        print("forgot %s: %s" % (plural(len(gone)), ", ".join(gone)))
+    if kept:
+        print("kept %s (add --live to forget %s too): %s"
+              % ("1 live member" if len(kept) == 1 else "%d live members" % len(kept),
+                 "it" if len(kept) == 1 else "them", ", ".join(kept)))
+
+
 def member_status(m, agents=_UNSET):
     if m["left_at"] is not None:
         return "left"
@@ -2650,6 +2677,8 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("join", help="register this session"); s.add_argument("name", nargs="?")
     sub.add_parser("leave", help="leave the fleet")
+    s = sub.add_parser("forget", help="delete this machine's members whose name matches a glob (live ones only with --live)")
+    s.add_argument("patterns", nargs="+"); s.add_argument("--live", action="store_true")
     s = sub.add_parser("ls", help="list members"); s.add_argument("--json", action="store_true"); s.add_argument("--all", action="store_true")
     s.add_argument("--local", action="store_true", help="this machine only")
     as_help = "send as the user (only a session outside the fleet; also FLEET_AS=petros)"
@@ -2714,6 +2743,7 @@ def main(argv=None):
     try:
         if a.cmd == "join": join(a.name)
         elif a.cmd == "leave": leave()
+        elif a.cmd == "forget": forget(a.patterns, a.live)
         elif a.cmd == "ls": ls(a.json, a.all, a.local)
         elif a.cmd == "statusline": cmd_statusline(a.session_id)
         elif a.cmd in ("tell", "ask"): send(a.cmd, a.target, " ".join(a.text), a.as_name)

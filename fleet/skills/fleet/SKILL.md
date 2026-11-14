@@ -1,7 +1,7 @@
 ---
 name: fleet
-description: Join this Claude Code session to the user's fleet of sessions and message other members. Use when the user says "/fleet", "join the fleet", "tell session X", "ask the other sessions", or when a message arrives that starts "Fleet tell" or "Fleet ask". Verbs - join, leave, ls, tell, ask, answer, ack, wait, thread, spawn, todo, stop, respawn, attach, notify, inbox, dismiss, history, profile, canary.
-argument-hint: "<join|leave|ls|tell|ask|answer|ack|wait|thread|spawn|todo|stop|respawn|attach|notify|inbox|dismiss|history|profile|canary> ..."
+description: Join this Claude Code session to the user's fleet of sessions and message other members. Use when the user says "/fleet", "join the fleet", "tell session X", "ask the other sessions", or when a message arrives that starts "Fleet tell" or "Fleet ask". Verbs - join, leave, forget, ls, tell, ask, answer, ack, wait, thread, spawn, todo, stop, respawn, attach, notify, inbox, dismiss, history, profile, canary.
+argument-hint: "<join|leave|forget|ls|tell|ask|answer|ack|wait|thread|spawn|todo|stop|respawn|attach|notify|inbox|dismiss|history|profile|canary> ..."
 allowed-tools:
   - Bash
 ---
@@ -18,6 +18,7 @@ The CLI is `fleet`, on `PATH` while this plugin is installed. `/fleet <verb> ...
 |---|---|
 | `join [name]` | Register this session. The default name is the session's name, else its folder. A taken name is refused. |
 | `leave` | Leave the fleet. |
+| `forget <glob>... [--live]` | Delete this machine's member rows whose name matches, e.g. `forget 'job:*'`. A live member is kept unless `--live`. Messages stay. |
 | `ls [--json] [--all] [--local]` | Members, alive or dead, with their folder. With `machines.json`, every machine's members (`name@machine`), and a line for each machine that did not answer. `--local` asks this machine only. |
 | `tell <name\|*\|petros> "..." [--as petros]` | Instruct one member, or every live member. Prints a thread id. `name@machine` targets another machine; a bare name not found here is looked up there; `*` reaches every machine. |
 | `ask <name\|*> "..."` | Ask. Every recipient answers once. Prints a thread id. |

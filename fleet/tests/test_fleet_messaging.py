@@ -300,3 +300,16 @@ def test_hooks_json_declares_only_the_fleet_hooks_and_the_marketplace_points_at_
     [p] = [p for p in m["plugins"] if p["name"] == "fleet"]
     assert p["source"] == "./fleet"
     assert json.load(open(os.path.join(ROOT, ".claude-plugin", "plugin.json")))["name"] == "fleet"
+
+
+def test_forget_removes_matching_members_and_keeps_live_ones_unless_asked(world):
+    a, b, c = world.session("alpha"), world.session("beta"), world.session("gamma")
+    world.member(a, "job:one"); world.member(b, "job:two"); world.member(c, "keeper")
+    world.run(a, "leave")
+    code, out, _ = world.run(c, "forget", "job:*")
+    assert code == 0 and out == "forgot 1 member: job:one\nkept 1 live member (add --live to forget it too): job:two\n"
+    assert [m["name"] for m in json.loads(world.run(c, "ls", "--json", "--all")[1])] == ["job:two", "keeper"]
+    code, out, _ = world.run(c, "forget", "job:*", "--live")
+    assert code == 0 and out == "forgot 1 member: job:two\n"
+    assert [m["name"] for m in json.loads(world.run(c, "ls", "--json", "--all")[1])] == ["keeper"]
+    assert world.run(c, "forget", "nobody")[1] == "no member matches nobody\n"
