@@ -370,9 +370,11 @@ if (DATA.comments && session) {
       var c = draft || byId(thread);
       var p = c && pinXY(c);
       var w = pop.offsetWidth, h = pop.offsetHeight;
-      var x = p ? box.left + p.x + 36 : box.left + box.w - w - 12;
+      // No pin (its board is gone): beside the Comments panel when it is open on a wide screen.
+      var side = panel.classList.contains('open') && box.w > 700 ? 360 : 0;
+      var x = p ? box.left + p.x + 36 : box.left + box.w - side - w - 12;
       var y = p ? box.top + p.y - 40 : box.top + 12;
-      if (x + w > innerWidth - 8) x = p ? box.left + p.x - w - 12 : innerWidth - w - 8;
+      if (x + w > innerWidth - 8) x = p ? box.left + p.x - w - 12 : innerWidth - side - w - 8;
       x = Math.max(8, x);
       y = Math.max(8, Math.min(y, innerHeight - h - 8));
       pop.style.left = Math.round(x) + 'px';
@@ -580,7 +582,8 @@ if (DATA.comments && session) {
       var o = shotBox[c.board + '|' + c.shot];
       if (o && !o.shown) setShown('all');
       o = shotBox[c.board + '|' + c.shot];
-      if (!o || !o.shown) return;
+      // Its board is gone from the canvas: no pin to fly to, but the thread (reply, resolve) still opens.
+      if (!o || !o.shown) { openThread(id); return; }
       var w = box.w - (panel.classList.contains('open') && box.w > 700 ? 360 : 0);
       var v = fitView(o.x, o.y, o.w, o.frameH, w, box.h, 48, 1);
       if (panel.classList.contains('open') && box.w <= 700) setPanel(false);
