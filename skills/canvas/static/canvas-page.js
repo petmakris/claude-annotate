@@ -54,10 +54,11 @@ var LABELS = DATA.labels || [];
 var shown = 'all';
 function isShown(label) { return shown === 'all' || label === shown; }
 var groupEls = [], boardEls = [], shotEls = [];
+var CHEVRON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 DATA.groups.forEach(function (g, gi) {
   var bg = el('div', 'group-bg');
   world.appendChild(bg);
-  var head = '<h2><span class="num">' + (gi + 1) + '</span> ' + esc(g.name) + '</h2>' +
+  var head = '<button type="button" class="fold" data-fold="' + gi + '" aria-expanded="true" title="Collapse this section">' + CHEVRON + '</button><h2><span class="num">' + (gi + 1) + '</span> ' + esc(g.name) + '</h2>' +
     (g.status ? '<span class="chip chip-' + esc(g.status) + '">' + esc(g.statusLabel || g.status) + '</span>' : '') +
     (g.note ? '<span class="muted">' + esc(g.note) + '</span>' : '') +
     '<span class="muted">' + g.boards.length + ' board' + (g.boards.length === 1 ? '' : 's') + '</span>' +
@@ -116,8 +117,15 @@ var changedOnly = !!CHANGES && load(CHANGED_KEY) === '1';
 function keepChanged(b) { return b.status === 'failure' || !!changeOf(b); }
 // Above a group's first line: its panel's edge and the boards' titles (canvas-math.js firstView).
 var TITLE_ROOM = 72;
+// Collapsed groups: their title stays, their boards go, the groups below close up.
+var FOLD_KEY = 'canvas-folded:' + (DATA.id || location.pathname);
+function groupKey(gi) { var g = DATA.groups[gi]; return String(g.id != null ? g.id : g.name); }
+var folded = {};
+try { (JSON.parse(load(FOLD_KEY) || '[]') || []).forEach(function (k) { folded[k] = true; }); } catch (e) {}
+function isFolded(gi) { return !!folded[groupKey(gi)]; }
 function relayout() {
-  layout = M.layoutCanvas(DATA.groups, isShown, { height: DATA.height, captionH: DATA.captionH || 0, keep: changedOnly ? keepChanged : null });
+  layout = M.layoutCanvas(DATA.groups, isShown, { height: DATA.height, captionH: DATA.captionH || 0, keep: changedOnly ? keepChanged : null,
+    folded: isFolded, foldH: 0 });
   if (emptyNote) emptyNote.hidden = !(changedOnly && !layout.groups.length);
   var pad = 48;
   groupEls.forEach(function (ge) { ge.lblOn = false; ge.lbl.style.visibility = 'hidden'; ge.box = null; ge.bg.style.display = 'none'; });
@@ -141,6 +149,15 @@ function relayout() {
       });
     });
   });
+  groupEls.forEach(function (ge, gi) {
+    var f = isFolded(gi), b = ge.lbl.querySelector('.fold');
+    ge.lbl.classList.toggle('folded', f);
+    ge.bg.classList.toggle('folded', f);
+    b.setAttribute('aria-expanded', String(!f));
+    b.title = f ? 'Expand this section' : 'Collapse this section';
+  });
+  var nFolded = DATA.groups.filter(function (g, gi) { return isFolded(gi); }).length;
+  document.querySelectorAll('.unfold-all').forEach(function (b) { b.hidden = !nFolded; b.textContent = 'Expand all ' + nFolded; });
   // A group title's width, for coversGroup: measured once, while hidden but laid out.
   groupEls.forEach(function (ge) { if (!ge.lblW) ge.lblW = ge.lbl.offsetWidth; });
   world.style.width = layout.w + 'px';
@@ -310,6 +327,35 @@ document.querySelectorAll('[data-zoom]').forEach(function (b) {
   b.addEventListener('click', function () { actions(b.getAttribute('data-zoom')); });
 });
 
+// A section's fold button: the section's title stays where it is on screen.
+function setFolded(gi, on) {
+  var before = groupEls[gi].box;
+  if (on) folded[groupKey(gi)] = true; else delete folded[groupKey(gi)];
+  save(FOLD_KEY, JSON.stringify(Object.keys(folded)));
+  relayout();
+  var after = groupEls[gi].box;
+  if (before && after) setView({ x: view.x + (before.x - after.x) * view.z, y: view.y + (before.y - after.y) * view.z, z: view.z });
+  else setView(view);
+}
+// Opening a board in a collapsed section (a link, a comment) expands it first.
+function unfoldBoard(key) {
+  var bo = boardEls.filter(function (o) { return String(boardKey(o.data)) === String(key); })[0];
+  if (bo && isFolded(bo.g)) { delete folded[groupKey(bo.g)]; save(FOLD_KEY, JSON.stringify(Object.keys(folded))); relayout(); }
+}
+layer.addEventListener('click', function (e) {
+  var b = e.target.closest('.fold');
+  if (!b) return;
+  var gi = parseInt(b.getAttribute('data-fold'), 10);
+  setFolded(gi, !isFolded(gi));
+});
+// Expand all: in the title on a wide window, at the top of the sections' menu on a phone.
+document.querySelectorAll('.unfold-all').forEach(function (b) { b.addEventListener('click', function () {
+  folded = {};
+  save(FOLD_KEY, '[]');
+  relayout();
+  setView(view);
+}); });
+
 // All, or one shot label: which shots of a many-shot board are shown. The
 // grid is laid out again for what is shown.
 var SIZES_KEY = 'canvas-shots:' + (DATA.id || location.pathname);
@@ -443,6 +489,7 @@ function go(hash, instant) {
   var m = /^#(?:board-|b-)(.+)$/.exec(hash) || /^#(\d+)$/.exec(hash), c = /^#c-(\d+)$/.exec(hash), t = null, v;
   if (m) {
     var want = decodeURIComponent(m[1]);
+    unfoldBoard(want);
     t = boardEls.filter(function (o) { return o.box && o.data.status !== 'failure' && String(boardKey(o.data)) === want; })[0];
   }
   else if (hash === '#failure') t = boardEls.filter(function (o) { return o.box && o.data.status === 'failure'; })[0];
@@ -506,7 +553,7 @@ window.addEventListener('blur', function () { space = false; canvas.classList.re
 // For the checks: what is where, read-only.
 window.canvasView = {
   view: function () { return { x: view.x, y: view.y, z: view.z }; },
-  layout: function () { return { w: layout.w, h: layout.h, groups: layout.groups.length }; },
+  layout: function () { return { w: layout.w, h: layout.h, groups: layout.groups.length, folded: layout.groups.filter(function (g) { return g.folded; }).length }; },
   shots: function () {
     return shotEls.filter(function (s) { return !!s.box; }).map(function (s) {
       return { board: s.data && boardKey(s.board.data), key: s.data.key, box: s.box, tier: s.tier, src: s.img.getAttribute('src') || '' };

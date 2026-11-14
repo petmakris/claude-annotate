@@ -139,3 +139,20 @@ def test_a_shot_is_loaded_when_it_is_in_view_or_half_a_window_from_it():
            "M.inView(v, 4800, 0, 400, 300, 1440, 900, 0.5), M.inView(v, 200, 0, 400, 300, 1440, 900, 0.5), M.inView(v, 200, 0, 400, 300, 1440, 900, 0)];")
     # Screen x: 0; 1500 (60 past the right edge, within half a window); 1400; -900 to -700 (within 720 of the left edge); the same with no margin.
     assert r == [True, True, True, True, False]
+
+
+def test_a_collapsed_group_keeps_its_place_and_title_with_no_boards_and_the_next_closes_up():
+    r = js(JOURNEY + "var g = [group(5), group(3), group(2)];"
+           "var o = { height: 300 }, a = M.layoutCanvas(g, all, o);"
+           "var f = M.layoutCanvas(g, all, { height: 300, folded: function (i) { return i === 0; } });"
+           "return { folded: f.groups.map(function (x) { return [x.i, x.boards.length, !!x.folded, x.h]; }),"
+           "  y1: f.groups[1].y, ay1: a.groups[1].y, groups: f.groups.length,"
+           "  packed: (function () { var p = M.layoutCanvas(groups.concat(groups), all, { height: 300, folded: function (i) { return i % 3 === 0; } }).groups, d = [];"
+           "    for (var k = 1; k < p.length; k++) if (p[k - 1].folded && p[k].x === p[k - 1].x && p[k].y > p[k - 1].y) d.push(p[k].y - p[k - 1].y);"
+           "    return d; })() };")
+    assert r["folded"][0] == [0, 0, True, 0]
+    assert [x[:3] for x in r["folded"][1:]] == [[1, 3, False], [2, 2, False]]
+    # The group below starts a short gap (120) under the collapsed one's title.
+    assert r["groups"] == 3 and r["y1"] == 120 and r["ay1"] > 200
+    # Packed into columns too.
+    assert len(r["packed"]) >= 2 and set(r["packed"]) == {120}

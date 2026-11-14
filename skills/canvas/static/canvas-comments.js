@@ -579,6 +579,7 @@ if (DATA.comments && session) {
     function flyTo(id) {
       var c = byId(id);
       if (!c) return;
+      unfoldBoard(c.board);
       var o = shotBox[c.board + '|' + c.shot];
       if (o && !o.shown) setShown('all');
       o = shotBox[c.board + '|' + c.shot];

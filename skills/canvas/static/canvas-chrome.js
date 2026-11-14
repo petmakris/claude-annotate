@@ -55,7 +55,8 @@
     return '<a class="nav-link nav-' + esc(g.status || 'none') + '" href="#c-' + (i + 1) + '"><span class="num">' + (i + 1) + '</span> ' + esc(g.name) + '</a>';
   }).join('') + '</nav>' : '';
   var groupsBtn = nav ? '<span class="pop-host"><button type="button" class="pop-btn" aria-expanded="false" aria-haspopup="true" title="Go to a group">' +
-    D.groups.length + ' ' + (D.groupNoun || (D.session ? 'features' : 'groups')) + ' ▾</button><div class="pop pop-left pop-groups" role="menu">' + nav + '</div></span>' : '';
+    D.groups.length + ' ' + (D.groupNoun || (D.session ? 'features' : 'groups')) + ' ▾</button><div class="pop pop-left pop-groups" role="menu">' +
+    '<button type="button" class="unfold-all unfold-all-pop" hidden>Expand all</button>' + nav + '</div></span>' : '';
   var removed = CH && (CH.removed || []).length ? '<div class="meta chg-removed"><span><strong>' + CH.removed.length + ' removed</strong>' +
     (CH.since ? ' since ' + esc(CH.since) : '') + ':</span>' + CH.removed.map(function (r) {
       return '<span>' + (r.number ? '<span class="num">' + esc(r.number) + '</span> ' : '') + esc(r.title) + (r.group ? ' <span class="muted">· ' + esc(r.group) + '</span>' : '') + '</span>';
@@ -73,7 +74,8 @@
     '<button type="button" id="theme" title="Light or dark">◐ Theme</button></div></div></div></span>';
   document.getElementById('top').innerHTML =
     '<div class="float float-tl title"><h1 title="' + esc(D.title) + '">' + esc(D.title) + '</h1>' + status +
-    (D.session && D.session.reruns ? '<span class="run-chip run-none" id="s-run" role="status" hidden></span>' : '') + groupsBtn + '</div>' +
+    (D.session && D.session.reruns ? '<span class="run-chip run-none" id="s-run" role="status" hidden></span>' : '') + groupsBtn +
+    (D.groups.length > 1 ? '<button type="button" id="unfold-all" class="unfold-all" hidden title="Expand every collapsed section"></button>' : '') + '</div>' +
     '<div class="float float-tr tools" role="toolbar" aria-label="Canvas">' +
     (CH ? changed.replace(/<span class="chg-count"[^]*?<\/span>/, '').replace('>Changed only</button>', '>Changed<span class="chg-only-word"> only</span> <span class="chg-n">' + moved + '</span></button>') : '') +
     (D.session ? '<span class="s-claude" id="s-claude" role="status" title="The Claude session that answers this canvas"></span>' : '') +

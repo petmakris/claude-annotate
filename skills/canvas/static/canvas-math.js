@@ -89,12 +89,19 @@ var CanvasMath = (function () {
   // Every board at one size, in a grid under its group's title: boards wrap
   // into lines `lineW` wide. `shown(label)` says which shots are on show, and
   // `o.keep(board)`, when given, which boards: a group left with none of its
-  // boards is left out whole.
+  // boards is left out whole. `o.folded(i)`, when given, says which groups
+  // are collapsed: they keep their place and title, with no boards and a
+  // panel `o.foldH` tall, the next group `o.foldGap` below.
   function layoutAt(groups, shown, o, lineW) {
     var out = [], y = 0, worldW = 0;
     for (var g = 0; g < groups.length; g++) {
       var grp = groups[g], gy = y, x = 0, lineTop = y, boards = [], lineH = 0, gw = 0;
       if (o.keep && !grp.boards.some(o.keep)) continue;
+      if (o.folded && o.folded(g)) {
+        out.push({ i: g, x: 0, y: gy, w: o.emptyW, h: o.foldH, boards: [], folded: true });
+        y = gy + o.foldH + o.foldGap;
+        continue;
+      }
       for (var b = 0; b < grp.boards.length; b++) {
         var bd = grp.boards[b], shots = [], sx = 0;
         if (o.keep && !o.keep(bd)) continue;
@@ -126,19 +133,21 @@ var CanvasMath = (function () {
   // height.
   function pack(l, k, o) {
     var total = 0, i;
-    for (i = 0; i < l.groups.length; i++) total += l.groups[i].h + o.groupGap;
+    // A collapsed group is followed by the short gap, as layoutAt leaves it.
+    function gap(g) { return g.folded ? o.foldGap : o.groupGap; }
+    for (i = 0; i < l.groups.length; i++) total += l.groups[i].h + gap(l.groups[i]);
     var target = total / k, colW = l.w + o.groupGap * 1.5, col = 0, y = 0, h = 0, w = 0, groups = [];
     for (i = 0; i < l.groups.length; i++) {
       var g = l.groups[i];
-      if (y > 0 && col < k - 1 && y + (g.h + o.groupGap) / 2 > target) { col++; y = 0; }
+      if (y > 0 && col < k - 1 && y + (g.h + gap(g)) / 2 > target) { col++; y = 0; }
       var dx = col * colW - g.x, dy = y - g.y, boards = [];
       for (var b = 0; b < g.boards.length; b++) {
         var bd = g.boards[b];
         boards.push({ i: bd.i, x: bd.x + dx, y: bd.y + dy, w: bd.w, h: bd.h, shots: bd.shots });
       }
-      groups.push({ i: g.i, x: g.x + dx, y: g.y + dy, w: g.w, h: g.h, boards: boards });
-      y += g.h + o.groupGap;
-      if (y - o.groupGap > h) h = y - o.groupGap;
+      groups.push({ i: g.i, x: g.x + dx, y: g.y + dy, w: g.w, h: g.h, boards: boards, folded: g.folded });
+      y += g.h + gap(g);
+      if (y - gap(g) > h) h = y - gap(g);
       if (col * colW + g.w > w) w = col * colW + g.w;
     }
     return { groups: groups, w: w, h: h };
@@ -151,7 +160,8 @@ var CanvasMath = (function () {
     var o = {
       height: opts.height, shotGap: opts.shotGap || 16, boardGap: opts.boardGap || 64,
       rowGap: opts.rowGap || 72, groupGap: opts.groupGap || 200, captionH: opts.captionH || 0,
-      emptyW: opts.emptyW || 600, emptyH: opts.emptyH || 120, keep: opts.keep || null
+      emptyW: opts.emptyW || 600, emptyH: opts.emptyH || 120, keep: opts.keep || null,
+      folded: opts.folded || null, foldH: opts.foldH || 0, foldGap: opts.foldGap || 120
     };
     var widths = [], g, b;
     for (g = 0; g < groups.length; g++) {

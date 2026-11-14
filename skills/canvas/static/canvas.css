@@ -145,3 +145,20 @@ nav { columns: 3 150px; column-gap: 8px; }
   .pop-groups { position: fixed; top: 48px; left: 8px; right: 8px; width: auto; max-width: none; max-height: calc(100vh - 64px); }
   .banner { top: 50px; left: 8px; right: 8px; }
 }
+/* A section's fold button, before its number. A collapsed section keeps its title alone. */
+.lbl-row .fold { pointer-events: auto; align-self: center; font: inherit; font-size: 13px; line-height: 18px; width: 22px; height: 22px; padding: 0;
+  color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.lbl-row .fold svg { transition: transform .15s; }
+.lbl-row.folded .fold svg { transform: rotate(-90deg); }
+.lbl-row .fold:hover { color: var(--text); border-color: var(--accent); }
+.lbl-row.folded h2 { color: var(--muted); }
+.group-bg.folded { display: none !important; }
+.unfold-all { white-space: nowrap; }
+.unfold-all[hidden] { display: none; }
+/* Expand all sits in the title on a wide window and at the top of the sections' menu on a phone. */
+.pop-groups .unfold-all-pop { display: none; width: 100%; margin-bottom: 6px; }
+@media (max-width: 600px) {
+  .float-tl > .unfold-all { display: none; }
+  .pop-groups .unfold-all-pop:not([hidden]) { display: block; }
+}
