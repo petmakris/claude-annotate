@@ -96,7 +96,7 @@ nav { columns: 3 150px; column-gap: 8px; }
 .group-bg { position: absolute; background: var(--group); border-radius: 24px; }
 .board { position: absolute; margin: 0; }
 .shot { position: absolute; display: block; padding: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden;
-  background: var(--panel); box-shadow: var(--shadow); cursor: zoom-in; }
+  background: var(--panel); box-shadow: var(--shadow); cursor: inherit; }
 .shot img { display: block; width: 100%; height: auto; }
 /* A full-page shot shows its first screen; the arrow says there is more. */
 .shot .more { position: absolute; right: 6px; bottom: 6px; width: 22px; height: 22px; border-radius: 11px; font-size: 13px;
@@ -127,37 +127,6 @@ nav { columns: 3 150px; column-gap: 8px; }
 .lbl-variant { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .lbl-fail strong { color: var(--bad); }
 .lbl-cap { white-space: pre-line; color: var(--muted); line-height: 16px; overflow: hidden; }
-.lightbox { position: fixed; inset: 0; z-index: 10; background: #0e0e0d; display: none;
-  flex-direction: column; align-items: stretch; }
-.lightbox.open { display: flex; }
-/* Opaque bar: the page header must never show through the viewer's chrome. */
-.lb-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px; color: #fff;
-  background: #0e0e0d; border-bottom: 1px solid #2a2a28; }
-.lb-bar .cap { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.lb-bar a, .lb-bar button { color: #fff; background: #2a2a28; border: 0; border-radius: 6px;
-  padding: 6px 10px; font: inherit; cursor: pointer; text-decoration: none; }
-.lb-bar a:hover, .lb-bar button:hover { background: #3a3a37; }
-.lb-note { flex: none; color: #d6d6d0; padding: 8px 16px 0; max-width: 900px; margin: 0 auto; }
-/* align-items: flex-start, not stretch: a stretched flex item takes the
-   scroller's height whatever its width, which squashed the shot. Only the
-   width is ever set (by the script); height: auto keeps the image's ratio. */
-.lb-scroll { flex: 1; min-height: 0; overflow: auto; display: flex; justify-content: center; align-items: flex-start;
-  padding: 16px 16px 24px; }
-.lb-scroll img { flex: none; display: block; width: auto; height: auto; max-width: 100%; border-radius: 4px; background: #fff; }
-/* Before and now: one image, or two side by side, each with its caption when comparing. */
-.lb-scroll { gap: 16px; }
-.lb-fig { flex: none; margin: 0; }
-.lb-fig[hidden] { display: none; }
-.lb-fig figcaption { display: none; color: #d6d6d0; font-size: 12px; font-weight: 600; line-height: 16px; margin-bottom: 8px; }
-.lightbox.comparing .lb-fig figcaption { display: block; }
-.lb-wrap { position: relative; }
-.lb-diff { position: absolute; display: none; min-width: 6px; min-height: 6px; outline: 2px solid #fb923c; outline-offset: 3px;
-  border-radius: 2px; pointer-events: none; }
-.lb-bar .seg button[aria-pressed="true"] { background: #fb923c; color: #141413; }
-.lb-bar .seg button { border-radius: 0; margin-left: 1px; }
-.lb-bar .seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
-.lb-bar .seg button:last-child { border-radius: 0 6px 6px 0; }
-.lb-cmp[hidden] { display: none; }
 /* A phone: the groups shrink, the name gives way first, Claude's state is a dot. */
 @media (max-width: 600px) {
   .float { gap: 4px; padding: 3px 4px 3px 8px; }

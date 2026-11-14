@@ -4,16 +4,15 @@
 // Every board is drawn at one size, its shots side by side at one height, in
 // a grid under its group's title. Two fingers or the wheel pan, a pinch or
 // Ctrl/Cmd + wheel zooms round the pointer, a drag pans, and the toolbar zooms
-// and fits all. A click opens a shot full size; a drag that starts on one does
-// not. Titles and captions stay one size on screen. The view is remembered per
+// and fits all. A click on a shot opens nothing: the page only pans and zooms.
+// Titles and captions stay one size on screen. The view is remembered per
 // canvas, and #board-36 centres that board. The canvas draws thumbnails made
-// at build time, loaded for what is in view; the full image is only in the
-// viewer a click opens.
+// at build time, loaded for what is in view; a tall shot shows its first
+// screen, marked with an arrow.
 //
 // A canvas whose data has `changes` (canvas.py) marks the boards that changed
-// or are new since an earlier capture with an outline and a word, has a
-// Changed only button that lays out those boards alone, and its viewer shows a
-// changed shot now, before, or both side by side.
+// or are new since an earlier capture with an outline and a word, and has a
+// Changed only button that lays out those boards alone.
 //
 // This fragment runs inside one closure with canvas-comments.js, which fills
 // in `hooks`. CanvasMath (canvas-math.js) is loaded before it.
@@ -83,7 +82,6 @@ DATA.groups.forEach(function (g, gi) {
       var btn = el('button', 'shot' + (chg && (!s.change || s.change !== 'unchanged') ? ' chg-shot' : ''));
       btn.type = 'button';
       var caption = b.number + ' · ' + b.title + (b.shots.length > 1 ? ' · ' + s.label : '');
-      btn.setAttribute('data-file', s.file);
       btn.setAttribute('data-caption', caption);
       btn.setAttribute('data-board', boardKey(b));
       if (b.id == null) btn.setAttribute('data-board-num', '');
@@ -429,7 +427,7 @@ function lift(e) {
 }
 canvas.addEventListener('pointerup', lift);
 canvas.addEventListener('pointercancel', lift);
-// A click that ends a drag, a pinch or a Space pan opens nothing. A click on a
+// A click that ends a drag, a pinch or a Space pan does nothing. A click on a
 // pin, or on a shot in comment mode, is the comments script's.
 canvas.addEventListener('click', function (e) {
   if (e.target.closest('.c-panel')) return;
@@ -486,100 +484,10 @@ window.addEventListener('resize', function () { measureBox(); setView(view); });
 // needs where it is now.
 if (window.ResizeObserver) new ResizeObserver(function () { measureBox(); }).observe(canvas);
 
-// ── The viewer a click opens: the full image ──
-function visibleShots() { return shotEls.filter(function (s) { return !!s.box; }); }
-var lb = document.getElementById('lightbox'), lbImg = document.getElementById('lb-img');
-var lbPrev = document.getElementById('lb-prev'), lbCmp = document.getElementById('lb-cmp');
-var shots = [], cur = -1;
-// A shot with an earlier image shows it now, before, or both side by side
-// ('now', 'before', 'side'); the choice is remembered.
-var cmp = ['now', 'before', 'side'].indexOf(load('canvas-lb-compare')) >= 0 ? load('canvas-lb-compare') : 'side';
-function cmpOf(s) { return s && s.data.previous ? cmp : 'now'; }
-// 'width': the shot at 1.5x its CSS size (capped by the window), scrolling
-// down a tall one. 'fit': the whole shot in the window. Either way only the
-// width is set, so the image keeps its own aspect ratio.
-var mode = load('canvas-lb-mode') === 'fit' ? 'fit' : 'width';
-function size() {
-  if (cur < 0) return;
-  var s = shots[cur].data, scroll = document.getElementById('lb-scroll'), c = cmpOf(shots[cur]);
-  var w = s.width, h = s.height;
-  // Side by side: two columns 16 px apart; a caption over each when comparing.
-  var cols = c === 'side' ? 2 : 1, capH = s.previous ? 24 : 0;
-  var availW = (scroll.clientWidth - 32 - (cols - 1) * 16) / cols, availH = scroll.clientHeight - 40 - capH;
-  var width = mode === 'fit' ? Math.min(w * 1.5, availW, (availH * w) / h) : Math.min(w * 1.5, availW);
-  var px = Math.max(80, Math.floor(width)) + 'px';
-  lbImg.style.width = px;
-  lbPrev.style.width = px;
-  document.getElementById('lb-mode').textContent = mode === 'fit' ? 'Width' : 'Fit';
-}
-// Where the shot differs from its earlier image, outlined on both (canvas.py `diff`, CSS pixels of the shot).
-function diffBoxes(s) {
-  var d = s.diff;
-  lb.querySelectorAll('.lb-diff').forEach(function (box) {
-    if (!d || !s.previous) { box.style.display = 'none'; return; }
-    box.style.cssText = 'display:block;left:' + (100 * d.x / s.width) + '%;top:' + (100 * d.y / s.height) + '%;width:' +
-      (100 * d.width / s.width) + '%;height:' + (100 * d.height / s.height) + '%';
-  });
-}
-function showCompare() {
-  if (cur < 0) return;
-  var so = shots[cur], s = so.data, c = cmpOf(so);
-  lbCmp.hidden = !s.previous;
-  lbCmp.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-cmp') === c)); });
-  lb.classList.toggle('comparing', !!s.previous);
-  document.getElementById('lb-before').hidden = c === 'now';
-  document.getElementById('lb-now').hidden = c === 'before';
-  if (s.previous) {
-    if (lbPrev.getAttribute('src') !== s.previous) lbPrev.src = s.previous;
-    document.getElementById('lb-before-cap').textContent = 'Before' + (CHANGES && CHANGES.since ? ' · ' + CHANGES.since : '');
-  } else lbPrev.removeAttribute('src');
-  document.getElementById('lb-open').href = c === 'before' ? s.previous : s.file;
-  diffBoxes(s);
-  size();
-}
-lbCmp.querySelectorAll('button').forEach(function (b) {
-  b.addEventListener('click', function () { cmp = b.getAttribute('data-cmp'); save('canvas-lb-compare', cmp); showCompare(); });
-});
-function open(i) {
-  if (i < 0 || i >= shots.length) return;
-  cur = i;
-  var s = shots[i], b = s.board.data;
-  lbImg.src = s.data.file;
-  lbImg.alt = s.el.getAttribute('data-caption');
-  document.getElementById('lb-cap').textContent = s.el.getAttribute('data-caption');
-  var note = document.getElementById('lb-note'), chg = changeOf(b), since = CHANGES && CHANGES.since ? ' since ' + CHANGES.since : '';
-  var change = !chg ? '' : (b.changeLabel || chg).replace(/^./, function (c) { return c.toUpperCase(); }) + since + '.' +
-    (b.changeNote ? ' ' + b.changeNote : '') + (s.data.change === 'unchanged' ? ' This shot is the same as before.' : '');
-  note.textContent = [change, b.error || b.caption || ''].filter(Boolean).join(' ');
-  note.style.display = note.textContent ? '' : 'none';
-  lb.classList.add('open');
-  showCompare();
-  document.getElementById('lb-scroll').scrollTop = 0;
-}
-function close() { lb.classList.remove('open'); cur = -1; }
-function toggleMode() { mode = mode === 'fit' ? 'width' : 'fit'; save('canvas-lb-mode', mode); size(); }
-window.addEventListener('resize', size);
-shotEls.forEach(function (s) {
-  s.el.addEventListener('click', function () { shots = visibleShots(); open(shots.indexOf(s)); });
-});
-lb.addEventListener('click', function (e) {
-  var k = e.target.getAttribute && e.target.getAttribute('data-lb');
-  if (k === 'close' || e.target === lb || e.target.id === 'lb-scroll') close();
-  else if (k === 'prev') open(cur - 1);
-  else if (k === 'next') open(cur + 1);
-  else if (k === 'mode') toggleMode();
-});
 document.addEventListener('keydown', function (e) {
   // Typing in a comment: its keys are the text's.
   var t = e.target;
   if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)) return;
-  if (cur >= 0) {
-    if (e.key === 'Escape') close();
-    else if (e.key === 'ArrowLeft') open(cur - 1);
-    else if (e.key === 'ArrowRight') open(cur + 1);
-    else if (e.key === 'f' || e.key === 'F') toggleMode();
-    return;
-  }
   if (hooks.key && hooks.key(e)) { e.preventDefault(); return; }
   // Figma's keys: Space held pans, Shift+1 fits all, Shift+0 is 100 %, + and − zoom.
   if (e.code === 'Space') {
