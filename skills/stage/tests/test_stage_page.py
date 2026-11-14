@@ -314,7 +314,7 @@ POLL = {"nodes": [{"id": "a", "role": "entry", "label": "Poll"}, {"id": "b", "ro
         "edges": [{"from": "a", "to": "a", "label": "not yet"}, {"from": "a", "to": "b", "label": "ready"}]}
 
 
-def test_a_map_whose_entry_sits_in_its_one_loop_is_a_ring_and_a_pipeline_with_one_retry_is_not(tmp_path):
+def test_a_map_with_loops_still_reads_in_one_direction_never_round_a_ring(tmp_path):
     # the browser suite measured these maps for overlaps; here, which way each is laid out and what its cards say
     page = StagePage(tmp_path, embedded=False)
     for name, spec in (("live", LIVE_SPEC), ("cycle", CYCLE), ("retry", RETRY), ("poll", POLL)):
@@ -322,14 +322,14 @@ def test_a_map_whose_entry_sits_in_its_one_loop_is_a_ring_and_a_pipeline_with_on
     page.open()
     for name in ("live", "cycle", "retry", "poll"):
         page.js(f"document.querySelector('button[role=tab][data-view=\"{name}\"]').click();")  # a tab tap draws it
-        page.check(f"[pane('{name}').querySelector('.map').dataset.layout, pane('{name}').querySelector('.map').classList.contains('m-ring'),"
+        page.check(f"[pane('{name}').querySelector('.map').dataset.layout,"
                    f" [...pane('{name}').querySelectorAll('.m-node > b')].map((b) => b.textContent)]")
     # unmeasured, a board is placed as 900px wide: the eight phases of the retry go top to bottom there
     assert page.run() == [
-        ["ring", True, ["Listening", "Hearing you", "Sending", "Working", "Speaking"]],
-        ["ring", True, ["Idle", "Busy", "Done"]],
-        ["down", False, [f"Phase {i}" for i in range(8)]],
-        ["across", False, ["Poll", "Done"]]]
+        ["across", ["Listening", "Hearing you", "Sending", "Working", "Speaking"]],
+        ["across", ["Idle", "Busy", "Done"]],
+        ["down", [f"Phase {i}" for i in range(8)]],
+        ["across", ["Poll", "Done"]]]
 
 
 # -- the lanes ---------------------------------------------------------------------------------------------

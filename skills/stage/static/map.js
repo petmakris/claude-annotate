@@ -59,9 +59,10 @@ export function renderMap(box, spec, embedded) {
 // the arrow that goes back, found walking forward from where the flow starts. In a column, parts are
 // ordered by where the parts feeding them sit, so arrows cross as little as they can.
 //
-// A real state machine is drawn as a ring (`ring`): one with several loops, or with its entry inside a
-// loop. A single way back (a retry) is drawn in the columns, as a curve under the map, and an arrow from a
-// part to itself as a small loop over that part; neither turns a pipeline into a ring.
+// Every map reads in one direction, whatever loops it has. A way back is drawn as a curve under the map
+// (or up a lane on the right, top to bottom), and an arrow from a part to itself as a small loop over it.
+// There is no ring: laying parts round a circle loses the direction, and the reader cannot tell where the
+// flow starts or ends.
 function layers(spec) {
   const nodes = spec.nodes || [], edges = spec.edges || [];
   const ids = new Set(nodes.map((n) => n.id));
@@ -103,15 +104,7 @@ function layers(spec) {
       c.forEach((id, i) => pos.set(id, i));
     }
   }
-  // the entry is inside a loop when it reaches the loop's way back and the way back reaches it
-  const reach = (from) => {
-    const got = new Set([from]), todo = [from];
-    while (todo.length) for (const i of out.get(todo.pop())) if (!got.has(edges[i].to)) { got.add(edges[i].to); todo.push(edges[i].to); }
-    return got;
-  };
-  const entries = nodes.filter((n) => n.role === "entry").map((n) => n.id);
-  const looped = entries.some((id) => [...back].some((i) => reach(id).has(edges[i].from) && reach(edges[i].to).has(id)));
-  return { cols: cols.filter(Boolean), back, self, ring: back.size > 1 || (back.size === 1 && looped) };
+  return { cols: cols.filter(Boolean), back, self };
 }
 
 // Half the height of every part at a width, at rest or as the card being said, measured on a copy laid
@@ -139,8 +132,7 @@ function place(box) {
   const width = box.clientWidth || 900;
   const scroller = box.closest(".pbody");
   const height = Math.max(320, (scroller ? scroller.clientHeight - 32 : 480) - (+box.dataset.room || 16));
-  const plan = (L.ring && ring(box, st, L, width, height)) || across(box, st, L, width, height) || down(box, st, L, width, height);
-  box.classList.toggle("m-ring", plan.mode === "ring");
+  const plan = across(box, st, L, width, height) || down(box, st, L, width, height);
   box.dataset.layout = plan.mode;
   box.style.setProperty("--mw", plan.w + "px");
   box.style.setProperty("--mc", plan.cw + "px");
@@ -169,14 +161,14 @@ function across(box, st, L, width, height) {
   for (const [k, [w, most]] of sizes.entries()) {
     const cw = fit(c, w, width - 2 * SIDE, AIR_X, most);
     if (cw < (k < sizes.length - 1 ? Math.min(most, w + 60) : w)) continue;
-    box.classList.remove("m-ring");
     const hr = halves(box, w, false), hc = halves(box, cw, true);
     const big = (id) => Math.max(hr.get(id), hc.get(id));
     const looped = new Set([...self].map((i) => edges[i].from));
     const step = c > 1 ? Math.min(w + GAP_X * 2.2, (width - 2 * SIDE - cw) / (c - 1)) : 0;
     const left = (width - step * (c - 1)) / 2;
     const xy = new Map();
-    let lowest = 0;
+    let lowest = 0, highest = Infinity;
+    const colOf = new Map();
     cols.forEach((col, i) => {
       const ys = [0];
       for (let j = 1; j < col.length; j++) {
@@ -186,10 +178,13 @@ function across(box, st, L, width, height) {
       }
       const span = ys[ys.length - 1], over = big(col[0]) + (looped.has(col[0]) ? LOOP : 0);
       const top = Math.max(SIDE + over, height / 2 - span / 2);
-      col.forEach((id, j) => { xy.set(id, [left + i * step, top + ys[j]]); lowest = Math.max(lowest, top + ys[j] + big(id)); });
+      col.forEach((id, j) => {
+        xy.set(id, [left + i * step, top + ys[j]]); colOf.set(id, i);
+        lowest = Math.max(lowest, top + ys[j] + big(id)); highest = Math.min(highest, top + ys[j] - big(id));
+      });
     });
     const tall = Math.max(height, lowest + SIDE + (back.size ? 40 + 26 * back.size : 0));
-    return { mode: "across", w, cw, xy, hr, hc, lowest, tall, back, self, width };
+    return { mode: "across", w, cw, xy, hr, hc, lowest, highest, colOf, tall, back, self, width };
   }
   return null;
 }
@@ -210,7 +205,6 @@ function down(box, st, L, width) {
     }
   }
   if (!rows) { w = cw = Math.max(80, room); rows = cols.flatMap((c) => c.map((id) => [id])); }
-  box.classList.remove("m-ring");
   const hr = halves(box, w, false), hc = halves(box, cw, true);
   const looped = new Set([...self].map((i) => edges[i].from)), labelled = new Set(edges.filter((e) => e.label).map((e) => e.to));
   const most2 = (row, m) => Math.max(...row.map((id) => m.get(id)));
@@ -230,47 +224,6 @@ function down(box, st, L, width) {
   return { mode: "down", w, cw, xy, hr, hc, lowest, tall: lowest + SIDE + 16, back, self, width, lane: SIDE + room };
 }
 
-// A state machine is a ring: the states round an ellipse in the order the flow reaches them, clockwise
-// from the top. An arrow to the next state round bows outward; any other (a way back, a skip) curves
-// across the inside. The ring narrows its states on a narrow board; one that still cannot hold them apart,
-// with room for the card being said at any of them, is drawn top to bottom instead.
-const RW = 170;
-function ring(box, st, L, width, height) {
-  const order = L.cols.flat(), n = order.length, cx = width / 2, cy = height / 2;
-  box.classList.add("m-ring");
-  for (const [w, most] of [[RW, 270], [150, 230], [130, 190]]) {
-    const hr = halves(box, w, false), hcAt = halves(box, Math.min(most, width - 2 * SIDE), true);
-    const tallest = Math.max(...hcAt.values());
-    const cw = Math.min(most, width - 2 * SIDE);
-    const rx = Math.min(width / 2 - cw / 2 - SIDE, 420), ry = Math.min(height / 2 - tallest - SIDE, 200);
-    if (rx < w / 2 || ry < H) continue;
-    const xy = new Map();
-    order.forEach((id, i) => {
-      const a = -Math.PI / 2 + (i * 2 * Math.PI) / n;
-      xy.set(id, [cx + rx * Math.cos(a), cy + ry * Math.sin(a)]);
-    });
-    const plan = { mode: "ring", w, cw, xy, hr, hc: hcAt, tall: height, back: L.back, self: L.self, width, cx, cy, at: new Map(order.map((id, i) => [id, i])) };
-    if (apart(plan, width)) return plan;
-  }
-  box.classList.remove("m-ring");
-  return null;
-}
-
-// No two parts at rest touch, and none touches the card being said, whichever part that is; and the card
-// being said stays on the board.
-function apart(plan, width) {
-  const ids = [...plan.xy.keys()];
-  const rest = (id, air) => { const [x, y] = plan.xy.get(id), h = plan.hr.get(id); return [x - plan.w / 2 - air, y - h - air, x + plan.w / 2 + air, y + h + air]; };
-  const big = (id) => { const [x, y] = plan.xy.get(id), h = plan.hc.get(id); return [x - plan.cw / 2, y - h, x + plan.cw / 2, y + h]; };
-  const hit = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
-  for (const a of ids) {
-    const card = big(a);
-    if (card[0] < SIDE - 1 || card[2] > width - SIDE + 1 || card[1] < 0) return false;
-    for (const b of ids) if (a !== b && (hit(rest(a, 6), rest(b, 6)) || hit(card, rest(b, 8)))) return false;
-  }
-  return true;
-}
-
 // The arrows, their heads and their labels, for where the parts are and which of them is the card being
 // said: an arrow stops at the edge of the card it meets, however large that card is now.
 function draw(box) {
@@ -278,13 +231,6 @@ function draw(box) {
   if (!P) return;
   const svg = box.querySelector(".m-edges"), edges = st.spec.edges || [];
   const half = (id) => (st.cur === "node:" + id ? [P.cw / 2, P.hc.get(id)] : [P.w / 2, P.hr.get(id)]);
-  // where a line from a card's middle towards (x, y) leaves the card, with a little air
-  const rim = (id, x, y, air = 5) => {
-    const [cx, cy] = P.xy.get(id), [hw, hh] = half(id), dx = x - cx, dy = y - cy;
-    const t = Math.min((hw + air) / Math.abs(dx || 1e-6), (hh + air) / Math.abs(dy || 1e-6), 1);
-    return [cx + dx * t, cy + dy * t];
-  };
-  const under = (id, x, y) => { const [cx, cy] = P.xy.get(id), [hw, hh] = half(id); return Math.abs(x - cx) < hw + 8 && Math.abs(y - cy) < hh + 8; };
   const seen = new Map(), labels = [];
   edges.forEach((e, i) => {
     const g = svg.querySelector(`[data-key="${st.ekeys[i]}"]`), a = P.xy.get(e.from), b = P.xy.get(e.to);
@@ -295,7 +241,6 @@ function draw(box) {
     const spread = (nth - (count - 1) / 2);
     let curve, spots;
     if (P.self.has(i)) [curve, spots] = selfLoop(P, e.from, half, spread);
-    else if (P.mode === "ring") [curve, spots] = ringArrow(P, e, rim, under, spread);
     else if (P.back.has(i)) [curve, spots] = backArrow(P, e, half, [...P.back].indexOf(i));
     else [curve, spots] = forward(P, e, half, spread);
     const line = g.querySelector(".m-line");
@@ -309,7 +254,7 @@ function draw(box) {
     };
     g.querySelector(".m-tip:not(.m-tail)")?.setAttribute("d", tip(curve.end, curve.toward));
     g.querySelector(".m-tail")?.setAttribute("d", tip(curve.start, curve.away));
-    g.classList.toggle("m-back", P.mode === "ring" ? !curve.next : P.back.has(i));
+    g.classList.toggle("m-back", P.back.has(i));
     const label = g.querySelector(".m-elabel");
     // last, the same spots a little off the arrow
     if (label) labels.push({ label, spots: [...spots, ...spots.flatMap(([x, y]) => [[x, y - 24], [x, y + 24]])] });
@@ -360,14 +305,22 @@ function forward(P, e, half, spread) {
   return [{ d: path(p0, p1, p2, p3), end: p3, toward: p2, start: p0, away: p1 }, [...ALONG.map(at), ...beside]];
 }
 
-// A way back: across, out of the foot of one card, under the map and up into the foot of the other; top to
-// bottom, out of one card's right side, up the lane on the right and into the other's.
+// A way back: across, out of the foot of one card, under the map and up into the foot of the other; when a
+// card sits under either end and none over them, out of the top and over the map instead, so the arrow never
+// runs through a card. Top to bottom, out of one card's right side, up the lane on the right and into the other's.
 function backArrow(P, e, half, k) {
   const a = P.xy.get(e.from), b = P.xy.get(e.to), [aw, ah] = half(e.from), [bw, bh] = half(e.to);
   let p0, p1, p2, p3;
   if (P.mode === "across") {
-    const below = P.lowest + 22 + 26 * k, o = (k - (P.back.size - 1) / 2) * 18;
-    p0 = [a[0] + o, a[1] + ah]; p3 = [b[0] + o, b[1] + bh + 5]; p1 = [p0[0], below]; p2 = [p3[0], below];
+    const o = (k - (P.back.size - 1) / 2) * 18, above = P.highest - 22 - 26 * k;
+    const beside = (id, sign) => [...P.xy].some(([other, [, y]]) => other !== id && P.colOf.get(other) === P.colOf.get(id) && sign * (y - P.xy.get(id)[1]) > 0);
+    const over = above > SIDE && (beside(e.from, 1) || beside(e.to, 1)) && !beside(e.from, -1) && !beside(e.to, -1);
+    if (over) {
+      p0 = [a[0] + o, a[1] - ah]; p3 = [b[0] + o, b[1] - bh - 5]; p1 = [p0[0], above]; p2 = [p3[0], above];
+    } else {
+      const below = P.lowest + 22 + 26 * k;
+      p0 = [a[0] + o, a[1] + ah]; p3 = [b[0] + o, b[1] + bh + 5]; p1 = [p0[0], below]; p2 = [p3[0], below];
+    }
   } else {
     const side = P.lane + 14 + 22 * k;
     p0 = [a[0] + aw, a[1]]; p3 = [b[0] + bw + 5, b[1]]; p1 = [side, a[1]]; p2 = [side, b[1]];
@@ -375,13 +328,11 @@ function backArrow(P, e, half, k) {
   return [{ d: path(p0, p1, p2, p3), end: p3, toward: p2, start: p0, away: p1 }, ALONG.map(bezier(p0, p1, p2, p3))];
 }
 
-// An arrow from a part to itself: a small loop over its card (on the ring, on its outer side), its label
-// beyond the loop. Both its ends sit on the card's rim: on the ring the loop leaves a corner aslant, and an
-// end set off along the slant is brought back onto the card.
+// An arrow from a part to itself: a small loop over its card, its label beyond the loop. Both its ends sit
+// on the card's rim.
 function selfLoop(P, id, half, spread) {
   const [x, y] = P.xy.get(id), [hw, hh] = half(id);
-  let ux = 0, uy = -1;
-  if (P.mode === "ring") { const dx = x - P.cx, dy = y - P.cy, n = Math.hypot(dx, dy) || 1; ux = dx / n; uy = dy / n; }
+  const ux = 0, uy = -1;
   const t = Math.min(hw / Math.abs(ux || 1e-6), hh / Math.abs(uy || 1e-6));
   const reach = 44 + 16 * Math.abs(spread), px = x + ux * t, py = y + uy * t, vx = -uy, vy = ux;
   const onCard = ([qx, qy]) => [Math.min(Math.max(qx, x - hw), x + hw), Math.min(Math.max(qy, y - hh), y + hh)];
@@ -391,31 +342,6 @@ function selfLoop(P, id, half, spread) {
   const tip = [px + ux * (reach * 0.75 + 14), py + uy * (reach * 0.75 + 14)];
   return [{ d: path(s, c1, c2, end), end, toward: c2, start: s, away: c1 },
     [tip, [tip[0] + 60, tip[1]], [tip[0] - 60, tip[1]]]];
-}
-
-// On the ring: bent at right angles to the straight line between the two states, away from the middle for
-// the next state round, towards it for the rest; a line through the middle bends to its left. Arrows
-// between the same two states bow by different amounts.
-function ringArrow(P, e, rim, under, spread) {
-  const a = P.xy.get(e.from), b = P.xy.get(e.to), n = P.at.size;
-  const next = (P.at.get(e.from) + 1) % n === P.at.get(e.to);
-  const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
-  let px = -(b[1] - a[1]) / len, py = (b[0] - a[0]) / len;
-  const toMiddle = (P.cx - mx) * px + (P.cy - my) * py;
-  if (Math.abs(toMiddle) > 8 && (toMiddle > 0) === next) { px = -px; py = -py; }
-  // a bend that would sit under one of the two cards (the card being said is large) is flattened until it
-  // clears them, and a line too short to bend runs straight from rim to rim
-  let bow = (next ? 40 : Math.min(70, len * 0.18)) + spread * 34, qx, qy;
-  for (;; bow /= 2) {
-    qx = mx + px * bow; qy = my + py * bow;
-    if (Math.abs(bow) < 4) { bow = 0; qx = mx; qy = my; break; }
-    if (!under(e.from, qx, qy) && !under(e.to, qx, qy)) break;
-  }
-  let [sx, sy] = rim(e.from, qx, qy), [tx, ty] = rim(e.to, qx, qy);
-  if (under(e.from, qx, qy) || under(e.to, qx, qy)) { [sx, sy] = rim(e.from, b[0], b[1]); [tx, ty] = rim(e.to, a[0], a[1]); qx = (sx + tx) / 2; qy = (sy + ty) / 2; }
-  const at = (t) => [(1 - t) ** 2 * sx + 2 * (1 - t) * t * qx + t ** 2 * tx, (1 - t) ** 2 * sy + 2 * (1 - t) * t * qy + t ** 2 * ty];
-  return [{ d: `M ${sx} ${sy} Q ${qx} ${qy} ${tx} ${ty}`, end: [tx, ty], toward: [qx, qy], start: [sx, sy], away: [qx, qy], next },
-    ALONG.map(at)];
 }
 
 // After a frame: the part being said and the arrow into it, as the frame names them (beingSaid). On a step

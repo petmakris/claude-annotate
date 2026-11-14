@@ -586,11 +586,6 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 @media (prefers-reduced-motion:reduce){.map .m-line.m-draw{animation:none;stroke-dasharray:none}
   .map .m-edge.m-dashed .m-line.m-draw{stroke-dasharray:7 6;stroke-dashoffset:0}}
 /* the ring: a state machine's states round its loop; a bigger, glowing card for the state being said */
-.map.m-ring .m-node.m-cur{width:var(--mc,270px);padding:16px 20px}
-.map.m-ring .m-node.m-cur b{font-size:21px}
-.map.m-ring .m-edge.m-cur .m-line{stroke-width:4}
-.map.m-ring .m-edge.m-cur .m-elabel rect{fill:var(--tb, var(--panel));stroke:var(--tc);stroke-width:1.5}
-.map.m-ring .m-edge.m-cur .m-elabel text{font-size:13.5px}
 .map .m-dot{filter:drop-shadow(0 0 6px var(--tc))}
 .map .m-node.m-cur{animation:m-pop .5s cubic-bezier(.2,1.4,.4,1)}
 @keyframes m-pop{0%{transform:translate(-50%,-50%) scale(.86)}100%{transform:translate(-50%,-50%) scale(1)}}
