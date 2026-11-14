@@ -107,6 +107,7 @@ main { padding: 16px 16px 40px; display: grid; grid-template-columns: minmax(0, 
 .td-row { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto minmax(0, 120px) auto; align-items: center; gap: 4px 12px; padding: 8px 12px; }
 .td-main { display: grid; min-width: 0; }
 .td-title { font-weight: 600; }
+.ml-left > summary { cursor: pointer; width: max-content; padding: 10px 16px; font-size: 13px; }
 .td-notes { font-size: 13px; }
 .td-notes summary { cursor: pointer; width: max-content; }
 .td-notes div { margin-top: 4px; }

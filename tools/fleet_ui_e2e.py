@@ -224,13 +224,22 @@ try:
 
         def members():
             rows = page.locator(".ml-row")
-            expect(rows).to_have_count(2)
             expect(rows.nth(0)).to_contain_text("builder")
             expect(rows.nth(0).locator(".pill")).to_have_text("alive")
-            expect(rows.nth(1).locator(".pill")).to_have_text("left")
             expect(rows.nth(0).locator(".ml-folder")).to_have_text("~/projects/app")
+            expect(page.locator("#n-members .n")).to_have_text("1")  # the left member is not counted
             expect(page.locator("#n-members")).to_contain_text("1 alive")
-        check("Members: alive first, status pills, home folder shown as ~", members)
+            expect(page.locator(".ml-row.left")).not_to_be_visible()
+            toggle = page.locator(".ml-left > summary")
+            expect(toggle).to_have_text("Show 1 left")
+            toggle.click()
+            expect(page.locator(".ml-row.left .pill")).to_have_text("left")
+            expect(toggle).to_have_text("Hide 1 left")
+            page.wait_for_timeout(6000)  # one poll passes and keeps it open
+            expect(page.locator(".ml-row.left")).to_be_visible()
+            toggle.click()
+            expect(page.locator(".ml-row.left")).not_to_be_visible()
+        check("Members: alive first, home folder shown as ~, left members behind a Show N left toggle that survives a poll", members)
 
         def compose():
             row = page.locator(".ml-row").nth(0)
@@ -282,6 +291,7 @@ try:
         check("Members: Send instruction stores the tell as the user and the page reports the outcome", tell_send)
 
         def respawn():
+            page.locator(".ml-left > summary").click()
             row = page.locator(".ml-row.left")
             row.get_by_role("button", name="Respawn").click()
             row.get_by_role("button", name="Confirm respawn").click()

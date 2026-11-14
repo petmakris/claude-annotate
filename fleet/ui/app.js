@@ -102,7 +102,7 @@ function headCount(id, n, extra) {
 
 const SELF = { machine: "" };
 const target = (m) => (!m.machine || m.machine === SELF.machine ? m.name : m.name + "@" + m.machine);
-const M = { open: null };  // { key, kind } of the compose row that is open
+const M = { open: null, showLeft: false };  // { key, kind } of the compose row that is open; the left members shown
 
 // A notice above a view. A success fades after 6 s; an error stays until the next notice or a successful reload.
 const FLASH = {};
@@ -188,11 +188,12 @@ function renderMembers(data, now, force) {
   if (!force && (document.querySelector("#members .compose textarea") || document.querySelector("#members button[data-sure]"))) return;  // never wipe what is being typed or a pending confirmation
   const order = { alive: 0, dead: 1, left: 2 };
   const rows = data.members.slice().sort((a, b) => order[a.status] - order[b.status] || (b.joined_at || 0) - (a.joined_at || 0));
-  const alive = rows.filter((m) => m.status === "alive").length;
-  headCount("n-members", rows.length, rows.length ? [el("span", { class: "dim" }, alive + " alive")] : []);
+  const here = rows.filter((m) => m.status !== "left"), left = rows.filter((m) => m.status === "left");
+  const alive = here.filter((m) => m.status === "alive").length;
+  headCount("n-members", here.length, rows.length ? [el("span", { class: "dim" }, alive + " alive")] : []);
   const box = document.getElementById("members");
   if (!rows.length) return box.replaceChildren(empty("users", "No sessions have joined this fleet yet. Run /fleet join in a session."));
-  box.replaceChildren(el("ul", { class: "list ml" }, rows.map((m) => {
+  const row = (m) => {
     const li = el("li", { class: "row ml-row " + m.status },
       el("span", { class: "ml-status" }, pill(m.status)),
       el("span", { class: "ml-name" }, el("strong", {}, m.name), el("code", { class: "dim" }, m.session_id.slice(0, 8))),
@@ -202,7 +203,19 @@ function renderMembers(data, now, force) {
       memberActions(m));
     if (M.open && M.open.key === m.machine + "/" + m.session_id) li.append(composeBox(m));
     return li;
-  })));
+  };
+  const parts = [here.length ? el("ul", { class: "list ml" }, here.map(row))
+    : empty("users", "No session is in the fleet right now. Run /fleet join in a session.")];
+  if (left.length) {
+    // Sessions that ended or ran /fleet leave: closed by default, opened only for a respawn. Kept open across polls.
+    const label = el("summary", { class: "dim" });
+    const d = el("details", { class: "ml-left" }, label, el("ul", { class: "list ml" }, left.map(row)));
+    const say = () => { label.textContent = (d.open ? "Hide " : "Show ") + left.length + " left"; };
+    d.open = M.showLeft; say();
+    d.addEventListener("toggle", () => { M.showLeft = d.open; say(); });
+    parts.push(d);
+  }
+  box.replaceChildren(...parts);
 }
 
 function renderTodos(data) {
