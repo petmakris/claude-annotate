@@ -16,33 +16,28 @@ allowed-tools:
 `python3 "$SKILL_DIR/journey.py" <command> <app> …` — written `J <command>` here; always type the
 full form. It talks to webcompanion on this machine and needs no exported variables.
 
-The journey apps are data: the apps file (`~/.config/claude-annotate/journey/apps.json`, else `apps.example.json` beside `journey.py`) gives each one's name, where its journey
-runs (any sandbox of the app), canvas folder, how its features are listed and run, and where a run's results are. An app's
-**journey canvas** is a webcompanion session (kind `journey`, slug = the app) whose page is the
-app's canvas folder. Its one link is `https://<webcompanion host>/s/<app>/` (shop,
-ledger, tutor). The user comments on its boards, presses **Send to Claude** (the comments
-Claude has not answered, as one event), **Re-run** on a feature or **Re-run all**. This session
-answers. One Claude session per app; it lives only on the configured host (`host` in `~/.config/claude-annotate/journey/config.json`), in the session home (`home`), never in a sandbox folder.
-
 **A journey belongs to a sandbox, not to an app** (14 November 2026). Each sandbox that runs its journey (on a
 machine with no sandboxes, each checkout) has its own canvas, registered by the app's CLI with `J register <app>
---name <sandbox> --checkout <folder> --canvas <its .out>`. Its key is `<app>-<name>` (`mealy-petros-mealy-features`):
-its link is `/s/<key>/`, it has its own Claude session in that sandbox's folder, and `<app>` in every command
-below is that key (`/journey mealy-petros-mealy-features`). `J apps` lists every canvas. A removed sandbox's
-canvas is archived (`J archive <key> --to <dir>`): still open, still answered, but Re-run refuses. A bare app
-name is an app's shared canvas from before, still read.
+--name <sandbox> --checkout <folder> --canvas <its .out>`. Its key is `<app>-<name>` (`mealy-petros-mealy-features`).
+The canvas is a webcompanion session (kind `journey`, slug = the key) whose page is that folder, at
+`https://<webcompanion host>/s/<key>/`. It has its own Claude session in that sandbox's folder, and `<app>` in every
+command below is that key (`/journey mealy-petros-mealy-features`). `J apps` lists every canvas. A removed sandbox's
+canvas is archived (`J archive <key> --to <dir>`): still open, still answered, but Re-run refuses. An app's name
+alone is no canvas.
 
-- **shop, ledger, tutor** (example apps): there is no journey sandbox. A journey runs in any
-  sandbox of the app. The canvas is the apps file's `canvas` folder,
-  and its `source.json` names the sandbox, branch and commit it was captured on; `J apps` and
-  `J pending` give that sandbox's `folder`. Features are journey.feature's Scenarios.
+The user comments on its boards, presses **Send to Claude** (the comments Claude has not answered, as one event),
+**Re-run** on a feature or **Re-run all**. This session answers.
+
+The apps file (`~/.config/claude-annotate/journey/apps.json`, else `apps.example.json` beside `journey.py`) says, for
+each app (shop, ledger, tutor in the example), what the canvas calls it, how its features are listed (journey.feature's
+Scenarios, read from the canvas's sandbox), how a Re-run runs them, and where a run's results are.
 
 ## Refuse anywhere but the configured host
 
 If the config names a `host` and `hostname` is not it, do nothing else. Say, in one line each:
 
 - Journey sessions live only on the configured host.
-- Start the session `journey-<app>` there, or use the canvas itself:
+- Start the canvas's session there (`journey.py launch <key>`), or use the canvas itself:
   Send to Claude wakes the session without anyone at a terminal.
 
 ## `/journey <app>` — open or reattach
@@ -119,7 +114,7 @@ HEAD first; nothing needs bringing down after.
 | Every feature | `<cli> sandbox journey <app> --publish` |
 | The features, their boards and last run | `<cli> sandbox journey <app> --list` |
 | Publish what the sandbox ran | `<cli> sandbox journey <app> publish` |
-| The sandbox's own canvas (not the shared one) | `<cli> sandbox journey <app> open` |
+| The sandbox's canvas link | `<cli> sandbox journey <app> open` |
 | A sandbox's folder | `<cli> sandbox path <app> --name <name>` |
 
 Feature ids are journey.feature's Scenario names as slugs (`Plan setup` → `plan-setup`); a board's

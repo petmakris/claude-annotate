@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-"""/journey: an app's journey canvas as a webcompanion session, answered by one Claude session per app.
+"""/journey: a sandbox's journey canvas as a webcompanion session, answered by one Claude session per canvas.
 
-Every app with a journey (the apps file: apps.example.json beside this file, or your own at
-~/.config/claude-annotate/journey/apps.json) has, on the configured host only:
+A journey belongs to a sandbox, not to an app (14 November 2026). Every sandbox (on a machine with no sandboxes,
+every checkout) that runs its app's journey has, on this machine:
 
-  * a webcompanion session of kind `journey`, slug = the app, whose page is the
-    app's published canvas (the apps file's `canvas` folder: the app publishes into it, built with
-    claude-annotate's canvas viewer), at https://<webcompanion host>/s/<app>/. Comments are its
-    threads, one per board; Send to Claude and Re-run are events on it.
-  * a sandbox the journey runs in. Any sandbox of the app can run it. The app's own CLI
-    (the apps file's `run`), run from the session home, picks the sandbox the canvas was captured on,
-    else the app's only one, and never makes one. Each publish writes source.json beside the canvas: the sandbox, branch, folder and HEAD it was
-    captured on; this tool reads the sandbox's folder from it.
-  * a session home (config `home`), where the session starts and stays, so a ship that removes a sandbox never orphans it.
-  * one Claude session, whose id is ~/.local/state/journey/<app>/claude-session.
+  * its canvas: the folder its run builds, registered by `journey.py register`, key `<app>-<name>`. It is the page
+    of a webcompanion session of kind `journey`, slug = the key, at https://<webcompanion host>/s/<key>/.
+    Comments are its threads, one per board; Send to Claude and Re-run are events on it.
+  * one Claude session, started in the sandbox's folder, whose id is ~/.local/state/journey/<key>/claude-session.
     `owner.json` beside it says who has it open (pid, interactive or headless)
     and `lock` is held by whoever is starting Claude on it, so two processes
     never resume it at once.
+
+The apps file (apps.example.json beside this file, or your own at ~/.config/claude-annotate/journey/apps.json)
+says, for each app, what the canvas calls it, where its features are listed and how a Re-run runs them.
+Removing a sandbox archives its canvas (`journey.py archive`): its link keeps opening, and it runs nothing.
 
 The doorman (`journey.py doorman`, the systemd user unit journey-doorman)
 wakes an app's Claude session when an event waits and nobody listens: no
@@ -32,7 +30,7 @@ Commands (all print plain text unless --json):
   archive CANVAS --to DIR                a removed sandbox's canvas: copied to DIR, its page, no Re-run
   ensure CANVAS                          find or make the canvas's session and register its page
 
-CANVAS (written APP below) is a canvas key, `<app>-<sandbox name>`, or an app alone for its shared canvas from before.
+CANVAS (written APP below) is a canvas key, `<app>-<sandbox name>`.
   link APP                               the canvas links
   claim APP [--session ID --pid PID --mode interactive|headless] [--cwd DIR]
   watch APP [--session ID]               webcompanion watch, ended when another session claims the app
@@ -46,7 +44,6 @@ CANVAS (written APP below) is a canvas key, `<app>-<sandbox name>`, or an app al
   launch APP                             the interactive session (`@claude on main journey-<app>`)
   doorman [--once]                       the wake-up loop
   install-doorman                        the systemd user unit, through the service library of your tooling home
-  migrate FILE [--apply]                 carry the journey-comments store over
   purge APP COMMENT_ID                   remove a comment and its every op from its thread (test cleanup)
 """
 from __future__ import annotations
@@ -128,8 +125,7 @@ class Refused(Exception):
 # A journey belongs to a sandbox, not to an app (Petros, 14 November 2026). Each sandbox (on a machine with no
 # sandboxes, each checkout) that runs its journey has its own canvas: the folder its run builds, registered by
 # `journey.py register APP --name NAME --checkout DIR --canvas DIR`. Its key is `<app>-<name>`: the slug of its
-# webcompanion session (/s/<key>/), its state folder and its Claude session. A key that is a bare app name is an
-# app's shared canvas from before, still read.
+# webcompanion session (/s/<key>/), its state folder and its Claude session.
 
 def need_app(app: str) -> dict:
     if app not in APPS:
@@ -142,36 +138,36 @@ def name_slug(name: str) -> str:
 
 
 def canvas_key(app: str, name: str | None) -> str:
-    """A canvas's key: `<app>-<name>`, or the app alone for an app's shared canvas from before."""
+    """A canvas's key: `<app>-<name>`."""
     need_app(app)
     slug = name_slug(name or "")
-    return f"{app}-{slug}" if slug else app
+    if not slug:
+        raise Refused("a canvas needs a name: the sandbox's, or on a machine with no sandboxes the checkout's")
+    return f"{app}-{slug}"
 
 
 def canvas_record(key: str) -> dict:
-    """What `register` wrote for the canvas: {app, name, checkout, canvas, archived?, at}; {} for an app's shared one."""
+    """What `register` wrote for the canvas: {app, name, checkout, canvas, archived?, at}, or {}."""
     return read_json(STATE_ROOT / key / "canvas.json", {}) if re.match(r"^[a-z0-9-]+$", key) else {}
 
 
 def app_of(key: str) -> str:
     """The app a canvas belongs to; refused for a key no canvas has."""
     rec = canvas_record(key)
-    app = rec.get("app") or key
+    app = rec.get("app")
     if app not in APPS:
         raise Refused(f"no journey canvas {key!r}: one of {', '.join(canvas_keys()) or 'none yet'}")
     return app
 
 
 def canvas_keys() -> list[str]:
-    """Every canvas this machine knows: each app's shared one from before, then each registered one."""
-    return list(APPS) + sorted(p.parent.name for p in STATE_ROOT.glob("*/canvas.json") if p.parent.name not in APPS)
+    """Every canvas registered on this machine."""
+    return sorted(p.parent.name for p in STATE_ROOT.glob("*/canvas.json"))
 
 
 def register(app: str, name: str, checkout: str, canvas: str) -> dict:
     """Make (or move) a sandbox's canvas: its record, then its webcompanion session with the canvas as its page."""
     key = canvas_key(app, name)
-    if key == app:
-        raise Refused("a canvas needs a name: the sandbox's, or on a machine with no sandboxes the checkout's")
     rec = canvas_record(key)
     write_json(state_dir(key) / "canvas.json", {"app": app, "name": name, "checkout": checkout, "canvas": canvas,
                                                  "at": now_iso(), **({"since": rec["since"]} if rec.get("since") else
@@ -210,24 +206,11 @@ def app_cli() -> Path:
     return APP_HOME / (CONFIG.get("cli") or "bin/app")
 
 
-def canvas_source(app: str) -> dict:
-    """An app's shared canvas's source.json (from before): {app, sandbox, branch, path, head, ranAt, ended?}, or {}."""
-    return read_json(canvas_dir(app) / "source.json", {})
-
-
 def sandbox_folder(app: str) -> Path | None:
-    """The folder of the sandbox (or checkout) the canvas belongs to, while it exists and is not archived, or None.
-    For an app's shared canvas from before: the sandbox its source.json names."""
+    """The folder of the sandbox (or checkout) the canvas belongs to, while it exists and is not archived, or None."""
     rec = canvas_record(app)
-    if rec:
-        p = Path(rec.get("checkout") or "")
-        return p if not rec.get("archived") and p.is_absolute() and p.is_dir() else None
-    src = canvas_source(app)
-    path = src.get("path")
-    if not isinstance(path, str) or not path or src.get("ended"):
-        return None
-    p = Path(path)
-    return p if p.is_absolute() and p.is_dir() else None
+    p = Path(rec.get("checkout") or "")
+    return p if rec and not rec.get("archived") and p.is_absolute() and p.is_dir() else None
 
 
 def place(app: str) -> dict:
@@ -246,7 +229,7 @@ def features_root(app: str) -> Path:
 def session_folder(app: str) -> Path:
     """The folder the canvas's Claude session runs in: its sandbox's (one session per canvas), else the session home."""
     app_of(app)
-    return (sandbox_folder(app) if canvas_record(app) else None) or APP_HOME
+    return sandbox_folder(app) or APP_HOME
 
 
 def knows_named_journeys(cli: Path) -> bool:
@@ -274,25 +257,6 @@ def journey_cli(app: str) -> Path:
                   f"--name <name> [features] --publish")
 
 
-def line_folder(app: str) -> Path:
-    """The folder the session list (config `sessions_file`) should start `<machine> journey-<app>` in: the session home."""
-    return APP_HOME
-
-
-def sessions_line(app: str) -> str | None:
-    """The folder the session list (config `sessions_file`) gives `<machine> journey-<app>`, for `apps` to check."""
-    if not CONFIG.get("sessions_file"):
-        return None
-    try:
-        for line in Path(os.path.expanduser(CONFIG["sessions_file"])).read_text().splitlines():
-            parts = line.split()
-            if len(parts) >= 3 and not line.lstrip().startswith("#") and parts[0] == MACHINE and parts[1] == f"journey-{app}":
-                return str(Path(os.path.expanduser(parts[2])))
-    except OSError:
-        pass
-    return None
-
-
 def state_dir(app: str) -> Path:
     d = STATE_ROOT / app
     d.mkdir(parents=True, exist_ok=True)
@@ -300,9 +264,9 @@ def state_dir(app: str) -> Path:
 
 
 def canvas_dir(app: str) -> Path:
-    """The canvas's folder: the one registered (the sandbox's own, or its archive), else the app's shared one."""
-    rec = canvas_record(app)
-    return Path(os.path.expanduser(rec["canvas"] if rec.get("canvas") else need_app(app_of(app))["canvas"]))
+    """The canvas's folder: the one registered (the sandbox's own, or its archive)."""
+    app_of(app)
+    return Path(os.path.expanduser(canvas_record(app)["canvas"]))
 
 
 def stable_link(app: str) -> str:
@@ -765,7 +729,7 @@ def argv_of(template: list[str] | None, folder: Path | None, chosen: list[str] |
         if a == "{features}":
             argv += chosen or []
         elif a == "{--name}":
-            # The canvas's sandbox, for a CLI that takes --name; nothing for an app's shared canvas from before.
+            # The canvas's sandbox, for a CLI that takes --name.
             argv += ["--name", name] if name else []
         else:
             argv.append(fill(a, folder, name))
@@ -1023,87 +987,6 @@ def install_doorman() -> int:
 
 # ── migration from the journey-comments service ────────────────────────────
 
-def migrate(src: Path, apply: bool) -> dict:
-    """Every comment of comments.json as ops in its board's thread: create (keeping its id, number,
-    time and point), each reply, an edit's time, and resolve. Ids are kept, so a second run adds nothing."""
-    old = read_json(src, None)
-    if not isinstance(old, dict) or not isinstance(old.get("comments"), list):
-        raise Refused(f"{src} is not a journey-comments store")
-    plan: dict[str, list] = {}
-    for c in old["comments"]:
-        app = c.get("app")
-        if app not in APPS:
-            continue
-        anchor = c["board"] if isinstance(c["board"], str) else f"board-{c['board']}"
-        msgs = plan.setdefault(app, [])
-        create = {"kind": "create", "at": c["createdAt"], "uid": f"m-{c['id']}",
-                  "comment": {k: c[k] for k in ("id", "app", "board", "boardTitle", "chapter", "shot", "fx", "fy",
-                                                "text", "scope", "number") if k in c}}
-        if c.get("audio"):
-            create["comment"]["audio"] = c["audio"]
-        msgs.append((anchor, {"text": c["text"], "role": "user", "op": create, "source_event_id": f"m-{c['id']}",
-                              "migrated_from": "journey-comments"}))
-        for r in c.get("replies", []):
-            op = {"kind": "reply", "id": c["id"], "at": r["createdAt"], "uid": f"m-{r['id']}",
-                  "reply": {"id": r["id"], "text": r["text"], **({"audio": r["audio"]} if r.get("audio") else {})}}
-            msgs.append((anchor, {"text": r["text"], "role": "user", "op": op, "source_event_id": f"m-{r['id']}",
-                                  "migrated_from": "journey-comments"}))
-            if r.get("updatedAt"):
-                ed = {"kind": "editReply", "id": c["id"], "replyId": r["id"], "text": r["text"], "at": r["updatedAt"],
-                      "uid": f"m-{r['id']}-edit"}
-                msgs.append((anchor, {"text": "Edited a reply: " + r["text"], "role": "user", "op": ed,
-                                      "source_event_id": f"m-{r['id']}-edit", "migrated_from": "journey-comments"}))
-        if c.get("updatedAt") and c.get("updatedAt") != c.get("resolvedAt"):
-            ed = {"kind": "update", "id": c["id"], "text": c["text"], "at": c["updatedAt"], "uid": f"m-{c['id']}-edit"}
-            msgs.append((anchor, {"text": "Edited: " + c["text"], "role": "user", "op": ed,
-                                  "source_event_id": f"m-{c['id']}-edit", "migrated_from": "journey-comments"}))
-        if c.get("status") == "resolved":
-            op = {"kind": "update", "id": c["id"], "status": "resolved", "at": c.get("resolvedAt") or c.get("updatedAt"),
-                  "uid": f"m-{c['id']}-resolved"}
-            msgs.append((anchor, {"text": f"Resolved #{c['number']}", "role": "user", "op": op,
-                                  "source_event_id": f"m-{c['id']}-resolved", "migrated_from": "journey-comments"}))
-    report = {}
-    for app, msgs in plan.items():
-        sid = ensure(app)["sid"] if apply else (find_session(app) or {}).get("sid")
-        appended = 0
-        if apply:
-            for anchor, body in msgs:
-                res = wc.request("POST", f"/s/{sid}/threads/{wc.urllib.parse.quote(anchor, safe='')}", body)
-                appended += 1 if res.get("appended") else 0
-        report[app] = {"sid": sid, "messages": len(msgs), "appended": appended}
-    if apply:
-        report["compare"] = compare(old)
-    return report
-
-
-def _comparable(c: dict) -> dict:
-    keep = ("id", "number", "app", "board", "boardTitle", "chapter", "shot", "fx", "fy", "text", "scope", "status",
-            "createdAt", "resolvedAt", "audio")
-    out = {k: c.get(k) for k in keep}
-    out["replies"] = [{k: r.get(k) for k in ("id", "text", "createdAt", "audio")} for r in c.get("replies", [])]
-    return out
-
-
-def compare(old: dict) -> dict:
-    """The old store's comments against the sessions' folded ones, field by field."""
-    result = {"same": 0, "different": [], "missing": []}
-    by_app: dict[str, dict] = {}
-    for c in old["comments"]:
-        app = c.get("app")
-        if app not in APPS:
-            continue
-        if app not in by_app:
-            by_app[app] = comments_of(app, sid_of(app))
-        now = by_app[app].get(c["id"])
-        if now is None:
-            result["missing"].append(c["id"])
-        elif _comparable(now) != _comparable(c):
-            result["different"].append({"id": c["id"], "old": _comparable(c), "new": _comparable(now)})
-        else:
-            result["same"] += 1
-    return result
-
-
 def purge(app: str, comment_id: str) -> dict:
     """Remove a comment and every op about it from its board's thread (a test comment's cleanup).
     The thread's other messages are put back as they were, with their times."""
@@ -1183,9 +1066,6 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("doorman")
     p.add_argument("--once", action="store_true")
     sub.add_parser("install-doorman")
-    p = sub.add_parser("migrate")
-    p.add_argument("file", type=Path)
-    p.add_argument("--apply", action="store_true")
     p = sub.add_parser("purge")
     p.add_argument("app")
     p.add_argument("comment_id")
@@ -1203,15 +1083,11 @@ def main(argv: list[str] | None = None) -> int:
             rows = []
             for app in canvas_keys():
                 row = find_session(app) if on_main() else None
-                line = sessions_line(app)
                 p = place(app)
                 rows.append({"app": app, "folder": str(p["folder"] or ""), "from": p["from"],
                              "canvas": str(canvas_dir(app)),
                              "session": (row or {}).get("sid"), "claude": claude_session(app),
-                             "owner": owner(app).get("mode"), "link": stable_link(app),
-                             **({} if canvas_record(app) or line == str(line_folder(app)) else
-                                {"warning": f"sessions file starts journey-{app} in {line or 'no line'}, "
-                                            f"not {line_folder(app)}"})})
+                             "owner": owner(app).get("mode"), "link": stable_link(app)})
             show(rows, a.json)
         elif a.cmd == "ensure":
             need_main()
@@ -1268,9 +1144,6 @@ def main(argv: list[str] | None = None) -> int:
             return doorman(a.once)
         elif a.cmd == "install-doorman":
             return install_doorman()
-        elif a.cmd == "migrate":
-            need_main()
-            show(migrate(a.file, a.apply), a.json)
         elif a.cmd == "purge":
             show(purge(a.app, a.comment_id), a.json)
     except Refused as e:

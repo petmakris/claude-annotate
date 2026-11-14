@@ -99,6 +99,12 @@ FEATURE = """Feature: Shop journey
 """
 
 
+def record(key, app, checkout, canvas, **extra):
+    """A canvas registered the way `journey.py register` writes it."""
+    journey.write_json(journey.state_dir(key) / "canvas.json",
+                       {"app": app, "name": key.split("-", 1)[1], "checkout": str(checkout), "canvas": str(canvas), **extra})
+
+
 @pytest.fixture
 def app_checkout(tmp_path, monkeypatch):
     co = tmp_path / "co"
@@ -107,11 +113,12 @@ def app_checkout(tmp_path, monkeypatch):
     f.write_text(FEATURE)
     monkeypatch.setattr(journey, "features_root", lambda app: co)
     monkeypatch.setattr(journey, "STATE_ROOT", tmp_path / "state")
+    record("shop-events", "shop", co, tmp_path / "canvas")
     return co
 
 
 def test_features_are_journey_features_scenarios_as_slugs_with_their_skip(app_checkout):
-    assert journey.features("shop") == [
+    assert journey.features("shop-events") == [
         {"id": "sign-in", "name": "Sign in", "skip": False},
         {"id": "plan-setup", "name": "Plan setup", "skip": True},
         {"id": "today-s-log-and-more", "name": "Today's log, and more", "skip": False}]
@@ -122,9 +129,9 @@ def test_a_rerun_refuses_any_id_the_journey_does_not_have_before_running_anythin
     ran = []
     monkeypatch.setattr(journey.subprocess, "run", lambda *a, **k: ran.append(a))
     with pytest.raises(journey.Refused, match="no feature plan-setup; rm -rf"):
-        journey.rerun("shop", ["plan-setup; rm -rf"])
+        journey.rerun("shop-events", ["plan-setup; rm -rf"])
     with pytest.raises(journey.Refused, match="no feature plan-setup"):
-        journey.rerun("shop", ["plan-setup"])  # @skip never runs
+        journey.rerun("shop-events", ["plan-setup"])  # @skip never runs
     assert ran == []
 
 
@@ -243,53 +250,16 @@ def test_a_wake_that_answers_nothing_backs_off_before_trying_again(quiet, monkey
     assert d["failures"] == 1 and d["left"] == ["e1"]
 
 
-# ── the migration ──────────────────────────────────────────────────────────
-
-OLD = {"version": 1, "comments": [
-    {"id": "cmold1", "number": 1, "app": "ledger", "board": "sign-in/01-sign-in", "boardTitle": "Sign in", "chapter": "Sign in",
-     "shot": "desktop", "fx": 0.62, "fy": 0.23, "text": "Make them differ", "scope": "both", "status": "resolved",
-     "createdAt": "2026-10-30T06:00:00.000Z", "updatedAt": "2026-10-30T07:00:00.000Z", "resolvedAt": "2026-10-30T07:00:00.000Z",
-     "replies": [{"id": "rold1", "text": "And the icons", "createdAt": "2026-10-30T06:10:00.000Z"}]},
-    {"id": "cmold2", "number": 3, "app": "shop", "board": "settings/01-settings", "boardTitle": "Settings", "chapter": "Settings",
-     "shot": "phone", "fx": 0.43, "fy": 0.14, "text": "Icons, edited", "scope": "app", "status": "open",
-     "createdAt": "2026-10-30T06:20:00.000Z", "updatedAt": "2026-10-30T06:30:00.000Z",
-     "replies": [{"id": "rold2", "text": "Second", "createdAt": "2026-10-30T06:25:00.000Z", "updatedAt": "2026-10-30T06:26:00.000Z"}]},
-]}
-
-
-def test_the_migration_carries_every_comment_reply_edit_and_resolve_over_and_compares_equal(tmp_path, monkeypatch):
-    threads: dict[str, dict] = {}
-
-    def request(method, path, body=None, **kw):
-        assert method == "POST" and "/threads/" in path
-        sid, anchor = path.split("/")[2], journey.wc.urllib.parse.unquote(path.split("/threads/")[1])
-        msgs = threads.setdefault(sid, {}).setdefault(anchor, {"messages": []})["messages"]
-        if any(m.get("source_event_id") == body["source_event_id"] for m in msgs):
-            return {"appended": False}
-        msgs.append(body)
-        return {"appended": True}
-
-    monkeypatch.setattr(journey, "on_main", lambda: True)
-    monkeypatch.setattr(journey, "ensure", lambda app: {"sid": f"s-{app}"})
-    monkeypatch.setattr(journey, "sid_of", lambda app: f"s-{app}")
-    monkeypatch.setattr(journey.wc, "request", request)
-    monkeypatch.setattr(journey.wc, "get_threads", lambda sid, kind: threads.get(sid, {}))
-    src = tmp_path / "comments.json"
-    src.write_text(json.dumps(OLD))
-    first = journey.migrate(src, apply=True)
-    assert first["compare"] == {"same": 2, "different": [], "missing": []}
-    assert first["ledger"]["messages"] == 3 and first["shop"]["messages"] == 4
-    again = journey.migrate(src, apply=True)
-    assert again["ledger"]["appended"] == 0 and again["shop"]["appended"] == 0
-
-
-def test_a_long_answer_for_one_app_never_holds_another_apps_wake(monkeypatch):
+def test_a_long_answer_for_one_canvas_never_holds_another_canvass_wake(tmp_path, monkeypatch):
     import threading
+    monkeypatch.setattr(journey, "STATE_ROOT", tmp_path / "state")
+    for key in ("shop-events", "ledger-bills", "tutor-trial"):
+        record(key, key.split("-")[0], tmp_path / key, tmp_path / key / ".out")
     started, release = [], threading.Event()
 
     def tick(app):
         started.append(app)
-        if app == "shop":
+        if app == "shop-events":
             release.wait(5)
         return "idle"
 
@@ -298,36 +268,45 @@ def test_a_long_answer_for_one_app_never_holds_another_apps_wake(monkeypatch):
     t = threading.Thread(target=journey.doorman, kwargs={"once": True})
     t.start()
     for _ in range(100):
-        if len(started) == len(journey.APPS):
+        if len(started) == 3:
             break
         threading.Event().wait(0.02)
-    assert sorted(started) == sorted(journey.APPS)  # all began while shop still ran
+    assert sorted(started) == ["ledger-bills", "shop-events", "tutor-trial"]  # all began while shop's still ran
     release.set()
     t.join(5)
 
 
 def test_the_build_item_carries_the_published_pages_own_time_so_a_reload_lands_on_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(journey, "STATE_ROOT", tmp_path / "state")
     for app in ("shop", "ledger"):
-        monkeypatch.setitem(journey.APPS, app, {**journey.APPS[app], "canvas": str(tmp_path / app)})
+        record(f"{app}-events", app, tmp_path, tmp_path / app)
     (tmp_path / "shop").mkdir()
     (tmp_path / "shop" / "index.html").write_text(
         '<script type="application/json" id="canvas-data">{"title":"x","built":"2026-10-30T08:00:41.454Z","groups":[]}</script>')
-    assert journey.page_built("shop") == "2026-10-30T08:00:41.454Z"
-    assert journey.page_built("ledger") is None
+    assert journey.page_built("shop-events") == "2026-10-30T08:00:41.454Z"
+    assert journey.page_built("ledger-events") is None
 
 
-def test_the_published_canvas_lives_outside_the_outbox_and_its_link_is_the_sessions_by_slug(monkeypatch):
+def test_a_canvas_is_its_registered_folder_and_its_link_is_its_sessions_by_key(tmp_path, monkeypatch):
+    monkeypatch.setattr(journey, "STATE_ROOT", tmp_path / "state")
     monkeypatch.setattr(journey, "public_base", lambda: "https://wc.example.com")
-    assert journey.canvas_dir("ledger") == journey.HOME / ".local" / "share" / "journey-canvas" / "ledger"
-    assert journey.stable_link("shop") == "https://wc.example.com/s/shop/"
-    assert journey.board_link("tutor", "today/01-today") == \
-        "https://wc.example.com/s/tutor/#board-today/01-today"
+    record("ledger-bills", "ledger", tmp_path / "co", tmp_path / "co" / ".out")
+    assert journey.canvas_dir("ledger-bills") == tmp_path / "co" / ".out"
+    assert journey.stable_link("shop-events") == "https://wc.example.com/s/shop-events/"
+    assert journey.board_link("tutor-trial", "today/01-today") == \
+        "https://wc.example.com/s/tutor-trial/#board-today/01-today"
+    # An app alone is no canvas any more: the app-wide canvases are gone (14 November 2026).
+    with pytest.raises(journey.Refused, match="no journey canvas 'ledger'"):
+        journey.canvas_dir("ledger")
+    with pytest.raises(journey.Refused, match="a canvas needs a name"):
+        journey.canvas_key("ledger", "")
+    assert journey.canvas_keys() == ["ledger-bills"]
 
 
-def test_every_app_names_its_canvas_features_run_and_results_and_no_sandbox_of_its_own():
+def test_every_app_names_its_features_run_and_results_and_no_canvas_or_sandbox_of_its_own():
     for app, spec in journey.APPS.items():
-        assert {"name", "scopes", "canvas", "features", "run", "after", "results"} <= set(spec), app
-        assert "sandbox" not in spec and "checkout" not in spec, app
+        assert {"name", "features", "run", "after", "results"} <= set(spec), app
+        assert not {"sandbox", "checkout", "canvas", "scopes"} & set(spec), app
         assert "gherkin" in spec["features"], app
         assert "{features}" in spec["run"], app
 
@@ -343,44 +322,41 @@ def test_the_example_apps_run_the_app_cli_sandbox_journey_with_no_kill_after_and
 
 
 def test_a_comments_images_are_its_boards_shots_by_id_or_by_number(tmp_path, monkeypatch):
+    monkeypatch.setattr(journey, "STATE_ROOT", tmp_path / "state")
     for app in ("ledger", "shop"):
-        monkeypatch.setitem(journey.APPS, app, {**journey.APPS[app], "canvas": str(tmp_path / app)})
+        record(f"{app}-events", app, tmp_path, tmp_path / app)
     (tmp_path / "ledger" / "fix").mkdir(parents=True)
     (tmp_path / "ledger" / "fix" / "014.png").write_bytes(b"png")
     (tmp_path / "ledger" / "canvas.json").write_text(json.dumps({"groups": [{"boards": [
         {"number": 14, "shots": [{"file": "fix/014.png"}]}]}]}))
-    assert journey.board_files("ledger", 14) == [str(tmp_path / "ledger" / "fix" / "014.png")]
-    assert journey.board_files("ledger", 15) == []
+    assert journey.board_files("ledger-events", 14) == [str(tmp_path / "ledger" / "fix" / "014.png")]
+    assert journey.board_files("ledger-events", 15) == []
     (tmp_path / "shop" / "today").mkdir(parents=True)
     for f in ("01-today.png", "01-today.phone.png"):
         (tmp_path / "shop" / "today" / f).write_bytes(b"png")
     (tmp_path / "shop" / "canvas.json").write_text(json.dumps({"groups": [{"boards": [
         {"number": 1, "id": "today/01-today", "shots": [{"file": "today/01-today.png"}, {"file": "today/01-today.phone.png"}]}]}]}))
-    assert journey.board_files("shop", "today/01-today") == [str(tmp_path / "shop" / "today" / f)
+    assert journey.board_files("shop-events", "today/01-today") == [str(tmp_path / "shop" / "today" / f)
                                                              for f in ("01-today.png", "01-today.phone.png")]
 
 
-# ── an app's journey: any sandbox, read from the canvas's source.json ──
+# ── a canvas's sandbox: its record names it ──
 
 FAKE_CLI = """#!/usr/bin/env python3
 import datetime, json, os, sys
 args = sys.argv[1:]
 open(os.environ["FAKE_LOG"], "a").write(json.dumps({"argv": args, "cli": sys.argv[0], "cwd": os.getcwd(), "home": os.environ.get("APP_HOME")}) + "\\n")
-if args[:2] == ["sandbox", "journey"]:
+if args[:2] == ["sandbox", "journey"] or args[1:2] == ["journey"]:
     assert args[-1] == "--publish"
     if "--name" in args:
         i = args.index("--name")
         args = args[:i] + args[i + 2:]
     sb = os.environ["FAKE_SANDBOX"]
     at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    for f in args[3:-1] or ["sign-in", "today-s-log-and-more"]:
+    for f in args[(3 if args[0] == "sandbox" else 2):-1] or ["sign-in", "today-s-log-and-more"]:
         d = os.path.join(sb, "apps", "shop", "frontend", "e2e", "journey", ".out", f)
         os.makedirs(d, exist_ok=True)
         json.dump({"status": "passed", "finishedAt": at, "boards": [1, 2, 3]}, open(os.path.join(d, "manifest.json"), "w"))
-    canvas = os.environ["FAKE_CANVAS"]
-    os.makedirs(canvas, exist_ok=True)
-    json.dump({"app": "shop", "sandbox": "events", "branch": "shop/sandbox-events", "path": sb, "head": "abc", "ranAt": at},
-              open(os.path.join(canvas, "source.json"), "w"))
     sys.exit(0)
 sys.exit(3)
 """
@@ -400,59 +376,55 @@ def fake_cli(root: Path, named: bool) -> Path:
 
 @pytest.fixture
 def appenv(tmp_path, monkeypatch):
-    """A session home whose CLI is a stand-in, a shop sandbox folder, and the shop canvas folder."""
+    """A session home whose CLI is a stand-in, a shop sandbox folder, and its canvas, shop-events."""
     home = tmp_path / "app-home"
     cli = fake_cli(home, named=True)
     f = home / "apps" / "shop" / "frontend" / "e2e" / "journey" / "journey.feature"
     f.parent.mkdir(parents=True)
     f.write_text("Feature: x\n  Scenario: From main\n")
     sandbox = tmp_path / "checkouts" / "07-shop-sandbox-events"
-    canvas = tmp_path / "canvas" / "shop"
+    canvas = sandbox / ".out"
     logf = tmp_path / "cli.log"
     monkeypatch.setenv("FAKE_LOG", str(logf))
     monkeypatch.setenv("FAKE_SANDBOX", str(sandbox))
-    monkeypatch.setenv("FAKE_CANVAS", str(canvas))
     monkeypatch.setattr(journey, "APP_HOME", home)
     monkeypatch.setattr(journey, "CONFIG", {"cli": "tools/app/bin/app",
                                             "cli_probe": {"file": "src/commands/sandbox/journey.ts", "needle": "takeNameFlag"}})
     monkeypatch.setattr(journey, "STATE_ROOT", tmp_path / "state")
-    monkeypatch.setitem(journey.APPS, "shop", {**journey.APPS["shop"], "canvas": str(canvas)})
+    record("shop-events", "shop", sandbox, canvas)
 
     def calls():
         return [json.loads(x) for x in logf.read_text().splitlines()] if logf.exists() else []
     return {"home": home, "cli": cli, "sandbox": sandbox, "canvas": canvas, "calls": calls}
 
 
-def make_sandbox(appenv, feature=FEATURE, **source):
-    """The sandbox folder with its journey.feature, and the canvas's source.json naming it."""
+def make_sandbox(appenv, feature=FEATURE):
+    """The canvas's sandbox folder, with its journey.feature."""
     f = appenv["sandbox"] / "apps" / "shop" / "frontend" / "e2e" / "journey" / "journey.feature"
     f.parent.mkdir(parents=True)
     f.write_text(feature)
-    appenv["canvas"].mkdir(parents=True, exist_ok=True)
-    (appenv["canvas"] / "source.json").write_text(json.dumps({"app": "shop", "sandbox": "events", "branch": "shop/sandbox-events",
-                                                            "path": str(appenv["sandbox"]), "head": "abc", "ranAt": "x", **source}))
 
 
-def test_an_apps_folder_is_the_sandbox_its_canvas_was_captured_on(appenv):
+def test_a_canvass_folder_is_the_sandbox_its_record_names(appenv):
     make_sandbox(appenv)
-    p = journey.place("shop")
-    assert (p["from"], p["folder"]) == ("sandbox", appenv["sandbox"])
+    p = journey.place("shop-events")
+    assert (p["from"], p["folder"], p["name"]) == ("sandbox", appenv["sandbox"], "events")
     assert p["run"] == ["{cli}", "sandbox", "journey", "shop", "{--name}", "{features}", "--publish"]
-    assert appenv["calls"]() == []  # read from source.json: nothing runs
+    assert appenv["calls"]() == []  # read from the record: nothing runs
 
 
-def test_no_source_an_ended_sandbox_or_a_gone_folder_gives_no_folder(appenv):
-    assert journey.place("shop")["folder"] is None
-    make_sandbox(appenv, ended="shipped #840")
-    assert journey.place("shop")["folder"] is None
-    (appenv["canvas"] / "source.json").write_text(json.dumps({"path": str(appenv["sandbox"] / "gone")}))
-    assert journey.place("shop")["folder"] is None
+def test_a_gone_sandbox_or_an_archived_canvas_gives_no_folder(appenv, tmp_path):
+    assert journey.place("shop-events")["folder"] is None  # its folder does not exist yet
+    make_sandbox(appenv)
+    assert journey.place("shop-events")["folder"] == appenv["sandbox"]
+    record("shop-events", "shop", appenv["sandbox"], tmp_path / "archive", archived="2026-11-14T16:00:00Z")
+    assert journey.place("shop-events")["folder"] is None
 
 
 def test_feature_ids_come_from_the_canvas_sandbox_when_it_exists_else_from_the_main_checkout(appenv):
-    assert [f["id"] for f in journey.features("shop")] == ["from-main"]
+    assert [f["id"] for f in journey.features("shop-events")] == ["from-main"]
     make_sandbox(appenv)
-    assert [f["id"] for f in journey.features("shop")] == ["sign-in", "plan-setup", "today-s-log-and-more"]
+    assert [f["id"] for f in journey.features("shop-events")] == ["sign-in", "plan-setup", "today-s-log-and-more"]
 
 
 @pytest.fixture
@@ -466,36 +438,28 @@ def canvas_stubs(monkeypatch):
     return items
 
 
-def test_a_rerun_runs_the_cli_sandbox_journey_from_the_session_home_and_reads_results_from_the_sandbox_it_published_from(appenv, canvas_stubs):
+def test_a_rerun_runs_the_cli_sandbox_journey_from_the_session_home_and_reads_results_from_the_canvass_sandbox(appenv, canvas_stubs):
     make_sandbox(appenv)
-    res = journey.rerun("shop", ["sign-in"], "e-1")
-    assert appenv["calls"]() == [{"argv": ["sandbox", "journey", "shop", "sign-in", "--publish"], "cli": str(appenv["cli"]),
+    res = journey.rerun("shop-events", ["sign-in"], "e-1")
+    assert appenv["calls"]() == [{"argv": ["sandbox", "journey", "shop", "--name", "events", "sign-in", "--publish"], "cli": str(appenv["cli"]),
                                  "cwd": str(appenv["home"]), "home": str(appenv["home"])}]
     assert res["features"] == {"sign-in": {"state": "passed", "boards": 3}}
     assert [b["state"] for b in canvas_stubs["run/sign-in"]] == ["running", "passed"]
-
-
-def test_a_first_rerun_with_no_source_reads_the_results_where_the_publish_says_it_ran(appenv, canvas_stubs):
-    res = journey.rerun("shop", ["all"])
-    assert [c["argv"] for c in appenv["calls"]()] == [["sandbox", "journey", "shop", "--publish"]]  # every feature main lists: no ids
-    # main lists from-main, which the stand-in did not run: failed; the folder came from the new source.json.
-    assert res["features"]["from-main"]["state"] == "failed"
-    assert journey.place("shop")["folder"] == appenv["sandbox"]
 
 
 def test_until_main_knows_named_journeys_a_rerun_uses_the_canvas_sandboxs_cli_or_refuses(appenv, canvas_stubs, tmp_path):
     """An older CLI would make a permanent journey sandbox again: never run it."""
     fake_cli(appenv["home"], named=False)
     with pytest.raises(journey.Refused, match="cannot run a journey in a named sandbox yet"):
-        journey.rerun("shop", ["all"])
+        journey.rerun("shop-events", ["all"])
     assert appenv["calls"]() == []
     assert "run/from-main" not in canvas_stubs  # refused before anything showed running
     make_sandbox(appenv)
     own = fake_cli(appenv["sandbox"], named=True)
-    journey.rerun("shop", ["sign-in"])
+    journey.rerun("shop-events", ["sign-in"])
     # Run from the sandbox's own checkout: an app CLI shim runs the CLI of the checkout its working directory is in.
     assert [(c["cli"], c["cwd"], c["argv"]) for c in appenv["calls"]()] == [
-        (str(own), str(appenv["sandbox"]), ["sandbox", "journey", "shop", "sign-in", "--publish"])]
+        (str(own), str(appenv["sandbox"]), ["sandbox", "journey", "shop", "--name", "events", "sign-in", "--publish"])]
 
 
 def test_a_rerun_of_a_checkouts_own_cli_runs_from_that_checkout(appenv, canvas_stubs, monkeypatch):
@@ -504,43 +468,29 @@ def test_a_rerun_of_a_checkouts_own_cli_runs_from_that_checkout(appenv, canvas_s
     make_sandbox(appenv)
     own = fake_cli(appenv["sandbox"], named=True)
     monkeypatch.setitem(journey.APPS, "shop", {**journey.APPS["shop"], "run": ["tools/app/bin/app", "shop", "journey", "{features}", "--publish"]})
-    journey.rerun("shop", ["sign-in"])
+    journey.rerun("shop-events", ["sign-in"])
     assert [(c["cli"], c["cwd"], c["argv"]) for c in appenv["calls"]()] == [
         (str(own), str(appenv["sandbox"]), ["shop", "journey", "sign-in", "--publish"])]
 
 
-def test_the_session_folder_is_the_main_checkout_and_no_sandbox_is_made(appenv):
+def test_apps_lists_every_registered_canvas_with_its_folder(appenv, monkeypatch, capsys):
     make_sandbox(appenv)
-    assert journey.session_folder("shop") == appenv["home"]
-    assert appenv["calls"]() == []
-
-
-def test_apps_lists_each_folder_and_warns_when_env_starts_a_session_elsewhere(appenv, tmp_path, monkeypatch, capsys):
-    make_sandbox(appenv)
-    env = tmp_path / "env"
-    (env / "machines").mkdir(parents=True)
-    (env / "machines" / "claude-sessions").write_text(
-        f"main journey-shop     {appenv['home']}  python3 journey.py launch shop\n"
-        "main journey-ledger   ~/projects/checkouts/06-journey-ledger  python3 journey.py launch ledger\n")
-    monkeypatch.setattr(journey, "CONFIG", {**journey.CONFIG, "sessions_file": str(env / "machines" / "claude-sessions")})
     monkeypatch.setattr(journey, "on_main", lambda: False)
+    monkeypatch.setattr(journey, "public_base", lambda: "https://wc.example.com")
     assert journey.main(["--json", "apps"]) == 0
-    rows = {r["app"]: r for r in json.loads(capsys.readouterr().out)}
-    assert (rows["shop"]["folder"], rows["shop"]["from"]) == (str(appenv["sandbox"]), "sandbox")
-    assert "warning" not in rows["shop"]
-    assert rows["ledger"]["warning"] == (f"sessions file starts journey-ledger in "
-                                          f"{journey.HOME}/projects/checkouts/06-journey-ledger, not {appenv['home']}")
-    assert rows["tutor"]["warning"] == f"sessions file starts journey-tutor in no line, not {appenv['home']}"
+    rows = json.loads(capsys.readouterr().out)
+    assert [(r["app"], r["folder"], r["canvas"], r["link"]) for r in rows] == [
+        ("shop-events", str(appenv["sandbox"]), str(appenv["canvas"]), "https://wc.example.com/s/shop-events/")]
 
 
-def test_launch_resumes_the_session_in_the_main_checkout_and_tells_claude_launch_to_stay_there(appenv, monkeypatch):
+def test_launch_resumes_the_session_in_its_sandbox_and_tells_claude_launch_to_stay_there(appenv, monkeypatch):
     """claude-launch moves a resumed session back to the folder it is filed under (env's session roots)
     unless CLAUDE_LAUNCH_HERE is set; Claude resumes a session from any folder."""
     make_sandbox(appenv)
     monkeypatch.setattr(journey, "on_main", lambda: True)
     monkeypatch.setattr(journey, "claude_launch", lambda: "/bin/claude-launch")
     monkeypatch.setattr(journey, "transcript_exists", lambda sid: True)
-    journey.set_claude_session("shop", "8934f378-3e3f-4aa6-a378-33551af9caf5")
+    journey.set_claude_session("shop-events", "8934f378-3e3f-4aa6-a378-33551af9caf5")
     monkeypatch.delenv("CLAUDE_LAUNCH_HERE", raising=False)
     seen = {}
     monkeypatch.setattr(journey.os, "chdir", lambda d: seen.setdefault("cwd", Path(d)))
@@ -548,11 +498,11 @@ def test_launch_resumes_the_session_in_the_main_checkout_and_tells_claude_launch
     def execv(path, argv):
         seen.update(argv=argv, here=os.environ.get("CLAUDE_LAUNCH_HERE"))
     monkeypatch.setattr(journey.os, "execv", execv)
-    journey.launch("shop")
-    assert seen == {"cwd": appenv["home"], "here": "1",
-                    "argv": ["/bin/claude-launch", "--remote-control", "main-journey-shop",
-                             "--resume", "8934f378-3e3f-4aa6-a378-33551af9caf5", "/journey shop"]}
-    assert journey.owner("shop")["cwd"] == str(appenv["home"])
+    journey.launch("shop-events")
+    assert seen == {"cwd": appenv["sandbox"], "here": "1",
+                    "argv": ["/bin/claude-launch", "--remote-control", "main-journey-shop-events",
+                             "--resume", "8934f378-3e3f-4aa6-a378-33551af9caf5", "/journey shop-events"]}
+    assert journey.owner("shop-events")["cwd"] == str(appenv["sandbox"])
 
 
 def test_a_command_that_runs_too_long_is_stopped_and_reported_as_timed_out(tmp_path, monkeypatch):
@@ -600,9 +550,8 @@ def test_a_sandboxs_canvas_has_its_own_key_folder_session_and_link_and_reruns_wi
     assert (res["key"], res["url"]) == ("shop-sandbox-events", "https://wc.example.com/s/shop-sandbox-events/")
     assert journey.app_of("shop-sandbox-events") == "shop"
     assert journey.canvas_dir("shop-sandbox-events") == own
-    # One Claude session per canvas, in its sandbox; the app's shared canvas keeps the session home.
+    # One Claude session per canvas, in its sandbox.
     assert journey.session_folder("shop-sandbox-events") == appenv["sandbox"]
-    assert journey.session_folder("shop") == appenv["home"]
     assert "shop-sandbox-events" in journey.canvas_keys()
     journey.rerun("shop-sandbox-events", ["sign-in"])
     assert [c["argv"] for c in appenv["calls"]()] == [["sandbox", "journey", "shop", "--name", "Sandbox Events", "sign-in", "--publish"]]
@@ -613,7 +562,7 @@ def test_a_sandboxs_canvas_has_its_own_key_folder_session_and_link_and_reruns_wi
 def test_a_removed_sandboxs_canvas_is_archived_its_page_moves_and_it_runs_nothing(appenv, canvas_stubs, monkeypatch, tmp_path):
     make_sandbox(appenv)
     own = appenv["sandbox"] / ".out"
-    own.mkdir(parents=True)
+    own.mkdir(parents=True, exist_ok=True)
     (own / "index.html").write_text("canvas")
     monkeypatch.setattr(journey, "ensure", lambda key: {"sid": "s-1", "url": journey.stable_link(key)})
     journey.register("shop", "events", str(appenv["sandbox"]), str(own))

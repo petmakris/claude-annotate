@@ -1,41 +1,71 @@
 {
-  "_doc": [
-    "An example of the journey apps file. Your own copy goes to ~/.config/claude-annotate/journey/apps.json (JOURNEY_APPS names another file); when that exists it replaces this one.",
-    "name: what the canvas calls the app. scopes: the comment box's choice, or null for none.",
-    "canvas: the folder the app publishes its canvas into; it is the page of the app's webcompanion session (kind journey, slug = the app).",
-    "features: where the feature ids come from. gherkin: a journey.feature's Scenarios as slugs (@skip kept), relative to the sandbox, else the session home.",
-    "run: argv that runs features and publishes them; {features} is the chosen ids, nothing for every feature; {cli} is the app CLI (config `cli`, under config `home`); {home} is the session home. The run runs in the session home; the CLI picks the sandbox and never makes one.",
-    "after: argv run once the run ends, whatever its result (null for none). env: added to the run's environment.",
-    "results: the folder, relative to the sandbox, whose <feature>/manifest.json the run writes (status, finishedAt, boards, error)."
+ "_doc": [
+  "An example of the journey apps file. Your own copy goes to ~/.config/claude-annotate/journey/apps.json (JOURNEY_APPS names another file); when that exists it replaces this one.",
+  "A journey belongs to a sandbox: each sandbox (on a machine with no sandboxes, each checkout) has its own canvas, registered by `journey.py register` with key <app>-<name>. This file says only how each app's journeys are read and re-run.",
+  "name: what the canvas calls the app.",
+  "features: where the feature ids come from. gherkin: a journey.feature's Scenarios as slugs (@skip kept), relative to the canvas's sandbox, else the session home.",
+  "run: argv that re-runs features in the canvas's sandbox and publishes them; {features} is the chosen ids, nothing for every feature; {--name} is `--name <the canvas's sandbox>`; {cli} is the app CLI (config `cli`, under config `home`); {home} is the session home; {checkout} is the canvas's own checkout. A relative first word is a file of that checkout, run from there (a machine with no sandboxes).",
+  "after: argv run once the run ends, whatever its result (null for none). env: added to the run's environment.",
+  "results: the folder, relative to the sandbox, whose <feature>/manifest.json the run writes (status, finishedAt, boards, error)."
+ ],
+ "shop": {
+  "name": "Shop",
+  "features": {
+   "gherkin": "apps/shop/frontend/e2e/journey/journey.feature"
+  },
+  "run": [
+   "{cli}",
+   "sandbox",
+   "journey",
+   "shop",
+   "{--name}",
+   "{features}",
+   "--publish"
   ],
-  "shop": {
-    "name": "Shop",
-    "scopes": {"app": "This app", "both": "Both apps"},
-    "canvas": "~/.local/share/journey-canvas/shop",
-    "features": {"gherkin": "apps/shop/frontend/e2e/journey/journey.feature"},
-    "run": ["{cli}", "sandbox", "journey", "shop", "{--name}", "{features}", "--publish"],
-    "after": null,
-    "env": {"APP_HOME": "{home}"},
-    "results": "apps/shop/frontend/e2e/journey/.out"
+  "after": null,
+  "env": {
+   "APP_HOME": "{home}"
   },
-  "ledger": {
-    "name": "Ledger",
-    "scopes": {"app": "This app", "both": "Both apps"},
-    "canvas": "~/.local/share/journey-canvas/ledger",
-    "features": {"gherkin": "apps/ledger/frontend/e2e/journey/journey.feature"},
-    "run": ["{cli}", "sandbox", "journey", "ledger", "{--name}", "{features}", "--publish"],
-    "after": null,
-    "env": {"APP_HOME": "{home}"},
-    "results": "apps/ledger/frontend/e2e/journey/.out"
+  "results": "apps/shop/frontend/e2e/journey/.out"
+ },
+ "ledger": {
+  "name": "Ledger",
+  "features": {
+   "gherkin": "apps/ledger/frontend/e2e/journey/journey.feature"
   },
-  "tutor": {
-    "name": "tutor",
-    "scopes": null,
-    "canvas": "~/.local/share/journey-canvas/tutor",
-    "features": {"gherkin": "apps/tutor/frontend/e2e/journey/journey.feature"},
-    "run": ["{cli}", "sandbox", "journey", "tutor", "{--name}", "{features}", "--publish"],
-    "after": null,
-    "env": {"APP_HOME": "{home}"},
-    "results": "apps/tutor/frontend/e2e/journey/.out"
-  }
+  "run": [
+   "{cli}",
+   "sandbox",
+   "journey",
+   "ledger",
+   "{--name}",
+   "{features}",
+   "--publish"
+  ],
+  "after": null,
+  "env": {
+   "APP_HOME": "{home}"
+  },
+  "results": "apps/ledger/frontend/e2e/journey/.out"
+ },
+ "tutor": {
+  "name": "tutor",
+  "features": {
+   "gherkin": "apps/tutor/frontend/e2e/journey/journey.feature"
+  },
+  "run": [
+   "{cli}",
+   "sandbox",
+   "journey",
+   "tutor",
+   "{--name}",
+   "{features}",
+   "--publish"
+  ],
+  "after": null,
+  "env": {
+   "APP_HOME": "{home}"
+  },
+  "results": "apps/tutor/frontend/e2e/journey/.out"
+ }
 }
