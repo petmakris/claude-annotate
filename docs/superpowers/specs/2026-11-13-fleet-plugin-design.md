@@ -137,7 +137,7 @@ broadcast fan out over the same list. There is no central server to keep alive.
 
 - **Members.** Name, id, host, folder, alive or dead, and a copy button for the respawn command.
 - **To-dos.** Open, claimed and done.
-- **Threads.** The last threads, with their answers.
+- **Threads.** The last threads, with their answers. (Removed from the page on 14 November 2026, see below.)
 
 The page has no write actions.
 
@@ -195,6 +195,19 @@ Added 13 November 2026, on top of the slices above.
   answer or dismiss an inbox item, stop or respawn a member, copy an attach command. A "For you" view and a header badge
   show the inbox. History shows a member's fleet name when the session has no other name.
 
+### Membership is chosen, and the page shows what is live (14 November 2026)
+
+- **Only a session that asks joins.** A session joins with `/fleet join`, or because whoever started it set
+  `FLEET_JOIN_NAME` (`fleet spawn` and `respawn` do). The user's job runner stopped setting it for every job, so
+  background jobs no longer fill the fleet.
+- **`fleet forget <glob>... [--live]`** deletes this machine's member rows whose name matches. A live member is kept
+  unless `--live`. Messages stay; History just loses that session's fleet name.
+- **Left members are out of the way.** A left session has ended or ran `leave`, so nothing needs cleaning. The page
+  hides left rows behind a closed "Show N left" toggle and leaves them out of the count, as `fleet ls` already did
+  without `--all`. The toggle keeps them one click from Respawn.
+- **The page drops Threads** and shows the backlog full width, each to-do as its title with its notes behind a closed
+  Notes toggle. Threads stay in `/api/threads` and `fleet thread`.
+
 ## Commands
 
 The CLI is `fleet`. The skills wrap it as `/fleet <verb>`.
@@ -203,6 +216,7 @@ The CLI is `fleet`. The skills wrap it as `/fleet <verb>`.
 |---|---|
 | `join [name]` | Register this session. The default name is the session's name or folder. |
 | `leave` | Leave the fleet. |
+| `forget <glob>… [--live]` | Delete this machine's members whose name matches. |
 | `ls` | Members on every machine. |
 | `tell <name\|*> "…"` | Instruct one member, or all members. |
 | `ask <name\|*> "…"` | Ask, and return a thread id. |
