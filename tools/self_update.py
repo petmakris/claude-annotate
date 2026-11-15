@@ -137,7 +137,7 @@ def fleet_machines(fleet_home: Optional[Path] = None) -> List[tuple]:
 REMOTE = (
     "cd ~/projects/claude-annotate && if [ -f tools/self_update.py ]; "
     "then CLAUDE_ANNOTATE_NO_UPDATE= python3 tools/self_update.py here; "
-    "else git pull -q --ff-only; fi"
+    "else git pull -q --ff-only && echo 'pulled (no self_update.py there yet)'; fi"
 )
 
 
