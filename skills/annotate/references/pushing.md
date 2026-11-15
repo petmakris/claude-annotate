@@ -252,7 +252,7 @@ Fenced code blocks are syntax-highlighted by Shiki (VS Code's grammars, GitHub D
 
 ## Markdown first, HTML only where markdown can't say it
 
-Write text sections in markdown: headings, lists, bold, code and links. Not tables: the reader edits by selecting words, and a table cannot be edited that way (SKILL.md § Block-kind menu). The reader sees a readable Source view, and your later rewrites diff cleanly. A reader can comment on any words they select, so you do not mark sub-units: the selection menu needs no markup, and a comment arrives with `step_id: null` unless the words sit inside an element you gave a `data-annotate-id`.
+Write text sections in markdown: headings, lists, tables, bold, code and links. A table is fine for a grid of facts: each body row is a comment target of its own, with the first cell's words as its id (SKILL.md § Block-kind menu says when a table and when a list). The reader sees a readable Source view, and your later rewrites diff cleanly. A reader can comment on any words they select, so you do not mark sub-units: the selection menu needs no markup, and a comment arrives with `step_id: null` unless the words sit inside an element you gave a `data-annotate-id`.
 
 Use HTML only where markdown cannot say it: a callout with no markdown form, and `kind: "mockup"`. Steps are markdown lists. The renderer (`markdown-it`) is configured with `html: true`; after render, a conservative client-side sanitizer strips `<script>`, `<iframe>`, `<style>`, `<form>`, `on*` event-handler attributes, and `javascript:` URLs. Everything else passes through.
 

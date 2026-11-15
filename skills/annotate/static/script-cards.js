@@ -10,17 +10,23 @@ function stepContextFor(blockId, stepId) {
   if (!section) return null;
   let node = section.querySelector(`[data-step-id="${cssEsc(stepId)}"]`);
   let ordinal = null;
+  let row = false;
   if (node) {
     ordinal = [...section.querySelectorAll("[data-step-id]")].indexOf(node) + 1;
   } else {
     node = section.querySelector(`[data-annotate-id="${cssEsc(stepId)}"]`);
+    // A table row (tables.js): named ROW n, n counting the part's body rows.
+    if (node && node.tagName === "TR") {
+      row = true;
+      ordinal = [...section.querySelectorAll("table tbody tr")].indexOf(node) + 1;
+    }
   }
   if (!node) return null;
   const labelNode = node.querySelector ? node.querySelector(".arrow-label") : null;
   let label = ((labelNode ? labelNode.textContent : node.textContent) || "")
     .replace(/\s+/g, " ").trim();
   if (label.length > 48) label = label.slice(0, 47).trimEnd() + "…";
-  return { node, ordinal, label };
+  return { node, ordinal, label, row };
 }
 
 // Add the "updating" spinner overlay + timer to a block section. Idempotent:
@@ -174,7 +180,8 @@ function buildCard(id, a, onSubmitCb) {
     head.className = "card-step-head";
     const chip = document.createElement("span");
     chip.className = "card-step-chip";
-    chip.textContent = stepCtx && stepCtx.ordinal ? `STEP ${stepCtx.ordinal}` : a.step_id;
+    chip.textContent = stepCtx && stepCtx.ordinal
+      ? `${stepCtx.row ? "ROW" : "STEP"} ${stepCtx.ordinal}` : a.step_id;
     head.appendChild(chip);
     if (stepCtx && stepCtx.label) {
       const lbl = document.createElement("span");

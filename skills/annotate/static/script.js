@@ -230,6 +230,8 @@ function applyEngagedStyling() {
     if (a.step_id) {
       const step = document.querySelector(
         `[data-block-id="${cssEsc(a.block_id)}"][data-step-id="${cssEsc(a.step_id)}"]`
+      ) || document.querySelector(
+        `[data-block-id="${cssEsc(a.block_id)}"] tr[data-annotate-id="${cssEsc(a.step_id)}"]`
       );
       if (step) step.dataset.engagedType = a.type;
     }

@@ -85,6 +85,8 @@ const JS = [
   // Before script.js: the selection menu and the highlighter both count prose
   // through its one walker.
   "anchors.js",
+  // Before script.js: each part painted as markdown gives its table rows ids.
+  "tables.js",
   // Before script.js and selection.js: both open comments in this window.
   "window-place.js",
   "comment-window.js",

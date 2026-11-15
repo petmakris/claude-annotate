@@ -419,11 +419,19 @@ def test_pushing_names_the_html_exceptions_and_no_table():
     assert '`kind: "mockup"`' in para
 
 
-def test_skill_forbids_tables_in_the_text():
-    # The reader edits by selecting words, which a table does not allow, so
-    # the router itself says no tables and the digest says never a table row.
+def test_skill_allows_tables_and_says_each_row_is_a_comment_target():
+    # A table row has an id and a comment button of its own (static/tables.js),
+    # so the router says when to use a table, and the digest stays a list.
     skill = (PUSHING.parent.parent / "SKILL.md").read_text(encoding="utf-8")
-    assert "**No tables, in any block, in either mode, in any rewrite.**" in skill
+    assert "No tables, in any block" not in skill
+    para = _paragraph(skill, "**Tables are allowed, and each row is a comment target.**")
+    assert "first cell" in para and "`step_id`" in para
+    assert "changes that row only" in para and "keep the table's shape" in para
+    assert "Use a list when" in para
+    assert "Not tables" not in PUSHING.read_text(encoding="utf-8")
+    events = (PUSHING.parent / "handling-events.md").read_text(encoding="utf-8")
+    assert "**A table row, or words inside a table cell:**" in events
+    assert "keep the table's shape, its header, its other rows" in events
     digest = _paragraph(PUSHING.read_text(encoding="utf-8"), "**Digest block**")
     assert "never a table row" in digest
 

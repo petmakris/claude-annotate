@@ -319,6 +319,7 @@ function updateBlockContent(section, blk, srvVer) {
     } else if (blockMd) {
       content.innerHTML = blockMd.render(blk.markdown || "");
       sanitizeFreeHtml(content);
+      if (window.AnnotateTables) window.AnnotateTables.decorate(content);
       if (window.AnnotateGlossary) window.AnnotateGlossary.decorate(content);
     }
   }

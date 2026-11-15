@@ -209,7 +209,8 @@ These commands are cheap and must never fail the turn: if one errors, carry on.
 2. Read the event with `webcompanion event --sid <sid> --event-id <event_id>` (see "Read the event from the store, never from the notification" above; the notification body may be truncated), and parse its `text` as JSON (see "The event payload is JSON inside JSON" above). **If the envelope's `type == "choice"`, jump to the `choice` subsection below.** Otherwise, the envelope's fields are:
    - `block_id` — the block to update. **Absent** for a general comment from the page's chat box: treat a missing `block_id` the same as `null`.
    - `step_id` — which authored `data-annotate-id` element the selected words sit
-     inside, or `null` for the whole block. **Pictures no longer produce one.**
+     inside — or a table row, whose id the page makes from its first cell —
+     or `null` for the whole block. **Pictures no longer produce one.**
      A `map`, `sequence`, `flowchart` or `diagram` block is commented as a whole, when
      the reader selected its title, so its comments arrive with `step_id: null`;
      the reader cannot click a step row, a node, or a pflow source line to scope
@@ -310,7 +311,7 @@ A dismissed `choice` or `sequence` block is removed whole-block the same way —
 
 ### `WEBCOMPANION_EVENT` with `type: "round"`
 
-**This is how essentially all content feedback arrives.** The reader selected words — any span, from two words to several paragraphs — and marked them, or selected a section's title and marked the whole section. Tables and pictures are marked whole, through their title. The payload carries the whole batch:
+**This is how essentially all content feedback arrives.** The reader selected words — any span, from two words to several paragraphs — and marked them, or selected a section's title and marked the whole section. Pictures are marked whole, through their title. A table row is its own target: the reader comments on a row from its button, or on words inside it, and either arrives with `step_id` set to the row's id. The payload carries the whole batch:
 
 - `reactions` — a list of `{scope, kind, block_id, selected_text, text,
   images, step_id, prefix, suffix, before?, after?}`.
@@ -406,8 +407,14 @@ Apply the WHOLE round in one pass — this is the entire point of batching:
      error.
    - **A span across paragraphs:** cut or fold the whole span, then re-join the
      surrounding paragraphs so they still read as one thought.
-   - **Words inside a table cell:** change only that cell's text; keep the
-     table's shape.
+   - **A table row, or words inside a table cell:** a row's `step_id` is its
+     id, made from its first cell's words (slugged, `row-N` when empty). Change
+     only that row — the cell the words sit in, or the row the comment is on —
+     and keep the table's shape, its header, its other rows and their order.
+     Keep the first cell's words so the row's id stays; if the change must
+     rename it, say so in `change_note`. Compact or delete on words in a cell
+     trims that cell only; it never removes the row. A selection across rows
+     arrives with `step_id: null`: change the rows it covers.
 
 Two rules govern compact, and both matter:
 

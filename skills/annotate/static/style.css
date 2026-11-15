@@ -187,6 +187,22 @@ main.prose th, main.prose td {
   padding: 6px 12px;
   text-align: left;
 }
+/* A table row is a comment target (tables.js): its button sits at the end of
+   the last cell, faint until the row is hovered or focused, and always
+   reachable on touch. The table itself stays the scroll container above. */
+main.prose .row-comment {
+  float: right; margin: 0 -6px 0 10px; padding: 2px; width: 22px; height: 22px;
+  border: 0; border-radius: 4px; background: transparent; color: var(--text-dim);
+  cursor: pointer; opacity: 0; user-select: none; -webkit-user-select: none;
+}
+main.prose .row-comment svg { width: 16px; height: 16px; display: block; }
+main.prose tr:hover .row-comment, main.prose .row-comment:focus-visible,
+main.prose tr[data-row-mark] .row-comment, main.prose tr[data-engaged-type] .row-comment { opacity: 1; }
+main.prose .row-comment:hover { color: var(--accent); background: var(--type-comment-wash); }
+@media (hover: none) { main.prose .row-comment { opacity: .6; width: 32px; height: 32px; } }
+main.prose tr[data-row-mark] > td { background: var(--type-comment-wash); }
+main.prose tr[data-row-mark] > td:first-child { box-shadow: inset 3px 0 0 var(--type-comment-fg); }
+main.prose tr[data-engaged-type] > td { background: var(--type-comment-wash); }
 /* Phone width: one unbreakable token (a column name, a path) set the
    min-content width of its whole column and squeezed the prose columns
    beside it — Notes measured 92px wide at 390px, one row 248px tall. Both

@@ -470,6 +470,7 @@ function createBlockSection(blk) {
     // sanitize the rendered tree before glossary decoration.
     content.innerHTML = blockMd ? blockMd.render(blk.markdown || "") : (blk.markdown || "");
     sanitizeFreeHtml(content);
+    if (window.AnnotateTables) window.AnnotateTables.decorate(content);
     if (window.AnnotateGlossary) window.AnnotateGlossary.decorate(content);
   }
   body.appendChild(content);
