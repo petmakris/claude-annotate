@@ -11,8 +11,18 @@
 # /audit-failing-tests runs the whole suite under 3.9 too, and fixes failures.
 #
 # Skip once with `git push --no-verify`.
+#
+# When the suite passes and the push goes to main, it starts tools/self_update.py in the
+# background: once GitHub holds the pushed commit, every machine in the fleet's
+# machines.json fast-forwards to it (and main's journey doorman restarts when journey.py
+# changed). A push is the event; no timer polls for it.
 set -e
 cd "$(git rev-parse --show-toplevel)"
+# git hands the refs on stdin: <local ref> <local sha> <remote ref> <remote sha>.
+pushed_main=""
+while read -r _lref lsha rref rsha; do
+  [ "$rref" = "refs/heads/main" ] && pushed_main="$lsha $rsha"
+done
 # A push from a linked worktree hands this hook GIT_DIR. Left set, every test
 # that runs git in a temp folder would write into this repository instead.
 unset $(git rev-parse --local-env-vars)
@@ -40,3 +50,11 @@ uv run -q --python 3.12 --with-requirements "$req" \
   python -m pytest skills fleet/tests -q -p no:cacheprovider >"$home/out" 2>&1 ||
   fail "$home/out" "the suite fails."
 tail -1 "$home/out" >&2
+
+if [ -n "$pushed_main" ]; then
+  set -- $pushed_main
+  log="${XDG_CACHE_HOME:-$HOME/.cache}/claude-annotate"
+  mkdir -p "$log"
+  nohup python3 tools/self_update.py all --wait "$1" --since "$2" >>"$log/update.log" 2>&1 </dev/null &
+  echo "pre-push: the fleet's machines update once GitHub has $(echo "$1" | cut -c1-7) (log: $log/update.log)" >&2
+fi

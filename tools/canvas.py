@@ -14,12 +14,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 # An app's tooling runs this file by path from a checkout, not through bin/claude-annotate, so the plugin root
 # is not on PYTHONPATH.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+# A build (every Lomem journey runs one) first brings this checkout to the latest main when that is safe, and
+# runs again on the new code when it moved (tools/self_update.py). It never stops the build.
+if sys.argv[1:2] == ["build"] and not os.environ.get("CLAUDE_ANNOTATE_UPDATED"):
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import self_update  # noqa: E402
+
+    if self_update.here(say=lambda m: print(m, file=sys.stderr)):
+        os.environ["CLAUDE_ANNOTATE_UPDATED"] = "1"
+        os.execv(sys.executable, [sys.executable, *sys.argv])
 
 from skills.canvas import canvas  # noqa: E402
 
