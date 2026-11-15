@@ -32,6 +32,10 @@
     return window.AnnotateTables ? window.AnnotateTables.button(id, true) : el("span");
   }
 
+  // Every option is its own card inside the decision. The recommended one is
+  // marked and carries the why; once answered, the chosen one says "Your
+  // choice" and the rest are dimmed. While open, each has a Choose button: its
+  // words come from CSS (aria-label here), so no text enters the part's text.
   function decisions(content, blk) {
     const list = el("div", "dec-list");
     let first = true;
@@ -45,12 +49,39 @@
       const head = el("div", "dec-head");
       lines(head, el("span", "dec-id", d.id),
             el("span", "dec-status", answered ? "Answered" : "Open"), commentButton(d.id));
-      const q = el("p", "dec-q", d.question);
-      const rec = el("p", "dec-rec");
-      rec.append(el("span", "dec-k", "Recommended"), document.createTextNode(" " + d.recommendation + " "),
-                 el("span", "dec-why", d.why));
-      const kids = [head, q, rec];
-      if (answered) {
+      const opts = el("div", "dec-opts");
+      let firstOpt = true;
+      for (const o of d.options || []) {
+        if (!firstOpt) opts.append(document.createTextNode("\n"));
+        firstOpt = false;
+        const rec = o.id === d.recommended;
+        const mine = answered && o.id === d.chosen;
+        const card = el("div", "dec-opt");
+        card.dataset.option = o.id;
+        if (rec) card.dataset.recommended = "1";
+        if (mine) card.dataset.chosen = "1";
+        if (answered && !mine) card.dataset.dim = "1";
+        const top = el("div", "opt-head");
+        const kids = [el("span", "opt-id", o.id), el("span", "opt-label", o.label)];
+        if (rec) kids.push(el("span", "opt-badge opt-rec", "Recommended"));
+        if (mine) kids.push(el("span", "opt-badge opt-mine", "Your choice"));
+        lines(top, ...kids);
+        const parts = [top, el("p", "opt-trade", o.trade)];
+        if (rec) parts.push(el("p", "dec-why", d.why));
+        lines(card, ...parts);
+        if (!answered) {
+          const btn = el("button", "dec-choose");
+          btn.type = "button";
+          btn.dataset.decision = d.id;
+          btn.dataset.option = o.id;
+          btn.dataset.label = o.label;
+          btn.setAttribute("aria-label", `Choose ${o.id}: ${o.label}`);
+          card.append(btn);
+        }
+        opts.append(card);
+      }
+      const kids = [head, el("p", "dec-q", d.question), opts];
+      if (answered && d.answer) {
         const ans = el("p", "dec-ans");
         ans.append(el("span", "dec-k", "Your answer"), document.createTextNode(" " + d.answer));
         kids.push(ans);
@@ -60,6 +91,25 @@
     }
     content.replaceChildren(list);
   }
+
+  // Pressing Choose pins one comment on that decision, `Choose <id>: <label>`,
+  // into the reader's round, as the comment window's Add to round does
+  // (pinComment): it goes out with the next Submit round. A decision holds one
+  // pending comment, so this replaces an earlier one on the same decision.
+  document.addEventListener("click", (ev) => {
+    const btn = ev.target.closest && ev.target.closest("button.dec-choose");
+    if (!btn) return;
+    const section = btn.closest("section.block");
+    if (!section || !window.AnnotateSubunits) return;
+    ev.preventDefault();
+    window.AnnotateSubunits.pinComment({
+      block_id: section.dataset.blockId,
+      step_id: btn.dataset.decision,
+      text: `Choose ${btn.dataset.option}: ${btn.dataset.label}`,
+    });
+    if (typeof applyEngagedStyling === "function") applyEngagedStyling();
+    if (window.AnnotateA11y) window.AnnotateA11y.announce(`Chose ${btn.dataset.option}, added to the round`);
+  });
 
   function facts(content, blk) {
     const strip = el("div", "facts-strip");

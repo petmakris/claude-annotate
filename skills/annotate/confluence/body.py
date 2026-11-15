@@ -279,12 +279,25 @@ def _spec_part(painter: str, spec: dict[str, Any]) -> str:
     if painter == "decisions":
         items = []
         for d in spec.get("decisions") or []:
-            tail = ("Answered: %s" % escape(str(d.get("answer", "")))
-                    if d.get("status") == "answered"
-                    else "Open. Recommended: %s (%s)" % (
-                        escape(str(d.get("recommendation", ""))), escape(str(d.get("why", "")))))
-            items.append("<li><p><strong>%s</strong> %s</p><p>%s</p></li>" % (
-                escape(str(d.get("id", ""))), escape(str(d.get("question", ""))), tail))
+            chosen = d.get("chosen")
+            rows = []
+            for o in d.get("options") or []:
+                marks = []
+                if o.get("id") == d.get("recommended"):
+                    marks.append("recommended")
+                if chosen and o.get("id") == chosen:
+                    marks.append("your choice")
+                rows.append("<li><p><strong>%s. %s</strong>%s: %s</p></li>" % (
+                    escape(str(o.get("id", ""))), escape(str(o.get("label", ""))),
+                    escape(" (%s)" % ", ".join(marks)) if marks else "",
+                    escape(str(o.get("trade", "")))))
+            tail = "Open. Recommended %s: %s" % (
+                escape(str(d.get("recommended", ""))), escape(str(d.get("why", ""))))
+            if d.get("status") == "answered":
+                tail = "Answered" + (": %s" % escape(str(d["answer"])) if d.get("answer") else "")
+            items.append("<li><p><strong>%s</strong> %s</p><ul>%s</ul><p>%s</p></li>" % (
+                escape(str(d.get("id", ""))), escape(str(d.get("question", ""))),
+                "".join(rows), tail))
         return "<ul>%s</ul>" % "".join(items)
     items = []
     for j in spec.get("jobs") or []:

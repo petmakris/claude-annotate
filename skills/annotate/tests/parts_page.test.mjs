@@ -33,15 +33,44 @@ function paint(painter, spec) {
   return c;
 }
 
-test("each decision is a comment target with its status and a button", () => {
-  const c = paint("decisions", { decisions: [
-    { id: "D1", question: "Q1?", recommendation: "Yes", why: "cheap", status: "open" },
-    { id: "D2", question: "Q2?", recommendation: "No", why: "slow", status: "answered", answer: "Fine" }] });
+const DEC = (extra) => ({ id: "D1", question: "Q1?", why: "cheap", recommended: "b", status: "open",
+  options: [{ id: "a", label: "Alpha", trade: "slow" }, { id: "b", label: "Beta", trade: "fast" }], ...extra });
+
+test("each option is a card, the recommended one marked, each with a Choose button while open", () => {
+  const c = paint("decisions", { decisions: [DEC({}), DEC({ id: "D2" })] });
   const d = c.querySelectorAll(".dec");
-  eq(d.map((x) => [x.dataset.annotateId, x.dataset.status]), [["D1", "open"], ["D2", "answered"]]);
-  eq(d.map((x) => x.querySelectorAll("button.item-comment").length), [1, 1]);
-  eq(d[0].querySelectorAll(".dec-ans").length, 0);
-  eq(d[1].querySelector(".dec-ans").textContent, "Your answer Fine");
+  eq(d.map((x) => [x.dataset.annotateId, x.dataset.status]), [["D1", "open"], ["D2", "open"]]);
+  const o = d[0].querySelectorAll(".dec-opt");
+  eq(o.map((x) => x.dataset.option), ["a", "b"]);
+  eq(o.map((x) => !!x.dataset.recommended), [false, true]);
+  eq(o[1].querySelector(".opt-rec").textContent, "Recommended");
+  eq(o[1].querySelector(".dec-why").textContent, "cheap");
+  eq(o[0].querySelectorAll(".dec-why").length, 0);
+  eq(o.map((x) => x.querySelectorAll("button.dec-choose").length), [1, 1]);
+  eq(d[0].querySelectorAll("button.item-comment").length, 1);
+  eq(o[0].querySelector(".dec-choose").getAttribute("aria-label"), "Choose a: Alpha");
+  eq(o[0].querySelector(".dec-choose").textContent, "", "its words come from CSS");
+});
+
+test("an answered decision marks the choice, dims the rest, and has no Choose buttons", () => {
+  const c = paint("decisions", { decisions: [DEC({ status: "answered", chosen: "a", answer: "A, but small" })] });
+  const o = c.querySelectorAll(".dec-opt");
+  eq(o.map((x) => [!!x.dataset.chosen, !!x.dataset.dim]), [[true, false], [false, true]]);
+  eq(o[0].querySelector(".opt-mine").textContent, "Your choice");
+  eq(c.querySelectorAll("button.dec-choose").length, 0);
+  eq(c.querySelector(".dec-ans").textContent, "Your answer A, but small");
+});
+
+test("pressing Choose pins `Choose <id>: <label>` on that decision", () => {
+  const pinned = [];
+  window.AnnotateSubunits = { pinComment: (a) => pinned.push(a) };
+  const section = document.createElement("section");
+  section.className = "block"; section.dataset.blockId = "section-3";
+  const content = document.createElement("div");
+  window.AnnotateSpecParts.paint("decisions", content, { spec: { decisions: [DEC({})] } });
+  section.append(content); document.body.append(section);
+  content.querySelectorAll(".dec-opt")[1].querySelector("button.dec-choose").click();
+  eq(pinned, [{ block_id: "section-3", step_id: "D1", text: "Choose b: Beta" }]);
 });
 
 test("each job is a comment target and says what it waits on", () => {

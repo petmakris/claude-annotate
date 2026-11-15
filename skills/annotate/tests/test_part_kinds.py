@@ -19,10 +19,20 @@ ANNOTATE = Path(__file__).resolve().parents[1]
 STATIC = ANNOTATE / "static"
 
 DECISIONS = {"decisions": [
-    {"id": "D1", "question": "Keep the old format?", "recommendation": "Drop it.",
-     "why": "Nothing reads it.", "status": "open"},
-    {"id": "D2", "question": "Behind a flag?", "recommendation": "Yes.",
-     "why": "Easy to turn off.", "status": "answered", "answer": "Yes, flag it."}]}
+    {"id": "D1", "question": "How is the test data stored?",
+     "options": [{"id": "a", "label": "One file per person per app", "trade": "Two people never edit the same file."},
+                 {"id": "b", "label": "One big file per app", "trade": "One place to read; edits collide."}],
+     "recommended": "a", "why": "Nothing else keeps two people apart.", "status": "open"},
+    {"id": "D2", "question": "Behind a flag?",
+     "options": [{"id": "a", "label": "Yes", "trade": "Off without a deploy."},
+                 {"id": "b", "label": "No", "trade": "Less to remove later."},
+                 {"id": "c", "label": "Later", "trade": "Decide after the pilot."}],
+     "recommended": "a", "why": "Rollback is free.", "status": "answered", "chosen": "a"},
+    {"id": "D3", "question": "Who reviews?",
+     "options": [{"id": "a", "label": "Anna", "trade": "Knows the code."},
+                 {"id": "b", "label": "Ben", "trade": "Fresh eyes."}],
+     "recommended": "b", "why": "Fresh eyes.", "status": "answered",
+     "answer": "Both, Anna first."}]}
 FACTS = {"facts": [{"value": "3 files", "label": "change"},
                    {"value": "2 days", "label": "estimate"},
                    {"value": "low", "label": "risk"}]}
@@ -73,9 +83,22 @@ BAD = [
     ("decisions", lambda s: s["decisions"][0].update(id="X1"), "D1, D2"),
     ("decisions", lambda s: s["decisions"][1].update(id="D1"), "used twice"),
     ("decisions", lambda s: s["decisions"][0].update(status="maybe"), "`status` must be one of open, answered"),
-    ("decisions", lambda s: s["decisions"][1].pop("answer"), "needs the reader's `answer`"),
+    ("decisions", lambda s: s["decisions"][1].pop("chosen"), "needs the reader's `chosen` option or their `answer`"),
+    ("decisions", lambda s: s["decisions"][0].update(chosen="a"), "silence is not a yes"),
     ("decisions", lambda s: s["decisions"][0].update(answer="yes"), "silence is not a yes"),
+    ("decisions", lambda s: s["decisions"][1].update(chosen="d"), "`chosen` must name one of the option ids"),
     ("decisions", lambda s: s["decisions"][0].update(why="a\nb"), "`why` must be a non-blank string on one line"),
+    ("decisions", lambda s: s["decisions"][0].update(recommended="c"), "`recommended` must name one of the option ids"),
+    ("decisions", lambda s: s["decisions"][0].pop("recommended"), "`recommended` must name one of the option ids"),
+    ("decisions", lambda s: s["decisions"][0].update(recommendation="Drop it."), "`recommendation` is now `recommended`"),
+    ("decisions", lambda s: s["decisions"][0].update(options=s["decisions"][0]["options"][:1]), "`options` must be a list of 2 to 4"),
+    ("decisions", lambda s: s["decisions"][0]["options"].extend(
+        [{"id": "c", "label": "x", "trade": "y"}, {"id": "d", "label": "x", "trade": "y"},
+         {"id": "a", "label": "x", "trade": "y"}]), "`options` must be a list of 2 to 4"),
+    ("decisions", lambda s: s["decisions"][0]["options"][1].update(id="a"), "option id 'a' is used twice"),
+    ("decisions", lambda s: s["decisions"][0]["options"][1].update(id="e"), "must be one of a, b, c, d"),
+    ("decisions", lambda s: s["decisions"][0]["options"][0].update(label="x\ny"), "`label` must be a non-blank one-line string"),
+    ("decisions", lambda s: s["decisions"][0]["options"][0].pop("trade"), "`trade` must be a non-blank one-line string"),
     ("decisions", lambda s: s.update(decisions=[]), "non-empty list"),
     ("facts", lambda s: s.update(facts=s["facts"][:1]), "2 to 6 facts (found 1)"),
     ("facts", lambda s: s["facts"].extend([{"value": str(i), "label": "x"} for i in range(4)]), "(found 7)"),
@@ -124,6 +147,11 @@ def test_the_rules_say_silence_is_never_a_yes():
     assert "**Silence is never a yes.**" in ref
     assert "only from the reader's own words" in ref
     assert "**A comment on a decision rewrites that decision only.**" in ref
+    assert "**A `Choose x: …` comment on a decision** sets `status: \"answered\"` and\n  `chosen: \"x\"`." in ref
+    assert "A free comment that settles it" in ref
+    events = (ANNOTATE / "references" / "handling-events.md").read_text(encoding="utf-8")
+    assert "A comment whose text is `Choose x: <label>` is a pick" in events
+    assert "Silence never answers" in events
 
 
 def test_the_first_table_column_stays_in_view_when_the_table_scrolls():
@@ -140,4 +168,14 @@ def test_parts_page_suite_passes():
     proc = subprocess.run(["node", str(suite)], capture_output=True, text=True, timeout=60)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     m = re.search(r"(\d+)/(\d+) passed", proc.stdout)
-    assert m and m.group(1) == m.group(2) and int(m.group(2)) == 4, proc.stdout
+    assert m and m.group(1) == m.group(2) and int(m.group(2)) == 6, proc.stdout
+
+
+def test_confluence_lists_the_options_and_marks_recommended_and_chosen():
+    from skills.annotate.confluence.body import render_block as confluence
+    html = confluence(_block("decisions", DECISIONS), [])
+    assert "<strong>a. One file per person per app</strong> (recommended): Two people never edit the same file." in html
+    assert "<strong>b. One big file per app</strong>: One place to read; edits collide." in html
+    assert "<strong>a. Yes</strong> (recommended, your choice): Off without a deploy." in html
+    assert "Answered: Both, Anna first." in html
+    assert "Open. Recommended a: Nothing else keeps two people apart." in html

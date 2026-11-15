@@ -152,6 +152,8 @@ class PartSpecError(ValueError):
 
 
 DECISION_STATUSES = ("open", "answered")
+DECISION_OPTION_IDS = ("a", "b", "c", "d")
+DECISION_OPTIONS_MIN, DECISION_OPTIONS_MAX = 2, 4
 JOB_STATUSES = ("todo", "running", "done", "blocked")
 FACTS_MIN, FACTS_MAX = 2, 6
 FACT_VALUE_MAX, FACT_LABEL_MAX = 20, 40
@@ -183,17 +185,54 @@ def _check_decisions(bid: str, spec: dict, problems: list) -> None:
             problems.append(f"{where}: `id` {did!r} is used twice")
         else:
             seen.add(did)
-        for k in ("question", "recommendation", "why"):
-            if not _text(d.get(k), one_line=(k != "question")):
-                problems.append(f"{where}: `{k}` must be a non-blank string"
-                                + ("" if k == "question" else " on one line"))
+        if "recommendation" in d:
+            problems.append(f"{where}: `recommendation` is now `recommended`, the id of "
+                            f"one of its `options`")
+        if not _text(d.get("question")):
+            problems.append(f"{where}: `question` must be a non-blank string")
+        if not _text(d.get("why"), one_line=True):
+            problems.append(f"{where}: `why` must be a non-blank string on one line")
+        opts = d.get("options")
+        ids: list = []
+        if not isinstance(opts, list) or not DECISION_OPTIONS_MIN <= len(opts) <= DECISION_OPTIONS_MAX:
+            problems.append(f"{where}: `options` must be a list of {DECISION_OPTIONS_MIN} "
+                            f"to {DECISION_OPTIONS_MAX}")
+        else:
+            for k, o in enumerate(opts):
+                if not isinstance(o, dict):
+                    problems.append(f"{where}: options[{k}] must be an object")
+                    continue
+                oid = o.get("id")
+                if oid not in DECISION_OPTION_IDS:
+                    problems.append(f"{where}: options[{k}] `id` must be one of "
+                                    f"{', '.join(DECISION_OPTION_IDS)}")
+                elif oid in ids:
+                    problems.append(f"{where}: option id {oid!r} is used twice")
+                else:
+                    ids.append(oid)
+                for key in ("label", "trade"):
+                    if not _text(o.get(key), one_line=True):
+                        problems.append(f"{where}: options[{k}] `{key}` must be a "
+                                        f"non-blank one-line string")
+        rec = d.get("recommended")
+        if rec not in ids:
+            problems.append(f"{where}: `recommended` must name one of the option ids")
         status = d.get("status")
+        chosen, answer = d.get("chosen"), d.get("answer")
         if status not in DECISION_STATUSES:
             problems.append(f"{where}: `status` must be one of {', '.join(DECISION_STATUSES)}")
-        elif status == "answered" and not _text(d.get("answer")):
-            problems.append(f"{where}: an answered decision needs the reader's `answer`")
-        elif status == "open" and d.get("answer") not in (None, ""):
-            problems.append(f"{where}: an open decision has no `answer` — silence is not a yes")
+        elif status == "open":
+            if chosen not in (None, "") or answer not in (None, ""):
+                problems.append(f"{where}: an open decision has no `chosen` or `answer` — "
+                                f"silence is not a yes")
+        else:
+            if chosen in (None, "") and not _text(answer):
+                problems.append(f"{where}: an answered decision needs the reader's `chosen` "
+                                f"option or their `answer`")
+            if chosen not in (None, "") and chosen not in ids:
+                problems.append(f"{where}: `chosen` must name one of the option ids")
+            if answer not in (None, "") and not _text(answer):
+                problems.append(f"{where}: `answer` must be a non-blank string")
 
 
 def _check_facts(bid: str, spec: dict, problems: list) -> None:

@@ -799,7 +799,7 @@ section.block.is-updating > *:not(.updating-overlay) {
 .job[data-status="done"] .job-title { color: var(--text-dim); }
 .dec .item-comment, .job .item-comment { margin-left: auto; }
 .dec-q { margin: 6px 0 4px; font-weight: 600; color: var(--text-strong); }
-.dec-rec, .dec-ans, .job-does { margin: 2px 0; }
+.dec-ans, .job-does { margin: 2px 0; }
 .dec-k { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim); margin-right: 4px; }
 .dec-why { color: var(--text-dim); }
 .job-title { font-weight: 600; color: var(--text-strong); }
@@ -828,3 +828,33 @@ section.block.is-updating > *:not(.updating-overlay) {
 .fact-label { margin-top: 2px; font-size: 12px; color: var(--text-dim); }
 main.prose ol.job-list, main.prose .dec-list { padding: 0; margin: 0; list-style: none; }
 main.prose .job-list > li, main.prose .dec p, main.prose .job p { margin-left: 0; }
+
+/* Decision options: one card each inside the decision (spec-parts.js). */
+.dec-opts { display: grid; gap: 8px; margin-top: 6px; }
+.dec-opt {
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); display: grid; gap: 2px;
+}
+.dec-opt[data-recommended] { border-color: var(--accent); }
+.dec-opt[data-chosen] { border-color: var(--status-live-fg); border-width: 2px; padding: 7px 11px; }
+.dec-opt[data-dim] { opacity: .6; }
+.opt-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.opt-id { font: 600 12px/1 ui-monospace, monospace; color: var(--text-dim); text-transform: uppercase; }
+.opt-label { font-weight: 600; color: var(--text-strong); }
+.opt-badge {
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 999px;
+}
+.opt-rec { background: var(--type-comment-bg); color: var(--type-comment-fg); }
+.opt-mine { background: var(--status-live-bg); color: var(--status-live-fg); }
+main.prose .opt-trade, main.prose .dec-opt .dec-why { margin: 0; }
+.opt-trade { color: var(--text); }
+.dec-choose {
+  justify-self: start; margin-top: 6px; min-height: 32px; padding: 4px 14px;
+  border: 1px solid var(--accent); border-radius: 6px; background: transparent;
+  color: var(--accent); font: 600 13px/1 inherit; font-family: inherit; cursor: pointer;
+  user-select: none; -webkit-user-select: none;
+}
+.dec-choose::after { content: "Choose this"; }
+.dec-choose:hover, .dec-choose:focus-visible { background: var(--accent); color: var(--accent-fg); }
+@media (hover: none) { .dec-choose { min-height: 40px; } }

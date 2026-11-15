@@ -476,8 +476,10 @@ def test_every_known_kind_loads(tmp_path):
 
     # The kinds the page paints from a checked spec need a real one.
     specs = {
-        "decisions": {"decisions": [{"id": "D1", "question": "q", "recommendation": "r",
-                                     "why": "w", "status": "open"}]},
+        "decisions": {"decisions": [{"id": "D1", "question": "q", "why": "w", "status": "open",
+                                     "options": [{"id": "a", "label": "x", "trade": "t"},
+                                                 {"id": "b", "label": "y", "trade": "u"}],
+                                     "recommended": "a"}]},
         "facts": {"facts": [{"value": "1", "label": "a"}, {"value": "2", "label": "b"}]},
         "jobs": {"jobs": [{"id": "J1", "title": "t", "does": "d", "status": "todo"}]},
     }

@@ -416,12 +416,18 @@ Apply the WHOLE round in one pass — this is the entire point of batching:
      trims that cell only; it never removes the row. A selection across rows
      arrives with `step_id: null`: change the rows it covers.
    - **A decision or a job** (`kind: "decisions"` or `"jobs"`): `step_id` is its
-     id (`D1`, `J2`), from a click on its comment button or from words selected
-     inside it. Change that item only, in `spec`, and leave every other item,
-     every id and the order. A decision becomes `answered` only when the reader's
-     own words settle it, and its `answer` holds those words; silence, or a
-     comment that only questions the recommendation, leaves it `open`. A
-     `facts` strip is commented whole (`step_id: null`).
+     id (`D1`, `J2`), from a click on its comment button, from the Choose button
+     on a decision's option, or from words selected inside it. Change that item
+     only, in `spec`, and leave every other item, every id (decision, option, job)
+     and the order. On a decision:
+     - A comment whose text is `Choose x: <label>` is a pick: set `status:
+       "answered"` and `chosen: "x"`.
+     - A free comment that settles it sets `status: "answered"` and `answer` to
+       the reader's own words (and `chosen` only if they named an option).
+     - A comment that only questions the recommendation leaves it `open`; change
+       the options, `recommended` or `why` as it asks.
+     - Silence never answers, and `chosen` or `answer` is never your recommendation.
+     A `facts` strip is commented whole (`step_id: null`).
 
 Two rules govern compact, and both matter:
 
