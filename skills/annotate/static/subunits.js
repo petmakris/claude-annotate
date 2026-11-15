@@ -214,11 +214,11 @@
     }
     window.AnnotateAnchors.paint(items);
     // A row of a table (tables.js) the reader has commented on, wordlessly.
-    document.querySelectorAll("tr[data-row-mark]").forEach((tr) => delete tr.dataset.rowMark);
+    document.querySelectorAll("[data-row-mark]").forEach((tr) => delete tr.dataset.rowMark);
     for (const m of Object.values(marks)) {
       if (isSpan(m) || !m.step_id || m.kind !== "comment") continue;
       const sec = sectionFor(m.block_id);
-      const tr = sec && sec.querySelector(`tr[data-annotate-id="${CSS.escape(m.step_id)}"]`);
+      const tr = sec && sec.querySelector(`[data-annotate-id="${CSS.escape(m.step_id)}"]`);
       if (tr) tr.dataset.rowMark = "comment";
     }
     // A comment's words are shown where it was made: one chip under the

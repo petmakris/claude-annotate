@@ -19,7 +19,7 @@ from typing import Any
 
 from skills.annotate.confluence.constants import media_token
 from skills.annotate.confluence.markdown_html import to_html
-from skills.annotate.kinds import with_trait
+from skills.annotate.kinds import trait, with_trait
 from skills._shared.visuals.sequence import _numbered
 from skills._shared.visuals.views import ALL_VIEW
 
@@ -270,6 +270,31 @@ def _title_of(blk: dict[str, Any]) -> str:
     return "Section"
 
 
+def _spec_part(painter: str, spec: dict[str, Any]) -> str:
+    """A decisions, facts or jobs part as plain Confluence HTML."""
+    if painter == "facts":
+        return "<p>%s</p>" % " &middot; ".join(
+            "<strong>%s</strong> %s" % (escape(str(f.get("value", ""))), escape(str(f.get("label", ""))))
+            for f in spec.get("facts") or [])
+    if painter == "decisions":
+        items = []
+        for d in spec.get("decisions") or []:
+            tail = ("Answered: %s" % escape(str(d.get("answer", "")))
+                    if d.get("status") == "answered"
+                    else "Open. Recommended: %s (%s)" % (
+                        escape(str(d.get("recommendation", ""))), escape(str(d.get("why", "")))))
+            items.append("<li><p><strong>%s</strong> %s</p><p>%s</p></li>" % (
+                escape(str(d.get("id", ""))), escape(str(d.get("question", ""))), tail))
+        return "<ul>%s</ul>" % "".join(items)
+    items = []
+    for j in spec.get("jobs") or []:
+        wait = ", waits on %s" % escape(", ".join(j["after"])) if j.get("after") else ""
+        items.append("<li><p><strong>%s %s</strong> (%s%s): %s</p></li>" % (
+            escape(str(j.get("id", ""))), escape(str(j.get("title", ""))),
+            escape(str(j.get("status", ""))), wait, escape(str(j.get("does", "")))))
+    return "<ol>%s</ol>" % "".join(items)
+
+
 def render_block(blk: dict[str, Any],
                  anchors_for_block: list[dict[str, Any]],
                  size: tuple[int, int] | None = None) -> str:
@@ -306,6 +331,8 @@ def render_block(blk: dict[str, Any],
                    % (escape(str(spec.get("question", ""))), options))
     elif kind == "compare":
         out.append(_compare(blk.get("spec") or {}))
+    elif trait(kind, "painter"):
+        out.append(_spec_part(trait(kind, "painter"), blk.get("spec") or {}))
     elif kind == "mockup":
         out.append('<div data-type="panel-note"><p>This section is an '
                    "interactive mockup, which has no Confluence equivalent. "

@@ -465,6 +465,9 @@ function createBlockSection(blk) {
     renderExplain(content, blk);
   } else if (kind === "compare") {
     renderCompare(content, blk);
+  } else if (AnnotateKinds.get(kind, "painter")) {
+    // decisions, facts, jobs: painted from their checked spec (spec-parts.js).
+    AnnotateSpecParts.paint(AnnotateKinds.get(kind, "painter"), content, blk);
   } else {
     // Markdown path — markdown-it now allows inline HTML (`html: true`);
     // sanitize the rendered tree before glossary decoration.

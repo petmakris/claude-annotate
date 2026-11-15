@@ -87,6 +87,8 @@ const JS = [
   "anchors.js",
   // Before script.js: each part painted as markdown gives its table rows ids.
   "tables.js",
+  // Before script.js: decisions, facts and jobs are painted from their spec.
+  "spec-parts.js",
   // Before script.js and selection.js: both open comments in this window.
   "window-place.js",
   "comment-window.js",

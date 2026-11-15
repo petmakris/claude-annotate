@@ -43,26 +43,32 @@
       }
       const last = tr.children[tr.children.length - 1];
       if (!last) return;
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "row-comment";
-      btn.setAttribute("aria-label", `Comment on this row (${id})`);
-      btn.title = "Comment on this row";
-      btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z" '
-        + 'fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
-      last.appendChild(btn);
+      last.appendChild(button(id, false));
     });
   }
 
+  // The wordless comment button, for a table row and for a decision or job
+  // (spec-parts.js). It holds no text node, so it never enters a part's text.
+  function button(id, item) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = item ? "item-comment" : "row-comment";
+    btn.setAttribute("aria-label", `Comment on ${item ? "this item" : "this row"} (${id})`);
+    btn.title = item ? "Comment on this" : "Comment on this row";
+    btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z" '
+      + 'fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
+    return btn;
+  }
+
   document.addEventListener("click", (ev) => {
-    const btn = ev.target.closest && ev.target.closest("button.row-comment");
+    const btn = ev.target.closest && ev.target.closest("button.row-comment, button.item-comment");
     if (!btn) return;
-    const tr = btn.closest("tr[data-annotate-id]");
+    const tr = btn.closest("[data-annotate-id]");
     const section = btn.closest("section.block");
     if (!tr || !section || typeof openAnnotation !== "function") return;
     ev.preventDefault();
     openAnnotation(section, "comment", { stepId: tr.dataset.annotateId });
   });
 
-  window.AnnotateTables = { decorate, slug };
+  window.AnnotateTables = { decorate, slug, button };
 })();

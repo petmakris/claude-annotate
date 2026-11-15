@@ -26,7 +26,7 @@ from typing import Any
 
 from skills._shared.atomic import write_text_atomic
 from skills.annotate.explain import _languages
-from skills.annotate.kinds import KINDS, RETIRED
+from skills.annotate.kinds import KINDS, RETIRED, trait
 
 
 # Every key the document format reads. A block with none of the content keys
@@ -145,6 +145,138 @@ def _check_compare_specs(blocks: list[dict[str, Any]]) -> None:
             f"{len(problems)} compare spec problem(s) — " + "; ".join(problems[:4]))
 
 
+class PartSpecError(ValueError):
+    """A `decisions`, `facts` or `jobs` block has the wrong shape. The page
+    paints exactly what it is given, so a missing question or a job that waits
+    on an id that does not exist would draw a part that is quietly wrong."""
+
+
+DECISION_STATUSES = ("open", "answered")
+JOB_STATUSES = ("todo", "running", "done", "blocked")
+FACTS_MIN, FACTS_MAX = 2, 6
+FACT_VALUE_MAX, FACT_LABEL_MAX = 20, 40
+_DECISION_ID = _re.compile(r"^D[1-9]\d*$")
+_JOB_ID = _re.compile(r"^J[1-9]\d*$")
+
+
+def _text(v: Any, one_line: bool = False) -> bool:
+    return isinstance(v, str) and bool(v.strip()) and not (one_line and "\n" in v.strip())
+
+
+def _items(bid: str, spec: dict, key: str, problems: list) -> list:
+    items = spec.get(key)
+    if not isinstance(items, list) or not items:
+        problems.append(f"{bid}: `spec.{key}` must be a non-empty list")
+        return []
+    return [(i, it) for i, it in enumerate(items) if isinstance(it, dict)
+            or problems.append(f"{bid}: {key}[{i}] must be an object")]
+
+
+def _check_decisions(bid: str, spec: dict, problems: list) -> None:
+    seen = set()
+    for i, d in _items(bid, spec, "decisions", problems):
+        did = d.get("id")
+        where = f"{bid}: decisions[{i}]"
+        if not isinstance(did, str) or not _DECISION_ID.match(did):
+            problems.append(f"{where}: `id` must look like D1, D2, ...")
+        elif did in seen:
+            problems.append(f"{where}: `id` {did!r} is used twice")
+        else:
+            seen.add(did)
+        for k in ("question", "recommendation", "why"):
+            if not _text(d.get(k), one_line=(k != "question")):
+                problems.append(f"{where}: `{k}` must be a non-blank string"
+                                + ("" if k == "question" else " on one line"))
+        status = d.get("status")
+        if status not in DECISION_STATUSES:
+            problems.append(f"{where}: `status` must be one of {', '.join(DECISION_STATUSES)}")
+        elif status == "answered" and not _text(d.get("answer")):
+            problems.append(f"{where}: an answered decision needs the reader's `answer`")
+        elif status == "open" and d.get("answer") not in (None, ""):
+            problems.append(f"{where}: an open decision has no `answer` — silence is not a yes")
+
+
+def _check_facts(bid: str, spec: dict, problems: list) -> None:
+    facts = [(i, f) for i, f in _items(bid, spec, "facts", problems)]
+    if facts and not FACTS_MIN <= len(spec["facts"]) <= FACTS_MAX:
+        problems.append(f"{bid}: a facts strip has {FACTS_MIN} to {FACTS_MAX} facts "
+                        f"(found {len(spec['facts'])})")
+    for i, f in facts:
+        where = f"{bid}: facts[{i}]"
+        for k, limit in (("value", FACT_VALUE_MAX), ("label", FACT_LABEL_MAX)):
+            v = f.get(k)
+            if not _text(v, one_line=True):
+                problems.append(f"{where}: `{k}` must be a non-blank one-line string")
+            elif len(v) > limit:
+                problems.append(f"{where}: `{k}` is {len(v)} characters, over the {limit} limit")
+
+
+def _check_jobs(bid: str, spec: dict, problems: list) -> None:
+    jobs = _items(bid, spec, "jobs", problems)
+    ids = [j.get("id") for _, j in jobs if isinstance(j.get("id"), str)]
+    seen = set()
+    for i, j in jobs:
+        jid = j.get("id")
+        where = f"{bid}: jobs[{i}]"
+        if not isinstance(jid, str) or not _JOB_ID.match(jid):
+            problems.append(f"{where}: `id` must look like J1, J2, ...")
+        elif jid in seen:
+            problems.append(f"{where}: `id` {jid!r} is used twice")
+        else:
+            seen.add(jid)
+        for k in ("title", "does"):
+            if not _text(j.get(k), one_line=True):
+                problems.append(f"{where}: `{k}` must be a non-blank one-line string")
+        if j.get("status") not in JOB_STATUSES:
+            problems.append(f"{where}: `status` must be one of {', '.join(JOB_STATUSES)}")
+        after = j.get("after", [])
+        if not isinstance(after, list) or not all(isinstance(a, str) for a in after):
+            problems.append(f"{where}: `after` must be a list of job ids")
+            continue
+        for a in after:
+            if a == jid:
+                problems.append(f"{where}: waits on itself")
+            elif a not in ids:
+                problems.append(f"{where}: `after` names {a!r}, which is not a job here")
+    waits = {j["id"]: [a for a in j.get("after", []) if a in ids]
+             for _, j in jobs if isinstance(j.get("id"), str)
+             and isinstance(j.get("after", []), list)}
+    state: dict = {}
+
+    def loops(n):
+        if state.get(n) == 1:
+            return True
+        if state.get(n) == 2:
+            return False
+        state[n] = 1
+        if any(loops(m) for m in waits.get(n, []) if m != n):
+            return True
+        state[n] = 2
+        return False
+    if any(loops(n) for n in waits):
+        problems.append(f"{bid}: jobs wait on each other in a circle")
+
+
+# kind -> checker. The registry says which kinds are these (`painter` trait).
+_PART_CHECKS = {"decisions": _check_decisions, "facts": _check_facts, "jobs": _check_jobs}
+
+
+def _check_part_specs(blocks: list[dict[str, Any]]) -> None:
+    problems: list = []
+    for b in blocks:
+        check = _PART_CHECKS.get(trait(b.get("kind"), "painter"))
+        if not check:
+            continue
+        spec = b.get("spec")
+        if not isinstance(spec, dict):
+            problems.append(f"{b.get('id', '?')}: `spec` must be an object")
+            continue
+        check(b.get("id", "?"), spec, problems)
+    if problems:
+        raise PartSpecError(
+            f"{len(problems)} part spec problem(s) — " + "; ".join(problems[:5]))
+
+
 @dataclass
 class BlocksDoc:
     response_id: str = ""
@@ -200,6 +332,7 @@ def load(path: Path) -> BlocksDoc:
             f"Prose goes in `markdown`.")
     _check_choice_specs(blocks)
     _check_compare_specs(blocks)
+    _check_part_specs(blocks)
     return BlocksDoc(
         response_id=raw.get("response_id", ""),
         title=raw.get("title", ""),

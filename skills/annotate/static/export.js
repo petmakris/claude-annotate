@@ -16,7 +16,7 @@
   // Comments, controls, and review scaffolding. See the note above on why
   // these are deleted rather than styled away.
   const STRIP = [
-    ".row-comment",         // a table row's comment button: a control
+    ".row-comment, .item-comment", // a table row, decision or job comment button: a control
     ".cq-bar",              // a choice queue's navigation: a view, not content
     "#fold-all",            // a view control with no JS in the export to run it
     ".max-toggle",          // maximize: a view control with no JS in the export to run it

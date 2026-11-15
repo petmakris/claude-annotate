@@ -19,7 +19,11 @@ KINDS: dict[str, dict] = _data["kinds"]
 # fails loudly instead of rendering as an empty card.
 RETIRED: dict[str, dict] = _data["retired"]
 
-TRAITS = frozenset(next(iter(KINDS.values())))
+# Every kind has the traits of `markdown`; `code_message` (with code: refused)
+# and `painter` (a kind the page paints from its spec, spec-parts.js) are the
+# optional ones.
+TRAITS = frozenset(KINDS["markdown"])
+OPTIONAL_TRAITS = frozenset({"code_message", "painter"})
 
 
 def trait(kind: str, name: str):

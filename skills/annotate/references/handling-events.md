@@ -415,6 +415,13 @@ Apply the WHOLE round in one pass — this is the entire point of batching:
      rename it, say so in `change_note`. Compact or delete on words in a cell
      trims that cell only; it never removes the row. A selection across rows
      arrives with `step_id: null`: change the rows it covers.
+   - **A decision or a job** (`kind: "decisions"` or `"jobs"`): `step_id` is its
+     id (`D1`, `J2`), from a click on its comment button or from words selected
+     inside it. Change that item only, in `spec`, and leave every other item,
+     every id and the order. A decision becomes `answered` only when the reader's
+     own words settle it, and its `answer` holds those words; silence, or a
+     comment that only questions the recommendation, leaves it `open`. A
+     `facts` strip is commented whole (`step_id: null`).
 
 Two rules govern compact, and both matter:
 

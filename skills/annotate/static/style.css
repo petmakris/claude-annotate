@@ -200,9 +200,20 @@ main.prose tr:hover .row-comment, main.prose .row-comment:focus-visible,
 main.prose tr[data-row-mark] .row-comment, main.prose tr[data-engaged-type] .row-comment { opacity: 1; }
 main.prose .row-comment:hover { color: var(--accent); background: var(--type-comment-wash); }
 @media (hover: none) { main.prose .row-comment { opacity: .6; width: 32px; height: 32px; } }
-main.prose tr[data-row-mark] > td { background: var(--type-comment-wash); }
-main.prose tr[data-row-mark] > td:first-child { box-shadow: inset 3px 0 0 var(--type-comment-fg); }
-main.prose tr[data-engaged-type] > td { background: var(--type-comment-wash); }
+main.prose tr[data-row-mark] > td { background-image: linear-gradient(var(--type-comment-wash), var(--type-comment-wash)); }
+main.prose tr[data-engaged-type] > td { background-image: linear-gradient(var(--type-comment-wash), var(--type-comment-wash)); }
+/* When a wide table scrolls sideways, its first column (the row's name) stays
+   in view. Opaque, so the cells scrolling under it do not show through, with
+   the row's tint laid over that ground; collapsed borders do not travel with a
+   sticky cell, so its right edge is drawn as a shadow. */
+main.prose tbody td:first-child, main.prose thead th:first-child {
+  position: sticky; left: 0; z-index: 1;
+  background-color: var(--surface);
+  box-shadow: inset -1px 0 0 var(--border);
+}
+main.prose tr[data-row-mark] > td:first-child {
+  box-shadow: inset 3px 0 0 var(--type-comment-fg), inset -1px 0 0 var(--border);
+}
 /* Phone width: one unbreakable token (a column name, a path) set the
    min-content width of its whole column and squeezed the prose columns
    beside it — Notes measured 92px wide at 390px, one row 248px tall. Both
@@ -759,3 +770,61 @@ section.block.is-updating > *:not(.updating-overlay) {
   box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.15);
 }
 .choice-note::placeholder { color: var(--text-dim); }
+
+/* === Decisions, facts and jobs (spec-parts.js) ======================= */
+/* Page tokens only, so light and dark follow the page. A decision and a job
+   are comment targets: the same wordless button as a table row, shown on
+   hover or focus and always on touch; a pinned comment tints the item. */
+.dec-list, .job-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.dec, .job {
+  position: relative; padding: 10px 14px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--surface);
+}
+.dec[data-status="open"] {
+  border-left: 4px solid var(--accent); background: var(--surface-soft);
+}
+.dec[data-status="answered"] { border-left: 4px solid var(--status-live-fg); }
+.dec[data-status="answered"] .dec-q { color: var(--text-dim); }
+.dec-head, .job-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dec-id, .job-id { font: 600 12px/1 ui-monospace, monospace; color: var(--text-dim); }
+.dec-status, .job-status {
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 999px; background: var(--surface-soft); color: var(--text-dim);
+}
+.dec[data-status="open"] .dec-status { background: var(--type-comment-bg); color: var(--type-comment-fg); }
+.dec[data-status="answered"] .dec-status { background: var(--status-live-bg); color: var(--status-live-fg); }
+.job[data-status="running"] .job-status { background: var(--type-comment-bg); color: var(--type-comment-fg); }
+.job[data-status="done"] .job-status { background: var(--status-live-bg); color: var(--status-live-fg); }
+.job[data-status="blocked"] .job-status { background: var(--type-reject-bg); color: var(--type-reject-fg); }
+.job[data-status="done"] .job-title { color: var(--text-dim); }
+.dec .item-comment, .job .item-comment { margin-left: auto; }
+.dec-q { margin: 6px 0 4px; font-weight: 600; color: var(--text-strong); }
+.dec-rec, .dec-ans, .job-does { margin: 2px 0; }
+.dec-k { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim); margin-right: 4px; }
+.dec-why { color: var(--text-dim); }
+.job-title { font-weight: 600; color: var(--text-strong); }
+.job-after { margin: 2px 0 0; font-size: 12px; color: var(--text-dim); }
+.job[data-status="blocked"] { border-left: 4px solid var(--type-reject-fg); }
+.job[data-status="running"] { border-left: 4px solid var(--accent); }
+.item-comment {
+  float: none; margin: 0; width: 24px; height: 24px; padding: 2px; border: 0; border-radius: 4px; background: transparent;
+  color: var(--text-dim); cursor: pointer; opacity: 0; user-select: none; -webkit-user-select: none;
+}
+.item-comment svg { width: 16px; height: 16px; display: block; }
+.dec:hover .item-comment, .job:hover .item-comment, .item-comment:focus-visible,
+.dec[data-row-mark] .item-comment, .job[data-row-mark] .item-comment,
+.dec[data-engaged-type] .item-comment, .job[data-engaged-type] .item-comment { opacity: 1; }
+.item-comment:hover { color: var(--accent); background: var(--type-comment-wash); }
+@media (hover: none) { .item-comment { opacity: .6; width: 32px; height: 32px; } }
+.dec[data-row-mark], .job[data-row-mark], .dec[data-engaged-type], .job[data-engaged-type] {
+  background-image: linear-gradient(var(--type-comment-wash), var(--type-comment-wash));
+}
+.facts-strip { display: flex; flex-wrap: wrap; gap: 10px; }
+.fact {
+  flex: 1 1 130px; min-width: 0; padding: 10px 14px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--surface);
+}
+.fact-value { font-size: 22px; font-weight: 700; line-height: 1.2; color: var(--text-strong); overflow-wrap: anywhere; }
+.fact-label { margin-top: 2px; font-size: 12px; color: var(--text-dim); }
+main.prose ol.job-list, main.prose .dec-list { padding: 0; margin: 0; list-style: none; }
+main.prose .job-list > li, main.prose .dec p, main.prose .job p { margin-left: 0; }

@@ -69,7 +69,7 @@ def test_the_guard_sees_a_hand_list():
 
 def test_every_kind_has_exactly_the_known_traits():
     for name, t in kinds.KINDS.items():
-        assert set(t) - {"code_message"} == TRAITS, name
+        assert set(t) - {"code_message", "painter"} == TRAITS, name
         assert t["code"] in ("pane", "dropped", "refused"), name
         assert (t["code"] == "refused") == ("code_message" in t), name
 
@@ -97,17 +97,20 @@ def test_every_kind_has_a_renderer_and_nothing_else_is_rendered():
 
 
 def test_the_traits_keep_each_kinds_behaviour():
-    """The values the hand lists held before the registry."""
+    """The values the hand lists held before the registry, and the new kinds'."""
+    new = {"decisions", "facts", "jobs"}
     assert set(kinds.with_trait("framed")) == {
-        "sequence", "map", "flowchart", "mockup", "choice", "explain", "compare"}
-    assert set(kinds.with_trait("whole_only")) == {"choice", "sequence", "map", "flowchart"}
+        "sequence", "map", "flowchart", "mockup", "choice", "explain", "compare"} | new
+    assert set(kinds.with_trait("whole_only")) == {
+        "choice", "sequence", "map", "flowchart", "facts"}
     assert set(kinds.with_trait("not_text")) == {
-        "choice", "sequence", "map", "flowchart", "mockup", "compare"}
+        "choice", "sequence", "map", "flowchart", "mockup", "compare"} | new
     assert set(kinds.with_trait("maximizable")) == {
         "sequence", "map", "flowchart", "mockup", "compare"}
     assert set(kinds.with_trait("picture")) == {"sequence", "map", "flowchart"}
-    assert set(kinds.with_trait("rebuild")) == {"choice", "mockup", "explain", "compare"}
+    assert set(kinds.with_trait("rebuild")) == {"choice", "mockup", "explain", "compare"} | new
     assert {k for k, t in kinds.KINDS.items() if t["code"] != "pane"} == {
-        "mockup", "explain", "compare"}
+        "mockup", "explain", "compare"} | new
+    assert {k for k, t in kinds.KINDS.items() if "painter" in t} == new
     # `diagram` is retired but old pages still carry it.
     assert kinds.RETIRED["diagram"]["whole_only"] and kinds.RETIRED["diagram"]["not_text"]

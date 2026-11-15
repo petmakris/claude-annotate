@@ -472,10 +472,19 @@ def test_every_known_kind_loads(tmp_path):
     import json
 
     from skills.annotate.blocks import BLOCK_KINDS, load
+    from skills.annotate.kinds import trait
 
+    # The kinds the page paints from a checked spec need a real one.
+    specs = {
+        "decisions": {"decisions": [{"id": "D1", "question": "q", "recommendation": "r",
+                                     "why": "w", "status": "open"}]},
+        "facts": {"facts": [{"value": "1", "label": "a"}, {"value": "2", "label": "b"}]},
+        "jobs": {"jobs": [{"id": "J1", "title": "t", "does": "d", "status": "todo"}]},
+    }
     p = tmp_path / "blocks.json"
     p.write_text(json.dumps({"blocks": [
-        {"id": f"section-{i}", "kind": k, "spec": {}, "markdown": "x"}
+        {"id": f"section-{i}", "kind": k, "markdown": "x",
+         "spec": specs.get(trait(k, "painter"), {})}
         for i, k in enumerate(sorted(BLOCK_KINDS))]}))
     assert len(load(p).blocks) == len(BLOCK_KINDS)
 

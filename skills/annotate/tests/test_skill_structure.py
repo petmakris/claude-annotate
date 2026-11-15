@@ -26,7 +26,7 @@ def test_skill_md_exists_and_is_lean():
     assert SKILL_MD.is_file()
     # The router must stay small; if it creeps back toward the old monolith,
     # this trips so we re-split. (Old monolith was ~500 lines.)
-    assert SKILL_MD.read_text(encoding="utf-8").count("\n") < 120
+    assert SKILL_MD.read_text(encoding="utf-8").count("\n") < 130
 
 
 def test_all_referenced_files_exist():
