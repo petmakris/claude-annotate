@@ -1,3 +1,5 @@
+> **Deprecated: new questions use `decisions`** (`references/block-kinds/decisions.md`). This kind keeps working for pages already published. Multi-select is the one thing only `choice` covers.
+
 # `kind: "choice"` block
 
 Read this when you've decided (from the kind menu in SKILL.md) that a block

@@ -290,13 +290,17 @@ def _spec_part(painter: str, spec: dict[str, Any]) -> str:
                 rows.append("<li><p><strong>%s. %s</strong>%s: %s</p></li>" % (
                     escape(str(o.get("id", ""))), escape(str(o.get("label", ""))),
                     escape(" (%s)" % ", ".join(marks)) if marks else "",
-                    escape(str(o.get("trade", "")))))
+                    escape(str(o["trade"]) if o.get("trade") else
+                           "You get: %s It costs: %s" % (o.get("gain", ""), o.get("cost", "")))))
             tail = "Open. Recommended %s: %s" % (
                 escape(str(d.get("recommended", ""))), escape(str(d.get("why", ""))))
             if d.get("status") == "answered":
                 tail = "Answered" + (": %s" % escape(str(d["answer"])) if d.get("answer") else "")
-            items.append("<li><p><strong>%s</strong> %s</p><ul>%s</ul><p>%s</p></li>" % (
-                escape(str(d.get("id", ""))), escape(str(d.get("question", ""))),
+            hard = " (hard to undo: %s)" % escape(str(d.get("change_note", ""))) if d.get("change") == "hard" else ""
+            if d.get("outcome"):
+                tail += " Claude changed the plan: %s" % escape(str(d["outcome"]))
+            items.append("<li><p><strong>%s</strong> %s%s</p><ul>%s</ul><p>%s</p></li>" % (
+                escape(str(d.get("id", ""))), escape(str(d.get("question", ""))), hard,
                 "".join(rows), tail))
         return "<ul>%s</ul>" % "".join(items)
     items = []

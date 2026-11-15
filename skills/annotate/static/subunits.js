@@ -252,6 +252,22 @@
       if (host === content || host.tagName === "LI") host.appendChild(chip);
       else host.insertAdjacentElement("afterend", chip);
     }
+    // The pending marks changed or were repainted: a part that shows them
+    // (spec-parts.js decisions) reads them again.
+    document.dispatchEvent(new CustomEvent("annotate:marks"));
+  }
+
+  // The pending comment on a step of a part, as {kind, text}, or null: what a
+  // decision shows as "Picked". Read-only.
+  function stepMark(blockId, stepId) {
+    const m = marks[stepMarkKey(blockId, stepId)];
+    return m && m.kind === "comment" ? { kind: m.kind, text: m.text || "" } : null;
+  }
+
+  // Take back the pending comment on a step ("Change my mind").
+  function removeStepMark(blockId, stepId) {
+    const key = stepMarkKey(blockId, stepId);
+    if (marks[key]) removeMark(key);
   }
 
   function spanMarkAt(section, x, y) {
@@ -936,6 +952,7 @@
     // Span and block marks, driven by the selection menu in selection.js.
     setSpanMark, overlapping, spanMarkAt, removeMarkByKey: removeMark, paintSpans,
     toggleBlockMark, pinComment, blockMark, repaintBlocks, renderDock,
+    stepMark, removeStepMark,
     // The reader's edits, driven by edit.js.
     addEdit,
     // Choice answers, driven by renderChoice in script.js.

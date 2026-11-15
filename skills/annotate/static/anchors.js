@@ -18,7 +18,7 @@
 (function () {
   "use strict";
 
-  const SKIP = ".sel-chip, .code-col, .block-label, .sp-card";
+  const SKIP = ".sel-chip, .code-col, .block-label, .sp-card, .dec-ui";
   const CONTEXT = 32;
   const KINDS = ["delete", "compact", "comment"];
 

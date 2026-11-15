@@ -71,7 +71,7 @@ def test_pictures_and_questions_get_a_frame_with_their_title_on_it():
     assert 'const isFramed = (kind) => AnnotateKinds.is(kind, "framed");' in src
     assert {k for k, t in KINDS.items() if t["framed"]} == {
         "sequence", "map", "flowchart", "mockup", "choice", "explain", "compare",
-        "decisions", "facts", "jobs"}
+        "facts", "jobs"}
     i = src.index("function blockLabel(")
     body = src[i:src.index("\n}", i)]
     assert "block-frame-head" in body

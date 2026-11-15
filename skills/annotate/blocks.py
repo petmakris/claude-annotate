@@ -153,6 +153,9 @@ class PartSpecError(ValueError):
 
 DECISION_STATUSES = ("open", "answered")
 DECISION_OPTION_IDS = ("a", "b", "c", "d")
+DECISION_CHANGES = ("easy", "hard")
+PART_TEXT_MAX, PART_LABEL_MAX, PART_DETAIL_MAX = 200, 80, 300
+_HTML = _re.compile(r"<\s*[A-Za-z/!]")
 DECISION_OPTIONS_MIN, DECISION_OPTIONS_MAX = 2, 4
 JOB_STATUSES = ("todo", "running", "done", "blocked")
 FACTS_MIN, FACTS_MAX = 2, 6
@@ -174,6 +177,19 @@ def _items(bid: str, spec: dict, key: str, problems: list) -> list:
             or problems.append(f"{bid}: {key}[{i}] must be an object")]
 
 
+def _short(where: str, key: str, v: Any, limit: int, problems: list, required: bool = True) -> None:
+    """One line of plain words: a string, not blank, one line, under `limit`
+    characters and with no HTML in it (the page paints it as text)."""
+    if v is None and not required:
+        return
+    if not _text(v, one_line=True):
+        problems.append(f"{where}: `{key}` must be a non-blank one-line string")
+    elif len(v) > limit:
+        problems.append(f"{where}: `{key}` is {len(v)} characters, over the {limit} limit")
+    elif _HTML.search(v):
+        problems.append(f"{where}: `{key}` must be plain words, no HTML")
+
+
 def _check_decisions(bid: str, spec: dict, problems: list) -> None:
     seen = set()
     for i, d in _items(bid, spec, "decisions", problems):
@@ -192,6 +208,14 @@ def _check_decisions(bid: str, spec: dict, problems: list) -> None:
             problems.append(f"{where}: `question` must be a non-blank string")
         if not _text(d.get("why"), one_line=True):
             problems.append(f"{where}: `why` must be a non-blank string on one line")
+        for key in ("switch_if", "next"):
+            _short(where, key, d.get(key), PART_TEXT_MAX, problems, required=False)
+        change = d.get("change", "easy")
+        if change not in DECISION_CHANGES:
+            problems.append(f"{where}: `change` must be one of {', '.join(DECISION_CHANGES)}")
+        elif change == "hard" and not _text(d.get("change_note")):
+            problems.append(f"{where}: a hard decision needs `change_note`, what undoing it costs")
+        _short(where, "change_note", d.get("change_note"), PART_TEXT_MAX, problems, required=False)
         opts = d.get("options")
         ids: list = []
         if not isinstance(opts, list) or not DECISION_OPTIONS_MIN <= len(opts) <= DECISION_OPTIONS_MAX:
@@ -202,18 +226,23 @@ def _check_decisions(bid: str, spec: dict, problems: list) -> None:
                 if not isinstance(o, dict):
                     problems.append(f"{where}: options[{k}] must be an object")
                     continue
+                ow = f"{where}: options[{k}]"
                 oid = o.get("id")
                 if oid not in DECISION_OPTION_IDS:
-                    problems.append(f"{where}: options[{k}] `id` must be one of "
-                                    f"{', '.join(DECISION_OPTION_IDS)}")
+                    problems.append(f"{ow} `id` must be one of {', '.join(DECISION_OPTION_IDS)}")
                 elif oid in ids:
                     problems.append(f"{where}: option id {oid!r} is used twice")
                 else:
                     ids.append(oid)
-                for key in ("label", "trade"):
-                    if not _text(o.get(key), one_line=True):
-                        problems.append(f"{where}: options[{k}] `{key}` must be a "
-                                        f"non-blank one-line string")
+                _short(ow, "label", o.get("label"), PART_LABEL_MAX, problems)
+                if "trade" in o:
+                    _short(ow, "trade", o.get("trade"), PART_TEXT_MAX, problems)
+                elif "gain" not in o or "cost" not in o:
+                    problems.append(f"{ow} needs `trade`, or both `gain` and `cost`")
+                for key in ("gain", "cost"):
+                    if key in o:
+                        _short(ow, key, o.get(key), PART_TEXT_MAX, problems)
+                _short(ow, "detail", o.get("detail"), PART_DETAIL_MAX, problems, required=False)
         rec = d.get("recommended")
         if rec not in ids:
             problems.append(f"{where}: `recommended` must name one of the option ids")
@@ -225,6 +254,8 @@ def _check_decisions(bid: str, spec: dict, problems: list) -> None:
             if chosen not in (None, "") or answer not in (None, ""):
                 problems.append(f"{where}: an open decision has no `chosen` or `answer` — "
                                 f"silence is not a yes")
+            if d.get("outcome") not in (None, ""):
+                problems.append(f"{where}: `outcome` only goes on an answered decision")
         else:
             if chosen in (None, "") and not _text(answer):
                 problems.append(f"{where}: an answered decision needs the reader's `chosen` "
@@ -233,6 +264,7 @@ def _check_decisions(bid: str, spec: dict, problems: list) -> None:
                 problems.append(f"{where}: `chosen` must name one of the option ids")
             if answer not in (None, "") and not _text(answer):
                 problems.append(f"{where}: `answer` must be a non-blank string")
+            _short(where, "outcome", d.get("outcome"), PART_TEXT_MAX, problems, required=False)
 
 
 def _check_facts(bid: str, spec: dict, problems: list) -> None:

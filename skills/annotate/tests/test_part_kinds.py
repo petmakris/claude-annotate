@@ -19,15 +19,21 @@ ANNOTATE = Path(__file__).resolve().parents[1]
 STATIC = ANNOTATE / "static"
 
 DECISIONS = {"decisions": [
-    {"id": "D1", "question": "How is the test data stored?",
-     "options": [{"id": "a", "label": "One file per person per app", "trade": "Two people never edit the same file."},
-                 {"id": "b", "label": "One big file per app", "trade": "One place to read; edits collide."}],
-     "recommended": "a", "why": "Nothing else keeps two people apart.", "status": "open"},
+    {"id": "D1", "question": "Where should each person's test data live?",
+     "change": "hard", "change_note": "Jobs 1 to 4 build on this. Changing it later means redoing them.",
+     "options": [{"id": "a", "label": "One file for each person", "gain": "You never edit the same file.",
+                  "cost": "Each app gets four files.", "detail": "like apps/mealy/dataset/natmakri.yml"},
+                 {"id": "b", "label": "One big file for each app", "gain": "All data in one place.",
+                  "cost": "Edits can clash in git."}],
+     "recommended": "a", "why": "Separate files stop your edits from clashing.",
+     "switch_if": "You want all the data in one place.", "next": "Jobs 1 to 4 build the files.",
+     "status": "open"},
     {"id": "D2", "question": "Behind a flag?",
      "options": [{"id": "a", "label": "Yes", "trade": "Off without a deploy."},
                  {"id": "b", "label": "No", "trade": "Less to remove later."},
                  {"id": "c", "label": "Later", "trade": "Decide after the pilot."}],
-     "recommended": "a", "why": "Rollback is free.", "status": "answered", "chosen": "a"},
+     "recommended": "a", "why": "Rollback is free.", "status": "answered", "chosen": "a",
+     "outcome": "The plan now ships behind a flag."},
     {"id": "D3", "question": "Who reviews?",
      "options": [{"id": "a", "label": "Anna", "trade": "Knows the code."},
                  {"id": "b", "label": "Ben", "trade": "Fresh eyes."}],
@@ -98,7 +104,18 @@ BAD = [
     ("decisions", lambda s: s["decisions"][0]["options"][1].update(id="a"), "option id 'a' is used twice"),
     ("decisions", lambda s: s["decisions"][0]["options"][1].update(id="e"), "must be one of a, b, c, d"),
     ("decisions", lambda s: s["decisions"][0]["options"][0].update(label="x\ny"), "`label` must be a non-blank one-line string"),
-    ("decisions", lambda s: s["decisions"][0]["options"][0].pop("trade"), "`trade` must be a non-blank one-line string"),
+    ("decisions", lambda s: s["decisions"][1]["options"][0].pop("trade"), "needs `trade`, or both `gain` and `cost`"),
+    ("decisions", lambda s: s["decisions"][0]["options"][0].pop("gain"), "needs `trade`, or both `gain` and `cost`"),
+    ("decisions", lambda s: s["decisions"][0]["options"][0].pop("cost"), "needs `trade`, or both `gain` and `cost`"),
+    ("decisions", lambda s: s["decisions"][0].pop("change_note"), "a hard decision needs `change_note`"),
+    ("decisions", lambda s: s["decisions"][0].update(change="sometimes"), "`change` must be one of easy, hard"),
+    ("decisions", lambda s: s["decisions"][0].update(outcome="Done."), "`outcome` only goes on an answered decision"),
+    ("decisions", lambda s: s["decisions"][0]["options"][0].update(cost="x" * 201), "`cost` is 201 characters, over the 200 limit"),
+    ("decisions", lambda s: s["decisions"][0]["options"][0].update(label="x" * 81), "`label` is 81 characters, over the 80 limit"),
+    ("decisions", lambda s: s["decisions"][0]["options"][0].update(detail="x" * 301), "`detail` is 301 characters, over the 300 limit"),
+    ("decisions", lambda s: s["decisions"][0].update(switch_if="a\nb"), "`switch_if` must be a non-blank one-line string"),
+    ("decisions", lambda s: s["decisions"][0].update(next="Run <b>this</b>"), "`next` must be plain words, no HTML"),
+    ("decisions", lambda s: s["decisions"][1].update(outcome="x" * 201), "`outcome` is 201 characters"),
     ("decisions", lambda s: s.update(decisions=[]), "non-empty list"),
     ("facts", lambda s: s.update(facts=s["facts"][:1]), "2 to 6 facts (found 1)"),
     ("facts", lambda s: s["facts"].extend([{"value": str(i), "label": "x"} for i in range(4)]), "(found 7)"),
@@ -147,7 +164,7 @@ def test_the_rules_say_silence_is_never_a_yes():
     assert "**Silence is never a yes.**" in ref
     assert "only from the reader's own words" in ref
     assert "**A comment on a decision rewrites that decision only.**" in ref
-    assert "**A `Choose x: …` comment on a decision** sets `status: \"answered\"` and\n  `chosen: \"x\"`." in ref
+    assert "**A `Choose x: …` comment on a decision** sets `status: \"answered\"` and\n  `chosen: \"x\"`, also when" in ref
     assert "A free comment that settles it" in ref
     events = (ANNOTATE / "references" / "handling-events.md").read_text(encoding="utf-8")
     assert "A comment whose text is `Choose x: <label>` is a pick" in events
@@ -168,14 +185,46 @@ def test_parts_page_suite_passes():
     proc = subprocess.run(["node", str(suite)], capture_output=True, text=True, timeout=60)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     m = re.search(r"(\d+)/(\d+) passed", proc.stdout)
-    assert m and m.group(1) == m.group(2) and int(m.group(2)) == 6, proc.stdout
+    assert m and m.group(1) == m.group(2) and int(m.group(2)) == 11, proc.stdout
+
+
+def test_an_option_with_gain_and_cost_and_no_trade_passes(tmp_path):
+    spec = copy.deepcopy(DECISIONS)
+    assert "trade" not in spec["decisions"][0]["options"][0]
+    assert _load(tmp_path, [_block("decisions", spec)]).blocks[0]["spec"] == spec
+
+
+def test_a_block_with_only_trade_still_passes(tmp_path):
+    """The published-page guard: a block written before gain and cost."""
+    old = {"decisions": [{"id": "D1", "question": "q", "why": "w", "status": "open",
+                          "options": [{"id": "a", "label": "x", "trade": "t"},
+                                      {"id": "b", "label": "y", "trade": "u"}],
+                          "recommended": "a"}]}
+    assert _load(tmp_path, [_block("decisions", old)]).blocks[0]["spec"] == old
 
 
 def test_confluence_lists_the_options_and_marks_recommended_and_chosen():
     from skills.annotate.confluence.body import render_block as confluence
     html = confluence(_block("decisions", DECISIONS), [])
-    assert "<strong>a. One file per person per app</strong> (recommended): Two people never edit the same file." in html
-    assert "<strong>b. One big file per app</strong>: One place to read; edits collide." in html
+    assert "(hard to undo: Jobs 1 to 4 build on this. Changing it later means redoing them.)" in html
+    assert "<strong>a. One file for each person</strong> (recommended): You get: You never edit the same file. It costs: Each app gets four files." in html
+    assert "<strong>b. One big file for each app</strong>: You get: All data in one place. It costs: Edits can clash in git." in html
     assert "<strong>a. Yes</strong> (recommended, your choice): Off without a deploy." in html
+    assert "Answered Claude changed the plan: The plan now ships behind a flag." in html
     assert "Answered: Both, Anna first." in html
-    assert "Open. Recommended a: Nothing else keeps two people apart." in html
+    assert "Open. Recommended a: Separate files stop your edits from clashing." in html
+
+
+def test_decisions_is_not_framed_so_its_summary_can_stick():
+    css = (STATIC / "style.css").read_text(encoding="utf-8")
+    sticky = css[css.index(".dec-sum {"):]
+    assert "position: sticky; top: 0" in sticky[:sticky.index("}")]
+    assert kinds.trait("decisions", "framed") is False
+    assert 'main.prose section.block[data-kind="decisions"] h2.block-heading' in css
+
+
+def test_the_choice_kind_is_marked_deprecated_in_its_docs():
+    ref = (ANNOTATE / "references" / "block-kinds" / "choice.md").read_text(encoding="utf-8")
+    assert ref.startswith("> **Deprecated: new questions use `decisions`**")
+    skill = (ANNOTATE / "SKILL.md").read_text(encoding="utf-8")
+    assert "**Deprecated: new questions use `decisions`.**" in skill

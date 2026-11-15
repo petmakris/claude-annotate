@@ -421,12 +421,16 @@ Apply the WHOLE round in one pass — this is the entire point of batching:
      only, in `spec`, and leave every other item, every id (decision, option, job)
      and the order. On a decision:
      - A comment whose text is `Choose x: <label>` is a pick: set `status:
-       "answered"` and `chosen: "x"`.
-     - A free comment that settles it sets `status: "answered"` and `answer` to
-       the reader's own words (and `chosen` only if they named an option).
-     - A comment that only questions the recommendation leaves it `open`; change
-       the options, `recommended` or `why` as it asks.
-     - Silence never answers, and `chosen` or `answer` is never your recommendation.
+       "answered"` and `chosen: "x"`, also when the decision was already answered
+       (the reader changed their mind).
+     - A free comment that settles it (including the words typed under "Write my
+       own") sets `status: "answered"` and `answer` to the reader's own words (and
+       `chosen` only if they named an option).
+     - A comment that only questions the recommendation leaves it `open`; rewrite
+       that decision's text (options, `recommended`, `why`) as it asks.
+     - After answering, set `outcome` from the reader's pick or words only.
+     - Silence never answers: a round that does not touch a decision leaves it
+       `open`. `chosen`, `answer` and `outcome` are never your own words.
      A `facts` strip is commented whole (`step_id: null`).
 
 Two rules govern compact, and both matter:

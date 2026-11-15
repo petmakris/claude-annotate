@@ -136,6 +136,9 @@
      control's boundary is how you find the control, and WCAG 1.4.11 asks
      3:1 of it. 3.08 on a card. */
   --control-border: #8a8f99;
+  /* A pick not sent yet (decisions): amber on a pale amber, 5.1:1. */
+  --pend-fg: #8a5a00;
+  --pend-bg: #fdf0cc;
 }
 
 /* === Dark ============================================================
@@ -209,6 +212,8 @@
   --link: #6ea8ef;
   /* 3.34:1 on a card, 3.03 on --surface-soft. */
   --control-border: #7a7a7a;
+  --pend-fg: #e8b84a;
+  --pend-bg: rgba(227, 179, 65, 0.18);
 }
 
 * { box-sizing: border-box; }

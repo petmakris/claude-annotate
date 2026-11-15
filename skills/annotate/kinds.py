@@ -20,10 +20,10 @@ KINDS: dict[str, dict] = _data["kinds"]
 RETIRED: dict[str, dict] = _data["retired"]
 
 # Every kind has the traits of `markdown`; `code_message` (with code: refused)
-# and `painter` (a kind the page paints from its spec, spec-parts.js) are the
-# optional ones.
+# `painter` (a kind the page paints from its spec, spec-parts.js) and
+# `deprecated` (a note: new pages use another kind) are the optional ones.
 TRAITS = frozenset(KINDS["markdown"])
-OPTIONAL_TRAITS = frozenset({"code_message", "painter"})
+OPTIONAL_TRAITS = frozenset({"code_message", "painter", "deprecated"})
 
 
 def trait(kind: str, name: str):

@@ -22,7 +22,7 @@
       "fit_to_width": true, "picture": true, "rebuild": false, "code": "pane"
     },
     "choice": {
-      "renderer": "spec", "server_drawn": false, "framed": true,
+      "renderer": "spec", "deprecated": "new questions use `decisions`", "server_drawn": false, "framed": true,
       "whole_only": true, "not_text": true, "maximizable": false,
       "fit_to_width": false, "picture": false, "rebuild": true, "code": "pane"
     },
@@ -44,7 +44,7 @@
       "code_message": "a compare block takes no anchors — its two panes already are the code; put prose and anchors in a markdown block beside it"
     },
     "decisions": {
-      "renderer": "spec", "painter": "decisions", "server_drawn": false, "framed": true,
+      "renderer": "spec", "painter": "decisions", "server_drawn": false, "framed": false,
       "whole_only": false, "not_text": true, "maximizable": false,
       "fit_to_width": false, "picture": false, "rebuild": true, "code": "refused",
       "code_message": "a decisions block takes no anchors — each decision is its own comment target; put code in a markdown block beside it"
