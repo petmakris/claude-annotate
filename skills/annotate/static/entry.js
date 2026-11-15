@@ -60,6 +60,9 @@ const CSS = [
 const JS = [
   // First: it replaces window.WebCompanion, which everything below calls.
   "compat.js",
+  // The block-kind registry, which entry.js has already fetched: the traits
+  // every script below asks about.
+  "kinds.js",
   // The daemon's request headers, for the two files that fetch directly
   // (speech-client.js, edit.js), and the editor opener (wc-open.js, a copy
   // of skills/_shared/static/wc-open.js) script.js's code panes use.
@@ -145,6 +148,14 @@ async function boot() {
     /* fall through to the waiting state below */
   }
 
+  // The one list of block kinds (block-kinds.json), fetched while the
+  // stylesheets load and read by kinds.js. A page without it cannot tell a
+  // picture from prose, so a failure ends the boot.
+  const kindData = fetch(asset("block-kinds.json"), { cache: "no-store" }).then((r) => {
+    if (!r.ok) throw new Error("block-kinds.json: " + r.status);
+    return r.json();
+  });
+  kindData.catch(() => {});
   await Promise.all(CSS.map(loadStylesheet));
 
   if (!doc.order || !doc.order.length) {
@@ -392,6 +403,9 @@ async function boot() {
   // time, each awaited before the next was requested, on the belief that
   // order needed it; it never did, and the page paid a round trip per file.
   // A script that fails to load is logged and the rest still run.
+  // The registry first: kinds.js reads it when it runs, and every script after
+  // it asks kinds.js.
+  window.__annotateKindData = await kindData;
   const loaded = loadScripts(JS);
   // The highlighter downloads alongside them but runs only once the page has
   // painted its blocks: its 0.8 MB parse would otherwise sit between the

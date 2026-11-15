@@ -225,7 +225,7 @@ def test_the_players_boot_after_every_render():
     assert "window.vzReveal.boot()" in src
     # Both paint sites go through paintVz, so a rewrite paints a new player.
     assert src.count("paintVz(content, blk);") == 2
-    assert '"map"' in re.search(r"const FRAMED = \[(.*?)\];", src).group(1)
+    assert blocks.KINDS["map"]["framed"] is True
 
 
 def _token_sets(css: str) -> list[dict]:

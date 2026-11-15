@@ -34,7 +34,8 @@
   const EDITOR_SRC = new URL("vendor/editor.min.js", BASE).href;
   const RICH_SRC = new URL("vendor/rich.min.js", BASE).href;
   // Answered with their own controls, or pictures: no markdown to edit.
-  const NOT_TEXT = ["choice", "sequence", "map", "diagram", "flowchart", "mockup", "compare"];
+  // (the registry's `not_text` trait: static/block-kinds.json)
+  const notText = (kind) => window.AnnotateKinds.is(kind, "not_text");
   const HINT_SOURCE = "⌘/ rich ⇄ source · ⌘S save · F6 bar · esc done";
   const HINT_RICH = "⌘B bold · ⌘I italic · ⌘E code · ⌘K link · ## heading · - list · F6 bar · esc done";
   const NO_RICH = "Rich editing isn't available for this part — showing the source";
@@ -355,7 +356,7 @@
   // Why this part cannot be opened now, or "" when it can.
   function refusal(section) {
     if (!section) return "This part is no longer on the page";
-    if (NOT_TEXT.includes(section.dataset.kind || "markdown")) return "This part can't be edited as text";
+    if (notText(section.dataset.kind || "markdown")) return "This part can't be edited as text";
     if (document.body.dataset.highlighter === "on") return "Turn off the highlighter to edit";
     if (window.AnnotatePage?.isBusy?.()) return "Claude is working — edit when it finishes";
     if (section.classList.contains("is-updating")) return "Claude is rewriting this part";
@@ -1476,7 +1477,7 @@
   // ── the selection menu ──────────────────────────────────────────────────
   function addButton(t, menu) {
     if (readOnly() || !t || !t.section) return;
-    if (NOT_TEXT.includes(t.section.dataset.kind || "markdown")) return;
+    if (notText(t.section.dataset.kind || "markdown")) return;
     const sheet = menu.classList.contains("sel-sheet");
     const b = document.createElement("button");
     b.type = "button";

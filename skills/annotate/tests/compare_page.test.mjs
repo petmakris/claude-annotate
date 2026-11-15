@@ -14,6 +14,10 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const src = (f) => readFileSync(path.join(here, "..", "static", f), "utf8");
 install();
 
+// The block-kind registry, read through the page's own kinds.js.
+globalThis.__annotateKindData = JSON.parse(src("block-kinds.json"));
+vm.runInThisContext(src("kinds.js"));
+
 let failures = 0, ran = 0;
 function test(name, fn) {
   ran++;

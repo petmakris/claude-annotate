@@ -19,6 +19,7 @@ from typing import Any
 
 from skills.annotate.confluence.constants import media_token
 from skills.annotate.confluence.markdown_html import to_html
+from skills.annotate.kinds import with_trait
 from skills._shared.visuals.sequence import _numbered
 from skills._shared.visuals.views import ALL_VIEW
 
@@ -28,7 +29,7 @@ from skills._shared.visuals.views import ALL_VIEW
 # disagreed about produced a placeholder no upload would ever fill. That
 # failure surfaced in `finalize`, AFTER the page and its attachments existed,
 # which is the worst moment available.
-DIAGRAM_KINDS = ("sequence", "map", "flowchart")
+DIAGRAM_KINDS = with_trait("picture")
 
 
 _SVG_W = re.compile(r'<svg[^>]*\bwidth="([\d.]+)"')

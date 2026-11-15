@@ -155,9 +155,9 @@ class TestCodePaneJs(unittest.TestCase):
         # first thing renderCodeColumn does, before it ever looks at panes.
         body = JS.split("function renderCodeColumn(blk) {", 1)[1]
         body = body.split("\n}", 1)[0]
-        guard_pos = body.find('blk.kind === "mockup"')
+        guard_pos = body.find('AnnotateKinds.get(blk.kind, "code") === "refused"')
         panes_pos = body.find("blk.code")
-        self.assertNotEqual(guard_pos, -1, "renderCodeColumn lost its mockup guard")
+        self.assertNotEqual(guard_pos, -1, "renderCodeColumn lost its no-column guard")
         self.assertLess(guard_pos, panes_pos,
                          "the mockup guard must run before panes are read")
 

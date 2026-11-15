@@ -64,14 +64,15 @@
   }
   // A choice is answered with its own controls, and a picture is commented
   // whole through its title: neither body takes a selection.
-  const WHOLE_ONLY = ["choice", "sequence", "map", "diagram", "flowchart"];
+  // (the registry's `whole_only` trait: static/block-kinds.json)
+  const wholeOnly = (kind) => window.AnnotateKinds.is(kind, "whole_only");
   function excluded(node, section) {
     const el = node && (node.nodeType === 1 ? node : node.parentElement);
     if (!el) return true;
     if (el.closest(".code-col")) return true;
     // The section's editor (edit.js): its Rich view is a .block-content too.
     if (el.closest(".ed-host, .ed-bar")) return true;
-    if (section && WHOLE_ONLY.includes(section.dataset.kind) && el.closest(".block-content")) return true;
+    if (section && wholeOnly(section.dataset.kind) && el.closest(".block-content")) return true;
     return !(el.closest(".block-content") || el.closest(".block-label"));
   }
 
@@ -237,7 +238,7 @@
     }
     // Within one part or across a heading: one anchor per part the words
     // touch, leaving out parts that take no selection (a picture, a question).
-    const parts = window.AnnotateSpans.textOnly(A().anchorsAcross(range), kindOf, WHOLE_ONLY);
+    const parts = window.AnnotateSpans.textOnly(A().anchorsAcross(range), kindOf, { includes: wholeOnly });
     if (!parts.length) return close();
     const anchor = window.AnnotateSpans.withSpans(parts);
     const section = sectionOf(range.startContainer) && parts[0].block_id === sectionOf(range.startContainer).dataset.blockId

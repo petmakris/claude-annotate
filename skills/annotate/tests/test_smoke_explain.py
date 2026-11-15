@@ -26,8 +26,8 @@ class TestExplainWiring(unittest.TestCase):
             self.assertIn(sel, CSS, "%s missing from style.css" % sel)
 
     def test_the_kind_is_registered_python_side(self):
-        blocks = (Path(__file__).resolve().parents[1] / "blocks.py").read_text()
-        self.assertIn('"explain"', blocks)
+        from skills.annotate.blocks import BLOCK_KINDS
+        self.assertIn("explain", BLOCK_KINDS)
         # Dispatched by render_block's per-kind table, not swallowed by its
         # markdown fallback: an explain block comes back with a compiled view.
         from skills.annotate.render import render_block

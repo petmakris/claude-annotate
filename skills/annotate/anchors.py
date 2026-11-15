@@ -21,6 +21,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Optional
 
+from skills.annotate.kinds import KINDS, trait
+
 # Limits, from docs/superpowers/specs/2026-08-20-code-anchors-design.md.
 MAX_ANCHORS = 3        # past three, the block is a tour — use /walkthrough
 MAX_WINDOW = 40        # a pane you must scroll has stopped being a glance
@@ -90,16 +92,9 @@ def block_problems(blk: dict) -> list:
         return []
 
     problems = []
-    if (blk.get("kind") or "markdown") == "mockup":
-        problems.append(
-            "a mockup block takes no anchors — its sandboxed iframe has "
-            "nowhere to put a pane"
-        )
-    if (blk.get("kind") or "markdown") == "compare":
-        problems.append(
-            "a compare block takes no anchors — its two panes already are "
-            "the code; put prose and anchors in a markdown block beside it"
-        )
+    kind = blk.get("kind") or "markdown"
+    if trait(kind, "code") == "refused":
+        problems.append(KINDS[kind]["code_message"])
     if len(code) > MAX_ANCHORS:
         problems.append(
             "at most %d anchors per block (found %d) — past that the block "

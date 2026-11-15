@@ -23,6 +23,7 @@ from skills._shared.visuals import elk_layout, flavours
 from skills._shared.visuals import views as views_mod
 from skills.annotate.pflow import PflowError, compile_source as compile_pflow
 from skills.annotate.explain import compile_spec as compile_explain
+from skills.annotate.kinds import KINDS, trait
 
 
 def html_escape(s: str) -> str:
@@ -265,20 +266,20 @@ def _render_markdown(blk: dict, base: dict) -> None:
     base["markdown"] = blk.get("markdown", "")
 
 
-# One renderer per block kind; each fills in the kind's own fields on `base`.
+# The renderers by name; the registry (kinds.py) says which kind uses which.
 # markdown is the fallback, and only for markdown: blocks.load() refuses any
-# other kind before a push reaches here, so it can never swallow one.
-_RENDERERS: dict[str, Callable[[dict, dict], None]] = {
-    "sequence": _render_sequence,
-    "map": _render_map,
-    "flowchart": _render_flowchart,
-    "choice": _forward_spec,
-    "mockup": _forward_spec,
-    "explain": _render_explain,
-    # The line diff is computed on the page (static/compare.js), beside the
-    # highlighter that paints it.
-    "compare": _forward_spec,
+# other kind before a push reaches here, so it can never swallow one. The
+# compare kind's line diff is computed on the page (static/compare.js).
+_RENDERER_FUNCS: dict[str, Callable[[dict, dict], None]] = {
+    "markdown_text": _render_markdown,
+    "vz_sequence": _render_sequence,
+    "vz_map": _render_map,
+    "flowchart_svg": _render_flowchart,
+    "spec": _forward_spec,
+    "explain_view": _render_explain,
 }
+_RENDERERS: dict[str, Callable[[dict, dict], None]] = {
+    k: _RENDERER_FUNCS[t["renderer"]] for k, t in KINDS.items()}
 
 
 def render_block(blk: dict) -> dict:
@@ -325,6 +326,6 @@ def render_block(blk: dict) -> dict:
     # premise is that the code and its explanation are one object, so a second
     # pane of the same file beside it would restate the split it deletes.
     # `compare` too: its two panes are the code.
-    if kind not in ("mockup", "explain", "compare") and isinstance(code, list) and code:
+    if trait(kind, "code") in ("pane", None) and isinstance(code, list) and code:
         base["code"] = code
     return base

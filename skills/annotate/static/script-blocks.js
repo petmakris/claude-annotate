@@ -10,7 +10,7 @@ function renderCodeColumn(blk) {
   // time, but the render path serves strangers on the read-only link --
   // defence in depth belongs here too, not only in the check. A mockup
   // renders in a sandboxed iframe and has nowhere to put a pane.
-  if (blk.kind === "mockup") return null;
+  if (AnnotateKinds.get(blk.kind, "code") === "refused") return null;
   const panes = Array.isArray(blk.code) ? blk.code : [];
   if (!panes.length) return null;
 
@@ -303,7 +303,8 @@ function linkSequenceKey(content) {
 // Kinds that work differently from prose — a picture you can maximise, a
 // question waiting for a pick, code walked note by note — sit in a light
 // frame with their title on it, so the reader sees where prose stops.
-const FRAMED = ["sequence", "map", "flowchart", "mockup", "choice", "explain", "compare"];
+// (the registry's `framed` trait: static/block-kinds.json)
+const isFramed = (kind) => AnnotateKinds.is(kind, "framed");
 
 // ── kind: compare ─────────────────────────────────────────────────────
 // Before and after code side by side, a split diff. compare.js computes the
@@ -480,7 +481,7 @@ function createBlockSection(blk) {
   }
 
   const label = blockLabel(blk);
-  if (FRAMED.includes(kind)) {
+  if (isFramed(kind)) {
     const frame = document.createElement("div");
     frame.className = "block-frame";
     frame.append(label, body);
@@ -495,7 +496,7 @@ function createBlockSection(blk) {
 // before it. A part without one gets an empty line instead, which shows only
 // when a mark or a change chip needs a place to sit.
 function blockLabel(blk) {
-  if (FRAMED.includes(blk.kind || "markdown")) {
+  if (isFramed(blk.kind || "markdown")) {
     const head = document.createElement("div");
     head.className = "block-label block-frame-head";
     head.id = `block-label-${blk.id}`;

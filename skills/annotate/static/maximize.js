@@ -33,7 +33,8 @@
   // Kinds where more width buys something. Prose is deliberately excluded: it
   // is set to a max measure, so a wider column only makes the lines harder to
   // track back to the left edge.
-  const MAXIMIZABLE = new Set(["sequence", "map", "flowchart", "mockup", "compare"]);
+  // (the registry's `maximizable` trait: static/block-kinds.json)
+  const maximizable = (kind) => window.AnnotateKinds.is(kind, "maximizable");
 
   const ICON_MAX =
     '<svg viewBox="0 0 24 24" aria-hidden="true">' +
@@ -169,7 +170,7 @@
     titleEl.textContent = section.dataset.label || "Diagram";
     applyFit(section, wantFit);
     // Code scrolls inside its own panes; there is no picture to scale.
-    fitBtn.hidden = section.dataset.kind === "compare";
+    fitBtn.hidden = !window.AnnotateKinds.is(section.dataset.kind, "fit_to_width");
   }
 
   // ── Fit-to-width ────────────────────────────────────────────────────────
@@ -264,7 +265,7 @@
   function decorate() {
     build();
     document.querySelectorAll("section.block[data-kind]").forEach(function (section) {
-      if (!MAXIMIZABLE.has(section.dataset.kind)) {
+      if (!maximizable(section.dataset.kind)) {
         // A block can change kind on rewrite; drop a button that no longer
         // applies rather than leaving a control that maximizes a paragraph.
         const stale = section.querySelector(".max-toggle");

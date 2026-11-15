@@ -26,6 +26,7 @@ from typing import Any
 
 from skills._shared.atomic import write_text_atomic
 from skills.annotate.explain import _languages
+from skills.annotate.kinds import KINDS, RETIRED
 
 
 # Every key the document format reads. A block with none of the content keys
@@ -45,12 +46,8 @@ BLOCK_KEYS = frozenset({
 # flowchart kind covered its cases with a renderer the page understands; it is
 # named below so a spec written against the old menu fails loudly instead of
 # rendering as an empty card.
-BLOCK_KINDS = frozenset({
-    "markdown", "sequence", "map", "flowchart", "choice", "mockup", "explain",
-    "compare",
-})
-RETIRED_KINDS = {"diagram": "removed — use `flowchart`, or a fenced code block "
-                            "in `markdown` for anything it cannot draw"}
+BLOCK_KINDS = frozenset(KINDS)
+RETIRED_KINDS = {k: v["message"] for k, v in RETIRED.items()}
 
 
 class UnknownBlockKindError(ValueError):

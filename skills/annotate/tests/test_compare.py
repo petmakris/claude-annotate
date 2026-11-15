@@ -80,15 +80,19 @@ def test_confluence_with_nothing_on_either_side_still_renders():
     assert "Nothing to compare" in body.render_block({"id": "s", "kind": "compare", "spec": {}}, [])
 
 
+from skills.annotate.kinds import KINDS  # noqa: E402
+
+
 def test_the_page_wires_the_kind():
     src = SCRIPT_JS.read_text()
-    assert '"compare"' in src[src.index("const FRAMED"):src.index("\n", src.index("const FRAMED"))]
+    assert 'AnnotateKinds.is(kind, "framed")' in src
+    assert KINDS["compare"]["framed"] is True
     assert 'kind === "compare"' in src and "renderCompare(content, blk)" in src
     assert "AnnotateCompare.alignLines" in src
     entry = (STATIC / "entry.js").read_text()
     assert entry.index('"compare.js"') < entry.index('"script-blocks.js"')
-    assert '"compare"' in (STATIC / "maximize.js").read_text().split("MAXIMIZABLE = ")[1].split("\n")[0]
-    assert '"compare"' in (STATIC / "edit.js").read_text().split("NOT_TEXT = ")[1].split("\n")[0]
+    assert KINDS["compare"]["maximizable"] and KINDS["compare"]["not_text"]
+    assert not KINDS["compare"]["fit_to_width"]
     css = STYLE_CSS.read_text()
     for rule in (".cmp-row.is-del", ".cmp-row.is-add", ".cmp-row.is-fill", ".cmp-row { height:"):
         assert rule in css, rule

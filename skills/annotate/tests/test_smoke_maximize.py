@@ -83,9 +83,9 @@ def test_prose_is_not_maximizable():
     """Width buys prose nothing — it is set to a max measure, so a wider column
     only makes lines harder to track back to the left edge."""
     code = _strip_comments(MAXIMIZE_JS.read_text())
-    m = re.search(r"MAXIMIZABLE\s*=\s*new Set\(\[(.*?)\]\)", code, re.S)
-    assert m, "MAXIMIZABLE set not found"
-    kinds = set(re.findall(r'"([a-z]+)"', m.group(1)))
+    assert 'AnnotateKinds.is(kind, "maximizable")' in code
+    from skills.annotate.kinds import with_trait
+    kinds = set(with_trait("maximizable"))
     assert "sequence" in kinds
     assert "markdown" not in kinds and "choice" not in kinds
 
