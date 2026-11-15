@@ -230,6 +230,7 @@ These commands are cheap and must never fail the turn: if one errors, carry on.
      after `selected_text`. Use them to locate it; don't assume it is unique.
    - For `type == "dismiss"`: `block_id` is the block to remove; `text` is empty and ignored. Jump to the `dismiss` subsection below.
    - `images` — on the **outer** record, not the envelope: array of `{token, path}` entries (or empty).  When non-empty, `Read` each `path` before composing your rewrite so you see the screenshots.
+     A token `paste-N` is a picture the reader pasted; `drawing-N` is one they drew on the page's drawing pad (often with a pen on a tablet). The text names each where it belongs (`![drawing-1]`). A drawing is the reader's own sketch of what they mean: read its shapes, arrows and words as their idea, and say back in one line what you took from it before acting on it.
 3. Narrate that you have it: `claude-annotate progress --sid <sid> --text "Read your comment on <block_id>" --event-id "<event_id>"`.
 4. **Narrate before each distinct piece of work below** — a search, a pass
    of reading, a command run, a rewrite — writing the line *before* you
@@ -397,7 +398,8 @@ Apply the WHOLE round in one pass — this is the entire point of batching:
      the answer or clarification into the prose. A `comment` is about
      **exactly the quoted words**, not the whole paragraph they sit in. Answer
      that, and rewrite the paragraph only as far as the answer needs. `Read`
-     any `images` paths first.
+     any `images` paths first; a `drawing-N` token is a sketch the reader drew
+     (see the `images` field above).
    - **`compact`** — cut the selected words from the block's markdown, and fold
      what they contribute into the **same sentence** where it can, otherwise
      the nearest surviving sentence or paragraph that covers that ground. The

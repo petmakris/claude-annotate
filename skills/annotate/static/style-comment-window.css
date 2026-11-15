@@ -46,3 +46,46 @@ body.has-max-overlay .comment-window { z-index: 1250; }
 .comment-window.is-calling { animation: card-calling 1.1s ease; }
 @media (prefers-reduced-motion: reduce) { .comment-window.is-calling { animation: none; outline: 2px solid var(--accent); } }
 body.read-only .comment-window { display: none; }
+
+/* === Draw button and drawing tiles in the picture strip ============== */
+/* The Draw button sits in each comment body's button row (attachPaste's
+   strip.drawButton), so the strip itself only shows once it holds a picture. */
+.paste-draw {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--control-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  align-self: center;
+}
+.paste-draw svg { width: 16px; height: 16px; }
+.paste-draw:hover { background: var(--surface-hover); }
+.paste-draw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.paste-thumb.is-drawing { cursor: pointer; background: #ffffff; }
+.paste-thumb.is-drawing img { object-fit: contain; }
+.paste-thumb.is-drawing:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* A finger has no hover, so the remove button stays shown on a touch screen. */
+@media (hover: none) {
+  .paste-remove { display: inline-flex; width: 22px; height: 22px; font-size: 15px; }
+}
+/* The bottom row holds Draw, Cancel, the microphone and Add to round: the
+   buttons keep their words on one line and the key hint gives way. */
+.card-submit-row .paste-draw,
+.sel-row .paste-draw,
+.card-submit-row .card-submit-btn,
+.sel-row .card-submit-btn,
+.sel-row .comment-cancel { white-space: nowrap; flex-shrink: 0; }
+.sel-row .card-submit-hint,
+.card-submit-row .card-submit-hint { flex: 1 1 auto; min-width: 0; }
+/* A touch screen has no keys to hint at; the row keeps its room for buttons. */
+@media (hover: none) and (pointer: coarse) {
+  .sel-row .card-submit-hint,
+  .card-submit-row .card-submit-hint { display: none; }
+}

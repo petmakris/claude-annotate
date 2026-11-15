@@ -45,6 +45,11 @@
       + '<div class="comment-window-resize" title="Drag to resize"></div>';
     document.body.appendChild(win);
     win.querySelector(".comment-window-close").addEventListener("click", () => close());
+    // A picture pasted or drawn adds a row of tiles under the text box. The
+    // window grows to keep its buttons in view; it never shrinks below the
+    // size the reader chose, and the grown size is not remembered.
+    new MutationObserver(() => requestAnimationFrame(grow))
+      .observe(win.querySelector(".comment-window-body"), { childList: true, subtree: true });
 
     const bar = win.querySelector(".comment-window-bar");
     bar.addEventListener("pointerdown", (e) => {
@@ -135,7 +140,18 @@
     const s = storedSize();
     const sel = near || { left: 0, top: 80, right: 0, bottom: 80 };
     apply(window.AnnotateWindowPlace.place({ sel, content: contentRect(), view: view(), size: s }));
+    requestAnimationFrame(grow);
     return win;
+  }
+
+  function grow() {
+    if (!win || win.hidden) return;
+    const inner = win.querySelector(".comment-window-body").firstElementChild;
+    if (!inner) return;
+    const over = inner.scrollHeight - inner.clientHeight;
+    if (over <= 0) return;
+    const b = box();
+    apply(window.AnnotateWindowPlace.clamp({ ...b, height: b.height + over + 2 }, view()));
   }
 
   function close(owner) {

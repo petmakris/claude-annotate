@@ -67,6 +67,22 @@ if (doneBtn) {
   const KEY = `annotate.general.${location.pathname}`;
   try { input.value = localStorage.getItem(KEY) || ""; } catch {}
 
+  // Pictures, pasted or drawn, as on a part's comment (attachPaste). They
+  // are not kept across a reload: an upload's path is only good while the
+  // text that names it is still being written.
+  let images = [];
+  // The Draw button goes in the composer's own bar, before Send; a fresh
+  // strip after a send hands its new button the same place.
+  const bar = sendBtn.parentElement;
+  let drawButton = null;
+  const newStrip = () => attachPaste(input, images, (list) => { images = list; }, (b) => {
+    if (drawButton) drawButton.remove();
+    drawButton = b;
+    bar.insertBefore(b, sendBtn);
+  });
+  let strip = newStrip();
+  input.insertAdjacentElement("afterend", strip);
+
   const sync = () => {
     sendBtn.disabled = input.value.trim() === "";
     try {
@@ -86,11 +102,15 @@ if (doneBtn) {
     // this comment, so asking afterwards always answered "busy", and every
     // comment was reported as queued behind some other update.
     const queued = document.body.classList.contains("is-busy");
-    const payload = { block_id: null, step_id: null, type: "comment", text, selected_text: "", images: [] };
+    const payload = { block_id: null, step_id: null, type: "comment", text, selected_text: "", images };
     WebCompanion.api.submit(payload).then((res) => {
       const eventId = res && res.event_id;
       if (eventId) pendingEvents.set(String(eventId), { general: true });
       input.value = "";
+      images = [];
+      const fresh = newStrip();
+      strip.replaceWith(fresh);
+      strip = fresh;
       try { localStorage.removeItem(KEY); } catch {}
       sync();
       // The server queues events, so a send while Claude is mid-update is

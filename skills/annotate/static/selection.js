@@ -19,9 +19,13 @@
     delete: '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
     compact: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
     remove: '<svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    draw: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19z"/><path d="M14.5 6.5l3 3"/></svg>',
   };
   const ACTS = [
     ["comment", "Comment", "c"],
+    // A comment that starts on the drawing pad: the comment window opens on
+    // these words and the pad opens over it (drawpad.js).
+    ["draw", "Draw — a picture about this", "w"],
     ["delete", "Delete — removed for good (undo until you submit)", "d"],
     ["compact", "Compact — off the page; its point folds into what stays", "x"],
   ];
@@ -39,7 +43,7 @@
   // A finger has no hover and no reliable mouseup: the menu becomes a sheet
   // at the bottom of the screen, opened from selectionchange.
   const touch = window.matchMedia("(hover: none) and (pointer: coarse)");
-  const WORD = { comment: "Comment", delete: "Delete", compact: "Compact" };
+  const WORD = { comment: "Comment", draw: "Draw", delete: "Delete", compact: "Compact" };
 
   let menu = null, target = null, suppressUntil = 0, lastPoint = null;
   // Where focus was when the keyboard opened the menu; it goes back there
@@ -306,9 +310,23 @@
     close();
   }
 
+  // Draw is Comment with the pad opened straight away from the window's own
+  // Draw button, so the picture lands in that comment like a pasted one.
+  function drawInWindow() {
+    requestAnimationFrame(() => document.querySelector(".comment-window .paste-draw")?.click());
+  }
+
   function run(act) {
     if (!target) return;
     const t = target;
+    if (act === "draw") {
+      // A window that already holds words keeps them and only pulses
+      // (openComposer); a drawing must not land in that other comment.
+      const busy = W().isOpen() && W().hasWords();
+      run("comment");
+      if (!busy) drawInWindow();
+      return;
+    }
     if (t.whole) {
       close();
       if (act === "comment") window.AnnotatePage?.openComment(t.section.dataset.blockId);
@@ -356,14 +374,15 @@
     ta.value = initial != null ? initial : (prior ? prior.text : "");
     // Pictures pasted here ride on the mark, as a part's comment's do.
     let images = (prior && prior.images) || [];
-    const strip = attachPaste(ta, images, (list) => { images = list; syncDraftLock(); });
+    let drawButton = null;
+    const strip = attachPaste(ta, images, (list) => { images = list; syncDraftLock(); }, (b) => { drawButton = b; });
     ta.placeholder = "Ask or push back on this…";
     ta.setAttribute("aria-label", "Comment on the selected words");
     ta.addEventListener("input", () => { if (draft) draft.text = ta.value; syncDraftLock(); });
     const row = document.createElement("div");
     row.className = "sel-row";
     row.innerHTML = '<span class="card-submit-hint"><kbd>↩</kbd> to add · '
-      + '<kbd>⇧</kbd><kbd>↩</kbd> new line · paste an image to attach</span>';
+      + '<kbd>⇧</kbd><kbd>↩</kbd> new line</span>';
     const cancel = document.createElement("button");
     cancel.type = "button"; cancel.className = "comment-cancel"; cancel.textContent = "Cancel";
     const add = document.createElement("button");
@@ -394,7 +413,7 @@
     ta.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commit(); }
     });
-    row.append(cancel, add);
+    row.append(drawButton, cancel, add);
     box.append(ta, strip, row);
     window.AnnotateCommentWindow.open({ owner: "span", quote: anchor.selected_text, body: box,
       near: range.getBoundingClientRect(),
@@ -530,6 +549,7 @@
   // mousedown for a tap on blank text.
   document.addEventListener("pointerdown", (ev) => {
     if (!menu || !menu.classList.contains("sel-sheet")) return;
+    if (ev.target instanceof Element && ev.target.closest(".drawpad")) return;
     const inside = ev.target instanceof Element && ev.target.closest(".sel-menu");
     if (inside) return press(true);
     close();
@@ -569,7 +589,7 @@
         else if (target && target.section) window.AnnotateEdit?.sayWhy?.(target.section);
         return;
       }
-      const act = { c: "comment", d: "delete", x: "compact" }[ev.key];
+      const act = { c: "comment", w: "draw", d: "delete", x: "compact" }[ev.key];
       if (!act) return;
       // An open menu owns these keys: they must not fall through to
       // script.js's `c`, which would open a comment behind it.

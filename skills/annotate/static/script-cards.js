@@ -67,28 +67,93 @@ function startUpdatingOverlay(section) {
   }, 1000);
 }
 
-// The image paste strip under a comment's text box, shared by both bodies of
-// the comment window: a part's comment (buildCard) and the selection's box
-// (selection.js). A pasted image is uploaded, its token goes into the text
-// at the caret, and `onImages` hears the whole list each time it changes.
-// Returns the strip, for the caller to place under the text box.
-function attachPaste(ta, images, onImages) {
+// The picture strip under a comment's text box, shared by every comment
+// body: a part's comment (buildCard), the selection's box (selection.js) and
+// the whole-response composer (script-chrome.js). A picture comes in two
+// ways: pasted, or drawn on the drawing pad (drawpad.js) from the strip's
+// Draw button. Either way it is uploaded, its token goes into the text at the
+// caret (`![paste-1]`, `![drawing-2]`), and `onImages` hears the whole list
+// each time it changes. A drawing's tile opens the pad again on its lines.
+// Returns the strip, for the caller to place under the text box. The Draw
+// button goes where `placeDraw(button)` puts it, so a caller can set it in its
+// own button row at no cost in height; with no `placeDraw` it heads the strip.
+//
+// The lines of each drawing, by its uploaded path, so a drawing reopened
+// after its comment window was rebuilt can still be edited. Lost on reload:
+// the picture is kept, only re-editing it is not.
+const DRAWING_STROKES = new Map();
+
+function attachPaste(ta, images, onImages, placeDraw) {
   let pastes = (images || []).map(img => ({ token: img.token, path: img.path, thumbUrl: null }));
-  let nextIndex = pastes.length + 1;
+  const used = pastes.map(p => Number(String(p.token).split("-").pop()) || 0);
+  let nextIndex = Math.max(0, ...used) + 1;
   const strip = document.createElement("div");
   strip.className = "paste-strip";
+
+  const drawBtn = document.createElement("button");
+  drawBtn.type = "button";
+  drawBtn.className = "paste-draw";
+  drawBtn.title = "Draw a picture to attach";
+  drawBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" '
+    + 'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+    + '<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19z"/><path d="M14.5 6.5l3 3"/></svg>'
+    + '<span>Draw</span>';
+  drawBtn.addEventListener("click", (ev) => { ev.stopPropagation(); openPad(null); });
 
   function changed() {
     onImages(pastes.map(p => ({ token: p.token, path: p.path })));
   }
 
+  // Put `![token]` into the text where the caret was, and let the owner keep
+  // its text from its own input listener.
+  function insertToken(token, at) {
+    const insertion = `![${token}]`;
+    const start = at ? at.start : ta.selectionStart;
+    const end = at ? at.end : ta.selectionEnd;
+    ta.value = ta.value.slice(0, start) + insertion + ta.value.slice(end);
+    const caret = start + insertion.length;
+    ta.setSelectionRange(caret, caret);
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function openPad(existing) {
+    if (!window.DrawPad) { showPasteError("drawing is not available"); return; }
+    // The pad takes focus, so remember where the caret was now.
+    const at = { start: ta.selectionStart, end: ta.selectionEnd };
+    window.DrawPad.open({
+      title: existing ? `Edit ${existing.token}` : "New drawing",
+      doneLabel: existing ? "Update drawing" : "Attach drawing",
+      strokes: existing ? DRAWING_STROKES.get(existing.path) : null,
+      returnFocus: ta,
+      onDone: async (blob, strokes) => {
+        let result;
+        try {
+          result = await WebCompanion.api.pasteImage(blob);
+        } catch (_) {
+          showPasteError("upload failed");
+          return;
+        }
+        DRAWING_STROKES.set(result.path, strokes);
+        if (existing) {
+          const p = pastes.find(x => x.token === existing.token);
+          if (p) { p.path = result.path; p.thumbUrl = URL.createObjectURL(blob); }
+        } else {
+          const token = `drawing-${nextIndex++}`;
+          insertToken(token, at);
+          pastes.push({ token, path: result.path, thumbUrl: URL.createObjectURL(blob) });
+        }
+        changed();
+        render();
+        ta.focus({ preventScroll: true });
+      },
+    });
+  }
+
   function render() {
-    strip.replaceChildren();
-    if (pastes.length === 0) {
-      strip.dataset.empty = "1";
-      return;
-    }
-    delete strip.dataset.empty;
+    const own = !drawBtn.parentNode || drawBtn.parentNode === strip;
+    strip.replaceChildren(...(own ? [drawBtn] : []));
+    if (pastes.length === 0 && !own) strip.dataset.empty = "1";
+    else delete strip.dataset.empty;
     for (const p of pastes) {
       const tile = document.createElement("div");
       tile.className = "paste-thumb";
@@ -104,6 +169,7 @@ function attachPaste(ta, images, onImages) {
       remove.type = "button";
       remove.className = "paste-remove";
       remove.title = "Remove";
+      remove.setAttribute("aria-label", `Remove ${p.token}`);
       remove.textContent = "×";
       remove.addEventListener("click", (ev) => {
         ev.stopPropagation();
@@ -114,6 +180,17 @@ function attachPaste(ta, images, onImages) {
       tile.appendChild(img);
       tile.appendChild(label);
       tile.appendChild(remove);
+      if (DRAWING_STROKES.has(p.path)) {
+        tile.classList.add("is-drawing");
+        tile.title = "Edit this drawing";
+        tile.tabIndex = 0;
+        tile.setAttribute("role", "button");
+        tile.setAttribute("aria-label", `Edit ${p.token}`);
+        tile.addEventListener("click", () => openPad(p));
+        tile.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); openPad(p); }
+        });
+      }
       strip.appendChild(tile);
     }
   }
@@ -143,14 +220,7 @@ function attachPaste(ta, images, onImages) {
     const blob = imageItem.getAsFile();
     if (!blob) return;
     const token = `paste-${nextIndex++}`;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const insertion = `![${token}]`;
-    ta.value = ta.value.slice(0, start) + insertion + ta.value.slice(end);
-    const caret = start + insertion.length;
-    ta.setSelectionRange(caret, caret);
-    // The owner keeps its text from its own input listener.
-    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    insertToken(token, null);
     try {
       const result = await WebCompanion.api.pasteImage(blob);
       pastes.push({ token, path: result.path, thumbUrl: URL.createObjectURL(blob) });
@@ -161,6 +231,7 @@ function attachPaste(ta, images, onImages) {
     }
   });
 
+  if (placeDraw) placeDraw(drawBtn);
   render();
   return strip;
 }
@@ -260,12 +331,13 @@ function buildCard(id, a, onSubmitCb) {
   wrap.appendChild(ta);
   wrap.appendChild(handle);
   card.appendChild(wrap);
+  let drawButton = null;
   card.appendChild(attachPaste(ta, annotations[id].images, (images) => {
     if (!annotations[id]) return;
     if (images.length) annotations[id].images = images;
     else delete annotations[id].images;
     saveDrafts();
-  }));
+  }, (b) => { drawButton = b; }));
   // Auto-grow once on initial render so a card with prior content shows it all.
   queueMicrotask(autoGrow);
 
@@ -276,8 +348,9 @@ function buildCard(id, a, onSubmitCb) {
   hint.className = "card-submit-hint";
   // The button pins into the round; nothing is sent until the round dock's
   // Submit, so the label must not promise delivery.
-  hint.innerHTML = '<kbd>⌘</kbd><kbd>↩</kbd> to add · paste an image to attach';
+  hint.innerHTML = '<kbd>⌘</kbd><kbd>↩</kbd> to add';
   submitRow.appendChild(hint);
+  submitRow.appendChild(drawButton);
   const submitBtn = document.createElement("button");
   submitBtn.type = "button";
   submitBtn.className = "card-submit-btn";

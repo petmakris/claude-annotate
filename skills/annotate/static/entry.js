@@ -49,6 +49,7 @@ const CSS = [
   "diagram.css",
   "popover.css",
   "code-theme.css",
+  "drawpad.css",
 ];
 
 // Same order the old server's <head> had, and for the same reasons: the
@@ -106,6 +107,8 @@ const JS = [
   "script-settings.js",
   "script-explain.js",
   "script-blocks.js",
+  // The drawing pad, before script-cards.js whose picture strip opens it.
+  "drawpad.js",
   "script-cards.js",
   "script-chrome.js",
   "script-poll.js",
