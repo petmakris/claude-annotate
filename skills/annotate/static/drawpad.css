@@ -144,6 +144,8 @@ html.drawpad-open body {
   background: color-mix(in srgb, var(--dp-accent) 88%, #000);
 }
 .dp-text-btn:disabled { opacity: 0.45; cursor: default; }
+.dp-status { margin-right: 8px; color: var(--dp-dim); font-size: 13px; white-space: nowrap; }
+.dp-status:empty { display: none; }
 
 .dp-stage {
   position: relative;

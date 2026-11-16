@@ -252,7 +252,8 @@
         </div>
         <div class="dp-spacer"></div>
         <div class="dp-group dp-end">
-          <button type="button" class="dp-text-btn" data-act="cancel">Cancel</button>
+          <span class="dp-status" aria-live="polite"></span>
+          ${opts.noCancel ? "" : '<button type="button" class="dp-text-btn" data-act="cancel">Cancel</button>'}
           <button type="button" class="dp-text-btn dp-primary" data-act="done">${opts.doneLabel || "Attach drawing"}</button>
         </div>
       </div>
@@ -270,6 +271,7 @@
     const lctx = live.getContext("2d");
     const zoomLabel = root.querySelector(".dp-zoom-label");
     const doneBtn = root.querySelector('[data-act="done"]');
+    const statusEl = root.querySelector(".dp-status");
     let dpr = 1, sw = 0, sh = 0;
 
     // ── layout and paint ──
@@ -378,9 +380,17 @@
     }
 
     // ── history ──
+    // opts.onChange hears every change to the lines (a new line, an erase,
+    // a clear, undo, redo), with a copy it may keep: a page that saves the
+    // drawing as it is made listens here.
+    function changed() {
+      if (opts.onChange) opts.onChange(strokes.map((s) => ({ ...s, points: s.points.map((p) => p.slice()) })));
+    }
+
     function record(action) {
       undoStack.push(action);
       redoStack.length = 0;
+      changed();
     }
 
     // An erase or a clear swaps the whole list; undo puts the old one back,
@@ -400,6 +410,7 @@
       apply(a, false);
       redoStack.push(a);
       paintBase();
+      changed();
     }
 
     function redo() {
@@ -408,6 +419,7 @@
       apply(a, true);
       undoStack.push(a);
       paintBase();
+      changed();
     }
 
     function clearAll() {
@@ -623,21 +635,35 @@
     }
 
     function cancel() {
-      if (closed) return;
+      if (closed || opts.noCancel) return; // a pad with no Cancel stays up on Escape too
       const dirty = undoStack.length > 0;
       if (dirty && !window.confirm("Throw this drawing away?")) return;
       teardown();
       if (opts.onCancel) opts.onCancel();
     }
 
+    // With opts.stayOpen the pad stays up after Done: the button sends the
+    // drawing as it is now (onDone may return a promise) and comes back for
+    // the next one. Without it, Done closes the pad, as annotate's comments use it.
     async function done() {
-      if (closed || !strokes.length) return;
+      if (closed || !strokes.length || doneBtn.disabled) return;
       doneBtn.disabled = true;
       const blob = await exportPng(strokes);
       const kept = strokes.map((s) => ({ ...s, points: s.points.map((p) => p.slice()) }));
-      teardown();
-      if (opts.onDone && blob) opts.onDone(blob, kept);
+      if (!opts.stayOpen) {
+        teardown();
+        if (opts.onDone && blob) opts.onDone(blob, kept);
+        return;
+      }
+      try {
+        if (opts.onDone && blob) await opts.onDone(blob, kept);
+      } finally {
+        if (!closed) sync();
+      }
     }
+
+    // One short word beside Done ("Sent", "nobody listening"); "" clears it.
+    this.setStatus = (text) => { statusEl.textContent = text || ""; };
 
     this.close = (notify) => { if (!closed) { teardown(); if (notify && opts.onCancel) opts.onCancel(); } };
 
