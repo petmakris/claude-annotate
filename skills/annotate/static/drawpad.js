@@ -273,7 +273,25 @@
     let dpr = 1, sw = 0, sh = 0;
 
     // ── layout and paint ──
+    // The pad covers what is on screen, not the page: on a phone or tablet the
+    // browser zooms the page in when a small text box gets focus (Android
+    // Chrome below 16px), and a pad fixed at inset 0 then hangs off the top and
+    // the right edge, with no way to pinch back out because the pad takes every
+    // touch. Following the visual viewport keeps every control on screen.
+    function place() {
+      const vv = window.visualViewport;
+      if (!vv || (vv.scale === 1 && vv.offsetLeft === 0 && vv.offsetTop === 0)) {
+        root.style.left = root.style.top = root.style.width = root.style.height = "";
+        return;
+      }
+      root.style.left = vv.offsetLeft + "px";
+      root.style.top = vv.offsetTop + "px";
+      root.style.width = vv.width + "px";
+      root.style.height = vv.height + "px";
+    }
+
     function resize() {
+      place();
       const r = stage.getBoundingClientRect();
       dpr = window.devicePixelRatio || 1;
       sw = r.width; sh = r.height;
@@ -590,6 +608,10 @@
     function teardown() {
       closed = true;
       window.removeEventListener("resize", resize);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", resize);
+        window.visualViewport.removeEventListener("scroll", place);
+      }
       window.removeEventListener("keydown", onKey, true);
       window.removeEventListener("keyup", onKey, true);
       root.remove();
@@ -648,6 +670,10 @@
     stage.addEventListener("pointercancel", onUp);
     stage.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("resize", resize);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", resize);
+      window.visualViewport.addEventListener("scroll", place);
+    }
     window.addEventListener("keydown", onKey, true);
     window.addEventListener("keyup", onKey, true);
 

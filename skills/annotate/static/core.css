@@ -738,3 +738,14 @@ body.read-only .read-only-badge {
   white-space: nowrap;
 }
 
+/* Android Chrome zooms the page in when a text box under 16px gets focus, and
+   the page stays zoomed after: the drawing pad opened from a comment then
+   started off screen. On a touch screen every text box is 16px, so focus never
+   zooms. */
+@media (pointer: coarse) {
+  textarea,
+  select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]) {
+    font-size: 16px !important; /* beats each box's own font shorthand */
+  }
+}
