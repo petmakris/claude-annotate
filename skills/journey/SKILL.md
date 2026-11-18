@@ -101,7 +101,7 @@ After an event is handled: `J ack <app> <event_id>`. Never ack an event you did 
 
 ## The journey commands, so the user never types them
 
-The commands run from the session home: `<cli> sandbox journey` picks the sandbox the canvas was captured on, else the app's only sandbox. It never makes one: with none, or several and none on the canvas, it refuses and lists names. Then make one with `<cli> sandbox up <app> --name <name> --journey`, or name one with `--name <name>`, and say so to the user.
+A journey is a sandbox plus a person: each canvas is one listed person's on one sandbox, named `<sandbox>-<username>`, and lomem refuses a journey with no person. The commands run from the session home with the canvas's name, `--name <sandbox>-<username>`, which lomem reads as the sandbox and the person (Re-run sends it the same way). A run of a person who is already running is refused: say so and wait. `<cli> sandbox journey` never makes a sandbox: with none, it refuses and lists names. Then make one with `<cli> sandbox up <app> --name <name> --journey --person <username>`, and say so to the user.
 
 ### Shop, Ledger, tutor
 
@@ -110,11 +110,11 @@ HEAD first; nothing needs bringing down after.
 
 | What | Command |
 |---|---|
-| Run features and publish (prefer `J rerun`, which also shows it on the canvas) | `<cli> sandbox journey <app> <feature…> --publish` |
-| Every feature | `<cli> sandbox journey <app> --publish` |
-| The features, their boards and last run | `<cli> sandbox journey <app> --list` |
-| Publish what the sandbox ran | `<cli> sandbox journey <app> publish` |
-| The sandbox's canvas link | `<cli> sandbox journey <app> open` |
+| Run features and publish (prefer `J rerun`, which also shows it on the canvas) | `<cli> sandbox journey <app> --name <sandbox>-<username> <feature…> --publish` |
+| Every feature | `<cli> sandbox journey <app> --name <sandbox>-<username> --publish` |
+| The features, their boards and last run | `<cli> sandbox journey <app> --name <sandbox>-<username> --list` |
+| Publish what the person's run left | `<cli> sandbox journey <app> --name <sandbox>-<username> publish` |
+| The person's canvas link | `<cli> sandbox journey <app> --name <sandbox>-<username> open` |
 | A sandbox's folder | `<cli> sandbox path <app> --name <name>` |
 
 Feature ids are journey.feature's Scenario names as slugs (`Plan setup` → `plan-setup`); a board's
