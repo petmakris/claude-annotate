@@ -17,7 +17,12 @@ comments; **you** edit the file. Nothing else writes it.
 
 ## Opening a deck
 
-0. **If there is no deck yet, create it first — never refuse.** People type `/deck` expecting a
+0. **A new presentation about a user interface is not a deck.** When the topic is what a
+   screen, field, dialog or flow shows and how to use it, build it with the `explainer` skill
+   in this plugin instead and say so in one line; the rest of this skill is for decks that argue
+   something. An existing deck is opened as below whatever it is about.
+
+   **If there is no deck yet, create it first — never refuse.** People type `/deck` expecting a
    deck to appear, and a skill that answers "I only open existing decks" sends them away empty-
    handed. The deck is missing when the argument is a path that does not exist, or when it is a
    topic rather than a path (`/deck proposal for feedback tracking`).

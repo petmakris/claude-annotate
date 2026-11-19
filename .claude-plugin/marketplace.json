@@ -10,7 +10,7 @@
       "version": "0.1.0",
       "source": "./",
       "strict": false,
-      "description": "Read Claude's long answers in a browser and comment on any block; Claude rewrites that block in place. Also builds and reviews slide decks (/slides, /deck), draws a feature's data flow (/dataflow) and shows one Java object filled with real values (/specimen). Puts live views of your work in front of you (/stage) and talks a problem through out loud (/talk). Shows a set of screenshots as one canvas that pans and zooms, with comments pinned on the shots (/canvas). Gives you one drawing pad at a fixed link whose Update sends the drawing to your session (/draw). Requires Python 3.9+ on PATH, and /annotate, /deck, /dataflow, /specimen, /stage, /talk, /canvas, /journey and /draw also need the separately-installed webcompanion daemon (pipx install webcompanion && webcompanion install-service); run /annotate-doctor to check or install it. /talk also needs uv, Python 3.11+ and a speech engine: an Azure Speech key, or the VoiceStudio app on macOS. /slides does not use the daemon.",
+      "description": "Read Claude's long answers in a browser and comment on any block; Claude rewrites that block in place. Also explains a user interface part by part as one HTML page (/explainer), builds and reviews slide decks (/slides, /deck), draws a feature's data flow (/dataflow) and shows one Java object filled with real values (/specimen). Puts live views of your work in front of you (/stage) and talks a problem through out loud (/talk). Shows a set of screenshots as one canvas that pans and zooms, with comments pinned on the shots (/canvas). Gives you one drawing pad at a fixed link whose Update sends the drawing to your session (/draw). Requires Python 3.9+ on PATH, and /annotate, /deck, /dataflow, /specimen, /stage, /talk, /canvas, /journey and /draw also need the separately-installed webcompanion daemon (pipx install webcompanion && webcompanion install-service); run /annotate-doctor to check or install it. /talk also needs uv, Python 3.11+ and a speech engine: an Azure Speech key, or the VoiceStudio app on macOS. /slides does not use the daemon.",
       "skills": [
         "./skills/annotate",
         "./skills/annotate-doctor",
@@ -18,6 +18,7 @@
         "./skills/specimen",
         "./skills/deck",
         "./skills/slides",
+        "./skills/explainer",
         "./skills/stage",
         "./skills/talk",
         "./skills/canvas",
