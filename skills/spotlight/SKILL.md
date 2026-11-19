@@ -1,7 +1,7 @@
 ---
-name: explainer
-description: Explain a user interface part by part, as one self-contained HTML page. The real screen sits on the left with everything dimmed except the part being explained; on the right a dashed line joins it to a claim, two or three lines, and optional fact cards and examples; Previous, Next, dots and the arrow keys walk the parts. This is the first choice whenever a presentation, walkthrough, help page or guide is about what a screen, field, dialog, panel or flow shows and how to use it; /slides and /deck send UI explanations here. Triggered by /explainer <topic or spec>, or by any request to present, walk through or explain screens.
-argument-hint: "<topic, or the path to an explainer.json>"
+name: spotlight
+description: Explain a user interface part by part, as one self-contained HTML page. The real screen sits on the left with everything dimmed except the part being explained; on the right a dashed line joins it to a claim, two or three lines, and optional fact cards and examples; Previous, Next, dots and the arrow keys walk the parts. This is the first choice whenever a presentation, walkthrough, help page or guide is about what a screen, field, dialog, panel or flow shows and how to use it; /slides and /deck send UI explanations here. Triggered by /spotlight <topic or spec>, or by any request to present, walk through or explain screens.
+argument-hint: "<topic, or the path to a spotlight.json>"
 allowed-tools:
   - Bash
   - Read
@@ -9,15 +9,15 @@ allowed-tools:
   - Edit
 ---
 
-# /explainer — a screen, explained one part at a time
+# /spotlight — a screen, explained one part at a time
 
 **Reach for this first whenever the subject is a user interface.** "Make a presentation about
 what changed in Jira", "walk the team through the new field", "a help page for this tab", "show
-how to use the dialog": each of those is an explainer, not a slide deck. The reader sees the real
+how to use the dialog": each of those is a spotlight, not a slide deck. The reader sees the real
 screen, the part in focus is lit and everything else is dimmed, and the text beside it says what
 that part is and what to do with it. A deck (`/slides`) is for a talk that argues something —
 a proposal, numbers, a decision — where the screens, if any, are evidence rather than the subject.
-When a request mixes the two, build the explainer for the screens and leave the argument to the
+When a request mixes the two, build the spotlight for the screens and leave the argument to the
 deck; never squeeze screenshots into 1280×720 slides with numbered badges and a legend.
 
 ## What a reader gets
@@ -38,20 +38,20 @@ deck; never squeeze screenshots into 1280×720 slides with numbered badges and a
 
 | File | Role |
 |---|---|
-| `template.html` | The viewer. Every explainer uses it unchanged; a look that should change for every future explainer changes here. |
-| `build.py` | `python3 build.py <folder>/explainer.json` writes the page with every image embedded. A spec with `crop` needs Pillow: `uv run --with pillow python build.py …`. It refuses a box that leaves its image, a step without a title, a box on an HTML screen and a focus on an image screen. |
+| `template.html` | The viewer. Every spotlight uses it unchanged; a look that should change for every future spotlight changes here. |
+| `build.py` | `python3 build.py <folder>/spotlight.json` writes the page with every image embedded. A spec with `crop` needs Pillow: `uv run --with pillow python build.py …`. It refuses a box that leaves its image, a step without a title, a box on an HTML screen and a focus on an image screen. |
 | `check.py` | `uv run --with playwright python check.py <page>.html <review-dir>` walks every part at 1440×900 and 390×844: sideways scroll, a part that rings nothing, a ring outside its screen, a missing line on desktop, text taller than its panel. It writes `desktop-NN.png` and `phone-NN.png`, one per part: look at them, and use them where the HTML cannot go (a Confluence page). |
 
-Run both from `$(claude-annotate root)/skills/explainer/`.
+Run both from `$(claude-annotate root)/skills/spotlight/`.
 
-## The spec: `explainer.json`
+## The spec: `spotlight.json`
 
 ```json
 {
   "tag": "Team · Tool",
   "title": "What the reader is about to understand, as a sentence",
   "link": "https://… (optional: the title links here)",
-  "out": "my-explainer.html",
+  "out": "my-spotlight.html",
   "footer": "Where the screens come from, shown under each screen",
   "css": "stage.css (optional: styles for HTML screens)",
   "screens": [
@@ -123,16 +123,16 @@ Run both from `$(claude-annotate root)/skills/explainer/`.
 The same spec is also a stage board, drawn with the same spotlight (`skills/_shared/static/spotlight.js`, which
 this page's build pastes in and the stage keeps a copy of):
 
-- `python3 "$(claude-annotate root)/skills/stage/stage.py" show <name> screen:<path/explainer.json>` puts it on the
+- `python3 "$(claude-annotate root)/skills/stage/stage.py" show <name> screen:<path/spotlight.json>` puts it on the
   stage, Back and Next stepping through the parts; the images stay in the spec's folder.
-- In a /talk call, `[[show screen: <path/explainer.json> | Title]]` brings it in. The voice steps it: a part comes in
+- In a /talk call, `[[show screen: <path/spotlight.json> | Title]]` brings it in. The voice steps it: a part comes in
   with the sentence that says its title, and `[[point: part 3]]` or `[[point: part "title"]]` lights one. So write
   titles you will say aloud. The sentence being said stays at the foot of the stage; the panel keeps the part's text.
 - The parts are numbered p1, p2, ... in the spec's order, across every screen.
 
 ## Writing
 
-The house style of whoever the explainer is for applies (a `house-style` skill, a decks folder's
+The house style of whoever the spotlight is for applies (a `house-style` skill, a decks folder's
 `PRESENTATION-STYLE.md`): load it first. Beyond it:
 
 - A part's title is the claim it makes, a sentence with a verb, and fits in two lines.

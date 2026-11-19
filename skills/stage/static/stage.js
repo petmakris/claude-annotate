@@ -605,7 +605,7 @@ function renderInline(v, seq) {
       if (window.DOMPurify) paintScene(v, box, src); else note(box, "The scene could not be made safe to show, so it is not shown.", retryLibs);
     });
   } else if (src.format === "screen") {
-    // An explainer: one screen at a time, the part being said lit and explained beside it (screenboard.js).
+    // A spotlight: one screen at a time, the part being said lit and explained beside it (screenboard.js).
     const imageUrl = (path) => `${WC.api.BASE}mounts/${encodeURIComponent(src.mount)}/` +
       String(path).split("/").map(encodeURIComponent).join("/");
     renderScreen(box, src, { imageUrl, embedded });

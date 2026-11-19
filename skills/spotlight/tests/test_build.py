@@ -4,7 +4,7 @@ import zlib
 
 import pytest
 
-from skills.explainer import build as B
+from skills.spotlight import build as B
 
 
 def png(w, h):
@@ -17,7 +17,7 @@ def png(w, h):
 
 def spec_dir(tmp_path, spec, size=(200, 100)):
     (tmp_path / 'a.png').write_bytes(png(*size))
-    p = tmp_path / 'explainer.json'
+    p = tmp_path / 'spotlight.json'
     p.write_text(json.dumps(spec))
     return p
 

@@ -1,5 +1,5 @@
 // The spotlight a screen is explained with, one part at a time: everything dimmed except the parts in focus,
-// each ringed, and a dashed line from the lit part to the heading that explains it. Shared by the explainer's
+// each ringed, and a dashed line from the lit part to the heading that explains it. Shared by the /spotlight skill's
 // single-file page (its build pastes this file in) and the stage's screen board (a copy in skills/stage/static,
 // kept identical by skills/tests/test_shared_static_copies.py). A classic script: it sets window.Spotlight.
 (function () {

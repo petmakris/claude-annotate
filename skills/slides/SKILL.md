@@ -1,6 +1,6 @@
 ---
 name: slides
-description: Use when the user wants to build, extend, audit or export one of their single-file HTML presentation decks (a presentation whose subject is a user interface — what a screen, field or dialog shows and how to use it — goes to the explainer skill instead) — "start a new deck for Thursday's talk", "add two slides to that deck", "does that slide overflow?", "re-export the deck and its PNGs". Decks live in one decks folder, set with `$SLIDES_DECKS_DIR` or `~/.config/slides/config.json`, and take their look from a theme the user can swap. Not for Confluence pages, artifacts or generic slide requests.
+description: Use when the user wants to build, extend, audit or export one of their single-file HTML presentation decks (a presentation whose subject is a user interface — what a screen, field or dialog shows and how to use it — goes to the spotlight skill instead) — "start a new deck for Thursday's talk", "add two slides to that deck", "does that slide overflow?", "re-export the deck and its PNGs". Decks live in one decks folder, set with `$SLIDES_DECKS_DIR` or `~/.config/slides/config.json`, and take their look from a theme the user can swap. Not for Confluence pages, artifacts or generic slide requests.
 how: "Inlines the canonical 1280x720 harness from framework/ and the chosen theme as snapshots the deck owns, writes slides from the existing component vocabulary using the deck the decks folder names as its markup reference, then measures every element against its slide rect in a real browser. Exporting is a separate job that runs only when the user asks for it."
 collections: [none]
 argument-hint: "[create|extend|export] <deck folder, slug or date>"
@@ -33,16 +33,16 @@ disagree, that one wins. That README also holds the rules the decks obey.
 
 ## First: is this an explanation of a user interface?
 
-**A presentation about screens is an explainer, not a deck.** When the subject is what a screen,
+**A presentation about screens is a spotlight, not a deck.** When the subject is what a screen,
 field, dialog, panel or flow shows and how people use it ("present what changed in Jira", "walk
-the team through the new field", "a help page for this tab"), stop here and use the `explainer`
-skill in this plugin (`$(claude-annotate root)/skills/explainer/SKILL.md`): the real screen with
+the team through the new field", "a help page for this tab"), stop here and use the `spotlight`
+skill in this plugin (`$(claude-annotate root)/skills/spotlight/SKILL.md`): the real screen with
 the part in focus lit and the rest dimmed, the explanation beside it, one part at a time. Never
 put screenshots on 1280×720 slides with numbered badges and a legend.
 
 A deck is for a talk that argues something: a proposal, numbers, a decision, a plan. When a
-request is both, the screens become an explainer and the deck links to it. If unsure which one
-the user wants, build the explainer and say so in one line.
+request is both, the screens become a spotlight and the deck links to it. If unsure which one
+the user wants, build the spotlight and say so in one line.
 
 ## Before anything else
 

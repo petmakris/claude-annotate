@@ -1,14 +1,14 @@
-// A screen board: an explainer (skills/explainer) on the stage. One screen at a time, everything on it dimmed
+// A screen board: a spotlight (skills/spotlight) on the stage. One screen at a time, everything on it dimmed
 // except the part being said, which is ringed; beside it that part's count, title and text, joined to it by a
 // dashed line. The scene engine decides what is said: every part has a keyed marker (part:p1, part:p2, ...) that
 // applyFrame shows and lights, and paintScreen reads the frame's `cur` (else its focus) to pick the part, so the
 // page draws what the frame names and guesses nothing. Nothing lit (frame 0, the rest frame, no scene): the screen
-// shown last, undimmed, with the board's title. The spotlight itself is spotlight.js, shared with the explainer.
+// shown last, undimmed, with the board's title. The spotlight itself is spotlight.js, shared with the /spotlight skill.
 import "./spotlight.js";
 
 const PART = /^part:(p\d+)$/;
 
-// Inline HTML the explainer's author wrote (a title with <code>, a link): made safe when DOMPurify is in, else
+// Inline HTML the spotlight's author wrote (a title with <code>, a link): made safe when DOMPurify is in, else
 // shown as its words.
 function safe(html) {
   const s = String(html ?? "");

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Check a built explainer in a real browser and capture every part as a PNG.
+"""Check a built spotlight in a real browser and capture every part as a PNG.
 
-    uv run --with playwright python check.py <explainer>.html <review-dir>
+    uv run --with playwright python check.py <spotlight>.html <review-dir>
 
 At 1440x900 and 390x844 it walks every part and reports: the page scrolling sideways, a ring
 outside its screen, a part whose focus finds nothing, a missing connector on desktop, and text
@@ -53,14 +53,14 @@ def main(argv):
         for name, vp in (('desktop', (1440, 900)), ('phone', (390, 844))):
             p = b.new_page(viewport={'width': vp[0], 'height': vp[1]})
             p.goto(page_path.as_uri())
-            p.wait_for_function('window.explainer')
+            p.wait_for_function('window.spotlightPage')
             p.wait_for_timeout(400)
             font = p.evaluate("getComputedStyle(document.body).fontFamily")
             if 'Inter' not in font:
                 faults.append(f'{name}: body font is {font}')
-            n = p.evaluate('window.explainer.count')
+            n = p.evaluate('window.spotlightPage.count')
             for k in range(n):
-                p.evaluate(f'window.explainer.go({k})')
+                p.evaluate(f'window.spotlightPage.go({k})')
                 p.wait_for_timeout(450)
                 r = p.evaluate(PROBE)
                 tag = f"{name} part {k + 1} ({r['title'][:50]})"

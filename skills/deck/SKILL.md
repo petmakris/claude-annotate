@@ -18,7 +18,7 @@ comments; **you** edit the file. Nothing else writes it.
 ## Opening a deck
 
 0. **A new presentation about a user interface is not a deck.** When the topic is what a
-   screen, field, dialog or flow shows and how to use it, build it with the `explainer` skill
+   screen, field, dialog or flow shows and how to use it, build it with the `spotlight` skill
    in this plugin instead and say so in one line; the rest of this skill is for decks that argue
    something. An existing deck is opened as below whatever it is about.
 

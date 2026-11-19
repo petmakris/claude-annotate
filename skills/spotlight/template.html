@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* The explainer: one screen at a time. Left, the real screen with everything dimmed except the part in focus.
+/* The spotlight: one screen at a time. Left, the real screen with everything dimmed except the part in focus.
    Right, what that part means, joined to it by a dashed line. A bar at the bottom moves between parts. */
 :root {
   --bg: #eef2f6; --card: #ffffff; --ink: #14202e; --dim: #4c5b6c; --line: #d5dbe3; --soft: #e9eef4;
@@ -277,7 +277,7 @@ __EXTRA_CSS__
   });
   addEventListener("resize", place);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(place);
-  window.explainer = { go, count: parts.length, current: () => i };
+  window.spotlightPage = { go, count: parts.length, current: () => i };
   const m = /^#part-(\d+)$/.exec(location.hash);
   go(m ? Number(m[1]) - 1 : 0);
 })();

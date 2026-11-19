@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Build an explainer: a JSON spec plus its screens -> one self-contained HTML file.
+"""Build a spotlight: a JSON spec plus its screens -> one self-contained HTML file.
 
-    python3 build.py <folder>/explainer.json
+    python3 build.py <folder>/spotlight.json
 
 Writes the file the spec's "out" names (relative to the spec), or <slug>.html next to the spec.
 Images are embedded as data: URIs. A box is [x, y, width, height] in the image's own pixels;
@@ -57,7 +57,7 @@ def cropped(data, crop, size, sid):
 
 
 def slug(text):
-    return re.sub(r'[^A-Za-z0-9]+', '-', text).strip('-') or 'explainer'
+    return re.sub(r'[^A-Za-z0-9]+', '-', text).strip('-') or 'spotlight'
 
 
 def check_crop(crop, size, sid):
@@ -192,7 +192,7 @@ def main(argv):
     try:
         out, screens, steps = build(argv[1])
     except SpecError as e:
-        sys.exit(f'explainer: {e}')
+        sys.exit(f'spotlight: {e}')
     print(f'{out}  {screens} screens, {steps} parts, {out.stat().st_size // 1024} KB')
 
 

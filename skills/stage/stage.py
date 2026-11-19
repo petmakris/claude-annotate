@@ -7,7 +7,7 @@
 
 <source>: a project file (path[#fragment]), http(s)://..., session:<kind>/<slug>,
 code:<path>:<a>-<b>[ highlight x[-y]], change:<path>[ since <rev>] (what changed, read from git),
-screen:<explainer.json> (a screen explained part by part),
+screen:<spotlight.json> (a screen explained part by part),
 or table:- / sequence:- / flowchart:- / map:- / diagram:- with the body on stdin. The stage draws no
 Mermaid: diagram:- turns a Mermaid graph or state diagram into a flowchart and a sequenceDiagram into a
 sequence, and refuses any other kind.

@@ -374,16 +374,16 @@ def plain_text(markup) -> str:
 
 
 def screen_source(cwd: Path, raw: str) -> dict:
-    """An explainer spec (skills/explainer) as a screen board: its screens, each part keyed p1, p2, ... in order.
+    """A spotlight spec (skills/spotlight) as a screen board: its screens, each part keyed p1, p2, ... in order.
     An image stays in the spec's folder, which the stage serves (stage.py mounts it), so the view holds only
-    the path, the image's size and its crop; every box is in the drawn screen's pixels, as the explainer draws it."""
-    from skills.explainer import build as explainer  # the explainer's own checks, so the two never disagree
+    the path, the image's size and its crop; every box is in the drawn screen's pixels, as the spotlight draws it."""
+    from skills.spotlight import build as spotlight  # the spotlight's own checks, so the two never disagree
     rel = raw.strip()
     if not rel:
-        raise SourceError("expected screen:<path to an explainer.json in the project>")
+        raise SourceError("expected screen:<path to a spotlight.json in the project>")
     path = _inside(cwd, rel)
     if not path.is_file():
-        raise SourceError(f"no such explainer spec in the project: {rel}")
+        raise SourceError(f"no such spotlight spec in the project: {rel}")
     try:
         spec = json.loads(path.read_text())
     except ValueError as e:
@@ -399,8 +399,8 @@ def screen_source(cwd: Path, raw: str) -> dict:
             except ValueError:
                 raise SourceError(f"screen:{rel}: image {img} is outside the spec's folder") from None
     try:
-        norm = explainer.normalize(spec, base, embed=False)
-    except explainer.SpecError as e:
+        norm = spotlight.normalize(spec, base, embed=False)
+    except spotlight.SpecError as e:
         raise SourceError(f"screen:{rel}: {e}") from None
     n, screens = 0, []
     for s in norm["screens"]:

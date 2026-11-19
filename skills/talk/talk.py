@@ -1309,11 +1309,11 @@ class Board:
         self.add({"kind": "change", "title": title, **src})
 
     def add_screen(self, spec: str, title: str) -> None:
-        """[[show screen: <explainer.json in the code folder> | title]]: a screen explained part by part. A sentence
+        """[[show screen: <spotlight.json in the code folder> | title]]: a screen explained part by part. A sentence
         that says a part's title brings that part lit, and [[point: part 3]] or [[point: part "title"]] lights one."""
         try:
             if not spec.strip():
-                raise stage_model.SourceError("expected an explainer.json in the code folder")
+                raise stage_model.SourceError("expected a spotlight.json in the code folder")
             if not self.code_dir:
                 raise stage_model.SourceError(f"talk was started without --code: {spec.strip()}")
             src = stage_model.parse_source("screen:" + spec.strip(), self.code_dir)

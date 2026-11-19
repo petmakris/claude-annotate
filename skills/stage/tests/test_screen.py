@@ -1,4 +1,4 @@
-"""A screen board: an explainer spec (skills/explainer) shown on the stage, one part lit at a time."""
+"""A screen board: a spotlight spec (skills/spotlight) shown on the stage, one part lit at a time."""
 import json
 import struct
 import zlib
@@ -33,13 +33,13 @@ SPEC = {
 def project(tmp_path, spec=SPEC):
     (tmp_path / "docs" / "shots").mkdir(parents=True)
     (tmp_path / "docs" / "shots" / "form.png").write_bytes(png(200, 100))
-    (tmp_path / "docs" / "explainer.json").write_text(json.dumps(spec))
+    (tmp_path / "docs" / "spotlight.json").write_text(json.dumps(spec))
     return tmp_path
 
 
 def test_a_screen_source_keeps_its_images_in_their_folder_and_numbers_its_parts(tmp_path):
-    src = model.parse_source("screen:docs/explainer.json", project(tmp_path))
-    assert (src["type"], src["format"], src["spec"], src["dir"]) == ("inline", "screen", "docs/explainer.json", "docs")
+    src = model.parse_source("screen:docs/spotlight.json", project(tmp_path))
+    assert (src["type"], src["format"], src["spec"], src["dir"]) == ("inline", "screen", "docs/spotlight.json", "docs")
     assert (src["title"], src["tag"], src["footer"]) == ("How to file a request", "Team · Tool", "Screens from a test site")
     form, lst = src["screens"]
     # the image stays a path; the crop is drawn by the page, so the box is moved into the cut
@@ -51,15 +51,15 @@ def test_a_screen_source_keeps_its_images_in_their_folder_and_numbers_its_parts(
 
 
 @pytest.mark.parametrize("spec, where, want", [
-    (None, "screen:docs/missing.json", "no such explainer spec in the project: docs/missing.json"),
+    (None, "screen:docs/missing.json", "no such spotlight spec in the project: docs/missing.json"),
     (None, "screen:../outside.json", "outside"),
-    (None, "screen:", "expected screen:<path to an explainer.json in the project>"),
-    ({"title": "T", "screens": [{"id": "a", "image": "../x.png", "steps": [{"title": "x"}]}]}, "screen:docs/explainer.json",
+    (None, "screen:", "expected screen:<path to a spotlight.json in the project>"),
+    ({"title": "T", "screens": [{"id": "a", "image": "../x.png", "steps": [{"title": "x"}]}]}, "screen:docs/spotlight.json",
      "image ../x.png is outside the spec's folder"),
     ({"title": "T", "screens": [{"id": "a", "image": "shots/form.png", "steps": [{"title": "x", "box": [190, 0, 20, 5]}]}]},
-     "screen:docs/explainer.json", "screen:docs/explainer.json: a step 1: box [190, 0, 20, 5] leaves the 200x100 image"),
+     "screen:docs/spotlight.json", "screen:docs/spotlight.json: a step 1: box [190, 0, 20, 5] leaves the 200x100 image"),
     ({"title": "T", "screens": [{"id": "a", "image": "shots/form.png", "crop": [150, 0, 100, 50], "steps": [{"title": "x"}]}]},
-     "screen:docs/explainer.json", "crop [150, 0, 100, 50] leaves the 200x100 image"),
+     "screen:docs/spotlight.json", "crop [150, 0, 100, 50] leaves the 200x100 image"),
 ])
 def test_a_screen_source_is_refused_with_the_reason(tmp_path, spec, where, want):
     root = project(tmp_path, spec or SPEC)
@@ -69,13 +69,13 @@ def test_a_screen_source_is_refused_with_the_reason(tmp_path, spec, where, want)
 
 def test_a_screen_that_is_not_json_is_refused(tmp_path):
     root = project(tmp_path)
-    (root / "docs" / "explainer.json").write_text("{nope")
-    with pytest.raises(model.SourceError, match="screen:docs/explainer.json: not JSON"):
-        model.parse_source("screen:docs/explainer.json", root)
+    (root / "docs" / "spotlight.json").write_text("{nope")
+    with pytest.raises(model.SourceError, match="screen:docs/spotlight.json: not JSON"):
+        model.parse_source("screen:docs/spotlight.json", root)
 
 
 def test_a_screens_parts_are_named_by_their_titles_as_plain_words(tmp_path):
-    src = model.parse_source("screen:docs/explainer.json", project(tmp_path))
+    src = model.parse_source("screen:docs/spotlight.json", project(tmp_path))
     m = model.screen_model(src)
     assert m.kind == "parts" and m.keys == ["part:p1", "part:p2", "part:p3"]
     assert m.names["press send when it is done"] == "part:p2"  # the <b> is not a word a sentence says
@@ -84,7 +84,7 @@ def test_a_screens_parts_are_named_by_their_titles_as_plain_words(tmp_path):
 
 
 def test_a_screen_shown_on_its_own_steps_one_part_at_a_time(tmp_path):
-    src = model.parse_source("screen:docs/explainer.json", project(tmp_path))
+    src = model.parse_source("screen:docs/spotlight.json", project(tmp_path))
     built = model.screen_scene(src, "How to file a request")
     assert (built["start"], built["steps"], built["rest"]) == ("full", 3, 4)
     assert [f["cur"] for f in built["frames"]] == [[], ["part:p1"], ["part:p2"], ["part:p3"], []]
@@ -93,7 +93,7 @@ def test_a_screen_shown_on_its_own_steps_one_part_at_a_time(tmp_path):
 
 def test_showing_a_screen_mounts_its_folder_and_the_cli_gives_it_its_steps(fake, tmp_path, capsys):  # noqa: F811
     root = project(tmp_path)
-    assert stage.main(["show", "how", "screen:docs/explainer.json", "--cwd", str(root)]) == 0
+    assert stage.main(["show", "how", "screen:docs/spotlight.json", "--cwd", str(root)]) == 0
     view = fake.items["view:how"]
     assert view["title"] == "How to file a request" and view["source"]["format"] == "screen"
     assert fake.mounts[view["source"]["mount"]] == str((root / "docs").resolve())
@@ -102,4 +102,4 @@ def test_showing_a_screen_mounts_its_folder_and_the_cli_gives_it_its_steps(fake,
 
 def test_the_cli_refuses_a_bad_screen_with_exit_2(fake, tmp_path, capsys):  # noqa: F811
     assert stage.main(["show", "how", "screen:docs/nothing.json", "--cwd", str(tmp_path)]) == 2
-    assert "no such explainer spec" in capsys.readouterr().err
+    assert "no such spotlight spec" in capsys.readouterr().err
