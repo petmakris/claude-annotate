@@ -45,11 +45,7 @@ def cropped(data, crop, size, sid):
     """Cut [x, y, width, height] out of the image, so the part that matters is drawn larger.
     Boxes stay in the full image's pixels; the caller moves them by the returned offset."""
     import io
-    if len(crop) != 4:
-        raise SpecError(f'{sid}: crop is [x, y, width, height], got {crop}')
-    x, y, cw, ch = crop
-    if cw <= 0 or ch <= 0 or x < 0 or y < 0 or x + cw > size[0] or y + ch > size[1]:
-        raise SpecError(f'{sid}: crop {crop} leaves the {size[0]}x{size[1]} image')
+    x, y, cw, ch = check_crop(crop, size, sid)
     try:
         from PIL import Image
     except ImportError:
@@ -64,8 +60,23 @@ def slug(text):
     return re.sub(r'[^A-Za-z0-9]+', '-', text).strip('-') or 'explainer'
 
 
-def normalize(spec, base):
-    """Check the spec and give every screen what the viewer reads: src/w/h or html, and steps with boxes."""
+def check_crop(crop, size, sid):
+    """A crop's [x, y, width, height], checked against the full image's size."""
+    if not isinstance(crop, (list, tuple)) or len(crop) != 4 or any(not isinstance(v, (int, float)) for v in crop):
+        raise SpecError(f'{sid}: crop is [x, y, width, height], got {crop}')
+    x, y, cw, ch = crop
+    if cw <= 0 or ch <= 0 or x < 0 or y < 0 or x + cw > size[0] or y + ch > size[1]:
+        raise SpecError(f'{sid}: crop {list(crop)} leaves the {size[0]}x{size[1]} image')
+    return x, y, cw, ch
+
+
+def normalize(spec, base, embed=True):
+    """Check the spec and give every screen what the viewer reads, and steps with boxes in the screen's own pixels.
+
+    With `embed` (the self-contained page) an image screen gets `src`, a data: URI of the image, cut to its crop
+    (Pillow). Without it (the stage, which serves the image from its folder) it keeps `image`, its path relative to
+    the spec, with `full` (the whole image's size) and `off` (where the crop starts): the page cuts it itself.
+    Either way `w` and `h` are the drawn size and every box is moved into it."""
     spec = dict(spec)
     # feature-walkthrough specs name the ticket instead of a tag and a link
     spec.setdefault('tag', spec.get('ticket', ''))
@@ -86,7 +97,9 @@ def normalize(spec, base):
         s['id'] = sid
         if s.get('phase') not in (None, 'today', 'design'):
             raise SpecError(f"{sid}: phase is today or design, not {s['phase']!r}")
-        if s.get('image'):
+        is_image = bool(s.get('image'))
+        off = (0, 0)
+        if is_image:
             p = base / s['image']
             if not p.is_file():
                 raise SpecError(f'{sid}: no image at {p}')
@@ -95,13 +108,20 @@ def normalize(spec, base):
                 w, h = image_size(data)
             except SpecError as e:
                 raise SpecError(f'{sid}: {p.name} is {e}')
-            mime = mimetypes.guess_type(p.name)[0] or 'image/png'
             crop = s.pop('crop', None)
             if crop:
-                data, mime, (w, h), off = cropped(data, crop, (w, h), sid)
+                x, y, cw, ch = check_crop(crop, (w, h), sid)
+            if embed:
+                mime = mimetypes.guess_type(p.name)[0] or 'image/png'
+                if crop:
+                    data, mime, (w, h), off = cropped(data, crop, (w, h), sid)
+                s.update(w=w, h=h, src=f'data:{mime};base64,' + base64.b64encode(data).decode())
+                s.pop('image', None)
             else:
-                off = (0, 0)
-            s.update(w=w, h=h, src=f'data:{mime};base64,' + base64.b64encode(data).decode())
+                s.update(full=[w, h], off=[x, y] if crop else [0, 0])
+                if crop:
+                    w, h, off = cw, ch, (x, y)
+                s.update(w=w, h=h, image=pathlib.PurePath(s['image']).as_posix())
         elif s.get('html') or s.get('html_file'):
             if s.get('html_file'):
                 s['html'] = (base / s.pop('html_file')).read_text()
@@ -116,19 +136,20 @@ def normalize(spec, base):
             where = f'{sid} step {k}'
             if not st.get('title'):
                 raise SpecError(f'{where}: no title')
-            boxes = st.pop('boxes', None) or ([st.pop('box')] if st.get('box') else [])
+            boxes = [list(b) if isinstance(b, (list, tuple)) else b
+                     for b in (st.pop('boxes', None) or ([st.pop('box')] if st.get('box') else []))]
             st.pop('box', None)
-            if boxes and not s.get('src'):
+            if boxes and not is_image:
                 raise SpecError(f'{where}: boxes belong to an image screen; an html screen uses focus')
-            if st.get('focus') and s.get('src'):
+            if st.get('focus') and is_image:
                 raise SpecError(f'{where}: focus belongs to an html screen; an image screen uses box')
-            if boxes and s.get('src'):
+            if boxes and is_image:
                 for b in boxes:
-                    if len(b) == 4:
+                    if isinstance(b, list) and len(b) == 4:
                         b[0] -= off[0]
                         b[1] -= off[1]
             for b in boxes:
-                if len(b) != 4 or any(not isinstance(v, (int, float)) for v in b):
+                if not isinstance(b, list) or len(b) != 4 or any(not isinstance(v, (int, float)) for v in b):
                     raise SpecError(f'{where}: a box is [x, y, width, height], got {b}')
                 x, y, bw, bh = b
                 if bw <= 0 or bh <= 0 or x < 0 or y < 0 or x + bw > s['w'] or y + bh > s['h']:
@@ -136,7 +157,6 @@ def normalize(spec, base):
             st['boxes'] = boxes
             fixed.append(st)
         s['steps'] = fixed
-        s.pop('image', None)
         out.append(s)
     spec['screens'] = out
     return spec
@@ -148,7 +168,9 @@ def render(spec, extra_css=''):
     html = (HERE / 'template.html').read_text()
     esc = title.replace('&', '&amp;').replace('<', '&lt;')
     css = f'<style>\n{extra_css}\n</style>' if extra_css else ''
-    return html.replace('__TITLE__', esc).replace('__EXTRA_CSS__', css).replace('__SPEC__', data)
+    spot = (HERE.parent / '_shared' / 'static' / 'spotlight.js').read_text().replace('</', '<\\/')
+    return (html.replace('__TITLE__', esc).replace('__EXTRA_CSS__', css).replace('__SPOTLIGHT_JS__', spot)
+            .replace('__SPEC__', data))
 
 
 def build(spec_path):

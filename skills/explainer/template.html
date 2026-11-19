@@ -133,6 +133,7 @@ __EXTRA_CSS__
   </nav>
 </div>
 <script id="spec" type="application/json">__SPEC__</script>
+<script>__SPOTLIGHT_JS__</script>
 <script>
 (() => {
   const spec = JSON.parse(document.getElementById("spec").textContent);
@@ -230,64 +231,17 @@ __EXTRA_CSS__
 
   let i = 0;
 
-  // The parts in focus, as rectangles in the frame's own pixels.
+  // The spotlight itself (dim, rings, the dashed line) is skills/_shared/static/spotlight.js, pasted in below by
+  // build.py: the stage's screen board draws with the same file.
+  const S = window.Spotlight;
   function rects(scr, st) {
-    const fr = scr.frame.getBoundingClientRect();
-    if (scr.s.src) {
-      const img = scr.frame.querySelector("img");
-      const kx = img.clientWidth / scr.s.w, ky = img.clientHeight / scr.s.h;
-      return (st.boxes || []).map(([x, y, w, h]) => ({ x: x * kx, y: y * ky, w: w * kx, h: h * ky }));
-    }
-    const out = [];
-    [].concat(st.focus || []).forEach((sel) => scr.frame.querySelectorAll(sel).forEach((el) => {
-      const r = el.getBoundingClientRect();
-      if (r.width || r.height) out.push({ x: r.left - fr.left - 4, y: r.top - fr.top - 4, w: r.width + 8, h: r.height + 8 });
-    }));
-    return out;
+    return scr.s.src ? S.boxRects(scr.frame.querySelector("img"), scr.s.w, scr.s.h, st.boxes) : S.focusRects(scr.frame, st.focus);
   }
-
-  function shade(scr, rs) {
-    const svg = scr.svg;
-    svg.textContent = "";
-    if (!rs.length) return;
-    const W = scr.frame.clientWidth, H = scr.frame.clientHeight;
-    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-    const id = "m" + Math.random().toString(36).slice(2);
-    const mask = document.createElementNS(NS, "mask"); mask.id = id;
-    const all = document.createElementNS(NS, "rect");
-    all.setAttribute("width", W); all.setAttribute("height", H); all.setAttribute("fill", "#fff");
-    mask.appendChild(all);
-    rs.forEach((r) => {
-      const hole = document.createElementNS(NS, "rect");
-      Object.entries({ x: r.x, y: r.y, width: r.w, height: r.h, rx: 6, fill: "#000" }).forEach(([k, v]) => hole.setAttribute(k, v));
-      mask.appendChild(hole);
-    });
-    const defs = document.createElementNS(NS, "defs"); defs.appendChild(mask); svg.appendChild(defs);
-    const dim = document.createElementNS(NS, "rect");
-    dim.setAttribute("class", "dim"); dim.setAttribute("width", W); dim.setAttribute("height", H); dim.setAttribute("mask", `url(#${id})`);
-    svg.appendChild(dim);
-    ["ring halo", "ring"].forEach((cls) => rs.forEach((r) => {
-      const ring = document.createElementNS(NS, "rect");
-      Object.entries({ x: r.x, y: r.y, width: r.w, height: r.h, rx: 6, class: cls }).forEach(([k, v]) => ring.setAttribute(k, v));
-      svg.appendChild(ring);
-    }));
-  }
-
+  function shade(scr, rs) { S.shade(scr.svg, scr.frame.clientWidth, scr.frame.clientHeight, rs); }
   function connect(scr, rs) {
     const path = $("linkpath"), dot = $("linkdot");
-    path.setAttribute("d", ""); dot.setAttribute("r", 0);
-    if (!rs.length || getComputedStyle($("link")).display === "none") return;
-    const box = main.getBoundingClientRect(), fr = scr.frame.getBoundingClientRect();
-    const right = Math.min(fr.right, fr.left + Math.max(...rs.map((r) => r.x + r.w))) - box.left;
-    const top = Math.max(fr.top, fr.top + Math.min(...rs.map((r) => r.y)));
-    const bottom = Math.min(fr.bottom, fr.top + Math.max(...rs.map((r) => r.y + r.h)));
-    const mid = (top + bottom) / 2 - box.top;
-    const h = panels[i].querySelector("h2").getBoundingClientRect();
-    const x2 = h.left - box.left - 12, y2 = h.top + Math.min(h.height, 40) / 2 - box.top;
-    const x1 = right + 6, cx = (x1 + x2) / 2;
-    if (x2 - x1 < 12) return;
-    path.setAttribute("d", `M${x1},${mid} C${cx},${mid} ${cx},${y2} ${x2},${y2}`);
-    dot.setAttribute("cx", x1); dot.setAttribute("cy", mid); dot.setAttribute("r", 5);
+    if (getComputedStyle($("link")).display === "none") { path.setAttribute("d", ""); dot.setAttribute("r", 0); return; }
+    S.link(main, scr.frame, rs, panels[i].querySelector("h2"), path, dot);
   }
 
   function place() {

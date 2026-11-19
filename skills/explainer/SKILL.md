@@ -118,6 +118,18 @@ Run both from `$(claude-annotate root)/skills/explainer/`.
    link). The `.html` is the master; it renders offline except for the web fonts, which fall
    back to the system's.
 
+## On the stage and in a call
+
+The same spec is also a stage board, drawn with the same spotlight (`skills/_shared/static/spotlight.js`, which
+this page's build pastes in and the stage keeps a copy of):
+
+- `python3 "$(claude-annotate root)/skills/stage/stage.py" show <name> screen:<path/explainer.json>` puts it on the
+  stage, Back and Next stepping through the parts; the images stay in the spec's folder.
+- In a /talk call, `[[show screen: <path/explainer.json> | Title]]` brings it in. The voice steps it: a part comes in
+  with the sentence that says its title, and `[[point: part 3]]` or `[[point: part "title"]]` lights one. So write
+  titles you will say aloud. The sentence being said stays at the foot of the stage; the panel keeps the part's text.
+- The parts are numbered p1, p2, ... in the spec's order, across every screen.
+
 ## Writing
 
 The house style of whoever the explainer is for applies (a `house-style` skill, a decks folder's

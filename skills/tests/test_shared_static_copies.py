@@ -46,6 +46,7 @@ EXPECTED = {
     "visuals.css": ["annotate", "stage"],
     "vz.css": ["annotate", "stage"],
     "vz-reveal.js": ["annotate", "stage"],
+    "spotlight.js": ["stage"],
     "wc-threads.js": ["dataflow"],
     "wc-boot.js": ["annotate", "dataflow", "deck"],
     "wc-open.js": ["annotate", "dataflow", "specimen"],

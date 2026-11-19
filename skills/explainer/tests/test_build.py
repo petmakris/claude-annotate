@@ -85,5 +85,5 @@ def test_a_feature_walkthrough_spec_takes_its_ticket_as_tag_link_and_file_name(t
 
 def test_text_holding_a_closing_script_tag_cannot_end_the_spec(tmp_path):
     out, _, _ = B.build(spec_dir(tmp_path, one([{'title': 'x</script><b>', 'box': [1, 1, 5, 5]}])))
-    assert out.read_text().count('</script>') == 2
+    assert out.read_text().count('</script>') == 3  # the spec, the shared spotlight and the viewer
     assert page_spec(out)['screens'][0]['steps'][0]['title'] == 'x</script><b>'
