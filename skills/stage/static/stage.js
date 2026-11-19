@@ -57,6 +57,7 @@
 import { applyFrame, beingSaid, settled, stepLabel } from "./scene.js";
 import { layoutLanes, renderLanes } from "./lanes.js";
 import { layoutMap, renderMap } from "./map.js";
+import { paintScreen, renderScreen } from "./screenboard.js";
 
 const VENDOR = ["highlight.min.js", "marked.min.js", "purify.min.js"]
   .map((f) => new URL("vendor/" + f, import.meta.url).href);
@@ -88,6 +89,7 @@ const ICON_PATHS = {
   page: '<path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M9.5 1.5v3h3M5.5 8.5h5M5.5 11h5"/>',
   change: '<path d="M4.5 2v6M1.5 5h6M8.5 12.5h6"/>',
   points: '<path d="M6 4h8M6 8h8M6 12h8"/><circle cx="2.6" cy="4" r=".9"/><circle cx="2.6" cy="8" r=".9"/><circle cx="2.6" cy="12" r=".9"/>',
+  screen: '<rect x="1.5" y="2" width="13" height="9" rx="1.4"/><path d="M6 14h4M8 11v3"/><rect x="4" y="4.5" width="4" height="3" rx=".6"/>',
   scene: '<rect x="1.5" y="2.5" width="5.5" height="5" rx="1.2"/><rect x="9" y="2.5" width="5.5" height="5" rx="1.2"/><rect x="1.5" y="10" width="13" height="3.5" rx="1.2"/>',
 };
 const icon = (kind) => `<svg class="ico" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[kind] || ICON_PATHS.page}</svg>`;
@@ -171,6 +173,10 @@ function metaText(src) {
   if (src.format === "diagram") return "Mermaid source";
   if (src.format === "scene") { const n = (src.parts || []).length; return `Scene · ${n} ${n === 1 ? "part" : "parts"}`; }
   if (src.format === "visual") return { sequence: "Sequence diagram", map: "Architecture map" }[src.tool] || "Flowchart";
+  if (src.format === "screen") {
+    const n = (src.screens || []).reduce((a, s) => a + (s.steps || []).length, 0);
+    return `Screen · ${n} ${n === 1 ? "part" : "parts"} · ${src.spec}`;
+  }
   return "Board";
 }
 
@@ -598,6 +604,13 @@ function renderInline(v, seq) {
       if (!current()) return;
       if (window.DOMPurify) paintScene(v, box, src); else note(box, "The scene could not be made safe to show, so it is not shown.", retryLibs);
     });
+  } else if (src.format === "screen") {
+    // An explainer: one screen at a time, the part being said lit and explained beside it (screenboard.js).
+    const imageUrl = (path) => `${WC.api.BASE}mounts/${encodeURIComponent(src.mount)}/` +
+      String(path).split("/").map(encodeURIComponent).join("/");
+    renderScreen(box, src, { imageUrl, embedded });
+    if (!window.DOMPurify) libsReady().then(() => { if (current() && window.DOMPurify) { renderScreen(box, src, { imageUrl, embedded }); paintFrame(v, box); } });
+    requestAnimationFrame(() => { if (current()) paintFrame(v, box); });
   } else if (src.format === "diagram") {
     // A Mermaid board saved before the stage stopped drawing Mermaid: its source, as written.
     box.className = "md legacy";
@@ -1261,6 +1274,10 @@ function paintFrame(v, box, animate = false) {
     const said = [...box.querySelectorAll("[data-key]")].filter((el) => { const on = cur.has(el.dataset.key); el.classList.toggle("s-cur", on); return on; });
     box.classList.toggle("s-on", said.length > 0);  // the parts shown before the one being said step back
     if (!done.focused.length) done.focused = said;
+  }
+  if (box.classList.contains("screenb")) {
+    paintScreen(box, scene, n, beingSaid);  // the screen of the part being said, lit, with its text beside it
+    done.focused = [];  // the board fits its pane: nothing to scroll into view
   }
   if (box.classList.contains("grid")) {
     const cur = new Set(beingSaid(scene, n).filter((k) => k.startsWith("row#")));

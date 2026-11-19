@@ -7,6 +7,7 @@
 
 <source>: a project file (path[#fragment]), http(s)://..., session:<kind>/<slug>,
 code:<path>:<a>-<b>[ highlight x[-y]], change:<path>[ since <rev>] (what changed, read from git),
+screen:<explainer.json> (a screen explained part by part),
 or table:- / sequence:- / flowchart:- / map:- / diagram:- with the body on stdin. The stage draws no
 Mermaid: diagram:- turns a Mermaid graph or state diagram into a flowchart and a sequenceDiagram into a
 sequence, and refuses any other kind.
@@ -89,6 +90,12 @@ def _complete_source(cwd: str, sid: str, source: dict) -> tuple:
         return source, model.dir_rev(folder)
     if source["type"] == "session":
         source["sid"] = _session_sid(cwd, source["kind"], source["slug"])
+    if source["type"] == "inline" and source.get("format") == "screen":
+        # the screen's images are served from the spec's folder, as a file board's page is
+        folder = Path(cwd).resolve() / source["dir"]
+        mount = model.mount_name(folder, Path(cwd))
+        wc.register_mount(sid, mount, str(folder), kind=KIND)
+        source["mount"] = mount
     return source, 0
 
 
@@ -287,7 +294,11 @@ def main(argv=None) -> int:
         if args.cmd == "show":
             stdin = sys.stdin.read() if args.source.endswith(":-") else None
             source = model.parse_source(args.source, Path(cwd), stdin)
-            res = show(cwd, args.name, source, title=args.title, background=args.background, slug=args.slug)
+            extra = None
+            if source.get("format") == "screen":  # on its own, Back and Next step through the parts
+                extra = {"scene": model.screen_scene(source, args.title or source.get("title") or args.name)}
+            res = show(cwd, args.name, source, title=args.title or source.get("title"), background=args.background,
+                       slug=args.slug, extra=extra)
             print(res["url"])
             if res["behind"]:
                 print("stage: a call is on, so this page opened as a background tab; to talk about it, put "

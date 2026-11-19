@@ -355,11 +355,84 @@ def parse_source(raw: str, cwd: Path, stdin_text: str | None = None) -> dict:
         return code_source(cwd, raw[len("code:"):])
     if raw.startswith("change:"):
         return change_source(cwd, raw[len("change:"):])
+    if raw.startswith("screen:"):
+        return screen_source(cwd, raw[len("screen:"):])
     target, _, fragment = raw.partition("#")
     path = _inside(cwd, target)
     if not path.parent.is_dir():
         raise SourceError(f"no such folder in the project: {path.parent}")
     return {"type": "file", "path": path.relative_to(cwd.resolve()).as_posix(), "fragment": fragment or None}
+
+
+_TAGS = re.compile(r"<[^>]*>")
+
+
+def plain_text(markup) -> str:
+    """Inline HTML as the words it says: a part's title as a sentence names it."""
+    import html as _html
+    return re.sub(r"\s+", " ", _html.unescape(_TAGS.sub("", str(markup or "")))).strip()
+
+
+def screen_source(cwd: Path, raw: str) -> dict:
+    """An explainer spec (skills/explainer) as a screen board: its screens, each part keyed p1, p2, ... in order.
+    An image stays in the spec's folder, which the stage serves (stage.py mounts it), so the view holds only
+    the path, the image's size and its crop; every box is in the drawn screen's pixels, as the explainer draws it."""
+    from skills.explainer import build as explainer  # the explainer's own checks, so the two never disagree
+    rel = raw.strip()
+    if not rel:
+        raise SourceError("expected screen:<path to an explainer.json in the project>")
+    path = _inside(cwd, rel)
+    if not path.is_file():
+        raise SourceError(f"no such explainer spec in the project: {rel}")
+    try:
+        spec = json.loads(path.read_text())
+    except ValueError as e:
+        raise SourceError(f"screen:{rel}: not JSON ({e})") from None
+    if not isinstance(spec, dict):
+        raise SourceError(f"screen:{rel}: the spec must be a JSON object")
+    base = path.parent
+    for s in spec.get("screens") or []:
+        img = isinstance(s, dict) and s.get("image")
+        if img:
+            try:
+                (base / img).resolve().relative_to(base.resolve())
+            except ValueError:
+                raise SourceError(f"screen:{rel}: image {img} is outside the spec's folder") from None
+    try:
+        norm = explainer.normalize(spec, base, embed=False)
+    except explainer.SpecError as e:
+        raise SourceError(f"screen:{rel}: {e}") from None
+    n, screens = 0, []
+    for s in norm["screens"]:
+        steps = []
+        for st in s["steps"]:
+            n += 1
+            steps.append({"id": f"p{n}", **{k: st[k] for k in ("title", "text", "facts", "examples", "boxes", "focus")
+                                            if st.get(k)}})
+        screens.append({**{k: s[k] for k in ("id", "label", "phase", "title", "source", "image", "w", "h", "full",
+                                              "off", "html", "alt") if s.get(k) is not None}, "steps": steps})
+    root = cwd.resolve()
+    return {"type": "inline", "format": "screen", "spec": path.relative_to(root).as_posix(),
+            "dir": base.relative_to(root).as_posix(),
+            **{k: norm[k] for k in ("title", "tag", "link", "footer") if norm.get(k)}, "screens": screens}
+
+
+def screen_parts(source: dict) -> list:
+    """A screen board's parts in order, for its scene: each step's key id and its title as words."""
+    return [{"id": st["id"], "name": plain_text(st.get("title"))} for s in source["screens"] for st in s["steps"]]
+
+
+def screen_model(source: dict) -> scene.SceneModel:
+    """A screen board's scene model: one part per step, named by its title, so a sentence that says a title
+    brings that part, and `part p3` or `part "Press Create"` points at one."""
+    return scene.parts_model(screen_parts(source))
+
+
+def screen_scene(source: dict, title: str) -> dict:
+    """The steps of a screen board shown on its own: the whole first screen, then one part lit per step."""
+    m = screen_model(source)
+    built, _ = scene.compile_scene(m, [[scene.Verb("focus", keys=[k])] for k in m.keys], title)
+    return built
 
 
 def mermaid_source(raw: str, body: str, root: Path | None = None) -> dict:

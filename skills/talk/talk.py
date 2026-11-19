@@ -423,10 +423,10 @@ def align_words(text: str, start: int, end: int, heard: list, duration: float, o
             for (a, b), (t0, t1) in zip(tokens, times)]
 
 
-BOARD_KINDS = ("code", "change", "diagram", "table", "sequence", "flowchart", "map", "scene", "page")
+BOARD_KINDS = ("code", "change", "diagram", "table", "sequence", "flowchart", "map", "scene", "page", "screen")
 VISUAL_KINDS = ("sequence", "flowchart", "map")  # drawn by the shared tools from a JSON spec; any other body is Mermaid
-STEPPED_KINDS = VISUAL_KINDS + ("scene",)  # come in with the sentences that name their parts unless verbs reveal them
-LINE_KINDS = ("code", "change", "page")  # one-line tags: their source is named on the tag, so no body follows
+STEPPED_KINDS = VISUAL_KINDS + ("scene", "screen")  # come in with the sentences that name their parts unless verbs reveal them
+LINE_KINDS = ("code", "change", "page", "screen")  # one-line tags: their source is named on the tag, so no body follows
 KIND_ALIASES = {"mermaid": "diagram", "graph": "diagram", "flow": "diagram",
                 "grid": "table", "diff": "change", "edit": "change", "file": "page", "url": "page"}
 CHANGE_FIELDS = ("type", "format", "path", "rev", "hunks", "added", "removed", "more", "lang")
@@ -733,6 +733,8 @@ def scene_model(item: dict) -> stage_scene.SceneModel | None:
         return stage_scene.map_model(item["visual"]["spec"])
     if kind == "scene":
         return stage_scene.parts_model(item["visual"]["parts"])
+    if kind == "screen":
+        return stage_model.screen_model(item["visual"])
     return None
 
 
@@ -932,7 +934,8 @@ class Board:
         if kind in LINE_KINDS:
             self.spill += self.close_block()
             cue, n = self.new_cue(), len(self.items)
-            {"code": self.add_code, "change": self.add_change, "page": self.add_page}[kind](rest, title)
+            {"code": self.add_code, "change": self.add_change, "page": self.add_page,
+             "screen": self.add_screen}[kind](rest, title)
             if len(self.items) > n:
                 cue["view"] = self.items[-1]["view"]
             return True
@@ -1001,7 +1004,7 @@ class Board:
         if kind == "page":
             self.problem(f'point not shown: "{name}" is a page, which has no lines, rows or nodes to light')
             return
-        if kind == "scene":
+        if kind in ("scene", "screen"):
             self.point_part(item, name, m)
             return
         if kind in VISUAL_KINDS:
@@ -1088,9 +1091,12 @@ class Board:
     def point_part(self, item: dict, name: str, m: re.Match) -> None:
         """A point at a scene's part, by its id or its name."""
         if not m["part"]:
-            self.problem(f'point not shown: "{name}" is a scene; use part ID')
+            self.problem(f'point not shown: "{name}" is a {item["kind"]}; use part ID')
             return
-        keys, _ = stage_scene.resolve(scene_model(item), "part " + m["part"].strip(), name)
+        want = m["part"].strip()
+        if item["kind"] == "screen" and want.isdigit():  # a screen's parts are p1, p2, ... in order: part 3 is p3
+            want = "p" + want
+        keys, _ = stage_scene.resolve(scene_model(item), "part " + want, name)
         if not keys:
             self.problem(f'point not shown: no part {m["part"].strip()} in "{name}"')
             return
@@ -1301,6 +1307,21 @@ class Board:
             return
         title = title or f"What changed in {Path(src['path']).name}"
         self.add({"kind": "change", "title": title, **src})
+
+    def add_screen(self, spec: str, title: str) -> None:
+        """[[show screen: <explainer.json in the code folder> | title]]: a screen explained part by part. A sentence
+        that says a part's title brings that part lit, and [[point: part 3]] or [[point: part "title"]] lights one."""
+        try:
+            if not spec.strip():
+                raise stage_model.SourceError("expected an explainer.json in the code folder")
+            if not self.code_dir:
+                raise stage_model.SourceError(f"talk was started without --code: {spec.strip()}")
+            src = stage_model.parse_source("screen:" + spec.strip(), self.code_dir)
+        except stage_model.SourceError as err:
+            self.problem(f"screen not shown, {err}")
+            return
+        self.add({"kind": "screen", "title": title or src.get("title") or Path(spec.strip()).stem,
+                  "visual": src, "ident": spec.strip()})
 
     def add_page(self, spec: str, title: str) -> None:
         """[[show page: <file in the code folder, address or session:kind/slug> | title]]: a page as a board of
