@@ -133,6 +133,11 @@ Then:
   New components go in a **new `<style>` block** after the `<!-- /framework:css -->` marker.
 - If a slide needs something the framework doesn't have, that's a per-deck override — add
   it to that new `<style>` block, never by editing `framework/` for a one-off.
+- **Run the theme's adapt step.** If the theme's folder (`~/.config/slides/themes/<theme>/`)
+  has an `adapt.py`, run `python3 <that folder>/adapt.py <deck>.html` after writing or changing
+  slides and before the layout audit, and read that folder's `README.md`: a theme that copies a
+  company template moves margins, rebuilds the cover and adds a footer, and the README's layout
+  limits (where the title band ends, where the footer starts) bind the audit like overflow does.
 - Per-deck content is exactly: the `<title>`, the cover slide, the content slides, the
   `.floatnav` links, and any extra `<style>` blocks.
 
@@ -153,7 +158,8 @@ Adding slides to a deck someone already presented from.
    `.floatnav`, add the section link there too, and give the slide the matching `id`.
 3. **Prefer an existing component.** If the new slide needs something genuinely new,
    add a new `<style>` block; do not grow the shared one.
-4. **Run the layout audit** (below) on the whole deck, not only the new slides — a slide
+4. **Run the theme's adapt step**, if the theme has one (Job 1), then
+   **run the layout audit** (below) on the whole deck, not only the new slides — a slide
    added between two others can push nothing, but a component copied from another deck
    often lands with the wrong `top`.
 5. **Update `notes.md`** — the running order table and its timings are now wrong.

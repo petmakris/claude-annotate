@@ -79,6 +79,10 @@ echo "DECK_PATH=$DECK_PATH"; echo "DECK_NAME=$DECK_NAME"
    If the deck's `theme:css snapshot of '<name>'` comment names a theme that has a
    `README.md` in `~/.config/slides/themes/<name>/`, read that too: it documents the
    components that theme adds.
+   If that folder also has an `adapt.py`, run `python3 <folder>/adapt.py "$DECK_PATH"` after
+   every edit you make, before you report the edit done: it moves the deck onto the theme's
+   company template (margins, cover, footer), and the README's layout limits bind every slide —
+   nothing may cross into the title band or the footer it describes.
 
    Then, in the same turn, tell the user in **two or three lines** what you loaded and the two or
    three constraints you will be holding to. Not a summary of the file — the specific limits that
