@@ -54,6 +54,7 @@ Run both from `$(claude-annotate root)/skills/spotlight/`.
   "out": "my-spotlight.html",
   "footer": "Where the screens come from, shown under each screen",
   "css": "stage.css (optional: styles for HTML screens)",
+  "theme": "evooq (optional: defaults to the slides config's theme; its spotlight.css restyles the page)",
   "screens": [
     {
       "id": "create",

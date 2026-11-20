@@ -87,3 +87,20 @@ def test_text_holding_a_closing_script_tag_cannot_end_the_spec(tmp_path):
     out, _, _ = B.build(spec_dir(tmp_path, one([{'title': 'x</script><b>', 'box': [1, 1, 5, 5]}])))
     assert out.read_text().count('</script>') == 3  # the spec, the shared spotlight and the viewer
     assert page_spec(out)['screens'][0]['steps'][0]['title'] == 'x</script><b>'
+
+
+def test_the_slides_theme_spotlight_css_is_embedded(tmp_path, monkeypatch):
+    theme = tmp_path / 'cfg' / 'slides' / 'themes' / 'brand'
+    theme.mkdir(parents=True)
+    (theme / 'spotlight.css').write_text(':root{--accent:#6A4DFC}')
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path / 'cfg'))
+    p = spec_dir(tmp_path, dict(one([{'title': 'x'}]), theme='brand', out='o.html'))
+    out, _, _ = B.build(p)
+    assert ':root{--accent:#6A4DFC}' in out.read_text()
+
+
+def test_no_theme_file_leaves_the_page_unthemed(tmp_path, monkeypatch):
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path / 'none'))
+    p = spec_dir(tmp_path, dict(one([{'title': 'x'}]), out='o.html'))
+    out, _, _ = B.build(p)
+    assert '--accent:#6A4DFC' not in out.read_text()

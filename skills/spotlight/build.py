@@ -173,12 +173,22 @@ def render(spec, extra_css=''):
             .replace('__SPEC__', data))
 
 
+def theme_css(raw):
+    """The slides theme's spotlight.css: the spec's "theme", else the slides config's, else none.
+    A theme that copies a company template ships one so spotlights match its decks."""
+    sys.path.insert(0, str(HERE.parent / 'slides' / 'framework'))
+    import slides_config
+    name = raw.get('theme') or slides_config.load_config().get('theme')
+    f = slides_config.config_dir() / 'themes' / str(name) / 'spotlight.css' if name else None
+    return f.read_text() if f and f.is_file() else ''
+
+
 def build(spec_path):
     spec_path = pathlib.Path(spec_path).resolve()
     base = spec_path.parent
     raw = json.loads(spec_path.read_text())
     spec = normalize(raw, base)
-    extra = (base / raw['css']).read_text() if raw.get('css') else ''
+    extra = theme_css(raw) + ((base / raw['css']).read_text() if raw.get('css') else '')
     name = raw.get('out') or f"{slug(raw.get('ticket') or raw['title'])}.html"
     out = (base / name).resolve()
     out.write_text(render(spec, extra))
