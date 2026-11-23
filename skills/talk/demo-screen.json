@@ -1,0 +1,20 @@
+{
+ "tag": "Talk · Stage",
+ "title": "The stage's header",
+ "screens": [
+  {
+   "id": "header",
+   "label": "Stage header",
+   "source": "A copy of the stage's own header, drawn as HTML",
+   "html": "<div style=\"display:flex;align-items:center;gap:14px;font:500 15px/1 system-ui,sans-serif;padding:6px 4px\"><span class=\"arrows\" style=\"display:inline-flex;gap:6px;font-size:20px;color:#5F6368\">&lsaquo; &rsaquo;</span><span class=\"count\" style=\"padding:6px 10px;border-radius:8px;background:#F1F3F4;color:#202124\">2 of 5 &#9662;</span><span class=\"follow\" style=\"padding:8px 14px;border-radius:14px;background:#1967D2;color:#fff\">Follow the voice</span><span style=\"margin-left:24px;font-weight:600;color:#202124\">How a turn waits</span></div>",
+   "steps": [
+    {"title": "A screen board explains a screen one part at a time",
+     "text": "Each part comes in with the sentence that says its title, lit on the screen and explained beside it."},
+    {"focus": ".arrows", "title": "The arrows walk the boards", "text": "Back and forward through every board of the call."},
+    {"focus": ".count", "title": "The counter opens the list of boards", "text": "Newest first, with the key points last."},
+    {"focus": ".follow", "title": "Follow the voice puts the stage back on the voice",
+     "text": "It shows while a board you picked by hand is in front."}
+   ]
+  }
+ ]
+}

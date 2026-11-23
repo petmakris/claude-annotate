@@ -1,0 +1,71 @@
+{
+  "_about": "The one list of block kinds. skills/annotate/kinds.py reads it for Python and static/kinds.js hands it to the page; no other file names a kind list. To add a kind: add it here, add its renderer name to render.py, and its page painter to script-blocks.js (see CLAUDE.md).",
+  "kinds": {
+    "markdown": {
+      "renderer": "markdown_text", "server_drawn": false, "framed": false,
+      "whole_only": false, "not_text": false, "maximizable": false,
+      "fit_to_width": false, "picture": false, "rebuild": false, "code": "pane"
+    },
+    "sequence": {
+      "renderer": "vz_sequence", "server_drawn": true, "framed": true,
+      "whole_only": true, "not_text": true, "maximizable": true,
+      "fit_to_width": true, "picture": true, "rebuild": false, "code": "pane"
+    },
+    "map": {
+      "renderer": "vz_map", "server_drawn": true, "framed": true,
+      "whole_only": true, "not_text": true, "maximizable": true,
+      "fit_to_width": true, "picture": true, "rebuild": false, "code": "pane"
+    },
+    "flowchart": {
+      "renderer": "flowchart_svg", "server_drawn": true, "framed": true,
+      "whole_only": true, "not_text": true, "maximizable": true,
+      "fit_to_width": true, "picture": true, "rebuild": false, "code": "pane"
+    },
+    "choice": {
+      "renderer": "spec", "deprecated": "new questions use `decisions`", "server_drawn": false, "framed": true,
+      "whole_only": true, "not_text": true, "maximizable": false,
+      "fit_to_width": false, "picture": false, "rebuild": true, "code": "pane"
+    },
+    "mockup": {
+      "renderer": "spec", "server_drawn": false, "framed": true,
+      "whole_only": false, "not_text": true, "maximizable": true,
+      "fit_to_width": true, "picture": false, "rebuild": true, "code": "refused",
+      "code_message": "a mockup block takes no anchors — its sandboxed iframe has nowhere to put a pane"
+    },
+    "explain": {
+      "renderer": "explain_view", "server_drawn": true, "framed": true,
+      "whole_only": false, "not_text": false, "maximizable": false,
+      "fit_to_width": false, "picture": false, "rebuild": true, "code": "dropped"
+    },
+    "compare": {
+      "renderer": "spec", "server_drawn": false, "framed": true,
+      "whole_only": false, "not_text": true, "maximizable": true,
+      "fit_to_width": false, "picture": false, "rebuild": true, "code": "refused",
+      "code_message": "a compare block takes no anchors — its two panes already are the code; put prose and anchors in a markdown block beside it"
+    },
+    "decisions": {
+      "renderer": "spec", "painter": "decisions", "server_drawn": false, "framed": false,
+      "whole_only": false, "not_text": true, "maximizable": false,
+      "fit_to_width": false, "picture": false, "rebuild": true, "code": "refused",
+      "code_message": "a decisions block takes no anchors — each decision is its own comment target; put code in a markdown block beside it"
+    },
+    "facts": {
+      "renderer": "spec", "painter": "facts", "server_drawn": false, "framed": true,
+      "whole_only": true, "not_text": true, "maximizable": false,
+      "fit_to_width": false, "picture": false, "rebuild": true, "code": "refused",
+      "code_message": "a facts block takes no anchors — it is a strip of short facts, commented whole"
+    },
+    "jobs": {
+      "renderer": "spec", "painter": "jobs", "server_drawn": false, "framed": true,
+      "whole_only": false, "not_text": true, "maximizable": false,
+      "fit_to_width": false, "picture": false, "rebuild": true, "code": "refused",
+      "code_message": "a jobs block takes no anchors — each job is its own comment target; put code in a markdown block beside it"
+    }
+  },
+  "retired": {
+    "diagram": {
+      "message": "removed — use `flowchart`, or a fenced code block in `markdown` for anything it cannot draw",
+      "whole_only": true, "not_text": true
+    }
+  }
+}

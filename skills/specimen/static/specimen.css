@@ -1,0 +1,426 @@
+/* specimen.css — one page: a header, the populated instance as a tree, then
+   a block for every type the tree never reached.
+
+   One theme, light, and no `prefers-color-scheme` block. This page is read
+   next to source code and screenshotted into tickets and wiki pages, where a
+   dark rendering is the odd one out, and two themes meant every tint had to
+   be picked twice and checked twice.
+
+   Contrast is the constraint the tokens are chosen against. Every colour here
+   is at least 7:1 on the background it actually sits on — measured, not
+   eyeballed — including the muted ones, because the muted text on this page is
+   a field's declared type and its provenance rather than decoration. The
+   lowest is the unset dash at 7.3:1 and the null badge at 7.5:1 on its own
+   tint; everything else is 7.9:1 or better. The null token keeps its own
+   colour everywhere, because a null being visible is what this page is for. */
+:root {
+  --bg: #eef0f3; --card: #fff; --border: #ccd2da; --rail: #b9c1cc;
+  --grid: #dfe4ea;
+  --text: #0f141a; --muted: #454d59; --accent: #1444c4;
+  --null: #930e05; --null-bg: #fbe3e0;
+  --unset: #4f5765;
+  --key: #12358f; --index: #7a4c00;
+  --g1: #0a5437; --g1-bg: #e4f1ea; --g2: #4f2496; --g2-bg: #ede6fa;
+  --leaf-bg: #f7f8fa;
+  --unhandled: #7d3f05; --unhandled-bg: #fbeeda;
+  --behaviour: #0a5437; --behaviour-bg: #e9f2ed;
+  --radius: 8px;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0; padding: 1.5rem 1.5rem 4rem; background: var(--bg); color: var(--text);
+  font: 15px/1.5 var(--sans);
+}
+
+/* Full width. A deep record table is 11 columns and a deep tree is indented
+   four levels; a reading-width column would put both behind a sideways scroll
+   while leaving half the screen empty. Prose is capped where it appears — the
+   header note and a block's reason — because a 200-character line is unreadable
+   whatever the table next to it needs. */
+main[data-wc-root] { max-width: none; margin: 0; }
+
+/* A type name is a button: clicking it copies the fully qualified name, which
+   is what an IDE's class search takes. It stays quiet — no border, no chrome —
+   until the pointer is on it, because these names sit inside sentences and
+   table headers and would be noise if every one of them wore a control. */
+.specimen-pill {
+  appearance: none; background: none; border: 0; padding: 0 .25rem;
+  margin: 0 -.25rem; font: inherit; color: inherit; cursor: copy;
+  border-radius: 4px; text-align: inherit;
+}
+.specimen-pill:hover {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
+}
+.specimen-pill-copied, .specimen-pill-copied:hover {
+  background: color-mix(in srgb, var(--g1) 20%, transparent);
+  color: var(--g1);
+}
+/* The header and a block's heading show the whole name, which has to be free
+   to wrap where a table cell's copy of it is not. */
+.specimen-pill-fqn { white-space: normal; text-align: left; word-break: break-word; }
+.specimen-grouphead .specimen-pill { color: inherit; }
+
+/* These rules sit ABOVE every context rule on purpose. `color: inherit` has to
+   beat the browser's own button colour, and at equal specificity source order
+   decides — left below, the pill would have taken the muted grey off a
+   declared type and the key blue off a column name. */
+
+
+.specimen-header { margin-bottom: 1.5rem; }
+.specimen-header h1 { font-size: 1.3rem; font-weight: 650; margin: 0 0 .25rem; }
+.specimen-meta {
+  margin: 0 0 .5rem; color: var(--muted); font-size: .82rem;
+  font-family: var(--mono); word-break: break-word;
+}
+.specimen-note {
+  margin: 0; color: var(--muted); font-size: .85rem; max-width: 60ch;
+}
+.specimen-capture {
+  margin: .3rem 0 0; color: var(--muted); font-size: .8rem; max-width: 60ch;
+  font-family: var(--mono); word-break: break-word;
+}
+
+.specimen-idle, .specimen-error { color: var(--muted); text-align: center; padding: 3rem 1rem; }
+.specimen-error { color: var(--null); }
+
+.specimen-type {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 1rem 1.2rem; margin-bottom: 1.1rem; overflow-x: auto;
+  box-shadow: 0 1px 2px rgba(15, 20, 26, .06);
+}
+.specimen-type h2 {
+  font-size: .88rem; font-weight: 600; font-family: var(--mono); margin: 0 0 .7rem;
+  word-break: break-all; color: var(--text);
+}
+
+/* The tree.
+
+   A row is a LINE, not a grid of columns: name, a colon, the value, and then
+   the declaration detail pushed to the end and dimmed. Columns were what made
+   the first version of this page read as a table with indentation rather than
+   as something you explore. Everything in the tree is monospace, because
+   alignment here comes from the indent rail, not from column widths. */
+.specimen-tree { padding-bottom: .5rem; font-family: var(--mono); }
+.specimen-tree > h2 { font-family: var(--sans); }
+
+.specimen-field-row {
+  display: flex;
+  align-items: baseline;
+  /* No row gap. A flex gap would put a space between the name and its colon
+     whenever the nullability mark between them is empty, which is most rows.
+     The few places that need air ask for it themselves. */
+  gap: 0;
+  padding: .06rem .4rem .06rem .2rem;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: .86rem;
+  line-height: 1.7;
+  white-space: nowrap;
+}
+.specimen-field-row:hover { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+
+.specimen-item-head, .specimen-root-head { gap: .4rem; }
+.specimen-item-head > *, .specimen-root-head > * { margin: 0; }
+.specimen-root-head { font-weight: 650; }
+.specimen-item-head > .specimen-field { color: var(--index); font-weight: 650; }
+
+/* The rail. It is the only thing saying what is inside what, so it is drawn,
+   not implied by whitespace, and it lights up with the node it belongs to. */
+.specimen-node-body {
+  margin-left: .48rem;
+  padding-left: .85rem;
+  border-left: 1px solid var(--rail);
+}
+.specimen-node-body:hover { border-left-color: var(--accent); }
+
+.specimen-toggle, .specimen-lead {
+  display: inline-block; width: .85rem; flex: 0 0 .85rem; text-align: center;
+  margin-right: .25rem;
+}
+.specimen-toggle {
+  appearance: none; background: none; border: 0; padding: 0;
+  font: inherit; font-size: .7rem; color: var(--muted); cursor: pointer; line-height: 1;
+}
+.specimen-toggle:hover { color: var(--accent); }
+
+/* `name: value` is the whole line. The key carries its own colour so the eye
+   lands on names when scanning and on values when reading across. */
+.specimen-field { color: var(--key); font-weight: 600; }
+.specimen-sep { color: var(--unset); }
+.specimen-value { color: var(--text); }
+.specimen-field-row > .specimen-value, .specimen-field-row > .specimen-preview {
+  margin-left: .4rem;
+}
+/* An object or a list says what it IS here; what it is worth is underneath. */
+.specimen-count { color: var(--muted); font-style: italic; }
+
+/* What a closed node holds, so a long tree can be skimmed without opening
+   every node. Rendered always, shown only while the node is closed — a node
+   that is open is already showing the real thing. */
+.specimen-preview {
+  color: var(--muted); font-style: italic;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.specimen-node:not(.specimen-closed) > .specimen-field-row > .specimen-preview { display: none; }
+
+/* Everything about the declaration rather than the value, pushed to the end
+   and dim. It is reference detail: present, never competing with the value. */
+/* Held back until the line is under the cursor. On every row at once it
+   competes with the values, and the same `BigDecimal chosen File.java:50`
+   twenty times over is what a reader is trying to look past. */
+.specimen-meta-group {
+  margin-left: auto; padding-left: 1.5rem;
+  display: flex; align-items: baseline; gap: .5rem;
+  font-size: .76rem; color: var(--muted); min-width: 0;
+  opacity: .45; transition: opacity .1s;
+}
+.specimen-field-row:hover .specimen-meta-group { opacity: 1; }
+.specimen-declared { color: var(--muted); }
+.specimen-provenance { color: var(--muted); }
+/* The source reference is the part that yields when a line runs out of room:
+   the field name is what the reader scans, and the editor button's tooltip
+   carries the same file and line either way. */
+.specimen-shape-from {
+  display: flex; min-width: 0; max-width: 16rem;
+}
+.specimen-shape-file { overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; }
+.specimen-shape-line { flex: 0 0 auto; }
+
+/* One character, not the word `@Nullable` spelled out on every second row.
+   The fact is one bit; the title attribute spells it for anyone who asks. */
+.specimen-nullability {
+  font-weight: 700; font-size: .8rem; cursor: help; margin-left: .15rem;
+}
+/* Scoped to the tree. In the table the mark is a COLUMN, and hiding an empty
+   one pulls every cell after it one column to the left. */
+.specimen-field-row > .specimen-nullability:empty { display: none; }
+.specimen-nullability-nullable { color: var(--unhandled); }
+.specimen-nullability-unmarked { color: var(--unset); }
+
+/* The editor button opens the declaration through the daemon, so it is an
+   action and not a link. Dim rather than hidden: a jump the reader cannot see
+   is a jump they will not know to make. */
+.specimen-open {
+  appearance: none; background: none; border: 0; padding: 0;
+  font: inherit; font-size: .8rem; color: var(--muted); cursor: pointer; opacity: .4;
+}
+.specimen-field-row:hover .specimen-open { opacity: 1; }
+.specimen-open:hover { color: var(--accent); }
+.specimen-open-failed { color: var(--null); opacity: 1; }
+
+/* Asking is deliberate. The row swallows its own clicks so that reading a
+   tree never opens a composer; this is the one control that lets a click
+   through to the runtime. */
+.specimen-ask {
+  appearance: none; background: none; border: 0; padding: 0;
+  font: inherit; font-size: .8rem; color: var(--muted); cursor: pointer; opacity: .4;
+}
+.specimen-field-row:hover .specimen-ask { opacity: 1; }
+.specimen-ask:hover { color: var(--accent); }
+
+.specimen-controls { margin: .7rem 0 0; display: flex; gap: .5rem; }
+.specimen-control {
+  appearance: none; background: var(--card); color: var(--muted);
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: .12rem .6rem; font: inherit; font-size: .76rem; cursor: pointer;
+}
+.specimen-control:hover { color: var(--text); border-color: var(--accent); }
+
+/* The null token: its own colour, everywhere, so a null reads as a null
+   whether it is sitting quietly in a tree or being scanned for in a
+   screenshot. */
+.specimen-null {
+  font-weight: 700; color: var(--null); background: var(--null-bg);
+  padding: 0 .4rem; border-radius: 3px;
+}
+.specimen-row-null { background: color-mix(in srgb, var(--null) 5%, transparent); }
+
+.specimen-unset { color: var(--unset); }
+
+/* The blocks below hold rows that never got a value, so their lines have no
+   value to read across to. */
+.specimen-orphan-body { font-family: var(--mono); }
+
+/* The table view.
+
+   One table per type, one ROW per instance of it, one column per field. Three
+   contributors are three lines under each other; the tree cannot show that,
+   because once each item is expanded its fields are a screen away from its
+   siblings'. Here columns are the point, so this is a real <table> and lets
+   the browser size the columns to their content. */
+.specimen-flat { font-family: var(--mono); position: relative; }
+.specimen-flat > h2 { font-family: var(--sans); }
+
+/* The runtime inserts a comment composer as the anchor element's next sibling,
+   and the anchor here is a <th>. Taking it out of flow is what stops it from
+   becoming a stray cell and tearing the header row apart. */
+.specimen-flat .wc-composer {
+  position: absolute; z-index: 5; left: 0; width: min(30rem, 92%);
+}
+
+.specimen-record-block { margin-bottom: 1.5rem; }
+.specimen-record-block:last-child { margin-bottom: 0; }
+.specimen-record-caption {
+  margin: 0 0 .35rem; display: flex; align-items: baseline; gap: .6rem;
+}
+.specimen-record-type { font-weight: 650; font-size: .9rem; color: var(--text); }
+.specimen-record-count { font-family: var(--sans); font-size: .74rem; color: var(--muted); }
+
+.specimen-record-table { border-collapse: collapse; font-size: .82rem; }
+/* Values align right, every one of them. A column of numbers has to line up on
+   its last digit to be comparable at all, and a column where some cells are
+   right and others left — a spanning null against the value beside it — reads
+   as a cell overflowing rather than as two different values. The row label is
+   an identifier and stays left; a group header is a label over a RANGE of
+   columns, not a value, so it centres over the span it names. */
+.specimen-record-table th, .specimen-record-table td {
+  text-align: right; vertical-align: baseline;
+}
+.specimen-record-table .specimen-record-path,
+.specimen-record-table .specimen-th-path { text-align: left; }
+/* A leaf column next to an open group reaches down with rowspan, so it has to
+   sit on the bottom row or its name floats a level above the names beside it. */
+.specimen-record-table th { vertical-align: bottom; }
+.specimen-record-table th, .specimen-record-table td {
+  padding: .3rem .5rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.specimen-record-table tbody tr:last-child td { border-bottom: 0; }
+
+/* Every column draws its own line, faint. Without them a cell that spans a
+   group — a null across its four columns — is indistinguishable from a cell
+   whose text has simply overflowed into its neighbour. The spanning cell is
+   then obvious precisely because the line that would have been inside it is
+   the one that is missing. */
+.specimen-record-table th, .specimen-record-table td {
+  border-right: 1px solid var(--grid);
+}
+.specimen-record-table th:last-child, .specimen-record-table td:last-child {
+  border-right: 0;
+}
+.specimen-record-table tbody tr:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
+/* A column IS a (type, field) pair, so the header is where the anchor and the
+   controls live — one thread per column rather than one per cell. */
+.specimen-th { border-bottom-color: var(--rail) !important; cursor: pointer; }
+
+/* Nested columns.
+
+   A composite column opens into its own fields as real columns under a
+   spanning header, and those can open again — so the header is a tree drawn
+   with colspan and rowspan. Each level takes a tint and an edge, because two
+   groups side by side with no line between them read as one wide group. */
+.specimen-grouphead {
+  text-align: center !important; font-weight: 650;
+  padding: .15rem .6rem !important; border-radius: 4px 4px 0 0;
+}
+.specimen-grouphead .specimen-th-name { color: inherit; }
+.specimen-grouphead.specimen-in1 { color: var(--g1); background: var(--g1-bg);
+  border-bottom: 1px solid var(--g1) !important; }
+.specimen-grouphead.specimen-in2 { color: var(--g2); background: var(--g2-bg);
+  border-bottom: 1px solid var(--g2) !important; }
+.specimen-grouphead .specimen-toggle { color: inherit; }
+
+th.specimen-in1, td.specimen-in1 { background: color-mix(in srgb, var(--g1) 5%, transparent); }
+th.specimen-in2, td.specimen-in2 { background: color-mix(in srgb, var(--g2) 7%, transparent); }
+.specimen-edge1 { border-left: 2px solid var(--g1) !important; padding-left: .5rem !important; }
+.specimen-edge2 { border-left: 2px solid var(--g2) !important; padding-left: .5rem !important; }
+
+/* A null object, across every column its group owns. A run of empty cells
+   would read as a run of empty FIELDS; one cell says the object is absent. */
+td.specimen-group-null {
+  color: var(--null); font-weight: 700;
+  background: color-mix(in srgb, var(--null) 7%, transparent) !important;
+}
+.specimen-th-name { color: var(--key); font-weight: 650; }
+.specimen-th-declared {
+  display: block; font-weight: 400; color: var(--muted); font-size: .72rem;
+}
+.specimen-th .specimen-meta-group { padding-left: 0; opacity: 0; }
+.specimen-th:hover .specimen-meta-group { opacity: 1; }
+.specimen-th-path { cursor: default; }
+
+/* Which instance this line is. Dim, because it identifies the row rather than
+   saying anything about the values on it. */
+.specimen-record-path {
+  color: var(--unset); font-size: .76rem; padding-right: 1.2rem !important;
+  max-width: 18rem; overflow: hidden; text-overflow: ellipsis;
+}
+
+.specimen-cell { display: inline-block; }
+.specimen-record-table td.specimen-row-null {
+  background: color-mix(in srgb, var(--null) 6%, transparent);
+}
+
+.specimen-control-on {
+  color: var(--text); border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--card));
+}
+
+/* A leaf: visually distinct from a real, read class — dashed, off-white. */
+.specimen-leaf {
+  background: var(--leaf-bg); border-style: dashed;
+}
+/* A behaviour class: read from source like a data class, so it keeps the card
+   and the table, but tinted and badged so it does not read as a row of data. */
+.specimen-behaviour {
+  background: var(--behaviour-bg); border-color: var(--behaviour);
+}
+.specimen-behaviour .specimen-badge { color: var(--behaviour); }
+.specimen-unhandled {
+  background: var(--unhandled-bg); border-color: var(--unhandled);
+}
+.specimen-badge {
+  display: inline-block; font-size: .72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--muted); margin: 0 0 .4rem;
+}
+.specimen-unhandled .specimen-badge { color: var(--unhandled); }
+.specimen-reason { margin: 0 0 .5rem; color: var(--text); }
+.specimen-accessors-label { margin: .3rem 0 .2rem; font-size: .8rem; color: var(--muted); }
+.specimen-accessors {
+  margin: 0; padding-left: 1.1rem; font-family: var(--mono); font-size: .8rem; color: var(--muted);
+}
+.specimen-accessors li { margin-bottom: .1rem; }
+
+/* Phone width: `name: value` still fits on one line, which is the point of
+   dropping the columns. What goes is the declaration detail — it is reference
+   material, and the editor button keeps its place. */
+@media (max-width: 560px) {
+  body { padding: 1rem .7rem 3rem; }
+  .specimen-type { padding: .8rem .7rem; }
+  .specimen-field-row { font-size: .8rem; }
+  .specimen-declared, .specimen-provenance, .specimen-shape-from { display: none; }
+  /* A type name is a button: clicking it copies the fully qualified name, which
+   is what an IDE's class search takes. It stays quiet — no border, no chrome —
+   until the pointer is on it, because these names sit inside sentences and
+   table headers and would be noise if every one of them wore a control. */
+.specimen-pill {
+  appearance: none; background: none; border: 0; padding: 0 .25rem;
+  margin: 0 -.25rem; font: inherit; color: inherit; cursor: copy;
+  border-radius: 4px; text-align: inherit;
+}
+.specimen-pill:hover {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
+}
+.specimen-pill-copied, .specimen-pill-copied:hover {
+  background: color-mix(in srgb, var(--g1) 20%, transparent);
+  color: var(--g1);
+}
+/* The header and a block's heading show the whole name, which has to be free
+   to wrap where a table cell's copy of it is not. */
+.specimen-pill-fqn { white-space: normal; text-align: left; word-break: break-word; }
+.specimen-grouphead .specimen-pill { color: inherit; }
+
+.specimen-record-path { max-width: 9rem; }
+  .specimen-th .specimen-meta-group { opacity: 1; }
+  .specimen-meta-group { padding-left: .5rem; }
+  .specimen-node-body { margin-left: .3rem; padding-left: .5rem; }
+  .specimen-open { opacity: 1; }
+}

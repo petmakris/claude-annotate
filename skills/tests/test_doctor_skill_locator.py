@@ -1,0 +1,151 @@
+"""Tests for the /annotate-doctor skill's doctor.sh locator.
+
+The locator must find doctor.sh in multiple installation scenarios:
+- --plugin-dir installs where <plugin-root>/bin is on PATH
+- marketplace installs where ~/.claude/plugins/cache/*/claude-annotate/bin is on PATH
+- environments where CLAUDE_PLUGIN_ROOT happens to be set (e.g. hook execution)
+
+This is critical because the most common failure diagnosis (missing python3)
+requires the script to run without Python itself.
+"""
+from __future__ import annotations
+
+import re
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+from skills.tests.sanitized_env import REPO_ROOT
+
+DOCTOR_PATH = REPO_ROOT / "skills" / "annotate-doctor" / "doctor.sh"
+
+
+def _extract_bash_block(skill_md: Path) -> str:
+    """Extract the bash block from the skill markdown."""
+    text = skill_md.read_text(encoding="utf-8")
+    # Find the bash block after "## Run it"
+    match = re.search(r"## Run it\s+```bash\n(.*?)```", text, re.DOTALL)
+    if not match:
+        raise ValueError("Could not find bash block in SKILL.md")
+    return match.group(1)
+
+
+class TestDoctorLocator(unittest.TestCase):
+    """Test the doctor.sh locator from annotate-doctor/SKILL.md."""
+
+    def setUp(self):
+        """Extract the locator script."""
+        skill_md = REPO_ROOT / "skills" / "annotate-doctor" / "SKILL.md"
+        self.locator = _extract_bash_block(skill_md)
+
+    def test_locates_doctor_via_plugin_root_bin_on_path(self):
+        """The locator finds doctor.sh when plugin-root/bin is on PATH.
+
+        This is the primary scenario: --plugin-dir installs where Claude Code
+        adds <plugin-root>/bin to PATH, or marketplace installs where the
+        plugin's bin is on PATH.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+
+            # Simulate a plugin install: copy repo layout
+            plugin_root = tmp / "plugin-root"
+            plugin_bin = plugin_root / "bin"
+            plugin_bin.mkdir(parents=True)
+
+            # Copy the actual doctor.sh to the simulated location
+            doctor_src = REPO_ROOT / "skills" / "annotate-doctor" / "doctor.sh"
+            doctor_dest = plugin_root / "skills" / "annotate-doctor" / "doctor.sh"
+            doctor_dest.parent.mkdir(parents=True)
+            doctor_dest.write_bytes(doctor_src.read_bytes())
+
+            # Create a dummy executable in bin/ so PATH is valid
+            (plugin_bin / "sh").symlink_to("/bin/sh")
+
+            # Run the locator with plugin_bin on PATH
+            env = {
+                "PATH": str(plugin_bin),
+                "HOME": str(tmp),
+            }
+            result = subprocess.run(
+                ["sh", "-c", self.locator],
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+
+            # The sandbox has no python3, curl or webcompanion, so doctor.sh
+            # fails its checks; what matters is that the locator found it and
+            # ran it, which its banner proves.
+            self.assertIn("claude-annotate doctor", result.stdout,
+                          f"locator should find and run doctor.sh: {result.stderr}")
+
+    def test_locates_doctor_in_the_marketplace_cache_layout(self):
+        """The third fallback walks cache/<marketplace>/<plugin>/<version>/.
+
+        It used to glob one level short (cache/*/claude-annotate*/), so it
+        could never match anything — and its name filter would have skipped a
+        claude-ide-review install even at the right depth. Nothing on PATH
+        here ends in /bin, so probe 1 cannot answer and this fallback is the
+        only thing that can.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+
+            # A real marketplace install of the OTHER plugin, at real depth.
+            versioned = (tmp / ".claude" / "plugins" / "cache"
+                         / "claude-annotate" / "claude-ide-review" / "0.1.0")
+            dest = versioned / "skills" / "annotate-doctor" / "doctor.sh"
+            dest.parent.mkdir(parents=True)
+            dest.write_bytes(
+                (REPO_ROOT / "skills" / "annotate-doctor" / "doctor.sh").read_bytes()
+            )
+
+            # Deliberately NOT named bin/, so the PATH probe cannot fire.
+            tools = tmp / "tools"
+            tools.mkdir()
+            (tools / "sh").symlink_to("/bin/sh")
+
+            result = subprocess.run(
+                ["sh", "-c", self.locator],
+                env={"PATH": str(tools), "HOME": str(tmp)},
+                capture_output=True, text=True, timeout=60,
+            )
+            self.assertIn("claude-annotate doctor", result.stdout,
+                          f"cache fallback did not find doctor.sh: {result.stderr}")
+
+    def test_fails_clearly_when_doctor_not_found(self):
+        """The locator fails with clear message when doctor.sh is missing.
+
+        This catches configuration errors and broken installs.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+
+            # Create a plugin-like structure but WITHOUT doctor.sh
+            plugin_root = tmp / "plugin-root"
+            plugin_bin = plugin_root / "bin"
+            plugin_bin.mkdir(parents=True)
+            (plugin_bin / "sh").symlink_to("/bin/sh")
+
+            # Run the locator with plugin_bin on PATH but no doctor.sh
+            env = {
+                "PATH": str(plugin_bin),
+                "HOME": str(tmp),
+            }
+            result = subprocess.run(
+                ["sh", "-c", self.locator],
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+
+            # Should fail (non-zero exit)
+            self.assertNotEqual(result.returncode, 0,
+                               "locator should fail when doctor.sh not found")
+
+            # Should report clearly
+            self.assertIn("could not locate doctor.sh",
+                         result.stdout + result.stderr,
+                         "locator should report clear error message")

@@ -1,0 +1,13 @@
+<!--
+  Loaded only when the bundled JCEF plugin (com.intellij.modules.jcef) is
+  present. It contributes no extensions: its whole job is to put that plugin on
+  this plugin's classloader parents, so com.intellij.ui.jcef.JBCefApp resolves.
+
+  From build 262 JCEF ships as a separate bundled plugin rather than as part of
+  com.intellij.modules.platform. Without this, SynthesisPopup's JBCefApp
+  reference threw NoClassDefFoundError on the EDT the moment a panel row was
+  clicked. Optional, because SynthesisPopup falls back to a JEditorPane when
+  the browser is unavailable — a user who disabled JCEF must still get the
+  plugin, just without the rich synthesis view.
+-->
+<idea-plugin/>

@@ -1,0 +1,949 @@
+/* Annotate skill — response typography and block-level annotation UI.
+   Skill-agnostic tokens, fonts, header, comment cards, etc. live in core.css.
+
+   One stylesheet in thirteen files, cut at its own section markers and linked
+   by entry.js in this order: style.css (this: prose, annotation containers,
+   the legend, the composer, cards, choice blocks), then style-search,
+   style-page, style-highlighter, style-code, style-explain, style-maximize,
+   style-menu, style-narration, style-choice-queue, style-selection,
+   style-read-aloud and style-edit. Order is cascade order, exactly as it was
+   in one file, so a rule that overrides an earlier one must stay in the same
+   file or a later one. */
+
+/* Unify the page column. core.css ships a 1400px content-max for diff
+   views; annotate's reading column is set here instead. The prose and the
+   sticky bars inside it derive their width from --content-max, and every
+   band of chrome derives its inset from --content-gutter.
+   760px is the page width's default (see the view controls in
+   style-page.css). It is also the :root default, so a page that carries no
+   width at all — an export — reads at 760px rather than at some older
+   measure. */
+:root {
+  --content-max: 760px;
+  --content-gutter: 24px;
+  /* The page chrome — top bar, composer band, footer actions — is FULL
+     WIDTH at every stop, one gutter in from the viewport edge, and never
+     follows --content-max. The bar is not content: when it followed the
+     reading column, narrowing the column dragged the search box and every
+     control inwards with it, so the controls moved under the pointer.
+     Measured then: the width toggle sat at x=980 / 1051 / 1261 across the
+     stops, a 281px swing from a setting that is about prose. It later sat
+     on a 1600px measure of its own, which was fine while 1600px was the
+     widest column; with Full uncapped, a capped bar would sit inset from
+     the column below it. Full width is the one measure no column exceeds,
+     so at Full the bar and the column share a left edge, and at any capped
+     width the bar simply keeps it. */
+}
+
+/* === Response content (prose) ======================================== */
+main.prose {
+  flex: 1;
+  padding: 26px var(--content-gutter) 80px var(--content-gutter);
+  max-width: var(--content-max);
+  width: 100%;
+  margin: 0 auto;
+}
+main.prose h1 { color: var(--text-strong); margin-top: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.022em; }
+main.prose h2 { color: var(--text-strong); margin-top: 1.4em; font-size: 21px; font-weight: 700; letter-spacing: -0.022em; }
+main.prose h3 {
+  color: var(--accent);
+  margin-top: 1.6em;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+main.prose p, main.prose li, main.prose blockquote {
+  position: relative;
+  padding: 4px 140px 4px 6px;
+  border-radius: 3px;
+  transition: background-color 120ms ease;
+}
+main.prose h1, main.prose h2, main.prose h3,
+main.prose h4, main.prose h5, main.prose h6 {
+  padding-right: 140px;
+  transition: background-color 120ms ease;
+  border-radius: 3px;
+}
+main.prose [data-block-id]:hover { background: var(--hover-tint); }
+main.prose blockquote p:hover { background: transparent; }
+/* Sequence blocks are ordinary cards: constant var(--surface) background
+   like every other block, no per-card hover wash. A prose-era override
+   here used to force them transparent, which read as a gray card that
+   flashed white on hover — the card rules (see "Card layout") already
+   neutralize the hover tint, and the useful hover affordance lives on the
+   diagram's own steps (diagram.css thickens the hovered arrow). */
+/* The <pre> is a bare, corner-clipping wrapper; the visible surface is the
+   inner code element (dark theme via code-theme.css, light fallback below). */
+main.prose pre {
+  margin: 1em 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 100%;
+}
+/* Syntax-highlighted code (Shiki, through code-paint.js). code-theme.css
+   paints the dark ground on code.sk-fence and every token carries its own
+   colour; this rule owns only the layout. */
+main.prose pre code.sk-fence {
+  display: block;
+  padding: 14px 16px;
+  overflow-x: auto;
+  /* No border-radius here — the parent <pre> clips to its own 8px radius. */
+  font-family: var(--font-code);
+  font-size: 13px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+/* Fallback when the highlighter is unavailable (failed to load): plain code
+   keeps the original light card so it stays readable on the light page. */
+main.prose pre code:not(.sk-fence) {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: var(--text);
+  white-space: pre;
+  overflow-x: auto;
+  font-family: var(--font-code);
+  font-size: 13.5px;
+}
+/* Inline code: blue ink on a faint blue-white tint with a hairline, picked
+   with the user in a colour picker. The ink clears 7:1 on its ground in both
+   themes. The ground barely lifts off the card (0.2 L* light, 3.1 dark), on
+   purpose: the hairline and the ink mark the code, not a filled box. The old
+   rule painted var(--surface), the card's own colour, so the box was
+   invisible and its 6px padding read as stray spaces round every name. */
+:root {
+  --code-inline-bg: #f6f8ff;
+  --code-inline-fg: #1a4fac;
+  --code-inline-line: #dee1e9;
+}
+:root:has(body[data-page-theme="dark"]) {
+  --code-inline-bg: #2e3137;
+  --code-inline-fg: #9fc2fe;
+  --code-inline-line: #42454d;
+}
+/* Inline code only — must not match <code> inside <pre>. */
+main.prose :not(pre) > code {
+  background: var(--code-inline-bg);
+  color: var(--code-inline-fg);
+  box-shadow: inset 0 0 0 1px var(--code-inline-line);
+  padding: 0.1em 0.5em; border-radius: 4px;
+  font-family: var(--font-code);
+  font-size: 0.86em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+/* A click on inline code copies it (script-blocks.js). */
+main.prose .block-content :not(pre):not(a) > code { cursor: copy; }
+main.prose .block-content code.is-copied {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+main.prose blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 16px;
+  margin: 1em 0;
+  color: var(--text-dim);
+}
+main.prose blockquote p { margin: 0.4em 0; padding: 0; }
+main.prose blockquote p:hover { background: transparent; }
+main.prose hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 2em 0;
+}
+main.prose ul, main.prose ol {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+main.prose li > ul, main.prose li > ol {
+  margin: 0.25em 0;
+}
+main.prose a {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+main.prose a:hover { filter: brightness(1.1); }
+main.prose table {
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 0.95em;
+  /* display:block turns the table itself into the scroll container. Prose
+     cells still wrap to fit the card; when an unbreakable token (file path,
+     UUID, inline code) makes the grid wider than the card, it scrolls
+     horizontally instead of being clipped by the card's overflow:hidden. */
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+main.prose th, main.prose td {
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  text-align: left;
+}
+/* A table row is a comment target (tables.js): its button sits at the end of
+   the last cell, faint until the row is hovered or focused, and always
+   reachable on touch. The table itself stays the scroll container above. */
+main.prose .row-comment {
+  float: right; margin: 0 -6px 0 10px; padding: 2px; width: 22px; height: 22px;
+  border: 0; border-radius: 4px; background: transparent; color: var(--text-dim);
+  cursor: pointer; opacity: 0; user-select: none; -webkit-user-select: none;
+}
+main.prose .row-comment svg { width: 16px; height: 16px; display: block; }
+main.prose tr:hover .row-comment, main.prose .row-comment:focus-visible,
+main.prose tr[data-row-mark] .row-comment, main.prose tr[data-engaged-type] .row-comment { opacity: 1; }
+main.prose .row-comment:hover { color: var(--accent); background: var(--type-comment-wash); }
+@media (hover: none) { main.prose .row-comment { opacity: .6; width: 32px; height: 32px; } }
+main.prose tr[data-row-mark] > td { background-image: linear-gradient(var(--type-comment-wash), var(--type-comment-wash)); }
+main.prose tr[data-engaged-type] > td { background-image: linear-gradient(var(--type-comment-wash), var(--type-comment-wash)); }
+/* When a wide table scrolls sideways, its first column (the row's name) stays
+   in view. Opaque, so the cells scrolling under it do not show through, with
+   the row's tint laid over that ground; collapsed borders do not travel with a
+   sticky cell, so its right edge is drawn as a shadow. */
+main.prose tbody td:first-child, main.prose thead th:first-child {
+  position: sticky; left: 0; z-index: 1;
+  background-color: var(--surface);
+  box-shadow: inset -1px 0 0 var(--border);
+}
+main.prose tr[data-row-mark] > td:first-child {
+  box-shadow: inset 3px 0 0 var(--type-comment-fg), inset -1px 0 0 var(--border);
+}
+/* Phone width: one unbreakable token (a column name, a path) set the
+   min-content width of its whole column and squeezed the prose columns
+   beside it — Notes measured 92px wide at 390px, one row 248px tall. Both
+   halves are needed: `anywhere` alone lets the token break, but then every
+   column shrinks to fit the card (measured: 46px columns); the floor keeps
+   each column readable and lets the table scroll, which it already does.
+   Desktop keeps the old rule — a wide token scrolls the table — because a
+   floor there would push many-column tables that fit today into scrolling. */
+@media (max-width: 600px) {
+  main.prose th, main.prose td { overflow-wrap: anywhere; min-width: 9em; }
+}
+main.prose th {
+  background: var(--surface);
+  font-weight: 600;
+}
+
+/* === Block-level annotation containers =============================== */
+[data-block-id] { position: relative; }
+
+[data-block-id][data-engaged-type] {
+  padding-left: 12px;
+  margin-left: -12px;
+  border-radius: 0 4px 4px 0;
+}
+[data-block-id][data-engaged-type]::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 4px; bottom: 4px;
+  width: 3px;
+  border-radius: 2px;
+}
+[data-block-id][data-engaged-type="reject"]              { background: var(--type-reject-wash); }
+[data-block-id][data-engaged-type="reject"]::before      { background: var(--type-reject-fg); }
+[data-block-id][data-engaged-type="comment"]             { background: var(--type-comment-wash); }
+[data-block-id][data-engaged-type="comment"]::before     { background: var(--type-comment-fg); }
+
+[data-block-id][data-engaged-type="reject"]:hover   { background: color-mix(in srgb, var(--type-reject-wash) 55%, var(--hover-tint)); }
+[data-block-id][data-engaged-type="comment"]:hover  { background: color-mix(in srgb, var(--type-comment-wash) 55%, var(--hover-tint)); }
+
+/* === Read-only mode ==================================================
+   A shared link renders the document and nothing that would be refused.
+   Every control, the round dock and the comment composers go away. There is
+   no longer an exception: the fold used to survive here because it never
+   left the reader's browser, but compact replaced it and compact is an edit,
+   which belongs to whoever owns the workspace. */
+body.read-only .sel-menu,
+body.read-only .comment-window,
+body.read-only #round-dock,
+body.read-only .comment-card { display: none; }
+
+/* === Legend ==========================================================
+   Reference material, not chrome the reader needs on every visit, so it lives
+   in the toolbar's Keys popover and paints as .legend-pop — see the pane rules
+   further down. These inner rules are shared with the exported standalone
+   HTML, which has no menu and renders the table inline.
+   Open state persists nowhere on purpose: reopening is cheap. */
+.legend-body {
+  margin-top: 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+.legend-entry { padding: 9px 0; border-bottom: 1px solid var(--border); }
+.legend-entry:last-of-type { border-bottom: 0; }
+.legend-entry-name {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; font-weight: 600; color: var(--text);
+}
+.legend-entry-name .legend-icon {
+  width: 14px; height: 14px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; color: var(--text-dim);
+}
+/* What it tells Claude, in Claude's voice — quoted in the copy, so it is set
+   as speech. What happens to the content is the consequence, set quieter. */
+.legend-entry-tells {
+  margin: 5px 0 0; font-size: 12px; color: var(--text); font-style: italic;
+}
+.legend-entry-does {
+  margin: 3px 0 0; font-size: 11.5px; color: var(--text-dim); line-height: 1.5;
+}
+.legend-note {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+/* Pending delete: greyed and struck through, NOT removed. Nothing is actually
+   deleted until the round is submitted, so the part has to look reversible —
+   choosing Delete on the title again un-marks it. The heading stays legible so
+   the undo affordance is findable. */
+section.block[data-block-mark="delete"] .block-body {
+  opacity: .45;
+  text-decoration: line-through;
+}
+section.block[data-block-mark="delete"] .block-heading-text {
+  text-decoration: line-through;
+  color: var(--text-dim);
+}
+
+/* A part marked compact dims whole, the same reversible-until-submit promise
+   the pending delete makes, without the strikethrough that would claim the
+   content is being dropped from the plan. */
+section.block[data-block-mark="compact"] .block-body { opacity: .5; }
+section.block[data-block-mark="compact"] .block-heading-text { color: var(--text-dim); }
+
+/* Your words: a part holding words the reader wrote in the editor says so
+   after its title. Quiet, in the rule's green, and outranked by a pending
+   mark, which is a decision still to send. The descendant selector reaches
+   the label of a framed part too, which sits inside .block-frame. */
+section.block[data-mine]:not([data-block-mark]) .block-label::after {
+  content: "✎ your words";
+  margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  display: inline-block; vertical-align: 2px;
+  color: var(--mine-fg);
+  background: var(--mine-wash);
+  box-shadow: inset 0 0 0 1px var(--mine-rule);
+}
+
+/* A mark is named after the title, since the strip that used to carry it is
+   gone. */
+section.block[data-block-mark] .block-label::after {
+  margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  color: #fff; vertical-align: 2px;
+  /* inline-block so a struck-through title does not strike its own badge */
+  display: inline-block; text-decoration: none;
+}
+section.block[data-block-mark="delete"] .block-label::after { content: "✕ delete"; background: var(--type-reject-fg); }
+section.block[data-block-mark="compact"] .block-label::after { content: "⤓ compact"; background: #7c3aed; }
+section.block[data-block-mark="comment"] .block-label::after { content: "💬 comment"; background: var(--accent); }
+
+/* === The legend's keyboard section ==================================
+   The keys existed before this panel documented them — `/` and `g` and the
+   ⌘K chords have been bound for a long time — and nobody could have known.
+   A shortcut nobody can discover is a shortcut nobody has. The legend is
+   already the page's answer to "what does this do", so it answers this too. */
+.legend-keys { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 11px; }
+.legend-keys-head {
+  margin: 0 0 7px;
+  font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-dim);
+}
+.legend-keytable { border-collapse: collapse; font-size: 12px; }
+.legend-keytable td { padding: 3px 12px 3px 0; vertical-align: baseline; }
+.legend-keytable td:first-child { white-space: nowrap; }
+.legend-keys kbd {
+  display: inline-block;
+  min-width: 17px; padding: 1px 5px;
+  border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px;
+  background: var(--surface-soft);
+  font-family: var(--font-code); font-size: 10.5px;
+  color: var(--text); text-align: center;
+}
+
+
+
+/* === The keyboard cursor ============================================
+   j and k move it, c comments on it, f folds it. Drawn as a rail down the
+   left edge rather than a ring around the card: a ring on a card that is
+   already bordered reads as a second border, and at this width the eye
+   stops seeing it. The rail is in the gutter where nothing else paints, so
+   it says "you are here" without competing with the block's own state —
+   a block can be marked, engaged AND focused at once.
+
+   The strip it reveals is the point: see the four-way reveal above.
+
+   Drawn as a ::before and not as the inset box-shadow this repo uses for the
+   code pane's anchor row: a part has no box of its own to carry a shadow.
+   The section is already position:relative with no ::before of its own, so
+   this costs no layout. */
+section.block[data-kb-focus]::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--accent);
+  z-index: 1;
+}
+section.block[data-kb-focus] .block-heading-text { color: var(--text-strong); }
+/* Focus is a cursor, not a selection: it must survive the page being busy,
+   so unlike the marks it is never dimmed by body.is-busy. */
+
+/* === General composer (page-level comment) =========================== */
+/* Opened by #composer-toggle, and painted as a third band of the top bar
+   rather than as a box in the reading column: full-bleed surface, its own
+   bottom hairline, and the SAME full-width gutter the top bar uses (the
+   `body .page-header` override below), so both bands share one left edge. A third band, the statusline strip, once
+   shared it too; it was removed with the route that fed it. Every
+   part of core.css's centred-box geometry has to be undone for that — its base
+   rule is `max-width: var(--content-max); margin: 0 auto 8px; padding: 16px
+   56px 0`, and leaving any of it in place leaves the band inset from the bar
+   above it by a different amount at every viewport width. */
+.general-composer {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 12px var(--content-gutter) 13px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+/* core.css's base rule is `.general-composer { display: flex; ... }` (0,1,0
+   specificity), which beats the UA default `[hidden] { display: none }`
+   (0,1,0 too, but the UA stylesheet always loses to an author stylesheet of
+   equal specificity) — so the bare `hidden` attribute this task's collapsed
+   composer relies on did nothing and the full textarea rendered anyway.
+   `[hidden]` added to a class selector here is 0,2,0, which wins. Same
+   specificity trick core.css already uses for `body.read-only .general-composer`
+   just above in that file. */
+.general-composer[hidden] { display: none; }
+.general-hint {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.general-hint kbd {
+  font-family: var(--font-code);
+  font-size: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+/* === Footer submit actions =========================================== */
+footer.actions {
+  position: sticky; bottom: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 12px var(--content-gutter);
+  display: flex; align-items: center; gap: 12px;
+}
+.actions-spacer { flex: 1; }
+.comment-count {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+footer.actions button {
+  background: var(--accent); color: var(--accent-fg);
+  border: none; padding: 8px 16px; border-radius: 5px;
+  font-weight: 600; cursor: pointer; font-size: 14px;
+}
+footer.actions button:hover { filter: brightness(1.1); }
+footer.actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+#submit-status { color: var(--text-dim); font-size: 13px; }
+#submit-status.ok { color: #86efac; }
+#submit-status.err { color: #fca5a5; }
+
+/* === Per-comment submit button ======================================= */
+.card-submit-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+.card-submit-hint {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.card-submit-hint kbd {
+  font-family: var(--font-code);
+  font-size: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.card-submit-btn {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border: none;
+  padding: 6px 14px;
+  border-radius: 5px;
+  font-weight: 600;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: filter 140ms ease;
+}
+.card-submit-btn:hover { filter: brightness(1.1); }
+.card-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* === Voice dictation mic button ===================================== */
+.voice-mic-btn {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.voice-mic-btn:hover { border-color: var(--accent); }
+.voice-mic-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.voice-mic-btn.listening {
+  background: #dc2626; color: #fff; border-color: #dc2626;
+  animation: voice-pulse 1.1s ease-in-out infinite;
+}
+.voice-interim {
+  font-size: 12.5px; color: var(--text-dim); font-style: italic; margin-right: auto;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%;
+}
+.voice-interim.voice-note { font-style: normal; white-space: normal; max-width: 60%; }
+.card-submit-row:has(.listening) .card-submit-hint,
+.sel-row:has(.listening) .card-submit-hint { display: none; }
+@keyframes voice-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+  50%      { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
+/* === One document ====================================================
+   A block is a part of one document: no box, no header bar, no number.
+   An authored title is an h2 (main.prose h2 sizes it); the body follows. */
+body { background: var(--surface); }
+section.block { position: relative; margin: 0; }
+/* The prose-era rules above (hover wash, engaged tint, bar and shift) were
+   written for a bare block. A part has no wash of its own: the only engaged
+   signal is the left border of .block-body. The keyboard-focus rail keeps
+   its ::before. */
+main.prose section.block:hover,
+main.prose section.block[data-engaged-type],
+main.prose section.block[data-engaged-type]:hover { background: transparent; }
+section.block[data-engaged-type] { padding-left: 0; margin-left: 0; border-radius: 0; }
+section.block[data-engaged-type]:not([data-kb-focus])::before { content: none; }
+section.block[data-engaged-type][data-kb-focus]::before {
+  top: 0; bottom: 0; width: 3px; border-radius: 0; background: var(--accent);
+}
+section.block:focus { outline: none; }
+.block-heading { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* A part's heading wraps at the column edge. The 140px above was room for
+   the hover controls of prose-era headings, and on a phone it left an
+   authored title about 180px to wrap in. The fold button hangs in the
+   margin: -28px puts the title's first letter over the paragraph's. */
+main.prose h2.block-heading { padding-right: 0; margin-left: -28px; }
+/* On a phone a title too long for one line would wrap whole under its fold
+   button; given the rest of the line, it wraps its words beside it, and a
+   change chip takes the next line. */
+@media (max-width: 600px) {
+  main.prose h2.block-heading .block-heading-text { flex: 1 1 0; }
+  /* The gutter is too narrow to hang the fold button in. */
+  main.prose h2.block-heading { margin-left: 0; }
+}
+.block-heading-text { min-width: 0; }
+/* An untitled part's label line: there only when a mark or chip needs it. */
+.block-meta { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; }
+section.block:not([data-block-mark]):not([data-mine]) > .block-meta:empty { display: none; }
+.block-body { position: relative; border-left: 3px solid transparent; padding-left: 12px; margin-left: -15px; }
+section.block[data-engaged-type="comment"] .block-body { border-left-color: var(--type-comment-fg); }
+section.block[data-engaged-type="reject"]  .block-body { border-left-color: var(--type-reject-fg); }
+main.prose .block-body p,
+main.prose .block-body li,
+main.prose .block-body blockquote { padding-right: 12px; }
+main.prose .block-body h1, main.prose .block-body h2, main.prose .block-body h3,
+main.prose .block-body h4, main.prose .block-body h5, main.prose .block-body h6 { padding-right: 12px; }
+.block-body > .block-content { padding: 0 0 4px; }
+.block-body > .block-content > :first-child { margin-top: 4px; }
+
+/* === Frames: pictures, questions, walked code ======================== */
+.block-frame { border: 1px solid var(--border); border-radius: 12px; background: var(--diagram-ground); margin: 14px 0 10px; overflow: hidden; }
+.block-frame-head { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--border); background: var(--surface-soft); }
+.block-frame-head .block-heading-text { font-size: 14px; font-weight: 600; color: var(--text-strong); }
+.block-frame-space { flex: 1; }
+.block-frame .block-body { margin-left: 0; padding: 12px 14px; border-left: 0; }
+
+/* === Folding ========================================================= */
+section.block.collapsed .block-body { display: none; }
+section.block.fold-hidden { display: none; }
+/* A search shows its matches inside folds; search.js sets the class only
+   while a query is active, and parts that do not match stay search-hidden. */
+body.searching section.block.fold-hidden,
+body.searching section.block.collapsed .block-body { display: revert; }
+/* A plain 24px square in the margin left of the heading; a tint on hover
+   says it is a button. The dashed circle it replaced read as a placeholder. */
+.fold-btn {
+  width: 24px; height: 24px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  background: transparent; border: 0; border-radius: 6px;
+  color: var(--text-dim); cursor: pointer; font-size: 14px; line-height: 1;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.fold-btn:hover, .fold-btn:focus-visible { color: var(--text-strong); background: var(--hover-tint); }
+
+/* === Block updating overlay ========================================= */
+section.block {
+  position: relative;
+}
+
+/* Dim + disable the underlying content while a rewrite is in flight. */
+section.block.is-updating > *:not(.updating-overlay) {
+  opacity: 0.42;
+  filter: saturate(0.7);
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 180ms ease;
+}
+
+
+/* Warm tinted veil covering the block content, sits below the pill. */
+.updating-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(253, 243, 234, 0.55);
+  pointer-events: none;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Centered pill: spinner + label + elapsed timer. */
+.updating-overlay .updating-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: #8a4d1e;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 999px;
+  box-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.06),
+    0 0 0 4px color-mix(in srgb, var(--accent) 8%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 2;
+}
+
+.updating-overlay .updating-spinner {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: updating-spin 0.85s linear infinite;
+}
+
+.updating-overlay .updating-timer {
+  color: color-mix(in srgb, var(--accent) 85%, #000);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+@keyframes updating-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Choice blocks ──────────────────────────────────────────────────────── */
+.choice-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.choice-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.choice-option {
+  display: flex;
+  align-items: flex-start;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+.choice-option:hover {
+  border-color: var(--accent);
+  background: var(--surface-soft);
+}
+.choice-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.choice-option.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.choice-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.choice-option-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.choice-option-label {
+  color: var(--text-strong);
+  font-weight: 500;
+}
+.choice-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.choice-option-desc {
+  color: var(--text-dim);
+  font-size: 0.85em;
+}
+/* An option that carries content. The card stays `user-select: none` so a
+   click reads as a pick; the body opts back in, because code in an option is
+   something the reader copies. */
+.choice-option.has-body .choice-option-text { flex: 1; min-width: 0; }
+.choice-option-body {
+  margin-top: 0.5rem;
+  user-select: text;
+  cursor: text;
+  color: var(--text);
+}
+.choice-option-body > :first-child { margin-top: 0; }
+.choice-option-body > :last-child { margin-bottom: 0; }
+.choice-footer {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+.choice-note {
+  flex: 1;
+  resize: none;
+  overflow: hidden;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.4;
+}
+.choice-note:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.15);
+}
+.choice-note::placeholder { color: var(--text-dim); }
+
+/* === Decisions, facts and jobs (spec-parts.js) ======================= */
+/* Page tokens only, so light and dark follow the page. A decision and a job
+   are comment targets: the same wordless button as a table row; a pinned
+   comment tints the item. */
+.job-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.job {
+  position: relative; padding: 10px 14px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--surface);
+}
+.job-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.job-id { font: 600 12px/1 ui-monospace, monospace; color: var(--text-dim); }
+.job-status {
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 999px; background: var(--surface-soft); color: var(--text-dim);
+}
+.job[data-status="running"] .job-status { background: var(--type-comment-bg); color: var(--type-comment-fg); }
+.job[data-status="done"] .job-status { background: var(--status-live-bg); color: var(--status-live-fg); }
+.job[data-status="blocked"] .job-status { background: var(--type-reject-bg); color: var(--type-reject-fg); }
+.job[data-status="done"] .job-title { color: var(--text-dim); }
+.job .item-comment { margin-left: auto; }
+.job-does { margin: 2px 0; }
+.job-title { font-weight: 600; color: var(--text-strong); }
+.job-after { margin: 2px 0 0; font-size: 12px; color: var(--text-dim); }
+.job[data-status="blocked"] { border-left: 4px solid var(--type-reject-fg); }
+.job[data-status="running"] { border-left: 4px solid var(--accent); }
+.item-comment {
+  float: none; margin: 0; width: 24px; height: 24px; padding: 2px; border: 0; border-radius: 4px; background: transparent;
+  color: var(--text-dim); cursor: pointer; opacity: 0; user-select: none; -webkit-user-select: none;
+}
+.item-comment svg { width: 16px; height: 16px; display: block; }
+.job:hover .item-comment, .item-comment:focus-visible,
+.job[data-row-mark] .item-comment, .job[data-engaged-type] .item-comment { opacity: 1; }
+.item-comment:hover { color: var(--accent); background: var(--type-comment-wash); }
+@media (hover: none) { .item-comment { opacity: .6; width: 32px; height: 32px; } }
+.job[data-row-mark], .job[data-engaged-type] {
+  background-image: linear-gradient(var(--type-comment-wash), var(--type-comment-wash));
+}
+.facts-strip { display: flex; flex-wrap: wrap; gap: 10px; }
+.fact {
+  flex: 1 1 130px; min-width: 0; padding: 10px 14px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--surface);
+}
+.fact-value { font-size: 22px; font-weight: 700; line-height: 1.2; color: var(--text-strong); overflow-wrap: anywhere; }
+.fact-label { margin-top: 2px; font-size: 12px; color: var(--text-dim); }
+main.prose ol.job-list, main.prose .dec-list { padding: 0; margin: 0; list-style: none; }
+main.prose .job-list > li, main.prose .job p { margin-left: 0; }
+
+/* Decisions: a summary strip, hard questions first, one card each. A card is
+   not decided, picked (amber), sent (blue) or answered (green). */
+.dec-list { display: block; }
+.dec-sum {
+  position: sticky; top: 0; z-index: 17; margin: 0 0 8px; padding: 10px 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .12);
+}
+body.is-busy .dec-sum { top: 56px; }
+.dec-sum-count { font-weight: 700; color: var(--text-strong); }
+.dec-sum-sub { color: var(--text-dim); font-size: 13px; }
+.dec-chips { display: flex; gap: 6px; margin-top: 8px; }
+.dec-nchip {
+  flex: 1; min-height: 44px; border: 1px solid var(--control-border); border-bottom: 4px solid var(--control-border);
+  border-radius: 8px; background: var(--surface-soft); color: var(--text-strong);
+  font: 700 15px var(--font-prose); cursor: pointer;
+}
+.dec-nchip[data-s="picked"] { background: var(--pend-bg); color: var(--pend-fg); border-color: var(--pend-fg); }
+.dec-nchip[data-s="sent"] { background: var(--type-comment-bg); color: var(--type-comment-fg); border-color: var(--accent); }
+.dec-nchip[data-s="answered"] { background: var(--status-live-bg); color: var(--status-live-fg); border-color: var(--status-live-fg); }
+.dec-nchip[data-hard="1"] { border-bottom-color: var(--type-reject-fg); }
+.dec-key { margin-top: 6px; font-size: 12px; color: var(--text-dim); }
+.dec-group {
+  margin: 22px 0 8px; font-size: 13px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--text-dim);
+}
+.dec {
+  position: relative; margin: 0 0 12px; padding: 14px 16px; border: 1px solid var(--border);
+  border-left: 4px solid var(--control-border); border-radius: 8px; background: var(--surface);
+  scroll-margin-top: 150px;
+}
+.dec[data-status="picked"] { border-left-color: var(--pend-fg); }
+.dec[data-status="sent"] { border-left-color: var(--accent); background: var(--surface-soft); }
+.dec[data-status="answered"] { border-left-color: var(--status-live-fg); }
+.dec-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; padding-right: 34px; }
+.dec-no { font-weight: 700; color: var(--text-dim); }
+.dec-chip { padding: 2px 9px; border-radius: 999px; font-weight: 600; }
+.dec-chip.hard { background: var(--type-reject-bg); color: var(--type-reject-fg); }
+.dec-chip.easy { background: var(--status-live-bg); color: var(--status-live-fg); }
+.dec-state { margin-left: auto; font-weight: 600; color: var(--text-dim); }
+.dec[data-status="picked"] .dec-state { color: var(--pend-fg); }
+.dec[data-status="sent"] .dec-state { color: var(--accent); }
+.dec[data-status="answered"] .dec-state { color: var(--status-live-fg); }
+.dec .item-comment {
+  position: absolute; right: 10px; top: 10px; width: 32px; height: 32px; opacity: 1;
+}
+.dec-q { margin: 8px 0 10px; font-size: 18px; line-height: 1.3; font-weight: 700; color: var(--text-strong); }
+.dec-rec {
+  padding: 10px 12px; border-radius: 8px; background: var(--type-comment-wash);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.dec-k { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim); }
+.dec-rec .dec-k { color: var(--type-comment-fg); }
+.dec-lab { font-weight: 700; color: var(--text-strong); font-size: 16px; margin: 2px 0 4px; }
+.dec-gc { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+.dec-gc dt { font-weight: 600; color: var(--text-dim); font-size: 13px; padding-top: 1px; }
+.dec-gc dd { margin: 0; }
+.dec-trade { margin: 0; }
+.dec-why { margin: 6px 0 0; color: var(--text-dim); }
+.dec-hard { margin: 8px 0 0; font-size: 13px; color: var(--type-reject-fg); font-weight: 600; }
+.dec-others { margin: 10px 0 0; display: grid; gap: 4px; }
+.dec-oth { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 14px; }
+.dec-oth b { color: var(--text-dim); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; padding-top: 2px; white-space: nowrap; }
+.dec-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.dec-acts .dec-btn.pri { flex: 1 1 100%; }
+.dec-acts .dec-btn:not(.pri) { flex: 1 1 140px; white-space: nowrap; }
+.dec-btn {
+  min-height: 44px; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--accent);
+  background: transparent; color: var(--accent); font: 600 15px var(--font-prose); cursor: pointer;
+}
+.dec-btn.pri { background: var(--accent); color: var(--accent-fg); }
+.dec-btn.sm { min-height: 40px; padding: 4px 14px; font-size: 14px; }
+.dec-btn.ghost { border-color: var(--control-border); color: var(--text); }
+.dec-btn:focus-visible, .dec-nchip:focus-visible, .dec summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dec-next { margin: 10px 0 0; font-size: 13px; color: var(--text-dim); }
+.dec-alts { margin-top: 12px; display: grid; gap: 8px; }
+.dec-alt { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-soft); }
+.dec-alt .dec-btn { margin-top: 10px; width: 100%; }
+.dec-if { margin: 0; font-size: 13px; color: var(--text); }
+.dec-detail { margin-top: 6px; }
+.dec summary { cursor: pointer; color: var(--text-dim); font-size: 13px; padding: 6px 0; min-height: 32px; }
+.dec-detail p { margin: 2px 0 6px; font-size: 13px; font-family: var(--font-code); }
+.dec-own { margin-top: 12px; }
+.dec-own textarea {
+  width: 100%; min-height: 72px; padding: 8px 10px; border: 1px solid var(--control-border);
+  border-radius: 8px; background: var(--surface); color: var(--text); font: 15px var(--font-prose);
+  box-sizing: border-box;
+}
+.dec-own .dec-btn { margin-top: 8px; }
+.dec-mine { margin: 2px 0 8px; padding: 8px 12px; border-radius: 8px; background: var(--pend-bg); color: var(--pend-fg); font-weight: 600; }
+.dec[data-status="answered"] .dec-mine { background: var(--status-live-bg); color: var(--status-live-fg); }
+.dec[data-status="sent"] .dec-mine { background: var(--type-comment-bg); color: var(--type-comment-fg); }
+.dec-mine small { display: block; font-weight: 400; }
+.dec-outc { margin: 0 0 8px; font-weight: 600; color: var(--status-live-fg); }
+.dec[data-row-mark], .dec[data-engaged-type] { background-image: linear-gradient(var(--type-comment-wash), var(--type-comment-wash)); }
+main.prose .dec p, main.prose .dec dl, main.prose .dec dd { margin-left: 0; }
+main.prose .dec .dec-q { margin: 8px 0 10px; }
+main.prose .dec .dec-trade, main.prose .dec .dec-if { margin: 0; }
+main.prose .dec .dec-why { margin: 6px 0 0; }
+main.prose .dec .dec-next { margin: 10px 0 0; }
+@media (max-width: 480px) {
+  .dec-sum { position: static; box-shadow: none; padding: 8px 12px; margin-bottom: 4px; }
+  body.is-busy .dec-sum { top: auto; }
+  .dec-sum-sub, .dec-key { display: none; }
+  .dec { padding: 12px; scroll-margin-top: 12px; }
+  .dec-q { font-size: 17px; }
+  .dec-acts .dec-btn:not(.pri) { flex: 1 1 calc(50% - 4px); padding: 4px 8px; font-size: 14px; }
+  .dec-group { margin-top: 14px; }
+}
+@media (max-width: 480px) {
+  /* The claim that heads a decisions part stays short, so the first card and its button reach the first screen. */
+  main.prose section.block[data-kind="decisions"] h2.block-heading { font-size: 20px; line-height: 1.25; margin-top: 12px; margin-bottom: 8px; }
+}
+@media (max-width: 480px) {
+  .dec-rec { padding: 8px 10px; }
+  .dec summary { min-height: 28px; padding: 3px 0; }
+  main.prose .dec .dec-why { margin-top: 4px; }
+  .dec-hard { margin-top: 6px; }
+  .dec-others { margin-top: 8px; }
+  .dec-acts { margin-top: 10px; }
+  .dec-q { margin: 6px 0 8px; }
+}
+@media (max-width: 480px) {
+  main.prose .dec .dec-q { margin: 4px 0 8px; }
+  .dec-group { margin-top: 8px; margin-bottom: 6px; }
+  .dec-sum { margin-bottom: 0; }
+  .dec-chips { margin-top: 6px; }
+  .dec { margin-bottom: 10px; }
+}

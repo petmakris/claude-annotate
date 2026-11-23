@@ -1,0 +1,6 @@
+{
+  "name": "fleet",
+  "version": "0.2.0",
+  "description": "Join Claude Code sessions into a fleet whose members message each other: tell, ask, answer and wait, with no model polling. Opt-in per session (/fleet join). Requires Python 3.9+.",
+  "author": {"name": "Petros Makris", "url": "https://github.com/petmakris"}
+}

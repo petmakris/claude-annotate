@@ -1,0 +1,153 @@
+{
+  "title": "Thing Upload Request",
+  "eyebrow": "example · things service",
+  "lede": "How a <code>POST /things</code> request is assembled. The controller's arguments become a command, two values come from injected beans instead of arguments, and the upload passes through untouched.",
+  "caption": "<code>tenant</code> and <code>timestamp</code> are not arguments: each comes from a bean, and each sits beside the row it feeds, one above the request and one below it. <code>rawUpload</code> skips the command and reaches <code>file</code> unchanged.",
+  "sources": {
+    "head": [
+      "Stage",
+      "File",
+      "Detail"
+    ],
+    "rows": [
+      [
+        "Entry",
+        "web/ThingController.java:20",
+        "made-up example"
+      ]
+    ]
+  },
+  "cards": [
+    {
+      "id": "C",
+      "stage": "ON THE WIRE",
+      "name": "POST /things",
+      "sub": "multipart",
+      "fields": [
+        {
+          "id": "tenant",
+          "label": "tenant"
+        },
+        {
+          "id": "mode",
+          "label": "mode"
+        },
+        {
+          "id": "owner",
+          "label": "owner"
+        },
+        {
+          "id": "file",
+          "label": "file"
+        },
+        {
+          "id": "ts",
+          "label": "timestamp"
+        }
+      ]
+    },
+    {
+      "id": "B",
+      "stage": "FROM THE CONTEXT",
+      "name": "not an argument",
+      "sub": "injected bean",
+      "fields": [
+        {
+          "id": "now",
+          "label": "clock.now()"
+        }
+      ]
+    },
+    {
+      "id": "entry",
+      "stage": "ENTRY",
+      "name": "handle(…)",
+      "sub": "ThingController:20",
+      "fields": [
+        {
+          "id": "body",
+          "label": "body"
+        },
+        {
+          "id": "user",
+          "label": "user"
+        },
+        {
+          "id": "raw",
+          "label": "rawUpload"
+        }
+      ]
+    },
+    {
+      "id": "mid",
+      "stage": "COMMAND",
+      "name": "ThingCommand",
+      "sub": "toCommand:41",
+      "fields": [
+        {
+          "id": "mode",
+          "label": "mode"
+        },
+        {
+          "id": "owner",
+          "label": "owner"
+        }
+      ]
+    },
+    {
+      "id": "opts",
+      "stage": "OPTIONS",
+      "name": "ThingOptions",
+      "sub": "parsed query",
+      "fields": [
+        {
+          "id": "mode",
+          "label": "mode"
+        }
+      ]
+    },
+    {
+      "id": "A",
+      "stage": "FROM THE CONTEXT",
+      "name": "not an argument",
+      "sub": "injected bean",
+      "fields": [
+        {
+          "id": "tenant",
+          "label": "tenantContext.id()"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "opts.mode",
+      "to": "mid.mode"
+    },
+    {
+      "from": "entry.user",
+      "to": "mid.owner"
+    },
+    {
+      "from": "entry.raw",
+      "to": "C.file",
+      "label": "untouched"
+    },
+    {
+      "from": "mid.mode",
+      "to": "C.mode"
+    },
+    {
+      "from": "mid.owner",
+      "to": "C.owner"
+    },
+    {
+      "from": "A.tenant",
+      "to": "C.tenant"
+    },
+    {
+      "from": "B.now",
+      "to": "C.ts"
+    }
+  ]
+}

@@ -1,0 +1,451 @@
+from __future__ import annotations
+
+import json
+import os
+import time
+from pathlib import Path
+
+import pytest
+
+from skills.stage import model
+
+
+def _bump(path: Path) -> None:
+    # Filesystems with coarse mtimes: move the clock forward explicitly.
+    t = time.time() + 5
+    os.utime(path, (t, t))
+
+
+def test_a_url_is_a_url(tmp_path):
+    assert model.parse_source("https://example.com/x", tmp_path) == {"type": "url", "url": "https://example.com/x"}
+
+
+def test_a_session_names_kind_and_slug(tmp_path):
+    assert model.parse_source("session:deck/my-deck", tmp_path) == {
+        "type": "session", "kind": "deck", "slug": "my-deck"}
+
+
+def test_a_bad_session_is_refused(tmp_path):
+    with pytest.raises(model.SourceError):
+        model.parse_source("session:deck", tmp_path)
+
+
+def test_diagram_and_table_read_stdin(tmp_path):
+    assert model.parse_source("table:-", tmp_path, "| a |\n|---|\n| 1 |")["format"] == "table"
+    with pytest.raises(model.SourceError, match="stdin was empty"):
+        model.parse_source("diagram:-", tmp_path, "  ")
+
+
+def test_a_mermaid_graph_or_state_diagram_is_drawn_as_the_map_a_call_draws():
+    graph = model.parse_source("diagram:-", Path("."), "graph LR; P[Page] -->|words| Q[Queue]\n")
+    assert graph == {"type": "inline", "format": "visual", "tool": "flowchart", "spec": {
+        "nodes": [{"id": "P", "role": "entry", "label": "Page"}, {"id": "Q", "role": "code", "label": "Queue"}],
+        "edges": [{"from": "P", "to": "Q", "label": "words"}]}}
+    states = model.parse_source("graph:-", Path("."), "stateDiagram-v2\n  [*] --> Idle\n  Idle --> Busy: work")
+    assert states["tool"] == "flowchart" and [n["role"] for n in states["spec"]["nodes"]] == ["entry", "code"]
+    for alias in ("mermaid:-", "flow:-", "Mermaid:-"):
+        assert model.parse_source(alias, Path("."), "graph TD; A-->B")["tool"] == "flowchart", alias
+
+
+def test_a_mermaid_sequence_diagram_is_drawn_as_lanes():
+    got = model.parse_source("diagram:-", Path("."), """sequenceDiagram
+    %% the doorbell
+    autonumber
+    participant P as Call page
+    actor U as User
+    U->>P: presses Talk
+    P->>+S: POST /api/turn
+    S-->>-P: the answer
+    S->>S: speaks it
+    Note over P,S: one turn
+    alt key set
+      S-)A: asks Azure
+    else no key
+      S-xV: asks VoiceStudio
+    end""")
+    assert got["tool"] == "sequence"
+    assert got["spec"]["actors"] == [{"id": "P", "label": "Call page"}, {"id": "U", "label": "User"},
+                                     {"id": "S", "label": "S"}, {"id": "A", "label": "A"}, {"id": "V", "label": "V"}]
+    assert [(s["from"], s["to"], s["arrow"], s.get("label")) for s in got["spec"]["steps"]] == [
+        ("U", "P", "request", "presses Talk"), ("P", "S", "request", "POST /api/turn"), ("S", "P", "event", "the answer"),
+        ("S", "S", "self", "speaks it"), ("P", "S", "band", "one turn"), ("S", "A", "request", "asks Azure"),
+        ("S", "V", "request", "asks VoiceStudio")]
+    assert got["spec"]["groups"] == [{"id": "g1", "kind": "alt", "branches": ["key set", "no key"]}]
+    assert [(s.get("group"), s.get("branch")) for s in got["spec"]["steps"][5:]] == [("g1", "0"), ("g1", "1")]
+
+
+@pytest.mark.parametrize("body, said", [
+    ("pie title Pets\n  \"Dogs\": 3", "diagram:-: the stage does not draw Mermaid pie, only a Mermaid graph, state or "
+     "sequence diagram; write a JSON spec for flowchart:-, sequence:- or map:- instead"),
+    ("classDiagram\n  A <|-- B", "diagram:-: the stage does not draw Mermaid classDiagram, only a Mermaid graph, state "
+     "or sequence diagram; write a JSON spec for flowchart:-, sequence:- or map:- instead"),
+    ("sequenceDiagram\n  loop every turn\n  opt late\n  A->>B: hi\n  end\n  end",
+     "diagram:-: this sequenceDiagram cannot be drawn as lanes: opt inside loop has no box of its own on the lanes; "
+     "write it as a JSON spec for sequence:-"),
+    ("sequenceDiagram\n  A->>B: hi\n  critical locked\n  B->>C: go\n  end",
+     "diagram:-: this sequenceDiagram cannot be drawn as lanes: the line 'critical locked' has no place on the lanes; "
+     "write it as a JSON spec for sequence:-"),
+    ("sequenceDiagram\n  participant A\n  participant B", "diagram:-: drawn as a sequence, sequence requires at least 1 step"),
+])
+def test_any_other_mermaid_is_refused_in_one_line_that_names_the_json_kinds(body, said):
+    with pytest.raises(model.SourceError) as err:
+        model.parse_source("diagram:-", Path("."), body)
+    assert str(err.value) == said and "\n" not in said
+
+
+def test_a_file_keeps_its_fragment_and_may_not_exist_yet(tmp_path):
+    (tmp_path / "deck").mkdir()
+    assert model.parse_source("deck/index.html#slide-3", tmp_path) == {
+        "type": "file", "path": "deck/index.html", "fragment": "slide-3"}
+    assert model.parse_source(str(tmp_path / "deck" / "new.html"), tmp_path) == {
+        "type": "file", "path": "deck/new.html", "fragment": None}
+
+
+def test_a_file_outside_the_project_is_refused(tmp_path):
+    with pytest.raises(model.SourceError, match="outside"):
+        model.parse_source("../elsewhere.html", tmp_path)
+
+
+def test_a_file_in_a_missing_directory_is_refused(tmp_path):
+    with pytest.raises(model.SourceError, match="no such folder"):
+        model.parse_source("nope/index.html", tmp_path)
+
+
+def test_code_reads_the_range_and_highlight(tmp_path):
+    (tmp_path / "a.py").write_text("x = 1\ny = 2\nz = 3\n")
+    src = model.parse_source("code:a.py:2-3 highlight 3", tmp_path)
+    assert src == {"type": "inline", "format": "code", "path": "a.py", "start": 2,
+                   "lines": ["y = 2", "z = 3"], "highlight": [3, 3], "lang": "py", "truncated": False}
+
+
+def test_code_is_cut_at_sixty_lines(tmp_path):
+    (tmp_path / "long.txt").write_text("\n".join(str(i) for i in range(100)))
+    src = model.code_source(tmp_path, "long.txt:1-100")
+    assert len(src["lines"]) == 60 and src["truncated"] is True
+
+
+def test_code_errors_are_source_errors(tmp_path):
+    (tmp_path / "a.py").write_text("x\n")
+    for spec in ("a.py", "missing.py:1-2", "a.py:3-1", "a.py:5-6", "../x.py:1-2"):
+        with pytest.raises(model.SourceError):
+            model.code_source(tmp_path, spec)
+
+
+def test_mount_name_is_stable_valid_and_distinct(tmp_path):
+    (tmp_path / "Decks" / "Q3 Review").mkdir(parents=True)
+    (tmp_path / "decks" / "q3-review").mkdir(parents=True)
+    a = model.mount_name(tmp_path / "Decks" / "Q3 Review", tmp_path)
+    b = model.mount_name(tmp_path / "decks" / "q3-review", tmp_path)
+    assert model.NAME_RE.match(a) and model.NAME_RE.match(b)
+    assert a != b
+    assert a == model.mount_name(tmp_path / "Decks" / "Q3 Review", tmp_path)
+    assert model.mount_name(tmp_path, tmp_path).startswith("root-")
+
+
+def test_dir_rev_changes_when_a_file_changes(tmp_path):
+    f = tmp_path / "index.html"
+    f.write_text("one")
+    before = model.dir_rev(tmp_path)
+    f.write_text("two")
+    _bump(f)
+    assert model.dir_rev(tmp_path) != before
+
+
+def test_dir_rev_changes_on_atomic_replace(tmp_path):
+    f = tmp_path / "index.html"
+    f.write_text("one")
+    before = model.dir_rev(tmp_path)
+    tmp = tmp_path / ".index.html.swp"
+    tmp.write_text("two")
+    os.replace(tmp, f)
+    _bump(tmp_path)
+    assert model.dir_rev(tmp_path) != before
+
+
+def test_dir_rev_sees_a_nested_asset(tmp_path):
+    (tmp_path / "assets").mkdir()
+    logo = tmp_path / "assets" / "logo.svg"
+    logo.write_text("<svg/>")
+    before = model.dir_rev(tmp_path)
+    logo.write_text("<svg></svg>")
+    _bump(logo)
+    assert model.dir_rev(tmp_path) != before
+
+
+def test_dir_rev_ignores_git_and_node_modules(tmp_path):
+    (tmp_path / "index.html").write_text("x")
+    for d in (".git", "node_modules"):
+        (tmp_path / d).mkdir()
+        (tmp_path / d / "f").write_text("x")
+    before = model.dir_rev(tmp_path)
+    for d in (".git", "node_modules"):
+        _bump(tmp_path / d / "f")
+    assert model.dir_rev(tmp_path) == before
+
+
+def test_dir_rev_of_a_missing_directory_is_zero(tmp_path):
+    assert model.dir_rev(tmp_path / "gone") == 0
+
+
+# -- what changed, read from git --------------------------------------------------
+
+
+def _git(cwd, *args):
+    import subprocess
+    subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True,
+                   env={**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+                        "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_GLOBAL": "/dev/null"})
+
+
+@pytest.fixture
+def repo(tmp_path):
+    _git(tmp_path, "init", "-q")
+    (tmp_path / "a.py").write_text("".join(f"value_{i} = {i}\n" for i in range(1, 21)))
+    (tmp_path / "same.py").write_text("x = 1\n")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-q", "-m", "start")
+    return tmp_path
+
+
+def test_a_change_is_read_from_git_with_line_numbers(repo):
+    lines = (repo / "a.py").read_text().splitlines()
+    lines[4] = "value_5 = 50"         # edit two lines
+    lines[14] = "value_15 = 150"
+    lines.insert(10, "added = True")  # and add one
+    (repo / "a.py").write_text("\n".join(lines) + "\n")
+    src = model.parse_source("change:a.py", repo)
+    assert src["type"] == "inline" and src["format"] == "change" and src["path"] == "a.py"
+    assert src["rev"] is None and src["lang"] == "py" and src["more"] == 0
+    assert src["added"] == 3 and src["removed"] == 2
+    rows = [r for h in src["hunks"] for r in h["lines"]]
+    assert {"op": "-", "old": 5, "new": None, "text": "value_5 = 5"} in rows
+    assert {"op": "+", "old": None, "new": 5, "text": "value_5 = 50"} in rows
+    assert {"op": "+", "old": None, "new": 11, "text": "added = True"} in rows
+    assert {"op": "+", "old": None, "new": 16, "text": "value_15 = 150"} in rows
+    first = src["hunks"][0]
+    assert first["header"].startswith("@@ -3,") and first["start_new"] == 3 and first["start_old"] == 3
+    assert model.change_source(repo, "a.py since HEAD~0")["added"] == 3
+
+
+def test_an_untracked_file_is_all_new(repo):
+    (repo / "new.py").write_text("a = 1\nb = 2\n")
+    src = model.change_source(repo, "new.py")
+    rows = src["hunks"][0]["lines"]
+    assert [r["op"] for r in rows] == ["+", "+"] and [r["new"] for r in rows] == [1, 2]
+    assert src["added"] == 2 and src["removed"] == 0
+
+
+def test_a_change_that_cannot_be_shown_says_why(repo, tmp_path_factory):
+    with pytest.raises(model.SourceError, match="no changes in same.py"):
+        model.change_source(repo, "same.py")
+    with pytest.raises(model.SourceError, match="not a git revision"):
+        model.change_source(repo, "a.py since ;rm")
+    with pytest.raises(model.SourceError, match="not a git revision"):
+        model.change_source(repo, "a.py since --output=x")
+    with pytest.raises(model.SourceError, match="outside the project"):
+        model.change_source(repo, "../elsewhere.py")
+    (repo / "b.bin").write_bytes(b"\0\1\2")
+    with pytest.raises(model.SourceError, match="binary"):
+        model.change_source(repo, "b.bin")
+    plain = tmp_path_factory.mktemp("plain")
+    (plain / "x.py").write_text("x\n")
+    with pytest.raises(model.SourceError, match="not a git repository"):
+        model.change_source(plain, "x.py")
+
+
+def test_a_long_change_shows_80_lines_and_counts_the_rest(repo):
+    (repo / "a.py").write_text("".join(f"other_{i} = {i}\n" for i in range(1, 181)))
+    src = model.change_source(repo, "a.py")
+    shown = sum(len(h["lines"]) for h in src["hunks"])
+    assert shown == 80 and src["added"] == 180 and src["removed"] == 20
+    assert src["more"] == 200 - 80
+
+
+def test_a_highlight_is_ordered_clamped_and_refused_outside_the_range(tmp_path):
+    (tmp_path / "a.py").write_text("\n".join(f"x{i}" for i in range(1, 11)) + "\n")
+    assert model.parse_source("code:a.py:5-8 highlight 7-3", tmp_path)["highlight"] == [5, 7]
+    assert model.parse_source("code:a.py:5-200 highlight 9-40", tmp_path)["highlight"] == [9, 10]
+    with pytest.raises(model.SourceError, match="outside lines 5-8"):
+        model.parse_source("code:a.py:5-8 highlight 1-2", tmp_path)
+
+
+def test_a_file_is_framed_only_when_a_browser_can_show_it():
+    for name in ("deck.html", "Deck.HTM", "chart.svg", "report.pdf", "shot.png", "clip.webm"):
+        assert model.file_display(name) == "page", name
+    for name in ("notes.md", "README.markdown"):
+        assert model.file_display(name) == "markdown", name
+    for name in ("config.yaml", "rows.csv", "run.sh", "talk.py", "Main.java", "app.ts", "Makefile", "build.log"):
+        assert model.file_display(name) == "text", name
+
+
+SEQ = {"actors": [{"id": "p", "label": "Page"}, {"id": "s", "label": "Server"}],
+       "steps": [{"id": "s1", "from": "p", "to": "s", "arrow": "request", "label": "POST /turn"}]}
+FLOW = {"nodes": [{"id": "a", "role": "entry", "label": "Start"}, {"id": "b", "role": "success", "label": "Done"}],
+        "edges": [{"from": "a", "to": "b"}]}
+
+
+def test_a_sequence_or_flowchart_spec_on_stdin_is_drawn_by_the_shared_tools(tmp_path):
+    seq = model.parse_source("sequence:-", tmp_path, json.dumps(SEQ))
+    assert (seq["type"], seq["format"], seq["tool"]) == ("inline", "visual", "sequence")
+    # the stage draws a sequence as its lanes and a flowchart as its map, from the spec: no drawing is stored
+    assert seq == {"type": "inline", "format": "visual", "tool": "sequence", "spec": SEQ}
+    flow = model.parse_source("flowchart:-", tmp_path, json.dumps(FLOW))
+    assert flow == {"type": "inline", "format": "visual", "tool": "flowchart", "spec": FLOW}
+
+
+def test_a_bad_spec_says_what_the_tool_said(tmp_path):
+    with pytest.raises(model.SourceError, match="sequence:-: not JSON"):
+        model.parse_source("sequence:-", tmp_path, "graph LR; a-->b")
+    with pytest.raises(model.SourceError, match="sequence:-: .*actor"):
+        model.parse_source("sequence:-", tmp_path, json.dumps({"actors": [], "steps": []}))
+
+
+def test_numbers_where_the_tools_want_text_are_drawn_and_a_wrong_shape_is_refused(tmp_path):
+    seq = {"actors": [{"id": 1, "label": "Page"}, {"id": 2, "label": "Server"}],
+           "steps": [{"id": 1, "from": 1, "to": 2, "arrow": "request", "label": 404}]}
+    drawn = model.parse_source("sequence:-", tmp_path, json.dumps(seq))
+    assert drawn["spec"]["steps"][0] == {"id": "1", "from": "1", "to": "2", "arrow": "request", "label": "404"}
+    flow = {"nodes": [{"id": 1, "label": 404}, {"id": "b", "label": "B"}], "edges": [{"from": 1, "to": "b"}]}
+    assert [n["id"] for n in model.parse_source("flowchart:-", tmp_path, json.dumps(flow))["spec"]["nodes"]] == ["1", "b"]
+    with pytest.raises(model.SourceError, match="nodes must be a list of objects"):
+        model.parse_source("flowchart:-", tmp_path, json.dumps({"nodes": ["a", "b"]}))
+    with pytest.raises(model.SourceError, match="edges must be a list of objects"):
+        model.parse_source("flowchart:-", tmp_path, json.dumps({"nodes": [{"id": "a", "label": "A"}], "edges": "x"}))
+    with pytest.raises(model.SourceError, match="block wrapper"):
+        model.parse_source("flowchart:-", tmp_path, json.dumps({"id": "s", "kind": "flowchart", "spec": FLOW}))
+
+
+def test_a_group_must_name_an_id_and_only_the_specs_nodes(tmp_path):
+    nodes = [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}]
+    ok = {"nodes": nodes, "edges": [], "groups": [{"id": "g", "label": "G", "nodes": ["a", "b"]}]}
+    assert model.parse_source("flowchart:-", tmp_path, json.dumps(ok))["spec"]["groups"] == ok["groups"]
+    for bad in ({"id": "g", "nodes": ["a", "z"]}, {"id": "", "nodes": ["a"]}, {"id": "g", "nodes": "a"}, {"nodes": ["a"]}):
+        with pytest.raises(model.SourceError, match="needs an id and a list of the spec's node ids"):
+            model.parse_source("flowchart:-", tmp_path, json.dumps({"nodes": nodes, "edges": [], "groups": [bad]}))
+
+
+def test_a_spec_the_tool_cannot_read_is_refused_not_raised(tmp_path, monkeypatch):
+    monkeypatch.setattr(model.sequence_svg, "validate", lambda *a, **k: 1 / 0)
+    with pytest.raises(model.SourceError, match="could not read this spec"):
+        model.parse_source("sequence:-", tmp_path, json.dumps(SEQ))
+
+
+def test_stdin_kinds_take_talks_names_and_an_unknown_one_is_refused(tmp_path):
+    assert model.parse_source("mermaid:-", tmp_path, "graph TD; A-->B")["tool"] == "flowchart"
+    assert model.parse_source("grid:-", tmp_path, "| a |\n|---|\n| 1 |")["format"] == "table"
+    with pytest.raises(model.SourceError, match="unknown chart:-"):
+        model.parse_source("chart:-", tmp_path, "x")
+
+
+def test_a_sequences_refs_keep_the_lines_round_them_and_a_ref_to_nothing_is_a_problem(tmp_path):
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "talk.py").write_text("".join(f"line {i}\n" for i in range(1, 11)))
+    spec = {"actors": [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}],
+            "steps": [{"id": "s1", "from": "a", "to": "b", "arrow": "request", "label": "near the top", "ref": "pkg/talk.py:2"},
+                      {"id": "s2", "from": "a", "to": "b", "arrow": "request", "label": "at the end", "ref": "pkg/talk.py:10"},
+                      {"id": "s3", "from": "a", "to": "b", "arrow": "request", "label": "past it", "ref": "pkg/talk.py:11"},
+                      {"id": "s4", "from": "a", "to": "b", "arrow": "request", "label": "no file", "ref": "pkg/gone.py:1"},
+                      {"id": "s5", "from": "a", "to": "b", "arrow": "request", "label": "outside", "ref": "../x.py:1"}]}
+    refs, problems = model.step_refs(spec, tmp_path)
+    assert refs == {"s1": {"path": "pkg/talk.py", "start": 1, "at": 2, "lines": [f"line {i}" for i in range(1, 8)], "lang": "py"},
+                    "s2": {"path": "pkg/talk.py", "start": 8, "at": 10, "lines": ["line 8", "line 9", "line 10"], "lang": "py"}}
+    assert problems == ["step s3: ref pkg/talk.py:11 is past the end of pkg/talk.py, which has 10 lines",
+                        "step s4: ref pkg/gone.py:1 names no file in the code folder",
+                        "step s5: ref ../x.py:1 names no file in the code folder"]
+    # a sequence put up from stdin keeps them, read from the folder it is put up in
+    source = model.parse_source("sequence:-", tmp_path, json.dumps({**spec, "steps": spec["steps"][:1]}))
+    assert source["refs"] == {"s1": refs["s1"]}
+
+
+MAP = {"columns": ["Who", "Where"], "boxes": [{"id": 1, "col": 0, "row": 0, "name": "A <b>person</b>", "b": 1},
+                                              {"id": "svc", "col": 1, "row": 0, "name": "bills.pay", "b": 2, "r": 1}],
+       "arrows": [{"from": 1, "to": "svc", "b": 2}, {"layer": "route", "from": 1, "to": "svc", "r": 1, "n": 1}]}
+
+
+def test_a_map_on_stdin_is_drawn_here_keyed_and_keeps_its_numbers_and_its_words_as_text(tmp_path):
+    src = model.parse_source("map:-", tmp_path, json.dumps(MAP))
+    assert (src["type"], src["format"], src["tool"]) == ("inline", "visual", "map")
+    # an id written as a number is text; a column, a row and a step stay numbers
+    assert src["spec"]["boxes"][0] == {"id": "1", "col": 0, "row": 0, "name": "A <b>person</b>", "b": 1}
+    assert src["spec"]["arrows"][1]["r"] == 1 and src["spec"]["arrows"][1]["to"] == "svc"
+    svg = src["svg"]
+    assert svg.startswith('<svg class="vz"') and 'data-key="box:1"' in svg and 'data-key="route:1"' in svg
+    assert "<b>" not in svg and "A &lt;b&gt;person&lt;/b&gt;" in svg
+    # the same spec draws the same map, its ids prefixed alike
+    assert model.parse_source("map:-", tmp_path, json.dumps(MAP))["svg"] == svg
+
+
+def test_a_map_the_tool_refuses_says_why(tmp_path):
+    with pytest.raises(model.SourceError, match="map:-: map requires columns"):
+        model.parse_source("map:-", tmp_path, json.dumps({"boxes": [{"id": "a"}]}))
+    with pytest.raises(model.SourceError, match="map:-: box 'b' overlaps box 'a'"):
+        model.parse_source("map:-", tmp_path, json.dumps({"columns": ["x"], "boxes": [
+            {"id": "a", "col": 0, "row": 0, "name": "A"}, {"id": "b", "col": 0, "row": 0, "name": "B"}]}))
+
+
+def test_a_sequence_takes_the_lane_sequences_fields_and_keeps_its_step_numbers(tmp_path):
+    seq = {"actors": [{"id": "p", "label": "Person", "role": "pays", "tone": "blue"}, {"id": "s", "label": "Service", "tone": "green"}],
+           "steps": [{"id": "s1", "from": "p", "to": "s", "arrow": "request", "label": "pays", "n": 1,
+                      "checks": [{"label": "unpaid", "ok": True}]}],
+           "outcome": {"tone": "green", "title": "Paid once", "lines": ["the rule holds"]}}
+    src = model.parse_source("sequence:-", tmp_path, json.dumps(seq))
+    assert src["spec"]["steps"][0]["n"] == 1 and src["spec"]["outcome"]["title"] == "Paid once"
+
+
+@pytest.fixture
+def elsewhere(tmp_path_factory):
+    """A git repository outside the project, with a changed file and a file git ignores."""
+    other = tmp_path_factory.mktemp("other-repo")
+    _git(other, "init", "-q")
+    (other / "lib.py").write_text("".join(f"line_{i} = {i}\n" for i in range(1, 11)))
+    (other / ".gitignore").write_text(".env\n")
+    _git(other, "add", ".")
+    _git(other, "commit", "-q", "-m", "start")
+    lines = (other / "lib.py").read_text().splitlines()
+    lines[2] = "line_3 = 30"
+    (other / "lib.py").write_text("\n".join(lines) + "\n")
+    (other / ".env").write_text("TOKEN=secret\n")
+    return other
+
+
+def test_an_absolute_path_in_another_repository_shows_its_change(repo, elsewhere):
+    src = model.change_source(repo, f"{elsewhere / 'lib.py'}")
+    assert src["path"] == f"{elsewhere.resolve().name}/lib.py"
+    rows = [r for h in src["hunks"] for r in h["lines"]]
+    assert {"op": "-", "old": 3, "new": None, "text": "line_3 = 3"} in rows
+    assert {"op": "+", "old": None, "new": 3, "text": "line_3 = 30"} in rows
+    assert src["added"] == 1 and src["removed"] == 1
+    code = model.code_source(repo, f"{elsewhere / 'lib.py'}:2-4")
+    assert code["path"] == f"{elsewhere.resolve().name}/lib.py"
+    assert code["lines"] == ["line_2 = 2", "line_3 = 30", "line_4 = 4"]
+
+
+def test_an_outside_file_git_ignores_is_refused(repo, elsewhere):
+    with pytest.raises(model.SourceError, match="ignored by git"):
+        model.code_source(repo, f"{elsewhere / '.env'}:1-1")
+    with pytest.raises(model.SourceError, match="ignored by git"):
+        model.change_source(repo, f"{elsewhere / '.env'}")
+
+
+def test_an_outside_path_in_a_hidden_home_folder_is_refused(repo, tmp_path_factory, monkeypatch):
+    home = tmp_path_factory.mktemp("home")
+    secret = home / ".ssh"
+    secret.mkdir()
+    _git(secret, "init", "-q")
+    (secret / "id_rsa").write_text("key\n")
+    monkeypatch.setenv("HOME", str(home))
+    with pytest.raises(model.SourceError, match="hidden folder"):
+        model.code_source(repo, f"{secret / 'id_rsa'}:1-1")
+    with pytest.raises(model.SourceError, match="hidden folder"):
+        model.code_source(repo, "~/.ssh/id_rsa:1-1")
+
+
+def test_an_outside_path_in_no_repository_and_a_relative_escape_stay_refused(repo, tmp_path_factory):
+    plain = tmp_path_factory.mktemp("plain-folder")
+    (plain / "x.py").write_text("x\n")
+    with pytest.raises(model.SourceError, match="in no git repository"):
+        model.code_source(repo, f"{plain / 'x.py'}:1-1")
+    with pytest.raises(model.SourceError, match="outside the project"):
+        model.code_source(repo, "../x.py:1-1")
+    with pytest.raises(model.SourceError, match="outside the project"):
+        model.change_source(repo, "../elsewhere/lib.py")

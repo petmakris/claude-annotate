@@ -1,0 +1,71 @@
+/* annotate page styles, part 12 of 13 (see style.css): read-aloud
+   (speech.js). */
+
+/* ── Read-aloud ─────────────────────────────────────────────────────────
+   The explainer card sits under the passage, in the comment box's wash.
+   Words ahead are dimmed, the word being heard is tinted, and the page
+   sentence being explained is lit like a reading highlight. */
+.sp-card {
+  display: block; margin: 8px 0 4px; padding: 10px 12px; border-radius: 10px;
+  background: var(--type-comment-wash);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+  font-weight: 400; font-style: normal;
+}
+/* A paragraph's text is 6px in from its box (main.prose p's padding), and
+   the card under it starts where the text does. A card inside a list item
+   is already there. */
+p + .sp-card, blockquote + .sp-card { margin-left: 6px; }
+.sp-head { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+/* The mode is two tabs on a quiet track; the chosen one is a raised chip. */
+.sp-tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 7px;
+  background: color-mix(in srgb, var(--text-dim) 12%, transparent); }
+.sp-tabs button { border: 0; background: transparent; color: var(--text-dim); font: inherit; font-size: 12px;
+  font-weight: 500; padding: 3px 10px; border-radius: 5px; cursor: pointer; }
+.sp-tabs button:hover { color: var(--text-strong); }
+.sp-tabs button[aria-pressed="true"] { background: var(--surface); color: var(--text-strong); font-weight: 600;
+  box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgba(0, 0, 0, .10); }
+.sp-x { margin-left: auto; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-dim); cursor: pointer; }
+.sp-script { font-size: 15px; line-height: 1.65; color: var(--text); }
+.sp-script .w { border-radius: 4px; transition: opacity 90ms linear, background 90ms linear; }
+/* Dimmed, not faded out: the words ahead keep 4.5:1 against the card. */
+.sp-script.playing .w:not(.done):not(.now) { opacity: .74; }
+body[data-page-theme="dark"] .sp-script.playing .w:not(.done):not(.now) { opacity: .6; }
+.sp-script .w.now { opacity: 1; color: var(--text-strong); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.sp-ctl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.sp-btn { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--control-border);
+  background: transparent; color: var(--text); font: inherit; font-size: 12.5px; font-weight: 500;
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.sp-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+.sp-btn svg { width: 13px; height: 13px; fill: currentColor; }
+/* Back one sentence: a square the height of Play, with a stroked icon the
+   size of the toolbar's. */
+.sp-icon { width: 28px; padding: 0; justify-content: center; }
+.sp-icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; }
+.sp-seg { display: inline-flex; border: 1px solid var(--control-border); border-radius: 6px; overflow: hidden; }
+.sp-seg button { border: 0; background: transparent; color: var(--text); font: inherit; font-size: 12px; padding: 4px 9px; cursor: pointer; }
+/* Play is the one solid blue control; the chosen speed is a tint. */
+.sp-seg button[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text-strong); font-weight: 600; }
+.sp-bar { flex: 1 1 80px; min-width: 60px; height: 4px; border-radius: 2px; overflow: hidden;
+  background: color-mix(in srgb, var(--text-dim) 25%, transparent); }
+.sp-bar i { display: block; height: 100%; width: 0; background: var(--accent); }
+.sp-time { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.sp-wait { display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; color: var(--text-dim); }
+.sp-wait i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: sp-blink 1s infinite; }
+.sp-wait i:nth-child(2) { animation-delay: .2s; } .sp-wait i:nth-child(3) { animation-delay: .4s; }
+@keyframes sp-blink { 50% { opacity: .2; } }
+.sp-error { font-size: 13px; color: var(--text); margin-bottom: 8px; }
+::highlight(annotate-speaking) { background-color: var(--highlight); }
+.sel-menu button[disabled] { opacity: .45; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) { .sp-script .w { transition: none; } .sp-wait i { animation: none; } }
+body.read-only .sp-card { display: none; }
+.sp-card:focus { outline: none; }
+.sp-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* A finger needs 44 px. */
+@media (pointer: coarse) {
+  .sp-btn { height: 44px; min-width: 44px; justify-content: center; }
+  .sp-seg button, .sp-tabs button { min-height: 44px; padding: 0 12px; }
+  .sp-x { width: 44px; height: 44px; }
+}

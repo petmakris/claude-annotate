@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Adversarial</title>
+<style>.slide{position:relative;width:1280px;height:720px;padding:40px;background:#fff}
+.bul li{margin:6px 0}</style></head><body>
+<div class="deck">
+
+<section class="slide"><span class="num">1</span>
+  <div class="title">Nested list</div>
+  <ul class="bul">
+    <li>Top level point
+      <ul><li>sub point A</li><li>sub point B</li></ul>
+    </li>
+    <li>Second top point</li>
+  </ul>
+</section>
+
+<section class="slide"><span class="num">2</span>
+  <p class="lede">An unclosed lede
+  <div class="conseq">The consequence line</div>
+  <div class="title">And the title</div>
+</section>
+
+<section class="slide"><span class="num">3</span>
+  <svg class="diag" width="10" height="10"><line x1="0" y1="0" x2="9" y2="9"></svg>
+  <div class="diag">The caption under the diagram</div>
+  <img class="ph"/>
+  <div class="ph">Caption after a self-closed image</div>
+</section>
+
+<section class="slide"><span class="num">4</span>
+  <div class="title">Outer slide</div>
+  <section class="slide"><div class="j">nested section content</div></section>
+  <div class="m">After the nested section</div>
+</section>
+
+<section class="slide"><span class="num">5</span>
+  <ul class="bul"><li>one<li>two</ul>
+  <div class="title">Title after an unclosed item</div>
+  <div class="tbl"><table><tr><td>A<td>B<tr><td>C<td>D</table></div>
+</section>
+
+</div></body></html>

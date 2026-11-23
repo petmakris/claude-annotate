@@ -1,0 +1,212 @@
+{
+  "title": "Document Upload Wire",
+  "eyebrow": "example · documents service",
+  "lede": "How an upload becomes the <code>PUT /{tenant}/documents</code> call to the archive. The tenant and the storage format come from injected beans, not from the request.",
+  "caption": "<code>tenant</code> is read from the context and docks level with the client's first parameter. Three document fields converge on one multipart part. <code>notify</code> skips the document and runs straight to the client.",
+  "sources": {
+    "head": [
+      "Stage",
+      "File",
+      "Detail"
+    ],
+    "rows": [
+      [
+        "Entry",
+        "web/DocumentController.java:31",
+        "made-up example"
+      ]
+    ]
+  },
+  "cards": [
+    {
+      "id": "ctxTenant",
+      "stage": "FROM THE CONTEXT",
+      "name": "not an argument",
+      "sub": "injected bean",
+      "fields": [
+        {
+          "id": "tenant",
+          "label": "tenantResolver.currentTenantId()"
+        }
+      ]
+    },
+    {
+      "id": "entry",
+      "stage": "ENTRY",
+      "name": "upload(…)",
+      "sub": "DocumentController:31",
+      "fields": [
+        {
+          "id": "file",
+          "label": "MultipartFile file"
+        },
+        {
+          "id": "notify",
+          "label": "boolean notify"
+        },
+        {
+          "id": "title",
+          "label": "String title"
+        }
+      ]
+    },
+    {
+      "id": "cmd",
+      "stage": "COMMAND",
+      "name": "UploadCommand",
+      "sub": "toCommand:18",
+      "fields": [
+        {
+          "id": "title",
+          "label": "title"
+        },
+        {
+          "id": "notify",
+          "label": "notify"
+        },
+        {
+          "id": "file",
+          "label": "file"
+        }
+      ]
+    },
+    {
+      "id": "ctxFormat",
+      "stage": "FROM THE CONTEXT",
+      "name": "not an argument",
+      "sub": "injected bean",
+      "fields": [
+        {
+          "id": "format",
+          "label": "storageProperties.format()"
+        }
+      ]
+    },
+    {
+      "id": "doc",
+      "stage": "DOCUMENT PART",
+      "name": "StoredDocument",
+      "sub": "built in DocumentService:57",
+      "fields": [
+        {
+          "id": "name",
+          "label": "name"
+        },
+        {
+          "id": "ctype",
+          "label": "contentType"
+        },
+        {
+          "id": "bytes",
+          "label": "bytes"
+        }
+      ]
+    },
+    {
+      "id": "client",
+      "stage": "CLIENT",
+      "name": "store(…)",
+      "sub": "ArchiveClient:22",
+      "fields": [
+        {
+          "id": "tenant",
+          "label": "@PathVariable tenant"
+        },
+        {
+          "id": "notify",
+          "label": "@RequestParam notify"
+        },
+        {
+          "id": "part",
+          "label": "@RequestPart document"
+        }
+      ]
+    },
+    {
+      "id": "wire",
+      "stage": "ON THE WIRE",
+      "name": "PUT /{tenant}/documents",
+      "sub": "multipart/form-data",
+      "fields": [
+        {
+          "id": "tenant",
+          "label": "/{tenant}/…"
+        },
+        {
+          "id": "notify",
+          "label": "?notify=true|false"
+        },
+        {
+          "id": "part",
+          "label": "part document"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "entry.title",
+      "to": "cmd.title"
+    },
+    {
+      "from": "entry.notify",
+      "to": "cmd.notify"
+    },
+    {
+      "from": "entry.file",
+      "to": "cmd.file"
+    },
+    {
+      "from": "cmd.title",
+      "to": "doc.name",
+      "label": "+ extension"
+    },
+    {
+      "from": "cmd.file",
+      "to": "doc.bytes",
+      "label": "read fully"
+    },
+    {
+      "from": "ctxFormat.format",
+      "to": "doc.name"
+    },
+    {
+      "from": "ctxFormat.format",
+      "to": "doc.ctype",
+      "label": "json or xml"
+    },
+    {
+      "from": "cmd.notify",
+      "to": "client.notify"
+    },
+    {
+      "from": "ctxTenant.tenant",
+      "to": "client.tenant",
+      "label": "String.valueOf"
+    },
+    {
+      "from": "doc.name",
+      "to": "client.part"
+    },
+    {
+      "from": "doc.ctype",
+      "to": "client.part"
+    },
+    {
+      "from": "doc.bytes",
+      "to": "client.part"
+    },
+    {
+      "from": "client.tenant",
+      "to": "wire.tenant"
+    },
+    {
+      "from": "client.notify",
+      "to": "wire.notify"
+    },
+    {
+      "from": "client.part",
+      "to": "wire.part"
+    }
+  ]
+}

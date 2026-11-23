@@ -1,0 +1,208 @@
+/* diagram.css — annotate's own part of how a diagram looks: its tone palette
+   (light and dark), the card that scrolls a wide diagram, and the states only
+   annotate's page has (a linked step, a comment card, the layout and view
+   buttons). The drawing itself is visuals.css, shared with the stage, loaded
+   just before this file. */
+/* The card is the scroll container. Without this the fixed-width SVG would be
+   clipped by .block-content's overflow, which is the whole point of not
+   scaling: wide diagrams scroll, they never shrink. */
+section.block[data-kind="sequence"] .block-content {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+}
+
+/* A diagram that scrolls sideways said nothing about it: 416px of picture in
+   a 301px box at phone width, cut at the edge with no sign there was more.
+   Scroll shadows — the covers move with the content (`local`), the shadows
+   stay with the box (`scroll`), so a shadow shows exactly on a side that has
+   more to scroll to and disappears at that end. No script, no state. */
+section.block[data-kind="sequence"] .block-content,
+section.block[data-kind="flowchart"] .block-content {
+  background:
+    linear-gradient(to right, var(--surface) 40%, transparent) left center / 28px 100% no-repeat local,
+    linear-gradient(to left, var(--surface) 40%, transparent) right center / 28px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(20, 24, 40, .22), transparent) left center / 14px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(20, 24, 40, .22), transparent) right center / 14px 100% no-repeat scroll;
+}
+
+/* ── tone palette ──────────────────────────────────────────────────
+   A tone is what the reader should conclude from an edge, not the mechanism
+   that carried it. `plain` is the unclassed default. On the root, so the
+   dark set below overrides it: declared on the svg it beat the inherited
+   dark inks, and a dark page drew light arrows. */
+:root {
+  --t-plain:    #3c4c5b;
+  --t-edge:     #3a6d99;
+  --t-internal: #a2560a;
+  --t-service:  #0c6d63;
+  --t-cheap:    #7c8a97;
+  --t-hot:      #a3364f;
+  --t-good:     #2c6b4c;
+  --t-dropped:  #98a2ad;
+  --t-internal-bg: #f8ecdd;
+  --t-hot-bg:      #f8e6ea;
+  --t-good-bg:     #e2f0e8;
+  --t-edge-bg:     #e4edf5;
+  --t-service-bg:  #dff0ed;
+  --t-cheap-bg:    #eef0f4;
+}
+
+/* Dark. The INKS lift (a #3a6d99 on #212830 is unreadable) and the washes
+   become tints of the card rather than pastels of white — same hues, same
+   roles, re-solved for the ground. `--diagram-ground` is what every shape
+   that used to say `white` now fills with; it is the card, so a diagram sits
+   ON the card instead of punching a white hole in it. */
+:root:has(body[data-page-theme="dark"]) {
+  --t-plain:    #adb7c2;
+  --t-edge:     #6cb0e8;
+  --t-internal: #e0a458;
+  --t-service:  #4cc6b8;
+  --t-cheap:    #9a9a9a;
+  --t-hot:      #f2848f;
+  --t-good:     #63c98d;
+  --t-dropped:  #767f8b;
+  --t-internal-bg: #3b2f1e;
+  --t-hot-bg:      #3d2429;
+  --t-good-bg:     #1f3a2a;
+  --t-edge-bg:     #1e3347;
+  --t-service-bg:  #17393a;
+  --t-cheap-bg:    #313131;
+}
+
+/* Selected pair. The halo and the row wash carry the selection so a toned
+   badge keeps its own ink: `hot` stays red while it is the one being read. */
+.annotate-seq .step-row.is-linked .badge-halo {
+  fill: color-mix(in srgb, var(--accent) 26%, transparent);
+}
+.annotate-seq .step-row.is-linked .row-bg {
+  fill: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.annotate-seq .step-row.is-linked .arr { stroke-width: 2.4; }
+.seq-key-row:hover { background: var(--hover-tint); }
+.seq-key-row.is-linked { background: color-mix(in srgb, var(--accent) 11%, transparent); }
+.seq-key-row.is-linked .seq-key-n {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+/* Engaged-type state (post-click, you have a draft on this step) stays as a
+   subtle row wash — distinguishes drafted steps without the hover-band feel. */
+.annotate-seq .step-row[data-engaged-type="comment"] .row-bg { fill: color-mix(in srgb, var(--type-comment-fg) 10%, transparent); }
+.annotate-seq .step-row[data-engaged-type="reject"]  .row-bg { fill: color-mix(in srgb, var(--type-reject-fg) 9%, transparent); }
+
+/* Card ↔ row link: while a step's comment card is focused or hovered, its row
+   lights up accent so the pairing is unmistakable. */
+.annotate-seq .step-row[data-card-focus] .row-bg { fill: color-mix(in srgb, var(--accent) 15%, transparent); }
+.annotate-seq .step-row[data-card-focus] .arrow-label { fill: var(--accent); }
+.annotate-seq .step-row[data-card-focus] .arr { stroke-width: 2.4; }
+/* #c0392b is 2.64:1 on the dark card. The sequence palette's --t-hot is the
+   same red already solved for this ground: 5.79:1. */
+:root:has(body[data-page-theme="dark"]) .annotate-flow .flow-label-error { fill: #f2848f; }
+
+/* No pointer cursor and no hover emphasis on a node — parity with
+   .annotate-seq .step-row above, and for the same reason. The one thing in a
+   node that IS clickable is a real anchor, which keeps its own cursor rule.
+   The card-focus and engaged washes stay: they mark a node a comment already
+   points at, which is state, not an invitation. */
+.annotate-flow .node[data-card-focus] .node-shape { stroke-width: 2.4; }
+.annotate-flow .node[data-engaged-type="comment"] .node-shape { stroke: var(--type-comment-fg); }
+.annotate-flow .node[data-engaged-type="reject"]  .node-shape { stroke: var(--type-reject-fg); }
+
+/* Layout-flavour control — one row of buttons above a flowchart that shipped
+   more than one rendering. Sits inside .block-content so a repaint replaces it
+   with the SVG it belongs to and the two can never disagree. */
+.flow-flavours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.flow-flavours button {
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 11px;
+  cursor: pointer;
+}
+.flow-flavours button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.flow-flavours button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.flow-flavours button[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* View control — same mechanism as the layout flavours, different axis: a view
+   changes which edges are drawn, so it is a question the reader picked, not a
+   rendering preference. Marked with the accent to say so. */
+.flow-views button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── maps and lane sequences (vz.css) ──────────────────────────────
+   vz.css picks its light or dark tokens by the OS (prefers-color-scheme) or
+   by :root[data-theme]. This page has its own switch, body[data-page-theme],
+   and a light page on a dark OS must stay light. So the two token sets are
+   set again here by the page's switch. The values are vz.css's own;
+   tests/test_vz_blocks.py fails when the two files disagree. */
+:root:has(body:not([data-page-theme="dark"])) .vz-player,
+:root:has(body:not([data-page-theme="dark"])) svg.vz,
+:root:has(body:not([data-page-theme="dark"])) .block-frame:has(.vz-player) {
+  --vz-fg: #161c1a; --vz-dim: #56615b; --vz-line: #d6dbd5; --vz-card: #ffffff; --vz-sunk: #eceee9;
+  --vz-accent: #b2570a; --vz-accent-soft: #fbeedd;
+  --vz-blue: #2c5d8f; --vz-blue-soft: #e8eff8; --vz-red: #a33b30; --vz-red-soft: #f9e6e2;
+  --vz-green: #2f6b3d; --vz-green-soft: #e4f1e6; --vz-amber: #8a5a00; --vz-amber-soft: #fbf1df;
+}
+:root:has(body[data-page-theme="dark"]) .vz-player,
+:root:has(body[data-page-theme="dark"]) svg.vz,
+:root:has(body[data-page-theme="dark"]) .block-frame:has(.vz-player) {
+  --vz-fg: #e9edea; --vz-dim: #a3aca7; --vz-line: #313936; --vz-card: #1c2220; --vz-sunk: #161b19;
+  --vz-accent: #f3a957; --vz-accent-soft: #3a2a14;
+  --vz-blue: #8fb8e6; --vz-blue-soft: #1b2634; --vz-red: #f0928a; --vz-red-soft: #2f1c1a;
+  --vz-green: #93c897; --vz-green-soft: #1b2a1e; --vz-amber: #e3b860; --vz-amber-soft: #2b2415;
+}
+
+/* The drawing was measured in Inter and JetBrains Mono with no letter
+   spacing (visuals/text_metrics.py, stage face). The page body sets a small
+   negative tracking, which the SVG's text would inherit and draw narrower
+   than measured. */
+svg.vz, .vz-player { letter-spacing: normal; font-feature-settings: normal; }
+
+/* The player sits on the ground vz.css draws for (--vz-card), and scrolls a
+   wide drawing in its own .vz-stage, so the card's scroll shadows go. */
+.block-frame:has(.vz-player) { background: var(--vz-card); }
+section.block .block-content:has(.vz-player) { background: none; overflow: visible; }
+
+/* The prose rules reach into the player's caption and must not:
+   `main.prose p` gives every paragraph a 140px right gutter for comment
+   cards, and `main.prose :not(pre) > code` repaints inline code. */
+main.prose .vz-player p { padding: 0; border-radius: 0; }
+main.prose .vz-player p:hover { background: none; }
+main.prose .vz-cap code {
+  background: var(--vz-sunk); padding: 1px 4px; border-radius: 4px;
+  color: inherit; box-shadow: none;
+  font-family: var(--vz-mono); font-size: .9em;
+}
+
+/* A sequence's or a map's subtitle, painted under its heading as text
+   (script-blocks.js paintVz). */
+main.prose p.vz-subtitle {
+  margin: 0 0 10px; padding: 0; color: var(--text-dim); font-size: 14px;
+}
+
+/* A drawing keeps its own size (paintVz sets --vz-w from its viewBox) and
+   its stage scrolls sideways. Maximize's Fit width is vz.css's own rule:
+   the drawing fills the width it is given. */
+main.prose .vz-stage svg.vz { width: var(--vz-w, 100%); max-width: none; }
+main.prose section.block.is-fit .vz-stage svg.vz { width: 100%; min-width: 0; }

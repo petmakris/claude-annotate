@@ -1,0 +1,1614 @@
+import json
+import asyncio
+import threading
+import time
+
+from helpers import AUTH, CALL, run, running_app, silent_wav, talk
+
+
+async def settle(call):
+    """Let the background speech tasks finish."""
+    for _ in range(50):
+        if all(e.get("speech") in (None, "ready", "failed") for e in call.entries):
+            return
+        await asyncio.sleep(0.02)
+
+
+def test_every_api_route_needs_the_token(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            statuses = []
+            for method, path in [("get", "/api/state"), ("post", "/api/listen"), ("post", "/api/say"),
+                                 ("get", "/api/turn?wait=0"), ("post", "/api/reply"), ("post", "/api/activity")]:
+                statuses.append((await getattr(client, method)(path)).status)
+            return statuses
+
+    assert run(go()) == [403] * 6
+
+
+def test_the_page_needs_the_call_id(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            return (await client.get("/c/wrong")).status, (await client.get(f"/c/{CALL}")).status
+
+    assert run(go()) == (404, 200)
+
+
+def test_a_recording_becomes_a_turn(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            fake.heard = "show me the queue"
+            resp = await client.post("/api/listen?lang=el", data=silent_wav(), headers=AUTH)
+            turn = await (await client.get("/api/turn?wait=1", headers=AUTH)).json()
+            return await resp.json(), turn, fake.languages
+
+    said, turn, languages = run(go())
+    assert said["text"] == "show me the queue"
+    assert turn == {"type": "turn", "id": "t1", "said": [{"who": "you", "text": "show me the queue"}]}
+    assert languages == ["el"]
+
+
+def test_a_recording_to_edit_comes_back_as_text_and_is_no_turn(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            fake.heard = "show me the queue"
+            said = await (await client.post("/api/listen?lang=en&draft=1", data=silent_wav(), headers=AUTH)).json()
+            return said, len(call.entries), (await client.get("/api/turn?wait=0.1", headers=AUTH)).status
+
+    assert run(go()) == ({"text": "show me the queue"}, 0, 204)
+
+
+def test_spoken_text_sent_after_editing_is_a_turn_not_marked_typed(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            await client.post("/api/say", json={"text": "show me the queue, edited", "spoken": True}, headers=AUTH)
+            turn = await (await client.get("/api/turn?wait=1", headers=AUTH)).json()
+            return turn, call.entries[-1]
+
+    turn, entry = run(go())
+    assert turn["said"] == [{"who": "you", "text": "show me the queue, edited"}]
+    assert entry["typed"] is False
+
+
+def test_a_recording_with_nothing_heard_is_no_turn(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            fake.heard = ""
+            said = await (await client.post("/api/listen", data=silent_wav(), headers=AUTH)).json()
+            return said, (await client.get("/api/turn?wait=0.1", headers=AUTH)).status
+
+    assert run(go()) == ({"text": ""}, 204)
+
+
+def test_a_speech_failure_reaches_the_page(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            fake.fail = "cannot reach VoiceStudio"
+            resp = await client.post("/api/listen", data=silent_wav(), headers=AUTH)
+            return resp.status, await resp.json()
+
+    status, body = run(go())
+    assert status == 502 and "VoiceStudio" in body["error"]
+
+
+def test_typed_text_becomes_a_turn_marked_typed(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            await client.post("/api/say", json={"text": "  what about put back?  "}, headers=AUTH)
+            turn = await (await client.get("/api/turn?wait=1", headers=AUTH)).json()
+            return turn, call.entries[-1]
+
+    turn, entry = run(go())
+    assert turn["said"] == [{"who": "you", "text": "what about put back?"}]
+    assert entry["typed"] is True
+
+
+def test_an_answer_is_shown_at_once_then_read_aloud_and_served(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            call.offer("hi", typed=True)
+            await call.turns.next(timeout=1)
+            resp = await client.post("/api/reply", json={"id": "t1", "text": "Use EXTERNAL_ONLY here."}, headers=AUTH)
+            shown = dict(call.entries[-1])
+            await settle(call)
+            entry = call.entries[-1]
+            audio = await client.get(f"/c/{CALL}/{entry['audio']}")
+            stranger = await client.get(f"/c/wrong/{entry['audio']}")
+            return await resp.json(), shown, entry, audio.status, await audio.read(), stranger.status, fake.spoken
+
+    body, shown, entry, status, audio, stranger, said = run(go())
+    assert body == {"ok": True, "board_problems": []}
+    assert shown["text"] == "Use EXTERNAL_ONLY here."
+    assert entry["speech"] == "ready" and entry["audio"] == "audio/0001.wav"
+    assert status == 200 and audio == silent_wav() and stranger == 404
+    assert said == ["Use external only here."]
+
+
+def test_an_answer_voicestudio_cannot_read_is_still_shown(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            call.offer("hi", typed=True)
+            await call.turns.next(timeout=1)
+            fake.fail = "HTTP 500"
+            await client.post("/api/reply", json={"id": "t1", "text": "Here it is."}, headers=AUTH)
+            await settle(call)
+            return call.entries[-1]
+
+    entry = run(go())
+    assert entry["text"] == "Here it is." and entry["speech"] == "failed" and "500" in entry["speech_error"]
+
+
+def test_a_status_is_shown_not_spoken_and_ignored_after_the_answer(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            call.offer("check jira", typed=True)
+            await call.turns.next(timeout=1)
+            first = await (await client.post("/api/reply", json={"id": "t1", "status": "checking Jira"},
+                                             headers=AUTH)).json()
+            await client.post("/api/reply", json={"id": "t1", "text": "Done."}, headers=AUTH)
+            late = await (await client.post("/api/reply", json={"id": "t1", "status": "still checking"},
+                                            headers=AUTH)).json()
+            await settle(call)
+            return first, late, [(e["who"], e["text"]) for e in call.entries], fake.spoken
+
+    first, late, entries, said = run(go())
+    assert first == {"ok": True} and "ignored" in late
+    assert ("status", "checking Jira") in entries and ("status", "still checking") not in entries
+    assert said == ["Done."]
+
+
+def test_notes_and_board_tags_leave_the_spoken_text(tmp_path):
+    (tmp_path / "a.py").write_text("x = 1\ny = 2\n")
+
+    async def go():
+        async with running_app(tmp_path, code=tmp_path) as (client, call, fake):
+            call.offer("show", typed=True)
+            await call.turns.next(timeout=1)
+            await client.post("/api/reply", json={"id": "t1", "text": (
+                "[[show code: a.py:1-2 | The file]]Look at the stage. [[note: follow up on y]]"
+                "[[show diagram | Flow]]graph TD; A[[Sub]]-->B[[/show]]That is all.")}, headers=AUTH)
+            await settle(call)
+            return [(e["who"], e["text"]) for e in call.entries], fake.spoken, call.board.items
+
+    entries, said, items = run(go())
+    assert ("board", "The file") in entries and ("board", "Flow") in entries
+    assert ("note", "follow up on y") in entries
+    assert ("claude", "Look at the stage. That is all.") in entries
+    assert said == ["Look at the stage. That is all."]  # read in one request
+    # a Mermaid graph is drawn as a map
+    assert items[1]["kind"] == "flowchart" and [n["label"] for n in json.loads(items[1]["body"])["nodes"]] == ["Sub", "B"]
+
+
+def test_a_wrap_up_ends_the_call_and_the_doorbell_hears_it(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            call.offer("bye", typed=True)
+            await call.turns.next(timeout=1)
+            await client.post("/api/reply", json={"id": "t1", "text": "Bye for now.", "end": True}, headers=AUTH)
+            end = await (await client.get("/api/turn?wait=1", headers=AUTH)).json()
+            after = await client.post("/api/say", json={"text": "wait"}, headers=AUTH)
+            await settle(call)
+            return end, after.status, call.view()["ended"]
+
+    end, after, ended = run(go())
+    assert end["type"] == "end" and end["reason"] == "wrapped up by Claude"
+    assert end["transcript"].endswith("transcript.md")
+    assert after == 410 and ended == "wrapped up by Claude"
+
+
+def test_ending_from_the_page_reaches_the_doorbell_and_refuses_replies(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            call.offer("hi", typed=True)
+            await call.turns.next(timeout=1)
+            await client.post("/api/stop", headers=AUTH)
+            end = await (await client.get("/api/turn?wait=1", headers=AUTH)).json()
+            late = await client.post("/api/reply", json={"id": "t1", "text": "Too late."}, headers=AUTH)
+            return end["reason"], late.status
+
+    assert run(go()) == ("ended from the page", 410)
+
+
+def test_a_late_reply_names_the_transcript_for_the_recap(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            call.offer("hi", typed=True)
+            await call.turns.next(timeout=1)
+            await client.post("/api/stop", headers=AUTH)
+            late = await client.post("/api/reply", json={"id": "t1", "text": "Too late."}, headers=AUTH)
+            return late.status, (await late.json())["transcript"]
+
+    status, transcript = run(go())
+    assert status == 410 and transcript.endswith("transcript.md")
+
+
+def test_a_turn_heard_after_the_hand_over_began_is_refused_so_the_page_sends_it_again(tmp_path):
+    from helpers import add_call, running_server
+
+    async def go():
+        async with running_server() as (client, server, fake):
+            call = add_call(server, tmp_path)
+            heard = fake.transcribe
+
+            def slow(audio, language=None):
+                server.handing_over = True  # the restart began while this was being heard
+                return heard(audio, language)
+
+            fake.transcribe = slow
+            with __import__("unittest.mock").mock.patch.object(talk.speech, "transcribe", slow):
+                resp = await client.post("/api/listen", data=silent_wav(), headers=AUTH)
+            return resp.status, [e for e in call.entries if e["who"] == "you"]
+
+    assert run(go()) == (503, [])
+
+
+def test_state_answers_same_until_something_changes(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            first = await (await client.get("/api/state", headers=AUTH)).json()
+            same = await (await client.get(f"/api/state?v={first['v']}", headers=AUTH)).json()
+            call.offer("hi", typed=True)
+            changed = await (await client.get(f"/api/state?v={first['v']}", headers=AUTH)).json()
+            return same, changed
+
+    same, changed = run(go())
+    assert same.get("same") is True
+    assert changed["entries"][-1]["text"] == "hi"
+
+
+def test_activity_from_the_answering_session_shows_while_it_works(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            call.offer("hi", typed=True)
+            await client.get("/api/turn?wait=1", headers=AUTH)
+            post = lambda body: client.post("/api/activity", json=body, headers=AUTH)  # noqa: E731
+            await post({"session_id": "me", "phase": "start", "tool": "Bash", "doorbell": True})
+            await post({"session_id": "other", "phase": "start", "tool": "Read", "label": "Reading b.py"})
+            await post({"session_id": "me", "phase": "start", "tool": "Read", "label": "Reading a.py"})
+            during = [(a["label"], a["state"]) for a in call.view()["activity"]]
+            await post({"session_id": "me", "phase": "end", "tool": "Read", "label": "Reading a.py"})
+            return during, [(a["label"], a["state"]) for a in call.view()["activity"]]
+
+    during, after = run(go())
+    assert during == [("Reading a.py", "running")]
+    assert after == [("Reading a.py", "done")]
+
+
+def test_the_transcript_records_the_call(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            call.offer("hello", typed=False)
+            await call.turns.next(timeout=1)
+            await client.post("/api/reply", json={"id": "t1", "text": "Hi."}, headers=AUTH)
+            await settle(call)
+            return call.transcript.read_text()
+
+    text = run(go())
+    assert "**You:** hello" in text and "**Claude:** Hi." in text
+
+
+def test_a_recording_in_auto_mode_lets_whisper_detect_the_language(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            await client.post("/api/listen?lang=auto", data=silent_wav(), headers=AUTH)
+            await client.post("/api/listen", data=silent_wav(), headers=AUTH)
+            return fake.languages
+
+    assert run(go()) == [None, None]
+
+
+def test_a_long_answer_is_read_in_one_request_with_its_progress_timed(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            call.offer("explain", typed=True)
+            await call.turns.next(timeout=1)
+            fake.hold = threading.Semaphore(0)
+            text = "First sentence. " + " ".join(f"Then sentence number {i} follows." for i in range(12))
+            await client.post("/api/reply", json={"id": "t1", "text": text}, headers=AUTH)
+            entry = call.entries[-1]
+            for _ in range(100):
+                if entry["speech"] == "making":
+                    break
+                await asyncio.sleep(0.02)
+            making = dict(entry)
+            state = await (await client.get("/api/state", headers=AUTH)).json()
+            fake.hold.release()
+            await settle(call)
+            whole = await client.get(f"/c/{CALL}/{entry['audio']}")
+            return making, state, entry, fake.spoken, await whole.read()
+
+    making, state, entry, said, whole = run(go())
+    assert making["speech"] == "making" and making["audio"] is None
+    assert making["speech_started"] > 0 and making["speech_estimate"] > 1
+    assert abs(state["now"] - time.time()) < 5  # the page times the bar against the server's clock
+    assert len(said) == 1 and entry["speech"] == "ready" and entry["audio"] == "audio/0001.wav"
+    assert whole == silent_wav()
+
+
+def test_the_estimate_learns_from_what_answers_took(monkeypatch):
+    import speech
+    monkeypatch.setattr(speech, "_rates", {})
+    text = "x" * 400
+    before = speech.estimate(text)
+    speech.learn(text, before * 3)
+    assert speech.estimate(text) > before * 1.5
+    speech.learn("short", 1000)  # too short to tell anything
+    assert speech.estimate(text) < before * 3
+
+
+def test_every_shown_word_is_timed_in_order(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            call.offer("explain", typed=True)
+            await call.turns.next(timeout=1)
+            text = "First sentence comes alone.\n\nThen a second, with `EXTERNAL_ONLY` in it. And a third one here."
+            await client.post("/api/reply", json={"id": "t1", "text": text}, headers=AUTH)
+            await settle(call)
+            return call.entries[-1]
+
+    entry = run(go())
+    words = entry["words"]
+    assert [entry["text"][a:b] for a, b, _, _ in words] == entry["text"].split()
+    starts = [t0 for _, _, t0, _ in words]
+    assert starts == sorted(starts) and all(t0 <= t1 for _, _, t0, t1 in words)
+    assert words[-1][3] <= 1.0  # the whole answer is one second of audio
+
+
+def test_align_words_matches_what_was_heard_and_shares_out_the_rest():
+    text = "Lowercasing means storing every address."
+    heard = [("Lower", 0.2, 0.4), ("casing", 0.5, 0.9), ("means", 1.0, 1.2), ("storing", 1.3, 1.6),
+             ("every", 1.7, 1.9), ("address", 2.0, 2.4)]
+    words = talk.align_words(text, 0, len(text), heard, 2.6, offset=10.0)
+    assert [text[a:b] for a, b, _, _ in words] == text.split()
+    assert words[1][2:] == [11.0, 11.2]  # "means" as heard, shifted by the piece's offset
+    assert words[0][2] == 10.0 and words[0][3] == 11.0  # "Lowercasing" fills the gap before "means"
+    assert words[-1][2:] == [12.0, 12.4]  # "address." matches "address"
+    even = talk.align_words("a bb", 0, 4, [], 3.0, offset=0.0)
+    assert even == [[0, 1, 0.0, 1.0], [2, 4, 1.0, 3.0]]
+
+
+# -- forgiving board tags -------------------------------------------------------
+
+
+def split(tmp_path, text):
+    """A reply split by a call with no stage: (spoken text, board items, board problems)."""
+    from helpers import make_args
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    shown = call.split_reply(text)
+    return " ".join(shown.split()), call.board.items, call.board.problems
+
+
+def test_an_unknown_board_kind_is_named_and_its_body_kept_out_of_the_speech(tmp_path):
+    spoken, items, problems = split(tmp_path, "Hi. [[show chart | Sales]] a,b [[/show]] Bye.")
+    assert spoken == "Hi. Bye." and items == []
+    assert len(problems) == 1 and 'unknown board kind "chart"' in problems[0]
+
+
+def test_tag_heads_are_forgiving(tmp_path):
+    spoken, items, problems = split(tmp_path, "Hi. [[show: table | X]]\n| a | b |\n|---|---|\n| 1 | 2 |\n[[/show]] Bye.")
+    assert [(i["kind"], i["title"]) for i in items] == [("table", "X")]
+    assert "|" not in spoken and problems == []
+    for head in ("show table", "show-table", "show:table", "SHOW Table", "table", "grid"):
+        _, items, problems = split(tmp_path, f"[[{head} | T]]| a |\n|---|\n| 1 |[[/show]]")
+        assert [i["kind"] for i in items] == ["table"] and problems == [], head
+    for head in ("show mermaid", "show graph", "flowchart", "diagram"):
+        _, items, problems = split(tmp_path, f"[[{head} | D]]graph TD; A-->B[[/show]]")
+        assert [i["kind"] for i in items] == ["flowchart"] and problems == [], head  # Mermaid is drawn as a map
+
+
+def test_a_block_never_closed_keeps_only_its_table_and_says_the_rest(tmp_path):
+    spoken, items, problems = split(tmp_path, "Hi. [[show table | T]]\n| a |\n|---|\n| 1 |\n\nThen I explain more.")
+    assert [(i["kind"], i["body"]) for i in items] == [("table", "| a |\n|---|\n| 1 |")]
+    assert "Then I explain more." in spoken and "|" not in spoken
+    assert any("missing [[/show]]" in p for p in problems)
+
+
+def test_a_new_show_tag_closes_a_block_left_open(tmp_path):
+    spoken, items, problems = split(tmp_path, "[[show table | A]]\n| a |\n|---|\n\nSaid. "
+                                              "[[show diagram | B]] graph TD; A-->B [[/show]] End.")
+    assert [i["title"] for i in items] == ["A", "B"]
+    assert spoken == "Said. End."
+    assert len(problems) == 1 and 'missing [[/show]] after "A"' in problems[0]
+
+
+def test_tags_after_a_block_left_open_still_work_and_a_colon_names_the_board(tmp_path):
+    reply = ("[[show diagram: Flow]]\n```mermaid\ngraph LR\n  S[Server] --> D[Doorbell]\n```\n"
+             "It starts here. [[point: node S]] The server listens. [[key: the doorbell wakes Claude]]\n"
+             "[[show table: Parts]]\n| Part | Job |\n|---|---|\n| talk.py | the page |\n"
+             "[[point: row \"talk.py\"]] This serves the page. [[key: talk.py serves the page]]")
+    spoken, items, problems = split(tmp_path, reply)
+    assert [(i["kind"], i["title"]) for i in items if i["kind"] != "keys"][:2] == [("flowchart", "Flow"), ("table", "Parts")]
+    assert "[[" not in spoken and "It starts here." in spoken and "This serves the page." in spoken
+    assert sum("missing [[/show]]" in p for p in problems) == 2
+
+
+def test_a_call_draws_mermaid_graphs_as_maps_and_shows_no_other_mermaid(tmp_path):
+    _, items, problems = split(tmp_path, "[[show mermaid | Flow]] graph TD; A-->B [[/show]]")
+    assert [i["kind"] for i in items] == ["flowchart"] and problems == []
+    _, items, problems = split(tmp_path, "[[show diagram | Bad]] A-->B [[/show]]")
+    assert items == [] and problems == ['"Bad" not shown: a call draws no Mermaid; use a sequence, a flowchart or a table']
+    _, items, problems = split(tmp_path, "[[show diagram | Seq]]sequenceDiagram\nA->>B: hi[[/show]]")
+    assert items == [] and len(problems) == 1 and "draws no Mermaid" in problems[0]
+
+
+def test_empty_blocks_unclosed_tags_and_stray_closes_are_reported_or_harmless(tmp_path):
+    spoken, items, problems = split(tmp_path, "[[show table | Nothing]][[/show]] Hi.")
+    assert items == [] and problems == ['empty table "Nothing" not shown'] and spoken == "Hi."
+    spoken, _, problems = split(tmp_path, "Hi. [[note: never closed\nThe rest is said.")
+    assert spoken == "Hi. The rest is said."
+    assert problems == ["a tag was not closed with ]]: [[note: never closed"]
+    spoken, _, problems = split(tmp_path, "Hi. [[/show]] Bye.")
+    assert spoken == "Hi. Bye." and problems == []
+
+
+def test_an_untagged_table_or_mermaid_fence_goes_on_the_stage(tmp_path):
+    spoken, items, problems = split(tmp_path, "Look at this.\n| a | b |\n|---|---|\n| 1 | 2 |\nThat is all.")
+    assert spoken == "Look at this. That is all."
+    assert [(i["kind"], i["title"]) for i in items] == [("table", "a · b")]
+    assert problems == ["table shown without a tag; wrap it in [[show table | title]] next time"]
+    spoken, items, problems = split(tmp_path, "First this. Here is the flow:\n```mermaid\ngraph TD\nA-->B\n```\nDone.")
+    assert spoken == "First this. Here is the flow: Done."
+    assert [(i["kind"], i["title"]) for i in items] == [("flowchart", "Here is the flow")]  # drawn as a map
+    assert [n["id"] for n in items[0]["visual"]["spec"]["nodes"]] == ["A", "B"]
+    assert any("without a tag" in p for p in problems)
+    spoken, items, _ = split(tmp_path, "One pipe | here | is prose.")
+    assert items == [] and spoken == "One pipe | here | is prose."
+
+
+def test_an_untagged_mermaid_fence_a_call_cannot_draw_is_said_neither_aloud_nor_on_the_stage(tmp_path):
+    spoken, items, problems = split(tmp_path, "First this. The pets:\n```mermaid\npie title Pets\n  \"Dogs\": 3\n```\nDone.")
+    assert spoken == "First this. The pets: Done." and items == []
+    assert problems == ['"The pets" not shown: a call draws no Mermaid; use a sequence, a flowchart or a table']
+
+
+def test_view_names_are_distinct_for_greek_titles_and_stable_per_title(tmp_path):
+    from helpers import make_args
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    a, b = call.view_name("Βήμα 1 αρχή", "table"), call.view_name("Βήμα 1 τέλος", "table")
+    assert a != b and talk.stage_mod.model.NAME_RE.match(a) and talk.stage_mod.model.NAME_RE.match(b)
+    assert call.view_name("Βήμα 1 αρχή", "table") == a
+    assert call.view_name("Flow", "diagram") == "flow"
+    assert call.view_name("flow!", "diagram") != "flow"  # same slug, other title
+    assert call.view_name("", "diagram") != call.view_name("", "diagram")
+    long = call.view_name("x" * 200, "code")
+    assert talk.stage_mod.model.NAME_RE.match(long)
+    call.split_reply("[[show table | Same]]| a |\n|---|\n| 1 |[[/show]] [[show table | Same]]| b |\n|---|\n| 2 |[[/show]]")
+    assert [i["view"] for i in call.board.items] == ["same", "same"]
+
+
+# -- the board follows the voice -------------------------------------------------
+
+
+def cues_of(tmp_path, text, code=None):
+    """A reply answered by a call with no stage: (its claude entry, board problems)."""
+    from helpers import make_args
+    call = talk.Call(make_args(code=code), "T", tmp_path / "out")
+    with __import__("unittest.mock").mock.patch.object(call, "speak", lambda entry: asyncio.sleep(0)):
+        entry = run(call.answer(text))
+    return entry, call.board.problems
+
+
+def focus_cues(tmp_path, text, code=None):
+    from helpers import make_args
+    call = talk.Call(make_args(code=code), "T", tmp_path / "out")
+    with __import__("unittest.mock").mock.patch.object(call, "speak", lambda entry: asyncio.sleep(0)):
+        entry = run(call.answer(text))
+    frames = {i["view"]: i["scene"]["frames"] for i in call.board.items if i.get("scene")}
+    focus = [(c["view"], frames[c["view"]][c["n"]]["focus"]) for c in entry["cues"] if c["kind"] == "frame"]
+    return entry, call.board.problems, focus
+
+
+def test_each_board_tag_becomes_a_cue_where_it_stood(tmp_path):
+    text = ("First part. [[show table | A]]\n| x |\n|---|\n| 1 |\n[[/show]] About A. "
+            "[[show diagram | B]] graph TD; P-->Q [[/show]] About B.")
+    entry, problems = cues_of(tmp_path, text)
+    said, cues = entry["text"], entry["cues"]
+    assert "" not in said and problems == []
+    assert [(c["kind"], c["view"]) for c in cues] == [("front", "a"), ("front", "b")]
+    assert abs(cues[0]["at"] - said.index("About A")) <= 1
+    assert abs(cues[1]["at"] - said.index("About B")) <= 1
+
+
+def test_a_point_lights_up_lines_of_the_last_board_and_a_bad_point_is_reported(tmp_path):
+    code = tmp_path / "code"
+    code.mkdir()
+    (code / "a.py").write_text("".join(f"line_{i} = {i}\n" for i in range(1, 11)))
+    entry, problems, focus = focus_cues(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point: lines 2-3]] These two.", code)
+    assert problems == []
+    assert entry["cues"][1] == {"at": entry["text"].index("These"), "kind": "frame", "view": "c", "n": 1}
+    assert focus == [("c", ["line:2", "line:3"])]
+    _, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point: line 9]] There.", code)
+    assert problems == ['point not shown: line 9 is outside lines 1-5 of "C"']
+    _, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point Nope: row 1]] There.", code)
+    assert problems == ['point not shown: no board titled "Nope" in this call']
+    entry, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point: wibble]] There.", code)
+    assert problems == ['point not shown: expected line N, lines A-B, old line N, row N, rows A-B, row "text", cell "row" / "column", node ID, step ID, part ID, box ID, zone N or route N']
+    assert [c["kind"] for c in entry["cues"]] == ["front"] and "wibble" not in entry["text"]
+
+
+def test_points_name_rows_and_nodes_and_a_titled_board(tmp_path):
+    text = ('[[show table | Ports]]| Name | Port |\n|---|---|\n| talk | 8766 |\n| Δαίμων | 3080 |[[/show]] '
+            '[[show diagram | Request path: page]] graph TD; Page-->Queue [[/show]] Two boards. '
+            '[[point Ports: row 2]] The second row. [[point ports: row "daimon"]] Same row. '
+            '[[point Request path: page: node Queue]] The queue. [[POINT: node Page]] The page.')
+    entry, problems, focus = focus_cues(tmp_path, text)
+    assert problems == ['point not shown: no row of "Ports" starts with "daimon"']
+    assert focus == [("ports", ["row#2"]), ("request-path-page", ["node:Queue"]), ("request-path-page", ["node:Page"])]
+    entry, problems, focus = focus_cues(tmp_path, text.replace('row "daimon"', 'row "δαιμων"'))
+    assert problems == [] and focus[:2] == [("ports", ["row#2"]), ("ports", ["row#2"])]
+    _, problems = cues_of(tmp_path, "[[show table | T]]| a |\n|---|\n| 1 |[[/show]] One. [[point: row 4]] No.")
+    assert problems == ['point not shown: "T" has 1 rows, not row 4']
+    _, problems = cues_of(tmp_path, "[[show table | T]]| a |\n|---|\n| 1 |[[/show]] One. [[point: line 1]] No.")
+    assert problems == ['point not shown: "T" is a table; use row N, rows A-B, row "text" or cell "row" / "column"']
+
+
+def test_boards_all_placed_at_the_end_are_reported(tmp_path):
+    entry, problems = cues_of(tmp_path, "Here is the answer, said first. [[show table | A]]| a |\n|---|\n| 1 |[[/show]]"
+                                        "[[show table | B]]| b |\n|---|\n| 2 |[[/show]]")
+    assert [c["at"] for c in entry["cues"]] == [len(entry["text"])] * 2
+    assert problems == ["all boards were placed after the last sentence, so the stage cannot follow the voice; "
+                        "put each tag before the sentence about it"]
+    _, problems = cues_of(tmp_path, "Said first. [[show table | A]]| a |\n|---|\n| 1 |[[/show]]")
+    assert problems == []  # one board at the end is fine
+
+
+def test_an_untagged_table_gets_its_cue_in_order(tmp_path):
+    entry, _ = cues_of(tmp_path, "[[show diagram | D]] graph TD; A-->B [[/show]] First. Then this.\n"
+                                 "| k | v |\n|---|---|\n| a | 1 |\nAfter the table.")
+    said = entry["text"]
+    assert [(c["view"], c["at"]) for c in entry["cues"]] == [("d", 0), ("k-v", said.index("After"))]
+
+
+# -- what changed, and key points ------------------------------------------------
+
+
+def git_repo(path):
+    import os
+    import subprocess
+    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+           "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_GLOBAL": "/dev/null"}
+    path.mkdir()
+    (path / "a.py").write_text("def old_name():\n    return 1\n")
+    for args in (["init", "-q"], ["add", "."], ["commit", "-q", "-m", "start"]):
+        subprocess.run(["git", "-C", str(path), *args], check=True, capture_output=True, env=env)
+    return path
+
+
+def test_a_change_tag_shows_what_changed_from_git(tmp_path):
+    code = git_repo(tmp_path / "code")
+    (code / "a.py").write_text("def new_name():\n    return 1\n")
+    spoken, items, problems = split_in(tmp_path, "[[show change: a.py | What I changed]] I renamed it.", code)
+    assert spoken == "I renamed it." and problems == []
+    (item,) = items
+    assert item["kind"] == "change" and item["title"] == "What I changed" and item["view"] == "what-i-changed"
+    assert (item["added"], item["removed"], item["path"], item["lang"]) == (1, 1, "a.py", "py")
+    name, source, title = talk.stage_view(item)
+    assert source == {k: item[k] for k in talk.CHANGE_FIELDS} and source["format"] == "change"
+    _, items, _ = split_in(tmp_path, "[[diff: a.py]] Same, shorter.", code)
+    assert [i["title"] for i in items] == ["What changed in a.py"]
+    entry, problems, focus = focus_cues(tmp_path, "[[show change: a.py | Edit]] Renamed. [[point: line 1]] This line.", code)
+    assert problems == [] and focus == [("edit", ["line:1"])]
+    _, problems = cues_of(tmp_path, "[[show change: a.py | Edit]] Renamed. [[point: line 9]] No.", code)
+    assert problems == ['point not shown: line 9 is not in the new lines shown in "Edit" (1-2)']
+    entry, problems, focus = focus_cues(tmp_path, "[[show change: a.py | Edit]] Renamed. [[point: old line 1]] Was this.", code)
+    assert problems == [] and focus == [("edit", ["old:1"])]  # a removed line, by its old number
+    _, problems = cues_of(tmp_path, "[[show change: a.py | Edit]] Renamed. [[point: old line 2]] No.", code)
+    assert problems == ['point not shown: old line 2 is not removed in "Edit" (removed: 1)']
+    _, problems = cues_of(tmp_path, "[[show code: a.py:1-2 | Now]] The file. [[point: old line 1]] No.", code)
+    assert problems == ['point not shown: "Now" is a code; use line N or lines A-B']
+
+
+def split_in(tmp_path, text, code):
+    from helpers import make_args
+    call = talk.Call(make_args(code=code), "T", tmp_path / "out")
+    shown = call.split_reply(text)
+    return " ".join(shown.split()), call.board.items, call.board.problems
+
+
+def test_a_page_tag_makes_the_page_a_board_the_voice_fronts(tmp_path):
+    # call IriDPEiq: the answer was about a page, and nothing in it could bring the page forward
+    code = tmp_path / "code"
+    (code / "docs").mkdir(parents=True)
+    (code / "docs" / "walk.html").write_text("<h1>Walkthrough</h1>")
+    text = ("[[show page: docs/walk.html | Report data walkthrough]] I made a page with the real data. "
+            "[[show table | One asset's groups]]| list | bucket |\n|---|---|\n| Country | LU |[[/show]] Start with one fund.")
+    entry, problems = cues_of(tmp_path, text, code)
+    assert problems == []
+    said = entry["text"]
+    assert [(c["view"], c["at"]) for c in entry["cues"] if c["kind"] == "front"] == [
+        ("report-data-walkthrough", 0), ("one-asset-s-groups", said.index("Start"))]
+    _, items, _ = split_in(tmp_path, text, code)
+    page = items[0]
+    assert (page["kind"], page["title"], page["view"]) == ("page", "Report data walkthrough", "report-data-walkthrough")
+    assert talk.stage_view(page) == ("report-data-walkthrough", {"type": "file", "path": "docs/walk.html", "fragment": None},
+                                     "Report data walkthrough")
+    _, items, problems = split_in(tmp_path, "[[show page: https://share.mac/r.html]] Here.", None)
+    assert problems == [] and items[0]["source"] == {"type": "url", "url": "https://share.mac/r.html"}
+    assert items[0]["title"] == "https://share.mac/r.html"
+    _, items, problems = split_in(tmp_path, "[[page: docs/walk.html | W]] Short form.", code)
+    assert problems == [] and [i["kind"] for i in items] == ["page"]
+
+
+def test_a_page_that_cannot_be_shown_or_pointed_at_is_a_problem(tmp_path):
+    code = tmp_path / "code"
+    code.mkdir()
+    (code / "a.py").write_text("x = 1\n")
+    cases = {"[[show page: gone.html | G]] Hi.": ["page not shown, no such file in the code folder: gone.html"],
+             "[[show page: ../out.html | O]] Hi.": [f"page not shown, ../out.html is outside the project {code.resolve()}"],
+             "[[show page: code:a.py:1-1 | C]] Hi.": ["page not shown, code:a.py:1-1 is not a page; use [[show code: ...]] or [[show change: ...]]"],
+             "[[show page | Nothing]] Hi.": ["page not shown, expected a file in the code folder, an address or session:<kind>/<slug>"]}
+    for text, want in cases.items():
+        _, items, problems = split_in(tmp_path, text, code)
+        assert (items, problems) == ([], want), text
+    _, _, problems = split_in(tmp_path, "[[show page: a.py | P]] Hi.", None)
+    assert problems == ["page not shown, talk was started without --code: a.py"]
+    _, problems = cues_of(tmp_path, "[[show page: https://x.mac/p | P]] Hi. [[point P: row 1]] There.", code)
+    assert problems == ['point not shown: "P" is a page, which has no lines, rows or nodes to light']
+    # a point with no title means the last board that has something to point at, not a page shown after it
+    entry, problems, focus = focus_cues(tmp_path, "[[show code: a.py:1-1 | A]] The line. [[show page: https://x.mac/p | P]] "
+                                                  "The page. [[point: line 1]] Back to the line.", code)
+    assert problems == [] and focus == [("a", ["line:1"])]
+
+
+SCENE = ("[[show scene | Ben's product name]] <div class=\"slide\"><div class=\"flow\">"
+         "<section data-part=\"data\" data-name=\"the data the server sends\"><div data-part=\"old\">K&amp;EProductType: Investment Grade Bonds</div></section>"
+         "<section data-part=\"rule\" data-name=\"the template rule\">find</section>"
+         "<section data-part=\"pdf\" data-name=\"what the PDF prints\">Investment Grade Bonds</section></div></div> [[/show]] ")
+
+
+def test_a_scene_is_a_board_the_voice_reveals_part_by_part(tmp_path):
+    from helpers import stage_rule_breaks
+    call = _call(tmp_path)
+    # no verbs: each part comes in with the sentence that names it, never the page at once
+    shown = call.split_reply(SCENE + "Follow one value. First the data the server sends. Then the template rule. "
+                                     "And what the PDF prints.")
+    (item,) = call.board.items
+    assert (item["kind"], item["view"], call.board.problems) == ("scene", "ben-s-product-name", [])
+    assert talk.stage_view(item)[1] == item["visual"] and item["visual"]["format"] == "scene"
+    frames = item["scene"]["frames"]
+    assert item["scene"]["start"] == "empty" and [f["cur"] for f in frames[1:-1]] == [
+        ["part:data", "part:old"], ["part:rule"], ["part:pdf"]]
+    assert stage_rule_breaks(call, shown) == []
+    # verbs and points by part
+    call.add("claude", shown, cues=call.reply_cues)
+    item.pop("scene")  # a scene belongs to the answer that compiled it
+    shown = call.split_reply(SCENE + "[[+ data]] The data. [[point: part old]] The old sticker. [[+ part pdf]] The PDF.")
+    frames = call.board.items[-1]["scene"]["frames"]
+    assert [f["cur"] for f in frames[1:-1]] == [["part:data"], ["part:old"], ["part:pdf"]]
+    assert call.board.problems == ['1 of 4 elements of "Ben\'s product name" are never revealed; they come in with the rest frame']
+    assert frames[1]["show"] == ["part:data"]  # old is pointed at on its own, so it waits for its own step
+    assert stage_rule_breaks(call, shown) == []
+
+
+def test_a_small_flowchart_shows_whole_and_draws_the_node_each_sentence_names_as_being_said(tmp_path):
+    from helpers import stage_rule_breaks
+    call = _call(tmp_path)
+    spec = ('{"nodes": [{"id": "prod", "role": "entry", "label": "Production"}, {"id": "copy", "role": "call", "label": "Copy Production"},'
+            ' {"id": "dev", "role": "success", "label": "Dev database"}], "edges": [{"from": "prod", "to": "copy"}, {"from": "copy", "to": "dev"}]}')
+    shown = call.split_reply(f"Dev works on a copy. [[show flowchart | Copy]] {spec} [[/show]] It starts in Production. "
+                             "A button in the dev admin starts Copy Production. And the copy lands in the dev database.")
+    scene = call.board.items[-1]["scene"]
+    # three nodes are too few to step, so the board is whole from the start; the voice still says one node at a time,
+    # the one each sentence names most fully ("Copy Production" is the copy node, not Production)
+    assert scene["start"] == "full" and [f["cur"] for f in scene["frames"]] == [
+        [], ["node:prod"], ["node:copy"], ["node:dev"], []]
+    assert call.board.problems == [] and stage_rule_breaks(call, shown) == []
+
+
+def test_a_scene_that_reads_as_a_document_is_shown_with_a_board_line_for_each_reason(tmp_path):
+    long_part = " ".join(["word"] * 17)
+    text = (f'[[show scene | Doc]] <div class="cols"><section data-part="a" data-name="the long part"><p>{long_part}</p>'
+            f'<pre>{" ".join(["code"] * 40)}</pre></section><section data-part="b">Short label here</section></div> [[/show]] Hi.')
+    call = _call(tmp_path)
+    call.split_reply(text)
+    assert [i["kind"] for i in call.board.items] == ["scene"]
+    assert call.board.problems[:2] == [
+        'scene "Doc": part "the long part" holds 17 words: a part is a label of at most 16, say the rest aloud',
+        'scene "Doc": no <div class="slide">: write the claim as <h1 class="title"> inside it']
+    call = _call(tmp_path)
+    call.split_reply(text.replace(long_part, " ".join(["word"] * 16)).replace('class="cols"', 'class="slide"'))
+    assert not [p for p in call.board.problems if p.startswith('scene "Doc"')]
+
+
+def test_a_scene_that_cannot_be_shown_or_pointed_at_is_a_problem(tmp_path):
+    cases = {"[[show scene | All]] <div><p>Everything at once</p></div> [[/show]] Hi.":
+             ['scene "All" not shown: no parts: mark each part with data-part'],
+             "[[show scene | S]] <a data-part=\"a\" href=\"javascript:go()\">x</a> [[/show]] Hi.":
+             ['scene "S" not shown: a javascript: link never runs in a scene; use a button with a handler'],
+             SCENE + "Hi. [[point: part nothing]] There.": ['point not shown: no part nothing in "Ben\'s product name"'],
+             SCENE + "Hi. [[point: row 2]] There.": ['point not shown: "Ben\'s product name" is a scene; use part ID'],
+             "[[show table | T]]| a |\n|---|\n| 1 |[[/show]] Hi. [[point: part a]] There.": ['point not shown: "T" is a table; use row N, rows A-B, row "text" or cell "row" / "column"']}
+    for text, want in cases.items():
+        _, problems = cues_of(tmp_path, text)
+        assert want[0] in problems and len(problems) <= 2, (text, problems)  # beside the note that no sentence names a part
+
+
+# -- stops: the answer asks, and waits ------------------------------------------------
+
+
+def test_a_stop_says_its_question_and_the_answer_pauses_right_after_it(tmp_path):
+    entry, problems = cues_of(tmp_path, "Ben buys a fund. [[guess: What does his cell print | Fixed Income | "
+                                        "*Investment Grade Bonds | Nothing]] It prints the old name. [[check]] "
+                                        "Next, the rule. [[deeper]]")
+    assert problems == []
+    assert entry["text"] == "Ben buys a fund. What does his cell print? It prints the old name. Clear so far? Next, the rule."
+    stops = [c for c in entry["cues"] if c["kind"] == "stop"]
+    assert [(c["at"], c["stop"]) for c in stops] == [
+        (entry["text"].index("It prints"), {"type": "guess", "question": "What does his cell print?",
+                                            "choices": ["Fixed Income", "Investment Grade Bonds", "Nothing"], "right": 1}),
+        (entry["text"].index("Next,"), {"type": "check", "question": "Clear so far?",
+                                        "choices": ["Go on", "Again, slower", "Another example"]}),
+        (len(entry["text"]), {"type": "deeper", "question": "", "choices": ["Go deeper", "That's enough"]})]
+    assert all("view" not in c for c in stops)
+
+
+def test_a_check_takes_its_own_question_and_a_say_back_ends_the_answer(tmp_path):
+    entry, problems = cues_of(tmp_path, "That is the match. [[check: Is the matching clear?]] Good. "
+                                        "[[say it back: What does hard-coded mean here]]")
+    assert problems == []
+    assert entry["text"] == "That is the match. Is the matching clear? Good. What does hard-coded mean here?"
+    assert [c["stop"]["type"] for c in entry["cues"]] == ["check", "sayback"]
+    assert entry["cues"][1] == {"at": len(entry["text"]), "kind": "stop", "stop": {
+        "type": "sayback", "question": "What does hard-coded mean here?", "choices": []}}
+
+
+def test_a_guess_never_brings_in_the_part_it_asks_about(tmp_path):
+    # the guess named "the PDF", so the scene showed what the PDF prints before the reader picked
+    call = _call(tmp_path)
+    call.split_reply(SCENE + "First the data the server sends. Then the template rule. [[guess: What does the PDF print | "
+                             "Fixed Income | *Investment Grade Bonds]] It prints the old name, as the PDF shows.")
+    frames = call.board.items[0]["scene"]["frames"]
+    assert [f["cur"] for f in frames[1:-1]] == [["part:data"], ["part:rule"], ["part:old", "part:pdf"]]
+    pdf = next(c for c in call.reply_cues if c["kind"] == "frame" and c["n"] == 3)
+    stop = next(c for c in call.reply_cues if c["kind"] == "stop")
+    assert pdf["at"] == stop["at"] == call.reply_cues[-1]["at"]  # the PDF comes in only once the guess is past
+
+
+def test_a_stop_written_wrong_is_reported(tmp_path):
+    cases = {"Hi. [[guess: What prints? | Only one]] There.":
+             ("Hi. What prints? There.", "a guess needs a question and two choices or more: [[guess: question | choice | *right | choice]]"),
+             "Hi. [[guess: What prints? | *a | *b]] There.":
+             ("Hi. What prints? There.", "a guess marks one right choice with *, not several"),
+             "Hi. [[say back]] There.":
+             ("Hi. There.", "a say back needs its question: [[say back: what does X mean here?]]"),
+             "Hi. [[check: Clear? | Yes | No]] There.":
+             ("Hi. Clear? There.", "[[check]] takes no choices: its buttons are fixed"),
+             "Hi. [[say back: What is it?]] And more after.":
+             ("Hi. What is it? And more after.", "[[say back]] hands over to the reader, and Claude's next answer checks "
+                                                 "what they say: end the answer at it, and say the rest after")}
+    for text, (said, problem) in cases.items():
+        entry, problems = cues_of(tmp_path, text)
+        assert (entry["text"], problems) == (said, [problem]), text
+    entry, _ = cues_of(tmp_path, "Hi. [[guess: What prints? | *a | *b]] There.")
+    assert entry["cues"] == []  # a broken guess is said, never stopped at
+    entry, _ = cues_of(tmp_path, "Hi. [[check: Clear? | Yes | No]] There.")
+    assert entry["cues"][0]["stop"]["choices"] == ["Go on", "Again, slower", "Another example"]
+
+
+def test_a_guess_picked_goes_with_the_next_turn_and_a_say_back_answer_names_its_question(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            await call.answer("Ben buys. [[guess: What prints? | Fixed Income | *Old name]] The old name. [[check]] On.")
+            picked = await client.post("/api/pick", json={"answer": 1, "i": 0, "choice": 0}, headers=AUTH)
+            wrong = [await client.post("/api/pick", json=body, headers=AUTH) for body in (
+                {"answer": 1, "i": 1, "choice": 0}, {"answer": 2, "i": 0, "choice": 0}, {"answer": 1, "i": 0, "choice": 5})]
+            quiet = (await client.get("/api/turn?wait=0.1", headers=AUTH)).status
+            await client.post("/api/say", json={"text": "It means named in the code", "answering": "What is hard-coded?"},
+                              headers=AUTH)
+            turn = await (await client.get("/api/turn?wait=1", headers=AUTH)).json()
+            await client.post("/api/say", json={"text": "next"}, headers=AUTH)
+            later = await (await client.get("/api/turn?wait=1", headers=AUTH)).json()
+            return (await picked.json(), [r.status for r in wrong], quiet, turn["said"], later["said"],
+                    call.entries[-2], call.transcript.read_text())
+
+    pick, wrong, quiet, said, later, entry, transcript = run(go())
+    assert pick == {"pick": {"answer": 1, "question": "What prints?", "picked": "Fixed Income", "right": "Old name"}}
+    assert wrong == [404, 404, 400] and quiet == 204  # a pick is no turn: the answer plays on
+    assert said == [{"who": "you", "text": "It means named in the code", "answering": "What is hard-coded?",
+                     "picks": [{"answer": 1, "question": "What prints?", "picked": "Fixed Income", "right": "Old name"}]}]
+    assert "picks" not in later[0]  # each pick goes once
+    assert entry["answering"] == "What is hard-coded?"
+    assert "**Picked:** What prints? Fixed Income (right: Old name)" in transcript
+
+
+def test_a_long_sentence_or_a_long_answer_is_reported_so_the_next_answer_is_shorter(tmp_path):
+    long_sentence = "This one sentence " + "goes on and on " * 8 + "until it ends."
+    _, problems = cues_of(tmp_path, f"Short. {long_sentence} Short again.")
+    assert problems == ['1 sentence is over 30 words, and the stage shows each sentence as one caption: split it '
+                        '(it starts "This one sentence goes on and on goes on and…")']
+    _, problems = cues_of(tmp_path, "One short sentence is here. " * 46)
+    assert problems == ["this answer is 230 words: keep an answer under 220 words, and say the rest in the next one"]
+    _, problems = cues_of(tmp_path, "One short sentence is here. " * 44)
+    assert problems == []
+
+
+def test_a_point_at_code_never_lands_on_a_page_shown_after_it(tmp_path):
+    code = tmp_path / "code"
+    code.mkdir()
+    (code / "a.py").write_text("x = 1\n")
+    _, problems, focus = focus_cues(tmp_path, "[[show code: a.py:1-1 | A]] The line. [[show page: https://x.mac/p | A]] "
+                                              "The page. [[point A: line 1]] Back to the line.", code)
+    assert focus == [("a", ["line:1"])]
+
+
+def test_a_change_that_cannot_be_shown_is_a_problem(tmp_path):
+    code = git_repo(tmp_path / "code")
+    _, items, problems = split_in(tmp_path, "[[show change: a.py | What I changed]] I renamed it.", code)
+    assert items == [] and problems == ["change not shown, no changes in a.py"]
+    _, _, problems = split_in(tmp_path, "[[show change: a.py since ;rm | X]] Hi.", code)
+    assert problems == ["change not shown, not a git revision: ;rm"]
+
+
+def test_key_points_build_up_over_the_call(tmp_path):
+    from helpers import make_args
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    with __import__("unittest.mock").mock.patch.object(call, "speak", lambda entry: asyncio.sleep(0)):
+        first = run(call.answer("The queue holds turns. [[key: turns wait in a queue]] The doorbell takes them. "
+                                "[[Key point: the doorbell wakes the session]]"))
+        second = run(call.answer("Long one. [[key: " + "word " * 40 + "]]"))
+    assert [k["answer"] for k in call.keys] == [1, 1, 2]
+    assert call.keys[0]["text"] == "turns wait in a queue"
+    assert first["text"] == "The queue holds turns. The doorbell takes them."
+    keys = [c for c in first["cues"] if c["kind"] == "key"]
+    assert [(c["view"], c["index"]) for c in keys] == [("key-points", 1), ("key-points", 2)]
+    assert keys[0]["at"] == first["text"].index("The doorbell")
+    assert len(call.keys[2]["text"]) <= 120 and call.keys[2]["text"].endswith("word…")
+    assert "key point too long, keep it under 12 words" in call.board.problems
+    assert [c["index"] for c in second["cues"]] == [3]
+    chips = [e for e in call.entries if e["who"] == "board"]
+    assert [(e["text"], e["view"], e["kind"], e["added"]) for e in chips] == [
+        ("Key points: +2", "key-points", "points", 2), ("Key points: +1", "key-points", "points", 1)]
+    transcript = call.transcript.read_text()
+    assert "**Key point:** turns wait in a queue" in transcript and transcript.count("**Key point:**") == 3
+    assert call.view_name("Key points", "table") != "key-points"  # a board titled so gets a view of its own
+
+
+def test_keys_at_the_end_are_not_boards_placed_late(tmp_path):
+    entry, problems = cues_of(tmp_path, "Said first. [[key: one]] [[key: two]]")
+    assert problems == [] and [c["kind"] for c in entry["cues"]] == ["key", "key"]
+
+
+def test_every_tag_the_skill_teaches_is_one_the_parser_reads():
+    import re
+    doc = (talk.Path(talk.__file__).parent / "SKILL.md").read_text()
+    section = doc.split("### Teaching with the board", 1)[1].split("### What a turn may do", 1)[0]
+    tags = [t.replace("\\|", "|").strip() for t in re.findall(r"\[\[(.+?)\]\]", section)]
+    assert len(tags) >= 10
+    for tag in tags:
+        verb, kind, _, _ = talk.parse_head(tag)
+        known = (verb == "/show" or (verb == "show" and kind in talk.BOARD_KINDS)
+                 or talk.parse_point(tag) is not None or talk.parse_key(tag) is not None or tag.startswith("note:")
+                 or talk.stage_scene.parse_verb(tag) is not None
+                 or (talk.parse_stop(tag) or {"problem": "not a stop"})["problem"] is None)
+        assert known, tag
+    for tag in tags:
+        point = talk.parse_point(tag)
+        if point and "N" not in point[1] and "X" not in point[1] and "..." not in tag:
+            assert talk._POINT_TARGET.fullmatch(point[1]), tag
+
+
+def test_a_tag_that_opens_a_line_leaves_no_indent(tmp_path):
+    from helpers import make_args
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    shown = call.split_reply("Intro.\n\n[[show table|X]]| a |\n|---|\n| 1 |[[/show]]\n"
+                             "[[point: row 1]] The skills live under claude.")
+    assert "\n The" not in shown and shown.endswith("\nThe skills live under claude.")
+    cue = call.reply_cues[-1]
+    assert cue["kind"] == "frame" and shown[cue["at"]:].startswith("The skills")
+    assert call.split_reply("Keep\n    this indent.") == "Keep\n    this indent."
+
+
+def test_short_table_separators_count_as_gfm_reads_them(tmp_path):
+    assert talk.table_first_cells("| k | v |\n|--|--|\n| a | 1 |\n| b | 2 |") == ["a", "b"]
+    assert talk.table_first_cells("| k | v |\n|:-|-:|\n| a | 1 |") == ["a"]
+    spoken, items, _ = split(tmp_path, "Look.\n| k | v |\n|:--|--:|\n| a | 1 |\nDone.")
+    assert [i["kind"] for i in items] == ["table"] and "|" not in spoken
+    _, problems = cues_of(tmp_path, "[[show table | T]]| k | v |\n|--|--|\n| a | 1 |\n| b | 2 |[[/show]] Two. "
+                                    "[[point: row 3]] No.")
+    assert problems == ['point not shown: "T" has 2 rows, not row 3']
+
+
+def test_show_with_an_underscore_is_a_board_tag():
+    assert talk.parse_head("show_table") == ("show", "table", "", "")
+    assert talk.parse_head("SHOW_diagram | D")[:2] == ("show", "diagram")
+
+
+def test_a_row_is_matched_by_the_text_the_stage_shows(tmp_path):
+    table = "[[show table | T]]| Name | v |\n|---|---|\n| `foo` | 1 |\n| [docs](https://x) | 2 |\n| **bold** | 3 |[[/show]] "
+    entry, problems, focus = focus_cues(tmp_path, table + 'Rows. [[point: row "foo"]] One. [[point: row "docs"]] Two. '
+                                                         '[[point: row "`bold`"]] Three.')
+    assert problems == []
+    assert focus == [("t", ["row#1"]), ("t", ["row#2"]), ("t", ["row#3"])]
+    _, problems = cues_of(tmp_path, table + 'Rows. [[point: row "https://x"]] No.')
+    assert problems == ['point not shown: no row of "T" starts with "https://x"']
+
+
+def test_a_node_is_one_the_flowchart_defines_not_any_word(tmp_path):
+    def problems_for(body, node):
+        return cues_of(tmp_path, f"[[show diagram | D]]{body}[[/show]] Flow. [[point: node {node}]] No.")[1]
+
+    assert problems_for("graph TD; A[label text]-->B\nB --> Aβ", "Aβ") == []
+    assert problems_for("graph TD; A[label text]-->B", "label") == ['point not shown: no node label in "D"']
+    assert problems_for("flowchart LR\n  A -.-> B & C\n  C:::hot", "C") == []
+    assert problems_for("---\ntitle: F\n---\ngraph TD\nA-->B", "B") == []
+    assert problems_for("graph TD\nsubgraph S1 [Group]\nA\nend\nS1-->C", "S1") == []
+    assert problems_for("graph TD\nA@{ shape: rect }\nA-->B", "A") == []
+    _, problems = cues_of(tmp_path, "[[show diagram | D]]graph TD; A[Ask]-->B[[/show]] Flow. [[point: node TD]] No.")
+    assert problems == ['point not shown: no node TD in "D"']
+
+
+# -- one identity per board: how a view is named is how a point finds it ---------------------------
+
+
+def test_a_title_written_in_another_case_updates_its_board(tmp_path):
+    _, items, problems = split(tmp_path, "[[show table | Ports]]| a |\n|---|\n| 1 |[[/show]] One. "
+                                         "[[show table | ports]]| a |\n|---|\n| 2 |[[/show]] Two.")
+    assert [i["view"] for i in items] == ["ports", "ports"] and problems == []
+
+
+def test_a_point_finds_the_board_of_its_kind_and_exact_title_first(tmp_path):
+    code = tmp_path / "code"
+    code.mkdir()
+    (code / "a.py").write_text("\n".join(f"x{i}" for i in range(1, 6)) + "\n")
+    entry, problems, focus = focus_cues(tmp_path, "[[show code: a.py:1-5 | Request flow]] Code. "
+                                                  "[[show diagram | Request flow]]graph TD; A-->B[[/show]] Flow. "
+                                                  "[[point Request flow: line 3]] Here. [[point Request flow: node B]] There.",
+                                        code)
+    views = [view for view, _ in focus]
+    assert problems == [] and views[0] == "request-flow" and views[1] != views[0]
+    entry, problems, focus = focus_cues(tmp_path, "[[show table | Plan]]| a |\n|---|\n| 1 |[[/show]] T. "
+                                                  "[[show diagram | plan]]graph TD; A-->B[[/show]] D. [[point Plan: row 1]] Here.")
+    assert problems == [] and focus == [("plan", ["row#1"])]
+
+
+def test_two_files_of_one_name_get_two_views(tmp_path):
+    code = tmp_path / "code"
+    for d in ("a", "b"):
+        (code / d).mkdir(parents=True)
+        (code / d / "__init__.py").write_text(f"{d} = 1\n")
+    _, items, problems = split_in(tmp_path, "[[show code: a/__init__.py:1-1]] A. [[show code: b/__init__.py:1-1]] B.", code)
+    assert problems == [] and len({i["view"] for i in items}) == 2
+
+
+def test_two_untagged_tables_with_one_header_get_two_views(tmp_path):
+    _, items, _ = split(tmp_path, "First:\n\n| Field | Value |\n|---|---|\n| a | 1 |\n\nThen:\n\n"
+                                  "| Field | Value |\n|---|---|\n| b | 2 |\n\nDone.")
+    assert len(items) == 2 and items[0]["view"] != items[1]["view"]
+
+
+# -- inside a block, tags read as they read outside it -----------------------------------------
+
+
+def test_a_bare_kind_tag_inside_an_open_block_starts_a_new_board(tmp_path):
+    spoken, items, problems = split(tmp_path, "[[show diagram | A]]graph TD\nA-->B\n\nNow [[table | B]]| x |\n|---|\n| 1 |[[/show]] done")
+    assert [(i["kind"], i["title"]) for i in items] == [("flowchart", "A"), ("table", "B")]
+    assert [n["id"] for n in json.loads(items[0]["body"])["nodes"]] == ["A", "B"] and "Now" in spoken and "done" in spoken
+
+
+def test_a_spaced_close_tag_closes_the_block(tmp_path):
+    spoken, items, problems = split(tmp_path, "[[show diagram | A]]graph TD\nA-->B[[/ show]] done")
+    assert [n["id"] for n in json.loads(items[0]["body"])["nodes"]] == ["A", "B"] and spoken == "done" and problems == []
+
+
+def test_a_mermaid_subroutine_named_show_stays_in_the_diagram(tmp_path):
+    spoken, items, problems = split(tmp_path, "[[show diagram | Flow]]graph TD\nA-->B[[Show results]]\nB-->C\n[[/show]] after.")
+    nodes = json.loads(items[0]["body"])["nodes"]
+    assert [(n["id"], n["label"]) for n in nodes] == [("A", "A"), ("B", "Show results"), ("C", "C")] and spoken == "after."
+    assert problems == []
+
+
+def test_a_caption_after_the_closing_fence_is_said(tmp_path):
+    spoken, items, problems = split(tmp_path, "[[show diagram | F]]\n```mermaid\ngraph TD\nA-->B\n```\n"
+                                              "The request goes left to right.[[/show]] Done.")
+    assert [n["id"] for n in json.loads(items[0]["body"])["nodes"]] == ["A", "B"] and problems == []
+    assert spoken == "The request goes left to right. Done."
+
+
+# -- what a tag asks for is checked against what the stage can show ----------------------------
+
+
+def test_a_highlight_is_ordered_and_one_outside_the_code_is_a_problem(tmp_path):
+    code = tmp_path / "code"
+    code.mkdir()
+    (code / "a.py").write_text("\n".join(f"x{i}" for i in range(1, 11)) + "\n")
+    _, items, problems = split_in(tmp_path, "[[show code: a.py:5-10 highlight 8-6 | A]] Hi.", code)
+    assert items[0]["highlight"] == [6, 8] and problems == []
+    _, items, problems = split_in(tmp_path, "[[show code: a.py:5-10 highlight 1-2 | B]] Hi.", code)
+    assert items[0]["highlight"] is None and problems == ["highlight 1-2 is outside lines 5-10 shown of a.py; not marked"]
+
+
+def test_a_range_past_the_end_says_where_it_was_cut(tmp_path):
+    code = tmp_path / "code"
+    code.mkdir()
+    (code / "a.py").write_text("\n".join(f"x{i}" for i in range(1, 11)) + "\n")
+    _, items, problems = split_in(tmp_path, "[[show code: a.py:5-200]] Hi.", code)
+    assert items[0]["title"] == "a.py" and len(items[0]["lines"]) == 6
+    assert problems == ["code cut at line 10, the end of a.py"]
+
+
+def test_a_node_point_in_a_diagram_the_stage_cannot_light_is_a_problem(tmp_path):
+    _, problems = cues_of(tmp_path, "[[show diagram | S]]sequenceDiagram\nAlice->>Bob: hi[[/show]] Hi. [[point S: node Alice]] Her.")
+    assert problems == ['"S" not shown: a call draws no Mermaid; use a sequence, a flowchart or a table',
+                        'point not shown: no board titled "S" in this call']
+    for word in ("end", "Yes"):
+        _, problems = cues_of(tmp_path, "[[show diagram | G]]graph TD\nsubgraph Backend\nA -- Yes --> B\nend[[/show]] "
+                                        f"Hi. [[point G: node {word}]] It.")
+        assert problems == [f'point not shown: no node {word} in "G"']
+
+
+def test_a_second_untagged_fence_is_titled_by_its_own_sentence(tmp_path):
+    _, items, _ = split(tmp_path, "First:\n```mermaid\ngraph TD\nA-->B\n```\nThen the second flow:\n"
+                                  "```Mermaid\ngraph TD\nC-->D\n```\nDone.")
+    assert [i["title"] for i in items] == ["First", "Then the second flow"]
+
+
+def test_untagged_tables_without_a_trailing_pipe_or_with_a_key_on_a_row_are_found(tmp_path):
+    spoken, items, _ = split(tmp_path, "Look:\n\n| a | b\n|---|---\n| 1 | 2\n\nDone.")
+    assert len(items) == 1 and spoken == "Look: Done."
+    spoken, items, _ = split(tmp_path, "Look:\n\n| a | b |\n|---|---|\n| 1 | 2 | [[key: one]]\n| 3 | 4 |\n\nDone.")
+    assert len(items) == 1 and table_rows(items[0]["body"]) == ["1", "3"] and "| 3" not in spoken
+
+
+def table_rows(body):
+    return talk.table_first_cells(body)
+
+
+def test_table_rows_are_counted_and_matched_as_the_stage_does(tmp_path):
+    assert talk.table_first_cells("| a | b |\n|---|---|\n| `a \\| b` | 1 |\nx | y") == ["`a | b`", "x"]
+    entry, problems, focus = focus_cues(tmp_path, "[[show table | T]]| k | v |\n|---|---|\n| `a \\| b` | 1 |\n| Straße | 2 |[[/show]] "
+                                                  "One. [[point T: row \"a | b\"]] Two. [[point T: row \"STRASSE\"]] Three.")
+    assert focus == [("t", ["row#1"])]
+    assert problems == ['point not shown: no row of "T" starts with "STRASSE"']
+
+
+def test_a_row_with_an_apostrophe_can_be_pointed_at(tmp_path):
+    entry, problems, focus = focus_cues(tmp_path, "[[show table | T]]| k |\n|---|\n| don't retry |[[/show]] One. "
+                                                  "[[point T: row \"don't retry\"]] Two.")
+    assert problems == [] and focus == [("t", ["row#1"])]
+
+
+# -- verbs: a scene's frames, landing on the word after each tag --------------------------------
+
+WORKED = ("[[show diagram | advisory drops :workflows]]\nflowchart LR\n  subgraph adv[\":advisory\"]\n"
+          "    pws[ProposalWorkflowServiceImpl]\n    legacy[web.workflows.legacy]\n  end\n  wf[\":workflows\"]\n"
+          "  engine[(Flowable engine)]\n  pws -->|imports 3 types| wf\n  wf --> engine\n  pws --> legacy\n[[/show]]\n"
+          "Start with the class at the centre of this. [[+ pws]] The proposal workflow service lives in advisory, "
+          "[[+ pws->wf]] and until now it imported three types from the workflows module, [[+ wf->engine]] which is "
+          "the module that owns Flowable. [[focus pws->wf]] That one import is the only reason advisory depended on "
+          "workflows. [[strike pws->wf]] [[focus none]] On this branch that edge is gone. [[+ legacy, pws->legacy]] "
+          "[[focus legacy]] The same three types now live inside advisory, in a legacy package next door. "
+          "[[callout legacy: ProposalFlags, ProposalWorkflowService, ProcessInstanceView]] "
+          "[[key: one class tied advisory to :workflows]]")
+
+
+def test_verbs_become_frames_of_their_scene_on_the_word_after_each_tag(tmp_path):
+    entry, problems, focus = focus_cues(tmp_path, WORKED)
+    said = entry["text"]
+    assert "[[" not in said and said.startswith("Start with the class")
+    assert [c["kind"] for c in entry["cues"]] == ["front"] + ["frame"] * 6 + ["key"]
+    assert [(c["n"], said[c["at"]:c["at"] + 9]) for c in entry["cues"] if c["kind"] == "frame"] == [
+        (1, "The propo"), (2, "and until"), (3, "which is "), (4, "That one "), (5, "On this b"), (6, "The same ")]
+    assert focus[3] == ("advisory-drops-workflows", ["edge:pws->wf#0"]) and focus[4][1] == []
+    assert focus[5][1] == ["node:legacy"]
+    assert problems == ['"strike" is not supported yet; dropped', '"callout" is not supported yet; dropped']
+
+
+def test_repairs_are_reported_and_counted_on_the_scene(tmp_path):
+    from helpers import make_args
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    call.split_reply("[[show diagram | Flow]]graph TD; Page-->Queue[[/show]] One. [[+ Pag]] Two. [[+ Queue->Page]] "
+                     "Three. [[+ nothing]] Four. [[all]] Five.")
+    assert call.board.problems == ['"Pag" in "Flow" read as node:Page',
+                                   '"Queue->Page" in "Flow" read as Page->Queue: that edge only goes the other way',
+                                   '"nothing" in "Flow" matches nothing; dropped']
+    assert call.board.items[0]["scene"]["repairs"] == 3
+
+
+def test_a_verb_before_any_board_or_on_a_diagram_that_cannot_step_is_reported(tmp_path):
+    _, problems = cues_of(tmp_path, "Hello. [[+ A]] There.")
+    assert problems == ["+ not shown: no board has been shown yet"]
+    entry, problems = cues_of(tmp_path, "[[show diagram | S]]sequenceDiagram\nAlice->>Bob: hi[[/show]] Hi. [[next]] Her.")
+    assert problems[0] == '"S" not shown: a call draws no Mermaid; use a sequence, a flowchart or a table'
+    assert entry["cues"] == []
+    _, problems = cues_of(tmp_path, "[[show table | T]]| a |\n|---|\n| 1 |[[/show]] Hi. [[+ Nope: row 1]] No.")
+    assert problems == ['+ not shown: no board titled "Nope" in this call']
+
+
+def test_two_scenes_in_one_reply_count_their_own_frames(tmp_path):
+    entry, problems, focus = focus_cues(tmp_path, "[[show diagram | One]]graph TD; A-->B[[/show]] First. [[+ A]] Here A. "
+                                                  "[[show diagram | Two]]graph TD; C-->D[[/show]] Then. [[+ C->D]] Here C. "
+                                                  "[[+ One: A->B]] Back to one.")
+    frames = [(c["view"], c["n"]) for c in entry["cues"] if c["kind"] == "frame"]
+    assert problems == [] and frames == [("one", 1), ("two", 1), ("one", 2)]
+
+
+CLOUDS = "| Name | Region |\n|---|---|\n| Azure | eu |\n| AWS | us |\n| GCP | eu |\n| OVH | fr |"
+
+
+def test_a_board_of_more_than_three_things_and_no_verbs_comes_in_one_sentence_at_a_time(tmp_path):
+    from helpers import make_args
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    shown = call.split_reply(f"[[show table | Clouds]]{CLOUDS}[[/show]] Azure first. AWS is next. GCP follows. "
+                             "OVH closes it. Done.")
+    assert [(c["n"], shown[c["at"]:c["at"] + 5]) for c in call.reply_cues if c["kind"] == "frame"] == [
+        (1, "Azure"), (2, "AWS i"), (3, "GCP f"), (4, "OVH c")]
+    built = call.board.items[0]["scene"]
+    rows = [[k for k in f["show"] if k.startswith("row#")] for f in built["frames"]]  # each row brings its cells
+    assert built["start"] == "empty" and [len(r) for r in rows] == [0, 1, 2, 3, 4, 4]
+    assert call.board.problems == ['"Clouds" has 4 elements and no verbs, so it came in with the sentences said '
+                                   "about it (dump); tag the word that names each thing"]
+
+
+def test_two_boards_with_no_verbs_in_one_answer_each_come_in_with_their_own_sentences(tmp_path):
+    from helpers import make_args, stage_rule_breaks
+    fruit = "| Name | Kind |\n|---|---|\n| Apple | fruit |\n| Brick | block |\n| Cloud | sky |\n| Drum | noise |"
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    shown = call.split_reply(f"[[show table | Clouds]]{CLOUDS}[[/show]] Azure first. AWS is next. GCP follows. OVH closes it. "
+                             f"[[show table | Things]]{fruit}[[/show]] Apple is red. Brick is hard. Cloud is white. Drum is loud.")
+    assert [(c["view"], c["n"], shown[c["at"]:c["at"] + 5]) for c in call.reply_cues if c["kind"] == "frame"] == [
+        ("clouds", 1, "Azure"), ("clouds", 2, "AWS i"), ("clouds", 3, "GCP f"), ("clouds", 4, "OVH c"),
+        ("things", 1, "Apple"), ("things", 2, "Brick"), ("things", 3, "Cloud"), ("things", 4, "Drum ")]
+    # each scene says it came in with the sentences, so the rules hold it to arriving where it is named
+    assert [(i["view"], i["scene"]["start"], i["scene"].get("auto")) for i in call.board.items] == [
+        ("clouds", "empty", True), ("things", "empty", True)]
+    assert stage_rule_breaks(call, shown) == []
+
+
+def test_fewer_sentences_than_things_bring_several_in_at_once(tmp_path):
+    from helpers import make_args
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    call.split_reply("[[show diagram | D]]graph TD; A-->B; B-->C; C-->D[[/show]] It starts at A. It ends at D.")
+    built = call.board.items[0]["scene"]
+    assert [len(f["show"]) for f in built["frames"]] == [0, 3, 7, 7]
+
+
+def test_a_small_board_code_and_a_board_said_last_are_never_stepped(tmp_path):
+    code = tmp_path / "code"
+    code.mkdir()
+    (code / "a.py").write_text("".join(f"x{i} = {i}\n" for i in range(1, 11)))
+    for text in ("[[show table | T]]| a |\n|---|\n| 1 |\n| 2 |\n| 3 |[[/show]] One. Two. Three. Four.",
+                 "[[show code: a.py:1-10 | C]] One. Two. Three. Four. Five.",
+                 f"All said first. [[show table | Clouds]]{CLOUDS}[[/show]]"):
+        _, items, problems = split_in(tmp_path, text, code)
+        assert "scene" not in items[0] and problems == [], text
+
+
+def test_an_untagged_table_is_stepped_like_a_tagged_one(tmp_path):
+    from helpers import make_args
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    call.split_reply(f"Here they are.\n{CLOUDS}\nAzure first. AWS next. GCP then. OVH last.")
+    assert call.board.items[0]["scene"]["steps"] == 4
+
+
+SEQ = ('{"actors": [{"id": "p", "label": "Page"}, {"id": "s", "label": "Server"}], "steps": ['
+       '{"id": "s1", "from": "p", "to": "s", "arrow": "request", "label": "send"},'
+       '{"id": "s2", "from": "s", "to": "s", "arrow": "self", "label": "queue"},'
+       '{"id": "s3", "from": "s", "to": "p", "arrow": "event", "label": "answer"},'
+       '{"id": "s4", "from": "p", "to": "p", "arrow": "self", "label": "play"}]}')
+FLOW = ('{"nodes": [{"id": "a", "role": "entry", "label": "Turn"}, {"id": "b", "role": "success", "label": "Played"}],'
+        ' "edges": [{"from": "a", "to": "b"}]}')
+
+
+def _call(tmp_path):
+    from helpers import make_args
+    return talk.Call(make_args(), "T", tmp_path / "out")
+
+
+def test_a_sequence_spec_goes_to_the_stage_as_its_spec_and_steps_one_sentence_at_a_time(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply(f"[[show sequence | Turn]] {SEQ} [[/show]] The page sends. It queues. It answers. It plays.")
+    item = call.board.items[0]
+    name, source, title = talk.stage_view(item)
+    assert (item["kind"], source["format"], source["tool"], title) == ("sequence", "visual", "sequence", "Turn")
+    assert sorted(source) == ["format", "spec", "tool", "type"]  # the lanes draw it: no SVG or numbered key rides along
+    shown = [set(f["show"]) for f in item["scene"]["frames"]]
+    assert "step:s1" in shown[1] and "step:s2" not in shown[1] and "step:s4" in shown[4]
+    assert not [p for p in call.board.problems if "(dump)" in p]
+
+
+REF_SEQ = ('{"actors": [{"id": "p", "label": "Page"}, {"id": "s", "label": "Server"}], "steps": ['
+           '{"id": "s1", "from": "p", "to": "s", "arrow": "request", "label": "send", "ref": "srv.py:2"},'
+           '{"id": "s2", "from": "s", "to": "p", "arrow": "event", "label": "answer", "reply_to": "s1", "ref": "srv.py:40"}]}')
+
+
+def test_a_sequences_refs_go_to_the_stage_with_their_lines_and_a_ref_to_nothing_is_a_board_line(tmp_path):
+    from helpers import make_args
+    (tmp_path / "code").mkdir()
+    (tmp_path / "code" / "srv.py").write_text("def listen():\n    return heard()\n")
+    call = talk.Call(make_args(code=tmp_path / "code"), "T", tmp_path / "out")
+    call.split_reply(f"[[show sequence | Turn]] {REF_SEQ} [[/show]] The page sends. The server answers.")
+    source = talk.stage_view(call.board.items[0])[1]
+    assert source["refs"] == {"s1": {"path": "srv.py", "start": 1, "at": 2, "lines": ["def listen():", "    return heard()"], "lang": "py"}}
+    assert call.board.problems == ['sequence "Turn": step s2: ref srv.py:40 is past the end of srv.py, which has 2 lines']
+    # started without --code, a ref has nothing to read from
+    bare = _call(tmp_path)
+    bare.split_reply(f"[[show sequence | Turn]] {REF_SEQ} [[/show]] The page sends. The server answers.")
+    assert "refs" not in talk.stage_view(bare.board.items[0])[1]
+    assert bare.board.problems == ['sequence "Turn": its refs show no code, talk was started without --code']
+
+
+def test_a_bad_spec_never_reaches_the_stage_and_the_board_says_why(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply('[[show sequence | Turn]] {"actors": [], "steps": []} [[/show]] Nothing to see.')
+    assert call.board.items == []
+    assert any("requires at least 2 actors" in p for p in call.board.problems)
+
+
+COMPARE = ('{"title": "Report path", "compare": {'
+           '"before": {"label": "master", "actors": [{"id": "p", "label": "Page"}, {"id": "c", "label": "Client"}, {"id": "r", "label": "Service"}],'
+           ' "steps": [{"id": "s1", "from": "p", "to": "c", "arrow": "request", "label": "asks for the report"},'
+           ' {"id": "s2", "from": "c", "to": "c", "arrow": "self", "label": "builds the timeseries"},'
+           ' {"id": "s3", "from": "c", "to": "r", "arrow": "request", "label": "sends fixed lists"},'
+           ' {"id": "s4", "from": "p", "to": "p", "arrow": "self", "label": "shows the report"}]},'
+           '"after": {"label": "the PR", "actors": [{"id": "p", "label": "Page"}, {"id": "m", "label": "Shared module", "tone": "amber"}, {"id": "r", "label": "Service"}],'
+           ' "steps": [{"id": "s1", "from": "p", "to": "m", "arrow": "request", "label": "asks for the report"},'
+           ' {"id": "s2", "from": "m", "to": "m", "arrow": "self", "label": "builds the timeseries"},'
+           ' {"id": "s3", "from": "m", "to": "r", "arrow": "request", "label": "sends the lists it is given"},'
+           ' {"id": "s4", "from": "p", "to": "p", "arrow": "self", "label": "shows the report"}]}}}')
+
+
+def test_a_before_after_sequence_comes_in_with_the_sentences_that_name_its_parts_and_the_voice_points_at_a_view(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply(f"[[show sequence | Report path]] {COMPARE} [[/show]] [[point: before]] Before, the page asks for the report. "
+                     "The client builds the timeseries. It sends fixed lists. [[point: after]] With the change, the shared module "
+                     "builds the timeseries. [[point: merged]] The page shows the report.")
+    item = call.board.items[0]
+    source = talk.stage_view(item)[1]
+    assert [source["spec"]["compare"][k]["label"] for k in ("before", "after")] == ["master", "the PR"]
+    # the shared module replaced the client, so a step it took over is the same row on both sides
+    assert [(s["id"], s["change"]) for s in source["spec"]["steps"]] == [
+        ("s1", "same"), ("s2", "same"), ("s3", "changed"), ("s4", "same")]
+    frames = item["scene"]["frames"]
+    # merged, the name the side-by-side board replaced, points at both sides
+    assert [f["focus"] for f in frames[1:6]] == [["mode:before"], [], [], ["mode:after"], ["mode:both"]]
+    # each sentence brings the row it names; the rest arrive later
+    steps = [[k for k in f["show"] if k.startswith("step:")] for f in frames[:6]]
+    assert steps[0] == [] and steps[1] == ["step:s1"] and steps[2] == ["step:s1", "step:s2"] and "step:s4" not in steps[4]
+    assert "step:s4" in steps[5] and [f["cur"] for f in frames[2:4]] == [["step:s2"], ["step:s3"]]
+    assert call.board.problems == []
+
+
+def test_the_voice_points_at_both_sides_of_a_before_after_board(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply(f"[[show sequence | Report path]] {COMPARE} [[/show]] [[point: after]] The module builds it. "
+                     "[[point: both]] The page shows the report.")
+    frames = call.board.items[0]["scene"]["frames"]
+    assert [f["focus"] for f in frames[1:3]] == [["mode:after"], ["mode:both"]]
+    assert not [p for p in call.board.problems if p.startswith("point not shown")]
+
+
+def test_pointing_at_a_view_of_a_board_with_no_before_and_after_is_a_board_line(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply(f"[[show sequence | Turn]] {SEQ} [[/show]] [[point: before]] It sends.")
+    assert call.board.problems[0] == 'point not shown: "Turn" has no before and after to point at; write the sequence with compare'
+    call.split_reply(f"[[show flowchart | Floor]] {FLOW} [[/show]] [[point: after]] Played.")
+    assert call.board.problems[-1] == 'point not shown: "Floor" is a flowchart; use node ID'
+
+
+def test_a_malformed_compare_spec_is_a_board_line_and_never_reaches_the_stage(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply('[[show sequence | Report path]] {"compare": {"before": {"actors": [], "steps": []}}} [[/show]] Nothing.')
+    assert call.board.items == []
+    assert call.board.problems == ['sequence "Report path" not shown: compare needs "before" and "after", each with actors and steps']
+
+
+def test_a_flowchart_written_in_mermaid_and_a_spec_both_become_maps(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply(f"[[show flowchart | Old]] graph LR; A-->B [[/show]] One. [[show flowchart | New]] {FLOW} [[/show]] Two.")
+    old, new = call.board.items
+    assert old["kind"] == "flowchart" and talk.stage_view(old)[1]["tool"] == "flowchart"
+    assert new["kind"] == "flowchart" and talk.stage_view(new)[1]["tool"] == "flowchart"
+
+
+def test_a_mermaid_subgraph_drawn_as_a_map_can_be_pointed_at_and_needs_no_board_line(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply("[[show diagram | Hear path]] graph LR; subgraph speech [Azure speech]\n stt[Speech to text] --> "
+                     "tts[Text to speech]\n end\n page[Call page] --> speech; speech --> claude[Claude session] [[/show]] "
+                     "[[+ page]] The page records. [[point: node speech]] Azure turns it into words. [[+ claude]] Claude answers.")
+    item = call.board.items[0]
+    assert [n["id"] for n in talk.stage_view(item)[1]["spec"]["nodes"]] == ["stt", "tts", "page", "claude"]
+    assert item["scene"]["frames"][2]["focus"] == ["group:speech", "node:stt", "node:tts"]
+    assert call.board.problems == []
+
+
+def test_a_point_lights_a_step_or_a_node_of_a_visual(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply(f"[[show sequence | Turn]] {SEQ} [[/show]] [[+ s1]] It sends. [[point: step s3]] It answers.")
+    frames = call.board.items[0]["scene"]["frames"]
+    assert frames[2]["focus"] == ["step:s3"]
+    call.split_reply(f"[[show flowchart | Floor]] {FLOW} [[/show]] [[point: node b]] Played.")
+    assert call.board.items[-1]["scene"]["frames"][1]["focus"] == ["node:b"]
+    call.split_reply("[[point Turn: step s9]] No such step.")
+    assert any("no step s9" in p for p in call.board.problems)
+
+
+def test_a_point_on_a_visual_lights_its_step_while_the_rest_still_comes_in_a_sentence_at_a_time(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply(f"[[show sequence | Turn]] {SEQ} [[/show]] The page sends. It queues. [[point: step s3]] It answers. "
+                     "It plays.")
+    built = call.board.items[0]["scene"]
+    assert built["start"] == "empty" and built["steps"] == 4
+    shown = [set(f["show"]) for f in built["frames"]]
+    assert "step:s1" in shown[1] and "step:s3" not in shown[2]
+    assert "step:s3" in shown[3] and built["frames"][3]["focus"] == ["step:s3"]
+
+
+def test_an_unclosed_spec_ends_with_its_json_and_the_speech_after_it_is_said(tmp_path):
+    spoken, items, problems = split(tmp_path, f"Here. [[show sequence | P]] {SEQ} The client asks. The server answers.")
+    assert [i["kind"] for i in items] == ["sequence"]
+    assert spoken == "Here. The client asks. The server answers."
+    assert problems[0] == 'missing [[/show]] after "P", closed it at the end of the sequence'
+
+
+def test_a_spec_under_a_mermaid_name_is_drawn_by_its_tool_and_a_wrong_tool_is_named(tmp_path):
+    call = _call(tmp_path)
+    call.split_reply(f"[[show flow | F]] {FLOW} [[/show]] Played.")
+    assert call.board.items[0]["kind"] == "flowchart"
+    assert call.board.problems[0] == '"F" is a flowchart spec, so it was drawn as one; write [[show flowchart | ...]]'
+    call.split_reply(f"[[show sequence | S]] {FLOW} [[/show]] Played.")
+    assert "this looks like a flowchart spec" in call.board.problems[-1]
+
+
+def test_a_board_that_breaks_never_costs_the_answer(tmp_path, monkeypatch):
+    call = _call(tmp_path)
+    monkeypatch.setattr(call, "compile_scenes", lambda *a: 1 / 0)
+    shown = call.split_reply_safely(f"The page sends. [[show sequence | P]] {SEQ} [[/show]] It answers. [[+ s1]] Done.")
+    assert " ".join(shown.split()) == "The page sends. It answers. Done."
+    assert "the boards of this answer failed (ZeroDivisionError" in call.board.problems[-1]
+
+
+def test_a_point_names_a_flowchart_node_whose_id_has_a_dot(tmp_path):
+    call = _call(tmp_path)
+    spec = FLOW.replace('"id": "b"', '"id": "api.gw"').replace('"to": "b"', '"to": "api.gw"')
+    call.split_reply(f"[[show flowchart | F]] {spec} [[/show]] [[point: node api.gw]] The gateway.")
+    assert call.board.problems == [] and call.board.items[0]["scene"]["frames"][1]["focus"] == ["node:api.gw"]
+
+
+def test_rows_are_the_first_tables_up_to_a_blank_line(tmp_path):
+    assert talk.table_first_cells("| k |\n|---|\n| one |\n| two |\n\n| x |\n|---|\n| y |") == ["one", "two"]
+
+
+def test_a_point_at_one_cell_lights_that_cell(tmp_path):
+    from helpers import make_args
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    call.split_reply("[[show table | Engines]]\n| | Azure | VoiceStudio |\n|---|---|---|\n| Speed | fast | slow |\n[[/show]] "
+                     '[[point: cell "Speed" / "Azure"]] Azure is fast. [[point: cell 1 / 3]] VoiceStudio is not.')
+    frames = call.board.items[0]["scene"]["frames"]
+    lit = [f["focus"] for f in frames if f["focus"]]
+    assert call.board.problems == [] and lit[:2] == [["cell#1.2"], ["cell#1.3"]]
+
+
+# -- boards that come in with the sentences said about them: real replies from saved calls ------------
+
+THREE_PATHS = (  # its refs and subs left out
+    '[[show flowchart | Three paths changed]] {"nodes": [{"id": "open", "role": "entry", "label": "Open a proposal"}, '
+    '{"id": "batch", "role": "entry", "label": "Nightly batch"}, {"id": "share", "role": "entry", "label": "Share task"}, '
+    '{"id": "catch", "role": "code", "label": "Catch every error"}, {"id": "guard", "role": "code", "label": "Broken guard '
+    'first"}, {"id": "state", "role": "success", "label": "Return latest state"}, {"id": "err", "role": "error", "label": '
+    '"Put in error"}], "edges": [{"from": "open", "to": "catch"}, {"from": "batch", "to": "guard"}, {"from": "guard", '
+    '"to": "err"}, {"from": "share", "to": "state", "label": "if broken"}]} [[/show]]\n\n[[point: node open]] First, '
+    "opening a proposal. [[point: node batch]] Second, the nightly batch. [[point: node share]] Third, sharing a proposal "
+    "that broke on refresh.\n\n")
+CALLS_BOTH = (  # its subs left out
+    'So the application code cannot even see Flowable. Only Flowable can see the application.\n\n[[show sequence | Calls in '
+    'both directions]] {"actors": [{"id": "app", "label": "Application (advisory)"}, {"id": "port", "label": "Interfaces '
+    'in advisory legacy"}, {"id": "fl", "label": "Flowable module (workflows)"}],\n "steps": [{"id": "s1", "from": "app", '
+    '"to": "port", "arrow": "request", "label": "asks for tasks"},\n           {"id": "s2", "from": "port", "to": "fl", '
+    '"arrow": "request", "label": "Spring injects the Flowable implementation"},\n           {"id": "s3", "from": "fl", '
+    '"to": "port", "arrow": "event", "label": "BPMN step needs orders sent"},\n           {"id": "s4", "from": "port", '
+    '"to": "app", "arrow": "event", "label": "Spring injects the app implementation"}]} [[/show]]\nThe two engines still '
+    "talk in both directions, and that is why the interfaces live in advisory. [[point: step s1]] When the application "
+    "wants a proposal's Flowable tasks, it calls the WorkflowsRepository interface. [[point: step s2]] At runtime Spring "
+    "hands it the Flowable implementation, AdvisoryWorkflowsRepository, which now sits inside the workflows module. "
+    "[[point: step s3]] The other way round, when a BPMN step must send orders, Flowable calls the SendOrdersDelegate "
+    "interface. [[point: step s4]] The application implements that one, in OrdersSyncService.\n\n")
+FIVE_COMMENTS = (  # the reviewer's name and the file names left out
+    "Splitting principle 29 into four narrow ones was the wrong move.\n[[show table | Five review comments]]\n"
+    "| Comment | Where | Caught by |\n|---|---|---|\n"
+    "| Why not use the same logic as the cloud mapper? | Mapper.java:302 | Do it the way the neighbours do |\n"
+    "| We call it asset in every other domain model | api.yml:1319 | Do it the way the neighbours do |\n"
+    "| Shorten to: Assets contributing to the breach of a rule | api.yml:1315 | Say what it is, in one line |\n"
+    "| No need to say it can be null if it is optional | api.yml:1277 | Say what it is, in one line |\n"
+    "| Shorten the changelog by a lot | changelog.md:15 | Say what it is, in one line |\n[[/show]]\n"
+    "I read the reviewer's five comments on the two pull requests. Two general principles cover all five. [[point: rows 1-2]] "
+    "The first is: when the codebase already does or names something, new code does and names it the same way. "
+    "[[point: rows 3-5]] The second is: a description says in one line what the thing is, and leaves out the cases and "
+    "anything its declaration already says.")
+
+
+def _frames_said(call, shown):
+    """(frame n, the words its cue fires on, what arrived, what is said) for the reply's only scene."""
+    built = next(i["scene"] for i in call.board.items if i.get("scene"))
+    out = []
+    for c in (c for c in call.reply_cues if c["kind"] == "frame"):
+        f, before = built["frames"][c["n"]], set(built["frames"][c["n"] - 1]["show"])
+        out.append((c["n"], " ".join(shown[c["at"]:].split()[:3]),
+                    [k for k in f["show"] if k not in before and not k.startswith(("edge:", "actor:", "cell#"))], f["cur"]))
+    return out
+
+
+def test_a_point_on_a_map_is_the_reveal_for_its_sentence_and_the_part_it_names_is_what_is_said(tmp_path):
+    from helpers import make_args, stage_rule_breaks
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    shown = call.split_reply(THREE_PATHS)
+    assert _frames_said(call, shown) == [
+        (1, "First, opening a", ["node:open"], ["node:open"]),
+        (2, "Second, the nightly", ["node:batch"], ["node:batch"]),
+        # the four parts no sentence names come in with the last one named, which stays the one said
+        (3, "Third, sharing a", ["node:share", "node:catch", "node:guard", "node:state", "node:err"],
+         ["node:share", "edge:share->state#0"])]
+    assert call.board.problems == ['4 of 7 parts of "Three paths changed" are named by no sentence, so they came in by '
+                                   "order; point at each where it is said"]
+    assert stage_rule_breaks(call, shown) == []
+
+
+def test_an_introduction_brings_no_step_and_each_pointed_step_arrives_on_its_own_sentence(tmp_path):
+    from helpers import make_args, stage_rule_breaks
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    shown = call.split_reply(CALLS_BOTH)
+    assert _frames_said(call, shown) == [
+        (1, "When the application", ["step:s1"], ["step:s1"]), (2, "At runtime Spring", ["step:s2"], ["step:s2"]),
+        (3, "The other way", ["step:s3"], ["step:s3"]), (4, "The application implements", ["step:s4"], ["step:s4"])]
+    assert call.board.problems == [] and stage_rule_breaks(call, shown) == []
+    # a point brings in what it lights on its own sentence, though that sentence names nothing
+    head = CALLS_BOTH[:CALLS_BOTH.index("The two engines")]
+    call = talk.Call(make_args(), "T", tmp_path / "again")
+    shown = call.split_reply(head + "It goes both ways. Here is how. [[point: step s3]] This one is the callback. Done.")
+    assert [(n, words, arrived) for n, words, arrived, _ in _frames_said(call, shown)] == [
+        (1, "Here is how.", ["step:s1", "step:s2"]), (2, "This one is", ["step:s3"]), (3, "Done.", ["step:s4"])]
+    # a focus tag does the same: it is resolved here, by its target's words, and `focus none` lights nothing
+    call = talk.Call(make_args(), "T", tmp_path / "focus")
+    shown = call.split_reply(head + "It goes both ways. Here is how. [[focus s3]] This one is the callback. [[focus none]] Done.")
+    assert [(n, words, arrived) for n, words, arrived, _ in _frames_said(call, shown)] == [
+        (1, "Here is how.", ["step:s1", "step:s2"]), (2, "This one is", ["step:s3"]), (3, "Done.", ["step:s4"])]
+
+
+def test_the_demo_sequence_brings_each_step_with_the_sentence_that_names_it(tmp_path):
+    from helpers import make_args, stage_rule_breaks
+    call = talk.Call(make_args(code=talk.SKILL_DIR.parents[1]), "T", tmp_path / "out")
+    shown = call.split_reply(next(t for t in talk.load_demo() if "One turn, end to end" in t))
+    assert [(n, words, arrived) for n, words, arrived, _ in _frames_said(call, shown)] == [
+        (1, "When you stop", ["step:s1"]), (2, "The server hands", ["step:s2"]), (3, "Azure sends back", ["step:s3"]),
+        (4, "Your Claude session", ["step:s4"]), (5, "It reads the", ["step:s5"]), (6, "Then it sends", ["step:s6"]),
+        (7, "The server has", ["step:s7"]), (8, "And the answer", ["step:s8"]), (9, "The slow part", [])]
+    assert call.board.problems == [] and stage_rule_breaks(call, shown) == []
+
+
+def test_a_board_tag_on_its_own_line_fires_its_first_frame_on_the_first_word_after_it(tmp_path):
+    from helpers import make_args, stage_rule_breaks
+    # the reply as call fuKjbRHGdvkbRbAC2mECXg first heard it: its two range points were dropped then
+    text = FIVE_COMMENTS.replace("[[point: rows 1-2]] ", "").replace("[[point: rows 3-5]] ", "")
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    shown = call.split_reply(text)
+    assert [(n, words, arrived) for n, words, arrived, _ in _frames_said(call, shown)] == [
+        (1, "I read the", ["row#1"]), (2, "Two general principles", ["row#2"]), (3, "The first is:", ["row#3"]),
+        (4, "The second is:", ["row#4", "row#5"])]
+    assert stage_rule_breaks(call, shown) == []
+
+
+def test_a_point_takes_a_range_of_rows(tmp_path):
+    from helpers import make_args, stage_rule_breaks
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    shown = call.split_reply(FIVE_COMMENTS)
+    assert call.board.problems == []
+    assert _frames_said(call, shown) == [(1, "The first is:", [], ["row#1", "row#2"]),
+                                         (2, "The second is:", [], ["row#3", "row#4", "row#5"])]
+    assert stage_rule_breaks(call, shown) == []
+    _, problems = cues_of(tmp_path, "[[show table | T]]| a |\n|---|\n| 1 |\n| 2 |[[/show]] One. [[point: rows 2-3]] No.")
+    assert problems == ['point not shown: "T" has 2 rows, not rows 2-3']
+
+
+# "Release path", from call 9BH6YJ7jN5n3mTCVyQWotg, the private name changed and the build refs dropped. Answer 1
+# showed it and pointed at its last step; answer 2 showed it again and stepped it a sentence at a time.
+RELEASE = json.dumps({
+    "actors": [{"id": "c", "label": "Contract"}, {"id": "m", "label": "Platform"}, {"id": "k", "label": "Core banking"}],
+    "steps": [{"id": "s0", "from": "m", "to": "k", "arrow": "band", "label": "Before: Platform on build 14"},
+              {"id": "s1", "from": "c", "to": "c", "arrow": "self", "label": "PR 288 opened, dev build published"},
+              {"id": "s2", "from": "c", "to": "m", "arrow": "request", "label": "draft pins build 139"},
+              {"id": "s3", "from": "c", "to": "c", "arrow": "self", "label": "new push, dev build published"},
+              {"id": "s4", "from": "c", "to": "m", "arrow": "request", "label": "re-pins build 140"},
+              {"id": "s5", "from": "c", "to": "c", "arrow": "self", "label": "merged, master publishes build 16"},
+              {"id": "s6", "from": "c", "to": "m", "arrow": "request", "label": "pins build 16 and merges"},
+              {"id": "s7", "from": "c", "to": "k", "arrow": "request", "label": "jumps from 2025-R3-1 to build 16"}]})
+RELEASE_SAID = ["Before anything moved, Platform sat on build 14.", "On the thirteenth, PR 288 published dev build 139.",
+                "Platform pinned it the same day.", "On the twenty-first a new push made build 140.",
+                "Platform re-pinned to it.", "On the twenty-sixth the contract merged and master published build 16.",
+                "Platform switched within two hours.", "A week later core banking jumped to the same build."]
+
+
+def _said(call, text, shows):
+    """One answer, split and listed as the call lists it, so the next one gets the next number."""
+    shown = call.split_reply(text)
+    for fut in call.stage_pending:
+        fut.result(timeout=5)
+    call.stage_pending = []
+    call.add("claude", shown, cues=call.reply_cues)
+    return [s for s in shows if s.args[1] == "release-path"][-1].kwargs["extra"]
+
+
+def test_each_answer_keeps_its_own_scene_on_a_board_and_the_stage_gets_them_all(tmp_path, monkeypatch):
+    import copy
+    from unittest.mock import MagicMock
+    call = _call(tmp_path)
+    call.stage_cwd = str(tmp_path)
+    show = MagicMock()
+    monkeypatch.setattr(talk.stage_mod, "show", show)
+    one = _said(call, f"[[show sequence | Release path]] {RELEASE} [[/show]] " + " ".join(RELEASE_SAID[:-1])
+                + f" [[point: step s7]] {RELEASE_SAID[-1]}", show.call_args_list)
+    first = copy.deepcopy(call.board.items[-1]["scene"])
+    last = call.entries[-1]["cues"][-1]
+    assert (last["kind"], first["frames"][last["n"]]["cur"]) == ("frame", ["step:s7"])
+    assert one["scenes"] == {"1": first} and one["answer"] == 1
+    two = _said(call, f"[[show sequence | Release path]] {RELEASE} [[/show]] "
+                + " ".join(f"[[+ step s{i}]] {s}" for i, s in enumerate(RELEASE_SAID)), show.call_args_list)
+    item = call.board.items[-1]
+    assert item["scene"]["steps"] == 8 and item["scene"]["start"] == "empty" and item["scene"] != first
+    assert item["scenes"] == {"1": first, "2": item["scene"]}
+    assert two["scenes"] == {"1": first, "2": item["scene"]} and two["scene"] == item["scene"] and two["answer"] == 2
+    # a later answer that only points at the board adds its scene beside theirs, on the same board
+    _said(call, "[[point Release path: step s2]] Platform pinned it the same day.", show.call_args_list)
+    assert sorted(item["scenes"]) == ["1", "2", "3"] and item["scenes"]["2"]["steps"] == 8
+    assert item["scenes"]["3"]["frames"][-2]["cur"] == ["step:s2"]
+    # one shown again changed starts over: the frames before name parts of another drawing
+    changed = RELEASE.replace("build 140", "build 141")
+    _said(call, f"[[show sequence | Release path]] {changed} [[/show]] [[point: step s4]] {RELEASE_SAID[4]}",
+          show.call_args_list)
+    assert list(call.board.items[-1]["scenes"]) == ["4"]
+
+
+MAP_REPLY = ('[[show map | Where pay lives]] {"columns": ["Who asks", "Entry", "Service"],'
+             ' "boxes": [{"id": "u", "col": 0, "row": 0, "name": "A person", "b": 1, "r": 1},'
+             ' {"id": "api", "col": 1, "row": 0, "name": "REST endpoint", "b": 2, "r": 1},'
+             ' {"id": "svc", "col": 2, "row": 0, "tone": "green", "name": "Billing service", "b": 3, "r": 2},'
+             ' {"id": "log", "col": 2, "row": 1, "name": "Audit log", "b": 4}],'
+             ' "arrows": [{"from": "u", "to": "api", "b": 2}, {"from": "api", "to": "svc", "b": 3}, {"from": "svc", "to": "log", "b": 4},'
+             ' {"layer": "route", "from": "u", "to": "api", "n": 1, "r": 1, "label": "sends the payment"},'
+             ' {"layer": "route", "from": "api", "to": "svc", "n": 2, "r": 2, "label": "asks the rule"}]} [[/show]] ')
+
+
+def test_a_map_is_a_board_built_up_as_it_is_said_and_followed_when_the_answer_follows_the_request(tmp_path):
+    from helpers import stage_rule_breaks
+    call = _call(tmp_path)
+    shown = call.split_reply(MAP_REPLY + "A person starts here. The REST endpoint takes the call. The billing service holds "
+                                         "the rule. The audit log keeps a copy. Now the person sends the payment. "
+                                         "The endpoint asks the rule.")
+    (item,) = call.board.items
+    assert (item["kind"], call.board.problems) == ("map", [])
+    assert talk.stage_view(item)[1] == item["visual"] and 'data-key="box:svc"' in item["visual"]["svg"]
+    frames = item["scene"]["frames"]
+    assert [f["cur"][0] for f in frames[1:-1]] == ["box:u", "box:api", "box:svc", "box:log", "route:1", "route:2"]
+    assert stage_rule_breaks(call, shown) == []
+    # an answer that never follows the request builds the map and leaves its route alone
+    call.add("claude", shown, cues=call.reply_cues)
+    item.pop("scene")
+    shown = call.split_reply(MAP_REPLY + "A person starts here. The REST endpoint takes the call. The billing service holds "
+                                         "the rule. [[point: box log]] The audit log keeps a copy.")
+    frames = call.board.items[-1]["scene"]["frames"]
+    assert call.board.problems == [] and not any(k.startswith("route:") for f in frames[:-1] for k in f["show"])
+    assert frames[4]["focus"] == ["box:log"]
+    assert stage_rule_breaks(call, shown) == []
+
+
+def test_a_map_point_names_a_box_a_zone_or_a_route_step_and_a_wrong_one_is_a_problem(tmp_path):
+    _, problems = cues_of(tmp_path, MAP_REPLY + "Here. [[point: route 2]] The rule. [[point: box nope]] Gone. [[point: node u]] No.")
+    assert [p for p in problems if p.startswith("point")] == ['point not shown: no box nope in "Where pay lives"',
+                        'point not shown: "Where pay lives" is a map; use box ID, zone N or route N']
+    _, problems = cues_of(tmp_path, '[[show map | M]] {"columns": ["a"], "boxes": [{"id": "x", "col": 0, "row": 0}]} [[/show]] Hi.')
+    assert problems == ["map \"M\" not shown: box 'x': name must be text"]
+
+
+def test_a_change_and_code_in_another_repository_show_by_absolute_path_and_can_be_pointed_at(tmp_path):
+    code = git_repo(tmp_path / "code")
+    other = git_repo(tmp_path / "other")
+    (other / "a.py").write_text("def new_name():\n    return 1\n")
+    target = other / "a.py"
+    spoken, items, problems = split_in(tmp_path, f"[[show change: {target} | Theirs]] Renamed there.", code)
+    assert spoken == "Renamed there." and problems == []
+    (item,) = items
+    assert item["kind"] == "change" and item["path"] == "other/a.py" and (item["added"], item["removed"]) == (1, 1)
+    entry, problems, focus = focus_cues(tmp_path, f"[[show change: {target} | Theirs]] Renamed. [[point: old line 1]] Was.", code)
+    assert problems == [] and focus == [("theirs", ["old:1"])]
+    _, items, problems = split_in(tmp_path, f"[[show code: {target}:1-2 | Their code]] Here.", code)
+    assert problems == [] and items[0]["path"] == "other/a.py" and items[0]["lines"][0] == "def new_name():"
+    _, items, problems = split_in(tmp_path, "[[show code: ../other/a.py:1-2 | Relative]] No.", code)
+    assert items == [] and problems and "outside the project" in problems[0]

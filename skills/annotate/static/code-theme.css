@@ -1,0 +1,7 @@
+/* The ground for fenced code and the pflow source pane: GitHub Dark, the theme
+   code-paint.js asks Shiki to colour fences in (FENCE_THEME). Every token
+   carries its own colour inline, so this file only paints what sits behind
+   them. Layout (radius/padding/font) lives in style.css. */
+pre code.sk-fence { display: block; overflow-x: auto; padding: 1em; }
+code.sk-fence { padding: 3px 5px; }
+.sk-fence { background: #0d1117; color: #e6edf3; }

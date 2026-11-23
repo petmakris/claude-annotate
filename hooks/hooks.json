@@ -1,0 +1,11 @@
+{
+  "description": "While a /talk call runs, its page shows this session's tool calls. The script exits at once when no talk server runs.",
+  "hooks": {
+    "PreToolUse": [{"hooks": [{"type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/talk/hooks/talk-activity.sh\"", "timeout": 5}]}],
+    "PostToolUse": [{"hooks": [{"type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/talk/hooks/talk-activity.sh\"", "timeout": 5}]}],
+    "PostToolUseFailure": [{"hooks": [{"type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/talk/hooks/talk-activity.sh\"", "timeout": 5}]}],
+    "PermissionDenied": [{"hooks": [{"type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/talk/hooks/talk-activity.sh\"", "timeout": 5}]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/talk/hooks/talk-activity.sh\"", "timeout": 5}]}],
+    "StopFailure": [{"hooks": [{"type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/talk/hooks/talk-activity.sh\"", "timeout": 5}]}]
+  }
+}

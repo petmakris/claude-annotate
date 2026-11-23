@@ -1,0 +1,11 @@
+{
+  "name": "annotate-shiki-bundle",
+  "private": true,
+  "description": "Builds skills/annotate/static/shiki.min.js, the one vendored syntax highlighter every annotate code surface uses. Run: npm ci && npm run build",
+  "type": "module",
+  "scripts": { "build": "node build.mjs" },
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "shiki": "4.4.3"
+  }
+}

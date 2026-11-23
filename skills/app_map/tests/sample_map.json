@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "name": "shop",
+  "match": {"remotes": ["github.com/acme/shop"], "folders": ["/work/shop"]},
+  "built": {"at": "2026-11-23T10:00:00Z", "commit": "0123456789abcdef0123456789abcdef01234567"},
+  "parts": [
+    {"id": "svc", "paths": ["/svc/"]},
+    {"id": "orders", "paths": ["/svc/src/**/java/com/acme/svc/orders/**", "/orders/"]},
+    {"id": "web", "paths": ["/web/"]},
+    {"id": "shared", "repo": "contract", "paths": ["/svc/"]}
+  ],
+  "details": {
+    "svc": {
+      "parts": [
+        {"id": "svc-api", "paths": ["/svc/src/**/java/com/acme/svc/api/**"]},
+        {"id": "svc-db", "paths": ["/svc/src/**/java/com/acme/svc/db/**"]}
+      ]
+    }
+  },
+  "owners": {
+    "svc": [{"team": "@acme/core", "files": 120}, {"team": null, "files": 8}],
+    "orders": [{"team": "@acme/orders", "files": 40}],
+    "web": [{"team": "@acme/web", "files": 30}, {"team": "@acme/core", "files": 2}],
+    "svc-api": [{"team": "@acme/core", "files": 20}],
+    "svc-db": [{"team": null, "files": 6}]
+  },
+  "teams": {"@acme/core": "CORE", "@acme/orders": "ORD"},
+  "repos": {"contract": "github.com/acme/contract"},
+  "modules": [{"name": "svc", "dir": "svc", "repo": null}, {"name": "svc-api", "dir": "svc/api", "repo": null}, {"name": "web", "dir": "web", "repo": null}, {"name": "contract-svc", "dir": "svc", "repo": "contract"}],
+  "drawings": {
+    "top": {
+      "width": 600, "height": 300,
+      "shapes": [
+        {"kind": "text", "x": 24, "y": 38, "anchor": "start", "role": "title", "size": 22, "weight": 700, "tone": "plain", "key": null, "runs": [{"text": "Orders flow from the web through the service", "mono": false}]},
+        {"kind": "rect", "x": 24, "y": 88, "w": 220, "h": 180, "r": 10, "role": "zone", "tone": "plain", "dashed": true, "key": "zone:0"},
+        {"kind": "rect", "x": 40, "y": 120, "w": 180, "h": 60, "r": 8, "role": "box", "tone": "plain", "dashed": false, "key": "box:svc"},
+        {"kind": "text", "x": 58, "y": 150, "anchor": "start", "role": "name", "size": 15.5, "weight": 600, "tone": "plain", "key": "box:svc", "runs": [{"text": "Service", "mono": false}]},
+        {"kind": "rect", "x": 40, "y": 196, "w": 180, "h": 60, "r": 8, "role": "box", "tone": "blue", "dashed": false, "key": "box:orders"},
+        {"kind": "text", "x": 58, "y": 226, "anchor": "start", "role": "name", "size": 15.5, "weight": 600, "tone": "plain", "key": "box:orders", "runs": [{"text": "Orders ", "mono": false}, {"text": "OrderService", "mono": true}]},
+        {"kind": "rect", "x": 380, "y": 120, "w": 180, "h": 60, "r": 8, "role": "box", "tone": "plain", "dashed": false, "key": "box:web"},
+        {"kind": "text", "x": 398, "y": 150, "anchor": "start", "role": "name", "size": 15.5, "weight": 600, "tone": "plain", "key": "box:web", "runs": [{"text": "Web", "mono": false}]},
+        {"kind": "path", "points": [[220, 150], [376, 150]], "role": "arrow", "tone": "plain", "dashed": false, "arrow": true, "key": "edge:svc->web#0"},
+        {"kind": "text", "x": 298, "y": 140, "anchor": "middle", "role": "label", "size": 13, "weight": 400, "tone": "plain", "key": "edge:svc->web#0", "runs": [{"text": "REST", "mono": false}]},
+        {"kind": "circle", "x": 298, "y": 170, "r": 11, "role": "badge", "tone": "blue", "dashed": false, "key": "edge:svc->web#0"},
+        {"kind": "path", "points": [[130, 196], [130, 180]], "role": "arrow", "tone": "plain", "dashed": true, "arrow": true, "key": "edge:orders->svc#0"}
+      ]
+    },
+    "svc": {
+      "width": 400, "height": 200,
+      "shapes": [
+        {"kind": "rect", "x": 24, "y": 40, "w": 160, "h": 60, "r": 8, "role": "box", "tone": "plain", "dashed": false, "key": "box:svc-api"},
+        {"kind": "rect", "x": 216, "y": 40, "w": 160, "h": 60, "r": 8, "role": "box", "tone": "plain", "dashed": false, "key": "box:svc-db"},
+        {"kind": "path", "points": [[184, 70], [212, 70]], "role": "arrow", "tone": "plain", "dashed": false, "arrow": true, "key": "edge:svc-db->svc-api#0"}
+      ]
+    }
+  }
+}
