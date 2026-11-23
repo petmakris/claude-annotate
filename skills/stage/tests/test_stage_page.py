@@ -400,7 +400,7 @@ OFFER = {"type": "inline", "format": "code", "path": "skills/talk/live_turns.py"
              "        self.offered_at = self.clock()",
              "        self._changed.set()",
          ]}
-CELLS = {"type": "inline", "format": "change", "path": "skills/stage/static/scene.js", "rev": "7e355e8", "added": 4, "removed": 1, "more": 0,
+CELLS = {"type": "inline", "format": "change", "path": "skills/stage/static/scene.js", "rev": "352ef9d", "added": 4, "removed": 1, "more": 0,
          "lang": "js", "hunks": [
              {"header": "@@ -16,5 +16,8 @@ function stampKeys(kind, box) {", "start_old": 16, "start_new": 16, "lines": [
                  {"op": " ", "old": 16, "new": 16, "text": "  if (kind === \"rows\") {"},

@@ -15,7 +15,10 @@ function stampKeys(kind, box) {
   }
   if (kind === "rows") {
     const rows = [...(box.querySelector("table")?.querySelectorAll("tbody tr") || [])];
-    rows.forEach((tr, i) => { tr.dataset.key = "row#" + (i + 1); });
+    rows.forEach((tr, i) => {
+      tr.dataset.key = "row#" + (i + 1);
+      [...tr.children].forEach((td, j) => { td.dataset.key = `cell#${i + 1}.${j + 1}`; });
+    });
     return rows.length > 0;
   }
   return false;
@@ -84,6 +87,29 @@ export function applyFrame(scene, box, n, from = null) {
   }
   paintCard(scene, box, n);
   return { focused };  // a key with nothing drawn for it lights nothing: the keys come from the drawing's own spec
+}
+
+// What is being said in frame n: what the frame names (`cur`, written by the scene compiler), so the page
+// draws that and guesses nothing. Nothing is being said in frame 0 or at rest. A scene saved before frames
+// named it gets a guess: what is pointed at (a cell as its row), else the newest thing that arrived, with
+// the arrow that arrived into it.
+export function beingSaid(scene, n) {
+  if (!scene || !(n > 0) || n >= scene.rest) return [];
+  const last = scene.frames.length - 1, frame = scene.frames[Math.min(n, last)];
+  if (Array.isArray(frame.cur)) return frame.cur;
+  const before = new Set(scene.frames[Math.min(n, last) - 1].show);
+  const part = (k) => (k.startsWith("cell#") ? "row#" + k.slice(5).split(".")[0] : k);
+  const arrived = frame.show.filter((k) => !before.has(k));
+  const pointed = [...new Set(frame.focus.map(part))];
+  const cur = pointed.length ? pointed : arrived.filter((k) => !/^(edge:|actor:|cell#|group:)/.test(k)).slice(-1);
+  const node = cur.filter((k) => k.startsWith("node:")).pop();
+  if (node) {
+    const ends = (e) => e.slice(5).replace(/#\d+$/, "").split("->");
+    const edges = arrived.filter((k) => k.startsWith("edge:"));
+    const edge = edges.find((e) => "node:" + ends(e)[1] === node) || edges.find((e) => "node:" + ends(e)[0] === node);
+    if (edge) cur.push(edge);
+  }
+  return cur;
 }
 
 // A scene saved before its frames named what is being said (no `cur`) may come from before the compiler
