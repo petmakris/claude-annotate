@@ -99,6 +99,17 @@ def test_the_slides_theme_spotlight_css_is_embedded(tmp_path, monkeypatch):
     assert ':root{--accent:#6A4DFC}' in out.read_text()
 
 
+def test_a_spec_naming_no_theme_ignores_the_slides_config_theme(tmp_path, monkeypatch):
+    cfg = tmp_path / 'cfg' / 'slides'
+    (cfg / 'themes' / 'brand').mkdir(parents=True)
+    (cfg / 'themes' / 'brand' / 'spotlight.css').write_text(':root{--accent:#6A4DFC}')
+    (cfg / 'config.json').write_text('{"theme": "brand"}')
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path / 'cfg'))
+    p = spec_dir(tmp_path, dict(one([{'title': 'x'}]), out='o.html'))
+    out, _, _ = B.build(p)
+    assert '--accent:#6A4DFC' not in out.read_text()
+
+
 def test_no_theme_file_leaves_the_page_unthemed(tmp_path, monkeypatch):
     monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path / 'none'))
     p = spec_dir(tmp_path, dict(one([{'title': 'x'}]), out='o.html'))

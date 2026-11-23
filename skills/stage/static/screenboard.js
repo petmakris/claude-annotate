@@ -56,6 +56,17 @@ export function paintScreen(box, scene, n, beingSaid) {
   showPart(box, id);
 }
 
+// One thin segment per part, a gap between screens, the part being said filled: the /spotlight page's progress,
+// read-only here because the voice or the stage's step buttons move it.
+function segs(sb, p) {
+  let out = '<div class="sb-segs" aria-hidden="true">';
+  sb.parts.forEach((q, i) => {
+    if (i && q.si !== sb.parts[i - 1].si) out += '<i class="gap"></i>';
+    out += `<i${q === p ? ' class="on"' : ""}></i>`;
+  });
+  return out + "</div>";
+}
+
 function showPart(box, id) {
   const sb = box._sb;
   const p = id ? sb.parts.find((q) => q.st.id === id) || null : null;
@@ -68,6 +79,7 @@ function showPart(box, id) {
   if (p) {
     html += `<div class="sb-meta"><span class="sb-count">${p.n} / ${sb.parts.length}</span>` +
       (many && s.label ? `<span class="sb-chip${s.phase ? " " + s.phase : ""}">${safe(s.phase === "design" ? "Design · " + s.label : s.label)}</span>` : "") + "</div>";
+    html += segs(sb, p);
     if (s.title) html += `<p class="sb-claim">${safe(s.title)}</p>`;
     html += `<h2>${safe(p.st.title)}</h2>`;
     for (const t of [].concat(p.st.text || [])) html += `<p>${safe(t)}</p>`;

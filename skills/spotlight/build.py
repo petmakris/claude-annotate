@@ -174,13 +174,16 @@ def render(spec, extra_css=''):
 
 
 def theme_css(raw):
-    """The slides theme's spotlight.css: the spec's "theme", else the slides config's, else none.
-    A theme that copies a company template ships one so spotlights match its decks."""
+    """The named slides theme's spotlight.css, only when the spec names one in "theme". A spotlight that names
+    none keeps this viewer's own look: it often stands alone (a walkthrough, a help page), and the slides config's
+    theme is a presentation's look, not a default for every page."""
+    name = raw.get('theme')
+    if not name:
+        return ''
     sys.path.insert(0, str(HERE.parent / 'slides' / 'framework'))
     import slides_config
-    name = raw.get('theme') or slides_config.load_config().get('theme')
-    f = slides_config.config_dir() / 'themes' / str(name) / 'spotlight.css' if name else None
-    return f.read_text() if f and f.is_file() else ''
+    f = slides_config.config_dir() / 'themes' / str(name) / 'spotlight.css'
+    return f.read_text() if f.is_file() else ''
 
 
 def build(spec_path):
