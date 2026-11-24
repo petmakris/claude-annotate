@@ -365,6 +365,35 @@ def test_canary_fails_when_the_scratch_session_never_joins(canary_world):
     assert any("did not join" in n for n in inbox_notes(w))
 
 
+def test_canary_does_not_count_the_macs_sleep_against_the_join(canary_world):
+    # 24 November 2026: the Mac woke for 2 s at 07:16:04 to start the canary and slept until 07:32:53; the wall
+    # clock moved 1011 s, the join wait ran out, and the canary reported a failure that was only sleep.
+    w = canary_world
+    wall = {"jump": 0.0, "slept": False, "asked": 0}
+    real_time, real_alive = fleet.time.time, fleet.is_alive
+
+    class Clock:
+        def __getattr__(self, k):
+            return getattr(__import__("time"), k)
+
+        @staticmethod
+        def time():
+            return real_time() + wall["jump"]
+
+    def alive(member):
+        # Not yet alive on the first two looks: the Mac sleeps after the first, so the wall-clock wait runs out and
+        # the second look is the last one the old loop makes. Awake time still has 60 s left for a third.
+        wall["asked"] += 1
+        if wall["asked"] == 1:
+            wall["slept"] = True
+            wall["jump"] += 1011.0
+        return wall["asked"] > 2 and real_alive(member)
+    w.mp.setattr(fleet, "time", Clock())
+    w.mp.setattr(fleet, "is_alive", alive)
+    code, out, err = run_canary(w)
+    assert wall["slept"] and code == 0 and "canary ok" in out, err
+
+
 def test_canary_fails_when_the_session_cannot_be_started(canary_world):
     w = canary_world
     w.mp.setenv("STUB_FAIL", "This folder is not trusted")

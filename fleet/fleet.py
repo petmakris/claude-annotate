@@ -2298,9 +2298,11 @@ def canary_steps(run, name):
     run["id"] = out["id"]
     step("started background session %s (id %s)" % (name, out["id"]))
     con = db()
-    end = time.time() + env_float("FLEET_CANARY_JOIN_WAIT", 60.0)
+    # Awake time, not the wall clock: the canary runs from a schedule, and a Mac that wakes for two seconds to start
+    # it and sleeps again for a quarter of an hour must not count that sleep against the join (24 November 2026).
+    end = time.monotonic() + env_float("FLEET_CANARY_JOIN_WAIT", 60.0)
     member = None
-    while time.time() < end and not (member and is_alive(member)):
+    while time.monotonic() < end and not (member and is_alive(member)):
         member = con.execute("SELECT * FROM members WHERE name=? AND left_at IS NULL", (name,)).fetchone()
         if not (member and is_alive(member)):
             time.sleep(0.5)
@@ -2365,9 +2367,9 @@ def canary_cleanup(run):
         r = con.execute("SELECT session_id FROM members WHERE name=?", (name,)).fetchone()
         sid = r[0] if r else agent_sid
     if run.get("id") or sid:
-        end = time.time() + env_float("FLEET_CANARY_END_WAIT", 20.0)
+        end = time.monotonic() + env_float("FLEET_CANARY_END_WAIT", 20.0)
         while listed(name, sid):
-            if time.time() >= end:
+            if time.monotonic() >= end:
                 notes.append("the scratch session %s is still listed by `claude agents --json`" % name)
                 break
             time.sleep(0.3)
