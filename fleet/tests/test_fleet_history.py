@@ -160,7 +160,7 @@ def test_the_newest_name_wins_and_a_blank_one_is_no_name():
     assert hist.newest_names(recs) == {"name_ai": "ai newest", "name_custom": "newest", "name_agent": "worker"}
 
 
-def test_a_rename_in_the_transcript_beats_the_slug_and_a_manual_name_beats_both(world):
+def test_a_rename_in_the_transcript_beats_the_slug_and_a_history_rename_becomes_the_claude_name(world):
     path = transcript(world, "n", names=[("ai-title", "aiTitle", "generated"), ("custom-title", "customTitle", "slug-one"),
                                          ("custom-title", "customTitle", "typed-later")])
     run_hook(world, hook_payload("SessionEnd", "s-7", "/w", path, "other"))
@@ -168,10 +168,21 @@ def test_a_rename_in_the_transcript_beats_the_slug_and_a_manual_name_beats_both(
     assert hist.display_name(r) == "typed-later"
     code, out, _ = cli(world, "history", "rename", "s-7", "My", "own name")
     assert code == 0 and hist.display_name(rows(world)["s-7"]) == "My own name"
+    last = json.loads(open(path).read().splitlines()[-1])
+    assert last == {"type": "custom-title", "customTitle": "My own name", "sessionId": "s-7"}  # one name: Claude's
     run_hook(world, hook_payload("Stop", "s-7", "/w", path))  # the next turn restates the transcript names
     assert hist.display_name(rows(world)["s-7"]) == "My own name"
-    cli(world, "history", "rename", "s-7", "")
-    assert hist.display_name(rows(world)["s-7"]) == "typed-later"
+
+
+def test_an_empty_history_rename_clears_only_an_old_manual_label(world):
+    path = transcript(world, "m", names=[("custom-title", "customTitle", "claude-name")])
+    run_hook(world, hook_payload("SessionEnd", "s-9", "/w", path, "other"))
+    con = world.here.db()
+    hist.update(con, "s-9", manual_name="old label")
+    con.commit()
+    assert hist.display_name(rows(world)["s-9"]) == "old label"
+    assert cli(world, "history", "rename", "s-9", "")[0] == 0
+    assert hist.display_name(rows(world)["s-9"]) == "claude-name"
 
 
 def test_a_name_found_in_the_tail_does_not_erase_an_older_kind(world):

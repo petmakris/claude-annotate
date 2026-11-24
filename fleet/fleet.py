@@ -70,6 +70,9 @@ CREATE TABLE IF NOT EXISTS todos (
   id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, ref TEXT, notes TEXT,
   created_by TEXT, state TEXT NOT NULL DEFAULT 'open', claimed_by TEXT, claimed_session TEXT,
   reserved_for TEXT, created_at REAL, claimed_at REAL, done_at REAL, owner TEXT, after TEXT);
+CREATE TABLE IF NOT EXISTS names (
+  session_id TEXT PRIMARY KEY, chosen TEXT, seen_title TEXT, asks INTEGER NOT NULL DEFAULT 0, updated_at REAL);
+CREATE TABLE IF NOT EXISTS aliases (old TEXT NOT NULL, new TEXT NOT NULL, session_id TEXT NOT NULL, at REAL);
 """
 
 
@@ -504,10 +507,18 @@ def join(name=None, transcript=None):
     con = db()
     info = find_self()
     cwd = info.get("cwd") or os.getcwd()
-    name = name or info.get("name") or os.path.basename(cwd.rstrip("/")) or "session"
-    if name.strip().lower() == PETROS:
-        raise FleetError("fleet: %r is reserved for the user, who has no session. Pick another name." % name)
+    given = name
+    if not name:
+        nrow = names_row(con, info["sessionId"])
+        if nrow and not nrow["chosen"] and nrow["seen_title"] == "":
+            raise FleetError("fleet: this session has no name yet. Give it one with `fleet name <name>` (2 to 5 "
+                             "lowercase words joined by hyphens that say what it works on), then `fleet join`.", 2)
+        name = (nrow and (nrow["chosen"] or nrow["seen_title"])) or info.get("name") \
+            or os.path.basename(cwd.rstrip("/")) or "session"
+    check_name(name)
     agents = agents_list()  # asked before the write lock is taken: it can be slow
+    if not given:  # a name the session already has: a live holder makes it name-2, never a refusal
+        name = free_name(con, name, info["sessionId"], agents)
     respawn = os.environ.get("FLEET_RESPAWN") or "cd %s && claude --resume %s -n %s" % (
         shlex.quote(cwd), info["sessionId"], shlex.quote(name))
     if not transcript:  # the recording hook noted it at SessionStart (hook input `transcript_path`)
@@ -516,8 +527,10 @@ def join(name=None, transcript=None):
     branch = git_branch(cwd)
     con.execute("BEGIN IMMEDIATE")  # the name check and the insert are one step: two joins cannot both win a name
     try:
-        for m in con.execute("SELECT * FROM members WHERE name=? AND left_at IS NULL AND session_id!=?",
-                             (name, info["sessionId"])).fetchall():
+        for m in con.execute("SELECT * FROM members WHERE left_at IS NULL AND session_id!=?",
+                             (info["sessionId"],)).fetchall():
+            if name_key(m["name"]) != name_key(name):
+                continue
             if is_alive(m, agents):
                 raise FleetError("fleet: the name %r is taken by a live member (session %s in %s)."
                                  % (name, m["session_id"], m["cwd"]))
@@ -531,9 +544,204 @@ def join(name=None, transcript=None):
         con.execute("ROLLBACK")
         raise
     print("joined the fleet as %s" % name)
+    if given:  # Claude's name follows the fleet name: the naming hook applies it at the session's next prompt
+        set_chosen(con, info["sessionId"], name)
     again = redeliver(con, name, info["sessionId"])
     if again:
         print("sent again %d message%s that reached no session" % (again, "" if again == 1 else "s"))
+
+
+# ---------------------------------------------------------------- one name: Claude's and the fleet's
+#
+# A session has one name. Claude Code holds it (its title: `/rename`, `claude -n`, or what a UserPromptSubmit hook
+# returns as `sessionTitle`); the fleet member and the history follow it. `fleet name`, `fleet join NAME` and
+# `fleet history rename` store the new name as `chosen`, rename the member at once, and the naming hook hands it
+# to Claude Code at the session's next prompt. A `/rename` reaches the hook as a changed `session_title`, and the
+# member takes it. An old name stays an alias for ALIAS_DAYS, so a message sent to it still arrives.
+
+ALIAS_DAYS = 7
+NAME_MAX = 48
+ASK_AT = (2, 5)  # the human prompts at which an unnamed interactive session is asked to name itself
+NAME_ASK = ("Fleet naming: this session has no name yet. As your first step this turn, run `fleet name <name>` "
+            "in Bash, where <name> is 2 to 5 lowercase words joined by hyphens that say what this session works on "
+            "(for example `voice-sandbox-rescue`). Then carry on with the request. Do not mention this to the user.")
+
+
+def name_key(name):
+    """Names compare ignoring case, and a space, a hyphen and an underscore count as the same."""
+    return re.sub(r"[\s_-]+", "-", (name or "").strip().lower()).strip("-")
+
+
+def check_name(name):
+    n = " ".join((name or "").split())
+    if n.lower() == PETROS:
+        raise FleetError("fleet: %r is reserved for the user, who has no session. Pick another name." % name)
+    if not n or "@" in n or "*" in n or "\n" in (name or ""):
+        raise FleetError("fleet: %r cannot be a name: it must not be empty or hold '@' or '*'." % name)
+    return n
+
+
+def clean_name(text):
+    """A name a session gives itself: one line, 3 to NAME_MAX characters, at most six words."""
+    n = check_name(text)
+    if len(n) < 3 or len(n) > NAME_MAX or len(re.split(r"[\s_-]+", n)) > 6:
+        raise FleetError("fleet: %r is not a short name. Use 2 to 5 words joined by hyphens, at most %d characters."
+                         % (n, NAME_MAX))
+    return n
+
+
+def names_row(con, sid):
+    return con.execute("SELECT * FROM names WHERE session_id=?", (sid,)).fetchone()
+
+
+def names_set(con, sid, **cols):
+    con.execute("INSERT OR IGNORE INTO names(session_id) VALUES (?)", (sid,))
+    cols["updated_at"] = time.time()
+    keys = list(cols)
+    con.execute("UPDATE names SET %s WHERE session_id=?" % ",".join(k + "=?" for k in keys),
+                [cols[k] for k in keys] + [sid])
+
+
+def set_chosen(con, sid, name):
+    r = names_row(con, sid)
+    if r and r["seen_title"] == name:
+        names_set(con, sid, chosen=None)
+    else:
+        names_set(con, sid, chosen=name)
+
+
+def free_name(con, name, sid, agents=_UNSET):
+    """`name`, or name-2, name-3... when a live member of another session holds it."""
+    taken = {name_key(m["name"]) for m in con.execute("SELECT * FROM members WHERE left_at IS NULL AND session_id!=?",
+                                                       (sid,)) if is_alive(m, agents)}
+    out, n = name, 2
+    while name_key(out) in taken:
+        out, n = "%s-%d" % (name, n), n + 1
+    return out
+
+
+def rename_member(con, sid, name, agents=_UNSET):
+    """Rename this session's live member, if it has one. Returns (old, new) or None when nothing changed."""
+    m = con.execute("SELECT * FROM members WHERE session_id=? AND left_at IS NULL", (sid,)).fetchone()
+    if not m:
+        return None
+    new = free_name(con, name, sid, agents)
+    if new == m["name"]:
+        return None
+    now = time.time()
+    con.execute("UPDATE members SET name=?, respawn=REPLACE(respawn, ?, ?) WHERE session_id=?",
+                (new, " -n " + shlex.quote(m["name"]), " -n " + shlex.quote(new), sid))
+    con.execute("INSERT INTO aliases(old, new, session_id, at) VALUES (?,?,?,?)", (m["name"], new, sid, now))
+    con.execute("DELETE FROM aliases WHERE at < ?", (now - ALIAS_DAYS * 86400,))
+    return m["name"], new
+
+
+def write_claude_title(transcript, sid, name):
+    """Claude Code's own record of a title, as `/rename` writes it: a record in the transcript (what the history
+    reads) and `custom-title.json` beside it (what `/resume` reads). Used for a session that is not running."""
+    if not transcript or not os.path.exists(transcript):
+        return False
+    with open(transcript, "a") as f:
+        f.write(json.dumps({"type": "custom-title", "customTitle": name, "sessionId": sid}) + "\n")
+    side = os.path.join(os.path.dirname(transcript), sid)
+    os.makedirs(side, exist_ok=True)
+    with open(os.path.join(side, "custom-title.json"), "w") as f:
+        json.dump({"customTitle": name}, f)
+    return True
+
+
+def name_session(text):
+    """`fleet name NAME`: this session's name, for Claude Code and the fleet alike."""
+    sid = os.environ.get("CLAUDE_CODE_SESSION_ID")
+    if not sid:
+        raise FleetError("fleet: cannot tell which Claude Code session this is (no CLAUDE_CODE_SESSION_ID).")
+    name = clean_name(text)
+    con = db()
+    set_chosen(con, sid, name)
+    moved = rename_member(con, sid, name)
+    print("this session is now called %s (Claude Code shows it from the next prompt)" % name)
+    if moved:
+        print("renamed in the fleet: %s -> %s" % moved)
+
+
+def human_prompts_before(path, stop):
+    n = 0
+    for rec in hist.records(path, head=hist.HEAD_BYTES):
+        if hist.human_prompt(rec):
+            n += 1
+            if n >= stop:
+                break
+    return n
+
+
+def name_hook(data):
+    """UserPromptSubmit: keep Claude Code's title and the fleet name one name. Returns the hook's output, or None."""
+    sid = data.get("session_id")
+    if not sid:
+        return None
+    title = " ".join((data.get("session_title") or "").split())
+    con = db()
+    r = names_row(con, sid)
+    chosen, seen = (r["chosen"], r["seen_title"]) if r else (None, None)
+    out = {}
+    if chosen and chosen != title:  # a name given by `fleet name`, `join NAME` or `history rename`: hand it over
+        out["sessionTitle"] = chosen
+        names_set(con, sid, chosen=None, seen_title=chosen)
+        title = chosen
+    elif chosen:
+        names_set(con, sid, chosen=None, seen_title=title)
+    elif title != (seen or ""):  # a `/rename` (or a first look): the member follows
+        names_set(con, sid, seen_title=title)
+        if title:
+            rename_member(con, sid, title)
+    elif r is None:
+        names_set(con, sid, seen_title=title)
+    asks = r["asks"] if r else 0
+    if not title and asks < len(ASK_AT) and os.environ.get("CLAUDE_CODE_ENTRYPOINT") == "cli" \
+            and not os.environ.get("FLEET_JOIN_NAME") and data.get("transcript_path"):
+        before = human_prompts_before(data["transcript_path"], ASK_AT[asks])
+        if before + 1 >= ASK_AT[asks]:  # the prompt being sent is not in the transcript yet
+            names_set(con, sid, asks=asks + 1)
+            out["additionalContext"] = NAME_ASK
+    if not out:
+        return None
+    out["hookEventName"] = "UserPromptSubmit"
+    return {"hookSpecificOutput": out}
+
+
+def hook_name():
+    """The naming hook. It must never fail or slow a prompt: whatever goes wrong is logged and it prints nothing."""
+    try:
+        if os.environ.get("FLEET_NO_NAME"):
+            return 0
+        res = name_hook(hook_input())
+        if res:
+            print(json.dumps(res))
+    except BaseException as e:  # noqa: B902 - a naming problem may cost a name, never a prompt
+        log_line("hook-name: %s: %s" % (type(e).__name__, e))
+    return 0
+
+
+def alias_target(con, name):
+    """The live member that was called `name` in the last ALIAS_DAYS, or None."""
+    since = time.time() - ALIAS_DAYS * 86400
+    for a in con.execute("SELECT * FROM aliases WHERE at >= ? ORDER BY at DESC", (since,)):
+        if name_key(a["old"]) == name_key(name):
+            m = con.execute("SELECT * FROM members WHERE session_id=? AND left_at IS NULL", (a["session_id"],)).fetchone()
+            return m
+    return None
+
+
+def member_named(con, name):
+    """A live member by name, compared loosely (case, spaces and hyphens), newest first."""
+    rows = con.execute("SELECT * FROM members WHERE left_at IS NULL ORDER BY joined_at DESC").fetchall()
+    for m in rows:
+        if m["name"] == name:
+            return m
+    for m in rows:
+        if name_key(m["name"]) == name_key(name):
+            return m
+    return None
 
 
 def leave(session_id=None):
@@ -1008,10 +1216,15 @@ def targets(con, me, target):
         if machine not in other_machines():
             raise FleetError("fleet: no machine named %r in machines.json." % machine)
         return [("remote", machine, name)], notes
-    if name == me["name"]:
+    if name_key(name) == name_key(me["name"]):
         raise FleetError("fleet: %r is this session." % target)
-    m = con.execute("SELECT * FROM members WHERE name=? AND left_at IS NULL ORDER BY joined_at DESC",
-                    (name,)).fetchone()
+    m = member_named(con, name)
+    if not m:
+        m = alias_target(con, name)
+        if m and m["session_id"] == me["session_id"]:
+            raise FleetError("fleet: %r is this session's old name." % target)
+        if m:
+            notes.append("%s is now called %s" % (name, m["name"]))
     if m:
         return [("local", m)], notes
     if machine or not other_machines():
@@ -1662,7 +1875,7 @@ def bg_entry(member):
 def member_by_name(con, name):
     """The member to act on: a live row of that name first, else the latest one."""
     m = con.execute("SELECT * FROM members WHERE name=? ORDER BY (left_at IS NULL) DESC, joined_at DESC",
-                    (name,)).fetchone()
+                    (name,)).fetchone() or member_named(con, name) or alias_target(con, name)
     if not m:
         raise FleetError("fleet: no member named %r. `fleet ls --all` lists them." % name)
     return m
@@ -2211,8 +2424,26 @@ def history_show(ident, as_json=False):
 
 
 def history_rename(ident, name):
-    r = history_guard(hist.rename, db(), ident, name)
-    print("%s is now %s" % (r["session_id"][:8], hist.display_name(r) or "(unnamed)"))
+    """One name: the session's Claude name and its fleet name change with the history's. A running session takes
+    it at its next prompt (the naming hook); a session that is not running gets Claude Code's own title records."""
+    con = db()
+    name = " ".join((name or "").split())
+    if not name:
+        r = history_guard(hist.rename, con, ident, "")
+        print("%s is now %s" % (r["session_id"][:8], hist.display_name(r) or "(unnamed)"))
+        return
+    name = check_name(name)
+    r = history_guard(hist.find, con, ident)
+    sid = r["session_id"]
+    hist.update(con, sid, manual_name=None, name_custom=name)
+    set_chosen(con, sid, name)
+    moved = rename_member(con, sid, name)
+    running = agent_for(agents_list(), sid)
+    if not running:
+        write_claude_title(r["transcript_path"], sid, name)
+    print("%s is now %s%s" % (sid[:8], name, " (Claude Code shows it from the next prompt)" if running else ""))
+    if moved:
+        print("renamed in the fleet: %s -> %s" % moved)
 
 
 def history_delete(ident):
@@ -3109,6 +3340,7 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("join", help="register this session"); s.add_argument("name", nargs="?")
     sub.add_parser("leave", help="leave the fleet")
+    sub.add_parser("name", help="name this session, in Claude Code and the fleet alike").add_argument("name", nargs="+")
     s = sub.add_parser("forget", help="delete this machine's members whose name matches a glob (live ones only with --live)")
     s.add_argument("patterns", nargs="+"); s.add_argument("--live", action="store_true")
     s = sub.add_parser("ls", help="list members"); s.add_argument("--json", action="store_true"); s.add_argument("--all", action="store_true")
@@ -3158,7 +3390,7 @@ def main(argv=None):
     sub.add_parser("_threads").add_argument("limit", type=int, nargs="?", default=30)
     sub.add_parser("_deliver"); sub.add_parser("_answer"); sub.add_parser("_thread").add_argument("thread")
     sub.add_parser("statusline", help="one JSON line for a status line").add_argument("session_id")
-    sub.add_parser("hook-join"); sub.add_parser("hook-leave"); sub.add_parser("hook-record")
+    sub.add_parser("hook-join"); sub.add_parser("hook-leave"); sub.add_parser("hook-record"); sub.add_parser("hook-name")
     h = sub.add_parser("history", help="every session this machine has run").add_subparsers(dest="history_cmd", required=True)
     s = h.add_parser("ls", help="list sessions, newest first")
     s.add_argument("--folder"); s.add_argument("--json", action="store_true")
@@ -3180,6 +3412,7 @@ def main(argv=None):
     try:
         if a.cmd == "join": join(a.name)
         elif a.cmd == "leave": leave()
+        elif a.cmd == "name": name_session(" ".join(a.name))
         elif a.cmd == "forget": forget(a.patterns, a.live)
         elif a.cmd == "ls": ls(a.json, a.all, a.local, a.state)
         elif a.cmd == "statusline": cmd_statusline(a.session_id)
@@ -3216,6 +3449,7 @@ def main(argv=None):
         elif a.cmd == "hook-join": return hook_join()
         elif a.cmd == "hook-leave": return hook_leave()
         elif a.cmd == "hook-record": return hook_record()
+        elif a.cmd == "hook-name": return hook_name()
         elif a.cmd == "history":
             c = a.history_cmd
             if c == "ls": history_ls(a.folder, a.json)

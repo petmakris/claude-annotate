@@ -331,7 +331,7 @@ def test_session_end_hook_leaves_and_is_silent_for_a_never_joined_session(world)
 
 def test_hooks_json_declares_only_the_fleet_hooks_and_the_marketplace_points_at_the_plugin():
     h = json.load(open(os.path.join(ROOT, "hooks", "hooks.json")))
-    assert set(h["hooks"]) == {"SessionStart", "SessionEnd", "Stop"}
+    assert set(h["hooks"]) == {"SessionStart", "SessionEnd", "Stop", "UserPromptSubmit"}
     m = json.load(open(os.path.join(ROOT, "..", ".claude-plugin", "marketplace.json")))
     [p] = [p for p in m["plugins"] if p["name"] == "fleet"]
     assert p["source"] == "./fleet"

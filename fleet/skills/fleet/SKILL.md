@@ -1,22 +1,39 @@
 ---
 name: fleet
-description: Join this Claude Code session to the user's fleet of sessions and message other members. Use when the user says "/fleet", "join the fleet", "tell session X", "ask the other sessions", or when a message arrives that starts "Fleet tell" or "Fleet ask". Verbs - join, leave, forget, ls, tell, ask, answer, ack, wait, thread, spawn, todo, stop, respawn, attach, notify, inbox, dismiss, history, profile, canary.
-argument-hint: "<join|leave|forget|ls|tell|ask|answer|ack|wait|thread|spawn|todo|stop|respawn|attach|notify|inbox|dismiss|history|profile|canary> ..."
+description: Join this Claude Code session to the user's fleet of sessions and message other members. Use when the user says "/fleet", "join the fleet", "tell session X", "ask the other sessions", or when a message arrives that starts "Fleet tell" or "Fleet ask". Verbs - join, name, leave, forget, ls, tell, ask, answer, ack, wait, thread, spawn, todo, stop, respawn, attach, notify, inbox, dismiss, history, profile, canary.
+argument-hint: "[join|name|leave|forget|ls|tell|ask|answer|ack|wait|thread|spawn|todo|stop|respawn|attach|notify|inbox|dismiss|history|profile|canary] ..."
 allowed-tools:
   - Bash
 ---
 
 # /fleet: sessions that talk to each other
 
-Only a session that runs `/fleet join` is in the fleet. Nothing registers on its own, and the fleet
+Only a session that runs `/fleet` (or `/fleet join`) is in the fleet. Nothing registers on its own, and the fleet
 keeps no summary of what a session is doing: ask the members.
 
 The CLI is `fleet`, on `PATH` while this plugin is installed. `/fleet <verb> ...` runs
 `fleet <verb> ...` in Bash and shows its output.
 
+**`/fleet` with no arguments joins this session**: run `fleet join`. If it answers that the session has no name
+yet, pick one (2 to 5 lowercase words joined by hyphens that say what this session works on), run
+`fleet name <name>`, then `fleet join` again.
+
+## One name
+
+A session has one name: its Claude Code name is its fleet name. A hook on every prompt keeps them equal.
+
+- `/rename` in Claude Code renames the fleet member at the session's next prompt.
+- `fleet name <name>`, `fleet join <name>` and `fleet history rename` rename the member at once, and Claude Code
+  shows the name from the session's next prompt.
+- An interactive session with no name is asked, on its second prompt, to name itself with `fleet name`. When a
+  line starting "Fleet naming:" asks you to, do it first, then carry on, and do not mention it.
+- A name a live member already holds becomes `name-2` in the fleet. Names match ignoring case, and a space and a
+  hyphen count as the same. An old name still reaches the session for 7 days.
+
 | Verb | Does |
 |---|---|
-| `join [name]` | Register this session. The default name is the session's name, else its folder. A taken name is refused. |
+| `join [name]` | Register this session. Without a name it takes the session's name (`name-2` when a live member holds it); it refuses a session that has none yet. A name given here that a live member holds is refused, and it becomes the session's Claude name too. |
+| `name <name>` | Name this session, in Claude Code and the fleet alike (see "One name"). |
 | `leave` | Leave the fleet. |
 | `forget <glob>... [--live]` | Delete this machine's member rows whose name matches, e.g. `forget 'job:*'`. A live member is kept unless `--live`. Messages stay. |
 | `ls [--json] [--all] [--local]` | Members, alive or dead, with their folder. With `machines.json`, every machine's members (`name@machine`), and a line for each machine that did not answer. `--local` asks this machine only. |
@@ -41,7 +58,7 @@ The CLI is `fleet`, on `PATH` while this plugin is installed. `/fleet <verb> ...
 | `inbox [--json] [--all]` | The user's inbox on every machine. An item on another machine is `12@machine`. With `lungo.json` in the fleet's folder it also lists what Lungo (the job runner) says waits on him, read live, as `lungo:<machine>/<job>#<item id>`: act on those in Lungo, never with `answer` or `dismiss`. When Lungo cannot be read it says so; it never shows that as nothing to do. |
 | `answer <id> "..." --as petros` / `dismiss <id> --as petros` | Answer or clear an inbox item, as the user. Only from a session outside the fleet. |
 | `history ls [--folder F] [--json]` / `show <id>` / `resume <id>` | Every session this machine has run (recorded by a hook, joined or not), newest first; one session's details; the command that resumes it. An id may be a prefix. |
-| `history rename <id> "<name>"` / `delete <id>` | Give a session a name of your own (empty clears it); remove its row (never its transcript). |
+| `history rename <id> "<name>"` / `delete <id>` | Rename a session: its Claude name and fleet name too (a running one takes it at its next prompt); remove its row (never its transcript). |
 | `history ask <id> "<question>"` | Answer a question from that session's transcript, with one headless call. |
 | `history describe [--limit N] [--folder F]` | Write a short description for sessions that have none (one headless call each, paced; on request only). |
 | `history search "<words>"` | Find a session by meaning over the descriptions. |
