@@ -178,7 +178,11 @@ if a[:1] == ["agents"]:
             over = load("status.json")  # {name: {"status": ..., "state": ...}}: what a test says a session is doing
             e.update(over.get(i.get("name"), {}) if isinstance(over, dict) else {})
             out.append(e)
-    print(json.dumps(out + load("agents.json") + [e for e in load("started.json") if e["name"] not in stopped]))
+    try:  # one machine's own entries (a test of several machines): $FLEET_HOME/agents.json
+        mine = json.load(open(os.path.join(os.environ.get("FLEET_HOME") or "-", "agents.json")))
+    except (OSError, ValueError):
+        mine = []
+    print(json.dumps(out + load("agents.json") + mine + [e for e in load("started.json") if e["name"] not in stopped]))
     sys.exit(0)
 if d:
     with open(os.path.join(d, "calls.jsonl"), "a") as f:

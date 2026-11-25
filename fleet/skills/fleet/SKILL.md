@@ -1,7 +1,7 @@
 ---
 name: fleet
-description: Join this Claude Code session to the user's fleet of sessions and message other members. Use when the user says "/fleet", "join the fleet", "tell session X", "ask the other sessions", or when a message arrives that starts "Fleet tell" or "Fleet ask". Verbs - join, name, leave, forget, ls, tell, ask, answer, ack, wait, thread, spawn, todo, stop, respawn, attach, notify, inbox, dismiss, history, profile, canary.
-argument-hint: "[join|name|leave|forget|ls|tell|ask|answer|ack|wait|thread|spawn|todo|stop|respawn|attach|notify|inbox|dismiss|history|profile|canary] ..."
+description: Join this Claude Code session to the user's fleet of sessions and message other members. Use when the user says "/fleet", "join the fleet", "tell session X", "ask the other sessions", or when a message arrives that starts "Fleet tell" or "Fleet ask". Verbs - join, name, leave, forget, ls, tell, ask, answer, ack, wait, thread, spawn, todo, stop, respawn, attach, notify, inbox, dismiss, history, sessions, profile, canary.
+argument-hint: "[join|name|leave|forget|ls|tell|ask|answer|ack|wait|thread|spawn|todo|stop|respawn|attach|notify|inbox|dismiss|history|sessions|profile|canary] ..."
 allowed-tools:
   - Bash
 ---
@@ -63,6 +63,8 @@ A session has one name: its Claude Code name is its fleet name. A hook on every 
 | `history describe [--limit N] [--folder F]` | Write a short description for sessions that have none (one headless call each, paced; on request only). |
 | `history search "<words>"` | Find a session by meaning over the descriptions. |
 | `history import <db> [--descriptions <db>]` | Copy the conversations (and descriptions) of an older store, once; a second run adds nothing. |
+| `sessions [--kind chat\|job\|worker\|all] [--named] [--since 14d] [--limit N] [--machine M] [--json]` | Every session on every machine, joined or not, with its live state and where it runs (tmux, window, bg, none). Off the hub it asks the hub (`hub` in machines.json); `--direct` asks every machine from here, `--local` this machine only. A machine that does not answer shows its last rows, marked stale, with this run's reason. |
+| `sessions open <machine:id> [--json]` | The plan for landing in a session, as data (attach, resume, wrap up then resume, or why not). `@claude pick` runs it; it never runs anything itself. |
 | `profile ls [--json]` / `show [folder]` / `set <folder> <name\|inherit>` | Launch profiles: which tools new sessions get in each folder (the nearest `.claude-launch` above it names a profile). `set` writes or removes that folder's standard file; a hand-written one is refused. Editing a profile's switches is on the page's Profiles view. Needs `profiles.json` in the fleet's folder. |
 | `ui [url]` | `ui` serves the page (a token is required). `ui url` prints the link that signs a browser in: `/login?t=...` sets a cookie and redirects to `/`. |
 | `canary [--json]` | End-to-end proof of delivery: starts a scratch background session, posts it a message and confirms it in the session's transcript, then removes the session. Exit 0, or 1 with one line (also put in the user's inbox). Meant for a daily schedule. |

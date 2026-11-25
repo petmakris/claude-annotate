@@ -30,6 +30,7 @@ from urllib.parse import parse_qs, urlparse
 
 import fleet_history as hist
 import fleet_profiles as prof
+import fleet_sessions as fs
 
 PREVIEW = 300  # a message as one line of a list (`fleet inbox`)
 WAKE_MAX = 2000  # the text a message carries into the receiver's conversation; longer is cut, naming its thread
@@ -172,7 +173,14 @@ _UNSET = object()
 
 
 def claude_bin():
-    return os.environ.get("FLEET_CLAUDE_BIN") or "claude"
+    """FLEET_CLAUDE_BIN, else `claude` on PATH, else ~/.local/bin/claude: an ssh command or a service runs without a
+    login shell, and its PATH often lacks the folder the installer puts `claude` in."""
+    if os.environ.get("FLEET_CLAUDE_BIN"):
+        return os.environ["FLEET_CLAUDE_BIN"]
+    if shutil.which("claude"):
+        return "claude"
+    local = os.path.join(os.path.expanduser("~"), ".local", "bin", "claude")
+    return local if os.access(local, os.X_OK) else "claude"
 
 
 def agents_list():
@@ -796,9 +804,9 @@ def member_status(m, agents=_UNSET):
 WAITING = "waiting"
 
 
-def local_members(show_all=False):
+def local_members(show_all=False, agents=_UNSET):
     con = db()
-    agents = agents_list()
+    agents = agents_list() if agents is _UNSET else agents
     con.execute("BEGIN")
     try:
         members = con.execute("SELECT * FROM members ORDER BY joined_at").fetchall()
@@ -2365,6 +2373,24 @@ def hook_leave():
 
 # ---------------------------------------------------------------- session history
 
+def stdout_gone():
+    """Stdout's reader went away (`fleet history ls --json | head`): point stdout at /dev/null, so neither the rest
+    of the output nor the flush at exit raises again."""
+    try:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    except (OSError, ValueError, io.UnsupportedOperation):
+        pass
+
+
+def emit(text):
+    """print(text), quietly ending when the reader of stdout has gone (`| head`)."""
+    try:
+        print(text)
+        sys.stdout.flush()
+    except BrokenPipeError:
+        stdout_gone()
+
+
 def history_ago(t):
     if not t:
         return "-"
@@ -2399,7 +2425,7 @@ def history_ls(folder=None, as_json=False):
         print("warning: %d transcript%s could not be read: has the transcript format changed? (the reason is in %s)"
               % (bad, "" if bad == 1 else "s", os.path.join(fleet_home(), "hooks.log")), file=sys.stderr)
     if as_json:
-        print(json.dumps([hview(con, r, names) for r in rs], indent=2))
+        emit(json.dumps([hview(con, r, names) for r in rs], indent=2))
         return
     if not rs:
         print("no sessions in the history" + (" under %s." % folder if folder else "."))
@@ -2500,6 +2526,477 @@ def hook_record():
     except BaseException as e:  # noqa: B902 - a recording problem may cost a row, never a session
         log_line("hook-record: %s: %s" % (type(e).__name__, e))
     return 0
+
+
+# ---------------------------------------------------------------- sessions (fleet_sessions.py)
+#
+# `fleet sessions` lists every Claude Code session of every machine with its live state, and `fleet sessions open
+# KEY` says, as data, how to land in one (fleet_sessions.py holds the contract). Everything is read when it is
+# asked for: the history, `claude agents --json`, the claude tmux server's panes and `ps`, the seamless registry,
+# and the other machines over ssh (5 s to connect, 8 s in all). A machine that answers leaves its rows and the time
+# in $FLEET_HOME/seen/<machine>.json; one that does not is served from there, marked stale, with the reason this
+# run's ssh gave. Nothing remembers reachability, and nothing polls.
+
+SESSIONS_TIMEOUT = 8
+HUB_TIMEOUT = 30
+REGISTRY_TIMEOUT = 10
+
+
+def sessions_conf():
+    """$FLEET_HOME/sessions.json: machine-specific settings, never in the repo. Keys: worker_prefixes, job_folders
+    (added to the kind rules), tmux_socket (default claude), env_dir, registry (a command), pick (a command)."""
+    try:
+        with open(os.path.join(fleet_home(), "sessions.json")) as f:
+            conf = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return conf if isinstance(conf, dict) else {}
+
+
+def hub_name():
+    hub = machines_config().get("hub")
+    return hub if isinstance(hub, str) and hub else self_machine()
+
+
+def screen_of(machine):
+    """macos, hyprland or none: the `screen` of a machine's entry in machines.json (this machine's own entry, or a
+    top-level `screen`, for itself)."""
+    conf = machines_config()
+    entry = conf.get(machine)
+    val = entry.get("screen") if isinstance(entry, dict) else None
+    if val is None and machine == self_machine():
+        val = conf.get("screen")
+    return val if val in ("macos", "hyprland") else "none"
+
+
+def env_dir():
+    """The env checkout that holds the seamless-sessions tools (the work rule and the registry), or None.
+    FLEET_ENV_DIR (empty: none), else sessions.json env_dir, else $ENV_HOME, else ~/projects/env."""
+    if "FLEET_ENV_DIR" in os.environ:
+        cands = [os.environ["FLEET_ENV_DIR"]]
+    else:
+        cands = [sessions_conf().get("env_dir"), os.environ.get("ENV_HOME"), os.path.join("~", "projects", "env")]
+    for c in cands:
+        if isinstance(c, str) and c:
+            d = os.path.expanduser(c)
+            if os.path.isfile(os.path.join(d, "libexec", "claude", "_session", "_core.py")):
+                return d
+    return None
+
+
+_WORK = {"key": None, "fn": None}
+
+
+def work_rule():
+    """is_work(folder, transcript) from the env checkout's own test (`_session/_core.py`: a work account's
+    transcript, or a folder under a path profile), or None when there is no env checkout. A rule that is there but
+    fails says yes: a row that cannot be judged never leaves its machine in full."""
+    d = env_dir()
+    if not d:
+        return None
+    if _WORK["key"] == d:
+        return _WORK["fn"]
+    import importlib.util
+    try:
+        spec = importlib.util.spec_from_file_location("fleet_env_session_core",
+                                                      os.path.join(d, "libexec", "claude", "_session", "_core.py"))
+        core = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(core)
+        paths = core.profile_paths()
+        accounts = core.listed_accounts()
+    except Exception as e:  # noqa: B902 - any failure of a foreign module means: judge everything as work
+        log_line("sessions: the work rule in %s failed (%s); every row counts as work" % (d, e))
+        _WORK.update(key=d, fn=lambda folder, transcript: True)
+        return _WORK["fn"]
+    home = os.path.expanduser("~")
+
+    def is_work(folder, transcript):
+        try:
+            if transcript and "/projects/" in transcript:
+                cfg = os.path.normpath(transcript[:transcript.index("/projects/")])
+                base = os.path.basename(cfg)
+                listed = cfg == os.path.join(home, ".claude") or (
+                    os.path.dirname(cfg) == home and base.startswith(".claude-") and base[8:] in accounts[1:])
+                if not listed:
+                    return True
+            return bool(folder) and bool(core.is_work_folder(folder, paths))
+        except Exception:  # noqa: B902
+            return True
+    _WORK.update(key=d, fn=is_work)
+    return is_work
+
+
+def registry_records():
+    """{sid: record} of the seamless-sessions registry (sessions.json `registry`, else the env checkout's
+    `_session/list --json`), or None when there is none or it does not answer."""
+    cmd = sessions_conf().get("registry")
+    if not (isinstance(cmd, list) and cmd and all(isinstance(c, str) for c in cmd)):
+        d = env_dir()
+        if not d:
+            return None
+        cmd = [os.path.join(d, "libexec", "claude", "_session", "list"), "--json"]
+    try:
+        r = subprocess.run([os.path.expanduser(c) for c in cmd], capture_output=True, text=True,
+                           timeout=REGISTRY_TIMEOUT, stdin=subprocess.DEVNULL)
+        data = json.loads(r.stdout)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    if r.returncode != 0 or not isinstance(data, list):
+        return None
+    return {x["sid"]: x for x in data if isinstance(x, dict) and isinstance(x.get("sid"), str)}
+
+
+def tmux_panes():
+    """({pane pid: tmux session} of the claude tmux server, whether that server answered)."""
+    sock = sessions_conf().get("tmux_socket") or "claude"
+    try:
+        r = subprocess.run([os.environ.get("FLEET_TMUX") or "tmux", "-L", str(sock), "list-panes", "-a", "-F",
+                            "#{pane_pid} #{session_name}"], capture_output=True, text=True, timeout=5,
+                           stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return {}, False
+    if r.returncode != 0:
+        return {}, False
+    return fs.parse_panes(r.stdout), True
+
+
+def process_parents():
+    try:
+        r = subprocess.run([os.environ.get("FLEET_PS") or "ps", "-A", "-o", "pid=,ppid="], capture_output=True,
+                           text=True, timeout=5, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    return fs.parse_parents(r.stdout)
+
+
+def history_dicts(con):
+    out = []
+    for r in hist.rows(con):
+        out.append({"id": r["session_id"], "folder": r["cwd"] or "", "about": r["first_prompt"] or "",
+                    "names": [(r["manual_name"], "manual"), (r["name_custom"], "custom"), (r["name_ai"], "ai"),
+                              (r["name_agent"], "agent")],
+                    "started": r["started_at"], "last_seen": r["last_seen_at"], "ended": r["ended_at"],
+                    "end_reason": r["end_reason"] or "", "transcript": r["transcript_path"] or ""})
+    return out
+
+
+class Filters:
+    """The view's filters, parsed once; `args` is how they go to another machine."""
+
+    def __init__(self, kind=None, named=False, since=None, limit=fs.LIMIT, only_id=None):
+        self.kinds = fs.parse_kinds(kind)
+        self.kind, self.named, self.since_text, self.limit, self.only_id = kind, named, since, limit, only_id
+        self.since = fs.parse_since(since)
+
+    def args(self):
+        out = ["--limit", str(self.limit)]
+        if self.kind:
+            out += ["--kind", self.kind]
+        if self.named:
+            out.append("--named")
+        if self.since_text:
+            out += ["--since", str(self.since_text)]
+        if self.only_id:
+            out += ["--id", self.only_id]
+        return out
+
+
+def sessions_local(flt, mask_work=False, internal=False):
+    """This machine's envelope. With `mask_work` (another machine asks) a work-rule row is masked; `internal` keeps
+    the fields a plan needs (the fleet name, the folder check, who holds each tmux session)."""
+    me, now = self_machine(), time.time()
+    con = db()
+    agents = agents_list()
+    members = local_members(False, agents)
+    panes, tmux_ok = tmux_panes()
+    parents = process_parents() if panes else {}
+    rows = fs.build_rows(me, history_dicts(con), agents, members, panes, parents, pid_running, sessions_conf(),
+                         work_rule(), now, flt.only_id)
+    if flt.only_id:
+        for r in rows:
+            r["_folder_ok"] = bool(r["folder"]) and os.path.isdir(r["folder"])
+    else:
+        rows = fs.select(rows, flt.kinds, flt.named, flt.since, flt.limit, now, default_recent=not flt.kind)
+    if mask_work:
+        rows = [fs.mask(r) for r in rows]
+    entry = {"reachable": True, "stale": False, "as_of": now, "reason": "", "fleet": True, "screen": screen_of(me),
+             "unreadable": hist.unreadable_count(con), "tmux_server": tmux_ok}
+    if internal and flt.only_id:
+        entry["_holders"] = fs.tmux_holders(panes, parents, agents, pid_running)
+    if not internal:
+        rows = [fs.public(r) for r in rows]
+    return {"machines": {me: entry}, "hub": hub_name(), "as_of": now, "rows": rows}
+
+
+def seen_path(machine):
+    d = os.path.join(private_home(), "seen")
+    os.makedirs(d, mode=0o700, exist_ok=True)
+    return os.path.join(d, re.sub(r"[^A-Za-z0-9_.-]", "_", machine) + ".json")
+
+
+def remember_rows(machine, as_of, rows):
+    """The last answer of a machine: its rows and when, nothing about whether it was reachable."""
+    path = seen_path(machine)
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    fd = os.open(tmp, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump({"as_of": as_of, "rows": rows}, f)
+    os.replace(tmp, path)
+
+
+def recall_rows(machine):
+    try:
+        with open(seen_path(machine)) as f:
+            data = json.load(f)
+        return data.get("as_of"), [r for r in data.get("rows") or [] if isinstance(r, dict)]
+    except (OSError, ValueError, AttributeError):
+        return None, []
+
+
+def ask_machine(machine, flt):
+    return run_remote_json(machine, ["sessions", "--local", "--json", "--internal", "--mask-work"] + flt.args(),
+                           timeout=SESSIONS_TIMEOUT, kind=dict, keys=("machines", "rows"))
+
+
+def relabel(machine, rows):
+    """Rows another machine sent, under the name this machine's machines.json gives it."""
+    out = []
+    for r in rows:
+        r = dict(r, machine=machine)
+        r["key"] = "%s:%s" % (machine, r.get("id"))
+        r["live_on"] = [machine] if r.get("live_on") else []
+        out.append(r)
+    return out
+
+
+def sessions_all(flt, machine=None):
+    """Every machine, asked in parallel from here -> (envelope with internal fields, rows per machine)."""
+    me = self_machine()
+    others = sorted(other_machines())
+    if machine:
+        if machine != me and machine not in others:
+            raise FleetError("fleet: no machine named %r in machines.json." % machine)
+        others = [m for m in others if m == machine]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
+        reg_f = ex.submit(registry_records)
+        far = ex.submit(fan_out, others, lambda m: ask_machine(m, flt))
+        local = sessions_local(flt, internal=True) if machine in (None, me) else None
+        got, registry = far.result(), reg_f.result()
+    machines, per = {}, {}
+    if local:
+        machines[me] = local["machines"][me]
+        per[me] = local["rows"]
+    for m in others:
+        res = got.get(m)
+        if isinstance(res, RemoteError) or res is None:
+            as_of, rows = recall_rows(m)
+            if flt.only_id:
+                rows = [r for r in rows if str(r.get("id", "")).startswith(flt.only_id)]
+            unreachable = res is None or res.unreachable
+            machines[m] = {"reachable": not unreachable, "stale": True, "as_of": as_of, "reason": str(res or "no answer"),
+                           "fleet": None if unreachable else False, "screen": screen_of(m), "unreadable": None,
+                           "tmux_server": None}
+            per[m] = [dict(r, stale=True, as_of=as_of, live_on=r.get("live_on") or []) for r in relabel(m, rows)]
+            continue
+        entry = dict(next(iter(res["machines"].values()), {}) or {})
+        entry.update(reachable=True, stale=False, reason="", screen=entry.get("screen") or screen_of(m))
+        machines[m] = entry
+        per[m] = relabel(m, [r for r in res["rows"] if isinstance(r, dict)])
+        if not flt.only_id:
+            remember_rows(m, entry.get("as_of") or time.time(), per[m])
+    rows = fs.merge(per, registry, hub_main=hub_name())
+    env = {"machines": machines, "hub": hub_name(), "as_of": time.time(), "rows": rows}
+    return env, per, registry
+
+
+def public_envelope(env):
+    out = dict(env)
+    out["machines"] = {m: {k: v for k, v in e.items() if not k.startswith("_")} for m, e in env["machines"].items()}
+    out["rows"] = [fs.public(r) for r in env["rows"]]
+    return out
+
+
+def sessions_envelope(flt, direct=False, machine=None):
+    """The list as this machine sees it. On the hub, or with `direct`, it asks every machine itself; elsewhere it
+    asks the hub, and asks the machines itself when the hub does not answer (saying so in `note`)."""
+    me, hub = self_machine(), hub_name()
+    if not direct and not machine and hub != me and hub in other_machines():
+        try:
+            env = run_remote_json(hub, ["sessions", "--json"] + flt.args(), timeout=HUB_TIMEOUT, kind=dict,
+                                  keys=("machines", "rows"))
+        except RemoteError as e:
+            env, _, _ = sessions_all(flt)
+            env = public_envelope(env)
+            env["note"] = "the hub %s did not answer (%s); this machine asked the others itself" % (hub, e)
+            return env
+        own = {r["id"]: r for r in sessions_local(flt)["rows"]}  # this machine's own rows, in full
+        env["rows"] = [dict(own[r["id"]], live_on=r.get("live_on") or own[r["id"]]["live_on"],
+                            copies=r.get("copies") or [], registry=r.get("registry"))
+                       if r.get("machine") == me and r.get("masked") and r.get("id") in own else r
+                       for r in env.get("rows") or []]
+        return env
+    env, _, _ = sessions_all(flt, machine)
+    return public_envelope(env)
+
+
+def sessions_text(env):
+    now = time.time()
+    for m, e in sorted(env["machines"].items()):
+        if e.get("stale"):
+            print("%s: not answering (%s)%s" % (m, e.get("reason") or "no answer",
+                  "; rows as of " + history_ago(e["as_of"]) if e.get("as_of") else "; never seen"))
+    if env.get("note"):
+        print(env["note"])
+    for r in env["rows"]:
+        dot = "*" if r["live_on"] else " "
+        name = r["name"] or "(unnamed) " + hist.clip(r["about"], 30) if not r["masked"] else (r["name"] or "(work)")
+        seen = int((now - (r["last_seen"] or now)) / 60)
+        print("%s %-8s %-7s %-6s %-40s %-6s %s" % (dot, r["machine"], r["state"] or "-", r["where"],
+              name[:40], "%dm" % seen if seen < 120 else "%dh" % (seen // 60) if seen < 2880 else "%dd" % (seen // 1440),
+              r["folder"]))
+    if not env["rows"]:
+        print("no sessions")
+
+
+def check_key(key):
+    if not isinstance(key, str) or not fs.KEY_RE.match(key):
+        raise FleetError("fleet: %r is not a session key (machine:id)." % key)
+    return key.split(":", 1)
+
+
+def sessions_open(key):
+    """The plan for landing in session `key`, worked out from every machine this one can ask."""
+    machine, sid = check_key(key)
+    me = self_machine()
+    if machine != me and machine not in other_machines():
+        raise FleetError("fleet: no machine named %r in machines.json." % machine)
+    env, per, registry = sessions_all(Filters(kind="all", only_id=sid))
+    copies = [r for rows in per.values() for r in rows]
+    ids = {r["id"] for r in copies}
+    if len(ids) > 1:
+        raise FleetError("fleet: %r matches %d sessions; give more of the id." % (sid, len(ids)))
+    if not copies:
+        m = env["machines"].get(machine) or {}
+        if m.get("stale"):
+            return {"kind": "refuse-offline", "key": key, "id": sid, "machine": machine, "name": "", "tmux": "",
+                    "folder": "", "pid": None, "state": "", "member": False, "force": False, "run_on_owner": False,
+                    "message": "%s: not answering (%s), and nothing is known of %s there. It may be running there, so "
+                               "it is not resumed anywhere else." % (machine, m.get("reason") or "no answer", sid[:8])}
+        raise FleetError("fleet: no session %s on any machine that answered." % key)
+    full = ids.pop()
+    holders = {m: e.get("_holders") or {} for m, e in env["machines"].items()}
+    folder_ok = {r["machine"]: r.get("_folder_ok") for r in copies if "_folder_ok" in r}
+    return fs.plan("%s:%s" % (machine, full), copies, env["machines"], holders, folder_ok,
+                   (registry or {}).get(full), here=me)
+
+
+def sessions_cmd(a):
+    if a.what == "open":
+        if not a.key:
+            raise FleetError("fleet: sessions open KEY")
+        p = sessions_open(a.key)
+        if a.json:
+            print(json.dumps(p, indent=2))
+        else:
+            print("%s %s on %s%s" % (p["kind"], p["key"], p["machine"], ": " + p["message"] if p["message"] else ""))
+        return 0
+    try:
+        flt = Filters(a.kind, a.named, a.since, a.limit, a.id)
+    except ValueError as e:
+        raise FleetError("fleet: %s" % e)
+    if a.local:
+        env = sessions_local(flt, a.mask_work, a.internal)
+    else:
+        env = sessions_envelope(flt, a.direct, a.machine)
+    if a.json:
+        emit(json.dumps(env, indent=2))
+    else:
+        sessions_text(env)
+    return 0
+
+
+def pick_command(key):
+    """What a new window runs to land in `key`: sessions.json `pick` (a command), else the env checkout's
+    `@claude pick`, then --open KEY."""
+    cmd = sessions_conf().get("pick")
+    if not (isinstance(cmd, list) and cmd and all(isinstance(c, str) for c in cmd)):
+        d = env_dir()
+        if not d:
+            raise FleetError("fleet: no picker to open a window with (set `pick` in sessions.json).")
+        cmd = [os.path.join(d, "bin", "@claude"), "pick"]
+    return [os.path.expanduser(c) for c in cmd] + ["--open", key]
+
+
+def hypr_instance():
+    """The live Hyprland instance's signature: the one folder under $XDG_RUNTIME_DIR/hypr with a socket."""
+    run = os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid()
+    socks = glob.glob(os.path.join(run, "hypr", "*", ".socket.sock"))
+    if not socks:
+        raise FleetError("fleet: no Hyprland running on %s (nothing in %s/hypr)." % (self_machine(), run))
+    socks.sort(key=lambda p: os.stat(p).st_mtime, reverse=True)
+    return os.path.basename(os.path.dirname(socks[0])), run
+
+
+def open_window(key, quiet=False):
+    """Internal `_open-window KEY`: open a terminal window on this machine's screen that lands in `key`."""
+    check_key(key)
+    line = " ".join(shlex.quote(c) for c in pick_command(key))
+    shell = os.environ.get("SHELL") or "/bin/sh"
+    screen = screen_of(self_machine())
+    env = None
+    if screen == "macos":
+        argv = ["open", "-na", "Ghostty", "--args", "-e", shell, "-lic", line]
+    elif screen == "hyprland":
+        sig, run = hypr_instance()
+        argv = ["hyprctl", "--instance", sig, "dispatch", "exec",
+                "ghostty -e %s -lic %s" % (shlex.quote(shell), shlex.quote(line))]
+        env = dict(os.environ, XDG_RUNTIME_DIR=run)
+    else:
+        raise FleetError("fleet: %s has no screen to open a window on." % self_machine())
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=15, env=env, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise FleetError("fleet: cannot open a window: %s" % e)
+    if r.returncode != 0 or (screen == "hyprland" and r.stdout.strip() not in ("", "ok")):
+        raise FleetError("fleet: opening a window failed: %s" % ((r.stderr or r.stdout).strip() or "exit %d" % r.returncode))
+    res = {"opened": self_machine(), "screen": screen, "command": line}
+    if not quiet:
+        print(json.dumps(res))
+    return res
+
+
+def force_stop(key, quiet=False):
+    """Internal `_force-stop KEY`: SIGTERM an idle interactive session in a window on this machine that is not a
+    fleet member. `claude agents --json` is read again right before, so the pid is the one that carries that
+    session now (a pid can be reused); never while it works, never in tmux or the background."""
+    machine, sid = check_key(key)
+    if machine != self_machine():
+        raise FleetError("fleet: %s is a session of %s, not of this machine (%s)." % (key, machine, self_machine()))
+    agents = agents_list()
+    if agents is None:
+        raise FleetError("fleet: `claude agents --json` does not answer; nothing is stopped.")
+    hits = [x for x in agents if str(x.get("sessionId") or "") == sid or
+            (len(sid) < 36 and str(x.get("sessionId") or "").startswith(sid))]
+    hit = next((x for x in hits if x.get("pid") and pid_running(x["pid"])), None)
+    if not hit:
+        raise FleetError("fleet: %s is not running here; nothing to stop." % key)
+    if hit.get("kind") == "background":
+        raise FleetError("fleet: %s is a background session: `fleet stop` or `claude stop` ends it." % key)
+    full = hit["sessionId"]
+    con = db()
+    if con.execute("SELECT 1 FROM members WHERE session_id=? AND left_at IS NULL", (full,)).fetchone():
+        raise FleetError("fleet: %s is a fleet member: it is told to wrap up (`fleet stop`), never killed." % key)
+    status = str(hit.get("status") or hit.get("state") or "")
+    if status != "idle":
+        raise FleetError("fleet: %s is %s, not idle; it is never stopped while it works." % (key, status or "in an unknown state"))
+    panes, _ = tmux_panes()
+    if panes and fs.pane_of(int(hit["pid"]), panes, process_parents()):
+        raise FleetError("fleet: %s runs in tmux; attach to it instead." % key)
+    os.kill(int(hit["pid"]), 15)
+    res = {"stopped": int(hit["pid"]), "key": key, "id": full}
+    if not quiet:
+        print(json.dumps(res))
+    return res
 
 
 # ---------------------------------------------------------------- canary
@@ -3118,6 +3615,113 @@ def ui_page_write(path, body):
     return 404, {"error": "not found"}
 
 
+class SessionsFeed:
+    """The page's session list. It answers at once with the last list it has (each row says `as_of`) and fetches a
+    fresh one in the background when that is older than the TTL, so a sleeping machine's 8 s never holds the page.
+    The first request, and one with ?fresh=1 (after an action), waits for a fresh list. The page asks on focus."""
+
+    def __init__(self, ttl=UI_TTL):
+        self.ttl, self.lock, self.val, self.at, self.busy = ttl, threading.Lock(), None, 0.0, False
+
+    def fetch(self):
+        with db_scope():
+            env, _, _ = sessions_all(Filters(kind="all"))
+        with self.lock:
+            self.val, self.at, self.busy = env, time.time(), False
+        return env
+
+    def refresh(self):
+        try:
+            self.fetch()
+        except Exception as e:  # noqa: B902 - a failed background refresh keeps the last list
+            log_line("sessions: the page's refresh failed: %s" % e)
+            with self.lock:
+                self.busy = False
+
+    def get(self, fresh=False):
+        with self.lock:
+            val, at, busy = self.val, self.at, self.busy
+            start = val is not None and not fresh and not busy and time.time() - at >= self.ttl
+            if start:
+                self.busy = True
+        if val is None or fresh:
+            return self.fetch()
+        if start:
+            threading.Thread(target=self.refresh, daemon=True).start()
+        return val
+
+    def forget(self):
+        with self.lock:
+            self.at = 0.0
+
+
+def session_row(feed, key):
+    """The row of `key` in the page's list (a fresh list when it is not in the last one), or a FleetError. The page
+    can only act on a session the list holds."""
+    check_key(key)
+    for fresh in (False, True):
+        hit = next((r for r in feed.get(fresh)["rows"] if r["key"] == key), None)
+        if hit:
+            return hit
+    raise FleetError("fleet: no session %s in the list." % key)
+
+
+def on_machine(machine, verb, key, quiet_fn):
+    """Run an internal verb about `key` on `machine` (this one: in process)."""
+    if machine == self_machine():
+        return quiet_fn(key, quiet=True)
+    try:
+        return run_remote_json(machine, [verb, key], timeout=30, kind=dict)
+    except RemoteError as e:
+        raise FleetError("fleet: %s: %s" % (machine, str(e).splitlines()[-1] if str(e) else "failed"))
+
+
+def ui_sessions_write(path, body, feed):
+    """The Sessions tab's writes. A request names a session by its key and a machine by name, both checked against
+    the list and machines.json; it never carries a command. -> (status, json)."""
+    try:
+        key = text_field(body, "key", limit=80)
+        row = session_row(feed, key)
+        line = "@claude pick --open %s" % key
+        if path == "/api/sessions/open":
+            target = text_field(body, "target", limit=64)
+            if target == "copy":
+                return 200, {"copy": line}
+            if target != self_machine() and target not in other_machines():
+                raise FleetError("fleet: no machine named %r." % target)
+            if screen_of(target) == "none":
+                raise FleetError("fleet: %s has no screen to open a window on; copy the line instead." % target)
+            return 200, dict(on_machine(target, "_open-window", key, open_window), copy=line)
+        if path == "/api/sessions/stop":
+            if body.get("force") is True:
+                res = on_machine(row["machine"], "_force-stop", key, force_stop)
+            elif row["member"]:
+                tgt = "%s@%s" % (row.get("_fleet_name") or row["name"], row["machine"])
+                res = control("stop", tgt)
+                if res["action"] != "stopped":
+                    res["thread"], _ = captured(send, "tell", tgt, WRAP_UP_TELL, PAGE)
+            else:
+                raise FleetError("fleet: %s is not a fleet member, so it cannot be told to wrap up; an idle one in a "
+                                 "window can be stopped with force." % (row["name"] or key))
+            feed.forget()
+            return 200, res
+        if path == "/api/sessions/rename":
+            name = text_field(body, "name", limit=200)
+            if row["machine"] == self_machine():
+                _, out = captured(history_rename, row["id"], name)
+            else:
+                try:
+                    out = run_remote(row["machine"], ["history", "rename", row["id"]] + name.split(), timeout=30).strip()
+                except RemoteError as e:
+                    raise FleetError("fleet: %s: %s" % (row["machine"], e))
+            feed.forget()
+            return 200, {"output": out}
+    except FleetError as e:
+        return 400, {"error": str(e).splitlines()[0] if str(e) else "failed"}
+    return 404, {"error": "not found"}
+
+
+SESSION_WRITES = ("/api/sessions/open", "/api/sessions/stop", "/api/sessions/rename")
 PROFILE_WRITES = ("/api/profiles/folder", "/api/profiles/save")
 PAGE_WRITES = ("/api/todos/add", "/api/tell", "/api/inbox/answer", "/api/inbox/dismiss", "/api/members/stop",
                "/api/members/respawn", "/api/members/attach")
@@ -3126,8 +3730,9 @@ PAGE_WRITES = ("/api/todos/add", "/api/tell", "/api/inbox/answer", "/api/inbox/d
 def make_ui_handler(cache, token):
     api = {"/api/members": ui_members, "/api/todos": ui_todos, "/api/threads": ui_threads}
     writes = ("/api/history/rename", "/api/history/delete", "/api/history/ask", "/api/history/search") + PAGE_WRITES \
-        + PROFILE_WRITES
-    guarded = ("/api/history", "/api/inbox", "/api/profiles")  # served only on loopback, like the writes
+        + PROFILE_WRITES + SESSION_WRITES
+    guarded = ("/api/history", "/api/inbox", "/api/profiles", "/api/sessions")  # served only on loopback, like the writes
+    feed = SessionsFeed(cache.ttl)
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "fleet-ui"
@@ -3214,6 +3819,8 @@ def make_ui_handler(cache, token):
                     cache.items.clear()
                 elif path in PROFILE_WRITES:
                     code, data = ui_profiles_write(path, body)
+                elif path in SESSION_WRITES:
+                    code, data = ui_sessions_write(path, body, feed)
                 else:
                     code, data = ui_history_write(path, body)
             except Exception as e:
@@ -3235,6 +3842,9 @@ def make_ui_handler(cache, token):
                     if path == "/api/profiles":
                         refresh = (parse_qs(urlparse(self.path).query).get("refresh") or [""])[0] == "1"
                         return self.send_json(200, ui_profiles(refresh))
+                    if path == "/api/sessions":
+                        fresh = (parse_qs(urlparse(self.path).query).get("fresh") or [""])[0] == "1"
+                        return self.send_json(200, public_envelope(feed.get(fresh)))
                     data = ui_history() if path == "/api/history" else cache.get(path, ui_inbox)
                     return self.send_json(200, data)
                 except Exception as e:
@@ -3404,6 +4014,18 @@ def main(argv=None):
     s = h.add_parser("search", help="find a session by meaning"); s.add_argument("query", nargs="+"); s.add_argument("--json", action="store_true")
     s = h.add_parser("import", help="copy conversations from another store"); s.add_argument("path")
     s.add_argument("--descriptions", help="a store with a digests table, when it is not the same file")
+    s = sub.add_parser("sessions", help="every session on every machine with its live state; `open KEY` says how to land in one")
+    s.add_argument("what", nargs="?", choices=["open"]); s.add_argument("key", nargs="?")
+    s.add_argument("--json", action="store_true"); s.add_argument("--local", action="store_true", help="this machine only")
+    s.add_argument("--direct", action="store_true", help="ask every machine from here, not through the hub")
+    s.add_argument("--limit", type=int, default=fs.LIMIT, help="rows per machine that are not live (default %d)" % fs.LIMIT)
+    s.add_argument("--since", help="seen since: 14d, 6h, 30m or epoch seconds")
+    s.add_argument("--kind", help="chat (default), job, worker, a comma list, or all")
+    s.add_argument("--named", action="store_true", help="named sessions only (live ones always show)")
+    s.add_argument("--machine", help="one machine only")
+    s.add_argument("--id", help=argparse.SUPPRESS); s.add_argument("--mask-work", action="store_true", help=argparse.SUPPRESS)
+    s.add_argument("--internal", action="store_true", help=argparse.SUPPRESS)
+    sub.add_parser("_open-window").add_argument("key"); sub.add_parser("_force-stop").add_argument("key")
     pr = sub.add_parser("profile", help="which tools a folder's new sessions get").add_subparsers(dest="profile_cmd", required=True)
     pr.add_parser("ls", help="every folder sessions ran in, with its profile").add_argument("--json", action="store_true")
     s = pr.add_parser("show", help="a folder's profile and what it keeps"); s.add_argument("folder", nargs="?"); s.add_argument("--json", action="store_true")
@@ -3461,6 +4083,9 @@ def main(argv=None):
             elif c == "describe": history_describe(a.limit, a.folder)
             elif c == "search": history_search(" ".join(a.query), a.json)
             elif c == "import": history_import(a.path, a.descriptions)
+        elif a.cmd == "sessions": return sessions_cmd(a)
+        elif a.cmd == "_open-window": open_window(a.key)
+        elif a.cmd == "_force-stop": force_stop(a.key)
         elif a.cmd == "profile":
             profile_cmd(a.profile_cmd, getattr(a, "folder", None), getattr(a, "name", None), getattr(a, "json", False))
     except FleetError as e:
@@ -3470,4 +4095,9 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    code = main()
+    try:
+        sys.stdout.flush()
+    except BrokenPipeError:
+        stdout_gone()
+    sys.exit(code)
