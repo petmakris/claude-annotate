@@ -131,7 +131,10 @@ function stripInfo() {
   if (recorder || (live && live.speech)) return {key: "talking", text: "Listening to you", clock: null};
   if (busy) return {key: "answering", text: "Turning your words into text", clock: null};
   if (view.stalled) return {key: "stalled", text: "Claude has not picked this up yet", warn: true, clock: openTurnAt()};
-  if (view.working || waitActive()) return {key: "answering", text: "Claude is answering", clock: openTurnAt()};
+  if (view.working || waitActive()) {
+    const w = waitModel();   // the wait card's step is the one word for where the question stands: the strip and the Now card say it too
+    return {key: "answering", text: w && w.step === "sent" ? "Sent, waiting for Claude to pick it up" : "Claude is answering", clock: openTurnAt()};
+  }
   if (queued) return {key: "new", text: "Answer " + answerNumber(queued) + " is next", clock: null};
   if (elsewhere && audio.paused && current) return {key: "paused", text: "Playing on another screen", clock: null};
   if (current && !audio.paused) return {key: "playing", text: "Playing answer " + n + (board ? (follow ? " · following the board" : " · board pinned") : ""), clock: null};

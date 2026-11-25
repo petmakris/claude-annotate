@@ -121,7 +121,13 @@ const STATE_ICONS = {
   elsewhere: ICON('<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>', 13),
 };
 function nowState(e, wait) {
-  if (wait) return view.stalled ? {key: "slow", word: "Slow"} : {key: "working", word: "Working"};
+  if (wait) {   // the wait card's own step, so the eyebrow never says Working over a card that says Sent
+    const w = waitModel(), step = w ? w.step : "";
+    if (step === "sent") return {key: "working", word: "Sent"};
+    if (step === "notpicked") return {key: "slow", word: "Not picked up"};
+    if (step === "silent") return {key: "slow", word: "Quiet"};
+    return step === "slow" || view.stalled ? {key: "slow", word: "Slow"} : {key: "working", word: "Working"};
+  }
   if (!e) return null;
   if (e.speech === "pending" || e.speech === "making") return {key: "voice", word: "Preparing the voice"};
   if (e.speech === "failed") return {key: "silent", word: "Not read aloud"};

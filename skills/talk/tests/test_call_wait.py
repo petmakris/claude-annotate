@@ -320,3 +320,13 @@ def test_a_question_sent_is_announced_once(tmp_path):
     page.js("window.said = []; announce = t => window.said.push(t); $('text').value = 'hello'; $('text').dispatchEvent(new ShimEvent('input')); $('sendtext').click(); await settle(); await serve(1);")
     page.check("window.said")
     assert page.run() == [["Your question was sent."]]
+
+
+def test_the_eyebrow_and_the_strip_say_the_step_the_wait_card_says(tmp_path):
+    """A question nobody collected is Sent in all three places, never Working or "answering" over a card that says Sent."""
+    page = run_states(tmp_path, lambda b: [waiting(b, 1), picked(b, 2)])
+    row = "[$('waitcard').querySelector('.wt-title').textContent, $('nowstate').textContent, $('sstext').textContent.split(' · ')[0]]"
+    page.js("await serve(1);").check(row)
+    page.js("await serve(2);").check(row)
+    assert page.run() == [["Sent", "Sent", "Sent, waiting for Claude to pick it up"],
+                          ["Claude is working", "Working", "Claude is answering"]]
