@@ -37,7 +37,7 @@ function load(e, play) {
   // A pause before playback starts (another call took the floor) rejects with AbortError: not a block.
   if (play) audio.play().catch(playFailed);
   if ("mediaSession" in navigator) navigator.mediaSession.metadata = new MediaMetadata({title: "Answer " + (e.n || ""), artist: "Claude", album: CFG.topic});
-  paintNow(); paintAll();
+  paintAll();
 }
 // One page of a call speaks. Two pages of one call (a laptop and the TV) would otherwise both start each
 // answer. The server holds the claim: POST /api/player {page, take} names the page that plays, /api/state

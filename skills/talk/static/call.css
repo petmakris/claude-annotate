@@ -53,6 +53,7 @@ svg{display:block;flex:none}
 .reader.text{display:block}
 .reader .rtext{box-sizing:border-box;max-width:36em;margin:0 auto;padding:max(48px,10vh) 32px 45vh;white-space:pre-line;
   font:500 clamp(20px,.9vw + 12px,32px)/1.6 var(--sans);color:var(--ink);text-wrap:pretty;overflow-wrap:anywhere}
+.reader .rhead{margin-bottom:14px;font:600 12px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .reader .w{cursor:pointer;border-radius:.2em;transition:color .2s}
 .reader .rs.future{visibility:hidden}
 .reader .rs.past{color:var(--muted)}
@@ -108,39 +109,15 @@ svg{display:block;flex:none}
 .live{width:8px;height:8px;border-radius:50%;background:var(--acc);box-shadow:0 0 8px var(--acc);flex:none}
 .live.off{background:var(--faint);box-shadow:none}
 
-/* [C] the conversation: turns, chips (T4: chips and the Now card change this region) */
-/* the conversation: your turns on the right, Claude's answers as text with their boards above them */
-.convo{flex:1;min-height:0;overflow:auto;padding:14px 14px 10px;display:flex;flex-direction:column;gap:12px}
-.empty{margin:12px 0;color:var(--faint);text-align:center}
-.turn.you{align-self:flex-end;max-width:88%;background:var(--you-soft);border-radius:14px 14px 4px 14px;padding:8px 12px}
-.turn.claude{padding:2px 0 2px 12px;border-left:2px solid var(--line)}
-.turn.claude.now{border-left-color:var(--claude)}
-.turn .who{display:flex;align-items:center;gap:8px;font:600 11px var(--sans);margin-bottom:3px}
-.turn .who small{font:400 11px var(--sans);color:var(--faint)}
-.turn.you .who{color:var(--you)}
-.turn.claude .who{color:var(--ink)}
-.turn .text{font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
-.turn.you .text{font-size:13.5px}
-.turn .w{border-radius:4px;cursor:pointer;transition:color .25s}
-.turn .w:hover{background:var(--shade)}
-.turn.reading .w{color:var(--faint)}
-.turn.reading .w.said{color:var(--ink)}
-.turn .w.now-word{background:var(--word);color:var(--ink)}
-.turn .play{margin-left:auto;display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:7px;font:500 11.5px var(--sans);color:var(--muted)}
-.turn .play:hover{background:var(--shade);color:var(--ink)}
-.turn.claude.now .play{color:var(--claude)}
-.turn .speech{margin-top:6px;font-size:12.5px;color:var(--muted)}
-.turn .speech.bad{color:var(--bad)}
-.turn.withdrawn .text{text-decoration:line-through;opacity:.55}
-.line.status{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--faint)}
-.line.status::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
-.line.system{text-align:center;color:var(--faint);font-size:12.5px}
-.chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-left:14px}
-.chips .clbl{display:none}
+/* [C] the conversation: the Now card and the list of earlier answers are in call-shell.css; only its box and the board chips are here */
+.convo{flex:1;min-height:0;overflow:auto;padding:12px 12px 10px;display:flex;flex-direction:column;gap:12px}
+.empty{margin:12px 0;color:var(--faint);text-align:center;display:flex;flex-direction:column;gap:4px}
+.empty .e2{font-size:13px}
 .chip{font-size:12px;padding:3px 10px;border-radius:8px;background:var(--acc-soft);color:var(--acc);overflow-wrap:anywhere}
 .chip.note{align-self:flex-start;background:var(--warn-soft);color:var(--warn)}
-button.chip.board{display:inline-flex;gap:6px;align-items:center;font:500 12px/1.4 var(--sans);background:var(--panel);color:var(--ink);border:1px solid var(--line)}
+button.chip.board{display:inline-flex;gap:6px;align-items:center;min-height:30px;font:500 13px/1.4 var(--sans);background:var(--panel);color:var(--ink);border:1px solid var(--line)}
 button.chip.board svg{color:var(--muted)}
+button.chip.board small{font:500 11px var(--sans);color:var(--acc);background:var(--acc-soft);border-radius:999px;padding:0 6px}
 button.chip.board.front{border-color:var(--acc);background:var(--acc-soft)}
 button.chip.board.front svg{color:var(--acc)}
 button.chip.board.missing{opacity:.6;text-decoration:line-through;border-style:dashed}
@@ -153,7 +130,7 @@ button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:va
   border-radius:999px;background:var(--ink);color:var(--panel);font:500 12.5px var(--sans);box-shadow:var(--lift);white-space:nowrap}
 .info{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
 .info:not(:has(>:not([hidden]))){display:none}
-.status{flex:1;min-width:0;font-size:13px;color:var(--muted)}
+.foot .status{flex:1;min-width:0;font-size:13px;color:var(--muted)}
 .status.warn{color:var(--warn)}
 .status.shimmer{background:linear-gradient(90deg,var(--muted) 0%,var(--ink) 50%,var(--muted) 100%);background-size:200% 100%;
   -webkit-background-clip:text;background-clip:text;color:transparent;animation:shim 1.8s linear infinite}
@@ -278,10 +255,8 @@ button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:va
 /* [I] TV and the phone */
 /* TV: read from across the room. The panel grows and its words with it; the stage zooms itself (stage:zoom). */
 .app[data-tv]:not([data-rail]){--pw:520px}
-.app[data-tv] .turn .text{font-size:20px}
 .app[data-tv] .reader:not(.strip) .rtext{font-size:clamp(26px,1.2vw + 14px,40px)}
 .app[data-tv] .reader.strip{--sf:clamp(26px,1.2vw + 14px,40px)}
-.app[data-tv] .turn.you .text{font-size:18px}
 .app[data-tv] .topic,.app[data-tv] .status{font-size:17px}
 .app[data-tv] .compose textarea{font-size:19px}
 .app[data-tv] .ib{width:44px;height:44px}
@@ -305,13 +280,9 @@ button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:va
 @media (prefers-reduced-motion:reduce){
   .app:not([data-state="idle"]) .frame::before,.status.shimmer,.spin,.pop,.preptrack.queued i{animation:none!important}
   .status.shimmer{background:none;color:var(--muted)}
-  .bars i,.turn .w{transition:none}
+  .bars i{transition:none}
 }
-/* [C] folded answers and stops (the fold rule is reversed by the Now card) */
-/* An answer said on the stage: its text folds to its first line, and Show text opens it */
-.turn.claude.folded .text{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;color:var(--muted)}
-.turn .fold{border:0;background:none;padding:2px 6px;border-radius:6px;font:500 11.5px var(--sans);color:var(--muted);cursor:pointer}
-.turn .fold:hover{background:var(--shade);color:var(--ink)}
+/* [C] stops */
 /* A stop of an answer with no board: its question and buttons, above the player */
 .stopcard{display:grid;gap:10px;padding:12px 14px;border-radius:12px;background:var(--panel);border:1px solid var(--acc)}
 .stopcard .sq{margin:0;font:600 15px/1.4 var(--sans);color:var(--ink)}

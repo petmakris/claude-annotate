@@ -63,13 +63,19 @@ window.addEventListener("message", ev => {
     for (const msg of stageOutbox.splice(0)) if (msg.type !== "stage:theme" && msg.type !== "stage:follow") toStage(msg);
     resync();
   }
-  else if (m.type === "stage:follow") { follow = !!m.on; paintSettings(); if (follow) resync(); }
+  else if (m.type === "stage:follow") { follow = !!m.on; paintSettings(); paintFollow(); if (follow) resync(); }
   else if (m.type === "stage:views") {
     stageViews = new Set((m.list || []).map(v => String(v.name)));
     boardAnswer = new Map((m.list || []).map(v => [String(v.name), v.answer]));
-    paintMissing();
+    paintMissing(); paintFollow(); paintTransport();
   }
-  else if (m.type === "stage:shown") { frontBoard = String(m.view || ""); paintFront(); }
+  else if (m.type === "stage:shown") {
+    const was = frontBoard;
+    frontBoard = String(m.view || ""); paintFront(); paintFollow(); paintTransport();
+    // the stage moves in a frame the page cannot read: say which board it is on, for a screen reader
+    const title = frontBoard && frontBoard !== was ? boardTitle(frontBoard) : "";
+    if (title) announce("The stage shows " + title + ".");
+  }
   else if (m.type === "stage:missing") paintMissing(String(m.view));
   else if (m.type === "stage:key" && MEDIA_KEYS.has(m.key)) mediaKey(m.key);
   else if (m.type === "stage:play") playFrame(String(m.view || ""), Number(m.answer), Number(m.n));
@@ -92,7 +98,16 @@ function playFrame(board, n, frameNo) {
 function chipTap(view) {
   toStage({type: "stage:front", view, manual: true});
   if (follow) { follow = false; toStage({type: "stage:follow", on: false}); paintSettings(); }
-  paintReader();
+  const title = boardTitle(view);
+  if (title) announce("Pinned the stage to " + title + ".");
+  paintReader(); paintFollow();
+}
+// Keep the stage on the board in front: following the voice off, said on the card's strip.
+function pinBoard() {
+  if (!follow) return;
+  follow = false; toStage({type: "stage:follow", on: false}); paintSettings(); paintReader(); paintFollow();
+  const title = boardTitle(frontBoard);
+  announce(title ? "Pinned the stage to " + title + "." : "Pinned the stage.");
 }
 let stageViews = null;
 let boardAnswer = new Map();   // board -> the number of the answer that showed it
@@ -115,12 +130,15 @@ setInterval(() => { if (stageViews) paintMissing(); }, MISSING_AFTER_MS / 2);
 // The chip of the board in front of the stage is drawn as chosen, wherever it is in the conversation.
 function paintFront() {
   $("app").toggleAttribute("data-board", !!frontBoard);   // a phone gives the stage more height while a board is up
-  for (const el of document.querySelectorAll("button.chip.board[data-view]")) el.classList.toggle("front", !!frontBoard && el.dataset.view === frontBoard);
+  for (const el of document.querySelectorAll("button.chip.board[data-view]")) {
+    const on = !!frontBoard && el.dataset.view === frontBoard;
+    el.classList.toggle("front", on); el.setAttribute("aria-pressed", String(on));
+  }
 }
 
 // ---- following the voice: the stage keeps it, the gear shows it -------------
 let follow = true;
-$("follow").onclick = () => { follow = !follow; toStage({type: "stage:follow", on: follow}); paintSettings(); if (follow) resync(); };
+$("follow").onclick = () => { follow = !follow; toStage({type: "stage:follow", on: follow}); paintSettings(); paintFollow(); if (follow) resync(); };
 
 // ---- the reader: the answer being said, in large type on the stage ----------------------------
 // Each sentence appears as it is said, and the word being said is lit; a tap on a word plays from there. When
@@ -133,6 +151,8 @@ function buildReader(e) {
   const rtextEl = $("rtext");
   rtextEl.replaceChildren(); rSents = []; rWords = [];
   if (!e) return;
+  // which answer this is (the panel's card names the same one)
+  const head = document.createElement("div"); head.className = "rhead"; head.textContent = "Answer " + (e.n || ""); rtextEl.append(head);
   const ss = sentenceSpans(e);
   if (!ss.length) { const s = document.createElement("span"); s.className = "rs"; s.textContent = e.text; rtextEl.append(s); rSents.push({el: s, first: 0, last: -1}); return; }
   if (ss[0].a > 0) rtextEl.append(e.text.slice(0, ss[0].a));
@@ -168,7 +188,9 @@ function paintReader() {
   // (before the first word the voice is at the start of the text: a board the answer opens with is already in front)
   const pos = active ? (k >= 0 ? e.words[k][0] : 0) : Infinity;
   const onBoard = !!e && !!CFG.stageUrl && (!follow || (e.cues || []).some(c => c.kind === "front" && c.at <= pos));
-  const mode = !e ? "off" : onBoard ? (active ? "strip" : "off") : "text";
+  // an answer with no board of its own leaves the board in front where it is (its words are on the strip, and the card holds the text)
+  const keeps = !!e && !!CFG.stageUrl && !!frontBoard && !(e.cues || []).some(c => c.kind === "front");
+  const mode = !e ? "off" : onBoard || keeps ? (active ? "strip" : "off") : "text";
   const j = k < 0 ? -1 : rSents.findIndex(s => k >= s.first && k <= s.last);
   const paint = `${mode}|${active}|${k}|${sig}`;
   if (paint === rPaint) return;
@@ -385,7 +407,7 @@ function readerPlays(e) {
 }
 function followAgain() {
   cueSync = true;
-  if (!follow) { follow = true; toStage({type: "stage:follow", on: true}); paintSettings(); }
+  if (!follow) { follow = true; toStage({type: "stage:follow", on: true}); paintSettings(); paintFollow(); }
 }
 // An answer played to its end holds its last frame a moment, then each of its boards shows whole, undimmed.
 const REST_HOLD_MS = 1500;

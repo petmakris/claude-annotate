@@ -38,7 +38,7 @@ def test_a_replay_from_the_first_word_fronts_the_board_the_answer_came_in_with(t
     html, states = served(tmp_path, [f"{six('intro')}. [[show table | Three paths changed]]{TABLE}[[/show]] "
                                      f"{six('paths')}. [[show table | Nightly batch guard]]{TABLE}[[/show]] {six('guard')}."])
     page = CallPage(html, states, autoplay=False).js("await serve(1); toStage().length = 0;")
-    page.js("document.querySelector(\"#convo .turn.claude .w[data-i='0']\").click();")
+    page.js("document.querySelector(\"#nowtext .w[data-i='0']\").click();")
     page.check("toStage().find((m) => m.type === 'stage:state')")
     assert page.run() == [{"type": "stage:state", "front": "three-paths-changed", "frames": {}, "keys": 0, "answer": 1}]
 
@@ -49,8 +49,7 @@ def test_a_play_the_reader_starts_keeps_the_board_they_picked(tmp_path):
     page = CallPage(html, states, seconds=3.0).js("await serve(1); await playTo(1.2);")
     page.check("toStage().some((m) => m.type === 'stage:frame' && m.n === 1)")
     starts = {"Play": "$('playpause').click();",
-              "conversation Play": "document.querySelector('#convo .turn.claude button.play').click();",
-              "word tap": "document.querySelector(\"#convo .turn.claude .w[data-i='3']\").click();",
+              "word tap": "document.querySelector(\"#nowtext .w[data-i='3']\").click();",
               "Space": "document.body.focus(); key(' ');",
               "← then Space": "document.body.focus(); key('ArrowLeft'); key(' ');",
               "← on the stage then Space": "fromStage({ type: 'stage:key', key: 'ArrowLeft' }); fromStage({ type: 'stage:key', key: ' ' });"}
@@ -70,7 +69,7 @@ def test_only_an_answer_that_starts_by_itself_turns_following_back_on(tmp_path):
     html, states = served(tmp_path, ["The first answer.", "The second answer."])
     page = CallPage(html, states, start=1)
     page.js("fromStage({ type: 'stage:follow', on: false }); toStage().length = 0;")
-    page.js("document.querySelector('#convo .turn.claude button.play').click();")  # the reader replays an old answer
+    page.js("$('playpause').click();")  # the reader replays an old answer
     page.js("await end(); await serve(2);")  # a new one comes and plays by itself
     page.check("toStage().filter((m) => m.type === 'stage:answer')")
     assert page.run() == [[{"type": "stage:answer", "n": 1, "follow": False}, {"type": "stage:answer", "n": 2, "follow": True}]]
@@ -96,7 +95,7 @@ def test_a_replay_of_the_sentence_about_a_page_fronts_the_page(tmp_path):
     page = CallPage(html, states, seconds=4.0, autoplay=False).js("await serve(1);")
     page.check("[...document.querySelectorAll('#convo button.chip.board')].map((b) => b.dataset.view)")
     for word in (0, 7):
-        page.js("toStage().length = 0;").js(f"document.querySelector(\"#convo .turn.claude .w[data-i='{word}']\").click();")
+        page.js("toStage().length = 0;").js(f"document.querySelector(\"#nowtext .w[data-i='{word}']\").click();")
         page.check("toStage().find((m) => m.type === 'stage:state').front")
     assert page.run() == [["report-data-walkthrough", "one-asset-s-groups"], "report-data-walkthrough", "one-asset-s-groups"]
 
@@ -124,7 +123,7 @@ def test_an_answer_held_for_a_hidden_tab_stays_put_once_the_reader_played_someth
     page = CallPage(html, states, start=1)
     page.js("document.visibilityState = 'hidden'; await serve(2);")
     # back in the tab, the reader plays the first answer from its Play, then pauses it
-    page.js("document.querySelector('#convo .turn.claude button.play').click(); audio.pause();")
+    page.js("document.querySelector('#tllist .tlrow button.play').click(); audio.pause();")
     page.js("document.visibilityState = 'visible'; document.dispatchEvent(new ShimEvent('visibilitychange'));")
     page.check("[audio.paused, audio.getAttribute('src')]")
     assert page.run() == [[True, "/c/test-call-id/audio/0000.wav"]]
@@ -233,24 +232,11 @@ def test_the_stage_reads_the_answer_sentence_by_sentence_and_its_board_takes_ove
                           ["reader off", ["rs", "rs"], None], []]
 
 
-def test_an_answer_with_no_board_is_read_on_the_stage_and_folds_in_the_panel(tmp_path):
+def test_an_answer_with_no_board_is_read_on_the_stage_when_no_board_is_in_front(tmp_path):
     html, states = served(tmp_path, ["Just words, nothing to show. And a second sentence."], seconds=3.0)
     page = CallPage(html, states, seconds=3.0).js("await serve(1); await playTo(2.0);").check(READER)
-    page.check("document.querySelector('#convo .turn.claude').classList.contains('folded')")
     page.js("await end(); await advance(1600);").check(READER).check(CAPTIONS)
-    assert page.run() == [["reader text", ["rs past", "rs cur"], "a"], True, ["reader text", ["rs", "rs"], None], []]
-
-
-def test_an_answer_with_boards_folds_its_text_and_show_text_opens_it(tmp_path):
-    html, states = served(tmp_path, [f"[[show table | One]]{TABLE}[[/show]] First things first. Then the second thing."])
-    page = CallPage(html, states, autoplay=False).js("await serve(1);")
-    turn = "document.querySelector('#convo .turn.claude')"
-    page.check(f"[{turn}.classList.contains('folded'), {turn}.querySelector('button.fold').textContent]")
-    page.js(f"{turn}.querySelector('button.fold').click();")
-    page.check(f"[{turn}.classList.contains('folded'), {turn}.querySelector('button.fold').textContent]")
-    page.js("await serve(1); await advance(1000);")  # the page polls again: the reader's choice stays
-    page.check(f"{turn}.classList.contains('folded')")
-    assert page.run() == [[True, "Show text"], [False, "Hide text"], False]
+    assert page.run() == [["reader text", ["rs past", "rs cur"], "a"], ["reader text", ["rs", "rs"], None], []]
 
 
 # -- stops: the answer asks, and waits ------------------------------------------------
@@ -508,15 +494,3 @@ def test_an_audio_file_that_cannot_load_says_so_with_retry_and_a_blocked_play_sa
         "The browser blocked playback. Press Play.",
         "Cannot play this audio file.",
         "Cannot play this audio file."]
-
-
-def test_a_conversation_at_its_end_is_scrolled_to_the_end_again_after_the_foot_changes_its_height(tmp_path):
-    html, states = served(tmp_path, ["The first answer."])
-    page = CallPage(html, states, autoplay=False)
-    # the box is 100 px tall and scrolled to the end of 500; the foot painted at the end of a render makes the content 600 px tall
-    page.js("const box = $('convo'); let h = 500; Object.defineProperty(box, 'scrollHeight', {get: () => h}); box.clientHeight = 100; box.scrollTop = 400;"
-            " let inRender = false; const draw = render, was = paintAll;"
-            " render = () => { inRender = true; try { draw(); } finally { inRender = false; } };"
-            " paintAll = () => { was(); if (inRender) h = 600; }; await serve(1);")
-    page.check("$('convo').scrollTop")
-    assert page.run() == [600]
