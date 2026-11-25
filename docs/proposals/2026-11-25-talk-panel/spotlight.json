@@ -1,0 +1,882 @@
+{
+ "tag": "Talk · side panel study",
+ "title": "What testers hit in talk's side panel, and 21 proposals for a better one",
+ "out": "index.html",
+ "css": "stage.css",
+ "footer": "Private copy of talk with a silent voice, 25 November 2026. Testers were Claude agents in role.",
+ "screens": [
+  {
+   "id": "intro",
+   "label": "What this is",
+   "html": "<div class=\"ba one\"><div class=\"side today\"><h4>What this report is about</h4>\n<p><b>Talk</b> is the call page where you speak or type with a Claude Code session. The big area on the left is the <b>stage</b>, where boards such as tables and diagrams appear. The narrow column on the right is the <b>side panel</b>: the conversation, the player, the text box and the settings. This report is about the side panel only.</p>\n<p>14 testers used real calls on a private copy of talk: the same code, run on its own so no real call was touched. Each tester was a Claude agent playing a person, not told what was being tested. Another agent answered each call the way a real session does. Then 11 designer agents drew new panels, and 11 new tester agents, not the first 14, compared each drawing with today's panel.</p>\n<div class=\"facts\"><div><b>14</b><span>testers used the page, 5 to 11 messages each</span></div><div><b>99</b><span>problems held up, of 111 reported. Three checker agents tried to disprove each one against the code and the screenshots.</span></div><div><b>21</b><span>proposals, each drawn on a laptop screen and a phone</span></div><div><b>11</b><span>fresh testers voted on every proposal</span></div></div></div></div>",
+   "steps": [
+    {
+     "title": "Testers used talk's side panel, and designers proposed 21 better ones",
+     "text": [
+      "Nothing was built or changed. First come the words this report uses, then the problems the testers hit, the proposals in rank order, and one decision for you."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "words",
+   "label": "Words used",
+   "html": "<div class=\"grid wd\"><div class=\"h\">Word</div><div class=\"h\">What it means here</div><div class=\"c\"><b>Talk</b></div><div class=\"c\">the call page where you speak or type with a Claude Code session, the Claude assistant working on your computer.</div><div class=\"c\"><b>Agent</b></div><div class=\"c\">a separate Claude worker given one task. Testers, checkers, designers, reviewers and judges here are all agents.</div><div class=\"c\"><b>Reviewer</b></div><div class=\"c\">an agent that checked each proposal&#x27;s build plan against talk&#x27;s code and fixed its drawing.</div><div class=\"c\"><b>Second page</b></div><div class=\"c\">a long page with every finding, vote and build plan, linked on the last slide.</div><div class=\"c\"><b>Call</b></div><div class=\"c\">one conversation, in its own browser tab. You can have several open.</div><div class=\"c\"><b>Stage</b></div><div class=\"c\">the big area on the left that shows boards: tables, diagrams, code.</div><div class=\"c\"><b>Side panel</b></div><div class=\"c\">the narrow column on the right. It is what this report is about.</div><div class=\"c\"><b>Answer</b></div><div class=\"c\">what Claude says back. It is read aloud and the word being said is lit.</div><div class=\"c\"><b>Turn</b></div><div class=\"c\">one message of yours and the answer to it.</div><div class=\"c\"><b>Fold</b></div><div class=\"c\">an answer shown as one cut-off line until you press Show text.</div><div class=\"c\"><b>Chip</b></div><div class=\"c\">a small button under an answer that names a board, such as Key points.</div><div class=\"c\"><b>Following the voice</b></div><div class=\"c\">the stage shows the board the voice is talking about.</div><div class=\"c\"><b>Queue</b></div><div class=\"c\">an answer waiting to play after the current one ends.</div><div class=\"c\"><b>Live mode</b></div><div class=\"c\">hands-free talking: the page listens and sends when you pause.</div><div class=\"c\"><b>Player</b></div><div class=\"c\">the play, pause, back and speed controls.</div><div class=\"c\"><b>Server</b></div><div class=\"c\">the program on your computer that runs the calls.</div><div class=\"c\"><b>Screen reader</b></div><div class=\"c\">software that reads the page aloud to a blind person.</div></div>",
+   "steps": [
+    {
+     "title": "These words mean one thing each in this report",
+     "text": [
+      "The proposals use them freely. Button labels on the page are quoted as they appear."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "testers",
+   "label": "The testers",
+   "html": "<div class=\"grid pg\"><div class=\"h\">Tester</div><div class=\"h n\">Score</div><div class=\"h\">What hurt most</div><div class=\"c\">Teacher, first time, laptop</div><div class=\"c n\">6.5</div><div class=\"c\">A table with overlapping text, and waits of minutes.</div><div class=\"c\">Carpenter, one thumb, phone</div><div class=\"c n\">6.5</div><div class=\"c\">No answer for 4.5 minutes, then a warning about the terminal.</div><div class=\"c\">Retired engineer, living-room TV</div><div class=\"c n\">6.5</div><div class=\"c\">Everything is tiny from 3 metres, and tables overlap.</div><div class=\"c\">Developer with a wrist injury, keyboard only</div><div class=\"c n\">5.5</div><div class=\"c\">No keyboard shortcuts or help, so keys just typed text.</div><div class=\"c\">Blind accountant, screen reader</div><div class=\"c n\">6</div><div class=\"c\">Waiting and new answers are never read aloud.</div><div class=\"c\">Product manager, corrects mid-answer</div><div class=\"c n\">6.5</div><div class=\"c\">The old answer kept speaking after she corrected the plan.</div><div class=\"c\">Architect, Greek language</div><div class=\"c n\">5.5</div><div class=\"c\">The Greek table had overlapping text and was unusable.</div><div class=\"c\">Student, returning after lunch</div><div class=\"c n\">7.5</div><div class=\"c\">A table with columns drawn on top of each other.</div><div class=\"c\">New developer, finds old answers</div><div class=\"c n\">7</div><div class=\"c\">Overlapping table, and answers cut to one line.</div><div class=\"c\">Freelancer, typing with sound off</div><div class=\"c n\">6.5</div><div class=\"c\">The first column overlapped, and a redo did not fix it.</div><div class=\"c\">Nurse cooking, listens like a podcast</div><div class=\"c n\">6.5</div><div class=\"c\">Space replayed the older answer, not the latest one.</div><div class=\"c\">Warehouse worker, wants to talk</div><div class=\"c n\">5.5</div><div class=\"c\">The microphone heard nothing, with no hint why.</div><div class=\"c\">Design student, small laptop, dark mode</div><div class=\"c n\">6.5</div><div class=\"c\">Table columns printed on top of each other.</div><div class=\"c\">Staff engineer, three calls at once</div><div class=\"c n\">5.5</div><div class=\"c\">Messages landed in the wrong call, and waits had no status.</div></div>",
+   "steps": [
+    {
+     "title": "Every tester scored the page between 5.5 and 7.5 out of 10",
+     "text": [
+      "Each tester had a different habit: a phone, a TV across the room, keyboard only, a screen reader, Greek, three calls at once. The score is the tester's own, out of 10, for the whole page. The testers are agents, not people, so treat their scores and votes as a strong hint, not proof. Talk normally reads answers aloud and turns your speech into text. In this test the voice was silent and speech-to-text was off, so testers typed and read."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "t-wait",
+   "label": "Waiting",
+   "image": "img/t-wait.jpg",
+   "source": "A tester's screen during the test",
+   "steps": [
+    {
+     "boxes": [
+      [
+       1062,
+       806,
+       320,
+       30
+      ]
+     ],
+     "title": "People waited minutes with only one grey line and nothing to press",
+     "text": [
+      "Eight of 14 testers saw only <em>Claude is working…</em> for one to nine minutes. It shows no clock and offers no way to resend or cancel, so they wondered if it was stuck."
+     ]
+    }
+   ],
+   "crop": [
+    700,
+    0,
+    740,
+    900
+   ]
+  },
+  {
+   "id": "t-gaps",
+   "label": "Status notes",
+   "image": "img/t-gaps.jpg",
+   "source": "A tester's screen during the test",
+   "steps": [
+    {
+     "boxes": [
+      [
+       1066,
+       395,
+       300,
+       40
+      ],
+      [
+       1062,
+       140,
+       378,
+       540
+      ]
+     ],
+     "title": "Old status notes stay in the conversation and stretch into blank gaps",
+     "text": [
+      "Notes such as <em>sketching your plan</em> stay after the answer arrives. A layout rule meant for the line above the text box also applies to them, so each one stretches to fill the empty space. Changing that one rule fixes it."
+     ]
+    }
+   ],
+   "crop": [
+    700,
+    0,
+    740,
+    900
+   ]
+  },
+  {
+   "id": "t-fold",
+   "label": "Finding",
+   "image": "img/t-fold.jpg",
+   "source": "A tester's screen during the test",
+   "steps": [
+    {
+     "boxes": [
+      [
+       1075,
+       150,
+       360,
+       625
+      ]
+     ],
+     "title": "Every answer folds to one cut-off line, so finding an earlier one costs a tap each",
+     "text": [
+      "A tester looking for one fact opened answer after answer with <em>Show text</em>. There is no search, and the chip <em>Key points: +1</em> does not say what it holds."
+     ]
+    }
+   ],
+   "crop": [
+    700,
+    0,
+    740,
+    900
+   ]
+  },
+  {
+   "id": "t-follow",
+   "label": "Following",
+   "image": "img/t-follow.jpg",
+   "source": "A tester's screen during the test",
+   "steps": [
+    {
+     "boxes": [
+      [
+       190,
+       6,
+       240,
+       28
+      ],
+      [
+       1075,
+       730,
+       355,
+       48
+      ]
+     ],
+     "title": "Playing an answer can leave a different board on the stage",
+     "text": [
+      "After a tester opened Key points, pressing Play on the table answer kept Key points in front. Only the stage's <em>Follow the voice</em> button hints at it. The panel says nothing."
+     ]
+    }
+   ],
+   "crop": [
+    0,
+    0,
+    1440,
+    900
+   ]
+  },
+  {
+   "id": "t-correct",
+   "label": "Corrections",
+   "image": "img/t-correct.jpg",
+   "source": "A tester's screen during the test",
+   "steps": [
+    {
+     "boxes": [
+      [
+       1075,
+       440,
+       355,
+       48
+      ],
+      [
+       1062,
+       765,
+       378,
+       28
+      ]
+     ],
+     "title": "A correction does not stop the old answer from speaking",
+     "text": [
+      "The tester cut her trip from 14 days to 10 while Claude worked. The 14-day answer still played over the 10-day board. The next answer waited in a queue with no way to skip it."
+     ]
+    }
+   ],
+   "crop": [
+    0,
+    0,
+    1440,
+    900
+   ]
+  },
+  {
+   "id": "t-calls",
+   "label": "Several calls",
+   "image": "img/t-calls.jpg",
+   "source": "A tester's screen during the test",
+   "steps": [
+    {
+     "boxes": [
+      [
+       730,
+       58,
+       318,
+       172
+      ]
+     ],
+     "title": "With several calls open, nothing says which one needs you",
+     "text": [
+      "The Other calls list shows only <em>talking now</em> or <em>open</em>, each with the same blue dot. Each call is its own browser tab, and the tab's title never changes, so a ready answer in another tab goes unseen."
+     ]
+    }
+   ],
+   "crop": [
+    300,
+    0,
+    1140,
+    900
+   ]
+  },
+  {
+   "id": "t-phone",
+   "label": "Phone",
+   "image": "img/t-phone.jpg",
+   "source": "A tester's screen during the test",
+   "steps": [
+    {
+     "boxes": [
+      [
+       0,
+       1142,
+       780,
+       322
+      ]
+     ],
+     "title": "On a phone the conversation shrinks to a few lines while a board is up",
+     "text": [
+      "The board takes most of the height. The tester saw a cut-off question and one folded line of the answer, and had to tap <em>Show text</em> in a tiny window."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "t-table",
+   "label": "Stage tables",
+   "image": "img/t-table.jpg",
+   "source": "A tester's screen during the test",
+   "steps": [
+    {
+     "boxes": [
+      [
+       310,
+       345,
+       440,
+       252
+      ]
+     ],
+     "title": "The stage draws a table's first column over the second one",
+     "text": [
+      "Ten of 14 testers met this, on desktop, phone and TV, in English and Greek. It is a stage defect outside the panel. It is listed with the other stage defects on the report's second page, linked from the last slide."
+     ]
+    }
+   ],
+   "crop": [
+    150,
+    250,
+    900,
+    450
+   ]
+  },
+  {
+   "id": "ranking",
+   "label": "Ranking",
+   "html": "<div class=\"grid rk\"><div class=\"h n\">#</div><div class=\"h\">Proposal (top 10 of 21)</div><div class=\"h n\">Preferred</div><div class=\"h n\">Score</div><div class=\"h\">Work</div><div class=\"c n\">1</div><div class=\"c\">The Calls button shows the most urgent state of your other calls</div><div class=\"c n\">8 of 11</div><div class=\"c n\">3.3</div><div class=\"c\">medium</div><div class=\"c n\">2</div><div class=\"c\">Every message you send shows where it stands and can be taken back</div><div class=\"c n\">11 of 11</div><div class=\"c n\">4.1</div><div class=\"c\">large</div><div class=\"c n\">3</div><div class=\"c\">The wait becomes a card with its own clock, its steps and a way out</div><div class=\"c n\">11 of 11</div><div class=\"c n\">4</div><div class=\"c\">medium</div><div class=\"c n\">4</div><div class=\"c\">Every message gets a visible life, with a counted wait and a way out</div><div class=\"c n\">11 of 11</div><div class=\"c n\">4.1</div><div class=\"c\">medium</div><div class=\"c n\">5</div><div class=\"c\">A Now card holds the whole current turn above a list of older answers</div><div class=\"c n\">11 of 11</div><div class=\"c n\">4.3</div><div class=\"c\">large</div><div class=\"c n\">6</div><div class=\"c\">A welcome-back card shows what you missed and plays it in one press</div><div class=\"c n\">11 of 11</div><div class=\"c n\">4.2</div><div class=\"c\">medium</div><div class=\"c n\">7</div><div class=\"c\">The conversation becomes a searchable list of answers with titles</div><div class=\"c n\">9 of 11</div><div class=\"c n\">3.8</div><div class=\"c\">large</div><div class=\"c n\">8</div><div class=\"c\">The side panel becomes a list of turns with the newest answer open</div><div class=\"c n\">11 of 11</div><div class=\"c n\">3.8</div><div class=\"c\">large</div><div class=\"c n\">9</div><div class=\"c\">The side panel says its state in words and has one live status line</div><div class=\"c n\">10 of 11</div><div class=\"c n\">3.8</div><div class=\"c\">large</div><div class=\"c n\">10</div><div class=\"c\">The side panel becomes a thread of titled turns with one control area</div><div class=\"c n\">11 of 11</div><div class=\"c n\">4</div><div class=\"c\">large</div></div>",
+   "steps": [
+    {
+     "title": "The proposals are ranked by how much they help your daily use",
+     "text": [
+      "Three judge agents ranked all 21: one for your daily use with several calls, one for value per day of work, one for the strength of the evidence. A fourth merged their lists. <em>Preferred</em> counts the 11 new testers who chose it over today. <em>Score</em> is their average from 1 to 5, where 3 means the same as today. <em>Work</em> is small under a day, medium one to three days, large more."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-multicall-1",
+   "label": "#1",
+   "phase": "design",
+   "image": "img/p-multicall-1.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       0,
+       488,
+       893,
+       372
+      ]
+     ],
+     "title": "1. The Calls button shows the most urgent state of your other calls",
+     "text": [
+      "<b>Today:</b> With several calls open you cannot tell which one is ready, working or waiting for you, and the browser tab name never changes.",
+      "<b>Proposed:</b> One Calls button shows the most urgent state and a count of calls that need you. It opens a list that sorts calls by need and names each state in words. The browser tab name shows the state too.",
+      "<b>Votes:</b> 8 of 11 testers preferred it to today, 3 saw no difference, 0 preferred today. Average 3.3 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Medium work, one to three days. The reviewer found that the plan fits the existing code, so the risk is low."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-input-2",
+   "label": "#2",
+   "phase": "design",
+   "image": "img/p-input-2.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "2. Every message you send shows where it stands and can be taken back",
+     "text": [
+      "<b>Today:</b> After you press Send you get no sign of what happened, and an old answer can start speaking over your correction.",
+      "<b>Proposed:</b> Under each message one line says Sent, Claude has it, Answered, Replaced or Taken back, with a wait counter. You can take a message back, and a replaced answer does not speak.",
+      "<b>Votes:</b> 11 of 11 testers preferred it to today, 0 saw no difference, 0 preferred today. Average 4.1 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Large work, more than three days. The main risk is that replacing a turn needs new work on the server. Taking a message back already works today."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-trust-1",
+   "label": "#3",
+   "phase": "design",
+   "image": "img/p-trust-1.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "3. The wait becomes a card with its own clock, its steps and a way out",
+     "text": [
+      "<b>Today:</b> After Send you see one faint line, and after 180 seconds a warning that tells you to check the terminal.",
+      "<b>Proposed:</b> A card under your message counts the wait and shows four steps: Sent, Picked up, Working and Answer. It offers Cancel and Send again.",
+      "<b>Votes:</b> 11 of 11 testers preferred it to today, 0 saw no difference, 0 preferred today. Average 4 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Large work, more than three days. The main risk is that cancelling a message Claude already started on is new work on the server. The reviewer also found the time limits in the plan were wrong."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-revampA-2",
+   "label": "#4",
+   "phase": "design",
+   "image": "img/p-revampA-2.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "4. Every message gets a visible life, with a counted wait and a way out",
+     "text": [
+      "<b>Today:</b> When you correct a question while Claude works, the old answer still arrives and plays over the new one, and the warning after a long wait offers no action.",
+      "<b>Proposed:</b> Under each message one line says where it is, such as Claude has it or Replaced. The wait is counted, and you can skip an answer in the queue.",
+      "<b>Votes:</b> 11 of 11 testers preferred it to today, 0 saw no difference, 0 preferred today. Average 4.1 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Medium work, one to three days. This is for the page only. The main risk is that cancelling or replacing a turn needs extra work on the server."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-revampB-1",
+   "label": "#5",
+   "phase": "design",
+   "image": "img/p-revampB-1.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "5. A Now card holds the whole current turn above a list of older answers",
+     "text": [
+      "<b>Today:</b> Every answer is one cut-off line, and the player sits far from the answer it controls.",
+      "<b>Proposed:</b> One card shows the current question, the full answer with the lit word, board chips and the player. Earlier answers are rows under it.",
+      "<b>Votes:</b> 11 of 11 testers preferred it to today, 0 saw no difference, 0 preferred today. Average 4.3 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Large work, more than three days. The main risk is that it reverses the documented rule that every answer folds to one line, and the reviewer found the plan wrongly said cancelling needed no server work."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-catchup-2",
+   "label": "#6",
+   "phase": "design",
+   "image": "img/p-catchup-2.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "6. A welcome-back card shows what you missed and plays it in one press",
+     "text": [
+      "<b>Today:</b> A call left open for hours looks the same when you return, with no sign of what is new.",
+      "<b>Proposed:</b> After a long absence a card says how long you were away and how many answers, boards and minutes of audio are new. You press Play the new or Read them.",
+      "<b>Votes:</b> 11 of 11 testers preferred it to today, 0 saw no difference, 0 preferred today. Average 4.2 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Medium work, one to three days. The main risk is that automatic playback must not take over following the voice."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-catchup-1",
+   "label": "#7",
+   "phase": "design",
+   "image": "img/p-catchup-1.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "7. The conversation becomes a searchable list of answers with titles",
+     "text": [
+      "<b>Today:</b> Each answer is cut to one grey line, so finding an older answer costs one press per answer.",
+      "<b>Proposed:</b> Every exchange is one row in the same columns: time, your question, a one-line summary, a board button and a play button. A search box and an Expand all button help you find one.",
+      "<b>Votes:</b> 9 of 11 testers preferred it to today, 1 saw no difference, 1 preferred today. Average 3.8 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Large work, more than three days. The main risk is that it breaks the documented rule that every answer folds to one line."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-convo-1",
+   "label": "#8",
+   "phase": "design",
+   "image": "img/p-convo-1.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "8. The side panel becomes a list of turns with the newest answer open",
+     "text": [
+      "<b>Today:</b> The side panel is a plain log, so nothing says which board belongs to which answer, and each older answer needs a press to read.",
+      "<b>Proposed:</b> Each of your questions becomes the heading of its turn, with its answer, boards and wait under it. The newest turn is open and older ones fold under their question, with a search box.",
+      "<b>Votes:</b> 11 of 11 testers preferred it to today, 0 saw no difference, 0 preferred today. Average 3.8 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Large work, more than three days. The main risk is that it breaks the documented rule that every answer folds to one line, so that rule must change too."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-access-1",
+   "label": "#9",
+   "phase": "design",
+   "image": "img/p-access-1.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "9. The side panel says its state in words and has one live status line",
+     "text": [
+      "<b>Today:</b> A person who cannot watch the side panel learns nothing when Claude starts, works, stalls or answers.",
+      "<b>Proposed:</b> One line under the title names the state in words and is read aloud by a screen reader. The conversation becomes a list with a heading for each answer.",
+      "<b>Votes:</b> 10 of 11 testers preferred it to today, 1 saw no difference, 0 preferred today. Average 3.8 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Medium work, one to three days. The main risk is that announcing too much is worse than silence, and the reviewer found the grey line above the text box, where Claude is working… appears, already shows about twelve other messages."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-revampA-1",
+   "label": "#10",
+   "phase": "design",
+   "image": "img/p-revampA-1.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "10. The side panel becomes a thread of titled turns with one control area",
+     "text": [
+      "<b>Today:</b> Frequent controls such as speed and Live mode are hidden in settings, and answers are folded one-line entries.",
+      "<b>Proposed:</b> The panel has a header with a state line, a thread of turns with the newest open, and a bottom area for the player, following the voice and the choice of how you talk: Type, Talk or Live mode.",
+      "<b>Votes:</b> 11 of 11 testers preferred it to today, 0 saw no difference, 0 preferred today. Average 4 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Large work, more than three days. The main risk is that it bundles many other proposals into one change."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-revampB-2",
+   "label": "#11",
+   "phase": "design",
+   "image": "img/p-revampB-2.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "11. A line above the text box counts the wait and offers cancel, resend or skip",
+     "text": [
+      "<b>Today:</b> A message sent while Claude works joins the open turn, and the long wait ends in a warning about the terminal.",
+      "<b>Proposed:</b> A line above the text box shows the step, a clock and the buttons Cancel, Send again, Ask for status or Skip. Your draft is kept.",
+      "<b>Votes:</b> 11 of 11 testers preferred it to today, 0 saw no difference, 0 preferred today. Average 3.5 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Medium work, one to three days. The main risk is that the reviewer found the plan was wrong about how a new message joins an open turn, so the server work is bigger."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-listen-1",
+   "label": "#12",
+   "phase": "design",
+   "image": "img/p-listen-1.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "12. A button row under the player names the answer that plays",
+     "text": [
+      "<b>Today:</b> Speed is only in settings, and nothing says which answer the Play button and the Space key act on.",
+      "<b>Proposed:</b> One row names the answer and the sentence now playing. It holds Previous, Next, speed and following the voice, plus a progress bar with marks for sentences.",
+      "<b>Votes:</b> 10 of 11 testers preferred it to today, 1 saw no difference, 0 preferred today. Average 3.9 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Medium work, one to three days. The main risk is that the Space key would act on the answer being played, which changes what it does today."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-trust-2",
+   "label": "#13",
+   "phase": "design",
+   "image": "img/p-trust-2.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "13. One state area under the title shows the call state and other calls in words",
+     "text": [
+      "<b>Today:</b> The state is spread over the bottom line, a chip, a small label and dots, and the browser tab name never changes.",
+      "<b>Proposed:</b> An area under the title shows a state word, one detail, a clock and the actions that fit. The browser tab name and border show the state from another tab.",
+      "<b>Votes:</b> 11 of 11 testers preferred it to today, 0 saw no difference, 0 preferred today. Average 3.6 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Large work, more than three days. The main risk is that the reviewer found the plan names several functions that do not exist."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-density-1",
+   "label": "#14",
+   "phase": "design",
+   "image": "img/p-density-1.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "14. The side panel becomes a calm list of titled answers with one now line",
+     "text": [
+      "<b>Today:</b> At rest the side panel is a log with message bubbles, floating chips and one-line answers.",
+      "<b>Proposed:</b> A one-row header has icon buttons. The conversation is a list of titled items, and one line says what plays and what to do.",
+      "<b>Votes:</b> 11 of 11 testers preferred it to today, 0 saw no difference, 0 preferred today. Average 3.9 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Large work, more than three days. The main risk is that it overlaps other proposals and breaks the documented rule that every answer folds to one line."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-input-1",
+   "label": "#15",
+   "phase": "design",
+   "image": "img/p-input-1.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "15. One text box area shows how you talk and what the microphone hears",
+     "text": [
+      "<b>Today:</b> The way you talk (typing, press to talk or Live mode) is hidden in settings, and a dead microphone looks the same as a quiet room.",
+      "<b>Proposed:</b> A visible Type, Talk and Live switch sits by the text box, with a sign that says it is your turn to speak. Your draft is never lost.",
+      "<b>Votes:</b> 10 of 11 testers preferred it to today, 1 saw no difference, 0 preferred today. Average 3.8 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Medium work, one to three days. The main risk is that the Live part makes the bottom of the side panel taller, and the reviewer found the plan names the wrong function for setting the mode."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-devices-1",
+   "label": "#16",
+   "phase": "design",
+   "image": "img/p-devices-1.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       414,
+       48,
+       390,
+       844
+      ]
+     ],
+     "title": "16. On a phone the side panel becomes a panel that slides up from the bottom",
+     "text": [
+      "<b>Today:</b> On a phone with a board shown, the side panel gets 38 percent of the screen height. That leaves about 150 pixels, so you see one cut-off line.",
+      "<b>Proposed:</b> The panel slides up from the bottom and has three heights. Its controls sit under the thumb, and the newest answer shows its full text.",
+      "<b>Votes:</b> 10 of 11 testers preferred it to today, 1 saw no difference, 0 preferred today. Average 3.5 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Medium work, one to three days. The main risk is that showing the newest answer in full breaks the documented rule that every answer folds to one line."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-multicall-2",
+   "label": "#17",
+   "phase": "design",
+   "image": "img/p-multicall-2.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       0,
+       488,
+       893,
+       372
+      ]
+     ],
+     "title": "17. A permanent column lists every call and its state beside the stage",
+     "text": [
+      "<b>Today:</b> Other calls sit behind a button and a popup, so each switch costs a press and a guess.",
+      "<b>Proposed:</b> A column beside the stage lists every call with its state and age, sorted by need. A button jumps to the first call that needs you.",
+      "<b>Votes:</b> 3 of 11 testers preferred it to today, 6 saw no difference, 2 preferred today. Average 3 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Large work, more than three days. The main risk is that the column takes 272 of the 1440 pixels of a laptop screen&#x27;s width, which is the width the stage needs most."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-density-2",
+   "label": "#18",
+   "phase": "design",
+   "image": "img/p-density-2.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "18. Settings move to a plain list and the empty first screen gets starter questions",
+     "text": [
+      "<b>Today:</b> The settings popup holds eleven controls in jargon and does not fit on short windows.",
+      "<b>Proposed:</b> Settings become a panel of labelled rows in plain words. Talk mode and speed sit beside the controls, and an empty call offers starter questions.",
+      "<b>Votes:</b> 8 of 11 testers preferred it to today, 3 saw no difference, 0 preferred today. Average 3.2 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Medium work, one to three days. The main risk is that a new Type mode needs the microphone to be reliably off."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-access-2",
+   "label": "#19",
+   "phase": "design",
+   "image": "img/p-access-2.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "19. Settings and shortcuts open in panels that keyboard users reach quickly",
+     "text": [
+      "<b>Today:</b> A keyboard user needs about 30 presses of the Tab key to reach Voice speed, because the cursor never enters the settings popup.",
+      "<b>Proposed:</b> Settings open in a panel where the keyboard cursor moves in, stays inside and returns when you close it. A list of every shortcut sits beside its button.",
+      "<b>Votes:</b> 3 of 11 testers preferred it to today, 7 saw no difference, 1 preferred today. Average 3.1 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Medium work, one to three days. The main risk is that some key combinations clash with the browser or the system."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-listen-2",
+   "label": "#20",
+   "phase": "design",
+   "image": "img/p-listen-2.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       464,
+       48,
+       440,
+       900
+      ]
+     ],
+     "title": "20. A top bar says in words and sounds what the call is doing",
+     "text": [
+      "<b>Today:</b> Someone who is not looking at the screen gets no word or sound when Claude starts, works or answers.",
+      "<b>Proposed:</b> A bar at the top of the side panel names one of five states in words, short sounds mark each change, and spoken commands control playback.",
+      "<b>Votes:</b> 8 of 11 testers preferred it to today, 2 saw no difference, 1 preferred today. Average 3.6 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Large work, more than three days. The main risk is that browsers block sound until the person has pressed something, and spoken commands already exist in part."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p-devices-2",
+   "label": "#21",
+   "phase": "design",
+   "image": "img/p-devices-2.jpg",
+   "source": "Left: today's panel. Right: the proposal's mock-up, same conversation where possible.",
+   "steps": [
+    {
+     "boxes": [
+      [
+       0,
+       622,
+       900,
+       506
+      ]
+     ],
+     "title": "21. TV mode becomes a setting that is offered and easy to find",
+     "text": [
+      "<b>Today:</b> TV mode, which makes everything larger, is only in settings, and a TV opens the page at the normal desktop size.",
+      "<b>Proposed:</b> A button in the header switches between Desk and TV, and a link can open a call in TV size. One scale setting enlarges everything.",
+      "<b>Votes:</b> 3 of 11 testers preferred it to today, 8 saw no difference, 0 preferred today. Average 3.2 out of 5, where 3 means the same as today.",
+      "<b>Work:</b> Medium work, one to three days. The main risk is that the page cannot tell a TV from a monitor, and the reviewer found the plan assumed a third, phone, screen mode, when the code has only Desk and TV."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "steps",
+   "label": "Five steps",
+   "html": "<div class=\"grid st\"><div class=\"h n\">#</div><div class=\"h\">Step</div><div class=\"h\">Work</div><div class=\"h\">From proposals</div><div class=\"c n\">1</div><div class=\"c\"><b>A better Calls button and browser tab name show which call needs you</b></div><div class=\"c\">one to three days</div><div class=\"c\">#1, #13, #20</div><div class=\"c n\">2</div><div class=\"c\"><b>A wait card shows when a message is sent and what to do next</b></div><div class=\"c\">one to three days for the page</div><div class=\"c\">#2, #3, #4, #11, #13</div><div class=\"c n\">3</div><div class=\"c\"><b>A Now card gives the newest answer in full over a short list of older ones</b></div><div class=\"c\">more than three days</div><div class=\"c\">#5, #7, #8, #12</div><div class=\"c n\">4</div><div class=\"c\"><b>A welcome-back card helps you return after a long absence</b></div><div class=\"c\">one to three days</div><div class=\"c\">#6, #9</div><div class=\"c n\">5</div><div class=\"c\"><b>Small pieces add a mode switch, a shortcut list and a taller phone conversation</b></div><div class=\"c\">one to three days</div><div class=\"c\">#15, #19, #16</div></div>",
+   "steps": [
+    {
+     "title": "Five steps take the best of each family of proposals",
+     "text": [
+      "Several proposals solve the same problem in different ways. These steps combine the best of each. In all they are at least seven days of Claude's work, more for step 3, plus a day for the quick fixes on the next slide. Proposals #10, #14, #17, #18 and #21 are in no step: they repeat a better-ranked proposal or did not beat today in the votes."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "quick",
+   "label": "Quick fixes",
+   "html": "<div class=\"ba\"><div class=\"side before\"><h4>Before</h4><p>Small defects in the panel that need no design decision:</p><p>• Today the status lines in the conversation stretch into blank gaps hundreds of pixels tall, and the fix keeps them one line high.</p><p>• Today a hint, the small text that appears over a button, opens upward onto the player time and stays, and the fix shows it only on keyboard focus or after a short delay.</p><p>• Today the hint for the Expand button covers the Copy button on the stage header, and the fix opens it away from the stage edge.</p><p>• Today the warning after 180 seconds tells you to check the terminal, and the fix says what to do in plain words and adds Send again and Copy question buttons.</p><p>• Today the line Claude is working shows no clock, and the fix shows the seconds counted from when you pressed Send.</p><p>• Today on a short screen the End call button is hidden below the visible part of the settings popup, and the fix makes it reachable.</p><p>• Today the step arrows on a board have no name for a screen reader and All shown looks like a label, and the fix names the arrows and makes All shown look like a button.</p></div><div class=\"side after\"><h4>After</h4><p>Each is a small change in the panel's own code, under a day for all of them together. The stage defects the testers hit are listed on the second page.</p><p><a href=\"details.html\" target=\"_blank\" rel=\"noopener\">The second page</a> has every finding, every proposal in full with its build plan, and every vote.</p></div></div>",
+   "steps": [
+    {
+     "title": "7 small panel defects can be fixed without any design decision",
+     "text": [
+      "They come from the same test. The largest is the status notes that stretch into blank gaps. The second page holds everything else: all findings, the rejected ones, each proposal's build plan and the testers' own words."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "decision",
+   "label": "Decision",
+   "html": "<div class=\"ba three\"><div class=\"side today\"><h4>Today</h4><p>The panel stays as it is. The problems in this report stay too.</p></div>\n<div class=\"side after\"><h4>Yes</h4><p>Claude builds the quick fixes first, then steps 1 to 5 in order. Step 2 covers the page only; the server part that cancels a turn is a later step of its own. Each step goes into claude-annotate, your own tools repository where this report lives, on its own, so you can try it on a real call before the next one starts.</p></div>\n<div class=\"side no\"><h4>No</h4><p>Nothing changes. This report and its proposals stay in the claude-annotate repository for later.</p></div></div>",
+   "steps": [
+    {
+     "title": "Decide whether Claude builds the quick fixes and the five steps",
+     "text": [
+      "To answer, write <em>build the talk panel steps</em> in this session's chat, or name the ones you want, such as <em>quick fixes and steps 1 and 2</em>, or write <em>no</em>. A step can be taken back by reverting its change. Every finding, vote and build plan is on <a href=\"details.html\" target=\"_blank\" rel=\"noopener\">the second page</a>."
+     ]
+    }
+   ]
+  }
+ ]
+}
