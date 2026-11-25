@@ -24,8 +24,11 @@ Read this to explain the page to the user or to debug it. Nothing here is needed
 
 ## The panel and the gear
 
-- The panel holds the whole conversation as a chat.
-- Under it sit the player (pause, back 10 seconds, a seek bar), the text field and the mic.
+- The panel's top is the **Now card**, the current turn: the answer in the player (else the newest) with its number, the state in words (Playing, Paused, New, Ready, Played, Preparing the voice, Not read aloud), the question asked, the full text with the word being said lit (a tap on a word plays from there), the answer's boards as named chips (the Key points chip says how many points are new), and the player: previous and next sentence, play or pause, a labelled seek bar, the time and the speed (one tap to the next speed). Space, the arrows, Back and the card name one answer; when the board in front belongs to another answer, Play says "Play answer N".
+- The card ends with the **Following strip**: Following (the stage goes where the voice goes) or Pinned (a board picked by hand stays in front), the board named, and one button, Pin board or Follow. A pinned stage also says which answer the voice is on. A chip tap, a tab, a step by hand and the gear's switch all show on it.
+- Under the card, **Earlier** lists every other answer as one aligned row: number (filled when the answer is new), question and its first sentence, boards with their count, time and Play. A tap on a row opens it in place (full text, chips, Play from the start, Copy); Expand all opens every row; the boards cell fronts the answer's board. Play on a row starts that answer and puts the stage back on the voice. Search (under the list's head, and the header's magnifier) finds an answer by its question, its words or its boards, ignoring case and accents, and marks the match.
+- Progress notes (`reply --status`) are not rows of the conversation: the foot says what Claude is doing now. An answer a correction replaced is tagged "Replaced by your correction".
+- Under the conversation sit the text field and the mic.
 - Space pauses and plays. The left and right arrows move to the start of the previous or next sentence, wherever nothing is being typed.
 - The panel sits on the left or the right, is as wide as it is dragged, and collapses to a rail that keeps the mic and the player.
 - The gear holds speed, language, light or dark, and whether the stage follows the voice.
@@ -51,8 +54,8 @@ Read this to explain the page to the user or to debug it. Nothing here is needed
 
 ## The stage beside the panel
 
-- Every answer shows on the stage in large type: each sentence appears as it is said, and the word being said is lit.
+- An answer with no board of its own is read on the stage in large type, under the label of its answer, when the stage has no board in front; with a board in front the board stays and the sentence being said goes on the strip under it. The panel's Now card holds the full text either way.
 - When the voice reaches a board's tag, the board takes the stage and the sentence being said stays under it on one line.
-- At rest an answer with a board shows the board.
+- At rest an answer with a board shows the board, and one with none leaves the board that was in front.
 - A board the reader picked by hand stays in front until **Follow the voice**.
 - A tap on a part of a board offers Ask about this and Play from here.

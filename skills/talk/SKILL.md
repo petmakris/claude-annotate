@@ -136,7 +136,7 @@ Before a table, ask: could the viewer say what each column measures, and would t
 
 **At most one plain claim sentence of 20 words or fewer before the board's tag.** A lead-in that names a list is still that one sentence, never a second.
 
-- **The stage reads your words aloud with you.** Each sentence appears as it is said and the word being said is lit, so the words on the stage are always the words being spoken. When the voice reaches a board's tag, the board takes the stage for the rest of the answer, and the sentence being said stays under it on one line.
+- **The stage reads your words aloud with you.** Each sentence appears as it is said and the word being said is lit, so the words on the stage are always the words being spoken. When the voice reaches a board's tag, the board takes the stage for the rest of the answer, and the sentence being said stays under it on one line. The panel beside it holds the same answer in full on its Now card, with its question and its boards named as chips, and keeps every earlier answer as a row of a searchable list: write each answer to stand on its own, with a plain first sentence, since that sentence is the row's gist.
 - **A question about structure or flow is answered with the board.**
   - The board's tag follows the one lead-in sentence above, then walk through it with points.
   - Show the whole board first, then zoom into the part that matters.
