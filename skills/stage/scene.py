@@ -175,6 +175,15 @@ def plain_cell(cell: str) -> str:
     return html.unescape(re.sub(r"<[^>]*>", "", t)).strip()
 
 
+def is_table_start(head: str, sep: str) -> bool:
+    """Whether two lines open a markdown table: a header with a pipe over a separator row that has as many cells
+    as the header. Text whose separator has fewer or more cells is no table, and the stage draws it as text.
+    This is the one rule, for parse_tables and for the talk skill's table_count."""
+    head, sep = head.strip(), sep.strip()
+    return ("|" in head and bool(_TABLE_SEP.match(sep)) and not _TABLE_SEP.match(head)
+            and len(split_cells(sep)) == len(split_cells(head)))
+
+
 def parse_tables(body: str) -> list[dict]:
     """Every markdown table of a board's body, in order: {header, rows}, each row padded to the header's width.
     A table is a header line, a separator line, and the lines after it up to the first blank one, with or without
@@ -184,8 +193,7 @@ def parse_tables(body: str) -> list[dict]:
     while i < len(lines):
         if _FENCE.match(lines[i]):
             fenced = not fenced
-        if not fenced and i + 1 < len(lines) and "|" in lines[i] and _TABLE_SEP.match(lines[i + 1]) \
-                and not _TABLE_SEP.match(lines[i]):
+        if not fenced and i + 1 < len(lines) and is_table_start(lines[i], lines[i + 1]):
             head = split_cells(lines[i])
             rows, j = [], i + 2
             while j < len(lines) and lines[j]:
@@ -1102,17 +1110,18 @@ def _snap(model: SceneModel, shown: set, focus: set, cur: list | None = None) ->
             "cur": list(cur or [])}
 
 
-def _said(model: SceneModel, keys: list[str], before: set, shown: set) -> list[str]:
+def _said(model: SceneModel, keys: list[str], before: set, shown: set, pointed: bool = False) -> list[str]:
     """What a frame draws as being said: these parts (a cell as its row, an arrow with the end it brought
     in), and on a flowchart the arrow that arrived with this frame into the last node of them, else one
-    that arrived out of it."""
+    that arrived out of it. An arrow the frame points at (`pointed`) is said alone, as it is lit: the end it
+    brought in is not also said, so the frame lights what the voice names and nothing more."""
     _arrows(model, shown)
     new = [k for k in model.keys if k in shown and k not in before]
     cur: list[str] = []
     for k in keys:
         if k.startswith("cell#"):
             k = model.up[k][0]
-        if k.startswith("edge:"):
+        if k.startswith("edge:") and not pointed:
             cur += [end for end in model.up[k] if end in new]
         cur.append(k)
     for k in list(cur):
@@ -1134,10 +1143,19 @@ were what when where which who why will with you your yours it's is it of on or 
 any each few more most other some such own same both here first finally""".split())
 
 
-def _words(text: str) -> list[str]:
-    # a short word that holds a digit (L1, S3, v2) names a part, as "L1 cache" and "L2 cache" must be told apart
-    return [w for w in re.findall(r"[^\W_]+", fold(text)) if (len(w) >= 3 or (len(w) == 2 and any(c.isdigit() for c in w)))
-            and w not in _STOP]
+def _words(text: str, short: bool = False) -> list[str]:
+    """The words of a text that can name a part. A short word that holds a digit (L1, S3, v2) names a part, as
+    "L1 cache" and "L2 cache" must be told apart. With `short`, every two-letter word counts (Go, UI, DB), for a
+    label made only of such words and for the sentence that may say it: whole words, never part of a longer one."""
+    return [w for w in re.findall(r"[^\W_]+", fold(text))
+            if (len(w) >= 3 or (len(w) == 2 and (short or any(c.isdigit() for c in w)))) and w not in _STOP]
+
+
+def _short_label(text: str) -> list[str]:
+    """The words of a label whose words are all two letters (Go, UI, DB), else []: such a label is matched
+    as whole words, which `_words` alone would drop."""
+    raw = [w for w in re.findall(r"[^\W_]+", fold(text)) if w not in _STOP]
+    return raw if raw and all(len(w) == 2 for w in raw) else []
 
 
 def _same(a: str, b: str) -> bool:
@@ -1152,10 +1170,10 @@ def part_names(model: SceneModel) -> dict[str, list[list[str]]]:
     """Each part's names as words: its labels (and a node's ref or method), and an id that is a word."""
     out: dict[str, list[list[str]]] = {}
     for name, key in model.names.items():
-        if _words(name):
-            out.setdefault(key, []).append(_words(name))
+        if _words(name) or _short_label(name):
+            out.setdefault(key, []).append(_words(name) or _short_label(name))
     for key, texts in model.alias.items():
-        out.setdefault(key, []).extend(_words(t) for t in texts if _words(t))
+        out.setdefault(key, []).extend(_words(t) or _short_label(t) for t in texts if _words(t) or _short_label(t))
     for key in model.order:
         ident = key.split(":", 1)[1] if key.startswith(("node:", "step:", "group:", "part:", "box:", "bar:")) else ""
         if len(ident) >= 3 and not re.fullmatch(r"[a-z]?\d+", ident, re.IGNORECASE) and _words(ident):
@@ -1228,7 +1246,7 @@ def said_parts(model: SceneModel, sentences: list[str]) -> dict[int, list[str]]:
     names, dist = part_names(model), distinctive(model)
     out: dict[int, list[str]] = {}
     for i, sentence in enumerate(sentences):
-        words = _words(sentence)
+        words = _words(sentence, short=True)
         best, score = None, (0.0, 0)
         for p in model.order:
             if not names_part(words, names.get(p, []), dist.get(p, frozenset())):
@@ -1280,7 +1298,7 @@ def _place(model: SceneModel, sentences: list[str], pointed: dict[int, list[str]
     # a scene always steps: a page must never come up whole at once
     if not model.can_hide or len(parts) <= (1 if model.kind == "parts" else AUTO_STEP_OVER) or m < 1:
         return {}, [], {}
-    words, names, dist = [_words(s) for s in sentences], part_names(model), distinctive(model)
+    words, names, dist = [_words(s, short=True) for s in sentences], part_names(model), distinctive(model)
 
     def says(i: int, p: str) -> bool:
         return names_part(words[i], names.get(p, []), dist.get(p, frozenset()))
@@ -1416,7 +1434,7 @@ def compile_scene(model: SceneModel, groups: list[list[Verb]], title: str) -> tu
         if pointed is None and revealed is not None:
             focus = set()
         said = pointed if pointed is not None else revealed or []
-        frames.append(_snap(model, shown, focus, _said(model, said, before, shown)))
+        frames.append(_snap(model, shown, focus, _said(model, said, before, shown, pointed is not None)))
     never = [k for k in model.order if k not in shown and not k.startswith("route:")]  # a map's route is followed or not
     if empty and never:
         notes.append(f'{len(never)} of {len(model.order)} elements of "{title}" are never revealed; '

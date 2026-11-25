@@ -770,3 +770,25 @@ def test_a_compare_board_may_close_with_an_outcome_which_is_a_part_the_voice_can
     built, _ = scene.compile_scene(m, [[scene.parse_verb("+ b1")], [scene.parse_verb("focus outcome")]], "T")
     assert "outcome:end" not in built["frames"][1]["show"] and built["frames"][2]["focus"] == ["outcome:end"]
     assert built["frames"][2]["cur"] == ["outcome:end"] and "outcome:end" in built["frames"][2]["show"]
+
+
+def test_a_label_of_two_letter_words_is_named_by_a_sentence_as_whole_words():
+    m = _flow("graph LR; G[Go]-->U[UI]; U-->D[DB]")
+    assert scene.part_names(m) == {"node:G": [["go"]], "node:U": [["ui"]], "node:D": [["db"]]}
+    assert scene.said_parts(m, ["Then Go hands over.", "The UI renders.", "It writes to the DB."]) == {
+        0: ["node:G"], 1: ["node:U"], 2: ["node:D"]}
+    assert scene.said_parts(m, ["It is a gone case.", "A guide."]) == {}  # never part of a longer word
+
+
+def test_an_edge_the_frame_points_at_lights_alone_and_not_the_node_it_brought_in():
+    model = _flow(EXAMPLE)
+    built, _ = scene.compile_scene(model, [verbs(*g) for g in [["+ pws"], ["+ wf", "focus pws->wf"]]], "T")
+    assert built["frames"][2] == {"show": ["node:pws", "node:wf", "edge:pws->wf#0"],
+                                  "focus": ["edge:pws->wf#0"], "cur": ["edge:pws->wf#0"]}
+
+
+def test_a_separator_row_with_another_cell_count_than_its_header_is_no_table():
+    assert scene.parse_tables("| a | b |\n|---|\n| 1 | 2 |") == []
+    assert scene.parse_tables("| a |\n|---|---|\n| 1 |") == []
+    assert scene.is_table_start("| a | b |", "|---|---|") and not scene.is_table_start("| a | b |", "|---|")
+    assert scene.parse_tables("| a | b |\n|---|---|\n| 1 | 2 |") == [{"header": ["a", "b"], "rows": [["1", "2"]]}]
