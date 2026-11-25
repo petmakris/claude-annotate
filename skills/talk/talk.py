@@ -1221,7 +1221,10 @@ class Board:
         if not kind:
             self.problem("board kind missing after show, use code, change, diagram or table")
         elif kind not in BOARD_KINDS:
-            self.problem(f'unknown board kind "{kind}", use code, change, sequence, flowchart, map, bars, graph or table')
+            self.problem(f'unknown board kind "{kind}", use code, change, sequence, flowchart, map, bars, graph or table'
+                         + ("; there is no [[/show]] after it, so the text after it was left alone" if bare else ""))
+        if bare:
+            return True
         self.open = {"kind": kind or "?", "title": title, "body": "", "cue": self.new_cue()}
         return True
 
