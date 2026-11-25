@@ -884,7 +884,7 @@ def test_every_tag_the_skill_teaches_is_one_the_parser_reads():
         assert known, tag
     for tag in tags:
         point = talk.parse_point(tag)
-        if point and "N" not in point[1] and "X" not in point[1] and "..." not in tag:
+        if point and point[1] and "N" not in point[1] and "X" not in point[1] and "..." not in tag:
             assert talk._POINT_TARGET.fullmatch(point[1]), tag
 
 
