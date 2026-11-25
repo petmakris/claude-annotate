@@ -30,7 +30,7 @@ from html import escape
 from typing import Any
 
 from . import text_metrics as tm
-from .map_svg import MARK, TONES, _attrs, _cls, _markers, _text, _width
+from .map_svg import TONES, _attrs, _cls, _markers, _text, _width
 
 W = 560               # the canvas: narrow, so text stays legible when a phone scales it down
 PAD = 20
@@ -221,7 +221,7 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
 
     grid: list[str] = []
     for t in ticks:
-        gx = x0 + frac(t) * (x1 - x0) if t > 0 or not log else x0
+        gx = x0 + frac(t) * (x1 - x0)
         grid.append(f'<line class="grd" x1="{gx:.0f}" y1="{top - 8:.0f}" x2="{gx:.0f}" y2="{rows_bottom:.0f}"/>')
         grid.append(_text("tk", gx, rows_bottom + 20, _tick_label(t), anchor="middle"))
     out.extend(grid)
@@ -267,4 +267,4 @@ def bar_keys(spec: dict[str, Any]) -> list[str]:
     return [f"bar:{b['id']}" for b in spec.get("bars") or []]
 
 
-__all__ = ["ValidationError", "validate", "render", "bar_keys", "scale_of", "MARK"]
+__all__ = ["ValidationError", "validate", "render", "bar_keys", "scale_of"]
