@@ -107,7 +107,7 @@ root.innerHTML = `<div class="stage">
       <button type="button" class="pos" aria-haspopup="true" aria-expanded="false" aria-label="All boards"><span class="tabpos"></span><span class="posdot" hidden></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
     </div>
     <button type="button" class="follow" hidden>Follow the voice</button>
-    <div class="boards" hidden><h4>Boards, newest first</h4><nav class="tabs" role="tablist" aria-label="Stage" aria-orientation="vertical"></nav></div></div>
+    <div class="boards" hidden><h4>Boards</h4><nav class="tabs" role="tablist" aria-label="Stage" aria-orientation="vertical"></nav></div></div>
   <div class="panes"><div class="empty"><div class="emptycard">
     <h2>The stage is empty</h2><p class="msg">${EMPTY_LINE}</p>
     <div class="tiles">${["code", "diagram", "table", "page"].map((k) =>
@@ -1158,8 +1158,7 @@ function markUpdated(v, on) {
   updateNav();
 }
 
-// The boards are one stage with a history: ‹ and › walk it, "Board 2 of 5" opens the list of every board, newest
-// first, and its dot says a board changed while another was in front. The tabs are the list's rows.
+// The boards are one stage with a history: ‹ and › walk it, "Board 2 of 5" opens the list of every board, in the order it counts them, and its dot says a board changed while another was in front. The tabs are the list's rows.
 function updateNav() {
   const tabs = [...tabsEl.children], i = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
   navEl.hidden = tabs.length < 2;
@@ -1231,7 +1230,8 @@ function select(name, arrive = false) {
   if (captionText) placeCaption();
 }
 
-// A pinned view (Key points) leads the history, whatever the layout's order, so the list shows it last.
+// A pinned view (Key points) leads the history, whatever the layout's order. The list shows the boards in this order, top to bottom,
+// the same order "Board i of n" counts in.
 function reorderTabs() {
   let names = layout.order.filter((n) => views.has(n));
   for (const n of views.keys()) if (!names.includes(n)) names.push(n);
