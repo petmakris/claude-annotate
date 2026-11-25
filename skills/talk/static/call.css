@@ -54,9 +54,9 @@ svg{display:block;flex:none}
 .reader .rs.cur .w{color:var(--faint)}
 .reader .rs.cur .w.said{color:var(--ink)}
 .reader .w.now-word{color:var(--ink)!important;background:var(--word);box-shadow:0 0 0 .1em var(--word)}
-.reader.strip{display:flex;align-items:center;position:relative;inset:auto;grid-row:2;grid-column:1;z-index:2;overflow:hidden;
-  height:calc(3 * 1.45 * clamp(17px,.5vw + 12px,24px) + 24px);background:var(--panel);border-top:1px solid var(--line)}
-.reader.strip .rtext{max-width:none;width:100%;margin:0;padding:12px 28px;white-space:normal;font-size:clamp(17px,.5vw + 12px,24px);line-height:1.45}
+.reader.strip{--sf:clamp(17px,.5vw + 12px,24px);display:flex;align-items:stretch;position:relative;inset:auto;grid-row:2;grid-column:1;z-index:2;overflow:hidden;
+  height:calc(3 * 1.45 * var(--sf) + 24px);max-height:40vh;background:var(--panel);border-top:1px solid var(--line)}
+.reader.strip .rtext{max-width:none;width:100%;margin:auto 0;padding:12px 28px;white-space:normal;font-size:var(--sf);line-height:1.45}
 .reader.strip .rs:not(.cur){display:none}
 .reader.strip .rtext>:not(.rs){display:none}
 @media (prefers-reduced-motion:reduce){.reader .w{transition:none}}
@@ -263,7 +263,8 @@ button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:va
 /* TV: read from across the room. The panel grows and its words with it; the stage zooms itself (stage:zoom). */
 .app[data-tv]:not([data-rail]){--pw:520px}
 .app[data-tv] .turn .text{font-size:20px}
-.app[data-tv] .reader .rtext{font-size:clamp(26px,1.2vw + 14px,40px)}
+.app[data-tv] .reader:not(.strip) .rtext{font-size:clamp(26px,1.2vw + 14px,40px)}
+.app[data-tv] .reader.strip{--sf:clamp(26px,1.2vw + 14px,40px)}
 .app[data-tv] .turn.you .text{font-size:18px}
 .app[data-tv] .topic,.app[data-tv] .status{font-size:17px}
 .app[data-tv] .compose textarea{font-size:19px}
@@ -278,8 +279,9 @@ button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:va
   .app[data-side="left"] .panel,.panel{order:0;border:0;border-top:1px solid var(--line)}
   .grip,.nowline{display:none}
   .rail{flex-direction:row;justify-content:center;padding:0 8px}
-  .pop,.app[data-side="left"] .pop{top:auto;bottom:calc(46% + 10px);left:10px;right:10px;width:auto}
-  .app[data-rail] .pop{bottom:70px}
+  /* a bottom sheet: it sits on the panel and never grows past the space above it, scrolling inside */
+  .pop,.app[data-side="left"] .pop{top:auto;bottom:calc(46% + 10px);left:10px;right:10px;width:auto;max-height:calc(54% - 24px)}
+  .app[data-rail] .pop,.app[data-rail] .gearpop{top:auto;bottom:70px;max-height:calc(100% - 82px)}
   .toast,.app[data-side="left"] .toast{left:50%;max-width:calc(100vw - 40px)}
 }
 @media (prefers-reduced-motion:reduce){

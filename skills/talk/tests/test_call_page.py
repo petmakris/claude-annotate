@@ -350,3 +350,88 @@ def test_a_word_that_starts_where_a_sentence_ends_belongs_to_the_next_sentence(t
     page.check("[rSents.map((s) => [s.first, s.last]), [...document.querySelectorAll('#rtext .rs')].map((e) => e.textContent),"
                " rWords.map((w) => w.textContent)]")
     assert page.run() == [[[[0, 0], [1, 2]], ["Hi.", "There now."], ["Hi.", "There", "now."]]]
+
+
+# -- the call page, round 1 of the bulldozer ----------------------------------------
+from pathlib import Path as _Path
+
+_CSS = (_Path(__file__).resolve().parents[1] / "static" / "call.css").read_text()
+
+
+def test_a_phone_gear_panel_is_a_sheet_capped_to_the_space_above_the_panel():
+    # callpage-1: the sheet sits 46% + 10px up and was as tall as the page less 68px, so its top left the screen
+    assert ".pop,.app[data-side=\"left\"] .pop{top:auto;bottom:calc(46% + 10px);left:10px;right:10px;width:auto;max-height:calc(54% - 24px)}" in _CSS
+    assert ".app[data-rail] .pop,.app[data-rail] .gearpop{top:auto;bottom:70px;max-height:calc(100% - 82px)}" in _CSS
+
+
+def test_the_strip_is_sized_from_the_font_it_is_set_in_tv_mode_too():
+    # callpage-2: the height came from the small font while the TV rule set a big one, so 3 lines needed 1.6x the room
+    assert "height:calc(3 * 1.45 * var(--sf) + 24px)" in _CSS
+    assert "font-size:var(--sf);line-height:1.45}" in _CSS
+    assert ".app[data-tv] .reader.strip{--sf:clamp(26px,1.2vw + 14px,40px)}" in _CSS
+    assert ".app[data-tv] .reader:not(.strip) .rtext{font-size:clamp(26px,1.2vw + 14px,40px)}" in _CSS
+    assert "margin:auto 0;padding:12px 28px" in _CSS  # centred when it fits, from the top when it overflows
+
+
+def test_the_strip_scrolls_the_word_being_said_into_sight(tmp_path):
+    html, states = served(tmp_path, [f"[[show table | One]]{TABLE}[[/show]] First things first. Then the second thing."], seconds=4.0)
+    stub = ("const P = Object.getPrototypeOf(document.createElement('span'));"
+            "P.getBoundingClientRect = function () { return this.classList.contains('w') ? { top: 150 - $('reader').scrollTop, bottom: 170 - $('reader').scrollTop }"
+            " : this.id === 'reader' ? { top: 0, bottom: 100 } : { top: 0, bottom: 0 }; };")
+    page = CallPage(html, states, seconds=4.0).js("await serve(1);" + stub + "await playTo(3.5);")
+    page.check("[$('reader').className, $('reader').scrollTop]")
+    assert page.run() == [["reader strip", 110]]  # the word's middle (160) is brought to the strip's middle (50)
+
+
+def test_a_chip_tap_on_the_board_in_front_turns_following_off_and_shows_the_board(tmp_path):
+    html, states = served(tmp_path, [f"First things first. [[show table | One]]{TABLE}[[/show]] Then the second thing."], seconds=4.0)
+    page = CallPage(html, states, seconds=4.0).js("await serve(1); await playTo(0.3);")
+    page.js("fromStage({ type: 'stage:shown', view: 'one' });")
+    page.check("[$('reader').className, follow]")  # the reader's text covers the stage; the board is in front behind it
+    page.js("document.querySelector('#convo button.chip.board').click();")
+    page.check("[$('reader').className, follow, toStage().filter((m) => m.type === 'stage:follow').pop().on]")
+    assert page.run() == [["reader text", True], ["reader strip", False, False]]
+
+
+def test_sentences_follow_the_servers_starts_and_fall_back_to_the_pages_own_splitter(tmp_path):
+    html, states = served(tmp_path, [], seconds=4.0)
+    page = CallPage(html, states, seconds=4.0)
+    text = "Use e.g. Redis. Then stop."
+    words = "[[0,3,0],[4,8,0.5],[9,15,1],[16,20,1.5],[21,26,2]]"
+    page.check(f"sentenceTimes({{text: {text!r}, words: {words}}})")                  # the page's splitter cuts at 'e.g.'
+    page.check(f"sentenceTimes({{text: {text!r}, words: {words}, starts: [16]}})")    # the server's starts do not
+    page.check(f"sentenceSpans({{text: {text!r}, words: {words}, starts: [16]}})")
+    assert page.run() == [[0, 1, 1.5], [0, 1.5], [{"t": 0, "a": 0, "b": 15}, {"t": 1.5, "a": 16, "b": 26}]]
+
+
+def test_a_second_page_of_the_call_does_not_speak_and_says_so(tmp_path):
+    html, states = served(tmp_path, ["Said to two screens."])
+    held = {"playing.test-call-id": {"id": "other-page", "at": 0}}
+    page = CallPage(html, states, stored=held).js("localStorage.setItem('talk.playing.test-call-id', JSON.stringify({id: 'other-page', at: Date.now()})); await serve(1);")
+    page.check("[audio.paused, audio.getAttribute('src'), $('status').textContent]")
+    assert page.run() == [[True, "/c/test-call-id/audio/0000.wav", "Playing on another screen."]]
+
+
+def test_a_page_plays_when_no_other_page_holds_the_voice(tmp_path):
+    html, states = served(tmp_path, ["Said to one screen."])
+    page = CallPage(html, states).js("await serve(1);")
+    page.check("[audio.paused, JSON.parse(localStorage.getItem('talk.playing.test-call-id')).id.length]")
+    assert page.run() == [[False, 8]]
+
+
+def test_an_answer_that_comes_while_another_plays_is_announced_and_starts_when_that_one_ends(tmp_path):
+    html, states = served(tmp_path, ["The first answer is here.", "The second answer is here."], seconds=3.0)
+    page = CallPage(html, states, seconds=3.0).js("await serve(1); await playTo(1.0);")
+    page.js("await serve(2);")
+    page.check("[audio.getAttribute('src'), $('status').textContent]")
+    page.js("await end(); await advance(50);")
+    page.check("[audio.getAttribute('src'), audio.paused, $('status').hidden]")
+    assert page.run() == [["/c/test-call-id/audio/0000.wav", "Next answer ready: it plays when this one ends."],
+                          ["/c/test-call-id/audio/0001.wav", False, True]]
+
+
+def test_the_poll_loop_goes_on_while_the_tab_is_hidden_and_at_once_when_it_is_seen(tmp_path):
+    html, states = served(tmp_path, [], seconds=3.0)
+    page = CallPage(html, states, seconds=3.0).js("document.visibilityState = 'hidden'; let n0 = polls.n; await advance(5000);")
+    page.check("polls.n - n0 >= 5")
+    assert page.run() == [True]

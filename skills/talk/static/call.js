@@ -145,6 +145,13 @@ function playFrame(board, n, frameNo) {
   playFrom(e, w[2], true);
 }
 
+// A chip brings its board to the front by hand. The board already in front sends no change, so while the reader's
+// text covers the stage the page turns following off itself (what a chip tap does on the stage) and shows the board.
+function chipTap(view) {
+  toStage({type: "stage:front", view, manual: true});
+  if (follow) { follow = false; toStage({type: "stage:follow", on: false}); paintSettings(); }
+  paintReader();
+}
 let stageViews = null;
 let boardAnswer = new Map();   // board -> the number of the answer that showed it
 let frontBoard = "";           // the board in front of the stage
@@ -338,7 +345,7 @@ function buildEntry(e) {
     const t = document.createElement("span"); t.textContent = e.text; el.append(t);
     el.setAttribute("aria-label", e.kind === "points" ? e.text : "On the stage: " + e.text);
     if (!CFG.stageUrl || !e.view) { el.disabled = true; el.title = "The stage is not available"; }
-    else el.onclick = () => toStage({type: "stage:front", view: e.view, manual: true});
+    else el.onclick = () => chipTap(e.view);
   } else if (e.who === "note") {
     el = document.createElement("div"); el.className = "chip note"; el.textContent = "Noted: " + e.text;
   } else {
@@ -497,6 +504,8 @@ function statusText() {
   if (live && live.parked) return {text: live.parked === "floor" ? "Listening in another call. Press the mic to listen here."
     : "Listening on another screen. Press the mic to listen here."};
   if (held && held.armed && !busy) return {text: "Listening. Go ahead."};
+  if (queued) return {text: "Next answer ready: it plays when this one ends."};
+  if (elsewhere && audio.paused && current) return {text: "Playing on another screen."};
   if (liveFlash && Date.now() < liveFlash.until && !busy) return {text: liveFlash.text};
   if (busy) return {text: "Turning your words into text…", shimmer: true};
   if (view.ended) return {text: closed ? "Closed. You can close this tab." : "The call has ended: " + view.ended + ". Answers can still be replayed."};
@@ -623,6 +632,9 @@ async function poll() {
     wake = null;
   }
 }
+// A tab out of sight keeps polling (the loop never checks): a call that ended meanwhile is found, and the tab
+// polls at once when it is seen again, since a browser slows the timers of a hidden tab.
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && wake) wake(); });
 $("retry").onclick = () => { if (connDown) { if (wake) wake(); } else if (unsent) sendWav(unsent); };
 
 // ---- the floor: one call talks at a time ----------------------------------
@@ -713,6 +725,7 @@ function audioUrl(path) { return location.pathname.replace(/\/$/, "") + "/" + pa
 function setSrc(path) { const url = audioUrl(path); if (audio.dataset.src !== url) { audio.src = url; audio.dataset.src = url; } }
 function load(e, play) {
   current = e; cueSync = true;
+  if (queued && queued.id === e.id) queued = null;
   setSrc(e.audio);
   audio.playbackRate = speed; audio.preservesPitch = true;
   // A pause before playback starts (another call took the floor) rejects with AbortError: not a block.
@@ -720,6 +733,33 @@ function load(e, play) {
   if ("mediaSession" in navigator) navigator.mediaSession.metadata = new MediaMetadata({title: "Answer " + (e.n || ""), artist: "Claude", album: CFG.topic});
   paintNow(); paintAll();
 }
+// One page of a call speaks. Two pages of one call (a laptop and the TV) would otherwise both start each
+// answer. The page that plays holds a lock in this origin's storage, renewed while it plays; another page of
+// the call finds it and stays silent ("Playing on another screen"). Pages on other devices do not share this
+// storage: the server-side claim of the talk-core batch is not in this tree, so a lock here is the fallback.
+const PAGE_ID = Math.random().toString(36).slice(2, 10);  // this page among the call's pages (live mode too)
+const LOCK_KEY = "playing." + CFG.call, LOCK_MS = 3000;
+function playingElsewhere() {
+  const l = store.get(LOCK_KEY, null);
+  return !!l && l.id !== PAGE_ID && Date.now() - l.at < LOCK_MS;
+}
+function holdPlayLock() { store.set(LOCK_KEY, {id: PAGE_ID, at: Date.now()}); }
+function dropPlayLock() { const l = store.get(LOCK_KEY, null); if (l && l.id === PAGE_ID) store.set(LOCK_KEY, null); }
+setInterval(() => { if (!audio.paused && !audio.ended) holdPlayLock(); }, 1000);
+audio.addEventListener("play", () => { elsewhere = false; holdPlayLock(); });
+for (const ev of ["pause", "ended"]) audio.addEventListener(ev, dropPlayLock);
+let elsewhere = false;      // a new answer was not played here: another page of this call holds the voice
+let queued = null;          // a new answer that came while another played: it starts when that one ends
+function startQueued() {
+  if (!queued || stopped) return;   // an answer waiting at a question keeps the next one waiting
+  const e = view.entries.find(x => x.id === queued.id) || queued; queued = null;
+  const at = view.entries.findIndex(x => x.id === e.id);
+  if (at < 0 || view.entries.slice(at + 1).some(x => x.who === "you" && !x.withdrawn)) { paintAll(); return; }
+  if (userBusy() || recorder || !autoplay) { paintAll(); return; }
+  if (playingElsewhere()) { elsewhere = true; load(e, false); paintAll(); return; }
+  load(e, true); paintAll();
+}
+audio.addEventListener("ended", () => { setTimeout(startQueued, 0); });
 function maybeAutoplay() {
   const fresh = view.entries.filter(e => e.who === "claude" && e.speech === "ready" && !seen.has(e.id));
   if (!fresh.length) return;
@@ -732,11 +772,14 @@ function maybeAutoplay() {
   // Only the call the user is talking in reads new answers aloud; another call's wait, marked new.
   const mine = !view.floor_call || view.floor_call === CFG.call;
   if (userBusy()) { if (mine && autoplay) deferred = last; return; }  // played once they are done (settle)
-  if (current && !audio.paused && !audio.ended) return;
+  // An answer that comes while another plays waits its turn: it is announced in the foot and starts at the end.
+  if (current && !audio.paused && !audio.ended) { if (mine && autoplay) queued = last; return; }
   // A tab out of sight never starts talking: the answer waits in the player and plays when the tab is back.
   const away = document.visibilityState === "hidden";
-  hiddenHeld = away && autoplay && !recorder && mine ? last.id : null;
-  load(last, autoplay && !recorder && mine && !away);
+  const other = mine && autoplay && !recorder && playingElsewhere();
+  elsewhere = other;
+  hiddenHeld = away && autoplay && !recorder && mine && !other ? last.id : null;
+  load(last, autoplay && !recorder && mine && !away && !other);
 }
 let hiddenHeld = null;      // the id of a new answer that came while the tab was hidden: it plays when the tab is seen
 document.addEventListener("visibilitychange", () => {
@@ -859,19 +902,43 @@ function paintReader() {
     }
   }
   if (mode === "text" && !active && was !== "text") readerEl.scrollTop = 0;
+  if (mode === "strip" && active && k >= 0) keepWordInStrip(readerEl, rWords[k]);
+}
+// The strip shows one sentence in a box of three lines: a longer one scrolls so the word being said stays in it.
+function keepWordInStrip(box, word) {
+  if (!word) return;
+  const b = box.getBoundingClientRect(), r = word.getBoundingClientRect();
+  if (r.top >= b.top && r.bottom <= b.bottom) return;
+  box.scrollTop = Math.max(0, box.scrollTop + (r.top + r.bottom) / 2 - (b.top + b.bottom) / 2);
 }
 
 // ---- the sentence being said, shown on the stage -------------------------------
 // Each sentence of an answer: its start in seconds and its span in the text.
-function sentenceSpans(e) {
-  const out = [];
-  if (!e.words || !e.words.length) return out;
+// The sentences of an answer as runs of its words: [first word, last word]. The server's `starts` (character
+// offsets into the text where a sentence begins, abbreviation-aware) when the answer carries them; else the
+// page's own splitter, which cuts after any word ending in . ! or ?.
+function sentenceRuns(e) {
+  const words = e.words || [], runs = [];
+  if (!words.length) return runs;
+  if (Array.isArray(e.starts) && e.starts.length && e.starts.every(n => Number.isFinite(n))) {
+    const bounds = [...new Set([0, ...e.starts])].sort((a, b) => a - b);
+    bounds.forEach((b, j) => {
+      const hi = j + 1 < bounds.length ? bounds[j + 1] : Infinity;
+      const first = words.findIndex(w => w[0] >= b && w[0] < hi);
+      if (first < 0) return;
+      let last = first;
+      while (last + 1 < words.length && words[last + 1][0] < hi) last++;
+      runs.push([first, last]);
+    });
+    return runs;
+  }
   let first = 0;
-  e.words.forEach((w, i) => {
-    if (i === e.words.length - 1 || /[.!?…][)\]"'”’]*$/.test(e.text.slice(w[0], w[1]))) { out.push({t: e.words[first][2], a: e.words[first][0], b: w[1]}); first = i + 1; }
+  words.forEach((w, i) => {
+    if (i === words.length - 1 || /[.!?…][)\]"'”’]*$/.test(e.text.slice(w[0], w[1]))) { runs.push([first, i]); first = i + 1; }
   });
-  return out;
+  return runs;
 }
+function sentenceSpans(e) { return sentenceRuns(e).map(([f, l]) => ({t: e.words[f][2], a: e.words[f][0], b: e.words[l][1]})); }
 let captionShown = "";  // the caption on the stage now: sent only when it changes
 function caption(e, t) {
   let text = "";
@@ -1115,11 +1182,7 @@ audio.addEventListener("seeked", () => { if (audio.paused) highlight(); });
 // An answer's sentence starts, in seconds: its first word and every word after one that ends a sentence.
 function sentenceTimes(e) {
   if (!e.words || !e.words.length) return null;
-  const out = [e.words[0][2]];
-  for (let i = 1; i < e.words.length; i++) {
-    if (/[.!?…][)\]"'”’]*$/.test(e.text.slice(e.words[i - 1][0], e.words[i - 1][1]))) out.push(e.words[i][2]);
-  }
-  return out;
+  return sentenceRuns(e).map(([f]) => e.words[f][2]);
 }
 const AGAIN_S = 1.0;   // ← this soon after a sentence starts goes to the one before, as a player's previous track does
 const SKIP_S = 5;      // an answer with no word timings moves by this much instead
@@ -1336,7 +1399,6 @@ const LIVE = {chunk: 2048, preMs: 400, minRms: 0.012, startMs: 160, startOverMs:
               floorMs: 8000, pauseMs: 700, duck: 0.2, maxMs: 60000, hardMs: 420000, armedMs: 6000, sleepMs: 600000};
 const liveQueue = [];
 let liveSending = false, wokeAt = 0;
-const PAGE_ID = Math.random().toString(36).slice(2);
 const liveChannel = "BroadcastChannel" in window ? new BroadcastChannel("talk-live") : null;
 const listening = () => !!live && !live.suspended && !live.parked;
 // The user is talking, or what they said is on its way: new answers wait and the held answer stays held.
