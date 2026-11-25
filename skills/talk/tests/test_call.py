@@ -405,7 +405,7 @@ def test_a_block_never_closed_keeps_only_its_table_and_says_the_rest(tmp_path):
 
 
 def test_a_new_show_tag_closes_a_block_left_open(tmp_path):
-    spoken, items, problems = split(tmp_path, "[[show table | A]]\n| a |\n|---|\n\nSaid. "
+    spoken, items, problems = split(tmp_path, "[[show table | A]]\n| a |\n|---|\n| 1 |\n\nSaid. "
                                               "[[show diagram | B]] graph TD; A-->B [[/show]] End.")
     assert [i["title"] for i in items] == ["A", "B"]
     assert spoken == "Said. End."
@@ -1456,7 +1456,8 @@ def test_an_introduction_brings_no_step_and_each_pointed_step_arrives_on_its_own
     assert _frames_said(call, shown) == [
         (1, "When the application", ["step:s1"], ["step:s1"]), (2, "At runtime Spring", ["step:s2"], ["step:s2"]),
         (3, "The other way", ["step:s3"], ["step:s3"]), (4, "The application implements", ["step:s4"], ["step:s4"])]
-    assert call.board.problems == [] and stage_rule_breaks(call, shown) == []
+    assert [p for p in call.board.problems if "first board comes after" not in p] == []  # the intro is a lead-in nudge only
+    assert stage_rule_breaks(call, shown) == []
     # a point brings in what it lights on its own sentence, though that sentence names nothing
     head = CALLS_BOTH[:CALLS_BOTH.index("The two engines")]
     call = talk.Call(make_args(), "T", tmp_path / "again")
@@ -1724,7 +1725,8 @@ def test_one_bad_board_path_fails_only_its_own_board(tmp_path):
     shown, call = split_text(tmp_path, text, code)
     assert shown == "One. Two. Three. Four."
     assert [i["title"] for i in call.board.items] == ["Good"]
-    assert len(call.board.problems) == 3 and all(p.startswith("code not shown") for p in call.board.problems)
+    failed = [p for p in call.board.problems if "first board comes after" not in p]  # three sentences came before Good
+    assert len(failed) == 3 and all(p.startswith("code not shown") for p in failed)
 
 
 TABLE3 = ("[[show table | Routes]]| Verb | Path | Note |\n|---|---|---|\n| GET | /users | list |\n| GET | /orders | list |\n"

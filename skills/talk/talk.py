@@ -68,6 +68,7 @@ import speech  # noqa: E402
 from skills.stage import stage as stage_mod  # noqa: E402
 from skills.stage import model as stage_model  # noqa: E402
 from skills.stage import scene as stage_scene  # noqa: E402
+from skills._shared.visuals.flowchart import _KNOWN_ROLES as FLOWCHART_ROLES  # noqa: E402
 
 DATA_DIR = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "talk"
 SESSIONS_DIR = DATA_DIR / "sessions"
@@ -387,6 +388,31 @@ def clean_text(text):
     return LONE_SURROGATE.sub("\ufffd", text) if isinstance(text, str) else text
 
 
+_MD_LINK = re.compile(r"!?\[([^\]\[]+)\]\([^)\s]+(?:\s+\"[^\"]*\")?\)")
+_MD_FENCE = re.compile(r"(```.*?```)", re.DOTALL)
+_MD_STRONG = re.compile(r"(?<![\w*])\*\*(?=\S)(.+?)(?<=\S)\*\*(?![\w*])|(?<!\w)__(?=\S)(.+?)(?<=\S)__(?!\w)", re.DOTALL)
+_MD_EM = re.compile(r"(?<![\w*])\*(?=[^\s*])([^*\n]+?)(?<=[^\s*])\*(?![\w*])|(?<![\w])_(?=[^\s_])([^_\n]+?)(?<=[^\s_])_(?![\w])")
+_MD_CODE = re.compile(r"`([^`\n]+)`")
+_MD_LEAD = re.compile(r"(?m)^[ \t]*(?:#{1,6}[ \t]+|[-*\u2022][ \t]+)")
+
+
+def plain_shown(text: str) -> str:
+    """The text shown (captions and transcript) with the markdown a session wrote taken out, as the voice
+    already does: emphasis marks, backticks, list bullets and heading marks go, a link keeps its text and
+    loses its target. A fenced block is left alone, and so is every private cue mark."""
+    out = []
+    for i, part in enumerate(_MD_FENCE.split(text)):
+        if i % 2:
+            out.append(part)
+            continue
+        part = _MD_LINK.sub(r"\1", part)
+        part = _MD_CODE.sub(r"\1", part)
+        part = _MD_STRONG.sub(lambda m: m.group(1) or m.group(2), part)
+        part = _MD_EM.sub(lambda m: m.group(1) or m.group(2), part)
+        out.append(_MD_LEAD.sub("", part))
+    return "".join(out)
+
+
 def speakable(text: str) -> str:
     """Make text safe to hand to a voice: EXTERNAL_ONLY -> 'external only', no markdown."""
     text = re.sub(r"```.*?```", " ", text, flags=re.DOTALL)
@@ -447,6 +473,7 @@ KIND_ALIASES = {"mermaid": "diagram", "flow": "diagram", "chart": "bars",
 CHANGE_FIELDS = ("type", "format", "path", "rev", "hunks", "added", "removed", "more", "lang")
 KEY_VIEW = "key-points"  # the one Key points view of a call
 MAX_SENTENCE_WORDS = 30  # the stage shows each sentence as one caption
+MAX_LEAD_SENTENCES = 1  # SKILL.md: at most one plain claim sentence before the first board, which opens on it
 MAX_KEY_POINTS = 3  # [[key: ...]] points an answer keeps; more is a board: line, none are dropped
 MAX_TITLE_WORDS = 5  # a board's title is the name of the picture, not its sentence
 MAX_ANSWER_WORDS = 220   # past this, an answer stops being followed: say the rest in the next one
@@ -654,10 +681,13 @@ POINT_FORMS_BY_KIND = {
     "diagram": "node ID",
     "flowchart": "node ID, edge A->B (a #N after it for the Nth parallel edge) or edge \"label\"",
     "sequence": "step ID, actor ID, before, after, both or outcome",
+    "bars": "bar ID, row N or rows A-B",
+    "graph": "node ID, before, after or both",
     "map": "box ID, zone N or route N",
     "scene": "part ID",
     "screen": "part N or part ID",
 }
+DRAWN_KINDS = ("bars", "graph")  # drawn by the server from a spec; a point at them names bar X or node X
 POINT_FORMS = ('expected line N, lines A-B, old line N, row N, rows A-B, rows 2,5, row "text", column "header", '
                'cell R / C, node ID, edge A->B, step ID, outcome, part ID, box ID, zone N or route N')
 
@@ -867,6 +897,10 @@ def check_table(title: str, body: str) -> tuple[str, list[str]]:
                 if _TABLE_SEP.match(ln.strip()):
                     past_sep = True
             body = "\n".join(out)
+        if not rows:
+            notes.append(f'table "{title}" not shown: it has a header but no body rows; add the rows the answer talks '
+                         "about, or say it in a sentence")
+            return "", notes
         if len(rows) > MAX_TABLE_ROWS or len(header) > MAX_TABLE_COLUMNS:
             notes.append(f'table "{title}" has {len(rows)} rows and {len(header)} columns: the stage reads a table '
                          f"of up to {MAX_TABLE_ROWS} rows and {MAX_TABLE_COLUMNS} columns, so cut the rows and "
@@ -1360,7 +1394,8 @@ class Board:
             item = self.find(title)
             if item is not None and item["kind"] in POINT_FORMS_BY_KIND:
                 self.problem(f'point not shown: could not read "{raw.strip()}"; "{item.get("title") or item["kind"]}" '
-                             f'is a {item["kind"]}, use {POINT_FORMS_BY_KIND[item["kind"]]}')
+                             f'is a {item["kind"]}{" board" if item["kind"] in DRAWN_KINDS else ""}, '
+                             f'use {POINT_FORMS_BY_KIND[item["kind"]]}')
             else:
                 self.problem(f"point not shown: {POINT_FORMS}")
             return
@@ -1370,8 +1405,14 @@ class Board:
                   "scene" if m["part"] else "diagram")
         item = self.find(title, wanted)
         if item is None:
-            self.problem(f'point not shown: no board titled "{title}" in this call' if title
-                         else "point not shown: no board has been shown yet")
+            pages = [i for i in self.items if i["kind"] == "page"]
+            if not title and pages:  # the only boards shown are pages, which have nothing to light
+                name = pages[-1].get("title") or "page"
+                self.problem(f'point not shown: "{name}", the last board shown, is a page, which has no lines, rows '
+                             "or nodes to light")
+            else:
+                self.problem(f'point not shown: no board titled "{title}" in this call' if title
+                             else "point not shown: no board has been shown yet")
             return
         name, kind = item.get("title") or item["kind"], item["kind"]
         if kind == "page":
@@ -1420,8 +1461,12 @@ class Board:
             first, last = item["start"], item["start"] + len(item["lines"]) - 1
             if a < first or b > last:
                 said = f"line {a} is" if a == b else f"lines {a}-{b} are"
-                self.problem(f'point not shown: {said} outside lines {first}-{last} of "{name}"')
-                return
+                if b < first or a > last:
+                    self.problem(f'point not shown: {said} outside lines {first}-{last} of "{name}"')
+                    return
+                # Partly visible: the lines that are shown are lit, and the author is told which were not.
+                a, b = max(a, first), min(b, last)
+                self.problem(f'point clipped to lines {a}-{b}: {said} partly outside lines {first}-{last} shown of "{name}"')
             target = {"type": "lines", "a": a, "b": b}
         elif kind == "table":
             target = self.table_target(item, name, m, row_text)
@@ -1639,7 +1684,7 @@ class Board:
         elif kind == "bars" and row_text:
             keys, note = stage_scene.resolve(model, row_text, name)
         else:
-            use = "bar ID, row N or rows A-B" if kind == "bars" else "node ID, before, after or both"
+            use = POINT_FORMS_BY_KIND[kind]
             self.problem(f'point not shown: "{name}" is a {kind} board; use {use}')
             return
         if not keys:
@@ -1721,6 +1766,8 @@ class Board:
             item["body"], notes = check_table(title, item["body"])
             for note in notes:
                 self.problem(note)
+            if not item["body"]:
+                return rest
         if kind in (*VISUAL_KINDS, "diagram") and item["body"].startswith("{"):
             try:
                 json.loads(item["body"])
@@ -1755,8 +1802,19 @@ class Board:
                 return rest
             if kind == "sequence":
                 self.add_refs(item, title)
+            if kind == "flowchart":
+                self.check_roles(item, title)
         self.add(item)
         return rest
+
+    def check_roles(self, item: dict, title: str) -> None:
+        """A flowchart node whose `role` the drawing does not know is drawn as plain code: say so."""
+        nodes = (item["visual"]["spec"].get("nodes") or [])
+        unknown = sorted({str(n["role"]) for n in nodes if isinstance(n, dict) and n.get("role") is not None
+                          and n["role"] not in FLOWCHART_ROLES}, key=str)
+        if unknown:
+            self.problem(f'flowchart "{title}": unknown role {", ".join(repr(r) for r in unknown)} on a node, drawn as '
+                         f'plain code; the roles are {", ".join(sorted(FLOWCHART_ROLES))}')
 
     def from_mermaid(self, item: dict, title: str) -> bool:
         """A call draws no Mermaid: a graph or a state diagram becomes a flowchart, drawn as a map, in place in
@@ -1820,8 +1878,10 @@ class Board:
             self.problem(f"code not shown, bad line range {a}-{b} in {m['path'].strip()}")
             return
         raw = path.read_bytes()
-        if b"\0" in raw[:8192]:
-            self.problem(f"code not shown, {m['path'].strip()} is a binary file")
+        try:
+            stage_model.check_binary(raw, m["path"].strip())
+        except stage_model.SourceError as err:
+            self.problem(f"code not shown, {err}")
             return
         all_lines = file_lines(raw.decode(errors="replace"))
         if a > len(all_lines):
@@ -1839,6 +1899,11 @@ class Board:
             title += f" (first {self.MAX_LINES} lines)"
             self.problem(f"code cut to lines {a}-{b} of {m['path'].strip()}: at most {self.MAX_LINES} lines")
         lines = all_lines[a - 1 : b]
+        try:
+            stage_model.check_line_bytes(lines, m["path"].strip(), a)
+        except stage_model.SourceError as err:
+            self.problem(f"code not shown, {err}")
+            return
         highlight = None
         if m["ha"]:
             ha, hb = int(m["ha"]), int(m["hb"] or m["ha"])
@@ -2383,6 +2448,11 @@ class Call:
 
         take(text)
         absorb()
+        clean = plain_shown(shown)  # the markers are gone and the tables are on the stage: only prose is left
+        if clean != shown:
+            shown = clean
+            self.board.problem("markdown in the answer (emphasis, backticks, bullets or link targets) was shown as "
+                               "plain text; the answer is spoken and captioned, so write plain sentences")
         placed = list(zip([i for i, c in enumerate(shown) if c == CUE], self.board.cues))  # the i-th CUE is the i-th cue
         shown, marks = place_cues(shown)
         timed = self.compile_scenes(shown, [(at, cue) for (_, cue), at in zip(placed, marks)
@@ -2396,7 +2466,7 @@ class Call:
                                "the voice; put each tag before the sentence about it")
         if len(self.keys) > keys_before:
             self.show_keys(len(self.keys) - keys_before)
-        self.check_shape(len(self.keys) - keys_before)
+        self.check_shape(len(self.keys) - keys_before, shown)
         items, self.reply_items = self.reply_items, []
         for item in items:
             self.put_on_stage(item)
@@ -2416,8 +2486,15 @@ class Call:
             self.board.problem(f"this answer is {words} words: keep an answer under {MAX_ANSWER_WORDS} words, "
                                "and say the rest in the next one")
 
-    def check_shape(self, keys: int) -> None:
-        """Two nudges on the shape of an answer, each one board: line; nothing is ever dropped for them."""
+    def check_shape(self, keys: int, shown: str = "") -> None:
+        """Three nudges on the shape of an answer, each one board: line; nothing is ever dropped for them."""
+        front = next((c for c in self.reply_cues if c["kind"] == "front"), None)
+        if front is not None:
+            before = shown[:front["at"]]
+            lead = (1 if before.strip() else 0) + sum(1 for st in sentence_starts(before) if st < len(before.rstrip()))
+            if lead > MAX_LEAD_SENTENCES:
+                self.board.problem(f"the first board comes after {lead} sentences: put it after at most {MAX_LEAD_SENTENCES} "
+                                   "claim sentence, so the stage opens on the first sentence and not after a lead-in")
         if keys > MAX_KEY_POINTS:
             self.board.problem(f"{keys} key points in one answer: keep at most {MAX_KEY_POINTS}, the ones worth "
                                "keeping, and say the rest")

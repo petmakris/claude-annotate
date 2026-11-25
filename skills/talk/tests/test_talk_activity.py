@@ -9,7 +9,7 @@ from helpers import SERVER_TOKEN, SKILL_DIR, add_call, run, running_app, running
 
 sys.path.insert(0, str(SKILL_DIR))
 
-from talk_activity import describe, rings_doorbell  # noqa: E402
+from talk_activity import describe  # noqa: E402
 
 HOOK = str(SKILL_DIR / "talk_activity.py")
 
@@ -200,12 +200,14 @@ def test_the_session_stopping_finishes_every_tool_still_running(tmp_path):
 
 
 def test_a_command_that_only_mentions_the_doorbell_does_not_set_doorbell():
+    from talk_activity import rings_doorbell
     for mention in ("echo talk_client.py doorbell", "grep -rn 'talk_client.py doorbell' .",
                     "cat talk_client.py doorbell.md", "git log --grep='python3 talk_client.py doorbell'"):
         assert rings_doorbell(mention) is False, mention
 
 
 def test_a_command_that_starts_the_doorbell_sets_doorbell():
+    from talk_activity import rings_doorbell
     for ring in ('python3 "$SKILL_DIR/talk_client.py" doorbell --call="x"', "python3 /x/talk_client.py doorbell",
                  "python3 '/x/talk_client.py' doorbell --call 'b'", "X=1 env Y=2 python3 /x/talk_client.py doorbell",
                  "cd /x && python3 talk_client.py doorbell --wait 5", "/x/talk_client.py doorbell"):

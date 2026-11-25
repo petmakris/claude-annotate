@@ -53,7 +53,7 @@ def served(tmp_path, answers, seconds=4.0, voices=(), code=None):
                 await _settle(call)
                 states.append(await (await client.get("/api/state", headers=AUTH)).json())
             return await (await client.get(f"/c/{CALL}")).text(), states
-    with patch.object(talk.speech, "voices", lambda: list(voices)):
+    with patch.object(talk.speech, "voices", lambda wait=True: list(voices)):
         return run_async(go())
 
 

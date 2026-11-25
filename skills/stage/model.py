@@ -14,6 +14,8 @@ from skills.stage import compare, scene
 
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 MAX_CODE_LINES = 60
+MAX_LINE_BYTES = 4000  # a code or change board holds lines of at most this many bytes: past it a file is minified or generated
+MAX_BOARD_BYTES = 200_000  # and the lines of one board at most this many, far under what the daemon takes in one item
 MAX_CHANGE_LINES = 80  # a change card shows whole hunks while their lines fit in this many; one hunk longer is cut
 GIT_TIMEOUT_S = 3
 # Walked twice a second, so the revision never descends into these, and stops counting
@@ -278,6 +280,27 @@ def _locate(cwd: Path | None, raw: str) -> tuple[Path, Path, str]:
     return root, path, f"{root.name}/{path.relative_to(root).as_posix()}"
 
 
+def check_binary(raw: bytes, rel: str) -> None:
+    """Refuse a binary file (a NUL in its first 8 KB) by name: stage.py and talk refuse it the same way."""
+    if b"\0" in raw[:8192]:
+        raise SourceError(f"{rel} is a binary file")
+
+
+def check_line_bytes(lines: list, rel: str, first: int = 1, numbers: list | None = None) -> None:
+    """Refuse lines no board can carry: one longer than MAX_LINE_BYTES, or all of them past MAX_BOARD_BYTES.
+    The daemon would otherwise answer 'item body too large', which reads as a daemon failure (exit 3)."""
+    total = 0
+    for n, text in zip(numbers or range(first, first + len(lines)), lines):
+        size = len(str(text).encode("utf-8", "replace"))
+        if size > MAX_LINE_BYTES:
+            raise SourceError(f"line {n} of {rel} is {size} bytes: a board holds lines of at most {MAX_LINE_BYTES} "
+                              "bytes (a minified or generated file); name a range without it")
+        total += size
+    if total > MAX_BOARD_BYTES:
+        raise SourceError(f"the lines asked of {rel} are {total} bytes: a board holds at most {MAX_BOARD_BYTES}; "
+                          "name a shorter range")
+
+
 def code_source(cwd: Path, spec: str) -> dict:
     """A range of a file's lines as a code board. At most MAX_CODE_LINES are kept: a longer range is cut and the
     board carries `note`, a sentence for the author that says what was left out, for talk to print."""
@@ -291,7 +314,9 @@ def code_source(cwd: Path, spec: str) -> dict:
     a, b = int(m["a"]), int(m["b"])
     if a < 1 or b < a:
         raise SourceError(f"bad line range {a}-{b} in {rel}")
-    lines = split_lines(path.read_text(errors="replace"))
+    raw = path.read_bytes()
+    check_binary(raw, rel)
+    lines = split_lines(raw.decode(errors="replace"))
     if a > len(lines):
         raise SourceError(f"{rel} has only {len(lines)} lines")
     asked = b
@@ -299,6 +324,7 @@ def code_source(cwd: Path, spec: str) -> dict:
     truncated = b - a + 1 > MAX_CODE_LINES
     if truncated:
         b = a + MAX_CODE_LINES - 1
+    check_line_bytes(lines[a - 1:b], rel, a)
     notes = []
     if asked > len(lines) and not truncated:
         notes.append(f"code cut at line {len(lines)}, the end of {rel}")
@@ -419,6 +445,8 @@ def change_source(cwd: Path, spec: str) -> dict:
     if re.search(r"^Binary files .* differ$", diff, re.MULTILINE):
         raise SourceError(f"{rel} is a binary file, so its change cannot be shown")
     hunks, added, removed, more, total = parse_diff(diff, pick)
+    shown_rows = [r for h in hunks for r in h["lines"]]
+    check_line_bytes([r["text"] for r in shown_rows], rel, numbers=[r["new"] or r["old"] for r in shown_rows])
     if not hunks:
         if pick is not None and total:
             said = f"hunk {pick[0]}" if pick[0] == pick[1] else f"hunks {pick[0]}-{pick[1]}"
@@ -658,9 +686,11 @@ def visual_source(tool: str, text: str, root: Path | None = None) -> dict:
         except Exception as e:
             raise SourceError(f"{tool}:-: the {tool} board could not be drawn ({type(e).__name__}: {e})") from None
     if tool == "sequence" and root is not None:
-        refs, _ = step_refs(spec, root)
+        refs, problems = step_refs(spec, root)
         if refs:
             source["refs"] = refs
+        if problems:  # the step is still shown; stage.py prints the note on stderr
+            source["note"] = "; ".join(f"sequence ref: {p}" for p in problems)
     return source
 
 

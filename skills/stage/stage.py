@@ -170,9 +170,32 @@ def _same_page(a: dict, b: dict) -> bool:
     return bool(fields) and a.get("type") == b.get("type") and all(a.get(f) == b.get(f) for f in fields)
 
 
+def attach(cwd: str, slug: str) -> dict:
+    """The live stage named `slug` (a slug or a sid), never a new one: --slug only attaches. With none
+    live, raises model.SourceError (exit 2) listing the live stages by slug and folder."""
+    want = wc.slugify(slug)
+    rows = [r for r in _live_rows(cwd) if r.get("kind", KIND) == KIND]
+    row = next((r for r in rows if r.get("sid") == slug or r.get("slug") == want), None)
+    if row is not None:
+        return row
+    try:
+        live = [r for r in wc.all_sessions(KIND) if r.get("state", "live") == "live"]
+    except DAEMON_ERRORS:
+        live = rows
+    live = live or rows
+    near = "; ".join("%s in %s" % (r.get("slug") or r.get("sid"), r.get("cwd") or cwd) for r in live)
+    raise model.SourceError("no live stage named %s%s" % (slug, "; live stages: " + near if near
+                                                         else "; none is live (leave out --slug to start one)"))
+
+
 def hide(cwd: str, name: str, *, slug: str | None = None) -> None:
     sid = ensure_stage(cwd, slug=slug)["sid"]
-    layout = _layout(wc.get_items(sid, kind=KIND))
+    items = wc.get_items(sid, kind=KIND)
+    if "view:" + name not in items:
+        names = sorted(a[len("view:"):] for a in items if a.startswith("view:"))
+        raise model.SourceError("no view named %s on this stage%s" % (name, "; views: " + ", ".join(names) if names
+                                                                      else "; it holds none"))
+    layout = _layout(items)
     wc.delete_item(sid, "view:" + name, kind=KIND)
     layout["order"] = [n for n in layout["order"] if n != name]
     if layout["front"] == name:
@@ -291,6 +314,8 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     cwd = str(Path(args.cwd).expanduser().resolve()) if args.cwd else repo_root(Path.cwd())
     try:
+        if args.slug and args.cmd in ("show", "hide", "link"):
+            attach(cwd, args.slug)  # a typo is an error, never a new stage
         if args.cmd == "show":
             stdin = sys.stdin.read() if args.source.endswith(":-") else None
             source = model.parse_source(args.source, Path(cwd), stdin)

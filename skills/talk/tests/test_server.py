@@ -584,7 +584,7 @@ OFFERED = [{"id": "en-US-AvaMultilingualNeural", "name": "Ava", "note": "America
 
 
 def test_the_page_picks_a_voice_and_the_next_answers_are_read_in_it(tmp_path, monkeypatch):
-    monkeypatch.setattr(talk.speech, "voices", lambda: OFFERED)
+    monkeypatch.setattr(talk.speech, "voices", lambda wait=True: OFFERED)
 
     async def go():
         async with running_app(tmp_path) as (client, call, fake):
@@ -601,7 +601,7 @@ def test_the_page_picks_a_voice_and_the_next_answers_are_read_in_it(tmp_path, mo
 
 
 def test_a_voice_sample_is_made_once_and_kept(tmp_path, monkeypatch):
-    monkeypatch.setattr(talk.speech, "voices", lambda: OFFERED)
+    monkeypatch.setattr(talk.speech, "voices", lambda wait=True: OFFERED)
     monkeypatch.setattr(talk, "DATA_DIR", tmp_path / "data")
 
     async def go():
