@@ -91,8 +91,8 @@ For every turn:
 
 `reply` exit codes:
 
-- 0: sent. A status for a turn already answered prints `ignored` and is not shown.
-- 2: refused, unreachable or no such turn.
+- 0: sent. A status for a turn already answered prints `ignored` and is not shown; an answer for a turn already answered prints `ignored`, except `--end`, which still says its wrap-up and ends the call.
+- 2: refused, unreachable or no such turn. A reply of only boards or key points, with no sentence, is refused (`a board needs a sentence`) and the turn stays open: send it again with the sentence that introduces each board.
 - 4: the call has ended, so nothing was shown and you do not re-arm. When it names a transcript, write the recap from it as for `TALK_END`.
 - `board:` lines after `sent` name a tag that was not shown as asked, or was shown only after a fix. Fix it in the next answer.
 - A doorbell that prints `doorbell superseded` was replaced by a newer one: do not re-arm for it.

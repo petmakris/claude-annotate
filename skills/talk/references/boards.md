@@ -120,7 +120,10 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 
 ## Nudges
 
-- `reply` prints a `board:` line when an answer holds more than 3 key points, or a board's title is over 5 words. Cut it in the next answer.
+- `reply` prints a `board:` line when an answer holds more than 3 key points, a board's title is over 5 words, or the first board comes after more than one sentence. Cut it in the next answer.
+- Markdown in the answer (emphasis, backticks, bullets, link targets) is shown as plain text and a `board:` line says so; a board's own table cells and code lines are never changed.
+- A table with a header and no rows is not shown. A flowchart node with a `role` the drawing does not know is drawn as plain code, and a `board:` line lists the roles.
+- A point at a code board partly outside the lines shown is clipped to them, with a `board:` line.
 
 ## Mermaid
 

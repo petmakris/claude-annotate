@@ -18,7 +18,10 @@ calls below attach to it.
 `show` and `link` print the stage's URL; `hide` does not. `--slug` picks one stage of the project
 by slug or sid; /talk gives every call a stage of its own and names its sid, so pass it during a call.
 Without `--slug` the newest stage of the project is used, never a talk call's (`talk-...`). A slug
-that names an ended stage or a stage in another folder fails rather than making a second stage, and
+that names no live stage (a typo, an ended stage, one in another folder) fails with exit 2 and lists the live
+stages, rather than making a second stage; `hide` of a name the stage does not hold fails the same way and lists
+the views it has. A code or change board refuses a file with a NUL, a line over 4000 bytes or lines past 200000 bytes
+(exit 2, never the daemon's exit 3), and a sequence ref that names no line is printed on stderr while the step is still shown.
 `show` refuses a view name another writer (a talk call's board, or a hand-made view) already holds.
 
 `<source>` is one of:
