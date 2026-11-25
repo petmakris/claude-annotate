@@ -172,7 +172,11 @@ function metaText(src) {
   if (src.format === "points") { const n = src.items.length; return `${n} key ${n === 1 ? "point" : "points"} from this call`; }
   if (src.format === "diagram") return "Mermaid source";
   if (src.format === "scene") { const n = (src.parts || []).length; return `Scene · ${n} ${n === 1 ? "part" : "parts"}`; }
-  if (src.format === "visual") return { sequence: "Sequence diagram", map: "Architecture map" }[src.tool] || "Flowchart";
+  if (src.format === "visual") {
+    const names = { sequence: "Sequence diagram", map: "Architecture map", bars: "Comparison chart", graph: "Graph", flowchart: "Flowchart" };
+    const t = String(src.tool || "");
+    return names[t] || (t ? t[0].toUpperCase() + t.slice(1) : "Visual");
+  }
   if (src.format === "screen") {
     const n = (src.screens || []).reduce((a, s) => a + (s.steps || []).length, 0);
     return `Screen · ${n} ${n === 1 ? "part" : "parts"} · ${src.spec}`;
@@ -549,7 +553,7 @@ function shapeBoard(box) {
     const cols = Math.max(heads.length, ...rows.map((r) => r.length), 0);
     table.dataset.t = String(t + 1);
     heads.forEach((th, i) => { th.dataset.c = String(i + 1); });
-    for (const r of rows) r.forEach((td, i) => { td.dataset.c = String(i + 1); });
+    for (const r of rows) r.forEach((td, i) => { td.dataset.c = String(i + 1); td.dataset.label = (heads[i]?.textContent || "").trim(); });  // the name a phone's row card gives each cell
     const col = (i) => rows.map((r) => r[i]).filter(Boolean);
     const text = (td) => td.textContent.trim();
     const widths = [], phone = [], scrolled = []; let need = 0;
@@ -643,7 +647,7 @@ function paintTable(v, box, src) {
   markdownInto(box, src.body, null, true);
   shapeBoard(box);
   box.classList.add("grid");  // a table board: the grid, its row, rows, column or cells being said lit
-  pulseDiff(v, box, "rows", [...box.querySelectorAll("tbody tr")].map((tr) => tr.textContent));
+  pulseDiff(v, box, "rows", [...box.querySelectorAll("tbody tr")].map((tr) => [...tr.querySelectorAll("td, th")].map((c) => c.textContent).join("\u001f")));  // a unit separator: "a|12" is not "a1|2"
   paintFrame(v, box);
 }
 
@@ -657,6 +661,14 @@ function pulseDiff(v, box, what, now) {
   if (!prev) return;
   v.prev = null;
   const els = box.querySelectorAll(what === "code" ? ".ln" : "tbody tr");
+  if (what === "rows") {
+    // A table is diffed by row text, not by place: an inserted or removed row moves the rows after it
+    // without changing them. A row glows when it is added or edited; an unchanged duplicate row is matched once each.
+    const left = new Map();
+    for (const t of prev) left.set(t, (left.get(t) || 0) + 1);
+    now.forEach((t, i) => { const n = left.get(t) || 0; if (n) left.set(t, n - 1); else restart(els[i], "changed"); });
+    return;
+  }
   now.forEach((t, i) => { if (prev[i] !== t) restart(els[i], "changed"); });
 }
 function restart(el, cls) {
@@ -1146,13 +1158,13 @@ function markUpdated(v, on) {
   updateNav();
 }
 
-// The boards are one stage with a history: ‹ and › walk it, "2 of 5" opens the list of every board, newest
+// The boards are one stage with a history: ‹ and › walk it, "Board 2 of 5" opens the list of every board, newest
 // first, and its dot says a board changed while another was in front. The tabs are the list's rows.
 function updateNav() {
   const tabs = [...tabsEl.children], i = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
   navEl.hidden = tabs.length < 2;
   if (navEl.hidden) showBoards(false);
-  navEl.querySelector(".tabpos").textContent = i >= 0 ? `${i + 1} of ${tabs.length}` : `${tabs.length} boards`;
+  navEl.querySelector(".tabpos").textContent = i >= 0 ? `Board ${i + 1} of ${tabs.length}` : `${tabs.length} boards`;
   navEl.querySelector(".prev").disabled = i <= 0;
   navEl.querySelector(".next").disabled = i < 0 || i >= tabs.length - 1;
   const changed = tabs.some((t) => t.classList.contains("updated") && t.getAttribute("aria-selected") !== "true");
@@ -1689,6 +1701,7 @@ let captionText = "";
 // itself fills the stage. A scroll moves it along (`scrolled`) without scrolling again.
 function placeCaption(scrolled = false) {
   captionEl.hidden = !captionText || !stopEl.hidden;
+  root.querySelector(".stage").classList.toggle("has-cap", !captionEl.hidden);  // a phone keeps room for it at the board's foot
   const name = selectedName(), v = name && views.get(name);
   if (!scrolled) captionWords(v);
   // a slide keeps the sentence in a bar across its foot; an older scene puts it in a bubble under the part

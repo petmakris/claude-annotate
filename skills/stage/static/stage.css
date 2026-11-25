@@ -376,7 +376,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .ln-boxdiv{stroke:var(--box-line);stroke-width:1;stroke-dasharray:4 4}
 .ln-actbar{fill:color-mix(in srgb,var(--bc) 16%,var(--panel));stroke:var(--bc);stroke-width:1.5;transition:opacity .25s}
 .ln-actbar.ln-live{fill:color-mix(in srgb,var(--bc) 34%,var(--panel))}
-.lanes .ln-ghost{opacity:.3}
+.lanes .ln-ghost{opacity:.65}  /* .65, not .3: its text reads at 4.5:1 (ink on the panel: 5.0 light, 6.1 dark; .55 gives 3.7 in light) */
 .lanes .ln-dim{opacity:.18}
 
 .ln-kind{position:absolute;z-index:2;height:17px;padding:0 7px 0 5px;border:0;border-radius:5px;cursor:pointer;
@@ -559,6 +559,8 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .md.grid.g-on tbody tr:not(.g-cur) td:not(.g-col):not(.k-focus){color:var(--muted)}
 .md.grid tbody tr.g-cur td{background:var(--hl-soft);color:var(--ink);font-weight:600}
 .md.grid tbody tr.g-cur td:first-child{box-shadow:inset 4px 0 0 var(--claude)}
+.md.grid .tablewrap.sticky-key tbody tr.g-cur td.key{box-shadow:inset 4px 0 0 var(--claude),inset 0 -1px 0 var(--line)}
+.md.grid .tablewrap.sticky-key tbody tr.g-cur:last-child td.key{box-shadow:inset 4px 0 0 var(--claude)}
 .md.grid .g-col{background:var(--hl-soft);color:var(--ink);font-weight:600}
 .md.grid thead th.g-col{color:var(--claude);box-shadow:inset 0 -3px 0 var(--claude)}
 .md.grid tbody tr td.k-focus,.md.grid tbody tr.g-cur td.k-focus{background:var(--word);color:var(--ink);font-weight:600;box-shadow:inset 0 0 0 2px var(--claude)}
@@ -571,6 +573,10 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .tablewrap.board.scrolls:not(.at-end){-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 32px),transparent)}
 .tablewrap.sticky-key td.key,.tablewrap.sticky-key th.key{position:sticky;left:0;z-index:1;background:var(--panel)}
 .tablewrap.sticky-key th.key{z-index:2;background:var(--row-alt)}
+/* a sticky cell leaves the collapsed table's border behind it, so its row rule is drawn on the cell itself (empty cells too) */
+.tablewrap.sticky-key td.key{box-shadow:inset 0 -1px 0 var(--line)}
+.tablewrap.sticky-key tbody tr:last-child td.key{box-shadow:none}
+.tablewrap.sticky-key th.key{box-shadow:inset 0 -1px 0 var(--line)}
 .md.grid tbody tr.g-cur td.key,.md.grid .g-col.key{background-color:var(--hl-soft)}
 @media (max-width:600px){
   /* a phone keeps the whole grid: compact when its words are short, else scrolling sideways with the first column kept */
@@ -583,6 +589,25 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
   .md.grid table[data-fit="scroll"]{width:calc(var(--tws) * 1ch);min-width:100%}   /* fixed too: lit weight moves no column */
   .md.grid table[data-fit="scroll"] col{width:max(calc(var(--wn) * 1ch),var(--min,0px))}
   .md.grid tbody tr.g-cur td:first-child{box-shadow:inset 3px 0 0 var(--claude)}
+  .md.grid .tablewrap.sticky-key tbody tr.g-cur td.key{box-shadow:inset 3px 0 0 var(--claude),inset 0 -1px 0 var(--line)}
+  .md.grid .tablewrap.sticky-key tbody tr.g-cur:last-child td.key{box-shadow:inset 3px 0 0 var(--claude)}
+  /* a grid that does not fit the width is never a sideways strip with cells cut at its edge: each row is a card, its
+     cells whole, each with its column's name; the first cell is the card's title */
+  .md.grid table[data-fit="scroll"]{width:100%;min-width:0!important;display:block}
+  .md.grid table[data-fit="scroll"] colgroup,.md.grid table[data-fit="scroll"] thead{display:none}
+  .md.grid table[data-fit="scroll"] tbody{display:block}
+  .md.grid>.tablewrap:has(table[data-fit="scroll"]){font-size:13px}
+  .md.grid table[data-fit="scroll"] tbody tr{display:block;margin:0 0 8px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel)}
+  .md.grid table[data-fit="scroll"] tbody tr:last-child{margin-bottom:0}
+  .md.grid table[data-fit="scroll"] tbody tr:nth-child(even){background:var(--panel)}
+  .md.grid table[data-fit="scroll"] td{display:flex;justify-content:space-between;align-items:baseline;gap:12px;width:auto;max-width:none;padding:6px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:normal;overflow-wrap:anywhere;word-break:normal}
+  .md.grid table[data-fit="scroll"] td:last-child{border-bottom:0}
+  .md.grid table[data-fit="scroll"] td::before{content:attr(data-label);flex:0 0 auto;max-width:45%;font:600 10.5px/1.4 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left}
+  .md.grid table[data-fit="scroll"] td.key{display:block;position:static;background:var(--row-alt);text-align:left;font-weight:600}
+  .md.grid table[data-fit="scroll"] td.key::before{content:none}
+  .md.grid table[data-fit="scroll"] td.key:empty{display:none}
+  .md.grid table[data-fit="scroll"] td.key{box-shadow:none}
+  .md.grid .tablewrap.sticky-key:has(table[data-fit="scroll"]) tbody tr.g-cur td.key{box-shadow:inset 3px 0 0 var(--claude)}
 }
 
 /* The map: a flowchart the stage draws itself (map.js). Parts not said yet are faint dashed ghosts;
@@ -751,6 +776,13 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .caption.bar.sub{left:24px;right:24px;bottom:16px;transform:none;max-width:none;text-align:left;text-wrap:pretty;
   font-size:clamp(16px,1.1vw,22px);padding:12px 18px;border:0;border-left:4px solid var(--acc);border-radius:10px}
 @media (prefers-reduced-motion:reduce){.caption.bubble{transition:none}}
+/* A phone: the sentence is at most three lines, ellipsised, and the board keeps room under it, so neither hides the other */
+@media (max-width:600px){
+  .caption{font-size:14px;line-height:1.4}
+  .caption.bar{bottom:8px;max-width:calc(100% - 16px);padding:8px 12px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden;text-wrap:pretty}
+  .caption.bubble{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden}
+  .stage.has-cap .pbody{padding-bottom:84px}   /* three 14px lines, their padding and the 8px under them */
+}
 
 /* A stop: the answer asks and waits, on a card at the foot of the stage in place of the caption */
 .stopcard{position:absolute;z-index:7;left:50%;bottom:16px;transform:translateX(-50%);box-sizing:border-box;width:max-content;
@@ -800,11 +832,11 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .vzmap svg.vz{width:100%;max-width:2400px;margin:0 auto}  /* fills the pane, a TV's too */
 @media (max-width:760px){.visual.vzmap:not(.vzbars):not(.vzgraph){overflow-x:hidden}}  /* on a phone the whole map fits the pane's width: no sideways scroll, the lit part and its arrow stay in view */
 .vzmap svg.vz rect.bx.k-hidden,.vzmap svg.vz rect.zone.k-hidden{opacity:1!important;fill:none;stroke:var(--vz-line);stroke-width:1.2;stroke-dasharray:4 4}
-.vzmap.k-dim svg.vz [data-key]:not(.k-focus):not(.k-hidden):not(.now){opacity:.3}
+.vzmap.k-dim svg.vz [data-key]:not(.k-focus):not(.k-hidden):not(.now){opacity:.65}
 .vzmap svg.vz rect.bx.k-focus{stroke:var(--vz-accent);stroke-width:2.4}
 .vzmap svg.vz .ar.k-focus{stroke:var(--vz-accent);stroke-width:3.2}
 .vzmap svg.vz [data-key]:not(.k-hidden){cursor:pointer}
-.vzmap svg.vz.mode-route .r-later:not(.now){opacity:.3}
+.vzmap svg.vz.mode-route .r-later:not(.now){opacity:.65}
 
 /* A screen board (screenboard.js): the screen on the left, dimmed but for the part being said, which is ringed;
    that part's count, title and text on the right, joined to it by a dashed line. In a call it keeps room at its

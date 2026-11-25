@@ -661,9 +661,9 @@ def test_the_board_arrows_keep_the_count_and_their_own_state_right_both_ways(tmp
     walked = page.run()
     # the count names the board in front, and › is off only on the last board, ‹ only on the first
     for pos, prev_off, next_off, view in walked:
-        i = int(pos.split(" of ")[0])
+        i = int(pos.split(" of ")[0].split()[-1])
         assert (prev_off, next_off) == (i == 1, i == 4) and "bcda"[i - 1] == view, walked
-    assert [w[0] for w in walked] == ["4 of 4", "3 of 4", "2 of 4", "1 of 4", "2 of 4", "3 of 4", "4 of 4"]
+    assert [w[0] for w in walked] == ["Board 4 of 4", "Board 3 of 4", "Board 2 of 4", "Board 1 of 4", "Board 2 of 4", "Board 3 of 4", "Board 4 of 4"]
 
 
 def test_the_part_being_said_spotlights_the_scene_and_a_point_dims_instead(tmp_path):
@@ -933,7 +933,7 @@ def test_on_a_stage_opened_alone_the_arrow_keys_walk_the_boards_as_the_buttons_d
     page = _two_boards(tmp_path)
     page.check(f"[({PRESS})('ArrowLeft'),({PRESS})('ArrowRight'), ({PRESS})('ArrowRight'), ({PRESS})('ArrowLeft')]")
     # ← on the first board and → on the last find a disabled button and do nothing
-    assert page.run() == [["1 of 2", "2 of 2", "2 of 2", "1 of 2"]]
+    assert page.run() == [["Board 1 of 2", "Board 2 of 2", "Board 2 of 2", "Board 1 of 2"]]
     assert page.errors == []
 
 
@@ -942,7 +942,7 @@ def test_an_arrow_key_with_no_button_to_press_does_nothing_and_raises_nothing(tm
     page.js("document.querySelector('.navbtn.next').classList.remove('navbtn');")  # the key's selector finds no button
     # the page opens on the last board: ← goes to the first, where → would go on to the last if it found its button
     page.check(f"[({PRESS})('ArrowLeft'), ({PRESS})('ArrowRight')]")
-    assert page.run() == [["1 of 2", "1 of 2"]]
+    assert page.run() == [["Board 1 of 2", "Board 1 of 2"]]
     assert page.errors == []
 
 
@@ -1109,3 +1109,30 @@ def test_a_column_pointed_at_cell_by_cell_is_lit_as_a_column_and_lights_no_row(t
     page.send({"type": "stage:state", "front": "t", "frames": {"t": 1}}).check(GRID_STATE + "('t')")
     got = page.run()[0]
     assert got["cols"] == ["Azure"] and [r[2] for r in got["rows"]] == [False] * 4 and got["on"] is True
+
+
+def test_a_table_updated_in_place_glows_only_the_rows_added_or_edited(tmp_path):
+    board = lambda *rows: {"type": "inline", "format": "table", "body": "| k | v |\n|---|---|\n" + "".join(f"| {a} | {b} |\n" for a, b in rows)}
+    page = StagePage(tmp_path).show("t", board(("a", 1), ("b", 2), ("c", 3)), title="T")
+    page.open()
+    glowing = "[...document.querySelectorAll('tbody tr')].map((tr) => [tr.textContent.trim(), tr.classList.contains('changed')])"
+    page.check(glowing)
+    page.show("t", board(("new", 0), ("a", 1), ("b", 20), ("c", 3)), title="T").js("await settle(2);").check(glowing)
+    page.show("t", board(("a", 1), ("c", 3)), title="T").js("await settle(2);").check(glowing)
+    first, inserted, removed = page.run()
+    assert [g for _, g in first] == [False, False, False]
+    # a row put in at the top moves the rest down without changing them; only the new row and the edited one glow
+    assert [["".join(t.split()), g] for t, g in inserted] == [["new0", True], ["a1", False], ["b20", True], ["c3", False]]
+    # a row taken out moves the rest up: nothing glows
+    assert [g for _, g in removed] == [False, False]
+
+
+def test_the_header_names_a_bars_board_and_a_graph_board_and_not_a_flowchart(tmp_path):
+    bars = {"title": "Costs", "unit": "ns", "bars": [{"id": "a", "label": "L1", "value": 1}, {"id": "b", "label": "RAM", "value": 100}]}
+    graph = {"nodes": [{"id": "a", "label": "base", "lane": "main"}, {"id": "b", "label": "tip", "lane": "main"}], "edges": [{"from": "a", "to": "b"}]}
+    page = (StagePage(tmp_path).show("b", visual("bars", bars), title="Costs").show("g", visual("graph", graph), title="Rebase")
+            .show("f", visual("flowchart", THREE_PATHS), title="Paths").open())
+    for name in ("b", "g", "f"):
+        page.js(f"document.querySelector('[role=tab][data-view={name}]').click();")
+        page.check(f"pane('{name}').querySelector('.vmeta span').textContent")
+    assert page.run() == ["Comparison chart", "Graph", "Flowchart"]
