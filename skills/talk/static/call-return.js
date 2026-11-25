@@ -121,18 +121,18 @@ function openQuestion() {
   for (let i = view.entries.length - 1; i >= 0; i--) { const e = view.entries[i]; if (e.who === "claude") return ""; if (e.who === "you" && !e.withdrawn) return e.text; }
   return "";
 }
-const clockOf = at => at == null ? "" : fmt(serverNow() - at);
-const answerNo = e => e && e.n ? e.n : (e && view.entries.filter(x => x.who === "claude" && x.id <= e.id).length) || 0;
+const elapsedOf = at => at == null ? "" : fmt(serverNow() - at);
+const answerNumber = e => e && e.n ? e.n : (e && view.entries.filter(x => x.who === "claude" && x.id <= e.id).length) || 0;
 // The first that applies. `clock`: the server time its clock counts from, or null.
 function stripInfo() {
-  const shown = shownAnswer(), n = answerNo(shown), board = !!(CFG.stageUrl && frontBoard);
+  const shown = shownAnswer(), n = answerNumber(shown), board = !!(CFG.stageUrl && frontBoard);
   if (floorNote) return {key: "paused", text: floorWords(floorNote), warn: true, act: "Resume here", clock: null};
   if (view.ended) return {key: "ended", text: closed ? "Call closed" : "The call has ended", clock: null};
   if (recorder || (live && live.speech)) return {key: "talking", text: "Listening to you", clock: null};
   if (busy) return {key: "answering", text: "Turning your words into text", clock: null};
   if (view.stalled) return {key: "stalled", text: "Claude has not picked this up yet", warn: true, clock: openTurnAt()};
   if (view.working || waitActive()) return {key: "answering", text: "Claude is answering", clock: openTurnAt()};
-  if (queued) return {key: "new", text: "Answer " + answerNo(queued) + " is next", clock: null};
+  if (queued) return {key: "new", text: "Answer " + answerNumber(queued) + " is next", clock: null};
   if (elsewhere && audio.paused && current) return {key: "paused", text: "Playing on another screen", clock: null};
   if (current && !audio.paused) return {key: "playing", text: "Playing answer " + n + (board ? (follow ? " · following the board" : " · board pinned") : ""), clock: null};
   if (current && audio.paused && !audio.ended && audio.currentTime > 0) return {key: "paused", text: "Paused at answer " + n, clock: null};
@@ -146,7 +146,7 @@ function paintStateStrip() {
   strip.hidden = view.v === -1;
   if (strip.hidden) return;
   const info = stripInfo(), need = callsNeedingYou();
-  const text = info.text + (info.clock != null ? " · " + clockOf(info.clock) : "");
+  const text = info.text + (info.clock != null ? " · " + elapsedOf(info.clock) : "");
   const more = need.length ? need.length + " need you" : "";
   const auto = !!autoplay;
   const sig = [info.key, text, info.warn ? 1 : 0, info.act || "", more, auto ? 1 : 0].join("|");
@@ -176,7 +176,7 @@ function paintWelcome() {
   card.hidden = !facts || !facts.count;
   if (card.hidden) { welcomeSig = ""; return; }
   const working = !!view.working && !view.ended, q = openQuestion();
-  const work = working ? "Claude is still working" + (q ? " on “" + (q.length > 70 ? q.slice(0, 70) + "…" : q) + "”" : "") + (openTurnAt() != null ? " · " + clockOf(openTurnAt()) : "") : "";
+  const work = working ? "Claude is still working" + (q ? " on “" + (q.length > 70 ? q.slice(0, 70) + "…" : q) + "”" : "") + (openTurnAt() != null ? " · " + elapsedOf(openTurnAt()) : "") : "";
   const sig = JSON.stringify([absence.ms, facts, work]);
   if (sig === welcomeSig) return;
   welcomeSig = sig;
@@ -244,8 +244,8 @@ function flushAnnounce() {
   setTimeout(() => { $("announcer").textContent = text; }, 50);
   if (annQueue.length) annTimer = setTimeout(flushAnnounce, ANNOUNCE_GAP_MS);
 }
-// A new view arrived: what a screen reader would otherwise miss. The first view only learns what is there.
-let announced = new Set(), wasActLabel = "", wasActAt = 0;
+// A new view arrived: what a screen reader would otherwise miss (the wait card says its own steps, call-wait.js). The first view only learns what is there.
+let announced = new Set();
 function questionBefore(i) {
   for (let k = i - 1; k >= 0; k--) { const e = view.entries[k]; if (e.who === "claude") return ""; if (e.who === "you" && !e.withdrawn) return e.text; }
   return "";
@@ -256,13 +256,8 @@ function returnOnView(before) {
     if (e.who !== "claude" || announced.has(e.id)) return;
     announced.add(e.id);
     const q = questionBefore(i), short = q.length > 70 ? q.slice(0, 70) + "…" : q;
-    announce("Answer " + answerNo(e) + " arrived" + (short ? ": " + short : "") + ".");
+    announce("Answer " + answerNumber(e) + " arrived" + (short ? ": " + short : "") + ".");
   });
-  if (view.working && !before.working && !view.ended) announce("Claude is working.");
-  const run = (view.activity || []).filter(a => a.state === "running").pop();
-  if (view.working && run && run.label !== wasActLabel && Date.now() - wasActAt > 5000) { wasActLabel = run.label; wasActAt = Date.now(); announce(run.label + "."); }
-  if (!view.working) wasActLabel = "";
-  if (view.stalled && !before.stalled && !view.ended) announce("Claude has not picked this up yet.");
   if (view.ended && !before.ended) announce("The call has ended.");
 }
 // Board changes come from the stage, not the poll. They are said only while the voice is silent: with an answer playing the

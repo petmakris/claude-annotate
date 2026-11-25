@@ -162,7 +162,7 @@ def test_a_chip_tap_pins_the_stage_and_the_strip_says_so_with_one_button_back(tm
 
 def test_the_chip_of_the_board_in_front_is_pressed_and_a_change_of_board_is_said_to_a_screen_reader(tmp_path):
     html, states = asked(tmp_path, answers=(FIRST,), asks=ASKS[:1])
-    page = CallPage(html, states, autoplay=False, seconds=3.0).js("globalThis.said = []; announce = (t) => said.push(t); await serve(1);")
+    page = CallPage(html, states, autoplay=False, seconds=3.0).js("await serve(1); globalThis.said = []; announce = (t) => said.push(t);")
     chips = "[...$('nowchips').querySelectorAll('button.chip.board')].map((b) => b.getAttribute('aria-pressed'))"
     page.js("fromStage({type: 'stage:shown', view: 'heat-pump-or-gas-boiler'});").check(chips)
     page.js("fromStage({type: 'stage:shown', view: 'heat-pump-or-gas-boiler'}); $('nowchips').querySelectorAll('button.chip.board')[1].click();").check("[...said]")

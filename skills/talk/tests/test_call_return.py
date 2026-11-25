@@ -45,24 +45,20 @@ def test_a_sentence_nobody_could_say_in_time_is_dropped(tmp_path):
     assert page.run() == [["", 0]]
 
 
-def test_a_screen_reader_hears_that_claude_started_changed_what_it_works_on_and_answered(tmp_path):
-    # study screenreader-1: the working line and the arrival of an answer were silent
+def test_a_screen_reader_hears_that_an_answer_arrived(tmp_path):
+    # study screenreader-1: the arrival of an answer was silent (the wait card says its own steps, test_call_wait.py)
     page = page_of(tmp_path, ["Answer."], start=0)
     page.check("$('announcer').textContent")
     page.js("STATES[1].entries.unshift({id: 90, who: 'you', text: 'How do the fees compare?', at: 1});"
-            " STATES[0] = {...STATES[0], v: 'w', working: true, activity: [{label: 'Working out fee figures', state: 'running', seconds: 3}]}; await serve(0);")
-    page.js("await tick(100);").check("$('announcer').textContent")
-    page.js("await tick(1600);").check("$('announcer').textContent")
-    page.js("await serve(1); await tick(1600);").check("$('announcer').textContent")
-    assert page.run() == ["", "Claude is working.", "Working out fee figures.", "Answer 1 arrived: How do the fees compare?."]
+            " await serve(1); await tick(1600);").check("$('announcer').textContent")
+    assert page.run() == ["", "Answer 1 arrived: How do the fees compare?."]
 
 
-def test_what_is_there_when_the_page_opens_is_not_announced_and_a_stall_and_an_end_are(tmp_path):
+def test_what_is_there_when_the_page_opens_is_not_announced_and_an_end_is(tmp_path):
     page = page_of(tmp_path)
     page.check("[$('announcer').textContent, annQueue.length]")
-    page.js("STATES[2] = {...STATES[2], v: 's', stalled: true}; await serve(2); await tick(100);").check("$('announcer').textContent")
     page.js("STATES[2] = {...STATES[2], v: 'e', stalled: false, ended: 'over'}; await serve(2); await tick(1600);").check("$('announcer').textContent")
-    assert page.run() == [["", 0], "Claude has not picked this up yet.", "The call has ended."]
+    assert page.run() == [["", 0], "The call has ended."]
 
 
 def test_a_board_that_changes_at_rest_is_said_but_not_while_the_answer_plays(tmp_path):
@@ -86,8 +82,8 @@ def test_the_panel_starts_with_a_way_to_the_newest_answer(tmp_path):
     html = (STATIC / "call.html").read_text()
     assert re.search(r'<div class="open">\s*<a class="skip" id="skiplatest" href="#nowcard">Jump to the latest answer</a>', html)
     page = page_of(tmp_path)
-    page.js("$('skiplatest').click();").check("[document.activeElement.dataset.id, document.activeElement.querySelector('.text').textContent.trim()]")
-    assert page.run() == [["1", "Second answer."]]
+    page.js("$('skiplatest').click();").check("[document.activeElement.id, $('nowtext').textContent.trim()]")
+    assert page.run() == [["nowcard", "Second answer."]]
 
 
 def test_a_quick_switch_for_playing_new_answers_by_themselves_sits_in_the_strip(tmp_path):
@@ -215,16 +211,16 @@ def test_an_answer_that_comes_during_play_the_new_waits_until_the_list_is_played
 
 def test_pressing_another_answer_ends_the_walk_through_the_new_ones(tmp_path):
     page = page_of(tmp_path, ["One.", "Two.", "Three."], start=3, away=(3600 * 1000, -1), autoplay=False)
-    page.js("$('wbplay').click(); await settle(); document.querySelectorAll('#convo .turn.claude button.play')[2].click(); await settle();")
+    page.js("$('wbplay').click(); await settle(); document.querySelectorAll('#tllist .tlrow button.play')[1].click(); await settle();")
     page.js("await end();").check("[current.id, catchPlaying, catchUp]")
     assert page.run() == [[2, None, []]]
 
 
 def test_read_them_scrolls_to_the_new_ones_and_plays_nothing(tmp_path):
     page = page_of(tmp_path, away=(3600 * 1000, -1), autoplay=False)
-    page.js("let scrolled = 0; $('nowcard').scrollIntoView = () => { scrolled++; }; $('wbread').click(); await settle();")
+    page.js("let scrolled = 0; $('sinceleft').scrollIntoView = () => { scrolled++; }; $('wbread').click(); await settle();")
     page.check("[audio.paused, !!current, $('welcome').hidden, document.activeElement.id, scrolled]")
-    assert page.run() == [[True, False, True, "nowcard", 1]]
+    assert page.run() == [[True, False, True, "sinceleft", 1]]
 
 
 # ---- the since-you-left divider -------------------------------------------------------------------
@@ -241,8 +237,8 @@ def test_the_divider_sits_before_the_first_answer_that_came_while_you_were_away(
     page.check("[...$('tllist').children].map((r) => r.id || r.dataset.id)")
     page.check("[$('sinceleft').querySelector('.slabel').textContent, $('sinceleft').querySelector('.scount').textContent, $('sinceleft').getAttribute('role')]")
     page.js("returnMarkEarlier($('tllist'));").check("$('tllist').children.length")
-    page.js("STATES[4] = {...STATES[4], v: 'h', heard_upto: 3}; await serve(4); returnMarkEarlier($('tllist'));").check("[...$('tllist').children].map((r) => r.id || r.dataset.id)")
-    assert page.run() == [["0", "sinceleft", "1", "2", "3"], ["Since you left", "3 not heard", "listitem"], 5, ["0", "1", "2", "3"]]
+    page.js("STATES[4] = {...STATES[4], v: 'h', heard_upto: 3}; await serve(4); returnMarkEarlier($('tllist'));").check("$('tllist').querySelector('#sinceleft') === null")
+    assert page.run() == [["0", "sinceleft", "1", "2", "3"], ["Since you left", "3 not heard", "listitem"], 5, True]
 
 
 def test_with_no_absence_there_is_no_divider(tmp_path):
