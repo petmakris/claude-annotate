@@ -9,7 +9,7 @@ import subprocess
 from html.parser import HTMLParser
 from pathlib import Path
 
-from skills._shared.visuals import bars_svg, flowchart, graph_svg, map_svg, sequence, sequence_svg
+from skills._shared.visuals import bars_svg, flowchart, graph_svg, label_check, map_svg, sequence, sequence_svg
 from skills.stage import compare, scene
 
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
@@ -627,6 +627,7 @@ def check_flowchart(spec: dict) -> None:
     nodes = spec.get("nodes")
     if not isinstance(nodes, list) or not nodes:
         raise flowchart.ValidationError("a flowchart needs a non-empty nodes list")
+    label_check.check_flowchart(spec, flowchart.ValidationError)
     ids = [n.get("id") for n in nodes if isinstance(n, dict)]
     if len(ids) != len(nodes) or not all(isinstance(i, str) and i for i in ids):
         raise flowchart.ValidationError("every node needs an id")
@@ -668,6 +669,7 @@ def visual_source(tool: str, text: str, root: Path | None = None) -> dict:
             spec = compare.compare_spec(_plain_sides(spec))  # each side checked as a sequence, then merged
         elif tool == "sequence":
             sequence_svg.validate(spec)  # the base rules, plus role, checks, n, outcome and the four tones
+            label_check.check_sequence(spec, sequence.ValidationError)  # the stage's word limits (annotate keeps its stored specs)
         elif tool in DRAWN:
             DRAWN[tool].validate(spec)
         else:
@@ -682,7 +684,7 @@ def visual_source(tool: str, text: str, root: Path | None = None) -> dict:
     if tool in DRAWN:
         uid = "vz" + tool[0] + hashlib.sha1(json.dumps(spec, sort_keys=True).encode()).hexdigest()[:8]
         try:
-            source["svg"] = DRAWN[tool].render(spec, uid, keyed=True)
+            source["svg"] = DRAWN[tool].render(spec, uid, keyed=True, **({"floor": True} if tool == "map" else {}))
         except Exception as e:
             raise SourceError(f"{tool}:-: the {tool} board could not be drawn ({type(e).__name__}: {e})") from None
     if tool == "sequence" and root is not None:

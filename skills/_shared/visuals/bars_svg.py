@@ -100,6 +100,12 @@ def validate(spec: dict[str, Any]) -> None:
             if len(b.get(field) or "") > most:
                 raise ValidationError(f"{where}: {field} is {len(b[field])} characters, at most {most}: "
                                       + ("a label is a few words you will say" if field == "label" else "a note is one short line, the number you say"))
+        if b.get("note"):
+            with tm.face("stage"):
+                wide = tm.text_px(b["note"], "vz-sb")
+            if wide > W - 2 * PAD:   # the note is one line from the left margin: wider than the canvas, the end is cut off
+                raise ValidationError(f"{where}: note is {wide:.0f} px wide on a canvas with {W - 2 * PAD} px of room: "
+                                      "a note is one short line, the number you say")
         if b.get("tone", "plain") not in TONES:
             raise ValidationError(f"{where}: unknown tone {b.get('tone')!r}; the tones are {', '.join(TONES)}")
         v = b.get("value")
