@@ -3012,8 +3012,10 @@ class Server:
     def summary(self, call: Call) -> dict:
         return {"id": call.id, "topic": call.topic, "ended": bool(call.ended),
                 "working": call.turns.working and not call.ended,
+                "stalled": call.turns.stalled and not call.ended,
                 "unheard": sum(1 for e in call.entries if e["who"] == "claude" and e["id"] > call.heard_upto),
-                "floor": self.floor == call.id, "started": call.started}
+                "floor": self.floor == call.id, "started": call.started,
+                "last_at": call.entries[-1].get("at", call.started) if call.entries else call.started}
 
     def summaries(self) -> list[dict]:
         return sorted((self.summary(c) for c in self.calls.values()), key=lambda s: s["started"])

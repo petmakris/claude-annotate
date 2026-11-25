@@ -26,6 +26,7 @@ a.call.ended{opacity:.65}
 .state{font:500 12.5px var(--sans);color:var(--muted);white-space:nowrap}
 a.call.new .state{color:var(--claude);font-weight:600}
 a.call.floor .state{color:var(--acc)}
+a.call.stalled .state{color:var(--warn);font-weight:600}
 .open{font:500 13px var(--sans);padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);white-space:nowrap}
 .empty{color:var(--faint);padding:24px 0;text-align:center}
 .err{color:var(--warn);font-size:12.5px;margin-top:12px}
@@ -41,11 +42,13 @@ a.call.floor .state{color:var(--acc)}
 <script>
 const $ = id => document.getElementById(id);
 const clock = t => new Date(t * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+// The words the call page's Calls popover says (call-calls.js callInfo), in the same order of need.
 function stateOf(c) {
   if (c.unheard) return c.unheard === 1 ? "New answer" : c.unheard + " new answers";
   if (c.ended) return "Ended";
-  if (c.working) return "Claude is working";
-  return c.floor ? "Talking now" : "Open";
+  if (c.stalled) return "Stalled";
+  if (c.working) return "Answering";
+  return c.floor ? "Talking now" : "Waiting for you";
 }
 let sig = "";
 async function refresh() {
@@ -61,7 +64,7 @@ async function refresh() {
     $("list").replaceChildren(...calls.map(c => {
       const li = document.createElement("li"), a = document.createElement("a");
       a.href = "/c/" + encodeURIComponent(c.id);
-      a.className = "call" + (c.unheard ? " new" : "") + (c.ended ? " ended" : "") + (c.floor ? " floor" : "");
+      a.className = "call" + (c.unheard ? " new" : "") + (c.ended ? " ended" : "") + (c.floor ? " floor" : "") + (c.stalled && !c.unheard && !c.ended ? " stalled" : "");
       const what = document.createElement("div"); what.className = "what";
       const b = document.createElement("b"); b.textContent = c.topic;
       const when = document.createElement("span"); when.textContent = "Started " + clock(c.started);
