@@ -304,6 +304,126 @@ def _frame(spec: dict, geo: dict, frame: str, ox: float, oy: float, keyed: bool,
     return out, frame_w, frame_h
 
 
+# A phone is narrow, so the same graph is drawn once more turned: time runs down the page and the lanes are
+# columns. Its text is set a little smaller (``svg.vzg [data-orient="tall"]`` in vz.css: 12 px names, 11 px the
+# rest, which no scale at or above 1 takes under 11 px) and a long label wraps, so the lanes of an ordinary graph
+# fit a 390 px phone with no sideways scroll and the page pans down only. The page shows one of the two drawings.
+TALL_PAD = 8
+TALL_GAP = 12          # between lane columns
+TALL_ROW_GAP = 30      # between rows, where the arrows turn
+TALL_NAME_W = 82       # a name wraps to lines no wider than this
+TALL_K = 12 / 15.5     # the tall names are set at 12 px, measured at the wide size
+
+
+def _wrap(text: str, style: str, k: float, limit: float) -> list[str]:
+    """`text` in lines no wider than `limit` (a single long word keeps its own line), measured at `k` times `style`."""
+    lines: list[str] = []
+    cur = ""
+    for word in text.split():
+        trial = f"{cur} {word}" if cur else word
+        if cur and _width(trial, style) * k > limit:
+            lines.append(cur)
+            cur = word
+        else:
+            cur = trial
+    return lines + [cur] if cur else [text]
+
+
+def _tall_size(n: dict) -> tuple[float, float, list[str], list[str]]:
+    name = _wrap(n["label"], "vz-nm", TALL_K, TALL_NAME_W)
+    sub = _wrap(n["sub"], "vz-sb", 11 / 13, TALL_NAME_W + 10) if n.get("sub") else []
+    w = max([_width(ln, "vz-nm") * TALL_K for ln in name] + [_width(ln, "vz-sb") * 11 / 13 for ln in sub] + [0]) + 18
+    h = 10 + 15 * len(name) + (4 + 14 * len(sub) if sub else 0)
+    return max(60.0, w), max(30.0, h), name, sub
+
+
+def _frame_tall(spec: dict, geo: dict, frame: str, ox: float, oy: float, keyed: bool) -> tuple[list[str], float, float]:
+    """One frame turned: a row for each column of the wide drawing, a column for each lane. Same keys and classes."""
+    nodes = {n["id"]: n for n in spec["nodes"]}
+    present = frame_nodes(spec, frame)
+    layer, lane = geo["layer"], geo["lane"]
+    sizes = {i: _tall_size(nodes[i]) for i in present}
+    lanes_used = sorted({lane[i] for i in present})
+    with tm.face("stage"):
+        label_w = {ln: (_width(geo["shown"][ln].upper(), "vz-zl") if geo["shown"][ln] else 0.0) for ln in lanes_used}
+    col_w = {ln: max([sizes[i][0] for i in present if lane[i] == ln] + [label_w[ln] + 4]) for ln in lanes_used}
+    x_of: dict[int, float] = {}
+    x = ox
+    for ln in lanes_used:
+        x_of[ln] = x
+        x += col_w[ln] + TALL_GAP
+    frame_w = x - TALL_GAP - ox
+    # a row for each column of the wide drawing; nodes sharing a column and lane take a row each
+    stack: dict[tuple[int, int], int] = {}
+    slot: dict[str, int] = {}
+    for i in present:
+        k = (layer[i], lane[i])
+        slot[i] = stack.get(k, 0)
+        stack[k] = slot[i] + 1
+    rows = sorted({(layer[i], slot[i]) for i in present})
+    row_h = {r: max(sizes[i][1] for i in present if (layer[i], slot[i]) == r) for r in rows}
+    head = 22 if any(geo["shown"][ln] for ln in lanes_used) else 0
+    y_of: dict[tuple[int, int], float] = {}
+    y = oy + head
+    for r in rows:
+        y_of[r] = y
+        y += row_h[r] + TALL_ROW_GAP
+    frame_h = y - TALL_ROW_GAP - oy
+
+    out: list[str] = [f'<g data-frame="{frame}">']
+    for ln in lanes_used:
+        if geo["shown"][ln]:
+            out.append(_text("zl", x_of[ln] + col_w[ln] / 2, oy + 12, geo["shown"][ln].upper(), "", "middle"))
+    pos: dict[str, tuple[float, float, float, float]] = {}
+    for i in present:
+        w, h = sizes[i][0], sizes[i][1]
+        r = (layer[i], slot[i])
+        pos[i] = (x_of[lane[i]] + (col_w[lane[i]] - w) / 2, y_of[r] + (row_h[r] - h) / 2, w, h)
+
+    def state_of(i: str) -> str:
+        s = nodes[i].get("state", "same")
+        return s if frame == "after" or s == "same" else "same"
+
+    seen_pairs: dict[tuple[str, str], int] = {}
+    for e in spec.get("edges") or []:
+        a, b = e["from"], e["to"]
+        n = seen_pairs.get((a, b), 0)
+        seen_pairs[(a, b)] = n + 1
+        if a not in pos or b not in pos:
+            continue
+        ax, ay, aw, ah = pos[a]
+        bx, by, bw, bh = pos[b]
+        x1, y1, x2, y2 = ax + aw / 2, ay + ah, bx + bw / 2, by
+        run = y2 - TALL_ROW_GAP / 2
+        d = f"M{x1:.0f},{y1:.0f} L{x2:.0f},{y2:.0f}" if abs(x1 - x2) < 1 else \
+            f"M{x1:.0f},{y1:.0f} L{x1:.0f},{run:.0f} L{x2:.0f},{run:.0f} L{x2:.0f},{y2:.0f}"
+        faint = state_of(a) in ("ghost", "struck") or state_of(b) in ("ghost", "struck")
+        key = f"edge:{a}->{b}#{n}" if keyed else ""
+        out.append(f'<path class="{_cls("ed", "faint" if faint else "")}" d="{d}"{_attrs(key=key)}/>')
+        if e.get("label"):
+            out.append(_text("lb", (x1 + x2) / 2, run - 4, e["label"], _attrs(key=key), "middle"))
+    for i in present:
+        n = nodes[i]
+        px, py, w, h = pos[i]
+        _, _, name, sub = sizes[i]
+        s = state_of(i)
+        att = _attrs(key=f"node:{i}" if keyed else "")
+        tone = {"new": "green", "struck": "red"}.get(s, "plain")
+        out.append(f'<rect class="{_cls("bx", "nd", tone, "gh" if s == "ghost" else "")}" x="{px:.0f}" y="{py:.0f}" width="{w:.0f}" '
+                   f'height="{h:.0f}" rx="8"{att}/>')
+        top = py + 8 + 12
+        for k, ln in enumerate(name):
+            out.append(_text(_cls("nm", "gh" if s == "ghost" else "", "st" if s == "struck" else ""), px + w / 2, top + 15 * k - 3, ln, att, "middle"))
+        for k, ln in enumerate(sub):
+            out.append(_text("sb", px + w / 2, top + 15 * len(name) + 14 * k - 1, ln, att, "middle"))
+        if s == "struck":
+            out.append(f'<line class="stk" x1="{px + 6:.0f}" y1="{py + h / 2:.0f}" x2="{px + w - 6:.0f}" y2="{py + h / 2:.0f}"{att}/>')
+        if s == "new":
+            out.append(_text("tg green", px + w - 4, py - 4, "NEW", att, "end"))
+    out.append("</g>")
+    return out, frame_w, frame_h
+
+
 def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
     """Validate and draw `spec` as one SVG string. `uid` prefixes every id. With `keyed`, nodes and edges carry their
     keys (``node:<id>``, ``edge:<a>-><b>#<n>``) in both frames, for the stage's frames."""
@@ -345,8 +465,25 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
         total_w, total_h = PAD + wf + PAD, y0 + hf + PAD
         total_w = max(total_w, PAD * 2 + _width(spec.get("title") or "", "vz-ttl"))
         vb = {"both": (0, 0, total_w, total_h)}
+    # the same graph turned, for a narrow page: before above after, or the one frame
+    tall: list[str] = []
+    tvb: dict[str, tuple[float, float, float, float]] = {}
+    if framed:
+        pb, tw_b, th_b = _frame_tall(spec, geo, "before", TALL_PAD, TALL_PAD + 22, keyed)
+        ty1 = TALL_PAD + 22 + th_b + 44
+        pa, tw_a, th_a = _frame_tall(spec, geo, "after", TALL_PAD, ty1 + 22, keyed)
+        tw = TALL_PAD * 2 + max(tw_b, tw_a)
+        tall = [_text("zl", TALL_PAD, TALL_PAD + 12, "BEFORE")] + pb + [_text("zl", TALL_PAD, ty1 + 12, "AFTER")] + pa
+        th = ty1 + 22 + th_a + TALL_PAD
+        tvb = {"before": (0, 0, tw, TALL_PAD + 22 + th_b + TALL_PAD), "after": (0, ty1 - 8, tw, th - ty1 + 8), "both": (0, 0, tw, th)}
+    else:
+        pa, tw_a, th_a = _frame_tall(spec, geo, "after", TALL_PAD, TALL_PAD, keyed)
+        tall = pa
+        tvb = {"both": (0, 0, TALL_PAD * 2 + tw_a, TALL_PAD * 2 + th_a)}
+    out += ['<g data-orient="tall">'] + tall + ["</g>"]
     aria = escape(spec.get("aria") or spec.get("title") or "Graph", quote=True)
     vbs = "".join(f' data-vb-{k}="{v[0]:.0f} {v[1]:.0f} {v[2]:.0f} {v[3]:.0f}"' for k, v in vb.items())
+    vbs += "".join(f' data-vb-tall-{k}="{v[0]:.0f} {v[1]:.0f} {v[2]:.0f} {v[3]:.0f}"' for k, v in tvb.items())
     return (f'<svg class="vz vzg" viewBox="0 0 {total_w:.0f} {total_h:.0f}" role="img" aria-label="{aria}" data-vz="graph" '
             f'data-frames="{"2" if framed else "1"}"{vbs}>' + _markers(uid) + "".join(out) + "</svg>")
 

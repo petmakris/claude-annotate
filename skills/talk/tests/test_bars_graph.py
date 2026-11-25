@@ -42,7 +42,7 @@ def test_a_bars_tag_draws_a_keyed_svg_and_its_aliases_read_the_same(tmp_path):
 def test_a_graph_tag_draws_both_frames_and_a_mermaid_graph_is_still_a_flowchart(tmp_path):
     call, _ = reply(tmp_path, f"Look. [[show graph | Rebase]] {json.dumps(GRAPH)} [[/show]] Done.")
     item = call.board.items[0]
-    assert (item["kind"], call.board.problems) == ("graph", []) and item["visual"]["svg"].count("<g data-frame=") == 2
+    assert (item["kind"], call.board.problems) == ("graph", []) and item["visual"]["svg"].split('<g data-orient="tall">')[0].count("<g data-frame=") == 2
     call, _ = reply(tmp_path, "Look. [[show graph | Old]]\ngraph TD\n A-->B\n[[/show]] Done.")
     assert (call.board.items[0]["kind"], call.board.problems) == ("flowchart", [])  # `graph` was Mermaid's name before it was a board
 

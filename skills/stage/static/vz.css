@@ -168,3 +168,11 @@ svg.vzg.mode-before g[data-frame="after"], svg.vzg.mode-after g[data-frame="befo
 svg.vzg [data-frame] { transition: opacity .35s ease }
 svg.vzg rect.bx.now { stroke: var(--vz-accent); stroke-width: 3 }
 svg.vzg .ed.now { stroke: var(--vz-accent); stroke-width: 3 }
+
+/* The graph turned for a narrow page (graph_svg.py `data-orient="tall"`): lanes are columns, time runs down; its text is
+   12 px and 11 px, so at a scale of 1 or more nothing is under 11 px. The page puts `tall` on the svg to show it. */
+svg.vzg > g[data-orient="tall"] { display: none }
+svg.vzg.tall > :not(defs):not([data-orient="tall"]) { display: none }
+svg.vzg.tall > g[data-orient="tall"] { display: inline }
+svg.vzg g[data-orient="tall"] text.nm { font-size: 12px }
+svg.vzg g[data-orient="tall"] text.sb, svg.vzg g[data-orient="tall"] text.lb { font-size: 11px }

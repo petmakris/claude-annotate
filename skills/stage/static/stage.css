@@ -542,14 +542,14 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
    columns or more. What is not said yet is dim, what was said plain, and what is being said (a row, rows, a column,
    a pair of cells) is lit by colour, weight and a band: never by size, padding or margin, which would move the rest. */
 .pbody>.md.grid{align-self:stretch;width:100%;margin-inline:0;align-items:center}
-.md.grid>.tablewrap{font-size:16px;width:min(100%,var(--tw,60ch));max-width:100%;border-radius:16px;flex:0 1 auto;margin-inline:auto}
-.md.grid>.tablewrap.span{width:100%;font-size:14px}   /* six columns or more: denser, so the words stay whole */
+.md.grid>.tablewrap{font-size:calc(16px * var(--tf,1));width:min(100%,var(--tw,60ch));max-width:100%;border-radius:16px;flex:0 1 auto;margin-inline:auto}
+.md.grid>.tablewrap.span{width:100%;font-size:calc(14px * var(--tf,1))}   /* six columns or more: denser, so the words stay whole */
 .md.grid>.tablewrap.span th,.md.grid>.tablewrap.span td{padding:10px 10px}
 .md.grid>.tablewrap:not(.span){max-width:72rem}
 .md.grid table{width:100%;min-width:0;table-layout:fixed;font:inherit;line-height:1.4}
-.md.grid col{width:var(--w)}
-.md.grid th,.md.grid td{padding:12px 18px;vertical-align:middle;overflow-wrap:break-word;text-align:left;transition:background-color .25s,color .25s}
-.md.grid thead th{font:600 12px/1.4 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.md.grid col{width:max(var(--w),var(--min,0px))}
+.md.grid th,.md.grid td{padding:12px 18px;vertical-align:middle;overflow-wrap:normal;word-break:keep-all;text-align:left;transition:background-color .25s,color .25s}
+.md.grid thead th{font:600 calc(12px * var(--tf,1))/1.4 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .md.grid td.key{font-weight:600;color:var(--ink);width:auto;white-space:normal}
 .md.grid th.num,.md.grid td.num{text-align:right;font-variant-numeric:tabular-nums}
 .md.grid tbody tr:nth-child(even){background:none}
@@ -575,13 +575,13 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 @media (max-width:600px){
   /* a phone keeps the whole grid: compact when its words are short, else scrolling sideways with the first column kept */
   .pbody>.md.grid{padding:0}
-  .md.grid>.tablewrap,.md.grid>.tablewrap:not(.span),.md.grid>.tablewrap.span{width:100%;max-width:100%;border-radius:12px;font-size:13px}
+  .md.grid>.tablewrap,.md.grid>.tablewrap:not(.span),.md.grid>.tablewrap.span{width:100%;max-width:100%;border-radius:12px;font-size:calc(13px * var(--tf,1))}
   .md.grid table{line-height:1.35}
-  .md.grid table[data-fit="fit"] col{width:var(--wp)}
+  .md.grid table[data-fit="fit"] col{width:max(var(--wp),var(--min,0px))}
   .md.grid th,.md.grid td,.md.grid>.tablewrap.span th,.md.grid>.tablewrap.span td{padding:8px 8px}
-  .md.grid thead th{font-size:10.5px;letter-spacing:.06em}
+  .md.grid thead th{font-size:calc(10.5px * var(--tf,1));letter-spacing:.06em}
   .md.grid table[data-fit="scroll"]{width:calc(var(--tws) * 1ch);min-width:100%}   /* fixed too: lit weight moves no column */
-  .md.grid table[data-fit="scroll"] col{width:calc(var(--wn) * 1ch)}
+  .md.grid table[data-fit="scroll"] col{width:max(calc(var(--wn) * 1ch),var(--min,0px))}
   .md.grid tbody tr.g-cur td:first-child{box-shadow:inset 3px 0 0 var(--claude)}
 }
 
@@ -798,7 +798,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
    keeps the accent while the rest dims. A wide map scrolls sideways rather than shrinking its words. */
 .visual.vzmap{padding:14px 16px;overflow-x:auto;overflow-y:visible}
 .vzmap svg.vz{width:100%;max-width:2400px;margin:0 auto}  /* fills the pane, a TV's too */
-@media (max-width:760px){.vzmap svg.vz{width:1100px;max-width:none}}  /* on a phone it scrolls sideways at a size words can be read at */
+@media (max-width:760px){.visual.vzmap:not(.vzbars):not(.vzgraph){overflow-x:hidden}}  /* on a phone the whole map fits the pane's width: no sideways scroll, the lit part and its arrow stay in view */
 .vzmap svg.vz rect.bx.k-hidden,.vzmap svg.vz rect.zone.k-hidden{opacity:1!important;fill:none;stroke:var(--vz-line);stroke-width:1.2;stroke-dasharray:4 4}
 .vzmap.k-dim svg.vz [data-key]:not(.k-focus):not(.k-hidden):not(.now){opacity:.3}
 .vzmap svg.vz rect.bx.k-focus{stroke:var(--vz-accent);stroke-width:2.4}
@@ -875,6 +875,7 @@ svg.sb-link circle{fill:var(--acc);stroke:var(--panel);stroke-width:2}
 .vzmap.vzgraph svg.vz{min-width:0;max-width:1500px;overflow:hidden}  /* a frame alone is cut to its own viewBox */
 .vzmap.vzgraph svg.vz .ed.k-hidden,.vzmap.vzgraph svg.vz .lb.k-hidden{opacity:0!important}
 .vzmap.vzgraph svg.vz .ed.k-focus{stroke:var(--vz-accent);stroke-width:3.2}
+.vzmap.vzgraph.g-tall{padding-inline:6px}  /* a graph turned for a phone takes the pane's width */
 .vzmap.vzgraph .gsw{display:flex;gap:6px;justify-content:center;margin:0 0 10px;position:sticky;left:0}
 .vzmap.vzgraph .gsw[hidden]{display:none}
 .vzmap.vzgraph .gsw button{font:600 14px var(--font,system-ui);padding:6px 16px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}

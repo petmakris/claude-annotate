@@ -424,5 +424,9 @@ export function layoutMap(box, scene, n, stepped = false) {
       dot.firstElementChild.beginElement();
     }
   }
-  return box.querySelector(".m-node.m-cur");
+  // the card being said, and for an arrow the two parts it joins and its label: all of them stay in view together
+  const ends = edge ? edge.slice(5).replace(/#\d+$/, "").split("->") : [];
+  const keep = [box.querySelector(".m-node.m-cur"), ...ends.map((id) => box.querySelector(`.m-node[data-node="${CSS.escape(id)}"]`)),
+    edge ? [...box.querySelectorAll(".m-edge")].find((g) => g.dataset.key === edge) : null].filter(Boolean);
+  return keep.length ? keep : null;
 }

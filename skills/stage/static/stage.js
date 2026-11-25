@@ -588,7 +588,48 @@ function shapeBoard(box) {
     table.style.setProperty("--tws", String(Math.round(scrolled.reduce((a, b) => a + b, 0))));
     table.dataset.fit = need <= FIT_CHARS ? "fit" : "scroll";  // the phone's form: a compact grid, or a sideways one
     wrap.addEventListener("scroll", () => scrollCue(wrap), { passive: true });
+    wordFloors(table, wrap);
+    if (typeof ResizeObserver === "function") {
+      let was = 0;
+      new ResizeObserver(() => { const w = wrap.clientWidth; if (w && Math.abs(w - was) > 1) { was = w; wordFloors(table, wrap); } }).observe(wrap);
+    }
   });
+}
+// A column is never narrower than its longest word, so a word never breaks across lines (no `Latenc/y`): each column's
+// floor is that word measured in the cell's own font (bold, as a lit row is; a header in capitals and its letter-spacing)
+// plus the cell's padding, shared out by the column's text as before for the rest. When the floors do not fit the board's
+// width, the text of the whole table is set smaller (down to 72 %); under that the table scrolls sideways, still unbroken.
+let measureCtx;
+function wordFloors(table, wrap) {
+  measureCtx ||= document.createElement("canvas").getContext?.("2d");
+  const cols = [...table.querySelectorAll(":scope > colgroup > col")];
+  if (!measureCtx || !cols.length) return;
+  const word = cols.map(() => 0), pad = cols.map(() => 0);
+  for (const td of table.querySelectorAll("th, td")) {
+    const i = (+td.dataset.c || 0) - 1;
+    if (i < 0 || i >= cols.length) continue;
+    const cs = getComputedStyle(td), size = parseFloat(cs.fontSize) || 14;
+    const sc = +wrap.style.getPropertyValue("--tf") || 1;
+    pad[i] = Math.max(pad[i], (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + 2);
+    const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const host = n.parentElement, hs = host === td ? cs : getComputedStyle(host), fs = (parseFloat(hs.fontSize) || size) / sc;
+      measureCtx.font = `${Math.max(600, +hs.fontWeight || 400)} ${fs}px ${hs.fontFamily}`;
+      const track = (parseFloat(hs.letterSpacing) || 0) / sc, caps = hs.textTransform === "uppercase";
+      for (const w of n.nodeValue.split(/\s+/)) {
+        if (!w) continue;
+        const text = caps ? w.toUpperCase() : w;
+        word[i] = Math.max(word[i], measureCtx.measureText(text).width + track * text.length + (host === td ? 0 : 12));
+      }
+    }
+  }
+  const avail = wrap.clientWidth - 2, padSum = pad.reduce((a, b) => a + b, 0), wordSum = word.reduce((a, b) => a + b, 0);
+  if (!avail || !wordSum) return;
+  const tf = padSum + wordSum <= avail ? 1 : Math.max(0.72, Math.min(1, (avail - padSum) / wordSum));
+  wrap.style.setProperty("--tf", tf.toFixed(3));
+  cols.forEach((c, i) => c.style.setProperty("--min", (word[i] * tf + pad[i]).toFixed(1) + "px"));
+  const total = word.reduce((a, w, i) => a + w * tf + pad[i], 0);
+  table.style.minWidth = total > avail ? Math.ceil(total) + "px" : "";   // the floors do not fit: the table scrolls, unbroken
 }
 // A table taller than its board keeps its header and shows it goes on: the foot fades until the end is reached.
 function scrollCue(wrap) {
@@ -742,6 +783,7 @@ function layoutVzMap(box, scene, n) {
   const at = steps.length ? Math.max(...steps) : null;  // how far the request has come
   svg.classList.toggle("mode-route", at !== null);
   if (svg.dataset.vz === "graph") layoutGraph(box, svg, frame, n < scene.rest);
+  const pointed = svg.classList.contains("tall") && n < scene.rest ? ["before", "after"].find((m) => (frame.focus || []).includes("mode:" + m)) : null;
   const on = svg.querySelector('marker[id$="-on"]')?.id, said = [];
   for (const el of svg.querySelectorAll("[data-key]")) {
     const now = cur.has(el.dataset.key);
@@ -753,7 +795,28 @@ function layoutVzMap(box, scene, n) {
     if (el.dataset.marker) el.dataset.marker = head;  // drawing in: its head comes back when the line is drawn
     else el.setAttribute("marker-end", head);
   }
-  return said;
+  const group = pointed && svg.querySelector(`g[data-orient="tall"] > g[data-frame="${pointed}"]`);
+  return withEnds(svg, group ? [...said, group] : said);
+}
+// An arrow lit on a drawn map is kept in view with the two boxes (or nodes) it joins, not on its own.
+function withEnds(svg, els) {
+  const out = [...els];
+  for (const el of els) {
+    const m = /^edge:(.+)->(.+)#\d+$/.exec(el.dataset.key || "");
+    if (m) {
+      for (const id of [m[1], m[2]]) for (const kind of ["box", "node"])
+        for (const e of svg.querySelectorAll(`[data-key="${kind}:${CSS.escape(id)}"]`)) if (!out.includes(e)) out.push(e);
+    } else if (el.tagName === "path" && el.classList.contains("ar") && el.getTotalLength && el.getScreenCTM()) {
+      // a route step's arrow names no boxes: the boxes its two ends touch
+      const ctm = el.getScreenCTM(), len = el.getTotalLength();
+      const ends = [0, len].map((d) => { const p = el.getPointAtLength(d); return [p.x * ctm.a + p.y * ctm.c + ctm.e, p.x * ctm.b + p.y * ctm.d + ctm.f]; });
+      for (const e of svg.querySelectorAll('rect.bx[data-key^="box:"]')) {
+        const r = e.getBoundingClientRect();
+        if (!out.includes(e) && ends.some(([x, y]) => x >= r.left - 6 && x <= r.right + 6 && y >= r.top - 6 && y <= r.bottom + 6)) out.push(e);
+      }
+    }
+  }
+  return out;
 }
 // A graph board: the frame the voice points at (`mode:before`, `mode:after`) keeps the light and the other goes faint, a
 // pointed frame alone lights no part, and on a narrow board one frame shows at a time (its own viewBox) with a switch.
@@ -764,8 +827,22 @@ function layoutGraph(box, svg, frame, playing) {
   svg.classList.toggle("mode-after", playing && said === "after");
   if (modes) box.classList.remove("k-dim");  // a frame is not a part: nothing else dims
   const two = svg.dataset.frames === "2", narrow = two && box.clientWidth > 0 && box.clientWidth < 640;
-  box.classList.toggle("g-narrow", narrow);
+  // a graph on a phone is drawn turned (lanes as columns, time down the page) at a scale of 1 or more, so its text stays
+  // 11 px or more and it pans down only; before sits above after. A graph saved without that drawing keeps the one-frame switch.
+  const tall = box.clientWidth > 0 && box.clientWidth < 640 && !!svg.dataset.vbTallBoth;
+  svg.classList.toggle("tall", tall);
+  box.classList.toggle("g-tall", tall);
+  box.classList.toggle("g-narrow", narrow && !tall);
   if (said) box.dataset.gframe = said;
+  if (tall) {
+    const tvb = svg.dataset.vbTallBoth;
+    svg.setAttribute("viewBox", tvb);
+    const cs = getComputedStyle(box);
+    svg.style.width = Math.min(+tvb.split(" ")[2], box.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0)) + "px";
+    const old = box.querySelector(":scope > .gsw");
+    if (old) old.hidden = true;
+    return;
+  }
   const pick = narrow ? (box.dataset.gframe || "after") : "both";
   const vb = svg.dataset["vb" + pick.charAt(0).toUpperCase() + pick.slice(1)];
   if (vb) svg.setAttribute("viewBox", vb);
@@ -1269,7 +1346,7 @@ followEl.onclick = () => setFollow(true);
 // that scrolls, inside the pane only: never the page around the stage. What is taller than the box starts at
 // its top instead. `room`: the foot of the board kept clear, which the element is centred above.
 function centre(el, room = 0) {
-  const els = (Array.isArray(el) ? el : [el]).filter((e) => e && e.isConnected);
+  const els = (Array.isArray(el) ? el : [el]).filter((e) => e && e.isConnected && e.getClientRects().length);  // not one drawn nowhere (the other orientation of a graph)
   if (!els.length) return;
   const behavior = reduced() ? "auto" : "smooth";
   for (let box = els[0].parentElement; box && box !== panesEl; box = box.parentElement) {
@@ -1445,7 +1522,7 @@ function paintFrame(v, box, animate = false) {
   // the map is placed to fit; on one taller than its board, the card being said is kept in view
   if (box.classList.contains("map")) done.focused = layoutMap(box, scene, n, animate && v.applied === n - 1);
   if (box.classList.contains("vzmap")) {
-    const said = layoutVzMap(box, scene, n), lit = done.focused.length ? done.focused : said;
+    const said = layoutVzMap(box, scene, n), lit = withEnds(box.querySelector("svg.vz") || box, done.focused.length ? done.focused : said);
     done.focused = lit;
     requestAnimationFrame(() => { if (!v.pane.hidden) centreAcross(box, lit); });  // a map wider than its board
   }

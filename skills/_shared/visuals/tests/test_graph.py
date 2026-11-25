@@ -86,7 +86,7 @@ def test_a_ghost_is_faint_and_dashed_after_and_ordinary_before_a_struck_node_is_
 
 
 def test_a_node_and_an_edge_carry_the_same_key_in_both_frames():
-    svg = graph_svg.render(REBASE, "g4", keyed=True)
+    svg = graph_svg.render(REBASE, "g4", keyed=True).split('<g data-orient="tall">')[0]  # the wide drawing
     assert svg.count('data-key="node:b"') == 2 * 2  # a rect and its label, in two frames
     assert svg.count('data-key="node:d2"') == 3     # new: the after frame only (its rect, its label and its NEW tag)
     assert svg.count('data-key="edge:a-&gt;b#0"') == 2
@@ -106,3 +106,21 @@ def test_labels_reach_the_page_only_as_text():
     spec = with_(title="<img src=x onerror=1>", nodes=[{"id": "a", "label": "<script>x</script>", "lane": "main"}], edges=[], lanes=None)
     svg = graph_svg.render(spec, "g6")
     assert "<script" not in svg and "<img" not in svg and "&lt;script&gt;" in svg
+
+
+def test_the_graph_is_drawn_again_turned_for_a_phone():
+    svg = graph_svg.render(REBASE, "g6", keyed=True)
+    wide, tall = svg.split('<g data-orient="tall">')
+    assert wide.count("<g data-frame=") == 2 and tall.count("<g data-frame=") == 2
+    for key in ('data-key="node:b"', 'data-key="node:d2"', 'data-key="edge:a-&gt;b#0"'):
+        assert tall.count(key) == wide.count(key)   # the same keys, so a frame lights both drawings
+    vb = {k: tuple(map(int, v.split())) for k, v in re.findall(r'data-vb-tall-(\w+)="([^"]*)"', svg)}
+    assert vb["both"][0] == 0 and vb["both"][2] <= 338   # lanes as columns: a 390 px phone's pane at a scale of 1
+    assert vb["before"][1] == 0 and vb["after"][1] > vb["before"][3] - 40 and vb["both"][3] > vb["after"][1]
+    assert 'data-key' not in graph_svg.render(REBASE, "g6").split('<g data-orient="tall">')[1]
+
+
+def test_a_tall_name_wraps_to_its_own_lines():
+    n = {"id": "x", "label": "your second, copied commit", "lane": "feature"}
+    w, h, name, sub = graph_svg._tall_size(n)
+    assert name == ["your second,", "copied", "commit"] and sub == [] and 94 < w < 95 and h == 10 + 15 * 3
