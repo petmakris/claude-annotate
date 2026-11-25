@@ -7,11 +7,12 @@
 // turn leaves the answer stopped, nothing (a cough, "mm-hm", its own echo) resumes it from the start
 // of its sentence. One page listens per call and one call per browser: the others park.
 const LIVE = {chunk: 2048, preMs: 400, minRms: 0.012, startMs: 160, startOverMs: 320, overGain: 1.8, minSpeechMs: 350,
-              floorMs: 8000, pauseMs: 700, duck: 0.2, maxMs: 60000, hardMs: 420000, armedMs: 6000, sleepMs: 600000};
+              floorMs: 8000, pauseMs: 700, duck: 0.2, maxMs: 60000, hardMs: 420000, armedMs: 6000, sleepMs: 600000,
+              flatRms: 0.0005, flatMs: 10000};   // a stream flat at zero this long is a muted or dead microphone, not a quiet room
 const liveQueue = [];
 let liveSending = false, wokeAt = 0;
 const liveChannel = "BroadcastChannel" in window ? new BroadcastChannel("talk-live") : null;
-const listening = () => !!live && !live.suspended && !live.parked;
+const listening = () => !!live && !live.suspended && !live.parked && !live.muted;
 // The user is talking, or what they said is on its way: new answers wait and the held answer stays held.
 const userBusy = () => !!held || !!(live && live.speech) || liveQueue.length > 0 || liveSending;
 const later = ms => new Promise(ok => setTimeout(ok, ms));
@@ -27,13 +28,27 @@ async function startLive() {
   const source = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(LIVE.chunk, 1, 1);
   live = {stream, ctx, source, node, rate: ctx.sampleRate, recent: [], pre: [], loud: 0, quiet: 0, voiced: 0, ms: 0,
           speech: false, chunks: [], floorTaken: false, parked: null, lastVoice: performance.now(),
-          suspended: ctx.state === "suspended"};
+          suspended: ctx.state === "suspended", muted: false, noSignal: false, flatMs: 0};
   node.onaudioprocess = ev => liveChunk(new Float32Array(ev.inputBuffer.getChannelData(0)));
   source.connect(node); node.connect(ctx.destination);
   const track = stream.getAudioTracks()[0];
-  if (track) track.onended = () => { if (live && live.stream === stream) stopLive("The microphone was lost. Press the mic to listen again."); };
+  if (track) {
+    track.onended = () => { if (live && live.stream === stream) stopLive("The microphone was lost. Press the mic to listen again."); };
+    // The browser or the system muted the input (a hardware switch, a privacy setting): said at once, not after the silence watch.
+    track.onmute = () => { if (live && live.stream === stream && !live.muted) { live.noSignal = true; paintAll(); } };
+    track.onunmute = () => { if (live && live.stream === stream) { live.noSignal = false; live.flatMs = 0; paintAll(); } };
+  }
   liveNote = "";
   claimLive();
+}
+// Mute keeps the stream, the floor and this page's claim, and sends nothing: what is being said is dropped, a held answer goes on.
+function setMuted(on) {
+  const l = live; if (!l || l.muted === on) return;
+  l.muted = on;
+  const track = l.stream.getAudioTracks()[0]; if (track) track.enabled = !on;
+  if (on) { if (l.speech) { l.speech = false; l.chunks = []; l.ms = 0; l.voiced = 0; l.quiet = 0; } l.loud = 0; levels.fill(0); $("app").style.removeProperty("--lvl"); settle(); }
+  else { l.lastVoice = performance.now(); l.recent.length = 0; l.pre.length = 0; l.flatMs = 0; l.noSignal = false; }
+  paintAll();
 }
 function stopLive(note = "") {
   const l = live; live = null;
@@ -101,10 +116,13 @@ function sentenceStart() {
 }
 function liveChunk(d) {
   const l = live;
-  if (!l || l.suspended) return;
+  if (!l || l.suspended || l.muted) return;
   let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
   const lvl = Math.sqrt(sum / d.length), ms = d.length / l.rate * 1000, now = performance.now();
   levels.push(Math.min(1, lvl * 8)); levels.shift();
+  // Flat at zero for ten seconds: a muted or dead input, never merely a quiet room (a quiet room still carries noise).
+  if (lvl < LIVE.flatRms) { l.flatMs += ms; if (l.flatMs >= LIVE.flatMs && !l.noSignal) { l.noSignal = true; paintAll(); } }
+  else { l.flatMs = 0; if (l.noSignal) { l.noSignal = false; paintAll(); } }
   if (!meterRaf) meterRaf = requestAnimationFrame(paintMeter);
   if (l.parked) return;
   // The floor is the quietest moment of the last few seconds: a fan or music switched on raises it,
@@ -232,6 +250,16 @@ async function sendLive(u) {
   } else if (body && !body.ignored && !u.over) flash("Didn't catch that.");
   paintAll();
 }
+// "slower", "faster" and "say that again slower" move the voice speed one step (the player's chip does the same by hand); a held
+// answer goes on at the new speed, and the last one also starts the sentence again.
+const SPEED_STEP = {slower: -1, faster: 1, repeat_slower: -1};
+function speedBySpeech(cmd, h) {
+  const at = SPEEDS.indexOf(speed), to = Math.min(SPEEDS.length - 1, Math.max(0, (at < 0 ? SPEEDS.indexOf(1) : at) + SPEED_STEP[cmd]));
+  if (to === at) flash(SPEED_STEP[cmd] < 0 ? "Already as slow as it goes." : "Already as fast as it goes.");
+  else { setSpeed(SPEEDS[to]); flash((SPEED_STEP[cmd] < 0 ? "Slower: " : "Faster: ") + speed + "×"); }
+  if (cmd === "repeat_slower" && current) { readerPlays(current); audio.currentTime = h ? h.from : sentenceStart(); audio.play().catch(() => {}); }
+  else if (h && h.paused && current) { audio.currentTime = h.from; audio.play().catch(() => {}); }
+}
 // A spoken command, acted on here: no turn, no wait for Claude.
 function runCommand(cmd, body) {
   chime(700);
@@ -239,6 +267,7 @@ function runCommand(cmd, body) {
   if (cmd === "withdraw") { undoable = null; flash("Taken back."); if (held) { held.armed = false; } return; }  // settle resumes a held answer
   const h = held;
   release();
+  if (cmd in SPEED_STEP) { speedBySpeech(cmd, h); return; }
   if (cmd === "pause") { audio.pause(); return; }
   // resume, repeat and back all play
   if (!current) { const e = lastAnswer(); if (e && e.speech === "ready") { readerPlays(e); load(e, true); } return; }

@@ -496,7 +496,6 @@ $("playpause").onclick = $("railpp").onclick = togglePlay;
 $("back").onclick = () => jump(-1);
 $("next").onclick = () => jump(1);
 $("railback").onclick = () => skip(-10);
-$("speedchip").onclick = () => { setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]); paintTransport(); };
 $("seek").oninput = () => { audio.currentTime = Number($("seek").value); paintPill(); };
 for (const ev of ["play", "pause", "ended", "durationchange", "loadedmetadata"]) audio.addEventListener(ev, paintAll);
 audio.addEventListener("timeupdate", paintPill);
@@ -527,5 +526,5 @@ function paintTransport() {
   $("seek").setAttribute("aria-label", shown ? "Position in answer " + shown.n : "Position in the answer");
   $("seek").setAttribute("aria-valuetext", current ? fmt(audio.currentTime) + " of " + fmt(d) : "");
   $("time").textContent = current ? fmt(audio.currentTime) + " / " + fmt(d) : "";
-  $("speedchip").textContent = speed + "×"; $("speedchip").setAttribute("aria-label", "Speed " + speed + " times, press for the next"); $("speedchip").title = "Voice speed";
+  $("speedchip").textContent = speed + "×";
 }

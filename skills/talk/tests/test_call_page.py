@@ -367,9 +367,9 @@ _CSS = (_Path(__file__).resolve().parents[1] / "static" / "call.css").read_text(
 
 
 def test_a_phone_gear_panel_is_a_sheet_capped_to_the_space_above_the_panel():
-    # callpage-1: the sheet sits one panel height + 10px up (46%, or 38% while a board is up) and was as tall as the page less 68px, so its top left the screen
+    # callpage-1: the sheet sits one panel height + 10px up (58%, or 52% while a board is up) and was as tall as the page less 68px, so its top left the screen
     assert ".pop,.app[data-side=\"left\"] .pop{top:auto;bottom:calc(var(--ph) + 10px);left:10px;right:10px;width:auto;max-height:calc(100% - var(--ph) - 24px)}" in _CSS
-    assert ".app{--ph:46%}" in _CSS and ".app[data-board]{--ph:38%}" in _CSS
+    assert ".app{--ph:58%}" in _CSS and ".app[data-board]{--ph:52%}" in _CSS
     assert ".app[data-rail] .pop,.app[data-rail] .gearpop{top:auto;bottom:70px;max-height:calc(100% - 82px)}" in _CSS
 
 

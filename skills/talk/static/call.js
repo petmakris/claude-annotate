@@ -112,7 +112,7 @@ function paintAll() {
   $("app").dataset.state = appState(); $("app").toggleAttribute("data-ended", !!view.ended);
   $("app").toggleAttribute("data-live", listening());
   $("app").toggleAttribute("data-tv", screenMode === "tv");
-  paintModeChip(); paintUndo();
+  paintUndo();
   // The paint hooks, one per feature, each in its owner's file (empty until that batch fills it). Order: the card of the
   // current turn and what waits on it, then the list and the strips, then what is said for a screen reader.
   paintNowCard(); paintWait(); paintEarlier(); paintInputMode(); paintStateStrip(); paintWelcome(); paintAnnounce();

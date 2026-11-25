@@ -121,8 +121,9 @@ await settle();
 
 class CallPage:
     def __init__(self, html: str, states: list, *, start: int = 0, seconds: float = 4.0, autoplay: bool = True,
-                 stored: dict | None = None):
+                 stored: dict | None = None, query: str = ""):
         self.html, self.states, self.start, self.seconds, self.autoplay = html, states, start, seconds, autoplay
+        self.query = query  # the address' query string, "?screen=tv" and the like
         self.stored = stored or {}  # what this origin's localStorage holds when the page opens, by key after "talk."
         self.steps: list = []
 
@@ -137,7 +138,7 @@ class CallPage:
     def run(self):
         cfg = re.search(r"window\.CFG = (.*?);</script>", self.html).group(1).replace("<\\/", "</")
         prelude = PRELUDE % {
-            "shim": json.dumps(SHIM.as_uri()), "url": json.dumps(PAGE), "html": json.dumps(self.html),
+            "shim": json.dumps(SHIM.as_uri()), "url": json.dumps(PAGE + self.query), "html": json.dumps(self.html),
             "states": json.dumps(self.states), "start": self.start, "cfg": json.dumps(cfg),
             "files": json.dumps(page_scripts(self.html)), "seconds": self.seconds,
             "storage": ("" if self.autoplay else 'localStorage.setItem("talk.autoplay", "false");')

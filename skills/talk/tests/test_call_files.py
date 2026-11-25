@@ -38,7 +38,7 @@ def test_the_hooks_each_file_owns_are_declared_where_the_core_calls_them():
     owners = {"paintNowCard": "call-shell.js", "paintEarlier": "call-shell.js", "shellOnView": "call-shell.js",
               "paintWait": "call-wait.js", "waitOnView": "call-wait.js", "turnSent": "call-wait.js", "waitActive": "call-wait.js",
               "callsOnView": "call-calls.js", "paintCallsButton": "call-calls.js",
-              "paintInputMode": "call-input.js", "paintMic": "call-input.js", "paintModeChip": "call-input.js",
+              "paintInputMode": "call-input.js", "paintMic": "call-input.js",
               "returnOnView": "call-return.js", "paintWelcome": "call-return.js", "paintStateStrip": "call-return.js",
               "paintAnnounce": "call-return.js", "announce": "call-return.js", "returnMarkEarlier": "call-return.js",
               "popChanged": "call-input.js", "setSpeed": "call-input.js"}

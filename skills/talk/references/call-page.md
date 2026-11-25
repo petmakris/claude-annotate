@@ -48,6 +48,7 @@ Read this to explain the page to the user or to debug it. Nothing here is needed
 - Under the card, **Earlier** lists every other answer as one aligned row: number (filled when the answer is new), question and its first sentence, boards with their count, time and Play. A tap on a row opens it in place (full text, chips, Play from the start, Copy); Expand all opens every row; the boards cell fronts the answer's board. Play on a row starts that answer and puts the stage back on the voice. Search (under the list's head, and the header's magnifier) finds an answer by its question, its words or its boards, ignoring case and accents, and marks the match.
 - Progress notes (`reply --status`) are not rows of the conversation: the foot says what Claude is doing now. An answer a correction replaced is tagged "Replaced by your correction".
 - Under the conversation sit the text field and the mic.
+- How the user talks and steers: the foot's Type, Talk and Live switch with a Your turn pill, a true mute in Live, the speed chip in the player (and Alt+S), Back as one sentence, the Keys sheet (`?`), layers that take and give back the focus, TV at one scale (`--tv`) and 44 px targets on a phone (`call-input.js`, `call-live.js`).
 - Space pauses and plays. The left and right arrows move to the start of the previous or next sentence, wherever nothing is being typed.
 - The panel sits on the left or the right, is as wide as it is dragged, and collapses to a rail that keeps the mic and the player.
 - The gear holds speed, language, light or dark, and whether the stage follows the voice.
@@ -56,12 +57,24 @@ Read this to explain the page to the user or to debug it. Nothing here is needed
 - A board the reader picks on the stage stays in front whatever they play, until they press **Follow the voice** or the next answer starts.
 - A new answer that arrives while the call's tab is hidden waits, and plays when the tab is seen again.
 
+### Keys and input mode
+
+- The switch under the player says how the next words get in: **Type** (the mic is put away and the cursor is in the field), **Talk** (press the mic, check the words, send) and **Live** (the microphone stays open). It is locked while a recording runs.
+- The pill beside it says whose turn it is: Your turn, Typing, Recording, Claude is working, Claude is speaking, and in Live Listening, Hearing you, Muted or No sound heard.
+- The voice speed is a chip in the player (and in the gear). Back is one sentence.
+- Space plays and pauses; the left and right arrows go a sentence back or forward; **?** opens the list of every key (also the Keys button under the field and the row in the gear). The other shortcuts are Alt chords by physical key: S next speed, M the message field, P the player, V follow the voice again, T Talk or Done.
+- Two skip links, the first stops of the page, go to the message field and to the player. A settings or keys layer takes the focus when it opens, keeps Tab inside it and gives the focus back to its button on Escape.
+- The page's own words are English whatever language the user speaks: **Speech language** is only what the page listens for and what is read aloud.
+- Full screen on a display 1700 px wide or more that has not chosen a size is TV size until full screen ends. `?screen=tv` or `?screen=desk` in the address chooses it and is kept. The gear's **Screen** row does the same.
+
 ## Live mode
 
-- Nothing listens between turns, so nothing is said by accident, unless the user picks **Live** under Talking in the gear.
+- Nothing listens between turns, so nothing is said by accident, unless the user picks **Live** on the switch under the player.
 - Then the microphone stays open, and what they say is sent after a short pause (0.8, 1.2 or 2 s).
 - Speaking over an answer interrupts it by talking. "mm-hm", "yeah" and coughs let it go on.
-- The gear can also limit interruptions to words that start with a cue such as "wait", "hold on", "sorry" or "listen".
+- The pill **Interrupt** on the switch can limit interruptions to words that start with a cue such as "wait", "hold on", "sorry" or "listen"; **Send after** sets the pause.
+- The mic button mutes and unmutes. A microphone that delivers only silence for ten seconds shows **No sound heard**.
+- "slower", "faster" and "say that again slower" are spoken commands for the voice speed, acted on by the page.
 
 ## Speech engines
 

@@ -337,8 +337,12 @@ COMMANDS = {"go on": "resume", "continue": "resume", "carry on": "resume", "keep
             "scratch that": "withdraw", "never mind": "withdraw", "nevermind": "withdraw", "forget it": "withdraw",
             "cancel": "withdraw", "cancel that": "withdraw",
             "stop listening": "mute",
+            "slower": "slower", "go slower": "slower", "slow down": "slower", "speak slower": "slower", "talk slower": "slower",
+            "faster": "faster", "go faster": "faster", "speed up": "faster", "speak faster": "faster", "talk faster": "faster",
+            "say that again slower": "repeat_slower", "repeat that slower": "repeat_slower", "repeat slower": "repeat_slower",
             "συνέχισε": "resume", "σταμάτα": "pause", "ξαναπές το": "repeat", "πάλι": "repeat", "πίσω": "back",
-            "άκυρο": "withdraw", "άσε": "withdraw", "σταμάτα να ακούς": "mute"}
+            "άκυρο": "withdraw", "άσε": "withdraw", "σταμάτα να ακούς": "mute",
+            "πιο αργά": "slower", "πιο γρήγορα": "faster", "ξαναπές το πιο αργά": "repeat_slower"}
 COURTESY = {"please", "claude", "ok", "okay", "now", "παρακαλώ"}
 
 
