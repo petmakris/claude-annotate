@@ -113,6 +113,8 @@ Pick the board from what the listener must see, before you write a word. A table
 | what changed: how it was and how it is now, or A versus B as a flow | sequence with compare (`compare`) | a table of two columns loses the order |
 | the parts of a system, where one request goes, what must never call what | map | a table lists parts and hides how they connect |
 | a decision, branches, a state machine | flowchart | a table hides the arrows |
+| how much, how long, how many: sizes, costs, waits, a quantity through a pipeline | bars | a table lists numbers and hides their size |
+| what happens to commits or to a tree: a rebase, a merge, a split, a delete | graph | a table cannot show a shape changing |
 | code, or an edit you made | code, change | never describe it in a table |
 | three or more things judged on the same few measures, and nothing connects them | table, last | the one case a table is for |
 
@@ -161,6 +163,8 @@ Board tags are taken out of the speech and drawn on the stage beside the convers
 | sequence with compare | how a flow was before a change and how it is after it, side by side, row for row | `[[show sequence \| Report path]]` a spec with `compare` `[[/show]]` |
 | map | an architecture: the parts of a system in columns and zones, where each caller comes in, and one request followed across it | `[[show map \| Where pay lives]]` a map spec `[[/show]]` |
 | flowchart | a decision or process that branches, joins or ends in outcomes, or a state machine (loops are fine) | `[[show flowchart \| Floor rule]]` a JSON spec `[[/show]]` |
+| bars | how much, how long or how many, one bar a thing on one scale, linear or log | `[[show bars \| Cache costs]]` a bars spec `[[/show]]` |
+| graph | a commit graph or a tree, and what a change does to it, before and after | `[[show graph \| Rebase]]` a graph spec `[[/show]]` |
 | code | existing code you are explaining | `[[show code: talk/live_turns.py:40-58 \| How a turn waits]]` |
 | change | after you edit a file, instead of describing the edit | `[[show change: talk/talk.py \| What I changed]]` |
 | table | three or more things on the same measures, with nothing connecting them. Last resort | `[[show table \| Ports]]` a markdown table `[[/show]]` |
@@ -193,7 +197,7 @@ The call page sends your words to the talk server, on port 8766. The talk server
 [[show sequence | The doorbell waits]] {"actors": [{"id": "d", "label": "Doorbell", "sub": "talk_client.py"}, {"id": "s", "label": "Talk server", "sub": "talk.py"}, {"id": "p", "label": "Call page"}],
  "steps": [{"id": "a1", "from": "d", "to": "s", "arrow": "request", "label": "asks for the next turn", "sub": "GET /api/turn"},
   {"id": "a2", "from": "p", "to": "s", "arrow": "request", "label": "sends what you said"},
-  {"id": "a3", "from": "s", "to": "d", "arrow": "event", "label": "answers the open request", "reply_to": "a1", "note": "up to 90 s"}]} [[/show]]
+  {"id": "a3", "from": "s", "to": "d", "arrow": "event", "label": "answers the open request", "reply_to": "a1", "note": "25 s a try"}]} [[/show]]
 ```
 
 **A sequence with compare**: before and after, closed with the verdict:
@@ -208,6 +212,25 @@ The call page sends your words to the talk server, on port 8766. The talk server
             {"id": "a2", "from": "sm", "to": "rc", "arrow": "request", "label": "sends requests with the lists it is given"}]}},
  "outcome": {"tone": "amber", "title": "Two teams now share one module", "lines": ["a change there reaches both reports"]}} [[/show]]
 [[point: before]] Before, the service asks the client for its data. [[point: after]] Now the shared module takes its place. [[point: outcome]] The cost is that one change reaches both reports.
+```
+
+**Bars**: how big, on a scale you can see. One unit for the board, `scale` `log` when the values span powers of ten, and a bar's `note` for a number you say:
+
+```
+[[show bars | Cache costs]] {"title": "A miss costs a hundred times a hit", "unit": "ns", "scale": "log",
+ "bars": [{"id": "l1", "label": "L1 cache", "value": 1, "note": "about four cycles"},
+  {"id": "l2", "label": "L2 cache", "value": 4}, {"id": "ram", "label": "Main memory", "value": 100, "tone": "red"}]} [[/show]]
+The L1 cache answers in about one nanosecond. [[point: bar l2]] The L2 cache takes four. [[point: bar ram]] Main memory takes a hundred, and that is the miss.
+```
+
+**A graph**: commits or a tree, before and after. A node is `new` (after only), `ghost` (still there, faint, after) or `struck` (removed, after); its `lane` is the row it sits in:
+
+```
+[[show graph | Rebase]] {"title": "A rebase copies your commits onto the new tip",
+ "nodes": [{"id": "a", "label": "base commit", "lane": "main"}, {"id": "c", "label": "new tip", "lane": "main"},
+  {"id": "d", "label": "old work", "lane": "feature", "state": "ghost"}, {"id": "d2", "label": "copied work", "lane": "after rebase", "state": "new"}],
+ "edges": [{"from": "a", "to": "c"}, {"from": "a", "to": "d"}, {"from": "c", "to": "d2"}]} [[/show]]
+[[point: before]] Before, your work hangs off the base commit. [[point: after]] Now the copied work hangs off the new tip. [[point: node d]] The old work is still there, but nothing reaches it.
 ```
 
 For a flowchart:
@@ -225,7 +248,8 @@ For a flowchart:
 - `[[point: lines 12-14]]` before a sentence lights up those lines and dims the rest.
 - Code: `line N`, `lines A-B`. On a change board, line numbers are the new ones and a range takes any line removed inside it; `old line N` (or `old lines A-B`) points at a removed line, by its number before the change.
 - Table: `row N`, `rows A-B`, `rows 2,5`, `row "name"` (by its first cell), `column "header"`, `cell "row" / "column"` (by its row's first cell and its column's header, or by numbers: `cell 2 / 3`).
-- Diagrams: `node X` (a flowchart node id), `edge a->b`, `step S` (a sequence step id), and on a map `box X`, `zone N` or `route N`. On a before and after sequence: `before`, `after`, `both`, `outcome`.
+- Diagrams: `node X` (a flowchart or graph node id), `edge a->b`, `step S` (a sequence step id), and on a map `box X`, `zone N` or `route N`. On a before and after sequence or a graph: `before`, `after`, `both`; on the sequence also `outcome`.
+- Bars: `bar X` (a bar id) or `rows A-B`. A name that is nearly an id is read as it, with a `board:` line; one that is not names the ids.
 - A lit step or node is drawn as the one being said.
 - It points at the last board shown. Name another one by its title: `[[point Turn path: node Q]]`.
 - Use two to four in an explanation, not one per sentence.
@@ -242,7 +266,7 @@ To control it, write the board once, whole, then put a verb just before the word
 | `[[all]]` | reveal everything still hidden |
 | `[[focus api->db]]`, `[[focus 42-45]]`, `[[focus rows 2-3]]`, `[[focus none]]` | light these and dim the rest. `point` does the same. The next reveal with no point of its own turns the light off |
 
-- Targets are node and subgraph ids, edges as `a->b`, sequence step and actor ids, a map's `box X`, `zone N` and `route N`, code lines and table rows, or their labels. Name another board by its title first: `[[+ Turn path: Q]]`.
+- Targets are node and subgraph ids, edges as `a->b`, sequence step and actor ids, a map's `box X`, `zone N` and `route N`, a bars board's `bar X`, code lines and table rows, or their labels. Name another board by its title first: `[[+ Turn path: Q]]`.
 - At most three things before the first verb.
 - A board of more than three things with no verbs comes in with the sentences that name each thing, and a `board:` line says so.
 - A target that names nothing exactly is read as the nearest id or label, or dropped. Each such repair is a `board:` line and is counted on the board's header.

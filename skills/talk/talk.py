@@ -426,11 +426,11 @@ def align_words(text: str, start: int, end: int, heard: list, duration: float, o
             for (a, b), (t0, t1) in zip(tokens, times)]
 
 
-BOARD_KINDS = ("code", "change", "diagram", "table", "sequence", "flowchart", "map", "scene", "page", "screen")
-VISUAL_KINDS = ("sequence", "flowchart", "map")  # drawn by the shared tools from a JSON spec; any other body is Mermaid
+BOARD_KINDS = ("code", "change", "diagram", "table", "sequence", "flowchart", "map", "bars", "graph", "scene", "page", "screen")
+VISUAL_KINDS = ("sequence", "flowchart", "map", "bars", "graph")  # drawn by the shared tools from a JSON spec; any other body is Mermaid
 STEPPED_KINDS = VISUAL_KINDS + ("scene", "screen")  # come in with the sentences that name their parts unless verbs reveal them
 LINE_KINDS = ("code", "change", "page", "screen")  # one-line tags: their source is named on the tag, so no body follows
-KIND_ALIASES = {"mermaid": "diagram", "graph": "diagram", "flow": "diagram",
+KIND_ALIASES = {"mermaid": "diagram", "flow": "diagram", "chart": "bars",
                 "grid": "table", "diff": "change", "edit": "change", "file": "page", "url": "page"}
 CHANGE_FIELDS = ("type", "format", "path", "rev", "hunks", "added", "removed", "more", "lang")
 KEY_VIEW = "key-points"  # the one Key points view of a call
@@ -627,6 +627,7 @@ _POINT_TARGET = re.compile(
     r"|edges?\s+(?P<edge>[^\[\]]+?)"
     r"|nodes?\s+(?P<node>[^\s:\[\]][^:\[\]]*?)|steps?\s+(?P<step>[^\s:\[\]][^:\[\]]*?)"
     r"|(?P<mapk>box|zone|route)(?:e?s)?\s+(?P<mapid>[^\s:\[\]][^:\[\]]*?)"
+    r"|bars?\s+(?P<bar>[^\s:\[\]][^:\[\]]*?)"
     r"|(?P<mode>before|after|both|merged)"
     r"|(?P<outcome>outcome)"
     r"|parts?\s+(?P<part>[^\s:\[\]][^:\[\]]*?))\s*\Z", re.IGNORECASE)
@@ -740,15 +741,19 @@ def cell_text(cell: str) -> str:
 
 def spec_tool(body: str) -> str | None:
     """Which shared tool a JSON body is written for, by its keys: nodes for a flowchart, actors or
-    steps for a sequence, columns and boxes for a map. None when it is not a JSON object or names none."""
+    steps for a sequence, columns and boxes for a map, a unit and bars for bars, nodes with lanes or states for a graph. None when it is not a JSON object or names none."""
     try:
         spec = json.loads(body)
     except ValueError:
         return None
     if not isinstance(spec, dict):
         return None
+    if "bars" in spec and "unit" in spec:
+        return "bars"
     if "nodes" in spec:
-        return "flowchart"
+        nodes = [n for n in spec["nodes"] if isinstance(n, dict)] if isinstance(spec["nodes"], list) else []
+        graph = any("lane" in n or "state" in n for n in nodes) and not any("role" in n for n in nodes)
+        return "graph" if graph else "flowchart"
     if "boxes" in spec and "columns" in spec:
         return "map"
     if "actors" in spec or "steps" in spec or "compare" in spec:
@@ -867,6 +872,10 @@ def scene_model(item: dict) -> stage_scene.SceneModel | None:
         return stage_scene.flowchart_spec_model(item["visual"]["spec"])
     if kind == "map":
         return stage_scene.map_model(item["visual"]["spec"])
+    if kind == "bars":
+        return stage_scene.bars_model(item["visual"]["spec"])
+    if kind == "graph":
+        return stage_scene.graph_model(item["visual"]["spec"])
     if kind == "scene":
         return stage_scene.parts_model(item["visual"]["parts"])
     if kind == "screen":
@@ -1212,10 +1221,7 @@ class Board:
         if not kind:
             self.problem("board kind missing after show, use code, change, diagram or table")
         elif kind not in BOARD_KINDS:
-            self.problem(f'unknown board kind "{kind}", use code, change, diagram or table'
-                         + ("; there is no [[/show]] after it, so the text after it was left alone" if bare else ""))
-        if bare:
-            return True
+            self.problem(f'unknown board kind "{kind}", use code, change, sequence, flowchart, map, bars, graph or table')
         self.open = {"kind": kind or "?", "title": title, "body": "", "cue": self.new_cue()}
         return True
 
@@ -1415,8 +1421,11 @@ class Board:
         self.cues.append({"kind": "frame", "view": item["view"], "verb": stage_scene.Verb("focus", keys=keys)})
 
     def point_visual(self, item: dict, name: str, m: re.Match) -> None:
-        """A point at a sequence's step, a flowchart's node or edge, or a map's box, zone or route step: lit by its key."""
+        """A point at a sequence's step, a flowchart's node or edge, a bars or graph board's part, or a map's box, zone or route step: lit by its key."""
         kind = item["kind"]
+        if kind in ("bars", "graph"):
+            self.point_drawn(item, name, m)
+            return
         if m["column"] or m["rowlist"] or m["n"] or m["text"] or m["curly"] or m["single"] or m["cell"] or m["line"]:
             self.problem(f'point not shown: "{name}" is a {kind}; use {POINT_FORMS_BY_KIND[kind]}')
             return
@@ -1512,6 +1521,39 @@ class Board:
             return None
         self.problem(f'point not shown: "{name}" has no outcome box; give the spec an outcome or use step ID')
         return None
+
+    def point_drawn(self, item: dict, name: str, m: re.Match) -> None:
+        """A point at a bars board (`bar X`, `rows A-B`, `row "label"`) or a graph's node (`node X`) or frame
+        (`before`, `after`, `both`). A name that is nearly an id is read as it, with a `board:` line; one that is
+        not is a `board:` line listing what the board has."""
+        model, kind = scene_model(item), item["kind"]
+        row_text = m["text"] or m["curly"] or m["single"]
+        if kind == "graph" and m["mode"]:
+            key = f'mode:{"both" if m["mode"].lower() == "merged" else m["mode"].lower()}'
+            if key not in model.keys:
+                self.problem(f'point not shown: "{name}" has no before and after to point at; mark a node new, ghost or struck')
+                return
+            keys, note = [key], None
+        elif kind == "graph" and m["node"]:
+            keys, note = stage_scene.resolve(model, "node " + m["node"].strip(), name)
+        elif kind == "bars" and m["bar"]:
+            keys, note = stage_scene.resolve(model, "bar " + m["bar"].strip(), name)
+        elif kind == "bars" and m["n"]:
+            keys, note = stage_scene.resolve(model, f'rows {m["n"]}' + (f'-{m["n2"]}' if m["n2"] else ""), name)
+        elif kind == "bars" and row_text:
+            keys, note = stage_scene.resolve(model, row_text, name)
+        else:
+            use = "bar ID, row N or rows A-B" if kind == "bars" else "node ID, before, after or both"
+            self.problem(f'point not shown: "{name}" is a {kind} board; use {use}')
+            return
+        if not keys:
+            have = ", ".join(k.split(":", 1)[1] for k in model.order[:8]) + (" ..." if len(model.order) > 8 else "")
+            self.problem(note.replace("matches nothing; dropped", f"matches nothing; the {'bars' if kind == 'bars' else 'nodes'} are {have}")
+                         if note else f'point not shown: nothing in "{name}" matches')
+            return
+        if note:
+            self.problem(note)  # read as the nearest id
+        self.cues.append({"kind": "frame", "view": item["view"], "verb": stage_scene.Verb("focus", keys=keys)})
 
     @staticmethod
     def target_keys(item: dict, target: dict) -> list[str]:

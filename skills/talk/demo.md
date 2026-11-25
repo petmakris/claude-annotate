@@ -27,10 +27,10 @@ A sequence comes in a step at a time, here the path of one turn. When you stop t
 ---
 [[show sequence | The doorbell waits]] {"actors": [{"id": "d", "label": "Doorbell", "sub": "talk_client.py"}, {"id": "s", "label": "Talk server", "sub": "talk.py"}, {"id": "p", "label": "Call page"}],
  "steps": [
-  {"id": "w1", "from": "d", "to": "s", "arrow": "request", "label": "asks for the next turn", "sub": "GET /api/turn", "note": "waits up to 90 s"},
+  {"id": "w1", "from": "d", "to": "s", "arrow": "request", "label": "asks for the next turn", "sub": "GET /api/turn", "note": "25 s a try"},
   {"id": "w2", "from": "p", "to": "s", "arrow": "request", "label": "sends what you said", "sub": "POST /api/say"},
   {"id": "w3", "from": "s", "to": "d", "arrow": "event", "label": "answers the open request with your turn", "reply_to": "w1"}]} [[/show]]
-A wait is a request that stays open. The doorbell asks the server for the next turn, and the server holds that request, so a bar stays open on the server. Nothing is pushed to the doorbell. When you send something, the server answers the open request with your turn. [[point: step w3]] The reply closes the bar. [[key: a wait is a request held open until its reply]] Next is a before and after.
+A wait is a request that stays open. The doorbell asks the server for the next turn, and the server holds that request for up to 25 seconds, so a bar stays open on the server. Nothing is pushed to the doorbell. When you send something, the server answers the open request with your turn. [[point: step w3]] The reply closes the bar. [[key: a wait is a request held open until its reply]] Next is a before and after.
 ---
 [[show sequence | Backtesting before and after]] {"title": "A shared module takes the Service client's place",
  "compare": {
@@ -85,7 +85,23 @@ A map shows how parts connect, all of it faint at first. [[+ page]] Everything s
   {"layer": "route", "from": "talk", "to": "claude", "tone": "blue", "n": 2, "r": 2, "label": "the doorbell wakes Claude"},
   {"layer": "route", "from": "talk", "to": "azure", "tone": "amber", "n": 3, "r": 3, "label": "reads the answer aloud"},
   {"layer": "route", "from": "talk", "to": "stage", "n": 4, "r": 4, "label": "puts up the boards"}]} [[/show]]
-An architecture map puts each part where it lives. The call page runs in your browser tab. It talks to one talk server on this Mac, on port 8766. The server reaches your Claude session, and Azure speech outside. The stage shows the boards. The page never talks to Azure itself: the dashed red arrow says never. [[key: a map is built up part by part, then follows one request]] [[point: box talk]] Everything goes through this one server, so now follow one turn. The page sends your words. The doorbell wakes Claude. Azure reads the answer aloud. And the server puts up the boards. Next is a table.
+An architecture map puts each part where it lives. The call page runs in your browser tab. It talks to one talk server on this Mac, on port 8766. The server reaches your Claude session, and Azure speech outside. The stage shows the boards. The page never talks to Azure itself: the dashed red arrow says never. [[key: a map is built up part by part, then follows one request]] [[point: box talk]] Everything goes through this one server, so now follow one turn. The page sends your words. The doorbell wakes Claude. Azure reads the answer aloud. And the server puts up the boards. Next is a bars board.
+---
+[[show bars | How long talk waits]] {"title": "From under a second to an hour", "unit": "s", "scale": "log",
+ "bars": [{"id": "pause", "label": "The shortest live pause", "value": 0.8, "note": "before what you said is sent"},
+  {"id": "long", "label": "The longest live pause", "value": 2},
+  {"id": "server", "label": "A restarted server", "value": 90, "note": "the client waits this long for it", "tone": "amber"},
+  {"id": "idle", "label": "A silent call", "value": 3600, "note": "an hour with no turn and no doorbell ends it", "tone": "red"}]} [[/show]]
+A bars board is for how much, how long or how many, so you see the size and not only the number. These are talk's waits, from under a second to an hour, on a log scale: each tick is ten times the one before. [[point: bar pause]] In live mode the shortest pause before your words are sent is 0.8 seconds. [[point: bar long]] The longest is 2 seconds. [[point: bar server]] The client waits up to 90 seconds for a restarted server. [[point: rows 3-4]] And a silent call with no doorbell ends after an hour, over a thousand times the shortest pause. [[key: bars show how much, with the scale on the board]] Next is a graph.
+---
+[[show graph | Merge or rebase]] {"title": "A rebase copies your commits and leaves the old ones behind",
+ "lanes": ["main", "feature", "after rebase"],
+ "nodes": [{"id": "a", "label": "first commit", "lane": "main"}, {"id": "b", "label": "second commit", "lane": "main"},
+  {"id": "c", "label": "new tip", "lane": "main", "sub": "someone else's work"},
+  {"id": "d", "label": "your first", "lane": "feature", "state": "ghost"}, {"id": "e", "label": "your second", "lane": "feature", "state": "ghost"},
+  {"id": "d2", "label": "your first, copied", "lane": "after rebase", "state": "new"}, {"id": "e2", "label": "your second, copied", "lane": "after rebase", "state": "new"}],
+ "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": "c"}, {"from": "b", "to": "d"}, {"from": "d", "to": "e"}, {"from": "c", "to": "d2"}, {"from": "d2", "to": "e2"}]} [[/show]]
+A graph board shows what happens to commits or to a tree, before and after. [[point: before]] Before, main has a first commit and a second commit. Your first and your second commit branch off the second one, and someone else has added a new tip to main. [[point: after]] A rebase copies your commits onto the new tip. [[point: node d2]] Your first commit, copied, is a new commit with a new parent, and your second, copied, follows it. [[point: node d]] The originals are still there, faint, but nothing reaches them. [[point: both]] That is why a rebase rewrites history and a merge does not. [[key: a graph board shows a change to commits or a tree, before and after]] Next is a table.
 ---
 [[show table | Four boards a session picks by hand]]
 | Board | Shows | Reads from | The voice can point at |

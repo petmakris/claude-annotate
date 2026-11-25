@@ -333,8 +333,8 @@ def test_a_spec_the_tool_cannot_read_is_refused_not_raised(tmp_path, monkeypatch
 def test_stdin_kinds_take_talks_names_and_an_unknown_one_is_refused(tmp_path):
     assert model.parse_source("mermaid:-", tmp_path, "graph TD; A-->B")["tool"] == "flowchart"
     assert model.parse_source("grid:-", tmp_path, "| a |\n|---|\n| 1 |")["format"] == "table"
-    with pytest.raises(model.SourceError, match="unknown chart:-"):
-        model.parse_source("chart:-", tmp_path, "x")
+    with pytest.raises(model.SourceError, match="unknown pie:-"):
+        model.parse_source("pie:-", tmp_path, "x")
 
 
 def test_a_sequences_refs_keep_the_lines_round_them_and_a_ref_to_nothing_is_a_problem(tmp_path):

@@ -136,7 +136,7 @@ def test_the_guide_opens_with_a_decision_table_that_puts_the_table_board_last():
     assert decision < boards < text.index("| Board | Use it for | Tag |")
     table = next(t for t in _tables(text) if t[0][0].startswith("The question is about"))
     assert [row[1] for row in table[2:]] == ["sequence", "sequence with compare (`compare`)", "map", "flowchart",
-                                             "code, change", "table, last"]
+                                             "bars", "graph", "code, change", "table, last"]
     assert "could the viewer say what each column means?" in text.lower()
     assert "5 to 8 rows" in text
 
@@ -153,7 +153,7 @@ def test_every_table_of_the_guide_has_the_same_cells_in_every_row():
 def test_the_guides_boards_table_tags_all_survive_their_pipes():
     table = next(t for t in _tables(GUIDE.read_text()) if t[0][0] == "Board")
     tags = {row[0]: row[2] for row in table[2:]}
-    assert set(tags) >= {"sequence", "sequence with compare", "map", "flowchart", "code", "change", "table", "page", "screen"}
+    assert set(tags) >= {"sequence", "sequence with compare", "map", "flowchart", "bars", "graph", "code", "change", "table", "page", "screen"}
     for name, cell in tags.items():
         assert re.search(r"\[\[show [a-z]+(?::[^\]]*)? \\\| [^\]]+\]\]|\[\[show [a-z]+: [^\]|]+ \\\| [^\]]+\]\]", cell), (name, cell)
 
@@ -170,7 +170,7 @@ def test_the_guides_references_exist_and_are_linked_from_it():
 def test_every_example_the_guide_gives_is_a_spec_the_real_validators_accept(tmp_path):
     text = GUIDE.read_text()
     examples = [b for b in re.findall(r"```\n(\[\[show .*?)```", text, re.S) if not b.startswith("[[show change")]
-    assert len(examples) >= 4  # a map, a wait, a compare and a flowchart
+    assert len(examples) >= 6  # a map, a wait, a compare, bars, a graph and a flowchart
     for n, example in enumerate(examples):
         call = talk.Call(make_args(code=talk.SKILL_DIR.parents[1]), "Guide", tmp_path / f"out{n}")
         shown = call.split_reply(example)

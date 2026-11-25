@@ -379,10 +379,10 @@ def split(tmp_path, text):
 
 
 def test_an_unknown_board_kind_is_named_and_its_body_kept_out_of_the_speech(tmp_path):
-    spoken, items, problems = split(tmp_path, "Hi. [[show chart | Sales]] a,b [[/show]] Bye.")
+    spoken, items, problems = split(tmp_path, "Hi. [[show pie | Sales]] a,b [[/show]] Bye.")
     assert spoken == "Hi. Bye." and items == []
-    assert problems == ['unknown board kind "chart", use code, change, diagram or table',
-                        'the body of the unknown board kind "chart" was left out and not said: "a,b"']
+    assert len(problems) == 2 and 'unknown board kind "pie"' in problems[0]
+    assert problems[1] == 'the body of the unknown board kind "pie" was left out and not said: "a,b"'
 
 
 def test_tag_heads_are_forgiving(tmp_path):

@@ -78,6 +78,34 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 - Loops still read in one direction: every way back runs under the map, or up a lane on the right when it reads top to bottom. An arrow from a part to itself is a small loop over that part.
 - With no verbs, each node comes in with the first sentence that names it, as on a sequence.
 
+## Bars
+
+- A bars board answers how much, how long or how many: one row a thing, a bar as long as its value, a chip with the value and unit.
+- The spec is `{"title", "unit", "scale": "linear" | "log", "bars": [{"id", "label", "value", "note"?, "tone"?}], "threshold"?: {"value", "label"}}`.
+- `unit` is written once, for the whole board. A bar that names another unit is refused, since bars on one scale share one unit.
+- `scale` `log` draws ticks at powers of ten and a visible "log scale" badge. It refuses a value of zero or less. A linear board refuses a negative value.
+- `value` is a number, never text with a unit in it. A zero is an empty bar on a linear board.
+- `note` is a second line under the label: the place for a number you say ("about four cycles").
+- Each bar's `label` is words you will say, and different from the others' (`L1 cache`, `L2 cache`, never `cache` twice).
+- A `threshold` is one optional dashed line. There are no series and no markers.
+- At most 24 bars. Cut it to the ones that carry the argument.
+- Each bar arrives with the sentence that names it. Points: `[[point: bar ram]]`, `[[point: rows 2-3]]`. The rest view shows every row.
+- A name that is nearly an id is read as it, with a `board:` line. One that is not names the ids the board has.
+
+## Graph
+
+- A graph board shows a commit graph or a tree, and what a change does to it. It is not a flowchart: use that for a process.
+- The spec is `{"title", "lanes"?, "nodes": [{"id", "label", "lane", "state"?, "sub"?}], "edges": [{"from", "to"}]}`. An edge runs from the older node to the newer one.
+- A `lane` is the row a node sits in (a branch name, or a level of a tree). Lanes run top to bottom in the order they first appear, or in `lanes`. A node's column is how many parents deep it is.
+- Leave `lane` out of every node and the rows are made for you, one per leaf, as a tree is drawn.
+- `state` is `same` (default), `new` (in the after only), `ghost` (there before, and after faint and dashed: still there, but nothing reaches it) or `struck` (there before, struck through after: removed).
+- With every node `same` the board is one graph. With any other state it is a before and an after, one above the other, and `[[point: before]]`, `[[point: after]]` and `[[point: both]]` point at a frame.
+- On a phone one frame shows at a time, with a switch, and the node being said stays in view.
+- Give a ghost its own lane to keep it clear of the copy that replaces it. Nodes that share a column and a lane stack in it.
+- A duplicate id, an edge to a node that is not there, and a cycle are refused, and a `board:` line names the id.
+- Points: `[[point: node d2]]`. A name that is nearly an id is read as it, with a `board:` line.
+- Label a node with words you will say (`new tip`, `your first commit`), never a hash or a letter alone: the node lights when a sentence says its label.
+
 ## Mermaid
 
 - A call draws no Mermaid. A Mermaid graph or state diagram you write is turned into a map, and any other kind is not shown. Write the JSON spec.

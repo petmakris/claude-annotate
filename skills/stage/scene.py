@@ -776,7 +776,44 @@ def parts_model(parts: list[dict]) -> SceneModel:
     return SceneModel("parts", keys, order=list(keys), up=up, down=down, names=names, can_hide=True)
 
 
-ENTITY_PREFIXES = {"sequence": ("step:", "actor:"), "parts": ("part:",), "map": ("box:", "zone:", "route:")}
+def bars_model(spec: dict) -> SceneModel:
+    """A bars board (bars_svg): one key per bar, `bar:<id>`, in the order the spec lists them. A bar is named by its label,
+    so a sentence that says it brings it in; `rows A-B` counts the bars as they are listed."""
+    bars = [b for b in spec.get("bars") or [] if b.get("id")]
+    keys = [f"bar:{b['id']}" for b in bars]
+    names: dict[str, str] = {}
+    for b, key in zip(bars, keys):
+        names.setdefault(fold(str(b.get("label", ""))), key)
+    names.pop("", None)
+    return SceneModel("bars", keys, order=list(keys), names=names, can_hide=True)
+
+
+def graph_model(spec: dict) -> SceneModel:
+    """A graph board (graph_svg): its nodes by how many parents deep they are, then lane; an edge shows once both its
+    nodes do. With a before and an after (some node not `same`) the two frames are keys too (`mode:before`,
+    `mode:after`, `mode:both`), so the voice can point at one."""
+    from skills._shared.visuals import graph_svg
+
+    layer = graph_svg.layout(spec)["layer"]
+    nodes = sorted(spec["nodes"], key=lambda n: layer[n["id"]])
+    keys = [f"node:{n['id']}" for n in nodes]
+    up: dict[str, list[str]] = {}
+    edges: dict[tuple[str, str], list[str]] = {}
+    for e, key in zip(spec.get("edges") or [], graph_svg.edge_keys(spec)):
+        up[key] = [f"node:{e['from']}", f"node:{e['to']}"]
+        edges.setdefault((e["from"], e["to"]), []).append(key)
+    names: dict[str, str] = {}
+    for n in nodes:
+        for text in (n.get("label"), n.get("sub")):
+            if text:
+                names.setdefault(fold(str(text)), f"node:{n['id']}")
+    modes = list(MODES) if graph_svg.has_frames(spec) else []
+    return SceneModel("graph", keys + [k for pair in edges.values() for k in pair] + modes, order=keys, up=up, names=names,
+                      edges=edges, can_hide=True)
+
+
+ENTITY_PREFIXES = {"sequence": ("step:", "actor:"), "parts": ("part:",), "map": ("box:", "zone:", "route:"),
+                   "bars": ("bar:",)}
 
 
 def _prefixes(model: SceneModel) -> tuple[str, ...]:
@@ -934,10 +971,15 @@ def resolve(model: SceneModel, raw: str, title: str) -> tuple[list[str], str | N
             return [f"{named[1].lower()}:{named[2].strip()}"], None
     if model.kind == "sequence" and OUTCOME in model.keys and re.fullmatch(r"(?:the\s+)?outcome", raw, re.IGNORECASE):
         return [OUTCOME], None
+    if model.kind == "bars" and (rows := re.fullmatch(r"rows?\s+(\d+)(?:\s*[-–]\s*(\d+))?", raw, re.IGNORECASE)):
+        a, b = sorted((int(rows[1]), int(rows[2] or rows[1])))
+        if 1 <= a and b <= len(model.order):
+            return model.order[a - 1:b], None
+        return [], f'"{title}" has {len(model.order)} bars, not {"row " + str(a) if a == b else f"rows {a}-{b}"}; dropped'
     side = "both" if raw.lower() == "merged" else raw.lower()   # merged: the name the side by side board replaced
-    if model.kind == "sequence" and f"mode:{side}" in model.keys:  # before, after or both
+    if model.kind in ("sequence", "graph") and f"mode:{side}" in model.keys:  # before, after or both
         return [f"mode:{side}"], None
-    m = re.fullmatch(r"(?:nodes?|steps?|parts?|box(?:es)?)\s+(.+)", raw, re.IGNORECASE)
+    m = re.fullmatch(r"(?:nodes?|steps?|parts?|bars?|box(?:es)?)\s+(.+)", raw, re.IGNORECASE)
     if m is None and model.kind == "sequence":
         actor = re.fullmatch(r"actors?\s+(.+)", raw, re.IGNORECASE)
         if actor and f"actor:{actor[1].strip()}" in model.keys:
@@ -1001,7 +1043,7 @@ def _said(model: SceneModel, keys: list[str], before: set, shown: set) -> list[s
         cur += model.said_with.get(k, [])  # a map's route step with the boxes it arrives at
     cur = list(dict.fromkeys(cur))
     node = next((k for k in reversed(cur) if k.startswith(("node:", "box:"))), None)
-    if model.kind in ("flowchart", "map") and node and not any(k.startswith("edge:") for k in cur):
+    if model.kind in ("flowchart", "map", "graph") and node and not any(k.startswith("edge:") for k in cur):
         edges = [k for k in new if k.startswith("edge:")]
         edge = next((e for e in edges if model.up[e][1] == node), None) or next((e for e in edges if model.up[e][0] == node), None)
         if edge:
@@ -1017,7 +1059,9 @@ any each few more most other some such own same both here""".split())
 
 
 def _words(text: str) -> list[str]:
-    return [w for w in re.findall(r"[^\W_]+", fold(text)) if len(w) >= 3 and w not in _STOP]
+    # a short word that holds a digit (L1, S3, v2) names a part, as "L1 cache" and "L2 cache" must be told apart
+    return [w for w in re.findall(r"[^\W_]+", fold(text)) if (len(w) >= 3 or (len(w) == 2 and any(c.isdigit() for c in w)))
+            and w not in _STOP]
 
 
 def _same(a: str, b: str) -> bool:
@@ -1037,7 +1081,7 @@ def part_names(model: SceneModel) -> dict[str, list[list[str]]]:
     for key, texts in model.alias.items():
         out.setdefault(key, []).extend(_words(t) for t in texts if _words(t))
     for key in model.order:
-        ident = key.split(":", 1)[1] if key.startswith(("node:", "step:", "group:", "part:", "box:")) else ""
+        ident = key.split(":", 1)[1] if key.startswith(("node:", "step:", "group:", "part:", "box:", "bar:")) else ""
         if len(ident) >= 3 and not re.fullmatch(r"[a-z]?\d+", ident, re.IGNORECASE) and _words(ident):
             out.setdefault(key, []).append(_words(ident))
     return out
@@ -1053,7 +1097,7 @@ def said_parts(model: SceneModel, sentences: list[str]) -> dict[int, list[str]]:
     each sentence that names a part marks it as being said. Per sentence index, the one part it names most
     fully: the largest share of one of its names said, then the most words of it ("Copy Production" is the copy,
     not Production)."""
-    if model.kind not in ("flowchart", "sequence", "map") or len(model.order) < 2:
+    if model.kind not in ("flowchart", "sequence", "map", "bars", "graph") or len(model.order) < 2:
         return {}
     names = part_names(model)
     out: dict[int, list[str]] = {}

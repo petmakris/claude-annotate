@@ -654,9 +654,10 @@ function renderInline(v, seq) {
     box.className = "visual lanes";
     renderLanes(box, src.spec, embedded, { refs: src.refs, play: (step, dry) => playStep(v, step, dry) });
     requestAnimationFrame(() => { if (current()) paintFrame(v, box); });
-  } else if (src.format === "visual" && src.tool === "map") {
-    // An architecture map is drawn on the server (map_svg, keyed for the frames) and made safe again here.
-    box.className = "visual vzmap";
+  } else if (src.format === "visual" && ["map", "bars", "graph"].includes(src.tool)) {
+    // An architecture map, a bars board and a graph board are drawn on the server (map_svg, bars_svg and graph_svg,
+    // keyed for the frames) and made safe again here.
+    box.className = "visual vzmap" + (src.tool === "map" ? "" : " vz" + src.tool);
     paintVzMap(v, box, src);
     if (!window.DOMPurify) libsReady().then(() => {
       if (!current()) return;
@@ -740,6 +741,7 @@ function layoutVzMap(box, scene, n) {
   const steps = n < scene.rest ? frame.show.filter((k) => k.startsWith("route:")).map((k) => +k.slice(6)) : [];
   const at = steps.length ? Math.max(...steps) : null;  // how far the request has come
   svg.classList.toggle("mode-route", at !== null);
+  if (svg.dataset.vz === "graph") layoutGraph(box, svg, frame, n < scene.rest);
   const on = svg.querySelector('marker[id$="-on"]')?.id, said = [];
   for (const el of svg.querySelectorAll("[data-key]")) {
     const now = cur.has(el.dataset.key);
@@ -752,6 +754,35 @@ function layoutVzMap(box, scene, n) {
     else el.setAttribute("marker-end", head);
   }
   return said;
+}
+// A graph board: the frame the voice points at (`mode:before`, `mode:after`) keeps the light and the other goes faint, a
+// pointed frame alone lights no part, and on a narrow board one frame shows at a time (its own viewBox) with a switch.
+function layoutGraph(box, svg, frame, playing) {
+  const focus = frame.focus || [], said = ["before", "after"].find((m) => focus.includes("mode:" + m));
+  const modes = focus.length > 0 && focus.every((k) => k.startsWith("mode:"));
+  svg.classList.toggle("mode-before", playing && said === "before");
+  svg.classList.toggle("mode-after", playing && said === "after");
+  if (modes) box.classList.remove("k-dim");  // a frame is not a part: nothing else dims
+  const two = svg.dataset.frames === "2", narrow = two && box.clientWidth > 0 && box.clientWidth < 640;
+  box.classList.toggle("g-narrow", narrow);
+  if (said) box.dataset.gframe = said;
+  const pick = narrow ? (box.dataset.gframe || "after") : "both";
+  const vb = svg.dataset["vb" + pick.charAt(0).toUpperCase() + pick.slice(1)];
+  if (vb) svg.setAttribute("viewBox", vb);
+  svg.style.width = narrow ? Math.max(box.clientWidth - 32, +vb.split(" ")[2] * 0.9) + "px" : "";
+  let sw = box.querySelector(":scope > .gsw");
+  if (narrow && !sw) {
+    sw = document.createElement("div");
+    sw.className = "gsw";
+    for (const name of ["before", "after"]) {
+      const b = document.createElement("button");
+      b.type = "button"; b.dataset.frame = name; b.textContent = name === "before" ? "Before" : "After";
+      b.onclick = () => { box.dataset.gframe = name; layoutGraph(box, svg, frame, playing); };
+      sw.append(b);
+    }
+    box.prepend(sw);
+  }
+  if (sw) { sw.hidden = !narrow; for (const b of sw.children) b.setAttribute("aria-pressed", String(b.dataset.frame === pick)); }
 }
 // A map wider than its board scrolls sideways: the parts being said are brought to its middle.
 function centreAcross(box, els) {
@@ -779,6 +810,8 @@ function mapPartName(spec, key) {
   const box = (bid) => plain(boxes.find((b) => b.id === bid)?.name || bid);
   if (kind === "box") return box(id);
   if (kind === "zone") return plain((spec.zones || [])[+id]?.label || "zone " + id);
+  if (kind === "bar") return plain((spec.bars || []).find((b) => b.id === id)?.label || id);
+  if (kind === "node") return plain((spec.nodes || []).find((n) => n.id === id)?.label || id);
   if (kind === "route") {
     const cap = ((spec.captions || {}).route || [])[+id - 1];
     const labels = (spec.arrows || []).filter((a) => a.layer === "route" && String(a.r ?? 1) === id && a.label).map((a) => plain(a.label));

@@ -1,13 +1,15 @@
-# Maps and lane sequences
+# Maps, lane sequences, bars and graphs
 
-Two diagrams, drawn the same way everywhere Claude draws: this repo's skills, the ai-building-blocks site, decks, pages and files. Claude writes a JSON spec; the library measures, lays out and draws the SVG; a small script plays it one step at a time.
+Four diagrams, drawn the same way everywhere Claude draws: this repo's skills, the ai-building-blocks site, decks, pages and files. Claude writes a JSON spec; the library measures, lays out and draws the SVG; a small script plays it one step at a time.
 
 | Diagram | Use it for | Spec has | Module |
 |---|---|---|---|
 | **map** | architecture: the parts of a system, where each caller comes in, where the rules live | `columns`, `boxes` | `skills/_shared/visuals/map_svg.py` |
+| **bars** | how much, how long, how many: one bar a thing on a linear or log scale | `unit`, `bars` | `skills/_shared/visuals/bars_svg.py` |
+| **graph** | a commit graph or a tree, and what a change does to it, before and after | `nodes`, `edges` | `skills/_shared/visuals/graph_svg.py` |
 | **lane sequence** | a request over time: who calls whom, with what, and what each check decides | `actors`, `steps` | `skills/_shared/visuals/sequence_svg.py` |
 
-Both read three ways from one SVG: whole, for a page, a PNG or a slide; built up one step at a time; and followed one request step by step. The reveal is something the reader starts; at rest the diagram is complete.
+The map and the lane sequence read three ways from one SVG (bars and graph are drawn in the same look for the stage and a talk call, and are not in `tools/vz.py`): whole, for a page, a PNG or a slide; built up one step at a time; and followed one request step by step. The reveal is something the reader starts; at rest the diagram is complete.
 
 ## Commands
 
@@ -63,6 +65,25 @@ A drawing is done when `vz_check.py check` reports 0 faults and its light and da
 - **Build** (`b` on any box, line, zone or arrow): the step at which the part appears when the map is built up. A child or a line takes its box's step unless it has its own.
 - **Route** (`r`, and `"layer": "route"` arrows with a badge number `n`): the step at which a part joins the request's path. Route arrows show only while following the request; structure arrows (`layer` base) show only otherwise; parts the route never touches are dimmed.
 - **Captions** for each mode, one `{title, text}` per step, show under the diagram while it plays.
+
+## Bars spec
+
+    {"title": "A miss costs a hundred times a hit", "unit": "ns", "scale": "log",
+     "bars": [{"id": "l1", "label": "L1 cache", "value": 1, "note": "about four cycles"},
+              {"id": "ram", "label": "Main memory", "value": 100, "tone": "red"}],
+     "threshold": {"value": 10, "label": "loop budget"}}
+
+`skills/_shared/visuals/bars_svg.py`: one row per thing, a bar as long as its value on one scale, a chip with the value and unit. `unit` is written once. `scale` is `linear` or `log`: a log board has ticks at powers of ten and a "log scale" badge, and refuses a value of zero or less. Non-numeric values, a bar with another unit, duplicate ids, series and markers are refused naming the bar. `note` is a second line under the label. One optional `threshold` is a dashed line. At most 24 bars. On the stage a bar is the key `bar:<id>`, and `[[point: bar X]]` and `[[point: rows A-B]]` light it.
+
+## Graph spec
+
+    {"title": "A rebase copies your commits onto the new tip",
+     "nodes": [{"id": "a", "label": "base commit", "lane": "main"}, {"id": "c", "label": "new tip", "lane": "main"},
+               {"id": "d", "label": "old work", "lane": "feature", "state": "ghost"},
+               {"id": "d2", "label": "copied work", "lane": "after rebase", "state": "new"}],
+     "edges": [{"from": "a", "to": "c"}, {"from": "a", "to": "d"}, {"from": "c", "to": "d2"}]}
+
+`skills/_shared/visuals/graph_svg.py`: a commit graph or a tree only. A node is `{id, label, lane, state?, sub?}` and an edge runs from the older node to the newer. `state` is `same`, `new` (after only), `ghost` (there before, faint and dashed after) or `struck` (struck through after). With any state but `same` the drawing holds both frames, before above after (`<g data-frame="before">` and `after`), and `data-vb-before`, `data-vb-after` and `data-vb-both` give a viewBox for each, for a page that shows one at a time. Columns come from the layering of `flowchart_layout.assign_layers` (how many parents deep), rows from `lane`; leave `lane` out of every node and a tree gets a row per leaf. A duplicate id, an edge to a missing node and a cycle are refused naming the id. On the stage a node is `node:<id>`, an edge `edge:<a>-><b>#<n>`, and `[[point: before]]`, `[[point: after]]`, `[[point: both]]` and `[[point: node X]]` light them.
 
 ## Lane sequence spec
 

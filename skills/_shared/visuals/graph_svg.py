@@ -1,7 +1,7 @@
 """Graph: what happens to commits or to a tree. Spec validator and server-side SVG renderer.
 
 A graph board draws a commit graph or a tree, and what a change does to it: the same graph before and
-after, side by side, with the commits a change adds, leaves behind or removes marked. It is the board for
+after, one above the other, with the commits a change adds, leaves behind or removes marked. It is the board for
 "what does rebase do to history", "what does a split do to a B-tree", "what does a delete leave". Only
 commit graphs and trees: nothing here is a flowchart (use that for a process), and no node has two parents
 that are not older than it (a cycle is refused).
@@ -24,7 +24,7 @@ that are not older than it (a cycle is refused).
 - Nodes of a frame that share a column and lane stack in that lane; give a ghost its own lane to keep it clear.
 
 With before and after the SVG holds both frames, ``<g data-frame="before">`` and ``<g data-frame="after">``,
-side by side, and ``data-vb`` on the SVG gives each frame's own viewBox (``before``, ``after``, ``both``) for a
+one above the other, and ``data-vb`` on the SVG gives each frame's own viewBox (``before``, ``after``, ``both``) for a
 page that shows one at a time (a phone). A node is keyed ``node:<id>`` in both frames, an edge ``edge:<a>-><b>#0``.
 Pure functions, no I/O. Nothing the author writes reaches the output except as escaped text.
 """
@@ -48,7 +48,7 @@ NODE_MIN_W = 84
 COL_GAP = 52
 LANE_GAP = 26
 LANE_LABEL_GAP = 18
-FRAME_GAP = 64
+FRAME_GAP = 48
 MAX_NODES = 40
 
 
@@ -326,16 +326,17 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
     y0 = top + head
     vb: dict[str, tuple[float, float, float, float]] = {}
     if framed:
+        # before above after: a frame is as wide as its own graph, and stacked they use a pane's height as well as its width
         parts_b, wb, hb = _frame(spec, geo, "before", PAD, y0, keyed, label_w)
-        ox = PAD + wb + FRAME_GAP
-        parts_a, wa, ha = _frame(spec, geo, "after", ox, y0, keyed, label_w)
+        y1 = y0 + hb + FRAME_GAP + HEAD_H - 12
+        parts_a, wa, ha = _frame(spec, geo, "after", PAD, y1, keyed, label_w)
         out.append(_text("zl", PAD, y0 - 14, "BEFORE"))
-        out.append(_text("zl", ox, y0 - 14, "AFTER"))
+        out.append(_text("zl", PAD, y1 - 14, "AFTER"))
         out += parts_b + parts_a
-        total_w, total_h = ox + wa + PAD, y0 + max(hb, ha) + PAD
+        total_w, total_h = PAD + max(wb, wa) + PAD, y1 + ha + PAD
         title_h = top - PAD
-        vb = {"before": (0, title_h, PAD + wb + PAD, total_h - title_h),
-              "after": (ox - PAD, title_h, wa + 2 * PAD, total_h - title_h),
+        vb = {"before": (0, title_h, total_w, y0 + hb + PAD - title_h),
+              "after": (0, y1 - HEAD_H, total_w, total_h - (y1 - HEAD_H)),
               "both": (0, 0, total_w, total_h)}
     else:
         parts, wf, hf = _frame(spec, geo, "after", PAD, y0, keyed, label_w)
