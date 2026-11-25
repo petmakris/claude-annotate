@@ -308,6 +308,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 
 /* the actor cards, on top while the rows scroll */
 .ln-head{position:sticky;top:-16px;z-index:6;background:var(--panel);border-bottom:1px solid var(--line);border-radius:12px 12px 0 0;padding:10px 0 10px}
+.ln-narrow .ln-stitle{display:none}
 .ln-actors{position:relative;height:56px}
 .ln-chip{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
   min-width:110px;padding:9px 14px 8px;border-radius:10px;box-sizing:border-box;width:max-content;text-align:center;overflow-wrap:break-word;cursor:pointer;
@@ -319,6 +320,20 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .ln-chip.ln-on{border-color:var(--ac,var(--acc));box-shadow:inset 0 3px 0 var(--ac),0 0 0 1px var(--ac),0 4px 14px -6px var(--ac)}
 .ln-chip.ln-off{opacity:.55}
 .ln-tight .ln-chip{min-width:0;padding-inline:8px}
+/* five actors or more on a phone (lanes.js columns): a card is its number, the names stand once in the key above the
+   lifelines, and the actors of the step said are named under the cards, which stay on top */
+.ln-key,.ln-now,.ln-chip .ln-no{display:none}
+.ln-dense .ln-key{display:flex;flex-wrap:wrap;gap:4px 6px;padding:10px 10px 6px}
+.ln-kitem{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:2px 8px 2px 3px;border:1px solid transparent;border-radius:999px;background:none;
+  font:500 12.5px/1.2 var(--sans);color:var(--ink);cursor:pointer;white-space:nowrap}
+.ln-kitem.ln-on{background:var(--tb);border-color:var(--tc)} .ln-kitem.ln-followed{border-color:var(--acc)}
+.ln-kitem i,.ln-now i{flex:none;width:19px;height:19px;border-radius:50%;display:grid;place-items:center;background:var(--tc);color:var(--panel);font:700 11px/1 var(--sans);font-style:normal}
+.ln-dense .ln-chip{width:28px;height:28px;min-width:0;padding:0;border-radius:50%;justify-content:center;max-width:28px!important}
+.ln-dense .ln-chip :is(span,em,small,.ln-tag){display:none}
+.ln-dense .ln-chip .ln-no{display:block;font:700 12px/1 var(--sans)}
+.ln-dense .ln-actors{height:32px!important}
+.ln-dense .ln-now{display:flex;gap:12px;height:22px;padding:6px 10px 0;overflow:hidden;font:600 12.5px/1.2 var(--sans);color:var(--ink)}
+.ln-now span{display:inline-flex;align-items:center;gap:5px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* an actor's head as the lane sequence draws it: a box in its tone, its role under its name in that tone */
 .lanes .ln-chip{background:var(--tb);border:1.5px solid var(--tc);box-shadow:0 1px 2px rgba(60,64,67,.10);font-weight:700;font-size:14.5px}
 .lanes .ln-chip.t-plain{background:var(--panel);border-color:var(--line)}
@@ -344,6 +359,10 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .ln-outcome b{font:700 15.5px/1.3 var(--sans);color:var(--tc)} .ln-outcome span{font:400 13px/1.4 var(--sans);color:var(--muted)}
 .ln-outcome.t-plain{border-color:var(--line);background:var(--panel)} .ln-outcome.t-plain b{color:var(--ink)}
 .ln-outcome.ln-ghost{opacity:.35}
+.ln-outcome.ln-lit{box-shadow:0 0 0 2px var(--tc)} .ln-outcome.t-plain.ln-lit{box-shadow:0 0 0 2px var(--ink)}
+.ln-outcome.ln-said{box-shadow:0 0 0 3px var(--tc),0 6px 18px -8px var(--tc)} .ln-outcome.k-hidden{opacity:.35}
+/* a compared board's outcome: once, across both sides, under the last row */
+.ln-cout{padding:0 12px} .ln-cout .ln-outcome{position:relative;left:auto;right:auto;margin:6px 0 16px}
 .ln-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 16px;margin-top:8px;font:400 12px var(--sans);color:var(--muted)}
 .ln-legend span{display:inline-flex;align-items:center;gap:6px}
 .ln-legend i{width:16px;height:3px;border-radius:2px;background:var(--tc)}
@@ -366,7 +385,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .ln-kind:hover{filter:brightness(1.08)}
 .ln-kind:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 .ln-kind.ln-ghost{opacity:.55}
-.ln-guard{position:absolute;z-index:2;font:500 12px/15px var(--mono);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-ligatures:none}
+.ln-guard{position:absolute;z-index:2;padding:0 4px;border-radius:4px;background:var(--box-head);font:500 12px/15px var(--mono);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-ligatures:none}
 .ln-guard.ln-branch{padding:3px 8px;border-radius:6px;background:var(--box-head);border:1px solid var(--box-line);font-weight:400}
 .ln-guard em{font-style:normal;font-weight:600;color:var(--muted)}
 .ln-guard.ln-ghost{opacity:.5}
@@ -431,6 +450,9 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .ln-over{transform:translate(-50%,calc(-100% - 5px));text-align:center}
 .ln-call{transform:translate(-50%,5px);text-align:center}
 .ln-event .ln-lbl b{font-weight:400;color:var(--muted)}
+/* a reply's words are bare over its dashed arrow: a backing keeps lifelines and bars from striking them */
+.ln-event .ln-lbl:not(.ln-chipped){padding:1px 7px;border-radius:6px;background:var(--panel);width:max-content;box-sizing:border-box}
+.ln-pl,.ln-phase em{padding:2px 7px;border-radius:5px;background:var(--panel)}
 .ln-beside,.ln-inband{transform:translateY(-50%);text-align:left}
 .ln-beside.ln-flip{text-align:right}
 .ln-inband{text-align:center}
@@ -503,8 +525,9 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .ln-btn.ln-pri{background:var(--acc);border-color:var(--acc);color:var(--on-acc)}
 .ln-btn.ln-pri:hover{filter:brightness(1.06)}
 @media (max-width:600px){
+  .ln-head{padding:6px 0}
   .ln-chip{font-size:12px;padding:7px 6px 6px;min-width:0}
-  .ln-chip small{display:none}
+  .ln-chip small,.ln-chip em{display:none}
   .ln-num{left:4px}
   .ln-phase{padding-left:36px}
   .ln-summary{left:8px;right:8px}
@@ -562,6 +585,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 /* The map: a flowchart the stage draws itself (map.js). Parts not said yet are faint dashed ghosts;
    the part being said is a large card with its detail; the arrow that just arrived draws in. */
 .visual.map{position:relative;padding:0;border:0;background:none;flex:0 0 auto;align-self:stretch}
+.pbody>.visual.map{margin-bottom:auto}  /* pinned to the pane's top: a pane that grows does not move the parts */
 .map .t-plain{--tc:var(--t-plain);--tb:var(--row-alt)} .map .t-edge{--tc:var(--t-edge);--tb:var(--t-edge-bg)}
 .map .t-internal{--tc:var(--t-internal);--tb:var(--t-internal-bg)} .map .t-good{--tc:var(--t-good);--tb:var(--t-good-bg)}
 .map .t-hot{--tc:var(--t-hot);--tb:var(--t-hot-bg)}
@@ -569,6 +593,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .map .m-line{fill:none;stroke:var(--tc);stroke-width:2;transition:stroke-width .3s}
 .map .m-tip{fill:var(--tc)}
 .map .m-elabel rect{fill:var(--bg);stroke:var(--line)}
+.map .m-lead{fill:none;stroke:var(--line);stroke-width:1.5}
 .map .m-elabel text{font:500 12.5px var(--sans);fill:var(--muted);text-anchor:middle}
 .map .m-edge.m-cur .m-line{stroke-width:3.5}
 .map .m-edge.m-cur .m-elabel text{font-weight:600;fill:var(--ink)}
@@ -576,15 +601,15 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .map .m-line.m-draw{stroke-dasharray:var(--len);stroke-dashoffset:var(--len);animation:m-draw .7s cubic-bezier(.4,0,.2,1) forwards}
 @keyframes m-draw{to{stroke-dashoffset:0}}
 .map .m-dot{fill:var(--tc)}
-.map .m-node{position:absolute;transform:translate(-50%,-50%);width:var(--mw,180px);min-height:52px;box-sizing:border-box;padding:9px 14px;border-radius:14px;
+.map .m-node{position:absolute;transform:translate(-50%,-50%);width:var(--mw,180px);min-height:calc(52px * var(--ms,1));box-sizing:border-box;padding:9px 14px;border-radius:14px;
   background:var(--panel);border:1.5px solid var(--tc);text-align:center;display:flex;flex-direction:column;justify-content:center;
   transition:width .4s cubic-bezier(.2,.7,.2,1),padding .4s,background-color .3s,box-shadow .3s,opacity .4s;z-index:1}
-.map .m-node b{font:600 15px/1.25 var(--sans);color:var(--ink);overflow-wrap:anywhere}
+.map .m-node b{font:600 calc(15px * var(--ms,1))/1.25 var(--sans);color:var(--ink);overflow-wrap:anywhere}
 .map .m-node code,.map .m-node .m-sub{display:none}
 .map .m-node.m-decision{border-radius:14px 14px 14px 14px;border-width:2px;border-style:double}
 .map .m-node.m-cur{width:var(--mc,260px);padding:14px 18px;background:var(--tb);z-index:2;
   box-shadow:0 0 0 5px color-mix(in srgb,var(--tc) 18%,transparent),0 18px 40px -18px rgba(15,23,42,.45)}
-.map .m-node.m-cur b{font-size:19px}
+.map .m-node.m-cur b{font-size:calc(19px * var(--ms,1))}
 /* the detail is dim text on the card's tone: muted drawn a little towards the ink reaches 4.5:1 on every tone */
 .map .m-node.m-cur code{display:block;margin-top:4px;font:400 12px/1.4 var(--mono);color:color-mix(in srgb,var(--muted) 85%,var(--ink));overflow-wrap:anywhere}
 .map .m-node.m-cur .m-sub{display:block;margin-top:4px;font:400 13px/1.35 var(--sans);color:color-mix(in srgb,var(--muted) 85%,var(--ink));overflow-wrap:anywhere}
@@ -769,7 +794,8 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
    still to come is an outline, as in the player; the parts being said take vz.css's `now`; a part pointed at
    keeps the accent while the rest dims. A wide map scrolls sideways rather than shrinking its words. */
 .visual.vzmap{padding:14px 16px;overflow-x:auto;overflow-y:visible}
-.vzmap svg.vz{min-width:760px;max-width:1400px;margin:0 auto}
+.vzmap svg.vz{width:100%;max-width:2400px;margin:0 auto}  /* fills the pane, a TV's too */
+@media (max-width:760px){.vzmap svg.vz{width:1100px;max-width:none}}  /* on a phone it scrolls sideways at a size words can be read at */
 .vzmap svg.vz rect.bx.k-hidden,.vzmap svg.vz rect.zone.k-hidden{opacity:1!important;fill:none;stroke:var(--vz-line);stroke-width:1.2;stroke-dasharray:4 4}
 .vzmap.k-dim svg.vz [data-key]:not(.k-focus):not(.k-hidden):not(.now){opacity:.3}
 .vzmap svg.vz rect.bx.k-focus{stroke:var(--vz-accent);stroke-width:2.4}

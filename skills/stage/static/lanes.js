@@ -40,6 +40,7 @@ const GAP = 10;          // between two cards on one line
 const CARD = 92;         // narrower than this, the cards take two lines, every other one on the lower
 const BAR = 10;          // an activation bar's width; a nested one stands NEST to the right
 const NEST = 6;
+const DENSE = 28;       // a numbered card on a phone with many actors
 const PHASE_H = 34, HEAD_H = 30, BRANCH_H = 30, CLOSE_H = 18, SUMMARY_H = 46;
 // An actor's colour is its tone's: a colour carries a meaning, so an actor with none is plain.
 const actorColour = (a) => `var(--t-${tone(a.tone) === "dropped" ? "plain" : tone(a.tone)})`;
@@ -58,12 +59,17 @@ export function renderLanes(box, spec, embedded, more = {}) {
   const actors = spec.actors || [];
   const legend = (spec.legend || []).length
     ? `<div class="ln-legend">${spec.legend.map((l) => `<span class="t-${tone(l.tone)}"><i></i>${esc(l.label)}</span>`).join("")}</div>` : "";
-  box.innerHTML = `<div class="ln-head"><div class="ln-actors">${actors.map((a, i) =>
+  const name = (a) => String(a.label || a.id).replace(/\n/g, " ");
+  // on a phone with many actors the cards are numbers (`ln-dense`), named once in a key above the lifelines
+  const key = `<div class="ln-key" aria-label="Who is who">${actors.map((a, i) =>
+    `<button type="button" class="ln-kitem t-${tone(a.tone)}" style="--ac:${actorColour(a, i)}" data-actor="${esc(a.id)}"><i>${i + 1}</i>${esc(name(a))}</button>`).join("")}</div>`;
+  box.innerHTML = `${key}<div class="ln-head"><div class="ln-actors">${actors.map((a, i) =>
       `<button type="button" class="ln-chip t-${tone(a.tone)}${a.mono ? " ln-mono" : ""}" style="--ac:${actorColour(a, i)}" data-key="actor:${esc(a.id)}" data-actor="${esc(a.id)}"
-        title="Follow ${esc(String(a.label || a.id).replace(/\n/g, " "))}"><span>${esc(String(a.label || a.id).replace(/\n/g, " "))}</span>${a.role ? `<em>${esc(a.role)}</em>` : ""}${a.sub ? `<small>${esc(a.sub)}</small>` : ""}${a.tag ? `<i class="ln-tag">${esc(a.tag)}</i>` : ""}</button>`).join("")}</div>${legend}</div>
+        title="Follow ${esc(name(a))}"><b class="ln-no">${i + 1}</b><span>${esc(name(a))}</span>${a.role ? `<em>${esc(a.role)}</em>` : ""}${a.sub ? `<small>${esc(a.sub)}</small>` : ""}${a.tag ? `<i class="ln-tag">${esc(a.tag)}</i>` : ""}</button>`).join("")}</div>
+      <div class="ln-now" aria-live="off"></div>${legend}</div>
     <div class="ln-body"></div>`;
   box._lanes = { spec, refs: more.refs || {}, play: embedded ? more.play : null, scene: null, n: null, cur: null, drawn: undefined,
-                 focus: null, folded: new Set(), pop: null, popNew: false, model: model(spec), onPaint: more.onPaint || null };
+                 focus: null, folded: new Set(), pop: null, popNew: false, model: model(spec), onPaint: more.onPaint || null, managed: !!more.managed, aim: null, outSaid: false };
   box.classList.toggle("ln-subs", (spec.steps || []).some((s) => s.sub));
   if (!box._lanesObserved) {
     box._lanesObserved = true;
@@ -103,6 +109,20 @@ export function layoutLanes(box, scene, n = null) {
   if (!st) return;
   st.scene = scene; st.n = n;
   paint(box);
+}
+
+// The outcome closes a diagram, plain or compared (one renderer, both boards): ghosted until the last step is
+// shown, lit while the voice points at it (`[[point: outcome]]`), says the last step, or at rest.
+const outcomeHeight = (o) => 30 + 22 * (o.lines || []).length + 18;
+function outcomeLit(st, fr, cur, last) {
+  const atRest = !st.scene || st.n == null || st.n >= st.scene.rest;
+  const shown = !fr.show || fr.show.has("outcome:box") || (last >= 0 && fr.show.has("step:" + st.model.steps[last]?.id));
+  const said = fr.said.includes("outcome:box") || fr.focus.has("outcome:box") || (cur != null && cur === last);
+  return { ghost: !shown, lit: shown && (said || (atRest && cur == null)), said };
+}
+function outcomeHtml(o, { ghost, lit, said }, style) {
+  return `<div class="ln-outcome t-${tone(o.tone)}${ghost ? " ln-ghost" : ""}${lit ? " ln-lit" : ""}${said ? " ln-said" : ""}" data-key="outcome:box"${style ? ` style="${style}"` : ""}>
+    <b>${esc(o.title)}</b>${(o.lines || []).map((l) => `<span>${esc(l)}</span>`).join("")}</div>`;
 }
 
 function frameOf(st) {
@@ -166,7 +186,7 @@ function paint(box) {
   }
   // the outcome closes the diagram: its title and its lines, in its tone
   const out = st.model.outcome;
-  if (out) { const lines = (out.lines || []).length; rows.push({ type: "outcome", out, y: y + 8, h: 30 + 22 * lines + 18 }); y += 8 + 30 + 22 * lines + 18 + 10; }
+  if (out) { const h = outcomeHeight(out); rows.push({ type: "outcome", out, y: y + 8, h }); y += 8 + h + 10; }
   const H = y + 24;
 
   // -- activation bars: a call's on its receiver until its reply; a call to itself a short one ------------
@@ -224,7 +244,7 @@ function paint(box) {
     if (r.type === "phase") {
       const pos = cur == null ? "" : cur > r.p.b ? " ln-past" : cur >= r.p.a ? " ln-here" : "";
       html.push(`<button type="button" class="ln-phase${pos}${phaseOn(r.p) ? "" : " ln-ghost"}" data-at="${esc(r.p.start_at)}"${phaseOn(r.p) ? " data-on" : ""}
-        data-fold="p:${esc(r.p.id)}" title="Fold this phase" style="top:${r.y}px;height:${r.h}px">${esc(r.p.label)}<em>steps ${r.p.a + 1}–${r.p.b + 1}</em></button>`);
+        data-fold="p:${esc(r.p.id)}" title="Fold this phase" style="top:${r.y}px;height:${r.h}px"><span class="ln-pl">${esc(r.p.label)}</span><em>steps ${r.p.a + 1}–${r.p.b + 1}</em></button>`);
     } else if (r.type === "summary") {
       const p = r.p, k = p.b - p.a + 1, done = cur != null ? cur > p.b : shown(p.b);
       const said = steps.slice(p.a, p.b + 1).map((s) => s.label);
@@ -234,9 +254,7 @@ function paint(box) {
     } else if (r.type === "step") {
       html.push(stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown));
     } else if (r.type === "outcome") {
-      const o = r.out;
-      html.push(`<div class="ln-outcome t-${tone(o.tone)}${shown(steps.length - 1) ? "" : " ln-ghost"}" style="top:${r.y}px;height:${r.h}px">
-        <b>${esc(o.title)}</b>${(o.lines || []).map((l) => `<span>${esc(l)}</span>`).join("")}</div>`);
+      html.push(outcomeHtml(r.out, outcomeLit(st, fr, cur, steps.length - 1), `top:${r.y}px;height:${r.h}px`));
     }
   }
   const body = box.querySelector(".ln-body");
@@ -253,10 +271,17 @@ function paint(box) {
   }
   if (measure(box, st, rows)) return;  // drawn again, taller where words wrap
   if (st.pop != null) popup(box, st, rows, cols, w);
+  // Where the view goes after this frame: to the step now said, to the top once the answer is over (a rest
+  // view left at the last rows shows the end of a flow and none of its start), or to the outcome when it is said.
   const moved = cur != null && st.drawn !== cur;
+  const rested = cur == null && st.drawn != null;
+  const outSaid = !!out && outcomeLit(st, fr, cur, steps.length - 1).said;
+  const aim = moved ? "row" : rested ? "top" : outSaid && !st.outSaid ? "outcome" : null;
   st.cur = cur != null ? steps[cur].id : null;
   st.drawn = cur;
-  if (moved) requestAnimationFrame(() => follow(box));
+  st.outSaid = outSaid;
+  st.rowTops = rows.filter((r) => r.type === "step" || r.type === "phase" || r.type === "summary" || r.type === "box").map((r) => r.y).sort((a, b) => a - b);
+  if (aim) { st.aim = aim; if (!st.managed) requestAnimationFrame(() => land(box)); }
   st.natural = natural;
   st.rowAt = new Map(rows.filter((r) => r.type === "step").map((r) => [r.s.id, r.y + r.ay]));
   st.onPaint?.();
@@ -269,7 +294,7 @@ function columns(box, st, w, narrow) {
   const actors = st.model.actors, n = actors.length;
   const notes = !narrow && st.model.steps.some((s) => s.note);
   const left = narrow ? 34 : 58, right = notes ? 112 : narrow ? 10 : 24;
-  box.classList.remove("ln-tight");
+  box.classList.remove("ln-tight", "ln-dense");
   const chips = actors.map((a) => box.querySelector(`.ln-chip[data-actor="${CSS.escape(String(a.id))}"]`));
   for (const c of chips) if (c) c.style.maxWidth = "none";
   const natural = chips.map((c) => (c ? c.offsetWidth : 0));
@@ -282,6 +307,15 @@ function columns(box, st, w, narrow) {
   };
   let k = 1, at = fit(1);
   if (n > 2 && at.cap < CARD) { k = 2; at = fit(2); }
+  // Five actors or more on a phone: names would pile up whatever their size, so each card is its number, one
+  // small row, and the names stand once in the key above (ln-key); the actors of the step said are named under it.
+  const dense = narrow && n >= 5;
+  if (dense) {
+    const lo = left + 6, hi = w - right - 8, d = (hi - lo) / (n - 1);
+    box.classList.add("ln-dense");
+    const xs = new Map(actors.map((a, i) => [a.id, Math.round(lo + d * i)]));
+    return { xs, pitch: d, k: 1, cap: DENSE, chips, left, right, notes, dense };
+  }
   box.classList.toggle("ln-tight", natural.some((nw) => nw > at.cap));
   const xs = new Map(actors.map((a, i) => [a.id, Math.round(n === 1 ? w / 2 : at.lo + at.d * i)]));
   return { xs, pitch: at.d, k, cap: at.cap, chips, left, right, notes };
@@ -304,6 +338,16 @@ function paintCards(box, st, cols, involved) {
   chips.forEach((c, i) => { if (c) c.style.top = (i % 2 && k === 2 ? second : 2) + "px"; });
   const head = box.querySelector(".ln-actors");
   if (head) head.style.height = (k === 2 ? second + tall(1) : 2 + Math.max(tall(0), tall(1))) + 4 + "px";
+  for (const it of box.querySelectorAll(".ln-kitem")) {
+    it.classList.toggle("ln-on", !!involved && involved.has(it.dataset.actor));
+    it.classList.toggle("ln-followed", st.focus === it.dataset.actor);
+  }
+  // numbered cards: the actors of the step said are named under them, where the key has scrolled away
+  const now = box.querySelector(".ln-now");
+  if (now) {
+    const named = involved ? st.model.actors.map((a, i) => [a, i]).filter(([a]) => involved.has(a.id)) : [];
+    now.innerHTML = named.map(([a, i]) => `<span class="t-${tone(a.tone)}" style="--ac:${actorColour(a, i)}"><i>${i + 1}</i>${esc(String(a.label || a.id).replace(/\n/g, " "))}</span>`).join("");
+  }
 }
 
 // A row's height and where its arrow lies in it: room above the arrow for its sentence, under it for its
@@ -522,25 +566,65 @@ function onClick(box, e) {
   if (at(".ln-pop")) return;
   const f = at("[data-fold]");
   if (f) { const k = f.dataset.fold; st.folded.has(k) ? st.folded.delete(k) : st.folded.add(k); st.pop = null; paint(box); return; }
-  const c = at(".ln-chip");
+  const c = at(".ln-chip, .ln-kitem");
   if (c) { st.focus = st.focus === c.dataset.actor ? null : c.dataset.actor; paint(box); return; }
   const row = at(".ln-row:not(.ln-gap)");
   if (row) { const i = st.model.at.get(row.dataset.step); st.pop = st.pop === i ? null : i; st.popNew = st.pop != null; paint(box); return; }
   if (st.pop != null) { st.pop = null; paint(box); }
 }
 
-// Keep the step being said a little above the middle of the rows in view, under the cards that stay on top.
-// Scrolls the pane's own scroller, never the page around it.
-function follow(box) {
-  const r = box.querySelector(".ln-row.ln-cur");
+// Where the view goes (st.aim, set by the frame): `land` does it once, on the pane's own scroller, never the page
+// around it. A compare board's panes are `managed`: the board lands the one on show after both are drawn level.
+function land(box) {
+  const st = box._lanes, aim = st?.aim;
+  if (!aim) return;
+  st.aim = null;
+  if (!box.isConnected || box.closest("[hidden]")) return;
+  if (aim === "row") follow(box);
+  else if (aim === "top") toTop(box);
+  else toOutcome(box, box);
+}
+
+function viewOf(box, headBox = box) {
   const scroller = box.closest(".pbody");
-  if (!r || !scroller || !r.isConnected) return;
-  const head = box.querySelector(".ln-head")?.offsetHeight || 0;
-  const rb = r.getBoundingClientRect(), sb = scroller.getBoundingClientRect();
-  const view = sb.height - head;
-  const want = scroller.scrollTop + (rb.top - sb.top) - head - view * 0.4 + rb.height / 2;
-  const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
-  scroller.scrollTo({ top: Math.max(0, want), behavior: smooth ? "smooth" : "auto" });
+  if (!scroller) return null;
+  const head = headBox.querySelector(".ln-head");
+  const sb = scroller.getBoundingClientRect();
+  // the cards stay on top: they cover this much of the pane's top once they stick
+  const stuck = head ? (parseFloat(getComputedStyle(head).top) || 0) + head.offsetHeight : 0;
+  return { scroller, sb, stuck, smooth: !matchMedia("(prefers-reduced-motion: reduce)").matches };
+}
+
+// Keep the step being said a little above the middle of the rows in view, under the cards that stay on top, and
+// the top of what shows on a row's own edge, so no row above is cut under the cards and none pokes out of them.
+function follow(box) {
+  const r = box.querySelector(".ln-row.ln-cur"), v = viewOf(box), st = box._lanes;
+  if (!r || !v || !r.isConnected) return;
+  const rb = r.getBoundingClientRect();
+  const view = v.sb.height - v.stuck;
+  let want = v.scroller.scrollTop + (rb.top - v.sb.top) - v.stuck - view * 0.4 + rb.height / 2;
+  const body = box.querySelector(".ln-body"), tops = st?.rowTops || [];
+  if (body && tops.length) {
+    const bodyTop = body.getBoundingClientRect().top - v.sb.top + v.scroller.scrollTop;
+    const seen = want + v.stuck - bodyTop;                  // the first y of the rows that show, as the view would be
+    const edge = tops.filter((t) => t <= seen + 1).pop();   // the row edge at or above it
+    want = edge == null ? 0 : edge - 8 + bodyTop - v.stuck;
+  }
+  v.scroller.scrollTo({ top: Math.max(0, want), behavior: v.smooth ? "smooth" : "auto" });
+}
+
+function toTop(box) {
+  const v = viewOf(box);
+  if (v) v.scroller.scrollTo({ top: 0, behavior: v.smooth ? "smooth" : "auto" });
+}
+
+// The outcome in view with the rows above it: its foot just over the pane's, when it is not whole in it.
+function toOutcome(box, headBox) {
+  const el = box.querySelector(".ln-outcome"), v = viewOf(box, headBox);
+  if (!el || !v) return;
+  const eb = el.getBoundingClientRect();
+  if (eb.top >= v.sb.top + v.stuck && eb.bottom <= v.sb.bottom - 8) return;
+  v.scroller.scrollTo({ top: Math.max(0, v.scroller.scrollTop + eb.bottom - v.sb.bottom + 18), behavior: v.smooth ? "smooth" : "auto" });
 }
 
 // -- a before/after board: two lane boards side by side, row for row ------------------------------------------
@@ -563,7 +647,7 @@ function sideSpec(spec, side) {
     const { row: _row, ...own } = s;
     return { ...own, id: r.id, reply_to: s.reply_to != null ? rowOf.get(s.reply_to) : undefined };
   });
-  return { ...spec, compare: undefined, actors, steps };
+  return { ...spec, compare: undefined, outcome: undefined, actors, steps };  // the outcome closes both sides at once (paintStrip)
 }
 
 // Each side's popup reads its own step's source lines: the after side's under the row's key, the before
@@ -582,12 +666,13 @@ function renderCompare(box, spec, embedded, more) {
   box.innerHTML = `<div class="ln-cmp"><div class="ln-sidebar" role="group" aria-label="Which flow">${SIDES.map((sd) =>
       `<button type="button" class="ln-mode" data-side="${sd}" aria-pressed="false">${esc(cmp[sd].label)}</button>`).join("")}</div>
     <div class="ln-cgrid">${SIDES.map((sd, k) => `${k ? `<div class="ln-gutter" aria-hidden="true"></div>` : ""}<div class="ln-side ln-s-${sd}" data-side="${sd}">
-      <div class="ln-stitle"><b>${sd === "before" ? "Before" : "After"}</b> · ${esc(cmp[sd].label)}</div><div class="ln-pane"></div></div>`).join("")}</div></div>`;
+      <div class="ln-stitle"><b>${sd === "before" ? "Before" : "After"}</b>${String(cmp[sd].label).toLowerCase() === sd ? "" : ` · ${esc(cmp[sd].label)}`}</div><div class="ln-pane"></div></div>`).join("")}</div>
+    <div class="ln-cout"></div></div>`;
   box._lanes = null;
   const st = box._cmp = { spec, scene: null, n: null, mode: "both", pinned: false, pick: "after", panes: {} };
   for (const sd of SIDES) {
     const pane = box.querySelector(`.ln-s-${sd} .ln-pane`);
-    renderLanes(pane, sideSpec(spec, sd), embedded, { refs: sideRefs(spec, more.refs || {}, sd), play: more.play, onPaint: () => syncSides(box) });
+    renderLanes(pane, sideSpec(spec, sd), embedded, { refs: sideRefs(spec, more.refs || {}, sd), play: more.play, onPaint: () => syncSides(box), managed: true });
     st.panes[sd] = pane;
   }
   if (!box._cmpObserved) {
@@ -631,6 +716,52 @@ function layoutCompare(box, scene, n = null) {
   for (const b of box.querySelectorAll(".ln-sidebar [data-side]")) b.setAttribute("aria-pressed", String(b.dataset.side === (one || mode)));
   for (const sd of SIDES) layoutLanes(st.panes[sd], scene, n);
   syncSides(box);
+  paintStrip(box);
+  landCompare(box);
+}
+
+// The outcome, once across both sides under the last row, drawn as a sequence draws its own (outcomeHtml).
+function paintStrip(box) {
+  const c = box._cmp, o = c.spec.outcome, host = box.querySelector(".ln-cout");
+  if (!o) { host.replaceChildren(); return; }
+  const steps = c.spec.steps, scene = c.scene, n = c.n;
+  const f = scene ? scene.frames[Math.max(0, Math.min(n ?? scene.frames.length - 1, scene.frames.length - 1))] : null;
+  const fr = { show: f ? new Set(f.show) : null, focus: new Set(f?.focus || []), said: scene && n != null ? beingSaid(scene, n) : [] };
+  const gone = new Set(steps.map((s) => s.replaces).filter(Boolean));
+  let last = steps.length - 1;
+  while (last > 0 && gone.has(steps[last].id)) last--;
+  const curKey = fr.said.filter((k) => k.startsWith("step:")).pop();
+  const cur = curKey ? steps.findIndex((s) => "step:" + s.id === curKey) : null;
+  const state = outcomeLit({ scene, n, model: { steps } }, fr, cur >= 0 ? cur : null, last);
+  const html = outcomeHtml(o, state, "");
+  const old = host.firstElementChild;
+  if (old && old.querySelector("b")?.textContent === o.title) {   // the same strip: its classes change, so it fades in or out
+    const next = document.createElement("div"); next.innerHTML = html;
+    old.className = next.firstElementChild.className;
+  } else host.innerHTML = html;
+  const was = !!c.outSaid; c.outSaid = state.said;
+  if (state.said && !was) c.aimOut = true;
+}
+
+// After both sides are level: the view goes where the frame said, on the side on show (the after side when both are).
+function landCompare(box) {
+  const c = box._cmp;
+  const shown = SIDES.map((sd) => c.panes[sd]).filter((p) => !p.closest(".ln-side")?.hidden);
+  const aims = SIDES.map((sd) => c.panes[sd]._lanes?.aim).filter(Boolean);
+  for (const sd of SIDES) if (c.panes[sd]._lanes) c.panes[sd]._lanes.aim = null;
+  const pane = shown[shown.length - 1];
+  // a side that came on show after the voice moved on (the pane was hidden when the step changed) is brought to it too
+  const behind = pane?._lanes && pane._lanes.cur != null && pane._lanes.landed !== pane._lanes.cur;
+  const aim = aims.includes("row") || behind ? "row" : aims.includes("top") ? "top" : c.aimOut ? "outcome" : null;
+  c.aimOut = false;
+  if (pane?._lanes && aim && pane.clientWidth > 0) pane._lanes.landed = aim === "row" ? pane._lanes.cur : null;
+  if (!aim || !pane || !box.isConnected || box.clientWidth === 0) return;
+  requestAnimationFrame(() => {
+    pane._lanes.aim = null;
+    if (aim === "row") follow(pane);
+    else if (aim === "top") toTop(box);
+    else toOutcome(box, pane);
+  });
 }
 
 // Each row as tall as its taller side, its arrow at the lower of the two, and the heads as tall as each other;
