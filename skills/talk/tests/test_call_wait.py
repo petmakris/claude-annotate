@@ -296,3 +296,18 @@ def test_play_anyway_makes_the_voice_of_a_skipped_answer_and_plays_it_when_it_is
     page.js("await serve(2);")
     page.check("[audio.paused, audio.getAttribute('src'), playAnywayId]")
     assert page.run() == [[["/api/speak", {"entry": 0}]], [True, None, 0], [False, "/c/test-call-id/audio/0000.wav", None]]
+
+
+def test_a_screen_reader_hears_each_change_of_step_once_and_never_the_clock(tmp_path):
+    page = run_states(tmp_path, lambda b: [waiting(b, 1), picked(b, 2), picked(b, 3, activity=[{"label": "Reading", "state": "running", "seconds": 1}]),
+                                           waiting(b, 4, stalled=True, turn=picked(b, 4)["turn"], working=True)])
+    page.js("window.said = []; announce = t => window.said.push(t); await serve(1); await advance(3000); await serve(2); await advance(2000); await serve(3); await serve(4);")
+    page.check("window.said")
+    assert page.run() == [["Claude is working. Claude has your question.", "Claude has gone quiet. No sign of life for 0:05."]]
+
+
+def test_a_question_sent_is_announced_once(tmp_path):
+    page = run_states(tmp_path, lambda b: [waiting(b, 1)])
+    page.js("window.said = []; announce = t => window.said.push(t); $('text').value = 'hello'; $('text').dispatchEvent(new ShimEvent('input')); $('sendtext').click(); await settle(); await serve(1);")
+    page.check("window.said")
+    assert page.run() == [["Your question was sent."]]

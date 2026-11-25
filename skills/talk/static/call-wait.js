@@ -133,6 +133,7 @@ const SLOW_AFTER = 90;       // seconds after the question: "Taking longer than 
 let waitTick = 0;            // the clock's interval, running only while the card is shown
 let waitSig = "";            // what the card was built from: it is rebuilt only when that changes, never each second
 let waitFor = null;          // the id of the first question the card was last built for: a new one scrolls the card into view
+let waitSaid = null;         // the step a screen reader was last told: it hears each change of step once, never the clock
 let sendNoteNow = null;      // {text, tone, until}: what happened to the last send, take back or copy
 let playAnywayId = null;     // a replaced answer the reader asked to hear: it plays when its voice is ready
 
@@ -186,6 +187,7 @@ const WAIT_ICON = {
   back: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
   check: '<path d="M5 12l5 5L20 7"/>',
   skip: '<path d="M6 5v14l10-7z"/><path d="M19 5v14"/>',
+  queue: '<path d="M4 6h10M4 11h10M4 16h6"/><path d="M15 14l5 3-5 3z"/>',
   swap: '<path d="M7 7h12M15 3l4 4-4 4M17 17H5M9 13l-4 4 4 4"/>',
 };
 const svgIcon = (name, size = 16) => '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + WAIT_ICON[name] + '</svg>';
@@ -208,7 +210,7 @@ function buildWait(m) {
   const head = document.createElement("div"); head.className = "wt-head";
   const icon = document.createElement("span"); icon.className = "wt-icon";
   icon.innerHTML = svgIcon(m.step === "sent" ? "sent" : m.step === "working" ? "working" : "warn", 20);
-  const title = document.createElement("span"); title.className = "wt-title"; title.setAttribute("role", "status"); title.setAttribute("aria-live", "polite");
+  const title = document.createElement("span"); title.className = "wt-title";
   title.textContent = WAIT_TITLE[m.step];
   const clock = document.createElement("span"); clock.className = "wt-clock"; clock.setAttribute("aria-hidden", "true");
   head.append(icon, title, clock);
@@ -318,7 +320,7 @@ function paintQueue() {
   const sig = e.id + ":" + (e.n || "");
   if (row.dataset.sig === sig) return;
   row.dataset.sig = sig;
-  const icon = document.createElement("span"); icon.className = "qr-icon"; icon.innerHTML = svgIcon("skip", 16);
+  const icon = document.createElement("span"); icon.className = "qr-icon"; icon.innerHTML = svgIcon("queue", 16);
   const text = document.createElement("span"); text.className = "qr-text";
   text.textContent = "Next: answer " + (e.n || "") + ". It plays when this one ends.";
   const skip = waitButton("skip", "Skip", skipQueued); skip.classList.add("qr-skip");
@@ -355,7 +357,13 @@ function paintWait() {
     if (sig !== waitSig || card.hidden) { waitSig = sig; buildWait(m); }
     tickWait(m);
     if (waitFor !== m.fl[0].id) { waitFor = m.fl[0].id; $("convo").scrollTop = 0; }
-  } else if (!card.hidden) { card.hidden = true; card.replaceChildren(); waitSig = ""; waitFor = null; }
+    // The live region is the page's one (announce), since this card is rebuilt: a change of step is said once. "Sent" is
+    // said by turnSent.
+    if (waitSaid !== m.step) {
+      if (waitSaid !== null || m.step !== "sent") { const sub = waitSub(m); announce(WAIT_TITLE[m.step] + "." + (sub ? " " + sub : "")); }
+      waitSaid = m.step;
+    }
+  } else if (!card.hidden) { card.hidden = true; card.replaceChildren(); waitSig = ""; waitFor = null; waitSaid = null; }
   // The placeholder says what the field does while a question is in flight.
   if (!answering && !recorder) $("text").placeholder = m ? "Add to your question" : "Type, or press the mic";
   paintSendNote(m);
