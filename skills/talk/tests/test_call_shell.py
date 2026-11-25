@@ -240,3 +240,11 @@ def test_every_board_kind_has_its_own_chip_icon_and_none_falls_back_to_the_page_
     have |= set(_re.findall(r"KIND_ICONS\.(\w+) =", js))
     want = set(_re.findall(r'"(\w+)"', kinds))
     assert sorted(want - have) == []
+
+
+def test_typing_in_the_search_brings_the_field_to_the_top_so_a_phone_shows_the_results():
+    html, states = asked(Path(__import__("tempfile").mkdtemp()), answers=(FIRST, SECOND, THIRD))
+    page = CallPage(html, states, autoplay=False, seconds=3.0).js("await serve(3); globalThis.jumps = 0; $('convo').scrollTo = () => { jumps++; };")
+    page.js("$('tlsearch').value = 'subsid'; $('tlsearch').dispatchEvent(new ShimEvent('input'));").check("jumps")
+    page.js("$('tlsearch').value = ''; $('tlsearch').dispatchEvent(new ShimEvent('input'));").check("jumps")
+    assert page.run() == [1, 1]

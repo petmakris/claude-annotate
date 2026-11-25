@@ -388,7 +388,9 @@ function paintEarlier() {
   paintFront(); paintMissing();
   returnMarkEarlier(list);
 }
-$("tlsearch").addEventListener("input", () => { tlQuery = $("tlsearch").value; paintEarlier(); });
+// The search field at the top of the view, so its results (on a phone, a short window) are all in sight.
+const searchToTop = () => $("convo").scrollTo({top: $("earlier").offsetTop - $("convo").offsetTop, behavior: "auto"});
+$("tlsearch").addEventListener("input", () => { tlQuery = $("tlsearch").value; paintEarlier(); if (tlQuery.trim()) searchToTop(); });
 $("tlsearch").addEventListener("keydown", (ev) => {
   if (ev.key === "Escape" && (tlQuery || searchOpen)) { ev.stopPropagation(); tlQuery = ""; $("tlsearch").value = ""; searchOpen = false; paintEarlier(); $("searchbtn").focus(); }
 });
@@ -396,7 +398,7 @@ $("searchbtn").onclick = () => {
   searchOpen = !searchOpen;
   if (!searchOpen && tlQuery) { tlQuery = ""; $("tlsearch").value = ""; }
   paintEarlier();
-  if (searchOpen) { $("convo").scrollTo({top: $("earlier").offsetTop - $("convo").offsetTop, behavior: "auto"}); $("tlsearch").focus(); }
+  if (searchOpen) { searchToTop(); $("tlsearch").focus(); }
 };
 $("tlexpand").onclick = () => {
   const shown = shownAnswer(), rest = turnsOf(view.entries).filter((t) => !shown || t.a.id !== shown.id);

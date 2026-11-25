@@ -330,3 +330,16 @@ def test_the_eyebrow_and_the_strip_say_the_step_the_wait_card_says(tmp_path):
     page.js("await serve(2);").check(row)
     assert page.run() == [["Sent", "Sent", "Sent, waiting for Claude to pick it up"],
                           ["Claude is working", "Working", "Claude is answering"]]
+
+
+def test_the_current_step_of_the_stepper_takes_none_of_the_now_cards_box():
+    """Its class `now` is also the Now card's (border, radius, shadow, overflow hidden in call-shell.css); a missed reset drew
+    a clipped box round the step and cut its time off."""
+    import re
+    from pathlib import Path
+    css = (Path(__file__).resolve().parents[1] / "static" / "call-wait.css").read_text()
+    rule = re.search(r"\.wt-steps li\.now\{([^}]*)\}", css)
+    assert rule, "the stepper's current step needs a reset of the Now card's box"
+    decl = rule.group(1)
+    for part in ("border:0", "border-radius:0", "box-shadow:none", "overflow:visible"):
+        assert part in decl

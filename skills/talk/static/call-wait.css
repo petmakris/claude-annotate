@@ -25,6 +25,7 @@
 .wait-card.warn .wt-q{border-left-color:var(--warn)}
 .wt-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
 .wt-steps li{display:grid;grid-template-rows:4px auto auto;gap:3px;min-width:0;font-size:12px;color:var(--faint)}
+.wt-steps li.now{flex:none;border:0;border-radius:0;background:none;box-shadow:none;overflow:visible}   /* the step's class is also the Now card's: it takes none of the card's box */
 .wt-steps i{border-radius:2px;background:var(--line)}
 .wt-steps :is(.done,.now) i{background:var(--acc)}
 .wt-steps .now i{background:linear-gradient(90deg,var(--acc) 0%,var(--acc-mid) 50%,var(--acc) 100%);background-size:200% 100%;animation:wtpulse 1.6s linear infinite}
