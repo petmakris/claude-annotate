@@ -360,7 +360,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .ln-outcome.t-plain{border-color:var(--line);background:var(--panel)} .ln-outcome.t-plain b{color:var(--ink)}
 .ln-outcome.ln-ghost{opacity:.35}
 .ln-outcome.ln-lit{box-shadow:0 0 0 2px var(--tc)} .ln-outcome.t-plain.ln-lit{box-shadow:0 0 0 2px var(--ink)}
-.ln-outcome.ln-said{box-shadow:0 0 0 3px var(--tc),0 6px 18px -8px var(--tc)} .ln-outcome.k-hidden{opacity:.35}
+.ln-outcome.ln-said{box-shadow:0 0 0 3px var(--tc),0 6px 18px -8px var(--tc)} .ln-outcome.k-hidden{opacity:.35!important}
 /* a compared board's outcome: once, across both sides, under the last row */
 .ln-cout{padding:0 12px} .ln-cout .ln-outcome{position:relative;left:auto;right:auto;margin:6px 0 16px}
 .ln-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 16px;margin-top:8px;font:400 12px var(--sans);color:var(--muted)}
@@ -443,7 +443,8 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .lanes .ln-num:not(:empty){border:1.5px solid var(--t-blue);color:var(--t-blue);background:var(--t-blue-bg);box-sizing:border-box}
 .lanes .ln-cur .ln-num:not(:empty){border-color:var(--acc);background:var(--acc);color:var(--on-acc)}
 .lanes .ln-num:empty{display:none}
-.ln-note{position:absolute;right:14px;transform:translateY(-50%);font:500 11px var(--mono);color:var(--muted);background:var(--row-alt);border-radius:6px;padding:3px 7px;white-space:nowrap}
+.ln-note{position:absolute;right:14px;transform:translateY(-50%);font:500 11px/1.35 var(--mono);color:var(--muted);background:var(--row-alt);border-radius:6px;padding:3px 7px;width:max-content;overflow-wrap:anywhere;text-align:left}
+.ln-note.ln-under{transform:none;width:auto;max-width:none;box-sizing:border-box;font-size:11.5px;color:var(--ink);pointer-events:none}   /* a phone: under the chip of the step said, in the row's own width */
 .ln-lbl,.ln-call{position:absolute;pointer-events:none}
 .ln-lbl b{display:block;font:500 13.5px/1.3 var(--sans);color:var(--ink)}
 .ln-lbl code,.ln-call code{display:block;font:400 11.5px/1.35 var(--mono);color:var(--muted);font-variant-ligatures:none;overflow-wrap:anywhere}
@@ -473,13 +474,15 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .ln-m-before .ln-s-after,.ln-m-after .ln-s-before{opacity:.4}
 .ln-gutter{position:relative;align-self:stretch}
 .ln-gm{position:absolute;left:0;right:0;transform:translateY(-50%);text-align:center;font:700 15px/1 var(--mono);font-style:normal;color:var(--faint)}
+.ln-gconn{position:absolute;left:50%;width:2px;margin-left:-1px;border-radius:2px;background:color-mix(in srgb,var(--t-amber) 45%,transparent);pointer-events:none}
+.ln-gconn.ln-lit{background:var(--t-amber);width:3px;margin-left:-1.5px}
 .ln-gm-changed,.ln-gm-moved{color:var(--t-amber)} .ln-gm-added{color:var(--t-green)} .ln-gm-removed{color:var(--t-red)}
 .ln-row.ln-gap{cursor:default}
 .ln-hatch-bg{fill:var(--row-alt)} .ln-hatch-line{fill:color-mix(in srgb,var(--line) 75%,var(--row-alt))}
 .ln-row.ln-hov:not(.ln-cur){background:color-mix(in srgb,var(--ink) 6%,transparent)}
 .ln-s-before mark.ln-w,.ln-s-after mark.ln-w{background:none;font-weight:700}
 .ln-s-before mark.ln-w{color:var(--t-red)} .ln-s-after mark.ln-w{color:var(--t-green)}
-.ln-tag{display:block;margin:3px auto 0;width:max-content;font:700 10.5px/1 var(--sans);font-style:normal;text-transform:uppercase;letter-spacing:.05em;
+.ln-tag{display:block;margin:3px auto 0;width:max-content;font:700 11px/1 var(--sans);font-style:normal;text-transform:uppercase;letter-spacing:.05em;
   padding:3px 7px;border-radius:999px;color:var(--panel);background:var(--tc)}
 .ln-sidebar{display:none}
 .ln-narrow .ln-sidebar{display:flex;justify-content:center;gap:6px;margin:0 0 10px}
@@ -876,3 +879,7 @@ svg.sb-link circle{fill:var(--acc);stroke:var(--panel);stroke-width:2}
 .vzmap.vzgraph .gsw[hidden]{display:none}
 .vzmap.vzgraph .gsw button{font:600 14px var(--font,system-ui);padding:6px 16px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
 .vzmap.vzgraph .gsw button[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+
+/* a board whose spec the lanes cannot draw says so (lanes.js failed) */
+.ln-fail{display:flex;flex-direction:column;gap:4px;margin:16px 12px;padding:12px 16px;border-radius:10px;border:1.5px solid var(--t-red);background:var(--t-red-bg);color:var(--ink)}
+.ln-fail b{font:700 14px var(--sans);color:var(--t-red)} .ln-fail span{font:400 13px/1.4 var(--sans)}

@@ -18,6 +18,11 @@
 // an actor on one side only is red and "removed" or green and "new". The voice points at a side with
 // `mode:before` or `mode:after` in a frame's focus, which dims the other (`mode:both` lifts it); on a board too
 // narrow for two, one side shows at a time, with a Before / After toggle.
+// A step that moved is two rows (its old place, its new one): a point on it lights both with a connector in the
+// gutter, never an empty gap. At rest both sides are whole and undimmed. On a board narrow enough for one side
+// the hatched gaps are left out and the side on show is the one that has the step being said.
+// A step's `note` stands in a margin right of the last lane, as wide as the longest note needs; on a phone it is
+// a line under the arrow of the step being said. A spec the board cannot draw is a message on the stage, not a blank.
 //
 // A click on a step opens its popup: who calls whom, the call, the source lines round its `ref` (the
 // source's `refs`, read from the code folder), the step it answers or is answered by, and Play from here.
@@ -34,6 +39,7 @@ const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const TONE = { plain: "plain", blue: "blue", red: "red", green: "green", amber: "amber", edge: "blue", service: "blue",
                internal: "amber", hot: "red", good: "green", cheap: "plain", dropped: "dropped" };
 const tone = (t) => TONE[t] || "plain";
+const OUTCOME = "outcome:end";   // the scene key of the closing box (scene.py OUTCOME), plain and compared
 const KINDS = ["request", "event", "self", "band"];
 const EDGE = 6;          // nothing comes nearer the board's edge than this
 const GAP = 10;          // between two cards on one line
@@ -53,6 +59,17 @@ const CHECK = `<svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true
 // `more`: the source's `refs` (step id -> {path, start, at, lines}) and `play(stepId, dry)`, which starts the
 // voice at the sentence that says a step (with `dry`, only asks whether one does) and returns false when none does.
 export function renderLanes(box, spec, embedded, more = {}) {
+  try { drawLanes(box, spec, embedded, more); } catch (e) { failed(box, e); }
+}
+
+// A spec the board cannot draw says so on the stage, where the reader looks, never a blank board.
+function failed(box, e) {
+  console.error("lanes:", e);
+  box._lanes = null; box._cmp = null;
+  box.innerHTML = `<div class="ln-fail" role="alert"><b>This diagram could not be drawn.</b><span>${esc(e?.message || e)}</span></div>`;
+}
+
+function drawLanes(box, spec, embedded, more) {
   if (spec.compare && typeof spec.compare.before === "object") return renderCompare(box, spec, embedded, more);
   if (spec.compare) spec = { ...spec, compare: undefined };  // a board saved as one merged diagram: drawn as its rows
   box._cmp = null;
@@ -104,6 +121,9 @@ function model(spec) {
 
 // After a frame: which steps are shown, which one is being said, which actors the voice points at.
 export function layoutLanes(box, scene, n = null) {
+  try { layoutOf(box, scene, n); } catch (e) { failed(box, e); }
+}
+function layoutOf(box, scene, n) {
   if (box._cmp) return layoutCompare(box, scene, n);
   const st = box._lanes;
   if (!st) return;
@@ -113,16 +133,17 @@ export function layoutLanes(box, scene, n = null) {
 
 // The outcome closes a diagram, plain or compared (one renderer, both boards): ghosted until the last step is
 // shown, lit while the voice points at it (`[[point: outcome]]`), says the last step, or at rest.
-const outcomeHeight = (o) => 30 + 22 * (o.lines || []).length + 18;
+const linesOf = (o) => (Array.isArray(o.lines) ? o.lines : o.lines ? [o.lines] : []);   // a saved board's one text is one line
+const outcomeHeight = (o) => 30 + 22 * linesOf(o).length + 18;
 function outcomeLit(st, fr, cur, last) {
   const atRest = !st.scene || st.n == null || st.n >= st.scene.rest;
-  const shown = !fr.show || fr.show.has("outcome:box") || (last >= 0 && fr.show.has("step:" + st.model.steps[last]?.id));
-  const said = fr.said.includes("outcome:box") || fr.focus.has("outcome:box") || (cur != null && cur === last);
+  const shown = !fr.show || fr.show.has(OUTCOME) || (last >= 0 && fr.show.has("step:" + st.model.steps[last]?.id));
+  const said = fr.said.includes(OUTCOME) || fr.focus.has(OUTCOME) || (cur != null && cur === last);
   return { ghost: !shown, lit: shown && (said || (atRest && cur == null)), said };
 }
 function outcomeHtml(o, { ghost, lit, said }, style) {
-  return `<div class="ln-outcome t-${tone(o.tone)}${ghost ? " ln-ghost" : ""}${lit ? " ln-lit" : ""}${said ? " ln-said" : ""}" data-key="outcome:box"${style ? ` style="${style}"` : ""}>
-    <b>${esc(o.title)}</b>${(o.lines || []).map((l) => `<span>${esc(l)}</span>`).join("")}</div>`;
+  return `<div class="ln-outcome t-${tone(o.tone)}${ghost ? " ln-ghost" : ""}${lit ? " ln-lit" : ""}${said ? " ln-said" : ""}" data-key="${OUTCOME}"${style ? ` style="${style}"` : ""}>
+    <b>${esc(o.title)}</b>${linesOf(o).map((l) => `<span>${esc(l)}</span>`).join("")}</div>`;
 }
 
 function frameOf(st) {
@@ -139,7 +160,10 @@ function paint(box) {
   const curKey = fr.said.filter((k) => k.startsWith("step:")).pop();
   if ([...fr.focus].length && [...fr.focus].every((k) => k.startsWith("mode:"))) box.closest(".k-dim")?.classList.remove("k-dim");  // a side lights no part
   const { steps, actors, phases, groups } = st.model;
-  const cur = curKey ? st.model.at.get(curKey.slice(5)) ?? null : null;
+  let cur = curKey ? st.model.at.get(curKey.slice(5)) ?? null : null;
+  // a compare side with no step in the row said (a moved step's old place is the other row): the row holding its mate is the one said
+  const mateOf = new Map(steps.filter((s) => s.mate).map((s) => ["step:" + s.mate, "step:" + s.id]));   // the row said -> the step here
+  if (cur != null && steps[cur].gap && mateOf.has(curKey)) cur = st.model.at.get(mateOf.get(curKey).slice(5));
   const lit = new Set(fr.said.filter((k) => k.startsWith("actor:")).map((k) => k.slice(6)));
   const shown = (i) => !fr.show || fr.show.has("step:" + steps[i].id);
   const w = st.w = box.clientWidth || 900, narrow = w < 600;
@@ -173,6 +197,7 @@ function paint(box) {
       }
       if (box_) box_.last = i;
       if (box_ && box_.folded) continue;
+      if (s.gap && st.dropGaps) continue;   // one side at a time (a phone): no hatched filler to scroll past
       let { h, ay, extra } = rowSize(st, s, i === cur, narrow);
       natural.set(s.id, { h, ay });
       const pad = st.pad?.get(s.id);   // on a compare board, the row as tall as on the other side
@@ -210,7 +235,7 @@ function paint(box) {
   };
 
   // -- who is in view: the voice's actors, or the one followed, or the step being said's two -----------------
-  const involved = st.focus ? new Set([st.focus]) : lit.size ? lit : cur != null ? new Set([steps[cur].from, steps[cur].to]) : null;
+  const involved = st.focus ? new Set([st.focus]) : lit.size ? lit : cur != null && !steps[cur].gap ? new Set([steps[cur].from, steps[cur].to]) : null;
   const touches = (s, set) => set.has(s.from) || set.has(s.to);
 
   // -- the drawing --------------------------------------------------------------------------------------
@@ -265,9 +290,13 @@ function paint(box) {
   if (st.scene) {
     for (const el of box.querySelectorAll("[data-key]")) {
       el.classList.add("k-key");
-      el.classList.toggle("k-focus", fr.focus.has(el.dataset.key));
+      const pointed = fr.focus.has(el.dataset.key) && !el.classList.contains("ln-gap")   // a hatched gap is never lit
+        || [...mateOf].some(([said, mine]) => mine === el.dataset.key && fr.focus.has(said));   // the old place of a moved step lights with the new one
+      el.classList.toggle("k-focus", pointed);
       el.classList.toggle("k-hidden", !!fr.show && !fr.show.has(el.dataset.key));
     }
+    const oel = box.querySelector(".ln-outcome");   // ghosted until said (k-hidden's .35), whole once the last step is shown
+    if (oel && !outcomeLit(st, fr, cur, steps.length - 1).ghost) oel.classList.remove("k-hidden");
   }
   if (measure(box, st, rows)) return;  // drawn again, taller where words wrap
   if (st.pop != null) popup(box, st, rows, cols, w);
@@ -293,7 +322,11 @@ function paint(box) {
 function columns(box, st, w, narrow) {
   const actors = st.model.actors, n = actors.length;
   const notes = !narrow && st.model.steps.some((s) => s.note);
-  const left = narrow ? 34 : 58, right = notes ? 112 : narrow ? 10 : 24;
+  // a step's note stands in the margin right of the last lane: as wide as the longest (11 px mono, 6.7 px a
+  // character), up to a third of the board, the rest of a long one wrapping inside it; never over a lane or a bar
+  const longest = notes ? Math.max(...st.model.steps.map((s) => String(s.note || "").length)) : 0;
+  const noteW = notes ? Math.round(Math.min(Math.max(112, longest * 6.7 + 28), Math.max(112, w * 0.34))) : 0;
+  const left = narrow ? 34 : 58, right = notes ? noteW : narrow ? 10 : 24;
   box.classList.remove("ln-tight", "ln-dense");
   const chips = actors.map((a) => box.querySelector(`.ln-chip[data-actor="${CSS.escape(String(a.id))}"]`));
   for (const c of chips) if (c) c.style.maxWidth = "none";
@@ -314,11 +347,11 @@ function columns(box, st, w, narrow) {
     const lo = left + 6, hi = w - right - 8, d = (hi - lo) / (n - 1);
     box.classList.add("ln-dense");
     const xs = new Map(actors.map((a, i) => [a.id, Math.round(lo + d * i)]));
-    return { xs, pitch: d, k: 1, cap: DENSE, chips, left, right, notes, dense };
+    return { xs, pitch: d, k: 1, cap: DENSE, chips, left, right, notes, noteW, dense };
   }
   box.classList.toggle("ln-tight", natural.some((nw) => nw > at.cap));
   const xs = new Map(actors.map((a, i) => [a.id, Math.round(n === 1 ? w / 2 : at.lo + at.d * i)]));
-  return { xs, pitch: at.d, k, cap: at.cap, chips, left, right, notes };
+  return { xs, pitch: at.d, k, cap: at.cap, chips, left, right, notes, noteW };
 }
 
 function paintCards(box, st, cols, involved) {
@@ -430,7 +463,10 @@ function stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown) {
   const fx = xs.get(s.from), tx = xs.get(s.to);
   const abs = y + ay;
   let svg = "", words = "";
-  const note = s.note && !narrow ? `<span class="ln-note" style="top:${ay}px">${esc(s.note)}</span>` : "";
+  // wide: in the margin right of the last lane; narrow: a line under the arrow's chip (and its checks) of the step said
+  const checkH = (s.checks || []).length ? 30 : 0;
+  const note = !s.note ? "" : !narrow ? `<span class="ln-note" style="top:${ay}px;max-width:${cols.noteW - 22}px">${esc(s.note)}</span>`
+    : isCur ? `<span class="ln-note ln-under" style="top:${ay + 12 + checkH}px;left:${cols.left}px;right:${EDGE}px">${esc(s.note)}</span>` : "";
   if (kind === "band") {
     const lo = Math.max(EDGE, Math.min(fx, tx) - 44), hi = Math.min(w - EDGE, Math.max(fx, tx) + 44);
     const bh = (isCur ? 46 : 32) + r.extra.a + r.extra.b;
@@ -445,7 +481,7 @@ function stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown) {
     const ex = flip ? edge(s.from, abs + 10, -1) : x0;
     // one half-oval out of the lane to xr and back, as sequence_svg draws it
     svg = `<path class="ln-path" pathLength="1" d="M${sx} ${ay - 10}A${Math.abs(xr - sx)} 10 0 0 ${flip ? 0 : 1} ${ex + (flip ? -9 : 9)} ${ay + 10}"/>${head(ex, ay + 10, flip ? 1 : -1, false)}`;
-    const room = flip ? xr - 12 - cols.left : w - (xr + 12) - (s.note && !narrow ? 120 : EDGE);
+    const room = flip ? xr - 12 - cols.left : w - (xr + 12) - (cols.notes && s.note ? cols.noteW + 6 : EDGE);
     words = `<div class="ln-lbl ln-beside ln-chipped${flip ? " ln-flip" : ""}" style="${flip ? `right:${w - xr + 12}px` : `left:${xr + 12}px`};top:${ay}px;max-width:${Math.max(100, room)}px">
       ${tag}<b>${said(s, "label")}</b>${s.sub ? `<code>${said(s, "sub")}</code>` : ""}</div>`;
   } else {
@@ -456,7 +492,7 @@ function stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown) {
     // as wide as its words on one line (Inter's and JetBrains Mono's average widths), else as the board allows
     const need = Math.max((s.label || "").length * (isCur ? 8.9 : 7.5), (s.sub || "").length * (isCur ? 7.6 : 7)) + 12;
     let lw = Math.min(Math.max(span + 30, need, narrow ? 180 : 230), w - cols.left - EDGE);
-    const right = w - (s.note && !narrow ? 120 : EDGE);
+    const right = w - (cols.notes && s.note ? cols.noteW + 6 : EDGE);
     const lc = Math.min(Math.max(mid, lw / 2 + cols.left - 6), right - lw / 2);
     // what a call carries sits in a chip on its arrow: its label, then its sub in mono; a reply's words are bare
     const chip = kind === "event" ? "" : " ln-chipped";
@@ -492,8 +528,11 @@ function measure(box, st, rows) {
   for (const r of rows) {
     if (r.type !== "step") continue;
     const el = box.querySelector(`.ln-row[data-step="${CSS.escape(String(r.s.id))}"]`);
-    const said = el?.querySelector(".ln-lbl"), call = el?.querySelector(".ln-call, .ln-checks");
-    const sh = said ? said.offsetHeight : 0, ch = call ? call.offsetHeight : 0;
+    const said = el?.querySelector(".ln-lbl");
+    const sh = said ? said.offsetHeight : 0;
+    let ch = 0;   // what hangs under the arrow (its checks, a narrow board's note): its lowest edge, from 10 px under the arrow
+    const aty = el?.querySelector(".ln-num")?.offsetTop ?? 0;
+    for (const x of el ? el.querySelectorAll(".ln-call, .ln-checks, .ln-under") : []) if (x.offsetHeight) ch = Math.max(ch, x.offsetTop + x.offsetHeight - aty - 10);
     if (!sh) continue;
     const isCur = el.classList.contains("ln-cur"), b = baseSize(r.s, isCur, st.w < 600);
     const centred = r.s.arrow === "self" || r.s.arrow === "band" || r.s.from === r.s.to;
@@ -641,11 +680,13 @@ function sideSpec(spec, side) {
   const actors = spec.compare[side].actors.map((a) => (a.change === "removed" ? { ...a, tone: "red", tag: "removed" }
     : a.change === "added" ? { ...a, tone: "green", tag: "new" } : a));
   const rowOf = new Map(spec.steps.filter((r) => r[side]).map((r) => [r[side].id, r.id]));
+  const mates = new Map(spec.steps.filter((r) => r.replaces).map((r) => [r.replaces, r.id]));   // old row -> the row it moved to
   const steps = spec.steps.map((r) => {
     const s = r[side];
     if (!s) return { id: r.id, gap: true, from: actors[0].id, to: actors[0].id, arrow: "gap", label: "" };
     const { row: _row, ...own } = s;
-    return { ...own, id: r.id, reply_to: s.reply_to != null ? rowOf.get(s.reply_to) : undefined };
+    return { ...own, id: r.id, reply_to: s.reply_to != null ? rowOf.get(s.reply_to) : undefined,
+             mate: side === "before" && !r.after ? mates.get(r.id) : undefined };
   });
   return { ...spec, compare: undefined, outcome: undefined, actors, steps };  // the outcome closes both sides at once (paintStrip)
 }
@@ -705,16 +746,22 @@ function layoutCompare(box, scene, n = null) {
       voice = ["both", "before", "after"].find((m) => f.includes("mode:" + m)) || (f.includes("mode:merged") ? "both" : null);
     }
   }
-  const mode = st.pinned || !voice ? st.mode : voice;
+  const atRest = !!scene && n != null && n >= scene.rest;   // the answer is over: both sides whole, nothing dimmed
+  const mode = st.pinned ? st.mode : atRest ? "both" : voice || st.mode;
   const narrow = box.clientWidth > 0 && box.clientWidth < NARROW;
-  const one = narrow ? (mode === "both" ? st.pick : mode) : null;
+  let one = narrow ? (mode === "both" ? st.pick : mode) : null;
+  if (one && mode === "both" && !st.pinned && scene && n != null) {   // the side on show follows the step being said
+    const said = beingSaid(scene, n).filter((k) => k.startsWith("step:")).pop();
+    const row = said && st.spec.steps.find((r) => "step:" + r.id === said);
+    if (row && !row[one] && row[one === "before" ? "after" : "before"]) one = one === "before" ? "after" : "before";
+  }
   box.classList.remove("ln-m-both", "ln-m-before", "ln-m-after");
   box.classList.add("ln-m-" + mode);
   box.classList.toggle("ln-narrow", narrow);
   for (const sd of SIDES) box.querySelector(`.ln-s-${sd}`).hidden = !!one && one !== sd;
   box.querySelector(".ln-gutter").hidden = narrow;
   for (const b of box.querySelectorAll(".ln-sidebar [data-side]")) b.setAttribute("aria-pressed", String(b.dataset.side === (one || mode)));
-  for (const sd of SIDES) layoutLanes(st.panes[sd], scene, n);
+  for (const sd of SIDES) { if (st.panes[sd]._lanes) st.panes[sd]._lanes.dropGaps = narrow; layoutLanes(st.panes[sd], scene, n); }
   syncSides(box);
   paintStrip(box);
   landCompare(box);
@@ -790,5 +837,9 @@ function syncSides(box) {
   const gutter = box.querySelector(".ln-gutter"), body = st.panes.after.querySelector(".ln-body");
   const top = body ? body.offsetTop : 0;   // both measured from the top of their side, which the gutter shares
   gutter.innerHTML = st.spec.steps.map((r) => `<i class="ln-gm ln-gm-${r.change}" data-row="${esc(r.id)}" title="${MARK_SAY[r.change] || ""}"
-    style="top:${top + (b.rowAt.get(r.id) ?? 0)}px">${MARK[r.change] || ""}</i>`).join("");
+    style="top:${top + (b.rowAt.get(r.id) ?? 0)}px">${MARK[r.change] || ""}</i>`).join("")
+    + st.spec.steps.filter((r) => r.replaces && b.rowAt.has(r.id) && b.rowAt.has(r.replaces)).map((r) => {   // a moved step: its old place joined to its new
+      const y1 = top + b.rowAt.get(r.replaces), y2 = top + b.rowAt.get(r.id);
+      return `<i class="ln-gconn${b.cur === r.id ? " ln-lit" : ""}" data-row="${esc(r.id)}" style="top:${Math.min(y1, y2)}px;height:${Math.abs(y2 - y1)}px"></i>`;
+    }).join("");
 }

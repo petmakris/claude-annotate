@@ -74,6 +74,10 @@ def validate(spec: dict[str, Any]) -> None:
     """The base sequence rules, plus the fields only this renderer reads."""
     if not isinstance(spec, dict):
         raise ValidationError("a sequence spec is an object")
+    for field in ("actors", "steps", "phases", "groups", "legend"):   # a wrong type is named, not a crash further on
+        v = spec.get(field)
+        if v is not None and (not isinstance(v, list) or not all(isinstance(x, dict) for x in v)):
+            raise ValidationError(f"{field} must be a list of objects")
     _validate_base(_as_base(spec))
     for a in spec.get("actors") or []:
         if a.get("role") is not None and not isinstance(a["role"], str):
@@ -89,6 +93,9 @@ def validate(spec: dict[str, Any]) -> None:
     if out is not None:
         if not isinstance(out, dict) or not isinstance(out.get("title"), str):
             raise ValidationError("outcome is {title, lines, tone}")
+        lines = out.get("lines")
+        if lines is not None and (not isinstance(lines, list) or not all(isinstance(x, str) for x in lines)):
+            raise ValidationError("outcome: lines is a list of text, one text for each line")
         if out.get("tone") is not None and out["tone"] not in TONE_MAP:
             raise ValidationError(f"outcome: unknown tone {out['tone']!r}")
 
