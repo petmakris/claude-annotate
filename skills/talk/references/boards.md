@@ -111,8 +111,11 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 
 ## Table
 
-- A table is two to four short measures of a few things: at most 4 rows by 4 columns, each cell 1 to 3 words. The voice says the verdict, never the cells, and a fifth row is a sentence.
-- Rows that are steps, parts, states, days or events belong on a sequence, a map, a flowchart or bars, or in plain sentences.
+- A table you chose is two to four short measures of a few things: at most 4 rows by 4 columns, each cell 1 to 3 words. The voice says the verdict, never the cells, and a fifth row is a sentence.
+- A table the user asked for is drawn as asked: every row and column they named, up to 8 rows by 6 columns on one board (the server reports more, never refuses it; two tables hold more). Their request wins over the 4 by 4 limit and over the rule below.
+- Rows that are steps, parts, states, days or events belong on a sequence, a map, a flowchart or bars, or in plain sentences, unless the user asked for a table.
+- A word longer than 22 characters in a cell cannot wrap: the stage scrolls the table sideways or, on a phone, makes each row a card, and a `board:` line names the word. Shorten it.
+- When the user says a board is drawn wrongly (overlap, cut off), the fault is the page's: say so in one sentence, do not resend the same cells, and give the facts in another shape.
 
 ## No board
 

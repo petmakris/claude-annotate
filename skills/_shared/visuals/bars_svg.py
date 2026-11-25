@@ -15,6 +15,8 @@ the same tones, the same vz.css tokens, measured here in text_metrics.
 - ``scale`` is ``linear`` (default) or ``log``. A log board draws ticks at powers of ten and a visible
   "log scale" badge, and refuses a value of zero or less (the log of it is not a length). A linear board
   refuses a negative value; zero draws an empty bar.
+- ``decimal`` (optional, ``.`` or ``,``) is the decimal separator of every chip and tick; left out, a board whose words
+  are Greek gets a comma and any other a point. A chip says one day, not "1 days" (``_unit_for``).
 - ``threshold`` is at most one dashed line with a ``label``; there are no series and no markers.
 - Each bar's ``id`` is its key (``bar:<id>``): the stage lights it, reveals it and points at it. Its ``label``
   is the words you say. ``note`` is a second line under it for a number you speak.
@@ -72,6 +74,8 @@ def validate(spec: dict[str, Any]) -> None:
     for k in ("title", "subtitle", "aria"):
         _text_field(spec, k, "bars")
     _text_field(spec, "unit", "bars", True)
+    if spec.get("decimal") not in (None, ".", ","):
+        raise ValidationError(f"bars: decimal is \".\" or \",\", got {spec['decimal']!r}")
     scale = spec.get("scale", "linear")
     if scale not in SCALES:
         raise ValidationError(f"bars: scale must be linear or log, got {scale!r}")
@@ -146,16 +150,47 @@ def _fmt(v: float) -> str:
     return f"{v:.3g}"
 
 
-def _tick_label(v: float) -> str:
+GREEK = re.compile("[\u0370-\u03ff\u1f00-\u1fff]")
+
+
+def _decimal(spec: dict[str, Any]) -> str:
+    """The decimal separator of a board: the one it names, else a comma when its words are Greek, else a point."""
+    if spec.get("decimal") in (".", ","):
+        return spec["decimal"]
+    words = [spec.get(k) or "" for k in ("title", "subtitle", "unit")]
+    words += [(b.get("label") or "") + (b.get("note") or "") for b in spec.get("bars") or []]
+    words.append((spec.get("threshold") or {}).get("label") or "")
+    return "," if GREEK.search(" ".join(words)) else "."
+
+
+def _local(text: str, dec: str) -> str:
+    """A formatted number with its separators: with a comma for decimals the thousands are spaced, not comma'd."""
+    return text if dec == "." else text.replace(",", "\u00a0").replace(".", ",")
+
+
+def _tick_label(v: float, dec: str = ".") -> str:
     """A power of ten as a tick says it: 1, 10, 1k, 1M, 0.01."""
     for size, mark in ((1e9, "G"), (1e6, "M"), (1e3, "k")):
         if v >= size:
-            return f"{v / size:g}{mark}"
-    return f"{v:g}"
+            return _local(f"{v / size:g}{mark}", dec)
+    return _local(f"{v:g}", dec)
 
 
-def _chip_text(v: float, unit: str) -> str:
-    text = _fmt(v)
+_NOT_PLURAL = re.compile(r"(?:ss|us|is|bps|rps|qps|fps|tps|ips|ops|flops)$", re.I)
+
+
+def _unit_for(v: float, unit: str) -> str:
+    """The unit as the value says it: one day, two days. Only an English plural in s whose last word is plain letters
+    (days, hours, users), never a rate (kbps) or an abbreviation."""
+    last = unit.rsplit(" ", 1)[-1]
+    if abs(v) != 1 or len(last) < 4 or not re.fullmatch(r"[A-Za-z-]+s", last) or _NOT_PLURAL.search(last):
+        return unit
+    return unit[:-1]
+
+
+def _chip_text(v: float, unit: str, dec: str = ".") -> str:
+    text = _local(_fmt(v), dec)
+    unit = _unit_for(v, unit)
     return text + unit if unit in ("%", "x") else f"{text} {unit}"
 
 
@@ -225,7 +260,8 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
     notes = any(b.get("note") for b in bars)
     min_pitch = MIN_PITCH + (14 if notes else 0)
     pitch = max(min_pitch, min(MAX_PITCH, FILL_H / len(bars)))
-    chips = [_chip_text(b["value"], unit) for b in bars]
+    dec = _decimal(spec)
+    chips = [_chip_text(b["value"], unit, dec) for b in bars]
     chip_w = [_width(c, "vz-nm") + 2 * CHIP_PAD for c in chips]
     x0, x1 = PAD, W - PAD - max(chip_w) - 8        # a bar's longest run, leaving room for its chip
     rows_bottom = top + pitch * len(bars)
@@ -234,7 +270,7 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
     for t in ticks:
         gx = x0 + frac(t) * (x1 - x0)
         grid.append(f'<line class="grd" x1="{gx:.0f}" y1="{top - 8:.0f}" x2="{gx:.0f}" y2="{rows_bottom:.0f}"/>')
-        grid.append(_text("tk", gx, rows_bottom + 20, _tick_label(t), anchor="middle"))
+        grid.append(_text("tk", gx, rows_bottom + 20, _tick_label(t, dec), anchor="middle"))
     out.extend(grid)
 
     for i, b in enumerate(bars):
@@ -263,7 +299,7 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
     if t:
         tx = x0 + frac(t["value"]) * (x1 - x0)
         out.append(f'<line class="thr" x1="{tx:.0f}" y1="{top - 8:.0f}" x2="{tx:.0f}" y2="{rows_bottom:.0f}"/>')
-        text = (t.get("label") or "limit") + " " + _chip_text(t["value"], unit)
+        text = (t.get("label") or "limit") + " " + _chip_text(t["value"], unit, dec)
         out.append(_text("thl", min(max(tx, PAD + _width(text, "vz-sb") / 2), W - PAD - _width(text, "vz-sb") / 2), top - 14, text, anchor="middle"))
 
     height = rows_bottom + 20 + PAD

@@ -493,6 +493,7 @@ MAX_ANSWER_WORDS = 220   # past this, an answer stops being followed: say the re
 MAX_KEY_CHARS = 120
 MAX_TABLE_ROWS = 8     # a table of more rows or columns is reported, never refused
 MAX_TABLE_COLUMNS = 6
+TABLE_WORD_MAX = 22     # stage.js gives a column a floor of its longest word up to this many characters; a longer word is a column the board cannot fit
 _HEAD = re.compile(r"(?:(?P<show>show)(?![a-z0-9])\s*[:\-_]?\s*)?(?P<kind>[a-z][a-z0-9_]*)?(?:(?:\s*:\s*|\s+)(?P<rest>.*))?\Z",
                    re.IGNORECASE | re.DOTALL)
 
@@ -918,6 +919,10 @@ def check_table(title: str, body: str) -> tuple[str, list[str]]:
             notes.append(f'table "{title}" has {len(rows)} rows and {len(header)} columns: the stage reads a table '
                          f"of up to {MAX_TABLE_ROWS} rows and {MAX_TABLE_COLUMNS} columns, so cut the rows and "
                          "columns the answer does not talk about, or split it into two boards")
+        long = [w for r in rows for c in r for w in cell_text(c).split() if len(w) > TABLE_WORD_MAX]
+        if long:
+            notes.append(f'table "{title}" has a word of {len(max(long, key=len))} characters ("{max(long, key=len)[:30]}…") that cannot wrap: '
+                         f"the stage scrolls the table sideways, or on a phone shows each row as a card; use a shorter word")
     return body, notes
 
 
