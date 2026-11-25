@@ -21,6 +21,7 @@ settings and not this session's.
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import shutil
@@ -194,6 +195,9 @@ def doorbell(call_id: str | None, wait: float) -> int:
                     continue
                 return emit_lost(f"the talk server kept answering HTTP {err.code}")
             return emit_lost(f"server refused the doorbell: HTTP {err.code}")
+        except http.client.HTTPException as err:
+            # a truncated or malformed answer (IncompleteRead, BadStatusLine): the call may well be open
+            return emit_lost(f"the talk server's answer was cut off or malformed ({type(err).__name__})")
         except (urllib.error.URLError, OSError):
             if state.get("ended"):
                 return emit_end("the call has ended", ended_transcript(state))
@@ -204,8 +208,11 @@ def doorbell(call_id: str | None, wait: float) -> int:
         failing_since = None
         if status == 204:
             continue
-        event = json.loads(raw)
-        kind = "TALK_END" if event.pop("type") == "end" else "TALK_TURN"
+        try:
+            event = json.loads(raw)
+            kind = "TALK_END" if event.pop("type") == "end" else "TALK_TURN"
+        except (ValueError, KeyError, AttributeError, TypeError):
+            return emit_lost("the talk server's answer was not a turn (not JSON)")
         emit(kind, event)
         return 0
 
@@ -261,6 +268,10 @@ def reply(call_id: str | None, turn_id: str | None, status_text: str | None, end
             return 2
         print(f"talk refused the reply: {error_text(err)}", file=sys.stderr)
         return 2
+    except http.client.HTTPException as err:
+        print(f"sent, but talk's answer was cut off or malformed ({type(err).__name__}); do not resend it: "
+              "it is probably being shown", file=sys.stderr)
+        return 2
     except (urllib.error.URLError, OSError) as err:
         if isinstance(err, (TimeoutError, socket.timeout)) or isinstance(getattr(err, "reason", None), (TimeoutError, socket.timeout)):
             print(f"sent, but talk did not confirm it within {REPLY_TIMEOUT_S:.0f} s; do not resend it: "
@@ -268,7 +279,12 @@ def reply(call_id: str | None, turn_id: str | None, status_text: str | None, end
             return 2
         print(f"talk is not reachable: {err}", file=sys.stderr)
         return 2
-    result = json.loads(raw or b"{}")
+    try:
+        result = json.loads(raw or b"{}")
+        result.get("ignored")
+    except (ValueError, AttributeError):
+        print("sent, but talk's answer was not JSON; do not resend it: it is probably being shown", file=sys.stderr)
+        return 2
     if result.get("ignored"):
         print(f"ignored: {result['ignored']}")
         return 0
