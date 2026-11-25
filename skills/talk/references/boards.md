@@ -83,7 +83,7 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 
 - A bars board answers how much, how long or how many: one row a thing, a bar as long as its value, a chip with the value and unit.
 - The spec is `{"title", "unit", "scale": "linear" | "log", "bars": [{"id", "label", "value", "note"?, "tone"?}], "threshold"?: {"value", "label"}}`.
-- `unit` is written once, for the whole board. A bar that names another unit is refused, since bars on one scale share one unit.
+- `unit` is written once, for the whole board. A bar that names another unit is refused, since bars on one scale share one unit. The chip says `1 day`, `2 days`: write the plural, the board drops the s for a value of one. A board whose words are Greek writes its numbers with a comma (`2,5`), and `"decimal": ","` or `"."` says it for any other language.
 - `scale` `log` draws ticks at powers of ten and a visible "log scale" badge. It refuses a value of zero or less. A linear board refuses a negative value.
 - `value` is a number, never text with a unit in it. A zero is an empty bar on a linear board.
 - `note` is a second line under the label: the place for a number you say ("about four cycles").
