@@ -1030,7 +1030,8 @@ def test_a_range_past_the_end_says_where_it_was_cut(tmp_path):
 def test_a_node_point_in_a_diagram_the_stage_cannot_light_is_a_problem(tmp_path):
     _, problems = cues_of(tmp_path, "[[show diagram | S]]sequenceDiagram\nAlice->>Bob: hi[[/show]] Hi. [[point S: node Alice]] Her.")
     assert problems == ['"S" not shown: a call draws no Mermaid; use a sequence, a flowchart or a table',
-                        'point not shown: no board titled "S" in this call']
+                        'point not shown: the board "S" was not shown (see the board: line above), so there is nothing on '
+                        'the stage to point at; fix that board and show it again']
     for word in ("end", "Yes"):
         _, problems = cues_of(tmp_path, "[[show diagram | G]]graph TD\nsubgraph Backend\nA -- Yes --> B\nend[[/show]] "
                                         f"Hi. [[point G: node {word}]] It.")
@@ -1440,9 +1441,9 @@ def test_a_point_on_a_map_is_the_reveal_for_its_sentence_and_the_part_it_names_i
          ["node:share", "edge:share->state#0"])]
     assert call.board.problems == [
         '4 of 7 parts of "Three paths changed" are named by no sentence, so they came in by order, not where they are '
-        'said: "catch every error", "broken guard first", "return latest state", "put in error" with "Third, sharing a '
-        "proposal that broke on…\". Say each part's own words in the sentence about it, or put [[point: node catch]] "
-        "before that sentence"]
+        "said. Say each one's words in the sentence about it, or put its tag there, in \"Third, sharing a proposal that "
+        'broke on…": "catch every error" [[point: node catch]], "broken guard first" [[point: node guard]], '
+        '"return latest state" [[point: node state]], "put in error" [[point: node err]]']
     assert stage_rule_breaks(call, shown) == []
 
 

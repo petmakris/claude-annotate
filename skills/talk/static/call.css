@@ -47,7 +47,7 @@ svg{display:block;flex:none}
 .reader{display:none;position:absolute;inset:0;z-index:2;overflow:auto;background:var(--bg);scrollbar-gutter:stable}
 .reader.text{display:block}
 .reader .rtext{box-sizing:border-box;max-width:36em;margin:0 auto;padding:max(48px,10vh) 32px 45vh;white-space:pre-line;
-  font:500 clamp(20px,.9vw + 12px,32px)/1.6 var(--sans);color:var(--ink);text-wrap:pretty}
+  font:500 clamp(20px,.9vw + 12px,32px)/1.6 var(--sans);color:var(--ink);text-wrap:pretty;overflow-wrap:anywhere}
 .reader .w{cursor:pointer;border-radius:.2em;transition:color .2s}
 .reader .rs.future{visibility:hidden}
 .reader .rs.past{color:var(--muted)}

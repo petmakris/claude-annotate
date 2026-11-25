@@ -189,5 +189,5 @@ def test_the_demo_teaches_a_zoned_map_a_never_arrow_a_wait_and_a_real_grid(tmp_p
     assert len(never) == 1 and never[0]["tone"] == "red" and never[0]["dash"] is True
     wait = boards["The doorbell waits"]["visual"]["spec"]["steps"]
     assert [s.get("reply_to") for s in wait] == [None, None, "w1"]
-    grid = _tables(boards["Four boards a session picks by hand"]["body"])[0]
+    grid = _tables(boards["Four boards, picked by hand"]["body"])[0]
     assert len(grid) == 6 and {len(row) for row in grid} == {4}  # a header, a separator and four things on three measures

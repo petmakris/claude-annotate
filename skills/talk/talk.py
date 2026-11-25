@@ -77,6 +77,7 @@ PAGE_GONE_S = 180.0  # an ended call whose page has not polled for this long shu
 END_COLLECT_S = 5.0  # a closing call waits this long for a doorbell to collect its end
 END_GRACE_S = 120.0  # an ended call is kept this long for the open turn of its session to be answered or the end collected
 PLAYER_TTL_S = 90.0  # the page that plays a call's answers is replaced when it has not polled for this long
+STAGE_TOUCH_S = 300.0  # a polling call page touches its stage this often, far inside the daemon's idle expiry
 STAGE_SETTLE_S = 5.0  # how long a reply waits for its stage shows, so their problems reach it
 MAX_RECORDING_BYTES = 16 * 1024 * 1024  # about eight minutes of 16 kHz speech
 IDLE_EXIT_S = 5 * 60  # the server exits after this long with no call open
@@ -435,6 +436,8 @@ KIND_ALIASES = {"mermaid": "diagram", "flow": "diagram", "chart": "bars",
 CHANGE_FIELDS = ("type", "format", "path", "rev", "hunks", "added", "removed", "more", "lang")
 KEY_VIEW = "key-points"  # the one Key points view of a call
 MAX_SENTENCE_WORDS = 30  # the stage shows each sentence as one caption
+MAX_KEY_POINTS = 3  # [[key: ...]] points an answer keeps; more is a board: line, none are dropped
+MAX_TITLE_WORDS = 5  # a board's title is the name of the picture, not its sentence
 MAX_ANSWER_WORDS = 220   # past this, an answer stops being followed: say the rest in the next one
 MAX_KEY_CHARS = 120
 MAX_TABLE_ROWS = 8     # a table of more rows or columns is reported, never refused
@@ -888,7 +891,8 @@ ABBREVIATIONS = {"e.g", "i.e", "vs", "etc", "approx", "dr", "mr", "mrs", "ms", "
                  "viz", "resp", "al", "inc", "ltd", "co", "u.s", "u.k", "u.n", "e.u", "a.m", "p.m", "ca", "est", "dept"}
 # These end a sentence when a capital letter follows ("and so on, etc. The next one"), else they do not.
 ABBREVIATION_ENDS = {"etc", "inc", "ltd", "co", "a.m", "p.m", "al", "ca"}
-_SENTENCE_END = re.compile(r"(?:[.!?…][\"')\]]*\s+|\n\s*)(?=\S)")
+# A Greek question mark is a semicolon (';' or U+037E): it ends a sentence only before a Greek letter, so an English clause break stays one.
+_SENTENCE_END = re.compile(r"(?:[.!?…\u037e][\"')\]]*\s+|;[\"')\]]*\s+(?=[\u0370-\u03ff\u1f00-\u1fff])|\n\s*)(?=\S)")
 _WORD_BEFORE_DOT = re.compile(r"(?:\A|(?<=[\s(\"'\[]))((?:[A-Za-z]\.)*[A-Za-z]+)\Z")
 
 
@@ -1146,29 +1150,64 @@ def point_for(key: str) -> str:
     """The [[point ...]] that lights a part, from its key."""
     if key.startswith("row#"):
         return f"[[point: row {key[4:]}]]"
+    if key == stage_scene.OUTCOME:
+        return "[[point: outcome]]"  # the outcome box is named "outcome", never by its key's "end"
     prefix, _, ident = key.partition(":")
     return f"[[point: {prefix} {ident}]]" if ident and prefix in ("node", "step", "box", "zone", "route", "part") else \
         f"[[point: {ident or key}]]"
 
 
-def by_order_problem(title: str, model: stage_scene.SceneModel, by_order: list[str], plan: dict, sentences: list[str]) -> str:
-    """Which parts came in by order, with the sentence each landed on and the tag that would place it."""
+def outcome_title_of(item: dict) -> str:
+    visual = item.get("visual")
+    spec = visual.get("spec") if isinstance(visual, dict) else None
+    outcome = spec.get("outcome") if isinstance(spec, dict) else None
+    return str(outcome.get("title") or "") if isinstance(outcome, dict) else ""
+
+
+UNNAMED_SHOWN = 6  # the unnamed parts a board: line lists by name; the rest are counted
+
+
+def unnamed_parts(model: stage_scene.SceneModel, by_order: list[str]) -> list[str]:
+    """The parts of a board no sentence names (they came in by order): scene.unnamed_parts when the scene
+    module has it, else the list the stepper already returned."""
+    found = getattr(stage_scene, "unnamed_parts", None)
+    if callable(found):
+        try:
+            got = found(model, by_order)
+            if isinstance(got, (list, tuple)) and all(isinstance(k, str) for k in got):
+                return list(got)
+        except TypeError:
+            pass
+    return list(by_order)
+
+
+def by_order_problem(title: str, model: stage_scene.SceneModel, by_order: list[str], plan: dict, sentences: list[str],
+                     outcome_title: str = "") -> str:
+    """Each part no sentence names, by its label, with the sentence it came in with and the tag that would
+    place it. A sequence's outcome box has no sentence of its own to put a tag in: it needs a closing sentence."""
     landed = {}
     for n, steps in plan.items():
         for keys in steps:
             for k in keys:
                 landed.setdefault(k, n)
+    parts = unnamed_parts(model, by_order)
     groups: dict[int | None, list[str]] = {}
-    for key in by_order[:4]:
-        groups.setdefault(landed.get(key), []).append(f'"{part_label(model, key)}"')
-    shown = []
-    for n, labels in groups.items():
-        where = f' with "{cut_words(" ".join(sentences[n].split()), 40)}"' if n is not None and n < len(sentences) else ""
-        shown.append(f"{', '.join(labels)}{where}")
-    more = f" and {len(by_order) - 4} more" if len(by_order) > 4 else ""
-    return (f'{len(by_order)} of {len(model.order)} parts of "{title}" are named by no sentence, so they came in by '
-            f"order, not where they are said: {'; '.join(shown)}{more}. Say each part's own words in the sentence "
-            f"about it, or put {point_for(by_order[0])} before that sentence")
+    closing = []
+    for key in parts[:UNNAMED_SHOWN]:
+        if key == stage_scene.OUTCOME:
+            label = outcome_title or part_label(model, key)
+            closing.append(f'end with a sentence that says "{label}" and carries {point_for(key)}')
+        else:
+            groups.setdefault(landed.get(key), []).append(f'"{part_label(model, key)}" {point_for(key)}')
+    lines = []
+    for n, tags in groups.items():
+        where = f'in "{cut_words(" ".join(sentences[n].split()), 40)}"' if n is not None and n < len(sentences) else "in its sentence"
+        lines.append(f"{where}: {', '.join(tags)}")
+    lines += closing
+    more = f"; and {len(parts) - UNNAMED_SHOWN} more" if len(parts) > UNNAMED_SHOWN else ""
+    return (f'{len(parts)} of {len(model.order)} parts of "{title}" are named by no sentence, so they came in by '
+            f"order, not where they are said. Say each one's words in the sentence about it, or put its tag there, "
+            f"{'; '.join(lines)}{more}")
 
 
 class Board:
@@ -1185,6 +1224,30 @@ class Board:
         self.on_add = on_add  # puts each item on the stage
         self.cues: list[dict] = []  # this reply's cues, in tag order; a show cue gets its view once accepted
         self.spill = ""
+        self.refused: dict[str, str] = {}  # this reply's refused boards by folded title -> the title as written
+        self.last_refused: str | None = None  # the title of the latest board of this reply if it was refused, else None
+        self.refusal_told: set[str] = set()  # the refusals a pointer was already dropped for with a board: line
+
+    def begin_reply(self) -> None:
+        self.refused, self.last_refused, self.refusal_told = {}, None, set()
+
+    def refuse(self, title: str) -> None:
+        self.refused[fold(title)] = title
+        self.last_refused = title
+
+    def refused_for(self, title: str, what: str) -> bool:
+        """A pointer or verb that names a board of this reply that was refused, or names none while the latest
+        board was refused, is dropped with one board: line naming the refusal: never lit on an earlier board."""
+        key = fold(title) if title else None
+        named = self.refused.get(key) if key else self.last_refused
+        if named is None:
+            return False
+        tell = fold(named)
+        if tell not in self.refusal_told:
+            self.refusal_told.add(tell)
+            self.problem(f'{what} not shown: the board "{named}" was not shown (see the board: line above), '
+                         "so there is nothing on the stage to point at; fix that board and show it again")
+        return True
 
     def marker(self, text: str, bare: bool = False) -> bool:
         """Handle a board marker; False if the marker isn't a board marker. Every show tag records a
@@ -1215,6 +1278,8 @@ class Board:
                 self.problem(f"{kind} not shown, {type(err).__name__}: {err}")
             if len(self.items) > n:
                 cue["view"] = self.items[-1]["view"]
+            else:
+                self.refuse(title or rest.strip() or kind)
             return True
         self.spill += self.close_block()
         title = title or rest  # [[show table: Ports]] names the board like [[show table | Ports]]
@@ -1259,6 +1324,8 @@ class Board:
         if step.name in stage_scene.LATER:
             self.problem(f'"{step.name}" is not supported yet; dropped')
             return
+        if self.refused_for(step.title, step.name):
+            return
         item = self.find(step.title)
         if item is None:
             self.problem(f'{step.name} not shown: no board titled "{step.title}" in this call' if step.title
@@ -1268,6 +1335,8 @@ class Board:
 
     def point(self, title: str, raw: str) -> None:
         """[[point ...]]: a cue that lights up lines of code, table rows, a column or a cell, a diagram node or edge."""
+        if self.refused_for(title, "point"):
+            return
         m = _POINT_TARGET.fullmatch(raw.strip())
         if not m:
             item = self.find(title)
@@ -1572,6 +1641,14 @@ class Board:
         return [target["key"]]
 
     def close_block(self, cut: bool = False) -> str:
+        """Close the open block, and a block that put no board on the stage is remembered as refused."""
+        opened, n = self.open, len(self.items)
+        rest = self.close_into(cut)
+        if opened is not None and len(self.items) == n:
+            self.refuse(opened["title"] or opened["kind"])
+        return rest
+
+    def close_into(self, cut: bool = False) -> str:
         """Put an open diagram or table on the board, without a ``` fence the model may have wrapped it in.
         `cut`: the block was never closed with [[/show]], so only its block-shaped head is shown and
         the rest is returned, to be said after all. A block of an unknown kind is never shown."""
@@ -1698,9 +1775,10 @@ class Board:
         return True
 
     def add_code(self, spec: str, title: str) -> None:
-        m = re.match(r"(?P<path>.+?):(?P<a>\d+)\s*-\s*(?P<b>\d+)(?:\s+highlight\s+(?P<ha>\d+)(?:\s*-\s*(?P<hb>\d+))?)?\s*$", spec)
+        m = re.match(r"(?P<path>.+?)(?::(?P<a>\d+)(?:\s*-\s*(?P<b>\d+))?)?"
+                     r"(?:\s+highlight\s+(?P<ha>\d+)(?:\s*-\s*(?P<hb>\d+))?)?\s*$", spec)
         if not m:
-            self.problem(f"code not shown, expected <path>:<first>-<last>: {spec}")
+            self.problem(f"code not shown, expected <path> or <path>:<first>-<last>: {spec}")
             return
         try:
             _, path, shown = stage_model.locate(self.code_dir, m["path"].strip())
@@ -1711,7 +1789,9 @@ class Board:
             where = "" if Path(m["path"].strip()).expanduser().is_absolute() else " in the code folder"
             self.problem(f"code not shown, no such file{where}: {m['path'].strip()}")
             return
-        a, b = int(m["a"]), int(m["b"])
+        # A bare path (or path:N) shows the file from its first line, up to the most a board holds.
+        whole = not m["b"]
+        a, b = (int(m["a"]), int(m["b"])) if m["b"] else (1, self.MAX_LINES)
         if a < 1 or b < a:
             self.problem(f"code not shown, bad line range {a}-{b} in {m['path'].strip()}")
             return
@@ -1724,9 +1804,12 @@ class Board:
             self.problem(f"code not shown, {m['path'].strip()} has only {len(all_lines)} lines")
             return
         title = title or path.name
+        if whole:
+            b = len(all_lines)  # the whole file, cut below only when it is more than a board holds
         if b > len(all_lines):
             b = len(all_lines)
-            self.problem(f"code cut at line {b}, the end of {m['path'].strip()}")
+            if not whole:
+                self.problem(f"code cut at line {b}, the end of {m['path'].strip()}")
         if b - a + 1 > self.MAX_LINES:
             b = a + self.MAX_LINES - 1
             title += f" (first {self.MAX_LINES} lines)"
@@ -1802,6 +1885,8 @@ class Board:
         if cue is not None:
             cue["view"] = item["view"]
         self.items.append(item)
+        self.refused.pop(fold(item.get("title") or ""), None)
+        self.last_refused = None
         self.log.board_item(item)
         if self.on_add:
             self.on_add(item)
@@ -1811,6 +1896,28 @@ class Board:
 # ---------------------------------------------------------------------------
 # The call: what was said, what is on the stage, and the audio of every answer
 # ---------------------------------------------------------------------------
+
+
+def _quiet(fn, *args, **kw) -> None:
+    try:
+        fn(*args, **kw)
+    except Exception:  # noqa: BLE001 - a touch is best effort
+        pass
+
+
+def show_reviving(cwd: str, name: str, source: dict, **kw) -> dict:
+    """stage.show, and when webcompanion finished the call's stage (its idle expiry), unfinish it and
+    show once more: the call outlives the daemon's twelve idle hours."""
+    try:
+        return stage_mod.show(cwd, name, source, **kw)
+    except stage_mod.wc.SlugMismatch as err:
+        sid = kw.get("slug")
+        if "was ended" not in str(err) or not sid or not stage_mod.wc.SID_RE.match(str(sid)):
+            raise
+        stage_mod.wc.request("POST", f"/s/{urllib.parse.quote(sid, safe='')}/api/unfinish"
+                             + stage_mod.wc._kind_qs(stage_mod.KIND))
+        say(f"talk: the stage {sid} had been finished by the daemon; reopened it")
+        return stage_mod.show(cwd, name, source, **kw)
 
 
 class Call:
@@ -1851,6 +1958,7 @@ class Call:
         self.stage_cwd: str | None = None  # set by open_call(); None in tests means "no stage"
         self.stage_slug: str | None = None  # this call's own stage, set by open_call()
         self.stage_sid: str | None = None
+        self.stage_touched = 0.0  # when the call's poll last touched its stage
         # board title -> stage view name, for this call; the Key points view's name is taken from the start
         self.view_names: dict[str, str] = {"\0keys": KEY_VIEW}
         self.keys: list[dict] = []  # every [[key: ...]] of the call, in order: {answer, text}
@@ -2187,6 +2295,7 @@ class Call:
         stood becomes a cue in `reply_cues`, so the stage can follow the voice."""
         self.answer_no = sum(1 for e in self.entries if e["who"] == "claude") + 1
         self.board.cues, self.reply_shows, self.reply_items = [], 0, []
+        self.board.begin_reply()
         keys_before = len(self.keys)
         shown = ""
 
@@ -2257,6 +2366,7 @@ class Call:
                                "the voice; put each tag before the sentence about it")
         if len(self.keys) > keys_before:
             self.show_keys(len(self.keys) - keys_before)
+        self.check_shape(len(self.keys) - keys_before)
         items, self.reply_items = self.reply_items, []
         for item in items:
             self.put_on_stage(item)
@@ -2275,6 +2385,21 @@ class Call:
         if words > MAX_ANSWER_WORDS:
             self.board.problem(f"this answer is {words} words: keep an answer under {MAX_ANSWER_WORDS} words, "
                                "and say the rest in the next one")
+
+    def check_shape(self, keys: int) -> None:
+        """Two nudges on the shape of an answer, each one board: line; nothing is ever dropped for them."""
+        if keys > MAX_KEY_POINTS:
+            self.board.problem(f"{keys} key points in one answer: keep at most {MAX_KEY_POINTS}, the ones worth "
+                               "keeping, and say the rest")
+        long = []
+        for item in self.reply_items:
+            title = re.sub(r" \(first \d+ lines\)$", "", item.get("title") or "")
+            if len(title.split()) > MAX_TITLE_WORDS:
+                long.append(title)
+        if long:
+            more = f" (and {len(long) - 1} more)" if len(long) > 1 else ""
+            self.board.problem(f'board title "{long[0]}"{more} is {len(long[0].split())} words: keep a board title to '
+                               f"{MAX_TITLE_WORDS} words, it names the picture and the voice says the rest")
 
     def split_reply_safely(self, text: str) -> str:
         """split_reply, but a board that breaks never costs the answer: the turn is already taken, so
@@ -2353,7 +2478,7 @@ class Call:
                 self.board.problem(f'"{title}" has {len(model.order)} elements and no verbs, '
                                    "so it came in with the sentences said about it (dump); tag the word that names each thing")
             elif by_order:
-                self.board.problem(by_order_problem(title, model, by_order, plan, sentences))
+                self.board.problem(by_order_problem(title, model, by_order, plan, sentences, outcome_title_of(item)))
             for n, reveals in plan.items():
                 brought = [{"kind": "frame", "view": view, "verb": stage_scene.Verb("+", keys=keys)} for keys in reveals]
                 pos, cues = first_run.get(n, (bounds[n], None))
@@ -2434,8 +2559,8 @@ class Call:
         cwd, slug, owner = self.stage_cwd, self.stage_sid or self.stage_slug, self.stage_owner()
 
         def show():
-            stage_mod.show(cwd, KEY_VIEW, source, title="Key points", slug=slug, background=True,
-                           extra={"kind": "points", "pinned": True}, owner=owner)
+            show_reviving(cwd, KEY_VIEW, source, title="Key points", slug=slug, background=True,
+                          extra={"kind": "points", "pinned": True}, owner=owner)
 
         self.stage_pending.append(self.stage_pool.submit(show))
 
@@ -2506,13 +2631,22 @@ class Call:
         self.reply_shows += 1
 
         def show():
-            stage_mod.show(cwd, name, source, title=title, slug=slug, extra=extra, owner=owner, **more)
+            show_reviving(cwd, name, source, title=title, slug=slug, extra=extra, owner=owner, **more)
 
         fut = self.stage_pool.submit(show)
         self.stage_pending.append(fut)
 
     def stage_owner(self) -> str:
         return f"talk call {self.id or '?'}"
+
+    def touch_stage(self) -> None:
+        """An open call's page polling keeps its stage in use, so the daemon's idle expiry never ends it."""
+        now = time.time()
+        sid = self.stage_sid
+        if not sid or now - self.stage_touched < STAGE_TOUCH_S:
+            return
+        self.stage_touched = now
+        self.stage_pool.submit(lambda: _quiet(stage_mod.wc.get_items, sid, kind=stage_mod.KIND))
 
     async def stage_settled(self, timeout: float | None = None) -> None:
         """Wait a little for this reply's stage shows; a show still running is carried to the next
@@ -2565,7 +2699,7 @@ class Call:
 
     def view(self) -> dict:
         return {"v": self.version, "entries": self.entries, "working": self.turns.working,
-                "stalled": self.turns.stalled, "activity": self.activity_view() if self.turns.working else [],
+                "stalled": self.turns.stalled, "listening": self.turns.listening, "activity": self.activity_view() if self.turns.working else [],
                 "ended": self.ended, "heard_upto": self.heard_upto, "filler": self.filler}
 
 
@@ -2654,7 +2788,7 @@ class Server:
     def stamp(self, call: Call) -> tuple[str, list[dict]]:
         """The page's version of its state, which also moves when the floor or another call changes."""
         others = [s for s in self.summaries() if s["id"] != call.id]
-        sig = hashlib.sha1(json.dumps([others, self.floor, self.floor_n, call.player_now()]).encode()).hexdigest()[:8]
+        sig = hashlib.sha1(json.dumps([others, self.floor, self.floor_n, call.player_now(), call.turns.stalled]).encode()).hexdigest()[:8]
         return f"{call.version}.{sig}", others
 
     def view(self, call: Call) -> dict:
@@ -2918,6 +3052,7 @@ def build_app(server: Server):
         if call is None:
             return refused(request)
         call.last_seen = time.time()
+        call.touch_stage()
         page = request.query.get("page")
         if page and call.player == page:  # the playing page's poll keeps its claim
             call.player_at = call.last_seen

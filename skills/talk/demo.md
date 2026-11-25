@@ -103,7 +103,7 @@ A bars board is for how much, how long or how many, so you see the size and not 
  "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": "c"}, {"from": "b", "to": "d"}, {"from": "d", "to": "e"}, {"from": "c", "to": "d2"}, {"from": "d2", "to": "e2"}]} [[/show]]
 A graph board shows what happens to commits or to a tree, before and after. [[point: before]] Before, main has a first commit and a second commit. Your first and your second commit branch off the second one, and someone else has added a new tip to main. [[point: after]] A rebase copies your commits onto the new tip. [[point: node d2]] Your first commit, copied, is a new commit with a new parent, and your second, copied, follows it. [[point: node d]] The originals are still there, faint, but nothing reaches them. [[point: both]] That is why a rebase rewrites history and a merge does not. [[key: a graph board shows a change to commits or a tree, before and after]] Next is a table.
 ---
-[[show table | Four boards a session picks by hand]]
+[[show table | Four boards, picked by hand]]
 | Board | Shows | Reads from | The voice can point at |
 |---|---|---|---|
 | code | existing lines of a file | `--code`, or any git work tree | lines |

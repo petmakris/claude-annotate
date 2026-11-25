@@ -883,7 +883,8 @@ function paintReader() {
   const k = active ? wordAt(e, t) : -1;
   // a board is in front once the voice has reached its front cue, at rest when the answer has one, and always
   // when the reader picked one by hand
-  const pos = active ? (k >= 0 ? e.words[k][0] : -1) : Infinity;
+  // (before the first word the voice is at the start of the text: a board the answer opens with is already in front)
+  const pos = active ? (k >= 0 ? e.words[k][0] : 0) : Infinity;
   const onBoard = !!e && !!CFG.stageUrl && (!follow || (e.cues || []).some(c => c.kind === "front" && c.at <= pos));
   const mode = !e ? "off" : onBoard ? (active ? "strip" : "off") : "text";
   const j = k < 0 ? -1 : rSents.findIndex(s => k >= s.first && k <= s.last);
@@ -908,8 +909,9 @@ function paintReader() {
 function keepWordInStrip(box, word) {
   if (!word) return;
   const b = box.getBoundingClientRect(), r = word.getBoundingClientRect();
-  if (r.top >= b.top && r.bottom <= b.bottom) return;
-  box.scrollTop = Math.max(0, box.scrollTop + (r.top + r.bottom) / 2 - (b.top + b.bottom) / 2);
+  if (r.top < b.top || r.bottom > b.bottom) box.scrollTop = Math.max(0, box.scrollTop + (r.top + r.bottom) / 2 - (b.top + b.bottom) / 2);
+  // a word wider than the box (a long path or identifier) is brought into view across as well
+  if (r.left < b.left || r.right > b.right) box.scrollLeft = Math.max(0, box.scrollLeft + (r.left + r.right) / 2 - (b.left + b.right) / 2);
 }
 
 // ---- the sentence being said, shown on the stage -------------------------------
@@ -934,7 +936,10 @@ function sentenceRuns(e) {
   }
   let first = 0;
   words.forEach((w, i) => {
-    if (i === words.length - 1 || /[.!?…][)\]"'”’]*$/.test(e.text.slice(w[0], w[1]))) { runs.push([first, i]); first = i + 1; }
+    const t = e.text.slice(w[0], w[1]);
+    // A Greek question mark is a semicolon: it ends a sentence only before a Greek letter (the server's rule).
+    const greekMark = /;[)\]"'”’]*$/.test(t) && i + 1 < words.length && /^[\u0370-\u03ff\u1f00-\u1fff]/.test(e.text.slice(words[i + 1][0], words[i + 1][1]));
+    if (i === words.length - 1 || /[.!?…\u037e][)\]"'”’]*$/.test(t) || greekMark) { runs.push([first, i]); first = i + 1; }
   });
   return runs;
 }

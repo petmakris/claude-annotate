@@ -148,10 +148,18 @@ class TurnQueue:
         return bool(self.open_ids)
 
     @property
+    def listening(self) -> bool:
+        """A doorbell is waiting right now: a session is there to collect the next turn."""
+        return self.waiters > 0
+
+    @property
     def stalled(self) -> bool:
         now = self.clock()
-        if self.pending_id is None or self.waiters:
+        if self.waiters:
             return False
+        if self.pending_id is None:
+            # A collected turn nobody answers, and no doorbell back: the session died or was interrupted.
+            return bool(self.open_ids) and now - max(self.collected_at, self.last_activity) > STALLED_OPEN_AFTER
         if self.open_ids:
             # The session is answering an older turn: it is busy, not stalled, until it has been silent for long.
             return now - max(self.collected_at, self.last_activity, self.offered_at) > STALLED_OPEN_AFTER
