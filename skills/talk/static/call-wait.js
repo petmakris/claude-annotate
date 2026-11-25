@@ -171,7 +171,7 @@ function waitSub(m) {
   if (m.step === "sent") return m.earlier ? "Claude is finishing the earlier question. This one comes next." : "Waiting for Claude to pick it up.";
   if (m.step === "notpicked") return "Claude has not picked this up yet.";
   if (m.step === "silent") return "No sign of life for " + fmt(m.quiet === null ? m.elapsed : m.quiet) + ".";
-  if (m.step === "slow") return m.quiet === null ? "Still working on it." : "Last sign of life " + stepClock(m.quiet) + " ago.";
+  if (m.step === "slow") return m.run ? "Still on the step below." : m.quiet === null ? "Still working on it." : "Last sign of life " + stepClock(m.quiet) + " ago.";
   return m.run ? "" : "Claude has your question.";  // a step running is a row of its own
 }
 const WAIT_STEPS = ["Sent", "Picked up", "Working", "Answer"];

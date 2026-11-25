@@ -106,6 +106,15 @@ def test_after_ninety_seconds_the_card_turns_slow_and_says_when_the_session_last
                           ["Cancel", "Copy question"]]
 
 
+def test_a_slow_question_with_a_step_running_points_at_the_step_not_at_the_last_tool_call(tmp_path):
+    turn = {"entries": [{"id": 0, "state": "picked"}], "earlier": 0, "collected_at": NOW - 95, "alive_at": NOW - 111}
+    run = [{"label": "Searching for analogies", "state": "running", "seconds": 111.0}]
+    page = run_states(tmp_path, lambda b: [picked(b, 1, run, entries=[{**YOU, "at": NOW - 100}], turn=turn)]).js("await serve(1);")
+    page.check(card("querySelector('.wt-title').textContent"))
+    page.check(card("querySelector('.wt-sub').textContent"))
+    assert page.run() == ["Taking longer than usual", "Still on the step below."]
+
+
 def test_a_collected_question_the_server_calls_stalled_says_the_session_went_quiet(tmp_path):
     page = run_states(tmp_path, lambda b: [picked(b, 1, stalled=True, entries=[{**YOU, "at": NOW - 230}],
                                                   turn={"entries": [{"id": 0, "state": "picked"}], "earlier": 0, "collected_at": NOW - 225, "alive_at": NOW - 200})])
