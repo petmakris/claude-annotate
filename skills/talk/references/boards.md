@@ -14,7 +14,7 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 
 ## Map
 
-- An architecture map is the map spec of `docs/vz.md`: `columns`, `boxes` on a grid, `zones`, `arrows`, each part's build step `b` and route step `r`, and `"layer": "route"` arrows with a badge `n`.
+- An architecture map is the map spec of `docs/vz.md`: `columns`, `boxes` on a grid, `zones`, `arrows`, each part's build step `b` and route step `r`, and `"layer": "route"` arrows with a badge `n`. A name, an arrow label or a column title is at most 60 characters and a line of a box 120: a longer one is refused by name.
 - Give it a title that states the claim.
 - Draw each process as a zone with its name and port, around the boxes it serves. A named part gets its own box, never only a column header.
 - A forbidden relation is an arrow with `"tone": "red", "dash": true` and the label `never`. Draw only relations you speak about.
@@ -88,7 +88,7 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 - `note` is a second line under the label: the place for a number you say ("about four cycles").
 - Each bar's `label` is words you will say, and different from the others' (`L1 cache`, `L2 cache`, never `cache` twice).
 - A `threshold` is one optional dashed line. There are no series and no markers.
-- A label is at most 48 characters and a note 90: each is one line. At most 24 bars. Cut it to the ones that carry the argument.
+- A label is at most 48 characters and a note 90 and no wider than the canvas (about 80 characters): each is one line. At most 24 bars. Cut it to the ones that carry the argument.
 - Each bar arrives with the sentence that names it. Points: `[[point: bar ram]]`, `[[point: rows 2-3]]`. The rest view shows every row.
 - A name that is nearly an id is read as it, with a `board:` line. One that is not names the ids the board has.
 

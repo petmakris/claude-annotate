@@ -13,6 +13,7 @@
 
 import { beingSaid } from "./scene.js";
 import { routeEdges, rounded } from "./route.js";
+import { placeEdgeLabels } from "./map_labels.js";
 
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 // a long name breaks between its words: before a capital that follows a small letter, after . _ / -
@@ -46,7 +47,7 @@ export function renderMap(box, spec, embedded) {
     ${nodes.map((n) => {
       const detail = n.method || n.ref;
       return `<div class="m-node t-${TONE[n.role] || "plain"} m-${esc(n.role || "code")}" data-key="node:${esc(n.id)}" data-node="${esc(n.id)}">
-        <b>${breakable(n.label || n.id)}</b>${detail ? `<code>${breakable(detail)}</code>` : ""}${n.sub ? `<span class="m-sub">${breakable(n.sub)}</span>` : ""}</div>`;
+        <b style="overflow-wrap:normal">${breakable(n.label || n.id)}</b>${detail ? `<code>${breakable(detail)}</code>` : ""}${n.sub ? `<span class="m-sub">${breakable(n.sub)}</span>` : ""}</div>`;
     }).join("")}`;
   place(box);
   if (!box._mapObserved) {
@@ -138,6 +139,7 @@ function halves(box, w, cur) {
 function place(box) {
   const st = box._map;
   if (!st) return;
+  box.style.transform = ""; box.style.marginBottom = "";   // measured at its own size; fitScale scales it again at the end
   const L = layers(st.spec);
   const width = box.clientWidth || 900;
   const scroller = box.closest(".pbody");
@@ -146,14 +148,16 @@ function place(box) {
   // scrolls it then, and the row of parts jumped)
   const others = scroller ? Math.max(0, scroller.scrollHeight - box.offsetHeight) : 32;
   const height = Math.max(320, (scroller ? scroller.clientHeight - others : 480) - (+box.dataset.room || 16));
+  const need = wordNeed(box);
   // As large as the pane lets it be (up to 1.8 times; type grows with it, --ms), so a map on a TV does not sit as a
   // small block in an empty pane; one that does not fit even at its own size scrolls, as before.
   let plan = null;
   for (const s of [1.8, 1.6, 1.4, 1.25, 1.12]) {
-    const p = across(box, st, L, width, height, s);
+    const p = across(box, st, L, width, height, s, need);
     if (p && p.tall <= height + 1) { plan = p; break; }
   }
-  plan = plan || across(box, st, L, width, height) || down(box, st, L, width, height);
+  plan = plan || across(box, st, L, width, height, 1, need) || down(box, st, L, width, height, need);
+  plan.avail = height;
   box.style.setProperty("--ms", plan.s || 1);
   box._mapPane = [box.clientWidth, scroller ? scroller.clientHeight : 0];
   box.dataset.layout = plan.mode;
@@ -161,6 +165,7 @@ function place(box) {
   box.style.setProperty("--mc", plan.cw + "px");
   box.style.height = plan.tall + "px";
   st.plan = plan;
+  fitScale(box);
   for (const el of box.querySelectorAll(".m-node")) {
     const [x, y] = plan.xy.get(el.dataset.node);
     el.style.left = x + "px"; el.style.top = y + "px";
@@ -171,6 +176,46 @@ function place(box) {
   draw(box);
 }
 
+// The least width a part needs so that no word of its name breaks in the middle: its longest word, measured at the type's
+// own size (`--ms` 1) as a copy laid out at its minimum content width, for the part at rest and for the card being said.
+// Scaled with the type by `needW`.
+function wordNeed(box) {
+  const keep = box.style.getPropertyValue("--ms");
+  box.style.setProperty("--ms", "1");
+  const out = { rest: 0, cur: 0 };
+  for (const el of box.querySelectorAll(":scope > .m-node")) {
+    for (const cur of [false, true]) {
+      const c = el.cloneNode(true);
+      c.classList.remove("k-hidden", "k-focus", "m-cur");
+      if (cur) c.classList.add("m-cur");
+      c.style.cssText = "width:min-content;left:0;top:0;transition:none;animation:none;visibility:hidden";
+      box.append(c);
+      const w = c.getBoundingClientRect().width;
+      c.remove();
+      out[cur ? "cur" : "rest"] = Math.max(out[cur ? "cur" : "rest"], w);
+    }
+  }
+  if (keep) box.style.setProperty("--ms", keep); else box.style.removeProperty("--ms");
+  return out;
+}
+// A need at type scale s: the type grows with s, the padding (28 at rest, 36 as the card) does not.
+const needW = (need, s, pad) => Math.min(260 * s, Math.max(0, (need - pad) * s + pad));
+
+// At rest the whole board is in view: a board taller than its pane is scaled down to the pane (down to half its size), where it
+// used to be cropped at the foot and scrolled. While a part is said the board is at its own size and the stage keeps
+// that part in view.
+function fitScale(box) {
+  const st = box._map, P = st && st.plan;
+  if (!P) return;
+  const fits = P.avail / P.tall;   // a board that would have to shrink below half its size is left at its own size, to scroll
+  const k = st.cur === null && fits < 1 && fits >= 0.5 ? fits : 1;
+  box.style.transformOrigin = "top center";
+  box.style.transition = "transform .3s";
+  box.style.transform = k < 1 ? `scale(${k})` : "";
+  box.style.marginBottom = k < 1 ? `${-(1 - k) * P.tall}px` : "";
+  box.dataset.fit = k < 1 ? k.toFixed(3) : "1";
+}
+
 // The card being said is larger than a part at rest by how much room the board has: up to 260px wide,
 // and never so wide that it would reach a neighbour or the board's edge (`fit`, for n parts in a line).
 const fit = (n, w, room, air, most) => Math.min(most, n > 1 ? (room - (n - 1) * (w / 2 + air)) / ((n + 1) / 2) : room);
@@ -178,12 +223,14 @@ const fit = (n, w, room, air, most) => Math.min(most, n > 1 ? (room - (n - 1) * 
 // Left to right while the columns fit, narrowing the parts a little first. In a column the parts are as
 // far apart as either of two neighbours needs when it is the card being said; a column taller than the
 // board makes the board scroll, and the card being said is kept in view (layoutMap).
-function across(box, st, L, width, height, s = 1) {
+function across(box, st, L, width, height, s = 1, need = { rest: 0, cur: 0 }) {
   const { cols, back, self } = L, c = cols.length, edges = st.spec.edges || [];
   const sizes = [[W * s, 260 * s], [150 * s, 240 * s], [130 * s, 220 * s]];
-  for (const [k, [w, most]] of sizes.entries()) {
+  const nr = needW(need.rest, s, 28), nc = needW(need.cur, s, 36);   // no part's name breaks inside a word
+  for (const [k, [size, most]] of sizes.entries()) {
+    const w = Math.max(size, nr);
     const cw = fit(c, w, width - 2 * SIDE, AIR_X, most);
-    if (cw < (k < sizes.length - 1 ? Math.min(most, w + 60) : w)) continue;
+    if (cw < Math.max(nc, k < sizes.length - 1 ? Math.min(most, w + 60) : w)) continue;
     const hr = halves(box, w, false), hc = halves(box, cw, true);
     const big = (id) => Math.max(hr.get(id), hc.get(id));
     const looped = new Set([...self].map((i) => edges[i].from));
@@ -215,16 +262,16 @@ function across(box, st, L, width, height, s = 1) {
 // Top to bottom when the columns do not fit across: each column becomes a row, split over more rows when
 // it holds more parts than the width does. The parts narrow to fit their row; ways back run down a lane
 // kept clear on the right.
-function down(box, st, L, width) {
+function down(box, st, L, width, height, need = { rest: 0, cur: 0 }) {
   const { cols, back, self } = L, edges = st.spec.edges || [];
   const lane = back.size ? 24 + 22 * back.size : 0, room = width - 2 * SIDE - lane;
   const most = Math.max(...cols.map((c) => c.length));
   let rows, w, cw;
   for (let per = most; per >= 1 && !rows; per--) {
     for (const size of [W, 150, 130, 120, 110]) {
-      w = Math.min(size, room);
+      w = Math.min(Math.max(size, needW(need.rest, 1, 28)), room);
       cw = fit(per, w, room, AIR_X / 2, 260);
-      if (cw >= w) { rows = cols.flatMap((c) => Array.from({ length: Math.ceil(c.length / per) }, (_, i) => c.slice(i * per, i * per + per))); break; }
+      if (cw >= w && (cw >= needW(need.cur, 1, 36) || per === 1)) { rows = cols.flatMap((c) => Array.from({ length: Math.ceil(c.length / per) }, (_, i) => c.slice(i * per, i * per + per))); break; }
     }
   }
   if (!rows) { w = cw = Math.max(80, room); rows = cols.flatMap((c) => c.map((id) => [id])); }
@@ -294,61 +341,29 @@ function draw(box) {
   placeLabels(P, labels, nodes, routes);
 }
 
-// Each label (wrapped to MAXLINE, padded 8 by 3) goes to the place on its own arrow that costs least: on a part,
-// on a label already placed, on another arrow or over its own arrow's head all cost; the middle of the longest
-// stretch is the first choice.
+// Each label (wrapped to MAXLINE, padded 8 by 3) goes to the place on its own arrow that costs least (map_labels.js decides:
+// on a part, on another label, on another arrow or its head all cost; the middle of the longest stretch is the first choice).
 function placeLabels(P, labels, nodes, routes) {
   const cards = [...nodes.values()].map((n) => [n.x - n.hw - 3, n.y - n.hh - 3, n.x + n.hw + 3, n.y + n.hh + 3]);
-  const lines = [];
-  for (const [i, r] of routes) for (let k = 1; k < r.pts.length; k++) lines.push({ i, a: r.pts[k - 1], b: r.pts[k] });
-  const area = (r, q) => Math.max(0, Math.min(r[2], q[2]) - Math.max(r[0], q[0])) * Math.max(0, Math.min(r[3], q[3]) - Math.max(r[1], q[1]));
-  const cutBy = (r, s) => Math.min(s.a[0], s.b[0]) < r[2] && Math.max(s.a[0], s.b[0]) > r[0] && Math.min(s.a[1], s.b[1]) < r[3] && Math.max(s.a[1], s.b[1]) > r[1];
-  const placed = [];
-  for (const L of labels.slice().sort((a, b) => (b.text || "").length - (a.text || "").length)) {
+  const sized = labels.map((L) => {
+    const rows = wrap(L.label.querySelector("text"), L.text, MAXLINE);
+    return { ...L, rows, w: Math.max(...rows.map((x) => x.w)) + 16, h: rows.length * 15 + 6 };
+  });
+  const spots = placeEdgeLabels({ labels: sized, cards, routes, width: P.width, side: SIDE, across: P.mode === "across" });
+  for (const L of sized) {
+    const best = spots.get(L.i), { x, y } = best, { rows, w, h } = L;
     const t = L.label.querySelector("text");
-    const rows = wrap(t, L.text, MAXLINE);
-    const w = Math.max(...rows.map((x) => x.w)) + 16, h = rows.length * 15 + 6;
-    const cand = [];
-    if (L.spots) L.spots.forEach(([x, y]) => cand.push([x, y]));
-    else {
-      const segs = L.pts.slice(1).map((q, k) => ({ a: L.pts[k], b: q, len: Math.hypot(q[0] - L.pts[k][0], q[1] - L.pts[k][1]) })).sort((x, y) => y.len - x.len);
-      for (const sg of segs) for (const f of [0.5, 0.3, 0.7]) cand.push([sg.a[0] + (sg.b[0] - sg.a[0]) * f, sg.a[1] + (sg.b[1] - sg.a[1]) * f]);
-      // where no stretch has room beside the parts: just clear of them across the flow, with a short leader to the arrow
-      const reach = Math.max(...[...nodes.values()].map((n) => (P.mode === "across" ? n.hh : n.hw))) + h / 2 + 10;
-      for (const sg of segs) {
-        const horizontal = Math.abs(sg.a[1] - sg.b[1]) < 0.01;
-        if (horizontal !== (P.mode === "across")) continue;
-        for (const dir of [-1, 1]) cand.push([(sg.a[0] + sg.b[0]) / 2 + (horizontal ? 0 : dir * (w / 2 + 12)), (sg.a[1] + sg.b[1]) / 2 + (horizontal ? dir * reach : 0), true]);
-      }
-    }
-    let best = null;
-    cand.forEach(([cx, cy, off], k) => {
-      const x = Math.max(SIDE + w / 2, Math.min(P.width - SIDE - w / 2, cx)), y = cy;
-      const r = [x - w / 2, y - h / 2, x + w / 2, y + h / 2];
-      let cost = k * 0.5 + (off ? 30 : 0);
-      for (const c of cards) cost += area(r, c) * 4 + (area(r, c) ? 400 : 0);
-      for (const q of placed) cost += area(r, q) * 4 + (area(r, q) ? 400 : 0);
-      for (const s of lines) if (s.i !== L.i && cutBy(r, s)) cost += 40;
-      for (const q of [L.end, L.start]) if (q && q[0] > r[0] - 14 && q[0] < r[2] + 14 && q[1] > r[1] - 14 && q[1] < r[3] + 14) cost += 500;
-      if (x !== cx) cost += 30;
-      if (!best || cost < best.cost) best = { cost, x, y, r, off, at: [cx, cy] };
-    });
-    const { x, y } = best;
-    placed.push(best.r);
     const top = y - (rows.length * 15) / 2;
     t.replaceChildren();
     rows.forEach((row, k) => {
       const ts = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
       ts.setAttribute("x", x); ts.setAttribute("y", top + 11.5 + k * 15); ts.textContent = row.text; t.append(ts);
     });
-    // an arrow's label off the arrow is joined to it by a leader
+    // an arrow's label off the arrow is joined to it by a leader, from the label to the nearest point of its arrow
     let lead = L.label.querySelector(".m-lead");
     if (best.off) {
-      const sg = L.pts.slice(1).map((q, k) => [L.pts[k], q]).find(([a, b]) => Math.abs(a[1] - b[1]) < 0.01 ? Math.abs(a[1] - y) < 400 && Math.min(a[0], b[0]) - 1 <= best.at[0] && best.at[0] <= Math.max(a[0], b[0]) + 1 : Math.min(a[1], b[1]) - 1 <= y && y <= Math.max(a[1], b[1]) + 1);
       if (!lead) { lead = document.createElementNS("http://www.w3.org/2000/svg", "path"); lead.setAttribute("class", "m-lead"); L.label.prepend(lead); }
-      const horizontal = !!sg && Math.abs(sg[0][1] - sg[1][1]) < 0.01;
-      const [lx, ly] = horizontal ? [x, sg[0][1]] : [sg ? sg[0][0] : x, y];
-      lead.setAttribute("d", horizontal ? `M ${lx} ${ly} L ${x} ${y}` : `M ${lx} ${ly} L ${x} ${y}`);
+      lead.setAttribute("d", `M ${best.at[0]} ${best.at[1]} L ${x} ${y}`);
     } else lead?.remove();
     const rc = L.label.querySelector("rect");
     rc.setAttribute("x", x - w / 2); rc.setAttribute("y", y - h / 2); rc.setAttribute("width", w); rc.setAttribute("height", h);
@@ -395,7 +410,7 @@ export function layoutMap(box, scene, n, stepped = false) {
   if (!st) return null;
   const said = scene && n != null ? beingSaid(scene, n) : [];
   const node = said.filter((k) => k.startsWith("node:")).pop() || null;
-  if (st.cur !== node) { st.cur = node; draw(box); }  // the arrows meet the card being said at its new size
+  if (st.cur !== node) { st.cur = node; draw(box); fitScale(box); }  // the arrows meet the card being said at its new size; at rest the board fits whole
   // of the arrows named, the one into that card, else one out of it, else the last
   const named = said.filter((k) => k.startsWith("edge:")), id = node && node.slice(5);
   const edge = named.find((k) => node && k.endsWith("->" + id + k.slice(k.lastIndexOf("#"))))

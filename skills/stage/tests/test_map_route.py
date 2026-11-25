@@ -54,8 +54,8 @@ def test_every_arrow_of_the_lifecycle_runs_round_the_parts_it_does_not_join_with
     got = run(**LIFECYCLE)
     assert got["problems"] == []
     assert got["pts"]["0"] == [[165, 360], [200, 360]]
-    assert got["pts"]["5"] == [[845, 368], [865, 368], [865, 420], [880, 420]]    # e to g: out, down its own lane, in
-    assert got["pts"]["6"] == [[845, 352], [865, 352], [865, 300], [880, 300]]    # e to f: its lane is another height
+    assert got["pts"]["5"] == [[845, 369], [865, 369], [865, 420], [880, 420]]    # e to g: out, down its own lane, in
+    assert got["pts"]["6"] == [[845, 351], [865, 351], [865, 300], [880, 300]]    # e to f: its lane is another height
     assert got["pts"]["3"] == [[419, 388], [419, 470], [79, 470], [79, 393]]      # a way back runs under the row
     assert got["pts"]["7"] == [[943, 272], [943, 250], [93, 250], [93, 327]]      # one with a part under its start runs over
 
@@ -66,8 +66,8 @@ def test_an_arrow_that_skips_a_column_runs_in_the_free_corridor_of_the_column_it
     got = run(mode="across", nodes={"a": node(100, 200), "b": node(300, 200), "c": node(500, 200), "x": node(300, 320)},
               rank={"a": 0, "b": 1, "c": 2, "x": 1}, edges=[["a", "c"], ["a", "b"], ["b", "c"]])
     assert got["problems"] == []
-    assert got["pts"]["0"] == [[165, 192], [200, 192], [200, 165], [400, 165], [400, 192], [430, 192]]   # b's top edge is y 172
-    assert got["pts"]["1"] == [[165, 208], [200, 208], [200, 200], [230, 200]]   # its neighbours keep their own ports
+    assert got["pts"]["0"] == [[165, 191], [200, 191], [200, 165], [400, 165], [400, 191], [430, 191]]   # b's top edge is y 172
+    assert got["pts"]["1"] == [[165, 209], [200, 209], [200, 200], [230, 200]]   # its neighbours keep their own ports
 
 
 @needs_node
@@ -80,7 +80,7 @@ def test_two_arrows_into_one_part_and_two_through_one_corridor_never_lie_one_ove
     # a to e and b to d both change height in the gap before the last column, and b to d runs out at y 100 where a to e
     # runs in at y 100: b to d takes the lane on the left (x 400), a to e the one on its right (x 412)
     assert got["pts"]["1"] == [[165, 276], [412, 276], [412, 100], [430, 100]]
-    assert got["pts"]["2"] == [[365, 100], [400, 100], [400, 284], [430, 284]]
+    assert got["pts"]["2"] == [[365, 100], [400, 100], [400, 282], [430, 282]]
 
 
 @needs_node

@@ -16,7 +16,7 @@
 // `pts` are [x, y] corners, the last one where the arrow's head points. A self loop has no points (kind "loop").
 
 export const ARROW = 5;       // the head stops this far short of the part it enters
-const PORT = 16;              // the most two ports of one side are apart
+const PORT = 18;              // the most two ports of one side are apart: a head is 12 wide, so heads fan in clear of each other
 const CORRIDOR = 4;           // clear space kept round a part in a corridor
 const LANE = 9;               // the least two arrows in one corridor or gap are apart
 const BACK_PORT = 14;
@@ -49,7 +49,7 @@ export function routeEdges({ mode, nodes, rank, edges, bounds }) {
     for (const [id, es] of by) {
       const n = N.get(id);
       es.sort((a, b) => N.get(a[other]).v - N.get(b[other]).v || a.i - b.i);
-      const step = es.length > 1 ? Math.min(PORT, Math.max(6, (2 * n.hv - 8) / (es.length - 1))) : 0;
+      const step = es.length > 1 ? Math.min(PORT, Math.max(12, (2 * n.hv - 8) / (es.length - 1))) : 0;
       es.forEach((e, k) => { e[key] = n.v + (k - (es.length - 1) / 2) * step; });
     }
   };
