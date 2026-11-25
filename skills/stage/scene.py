@@ -33,11 +33,15 @@ _LINES = re.compile(r"(?:(?P<old>old)\s+)?(?:lines?\s+)?(?P<a>\d+)(?:\s*[-–]\s
 _CELL = re.compile(r"cells?\s+(?P<r>.+?)\s*(?:/|,|×)\s*(?P<c>.+)", re.IGNORECASE)
 
 
-def _column(model: "SceneModel", raw: str) -> int | None:
-    """A column by its number or its header, quoted or not."""
+def _column(model: "SceneModel", raw: str, table: int = 0) -> int | None:
+    """A column by its number or its header, quoted or not, in the table `table` (counted from 0)."""
     text = raw.strip().strip("\"'“”‘’").strip()
     if text.isdigit():
         return int(text)
+    heads = model.headers[table] if table < len(model.headers) else []
+    if heads:
+        found = [c for c, h in enumerate(heads, 1) if fold(h) and fold(h) == fold(text)]
+        return found[0] if found else None
     return model.columns.get(fold(text))
 
 
@@ -68,6 +72,9 @@ class SceneModel:
     columns: dict[str, int] = field(default_factory=dict)  # a table's columns by header, apart from its parts' names
     said_with: dict[str, list[str]] = field(default_factory=dict)  # a map's route step: the boxes it arrives at
     alias: dict[str, list[str]] = field(default_factory=dict)  # a part's other names, as words a sentence may say it with
+    ambiguous: dict[str, list[str]] = field(default_factory=dict)  # a table's text that names more than one row, with the rows
+    headers: list[list[str]] = field(default_factory=list)  # a table board's header cells, one list per table
+    row_table: dict[str, int] = field(default_factory=dict)  # a table board's row key -> the table (from 0) it is in
 
 
 def fold(text: str) -> str:
@@ -85,28 +92,149 @@ def change_model(hunks: list[dict]) -> SceneModel:
     return SceneModel("lines", list(dict.fromkeys(keys)))
 
 
+_TABLE_SEP = re.compile(r"^\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$")
+_FENCE = re.compile(r"^\s*(```|~~~)")
+
+
+def split_cells(row: str) -> list[str]:
+    """A markdown table row's cells: split at pipes that are not escaped (`\\|`) and not inside a `code span`;
+    an escaped pipe reads as a pipe."""
+    row = row.strip()
+    row = row[1:] if row.startswith("|") else row
+    if row.endswith("|") and not row.endswith("\\|"):
+        row = row[:-1]
+    cells, cur, i, tick = [], "", 0, 0
+    while i < len(row):
+        ch = row[i]
+        if ch == "\\" and row[i + 1:i + 2] == "|":
+            cur += "|"
+            i += 2
+            continue
+        if ch == "`":
+            run = len(row[i:]) - len(row[i:].lstrip("`"))
+            if tick == 0 and "`" * run in row[i + run:]:
+                tick = run
+            elif tick == run:
+                tick = 0
+            cur += "`" * run
+            i += run
+            continue
+        if ch == "|" and not tick:
+            cells.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+        i += 1
+    cells.append(cur.strip())
+    return cells
+
+
+def plain_cell(cell: str) -> str:
+    """A table cell as the stage shows it, as words: links become their text, and code and emphasis marks go."""
+    t = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", cell)
+    t = t.replace("`", "")
+    t = re.sub(r"(?<!\w)([*_]{1,3})(?=\S)(.+?)(?<=\S)\1(?!\w)", r"\2", t)
+    return html.unescape(re.sub(r"<[^>]*>", "", t)).strip()
+
+
+def parse_tables(body: str) -> list[dict]:
+    """Every markdown table of a board's body, in order: {header, rows}, each row padded to the header's width.
+    A table is a header line, a separator line, and the lines after it up to the first blank one, with or without
+    leading pipes, as the stage draws it. Lines inside a code fence are never a table."""
+    lines = [ln.strip() for ln in body.splitlines()]
+    tables, i, fenced = [], 0, False
+    while i < len(lines):
+        if _FENCE.match(lines[i]):
+            fenced = not fenced
+        if not fenced and i + 1 < len(lines) and "|" in lines[i] and _TABLE_SEP.match(lines[i + 1]) \
+                and not _TABLE_SEP.match(lines[i]):
+            head = split_cells(lines[i])
+            rows, j = [], i + 2
+            while j < len(lines) and lines[j]:
+                rows.append(split_cells(lines[j]))
+                j += 1
+            width = max([len(head), *map(len, rows)])
+            tables.append({"header": head + [""] * (width - len(head)),
+                           "rows": [r + [""] * (width - len(r)) for r in rows]})
+            i = j
+            continue
+        i += 1
+    return tables
+
+
+def body_model(body: str) -> "SceneModel":
+    """The scene model of a table board's body, from its markdown: all of its tables, in order."""
+    return tables_model([{"header": [plain_cell(c) for c in t["header"]],
+                          "rows": [[plain_cell(c) for c in r] for r in t["rows"]]} for t in parse_tables(body)])
+
+
 def rows_model(cells: list[str], header: list[str] | None = None) -> SceneModel:
-    """A table's rows, named by their first cell. With its header, every cell is a key too
-    (`cell#<row>.<column>`, both counted from 1), so one cell can be the one being said; a cell
-    brings its row, and a column is named by its header (kept in `columns`, never among the parts' names, so
-    a row named in words never matches a column)."""
-    keys = [f"row#{i}" for i in range(1, len(cells) + 1)]
+    """A table's rows known only by their first cell (a board's other cells unknown): see tables_model."""
+    return tables_model([{"header": list(header or []), "rows": [[c] for c in cells]}], width=len(header or []))
+
+
+def tables_model(tables: list[dict], width: int | None = None) -> SceneModel:
+    """A table board's keys, over every table of it, rows numbered across them from 1 (`row#<n>`).
+    With its header, every cell is a key too (`cell#<row>.<column>`, the column counted from 1 in its own
+    table), so one cell can be the one being said; a cell brings its row, and a row brings the rows before it, so
+    the table never shows a gap. A column is `col#<c>` (`col#<table>.<c>` with more than one table, both from 1)
+    and brings the rows of its table. A row is named by its first cell, by any other cell whose text is in
+    no other row, and by its first and second cell together ("Azure / Cost"); a text that names two rows or more
+    is kept in `ambiguous`, never guessed. Columns are named by their header (`columns` for the first table,
+    kept apart from the parts' names, so a row named in words never matches a column)."""
+    keys: list[str] = []
     names: dict[str, str] = {}
-    for key, cell in zip(keys, cells):
-        names.setdefault(fold(cell), key)
+    seen: dict[str, list[str]] = {}
     up: dict[str, list[str]] = {}
-    cols = len(header or [])
-    columns: dict[str, int] = {}
-    for c, head in enumerate(header or [], 1):
-        if fold(head):
-            columns.setdefault(fold(head), c)
     down: dict[str, list[str]] = {}
-    for r in range(1, len(cells) + 1):
+    columns: dict[str, int] = {}
+    row_table: dict[str, int] = {}
+    colkeys: list[str] = []
+    n = 0
+    for t, table in enumerate(tables):
+        head = table["header"]
+        cols = width if width is not None else max([len(head), *(len(r) for r in table["rows"])] or [0])
+        first = n
+        for c, h in enumerate(head, 1):
+            if t == 0 and fold(h):
+                columns.setdefault(fold(h), c)
+        for row in table["rows"]:
+            n += 1
+            key = f"row#{n}"
+            keys.append(key)
+            row_table[key] = t
+            if n > 1:
+                up[key] = [f"row#{n - 1}"]  # a row brings the rows before it, across tables too
+            texts = {fold(x) for x in row if fold(x)}
+            for text in texts:
+                seen.setdefault(text, [])
+                if key not in seen[text]:
+                    seen[text].append(key)
+            if len(row) >= 2 and fold(row[0]) and fold(row[1]):
+                for sep in (" / ", " ", " - ", " · "):
+                    seen.setdefault(fold(row[0] + sep + row[1]), []).append(key)
+            for c in range(1, cols + 1):
+                up[f"cell#{n}.{c}"] = [key]
+                down.setdefault(key, []).append(f"cell#{n}.{c}")  # a row shown shows its cells
+        rows_of_table = [f"row#{r}" for r in range(first + 1, n + 1)]
         for c in range(1, cols + 1):
-            up[f"cell#{r}.{c}"] = [f"row#{r}"]
-            down.setdefault(f"row#{r}", []).append(f"cell#{r}.{c}")  # a row shown shows its cells
-    return SceneModel("rows", keys + list(up), order=list(keys), up=up, down=down, names=names, can_hide=True,
-                      columns=columns)
+            ck = f"col#{c}" if len(tables) == 1 else f"col#{t + 1}.{c}"
+            colkeys.append(ck)
+            down[ck] = rows_of_table
+    # the first cell names its row first: a text some row starts with, and no other row does, is that row's
+    for key, row in zip(keys, [r for table in tables for r in table["rows"]]):
+        if fold(row[0]) and len(seen.get(fold(row[0]), [])) == 1:
+            names[fold(row[0])] = key
+    ambiguous: dict[str, list[str]] = {}
+    for text, rows in seen.items():
+        if len(rows) == 1:
+            names.setdefault(text, rows[0])
+        else:
+            ambiguous[text] = rows
+            names.pop(text, None)
+    return SceneModel("rows", keys + [k for k in up if k.startswith("cell#")] + colkeys, order=list(keys), up=up, down=down,
+                      names=names, can_hide=True, columns=columns, ambiguous=ambiguous,
+                      headers=[list(t["header"]) for t in tables], row_table=row_table)
 
 
 _HEADER = re.compile(r"\A\s*(?:graph|flowchart)\b(?:[ \t]+(?:TB|TD|BT|RL|LR)\b)?", re.IGNORECASE)
@@ -498,6 +626,9 @@ def parse_verb(marker: str) -> Verb | None:
 MODES = ("mode:both", "mode:before", "mode:after")  # the sides of a compare sequence the voice can point at (lanes.js)
 
 
+OUTCOME = "outcome:end"  # a sequence's closing outcome box, a part of its scene like a step
+
+
 def sequence_model(spec: dict) -> SceneModel:
     """A sequence spec: its actors, then its steps, which come in order and each bring their actors."""
     actors = [f"actor:{a['id']}" for a in spec["actors"]]
@@ -514,6 +645,7 @@ def sequence_model(spec: dict) -> SceneModel:
         elif s.get("change") == "changed" and s.get("before") and s["before"].get("label") != s.get("label"):
             alias[f"step:{s['id']}"] = [str(s["before"].get("label", ""))]
     steps = [k for k in steps if k not in gone]
+    outcome = spec.get("outcome")
     names: dict[str, str] = {}
     # a sentence names the step as it stands now: a row with no after step (a compare board's) only after the others
     for s in sorted(spec["steps"], key=lambda s: s.get("change") in ("removed", "moved") and "after" not in s):
@@ -521,8 +653,14 @@ def sequence_model(spec: dict) -> SceneModel:
     for a in spec["actors"]:
         names.setdefault(fold(str(a.get("label", "")).replace("\n", " ")), f"actor:{a['id']}")
     names.pop("", None)
+    tail: list[str] = []
+    if isinstance(outcome, dict):  # the box that closes the diagram comes in last, and a point can name it
+        tail = [OUTCOME]
+        names.setdefault(fold(str(outcome.get("title", ""))), OUTCOME)
+        names.pop("", None)
+    steps = steps + tail
     if spec.get("compare"):  # a compare board's views are keys too, so the voice can point at one
-        keys = actors + [f"step:{s['id']}" for s in spec["steps"]] + list(MODES)
+        keys = actors + [f"step:{s['id']}" for s in spec["steps"]] + tail + list(MODES)
         return SceneModel("sequence", keys, order=steps, up=up, names=names, can_hide=True, alias=alias)
     return SceneModel("sequence", actors + steps, order=steps, up=up, names=names, can_hide=True)
 
@@ -669,6 +807,110 @@ def _entity(model: SceneModel, raw: str) -> tuple[str | None, bool]:
     return _closest(model, raw), True
 
 
+_NUMS = r"\d+(?:\s*[-–]\s*\d+)?"
+_ROW_LIST = re.compile(rf"rows?\s+(?P<list>{_NUMS}(?:\s*,\s*{_NUMS})+)", re.IGNORECASE)
+_COLUMN = re.compile(r"col(?:umn)?s?\.?\s+(?P<list>.+)", re.IGNORECASE)
+_CELLS = re.compile(r"cells\s+(?P<list>.+)", re.IGNORECASE)
+
+
+def _says(rows: list[str]) -> str:
+    nums = [r.split("#")[1] for r in rows]
+    return "rows " + " and ".join(nums) if len(nums) == 2 else "rows " + ", ".join(nums[:-1]) + " and " + nums[-1]
+
+
+def _column_key(model: SceneModel, raw: str) -> str | None:
+    """A column's key from its number or header; with more than one table, `2.3` is the third column of the second
+    and a header names its first table that has it."""
+    text = raw.strip().strip("\"'“”‘’").strip()
+    many = len(model.headers) > 1
+    pair = re.fullmatch(r"(\d+)\.(\d+)", text)
+    key = None
+    if pair and many:
+        key = f"col#{pair[1]}.{pair[2]}"
+    elif text.isdigit():
+        key = f"col#1.{text}" if many else f"col#{text}"
+    else:
+        for t, heads in enumerate(model.headers):
+            c = next((c for c, h in enumerate(heads, 1) if fold(h) and fold(h) == fold(text)), None)
+            if c:
+                key = f"col#{t + 1}.{c}" if many else f"col#{c}"
+                break
+    return key if key in model.keys else None
+
+
+def _resolve_row(model: SceneModel, text: str, raw: str, title: str, dropped: str) -> tuple[list[str], str | None]:
+    """One row: by its number, else by text (a first cell, any cell no other row has, or the first and second cell
+    together), a quoted text first. Text that names more than one row is refused, never guessed."""
+    quoted = re.fullmatch(r"(?:\"(.+)\"|“(.+)”|'(.+)')", text.strip())
+    word = next((g for g in quoted.groups() if g), None) if quoted else text.strip()
+    if not quoted and word.isdigit() and not (int(word) > len(model.order) and fold(word) in model.names):
+        key = f"row#{int(word)}"
+        if key in model.keys:
+            return [key], None
+        return [], f'"{title}" has {len(model.order)} rows, not row {int(word)}; dropped'
+    if fold(word) in model.ambiguous:
+        return [], (f'"{raw}" in "{title}" names {_says(model.ambiguous[fold(word)])}; '
+                    'say the row by its number, or by its first and second cell like "first / second"; dropped')
+    if fold(word) in model.names:
+        return [model.names[fold(word)]], None
+    key = _closest(model, word)
+    return ([key], f'"{raw}" in "{title}" read as {key}') if key else ([], dropped)
+
+
+def _resolve_rows(model: SceneModel, raw: str, title: str, dropped: str) -> tuple[list[str], str | None]:
+    """A table board's targets: row N, rows A-B, rows 2,5, row "text", cell R / C, cells R / C; R / C, column X."""
+    if (m := _CELLS.fullmatch(raw)):
+        keys, notes = [], []
+        for item in (i for i in re.split(r"\s*;\s*", m["list"]) if i.strip()):
+            got, note = _resolve_rows(model, "cell " + item, title, f'"{item.strip()}" in "{title}" matches nothing; dropped')
+            keys += [k for k in got if k not in keys]
+            notes += [note] if note else []
+        return keys, "; ".join(notes) or None
+    if (cell := _CELL.fullmatch(raw)):
+        row, note = _resolve_row(model, cell["r"], raw, title, dropped)
+        if not row and any(_column(model, cell["r"], t) for t in range(max(1, len(model.headers)))):
+            swapped, _ = _resolve_row(model, cell["c"], raw, title, dropped)  # written column first, then row
+            if swapped:
+                row, note = swapped, None
+                cell = {"r": cell["c"], "c": cell["r"]}
+        if not row:
+            return [], note
+        r = int(row[0].split("#")[1])
+        col = _column(model, cell["c"], model.row_table.get(row[0], 0))
+        key = f"cell#{r}.{col}" if col else None
+        return ([key], note) if key in model.keys else ([], dropped)
+    if (m := _COLUMN.fullmatch(raw)):
+        keys, notes = [], []
+        for item in (i for i in re.split(r"\s*[,;]\s*", m["list"]) if i.strip()):
+            key = _column_key(model, item)
+            if key is None:
+                notes.append(f'no column {item.strip()} in "{title}"')
+            elif key not in keys:
+                keys.append(key)
+        return keys, "; ".join(notes) or None
+    if (m := _ROW_LIST.fullmatch(raw)):
+        keys = []
+        for part in m["list"].split(","):
+            a, _, b = part.replace("–", "-").partition("-")
+            lo, hi = sorted((int(a), int(b or a)))
+            keys += [f"row#{k}" for k in range(lo, hi + 1) if f"row#{k}" not in keys]
+        if all(k in model.keys for k in keys):
+            return keys, None
+        return [], f'"{title}" has {len(model.order)} rows, not {raw.strip()}; dropped'
+    m = _ROW.fullmatch(raw)
+    if m and m["n"]:
+        a, b = sorted((int(m["n"]), int(m["n2"] or m["n"])))
+        keys = [f"row#{n}" for n in range(a, b + 1)]
+        if all(k in model.keys for k in keys):
+            return keys, None
+        if a == b and fold(m["n"]) in model.names:
+            return [model.names[fold(m["n"])]], None  # a row whose first cell is the number
+        said = f"row {a}" if a == b else f"rows {a}-{b}"
+        return [], f'"{title}" has {len(model.order)} rows, not {said}; dropped'
+    text = (m["q"] or m["c"] or m["s"] or m["bare"]) if m else raw
+    return _resolve_row(model, '"' + text + '"', raw, title, dropped)
+
+
 def resolve(model: SceneModel, raw: str, title: str) -> tuple[list[str], str | None]:
     raw = raw.strip()
     dropped = f'"{raw}" in "{title}" matches nothing; dropped'
@@ -684,29 +926,14 @@ def resolve(model: SceneModel, raw: str, title: str) -> tuple[list[str], str | N
         inside = [i for i, k in enumerate(model.keys) if k.startswith("line:") and a <= int(k[5:]) <= b]
         keys = model.keys[inside[0]:inside[-1] + 1] if inside else []
         return (keys, None) if keys else ([], f'"{raw}" is outside the lines of "{title}"; dropped')
-    if model.kind == "rows" and (cell := _CELL.fullmatch(raw)):
-        row, _ = resolve(model, "row " + cell["r"].strip(), title)
-        col = _column(model, cell["c"])
-        key = f"cell#{row[0].split('#')[1]}.{col}" if row and col else None
-        return ([key], None) if key in model.keys else ([], dropped)
     if model.kind == "rows":
-        m = _ROW.fullmatch(raw)
-        if m and m["n"]:
-            a, b = sorted((int(m["n"]), int(m["n2"] or m["n"])))
-            keys = [f"row#{n}" for n in range(a, b + 1)]
-            if all(k in model.keys for k in keys):
-                return keys, None
-            said = f"row {a}" if a == b else f"rows {a}-{b}"
-            return [], f'"{title}" has {len(model.order)} rows, not {said}; dropped'
-        text = (m["q"] or m["c"] or m["s"] or m["bare"]) if m else raw
-        if fold(text) in model.names:
-            return [model.names[fold(text)]], None
-        key = _closest(model, text)
-        return ([key], f'"{raw}" in "{title}" read as {key}') if key else ([], dropped)
+        return _resolve_rows(model, raw, title, dropped)
     if model.kind == "map":  # box ID, zone N, route N
         named = re.fullmatch(r"(box|zone|route)(?:e?s)?\s+(.+)", raw, re.IGNORECASE)
         if named and f"{named[1].lower()}:{named[2].strip()}" in model.keys:
             return [f"{named[1].lower()}:{named[2].strip()}"], None
+    if model.kind == "sequence" and OUTCOME in model.keys and re.fullmatch(r"(?:the\s+)?outcome", raw, re.IGNORECASE):
+        return [OUTCOME], None
     side = "both" if raw.lower() == "merged" else raw.lower()   # merged: the name the side by side board replaced
     if model.kind == "sequence" and f"mode:{side}" in model.keys:  # before, after or both
         return [f"mode:{side}"], None
@@ -741,7 +968,7 @@ def _reveal(model: SceneModel, key: str, shown: set) -> None:
             shown.add(k)
             stack.extend(model.up.get(k, []))
             # a row is shown whole, a part with what it holds, a map's box with its children and a zone with its boxes
-            if k.startswith(("row#", "part:", "box:", "zone:")):
+            if k.startswith(("row#", "col#", "part:", "box:", "zone:")):
                 stack.extend(model.down.get(k, []))
 
 

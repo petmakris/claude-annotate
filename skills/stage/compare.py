@@ -32,7 +32,7 @@ from skills._shared.visuals.sequence import ValidationError
 
 SIDES = ("before", "after")
 SIDE_KEYS = {"label", "actors", "steps"}
-OWN = {"actors", "steps", "phases", "groups", "outcome", "captions"}
+OWN = {"actors", "steps", "phases", "groups", "captions"}
 
 
 def _side(spec: dict, name: str) -> dict:
@@ -50,6 +50,17 @@ def _side(spec: dict, name: str) -> dict:
     except ValidationError as e:
         raise ValidationError(f"compare.{name}: {e}") from None
     return side
+
+
+def _outcome(out: Any) -> None:
+    """The outcome box that closes a compare board: {title, lines, tone}, as a sequence's."""
+    if not isinstance(out, dict) or not isinstance(out.get("title"), str):
+        raise ValidationError("outcome is {title, lines, tone}")
+    lines = out.get("lines")
+    if lines is not None and (not isinstance(lines, list) or not all(isinstance(x, str) for x in lines)):
+        raise ValidationError("outcome: lines is a list of text")
+    if out.get("tone") is not None and out["tone"] not in sequence_svg.TONE_MAP:
+        raise ValidationError(f"outcome: unknown tone {out['tone']!r}")
 
 
 def _merge_order(after_keys: list[str], before_keys: list[tuple[str, bool]],
@@ -133,7 +144,10 @@ def compare_spec(spec: dict[str, Any]) -> dict[str, Any]:
     clash = sorted(OWN & set(spec))
     if clash:
         raise ValidationError(f"compare does not take {', '.join(clash)} beside it: actors and steps go inside "
-                              "before and after, and phases, groups, outcome and captions are not supported with it")
+                              "before and after, and phases, groups and captions are not supported with it; outcome is")
+    out_spec = spec.get("outcome")
+    if out_spec is not None:  # one outcome closes the diagram, written and checked as a sequence's is
+        _outcome(out_spec)
     before, after = _side(cmp, "before"), _side(cmp, "after")
     b_ids = {a["id"] for a in before["actors"]}
     a_ids = {a["id"] for a in after["actors"]}

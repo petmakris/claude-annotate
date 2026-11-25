@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from skills.stage import scene
+from skills.stage import compare, scene
 
 EXAMPLE = """flowchart LR
   subgraph adv[":advisory"]
@@ -71,7 +71,8 @@ def test_code_lines_are_always_shown_and_table_rows_can_be_hidden():
     assert lines.keys == ["line:40", "line:41", "line:42"] and not lines.can_hide and lines.order == []
     rows = scene.rows_model(["Azure", "Straße", "azure"])
     assert rows.keys == ["row#1", "row#2", "row#3"] and rows.can_hide and rows.order == rows.keys
-    assert rows.names == {"azure": "row#1", "straße": "row#2"}
+    assert rows.names == {"straße": "row#2"}  # two rows start "azure": the text names neither, and says so
+    assert rows.ambiguous == {"azure": ["row#1", "row#3"]}
 
 
 def verbs(*tags):
@@ -179,11 +180,11 @@ def test_a_board_whose_every_reveal_names_nothing_starts_whole_instead_of_blank(
     table = scene.rows_model(["Speed", "Cost", "Needs"], ["", "Azure", "VoiceStudio"])
     built, notes = scene.compile_scene(table, [verbs("+ row 7"), verbs("focus row 2")], "Engines")
     assert built["start"] == "full" and notes == ['"Engines" has 3 rows, not row 7; dropped']
-    assert [len(f["show"]) for f in built["frames"]] == [12, 12, 12, 12]
+    assert [len(f["show"]) for f in built["frames"]] == [15, 15, 15, 15]  # 3 rows, their 9 cells, 3 columns
     assert built["frames"][2]["focus"] == ["row#2"] and built["frames"][2]["cur"] == ["row#2"]
     # one reveal that does name a part: the board starts empty, and that part comes in with it
     built, _ = scene.compile_scene(table, [verbs("+ row 7"), verbs("+ row 2")], "Engines")
-    assert built["start"] == "empty" and [f["show"][:1] for f in built["frames"]] == [[], [], ["row#2"], ["row#1"]]
+    assert built["start"] == "empty" and [f["show"][:2] for f in built["frames"]] == [[], [], ["row#1", "row#2"], ["row#1", "row#2"]]
 
 
 def test_next_reveals_in_declaration_order_and_says_when_nothing_is_left():
@@ -695,3 +696,76 @@ def test_a_diagram_of_one_part_marks_nothing():
 
 def test_a_sentence_naming_two_parts_equally_marks_the_later_one():
     assert scene.said_parts(_two_parts(), ["Alpha then Beta."]) == {0: ["node:b"]}
+
+
+# -- the table board's model: every table, rows named uniquely, columns, row lists, cell pairs --------------------
+
+GRID = ("| | Azure | Local | Browser |\n|---|---|---|---|\n| Speed | fast | slow | instant |\n| Cost | $16 | $0 | $0 |\n"
+        "| Offline | no | yes | yes |")
+TWO = "| Plan | Old |\n|---|---|\n| Free | 10 |\n| Pro | 100 |\n\n| Plan | New |\n|---|---|\n| Free | 25 |\n| Pro | 250 |"
+
+
+def test_every_table_of_a_body_is_modelled_with_its_rows_numbered_across():
+    tables = scene.parse_tables(TWO + "\n\n```\n| x | y |\n|---|---|\n| 1 | 2 |\n```")
+    assert [t["header"] for t in tables] == [["Plan", "Old"], ["Plan", "New"]]  # a fenced table is code, not a table
+    m = scene.body_model(TWO)
+    assert m.order == ["row#1", "row#2", "row#3", "row#4"] and m.row_table == {"row#1": 0, "row#2": 0, "row#3": 1, "row#4": 1}
+    assert [k for k in m.keys if k.startswith("col#")] == ["col#1.1", "col#1.2", "col#2.1", "col#2.2"]
+    assert scene.resolve(m, "row 3", "T") == (["row#3"], None)
+    assert scene.resolve(m, "cell 4 / New", "T") == (["cell#4.2"], None)  # the column is the one of the row's own table
+    assert scene.resolve(m, "column 2.2", "T") == (["col#2.2"], None)
+    # a later row brings the rows before it, so no row is ever left out of the order
+    built, _ = scene.compile_scene(m, [[scene.parse_verb("+ row 4")]], "T")
+    assert [k for k in built["frames"][1]["show"] if k.startswith("row#")] == ["row#1", "row#2", "row#3", "row#4"]
+
+
+def test_a_row_is_named_by_any_text_no_other_row_has_and_a_text_two_rows_have_is_refused():
+    m = scene.body_model("| Plan | Region | Limit |\n|---|---|---|\n| Free | EU | 10 |\n| Free | US | 20 |\n| Pro | EU | 100 |")
+    assert m.names["us"] == "row#2" and m.names["free / us"] == "row#2" and m.names["pro"] == "row#3"
+    assert m.ambiguous == {"free": ["row#1", "row#2"], "eu": ["row#1", "row#3"]}
+    assert scene.resolve(m, 'row "Free"', "T") == (
+        [], '"row "Free"" in "T" names rows 1 and 2; say the row by its number, or by its first and second cell like "first / second"; dropped')
+    assert scene.resolve(m, "row Free / EU", "T") == (["row#1"], None)  # the first and the second cell together
+    assert scene.resolve(m, "row 100", "T") == (["row#3"], None)  # a number that is no row's index is the text of one
+    assert scene.resolve(m, "row 9", "T") == ([], '"T" has 3 rows, not row 9; dropped')
+
+
+def test_a_column_a_list_of_rows_and_a_pair_of_cells_resolve_to_their_keys():
+    m = scene.body_model(GRID)
+    assert scene.resolve(m, "column Azure", "T") == (["col#2"], None)
+    assert scene.resolve(m, "columns Local, 4", "T") == (["col#3", "col#4"], None)
+    assert scene.resolve(m, "column Nope", "T") == ([], 'no column Nope in "T"')
+    assert scene.resolve(m, "rows 1, 3", "T") == (["row#1", "row#3"], None)
+    assert scene.resolve(m, "rows 1-2, 3", "T") == (["row#1", "row#2", "row#3"], None)
+    assert scene.resolve(m, "rows 1, 7", "T") == ([], '"T" has 3 rows, not rows 1, 7; dropped')
+    assert scene.resolve(m, "cells Cost / Azure; Offline / Local", "T") == (["cell#2.2", "cell#3.3"], None)
+    assert scene.resolve(m, "cell Azure / Cost", "T") == (["cell#2.2"], None)  # written column first: still that cell
+    # a column brings every row of its table; a column pointed at alone says no row
+    built, _ = scene.compile_scene(m, [[scene.Verb("focus", targets=["column Local"])]], "T")
+    assert built["start"] == "full" and built["frames"][1]["focus"] == ["col#3"] and built["frames"][1]["cur"] == ["col#3"]
+    built, _ = scene.compile_scene(m, [[scene.parse_verb("+ row 1")], [scene.Verb("focus", targets=["column Local"])]], "T")
+    assert [k for k in built["frames"][2]["show"] if k.startswith("row#")] == ["row#1", "row#2", "row#3"]
+
+
+def test_a_pipe_in_a_code_span_or_after_a_backslash_stays_in_its_cell_and_markup_is_read_as_words():
+    assert scene.split_cells("| `a|b` | x \\| y | z |") == ["`a|b`", "x | y", "z"]
+    assert scene.split_cells("a | b") == ["a", "b"]
+    assert scene.split_cells("| `open | b |") == ["`open", "b"]  # an unclosed tick does not swallow the row
+    assert scene.plain_cell("**bold** `code` [text](http://x) <b>raw</b>") == "bold code text raw"
+
+
+def test_a_compare_board_may_close_with_an_outcome_which_is_a_part_the_voice_can_point_at():
+    UI, SVC = {"id": "ui", "label": "UI"}, {"id": "svc", "label": "Service"}
+    step = lambda sid, a, b, label: {"id": sid, "from": a, "to": b, "arrow": "request", "label": label}
+    cmp_spec = {"compare": {"before": {"actors": [UI, SVC], "steps": [step("b1", "ui", "svc", "asks")]},
+                            "after": {"actors": [UI, SVC], "steps": [step("b1", "ui", "svc", "asks again")]}},
+                "outcome": {"title": "Same call, one fewer hop", "lines": ["faster"], "tone": "green"}}
+    spec = compare.compare_spec(cmp_spec)
+    assert spec["outcome"] == cmp_spec["outcome"]
+    m = scene.sequence_model(spec)
+    assert m.order[-1] == "outcome:end" and "outcome:end" in m.keys
+    assert scene.resolve(m, "outcome", "T") == (["outcome:end"], None)
+    assert scene.resolve(m, "Same call, one fewer hop", "T") == (["outcome:end"], None)
+    built, _ = scene.compile_scene(m, [[scene.parse_verb("+ b1")], [scene.parse_verb("focus outcome")]], "T")
+    assert "outcome:end" not in built["frames"][1]["show"] and built["frames"][2]["focus"] == ["outcome:end"]
+    assert built["frames"][2]["cur"] == ["outcome:end"] and "outcome:end" in built["frames"][2]["show"]
