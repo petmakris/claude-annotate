@@ -18,7 +18,7 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"system"');
 <div class="app" id="app" data-state="idle">
   <nav class="skip" id="skip" aria-label="Skip links"><a href="#text" id="skipmsg">Skip to the message</a><a href="#playpause" id="skipplay">Skip to the player</a></nav><!-- I: the way past the stage and the answers -->
   <div class="frame"><div class="stage">
-    <div class="stagewrap" id="stagewrap"><iframe id="stage" title="Stage" allow="clipboard-read; clipboard-write"></iframe>
+    <div class="stagewrap" id="stagewrap" role="region" aria-label="Stage"><iframe id="stage" title="Stage" allow="clipboard-read; clipboard-write"></iframe>
       <div class="veil" id="veil"><div class="loading" id="veilwait"><span class="spin"></span>Loading the stage…</div>
         <div class="failed" id="veilfail" hidden><p>The stage did not load.</p><div><button class="btn" id="reloadstage" type="button">Reload stage</button><a class="btn" id="openstage" target="_blank" rel="noopener">Open in a new tab</a></div></div></div></div>
     <p class="nostage" id="nostage" hidden>The stage is not available for this call.</p>
