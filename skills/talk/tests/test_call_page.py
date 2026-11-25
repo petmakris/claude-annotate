@@ -321,6 +321,28 @@ def test_a_say_back_waits_for_the_answer_in_the_text_field_and_sends_its_questio
                            "Type, or press the mic"]]
 
 
+LIVE_HEARS = """
+globalThis.fetch = (inner => async (path, opts = {}) => {
+  if (String(path).startsWith("/api/listen")) {
+    sentTo.push([String(path), null]);
+    return { ok: true, status: 200, json: async () => ({ text: "it names the old sticker", entry: { id: 9 } }) };
+  }
+  return inner(path, opts);
+})(globalThis.fetch);
+"""
+
+
+def test_a_say_back_spoken_in_live_mode_sends_its_question_and_clears_the_card(tmp_path):
+    html, states = served(tmp_path, ["The template names one sticker. [[say back: What does hard-coded mean here]]"], seconds=4.0)
+    page = CallPage(html, states, seconds=4.0).js("await serve(1); await end();").js(LIVE_HEARS)
+    page.check("[$('stopcard').hidden, $('text').placeholder]")
+    page.js("await sendLive({chunks: [new Float32Array(1600)], rate: 16000, gate: false});")
+    page.check("[sentTo.filter(s => s[0].startsWith('/api/listen')).map(s => new URLSearchParams(s[0].split('?')[1]).get('answering')),"
+               " $('stopcard').hidden, $('text').placeholder]")
+    assert page.run() == [[False, "Say it in your own words, then Send"],
+                          [["What does hard-coded mean here?"], True, "Type, or press the mic"]]
+
+
 def test_the_stage_never_runs_past_a_guess_the_reader_has_not_answered(tmp_path):
     scene = ('[[show scene | Ben]] <section data-part="data" data-name="the data">x</section>'
              '<section data-part="pdf" data-name="the PDF">Old name</section> [[/show]] ')

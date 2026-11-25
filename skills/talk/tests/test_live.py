@@ -205,3 +205,18 @@ def test_a_live_turn_makes_one_moment_once_in_the_calls_voice(tmp_path):
 
     filler, made, status = run(go())
     assert filler.startswith("audio/filler.") and made == 1 and status == 200
+
+
+def test_a_live_say_back_keeps_the_question_it_answers(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            fake.heard = "it names the old sticker"
+            out = await _listen(client, "/api/listen?live=1&answering=What+does+hard-coded+mean+here%3F")
+            plain = await _listen(client)
+            turn = await (await client.get("/api/turn?wait=1", headers=AUTH)).json()
+            return out, plain, turn["said"], call.entries[-2]
+
+    out, plain, said, entry = run(go())
+    assert out["entry"] is not None and plain["entry"] is not None
+    assert entry["answering"] == "What does hard-coded mean here?"
+    assert said[0]["answering"] == "What does hard-coded mean here?" and "answering" not in said[1]

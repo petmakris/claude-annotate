@@ -3133,7 +3133,9 @@ def build_app(server: Server):
             if dangling(text):
                 call.live_hold(text, interrupted)
                 return web.json_response({"text": text, "held": True})
-        return web.json_response({"text": text, "entry": call.offer(text, typed=False, interrupted=interrupted, live=live)})
+        answering = q.get("answering", "").strip()[:400] or None  # live: the [[say back]] question it answers
+        return web.json_response({"text": text, "entry": call.offer(text, typed=False, interrupted=interrupted, live=live,
+                                                                    answering=answering)})
 
     async def demo(request):
         """The gear's Stage demo: the demo call that is open, else a new one, for the page to open in a tab."""

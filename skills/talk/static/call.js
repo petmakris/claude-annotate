@@ -1580,6 +1580,8 @@ async function sendLive(u) {
   const q = new URLSearchParams({lang: language, live: "1"});
   if (u.over) { q.set("interrupted", u.over.id); q.set("at", u.over.at); }
   if (u.gate) q.set("keyword", "1");
+  const sayingBack = answering;  // the [[say back]] question this utterance may answer: it goes with the turn
+  if (sayingBack) q.set("answering", sayingBack);
   if (!u.gate) { busy = true; paintAll(); }
   const wav = toWav(u.chunks, u.rate);
   let body = null;
@@ -1618,6 +1620,7 @@ async function sendLive(u) {
     chime(520);
     undoable = {entry: body.entry.id, until: Date.now() + 8000}; setTimeout(paintAll, 8100);
     turnSentAt = Date.now();
+    if (sayingBack && answering === sayingBack) { answering = null; $("text").placeholder = "Type, or press the mic"; clearStop(); }
     view.v = -1; if (wake) wake();
   } else if (body && !body.ignored && !u.over) flash("Didn't catch that.");
   paintAll();
