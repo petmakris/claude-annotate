@@ -225,7 +225,7 @@ The call page sends your words to the talk server, on port 8766. The talk server
 The L1 cache answers in about one nanosecond. [[point: bar l2]] The L2 cache takes four. [[point: bar ram]] Main memory takes a hundred, and that is the miss.
 ```
 
-**A graph**: commits or a tree, before and after. A node is `new` (after only), `ghost` (still there, faint, after) or `struck` (removed, after); its `lane` is the row it sits in:
+**A graph**: commits or a tree, before and after. A node is `new` (after only), `ghost` (still there, faint, after) or `struck` (removed, after): mark every node the change replaces or removes, or it stays in the after as current. Its `lane` is the row it sits in:
 
 ```
 [[show graph | Rebase]] {"title": "A rebase copies your commits onto the new tip",

@@ -88,7 +88,7 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 - `note` is a second line under the label: the place for a number you say ("about four cycles").
 - Each bar's `label` is words you will say, and different from the others' (`L1 cache`, `L2 cache`, never `cache` twice).
 - A `threshold` is one optional dashed line. There are no series and no markers.
-- At most 24 bars. Cut it to the ones that carry the argument.
+- A label is at most 48 characters and a note 90: each is one line. At most 24 bars. Cut it to the ones that carry the argument.
 - Each bar arrives with the sentence that names it. Points: `[[point: bar ram]]`, `[[point: rows 2-3]]`. The rest view shows every row.
 - A name that is nearly an id is read as it, with a `board:` line. One that is not names the ids the board has.
 
@@ -99,6 +99,7 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 - A `lane` is the row a node sits in (a branch name, or a level of a tree). Lanes run top to bottom in the order they first appear, or in `lanes`. A node's column is how many parents deep it is.
 - Leave `lane` out of every node and the rows are made for you, one per leaf, as a tree is drawn.
 - `state` is `same` (default), `new` (in the after only), `ghost` (there before, and after faint and dashed: still there, but nothing reaches it) or `struck` (there before, struck through after: removed).
+- A node a change replaces or removes is `ghost` or `struck`: a node left `same` stays in the after as it was, so the old and the new would both show as current.
 - With every node `same` the board is one graph. With any other state it is a before and an after, one above the other, and `[[point: before]]`, `[[point: after]]` and `[[point: both]]` point at a frame.
 - On a phone one frame shows at a time, with a switch, and the node being said stays in view.
 - Give a ghost its own lane to keep it clear of the copy that replaces it. Nodes that share a column and a lane stack in it.

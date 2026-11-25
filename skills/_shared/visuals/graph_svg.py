@@ -144,6 +144,8 @@ def validate(spec: dict[str, Any]) -> None:
             raise ValidationError(f"edge {e['from']!r} -> {e['to']!r} is given twice")
         seen.add((e["from"], e["to"]))
         _text_field(e, "label", f"edge {i}")
+    if all(n.get("state", "same") == "new" for n in nodes) and len(nodes) > 0 and any(n.get("state") == "new" for n in nodes):
+        raise ValidationError("every node is new, so there is nothing in the before: mark what was there `same`, `ghost` or `struck`")
     cycle = _find_cycle(ids, edges)
     if cycle:
         raise ValidationError("the edges go round a cycle: " + " -> ".join(cycle)

@@ -40,6 +40,7 @@ def with_(**change):
     (with_(nodes=[{"id": "a", "label": "A", "lane": "main", "state": "gone"}], edges=[]), "node 'a': unknown state 'gone'"),
     (with_(nodes=[{"id": "a", "label": "A", "lane": "other"}], edges=[]), "node 'a': lane 'other' is not in lanes"),
     (with_(nodes=[]), "graph needs at least 1 node"),
+    (with_(nodes=[{"id": "a", "label": "A", "lane": "main", "state": "new"}], edges=[], lanes=None), "every node is new, so there is nothing in the before"),
     (with_(nodes=[{"id": f"n{i}", "label": "x", "lane": "main"} for i in range(41)], edges=[]), "graph has 41 nodes, at most 40"),
     (with_(nodes=[{"id": "a", "label": "", "lane": "main"}], edges=[]), "node 'a': label must be text"),
 ])

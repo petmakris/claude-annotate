@@ -44,6 +44,7 @@ TICK_H = 30
 MIN_PITCH, MAX_PITCH = 54, 104
 FILL_H = 520          # rows share about this much height, so a short board has tall rows and fills the pane
 MAX_BARS = 24
+MAX_LABEL, MAX_NOTE = 48, 90   # characters: a label and a note are one line each on the canvas
 MIN_BAR = 3.0         # a bar is never shorter, so a small value is still a bar
 SCALES = ("linear", "log")
 
@@ -95,6 +96,10 @@ def validate(spec: dict[str, Any]) -> None:
         where = f"bar {bid!r}"
         _text_field(b, "label", where, True)
         _text_field(b, "note", where)
+        for field, most in (("label", MAX_LABEL), ("note", MAX_NOTE)):
+            if len(b.get(field) or "") > most:
+                raise ValidationError(f"{where}: {field} is {len(b[field])} characters, at most {most}: "
+                                      + ("a label is a few words you will say" if field == "label" else "a note is one short line, the number you say"))
         if b.get("tone", "plain") not in TONES:
             raise ValidationError(f"{where}: unknown tone {b.get('tone')!r}; the tones are {', '.join(TONES)}")
         v = b.get("value")

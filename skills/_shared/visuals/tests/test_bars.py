@@ -36,6 +36,8 @@ def broken(**change):
     (broken(markers=[1]), "bars has no markers"),
     (broken(bars=[{"id": f"b{i}", "label": "x", "value": 1} for i in range(25)]), "bars has 25 bars, at most 24"),
     (broken(threshold={"value": 0, "label": "x"}), "threshold 0 is not above zero"),
+    (broken(bars=[{"id": "w", "label": "x" * 49, "value": 1}]), "bar 'w': label is 49 characters, at most 48"),
+    (broken(bars=[{"id": "w", "label": "x", "value": 1, "note": "y" * 91}]), "bar 'w': note is 91 characters, at most 90"),
 ])
 def test_a_spec_the_board_cannot_draw_honestly_is_refused_naming_the_bar(spec, why):
     with pytest.raises(bars_svg.ValidationError) as err:
