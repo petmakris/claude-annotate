@@ -1,5 +1,5 @@
 import json,os,subprocess,html,collections
-R='/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125'
+R='~/projects/dashboard/.scratch/bulldozer-talk-bd1125'
 E=R+'/evidence/'
 led=json.load(open(R+'/ledger.json'))['findings']
 def img(rel):

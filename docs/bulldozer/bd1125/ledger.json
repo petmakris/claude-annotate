@@ -35,7 +35,7 @@
    "felt_evidence": {
     "selector": ".board",
     "shots": {
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-1/after"
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-1/after"
     },
     "measure": {
      "what": "answers using a table board",
@@ -846,7 +846,7 @@
    "felt_evidence": {
     "selector": ".board",
     "shots": {
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-2/after"
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-2/after"
     },
     "measure": {
      "what": "answers using a table board",
@@ -889,7 +889,7 @@
    "felt_evidence": {
     "selector": ".board",
     "shots": {
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-3/after"
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-3/after"
     },
     "measure": {
      "what": "answers using a table board",
@@ -932,7 +932,7 @@
    "felt_evidence": {
     "selector": ".board",
     "shots": {
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-4/after"
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-4/after"
     },
     "measure": {
      "what": "answers using a table board",
@@ -1718,7 +1718,7 @@
    "felt_evidence": {
     "selector": ".board",
     "shots": {
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-5/after"
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-5/after"
     },
     "measure": {
      "what": "answers using a table board",
@@ -1761,7 +1761,7 @@
    "felt_evidence": {
     "selector": ".board",
     "shots": {
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-6/after"
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-6/after"
     },
     "measure": {
      "what": "answers using a table board",
@@ -1804,7 +1804,7 @@
    "felt_evidence": {
     "selector": ".board",
     "shots": {
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-7/after"
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-7/after"
     },
     "measure": {
      "what": "answers using a table board",
@@ -1847,7 +1847,7 @@
    "felt_evidence": {
     "selector": ".board",
     "shots": {
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-8/after"
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-8/after"
     },
     "measure": {
      "what": "answers using a table board",
@@ -1890,7 +1890,7 @@
    "felt_evidence": {
     "selector": ".board",
     "shots": {
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-9/after"
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-9/after"
     },
     "measure": {
      "what": "answers using a table board",
@@ -2019,7 +2019,7 @@
    "felt_evidence": {
     "selector": ".board",
     "shots": {
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-10/after"
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-guidance-10/after"
     },
     "measure": {
      "what": "answers using a table board",
@@ -2059,7 +2059,7 @@
    "felt_evidence": {
     "selector": ".board",
     "shots": {
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-trial-t2-2/after"
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-trial-t2-2/after"
     },
     "measure": {
      "what": "answers using a table board",
@@ -2146,7 +2146,7 @@
    "felt_evidence": {
     "selector": ".board",
     "shots": {
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-idea-board-choice/after"
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-idea-board-choice/after"
     },
     "measure": {
      "what": "answers using a table board",
@@ -2182,7 +2182,7 @@
    "felt_evidence": {
     "selector": ".board",
     "shots": {
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-idea-visual-first/after"
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r1-idea-visual-first/after"
     },
     "measure": {
      "what": "answers using a table board",
@@ -2201,7 +2201,7 @@
    ],
    "title": "The 'Claude has not picked this up' warning never reaches a page that polls: the state stamp ignores the clock-driven stalled flag",
    "where": "skills/talk/talk.py:2654 Server.stamp; live_turns.py:151 TurnQueue.stalled; call.js pollOnce",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/server/x6.py: stalled flips at 20 s, GET /api/state?v=<stamp> answers same:true at 11, 22, 33 s",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/server/x6.py: stalled flips at 20 s, GET /api/state?v=<stamp> answers same:true at 11, 22, 33 s",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Put call.turns.stalled (and any clock-derived field of view()) in the stamp signature. Guard: fake-clock test that the stamp differs before and after STALLED_AFTER.",
@@ -2232,7 +2232,7 @@
    ],
    "title": "A session that dies or is interrupted after collecting a turn leaves the call 'working' for ever, never stalled",
    "where": "skills/talk/live_turns.py:147-158; talk.py Call.view",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/server/x3.py: working=True stalled=False at 0.01 h, 1 h, 10 h",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/server/x3.py: working=True stalled=False at 0.01 h, 1 h, 10 h",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Stalled also when open_ids non-empty, no doorbell waits and nothing heard for STALLED_OPEN_AFTER; expose a 'listening' flag in view().",
@@ -2263,7 +2263,7 @@
    ],
    "title": "A call's stage that webcompanion finished (12 h idle expiry) stays dead: every later board fails and nothing recovers it",
    "where": "skills/talk/talk.py:2492 put_on_stage, 3264 open_call; stage.py show",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/server/x8.py: board_problems \"stage session ... was ended (finished)\"",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/server/x8.py: board_problems \"stage session ... was ended (finished)\"",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "On 'ended (finished)' call unfinish(sid) once and retry; touch the stage from the call's poll so expiry never fires on an open call. Test with a stubbed wc.",
@@ -2295,7 +2295,7 @@
    ],
    "title": "A reply made only of boards or keys consumes the turn and says nothing: no entry, no cues, no audio, answer number reused",
    "where": "skills/talk/talk.py:2449 Call.answer, post_reply after accept_reply",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/server/x1.py",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/server/x1.py",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "When shown is empty add a board problem 'a board needs a sentence' and accept the turn only after answer succeeded.",
@@ -2311,7 +2311,7 @@
    "guard": {
     "test": "skills/talk/tests/test_r4_server.py::test_a_reply_of_only_a_board_is_refused_and_the_turn_stays_open",
     "file": "skills/talk/tests/test_r4_server.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "A reply of only boards is now refused with \"a board needs a sentence\" and the turn stays open; no answer number is lost."
   },
@@ -2323,7 +2323,7 @@
    ],
    "title": "The floor stays with an ended call, so the user's other call is treated as 'elsewhere' (no autoplay, mic parked)",
    "where": "skills/talk/talk.py:2637 take_floor, 2536 Call.end",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/server/x4.py: floor_call stays A 9.5 s after End call",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/server/x4.py: floor_call stays A 9.5 s after End call",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Release the floor when the holder ends; bump floor_n.",
@@ -2345,7 +2345,7 @@
    ],
    "title": "A failed speech request is final: no retry and no way to read the answer aloud again",
    "where": "skills/talk/talk.py:2458-2485 Call.speak; speech.py",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/server/x10.py: speech=failed stays; /api/speak, /api/retry 404",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/server/x10.py: speech=failed stays; /api/speak, /api/retry 404",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "One automatic retry for transient errors (429, 5xx, cannot reach) and a /api/speak {entry} the play button calls when speech is failed.",
@@ -2361,7 +2361,7 @@
    "guard": {
     "test": "skills/talk/tests/test_r4_server.py::test_speech_is_tried_once_more_for_a_transient_error_and_not_for_others; test_speak_again_reads_a_failed_answer_and_refuses_the_rest",
     "file": "skills/talk/tests/test_r4_server.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "A transient speech failure retries once by itself, and POST /api/speak re-reads a failed answer; the play button in call.js is the frontend job's.",
    "felt_evidence": {
@@ -2393,7 +2393,7 @@
    "guard": {
     "test": "skills/talk/tests/test_talk_activity.py::test_a_command_that_only_mentions_the_doorbell_does_not_set_doorbell",
     "file": "skills/talk/tests/test_talk_activity.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "A grep or echo that names the doorbell no longer steals the call from the real session."
   },
@@ -2421,7 +2421,7 @@
    "guard": {
     "test": "skills/talk/tests/test_talk_activity.py::test_the_shim_exits_in_sh_without_starting_python_when_no_call_file_exists",
     "file": "skills/talk/tests/test_talk_activity.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "The hook no longer starts python on every tool call when no call is open."
   },
@@ -2449,7 +2449,7 @@
    "guard": {
     "test": "skills/talk/tests/test_r4_server.py::test_the_call_page_returns_at_once_while_the_key_command_runs",
     "file": "skills/talk/tests/test_r4_server.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "The call page no longer freezes the server for up to 20 s while the key command runs."
   },
@@ -2477,7 +2477,7 @@
    "guard": {
     "test": "skills/talk/tests/test_r4_server.py::test_reply_then_reply_end_still_ends_the_call",
     "file": "skills/talk/tests/test_r4_server.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "reply --end after an answered turn still says its wrap-up and ends the call."
   },
@@ -2505,7 +2505,7 @@
    "guard": {
     "test": "skills/talk/tests/test_r4_server.py::test_the_answer_on_stdin_is_read_as_utf8_whatever_the_locale",
     "file": "skills/talk/tests/test_r4_server.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "Greek on stdin under a POSIX locale is read as UTF-8 instead of becoming mojibake and a 500."
   },
@@ -2517,7 +2517,7 @@
    ],
    "title": "An answer that opens with its board blanks the stage for the lead-in of the voice (about 0.3 s) at every start and replay",
    "where": "skills/talk/static/call.js paintReader (pos, c.at <= pos)",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/callpage/drv/s13.py, s13b/blank.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/callpage/drv/s13.py, s13b/blank.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Before the first word take pos as 0 when the audio plays. Guard: node test, first word at 0.25 s, reader class at 0.05 s.",
@@ -2548,7 +2548,7 @@
    ],
    "title": "A long identifier, path or URL is one unbreakable word: it runs off the strip and the lit word is out of sight",
    "where": "skills/talk/static/call.css .reader .rtext; call.js buildReader",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/callpage/drv/s12.py: scrollWidth 994 vs 390",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/callpage/drv/s12.py: scrollWidth 994 vs 390",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "overflow-wrap:anywhere on .reader .rtext; keepWordInStrip scrolls horizontally when a word is wider than the box.",
@@ -2579,7 +2579,7 @@
    ],
    "title": "The browser blocked playback message is shown when the audio file cannot be loaded, and again at every press",
    "where": "skills/talk/static/call.js load()",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/callpage/drv/s11.py",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/callpage/drv/s11.py",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Add an error listener on #audio with specific messages and a Retry; keep 'blocked' for NotAllowedError.",
@@ -2607,7 +2607,7 @@
    ],
    "title": "The newest message is cut off at the bottom while Claude works when the conversation overflows",
    "where": "skills/talk/static/call.js render() scrollTop before paintAll",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/callpage/drv/s7b.py: gap 27 px for 20 s",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/callpage/drv/s7b.py: gap 27 px for 20 s",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Scroll to the end after paintAll or use a ResizeObserver on the foot.",
@@ -2635,7 +2635,7 @@
    ],
    "title": "A natural paraphrase lights the wrong part: a part named by one word of two is dropped and handed to the next sentence by order",
    "where": "skills/stage/scene.py:1090 names_part and by-order fallback; talk.py by_order_problem:1154",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/engine/f5.txt, out/f5/d03-point.png: hit and miss swapped",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/engine/f5.txt, out/f5/d03-point.png: hit and miss swapped",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Name a part by a distinctive word of its label that no other part holds, run before the by-order fallback; never give a part to a sentence that names another part; show an unnamed part with the rest frame, not by order.",
@@ -2698,7 +2698,7 @@
    ],
    "title": "Greek and other inflected labels never match their sentence: stem rule only strips a final s or e",
    "where": "skills/stage/scene.py:1067 _same, names_part",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/engine/gr.txt: 2 of 5 parts unmatched",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/engine/gr.txt: 2 of 5 parts unmatched",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Match folded words by a shared prefix of at least 5 letters or 70 percent in any alphabet.",
@@ -2726,7 +2726,7 @@
    ],
    "title": "The answer rules the skill states are not checked: late board, five key points and a 16-word title pass with no board: line",
    "where": "skills/talk/talk.py split_reply; SKILL.md Writing the answer",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/engine/o1.txt, q1.txt",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/engine/o1.txt, q1.txt",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Three board: nudges (board after N sentences, N key points, title word count), never refusals.",
@@ -2742,7 +2742,7 @@
    "guard": {
     "test": "skills/talk/tests/test_r4_engine.py::test_a_board_after_a_lead_in_of_sentences_gets_a_nudge_and_one_claim_sentence_does_not",
     "file": "skills/talk/tests/test_r4_engine.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "A first board after more than one sentence gets a board: line (threshold MAX_LEAD_SENTENCES=1, from SKILL.md); never a refusal.",
    "felt_evidence": {
@@ -2758,7 +2758,7 @@
    ],
    "title": "Markdown the session writes is shown literally in captions and transcript while only the voice is cleaned",
    "where": "skills/talk/talk.py:379 speakable; shown text and stage:caption",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/engine/ans/F.txt, out/F/d02-point.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/engine/ans/F.txt, out/F/d02-point.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Strip emphasis, backticks, bullets and link targets from shown text in split_reply and add a board: line.",
@@ -2774,14 +2774,14 @@
    "guard": {
     "test": "skills/talk/tests/test_r4_engine.py::test_markdown_is_taken_out_of_the_shown_text_and_never_out_of_a_board",
     "file": "skills/talk/tests/test_r4_engine.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "Captions and the transcript show plain text: no **, backticks, bullets or link targets; boards keep their cells and lines.",
    "felt_evidence": {
     "selector": "#reader, .caption",
     "shots": {
-     "before_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2-engine-5/before/d01-board.png",
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2-engine-5/after/d01-board.png"
+     "before_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2-engine-5/before/d01-board.png",
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2-engine-5/after/d01-board.png"
     },
     "measure": {
      "what": "raw ** and * and bullet marks in the caption and transcript",
@@ -2799,7 +2799,7 @@
    ],
    "title": "A refused board makes every later point say 'no board has been shown yet'; the unknown-arrow error does not list the arrows",
    "where": "skills/talk/talk.py Board.point; skills/_shared/visuals/sequence.py:72",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/engine/a1.txt",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/engine/a1.txt",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Remember refused boards for the answer and say so; list ARROW_TYPES in the error.",
@@ -2815,13 +2815,13 @@
    "guard": {
     "test": "skills/_shared/visuals/tests/test_diagrams_sequence.py::test_validate_unknown_arrow_message_lists_the_arrows",
     "file": "see notes",
-    "notes": "run alone, fix removed (fails) then restored (passes): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/guard-proof.txt"
+    "notes": "run alone, fix removed (fails) then restored (passes): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/guard-proof.txt"
    },
    "notice": "A sequence with a wrong arrow type is refused with the four arrows named, so an author fixes it in one try.",
    "felt_evidence": {
     "selector": "validate error message",
     "shots": {
-     "after": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/guard-proof.txt"
+     "after": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/guard-proof.txt"
     },
     "before_from": "starting-commit"
    }
@@ -2834,7 +2834,7 @@
    ],
    "title": "Table columns break words in the middle (Frankfur/t, COMPLIANC/E, 12.5/%) on desktop, dark and TV",
    "where": "skills/stage/static/stage.js:560-590 shapeBoard; stage.css:546-547",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/table out-wide/d03-point.png, out-longtext/d03-point.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/table out-wide/d03-point.png, out-longtext/d03-point.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Floor each column at its longest word in px, share only the rest by text length; overflow-wrap:anywhere only for words over 22 characters; harness check no cell scrollWidth > clientWidth.",
@@ -2856,7 +2856,7 @@
    ],
    "title": "A table of three rows or fewer never follows the voice: no row is lit when its name is said",
    "where": "skills/stage/scene.py:1133 auto_steps, :1076 said_parts",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/table a/untagged.txt: frames only board and rest",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/table a/untagged.txt: frames only board and rest",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Add 'rows' to said_parts' kinds so a small table shows whole and lights the row each sentence names.",
@@ -2884,7 +2884,7 @@
    ],
    "title": "Pointing at a column or row by the first word of its header or name is dropped when the header has a unit or the name more words",
    "where": "skills/stage/scene.py:36 _column, :897 _resolve_rows",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/table/probe.py",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/table/probe.py",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Resolve by full text, then without the parenthetical, then unique prefix or whole word, with a 'read as' note.",
@@ -2911,7 +2911,7 @@
    ],
    "title": "On a phone the sticky first column loses its row dividers and drops them on rows with an empty first cell",
    "where": "skills/stage/static/stage.css:569-571 .tablewrap.sticky-key",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/table out-wide/p11-point.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/table out-wide/p11-point.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Draw the row rule on the sticky cell with an inset box-shadow, or border-collapse:separate.",
@@ -2928,7 +2928,7 @@
     "none": "layout only: row rule drawn as an inset box-shadow on the sticky cells (empty first cell included), proven by harness shots"
    },
    "notice": "Sticky first column keeps its row dividers (also on the lit row).",
-   "felt_evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-f-2/after/wide/p11-point.png (cards now; the sticky grid stays for tables that fit)"
+   "felt_evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-f-2/after/wide/p11-point.png (cards now; the sticky grid stays for tables that fit)"
   },
   {
    "id": "bd1125-r2-diagrams-1",
@@ -2938,7 +2938,7 @@
    ],
    "title": "A sequence whose outcome.lines is a string is accepted, then paints a blank stage with no message",
    "where": "skills/_shared/visuals/sequence_svg.py validate; lanes.js:125 outcomeHtml",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/diagrams fuzz2.py, out-seq-weird/d05-rest.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/diagrams fuzz2.py, out-seq-weird/d05-rest.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Validate field types in sequence_svg and map_svg (coerce a string to one line); wrap renderLanes/renderMap in try/catch that posts a failure back.",
@@ -2957,8 +2957,8 @@
     "notes": "fail: 13 failed in 0.55s with lanes.js, stage.css and sequence_svg.py at bd1125 (e.g. test_a_sequences_outcome_has_the_scene_key_and_is_lit_at_rest, test_a_point_on_a_moved_step_lights_its_old_place_and_its_new_one_and_never_a_gap); pass: 13 passed in 0.54s with the fix restored (uv run ... pytest skills/stage/tests/test_r2_sequence.py -q -n 0); 390 px harness: harness/r2b3_seq390_check.py fails on bd1125 (notes missing, outcome invisible at rest) and passes on the fix"
    },
    "felt_evidence": [
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-before.log",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-after.log"
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-before.log",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-after.log"
    ]
   },
   {
@@ -2969,7 +2969,7 @@
    ],
    "title": "Pointing at an edge frames only the target node, so the lit arrow starts off screen",
    "where": "skills/stage/static/map.js camera; stage.js centre",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/diagrams out-flow-big/d05-point.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/diagrams out-flow-big/d05-point.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "On an edge point frame the bounding box of both end nodes and the label.",
@@ -2987,8 +2987,8 @@
    },
    "notice": "Pointing at an arrow keeps its two ends and its label in view together (map.js layoutMap, stage.js withEnds). When the ends are farther apart than the pane is tall the top of the group is kept, so the far end can still be off screen.",
    "felt_evidence": [
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r2-diagrams-2/before/d05-point.png",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r2-diagrams-2/after/d05-point.png"
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r2-diagrams-2/before/d05-point.png",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r2-diagrams-2/after/d05-point.png"
    ]
   },
   {
@@ -2999,7 +2999,7 @@
    ],
    "title": "Before/after board: the two sides are not level when one side has five or more actors",
    "where": "skills/stage/static/lanes.js renderCompare / columns",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/diagrams out-seq-compare/d06-rest.png: 218 vs 316",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/diagrams out-seq-compare/d06-rest.png: 218 vs 316",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "One header height for both panes or the same card mode on both sides.",
@@ -3015,16 +3015,16 @@
    "guard": {
     "test": "skills/stage/tests/test_r4_lanes.py::test_a_compare_board_with_five_actors_on_one_side_has_both_sides_in_the_dense_card_mode",
     "file": "see notes",
-    "notes": "run alone, fix removed (fails) then restored (passes): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/guard-proof.txt"
+    "notes": "run alone, fix removed (fails) then restored (passes): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/guard-proof.txt"
    },
    "notice": "A before/after board with five actors on one side now has both sides in the same card mode and the same key height, so the rows start level.",
    "felt_evidence": {
     "selector": ".visual.lanes",
     "shots": {
-     "before_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/cmp53-before/d02-point.png",
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/cmp53-after/d02-point.png",
-     "before_390": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/cmp53-before/p07-point.png",
-     "after_390": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/cmp53-after/p07-point.png"
+     "before_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/cmp53-before/d02-point.png",
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/cmp53-after/d02-point.png",
+     "before_390": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/cmp53-before/p07-point.png",
+     "after_390": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/cmp53-after/p07-point.png"
     },
     "before_from": "starting-commit"
    }
@@ -3037,7 +3037,7 @@
    ],
    "title": "Before/after: pointing at a moved step lights an empty hatched gap, and rest leaves the before side faded",
    "where": "skills/stage/static/lanes.js compare point; compare.py rows",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/diagrams out-cmp-small/d04-point.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/diagrams out-cmp-small/d04-point.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "A point on a moved step lights both rows with a connector; rest clears all dimming.",
@@ -3056,10 +3056,10 @@
     "notes": "fail: 13 failed in 0.55s with lanes.js, stage.css and sequence_svg.py at bd1125 (e.g. test_a_sequences_outcome_has_the_scene_key_and_is_lit_at_rest, test_a_point_on_a_moved_step_lights_its_old_place_and_its_new_one_and_never_a_gap); pass: 13 passed in 0.54s with the fix restored (uv run ... pytest skills/stage/tests/test_r2_sequence.py -q -n 0); 390 px harness: harness/r2b3_seq390_check.py fails on bd1125 (notes missing, outcome invisible at rest) and passes on the fix"
    },
    "felt_evidence": [
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/cmp-before/d06-point.png",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/cmp-after/d06-point.png",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-before.log",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-after.log"
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/cmp-before/d06-point.png",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/cmp-after/d06-point.png",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-before.log",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-after.log"
    ]
   },
   {
@@ -3070,7 +3070,7 @@
    ],
    "title": "A five-column architecture map is drawn 1818 px wide and shrunk to 8 px text on desktop; on a phone it is cropped mid-map",
    "where": "skills/_shared/visuals/map_svg.py viewBox; stage.css:797-798",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/diagrams out-map-big/d08-rest.png, p16-rest.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/diagrams out-map-big/d08-rest.png, p16-rest.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Choose box width from the pane, keep text at 11 px or more, start phone scroll at the left or reflow.",
@@ -3091,10 +3091,10 @@
    "notice": "A five-column map is now drawn 1165 px wide, not 1818: names and column titles wrap, boxes narrow, so the pane shows its text at about 11 px; one still wider scrolls sideways from its left edge on a desktop. On a phone a wide map is still fitted whole and small.",
    "felt_evidence": {
     "shots": {
-     "before_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/before-map-big/d07-rest.png",
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/final-map-big/d07-rest.png",
-     "after_390": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/final-map-big/p14-rest.png",
-     "after_dark": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/after-map-big/k15-rest.png"
+     "before_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/before-map-big/d07-rest.png",
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/final-map-big/d07-rest.png",
+     "after_390": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/final-map-big/p14-rest.png",
+     "after_dark": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/after-map-big/k15-rest.png"
     },
     "before_from": "starting-commit",
     "selector": ".vzmap svg.vz",
@@ -3114,7 +3114,7 @@
    ],
    "title": "Map arrow labels sit on the wrong lines: route labels stack, one is struck by another arrow, zone captions struck by a dashed arrow",
    "where": "skills/_shared/visuals/map_svg.py label and route placement",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/diagrams out-map-big/d07-point.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/diagrams out-map-big/d07-point.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Place a label at its own segment midpoint, reject positions crossing other arrows or captions.",
@@ -3135,8 +3135,8 @@
    "notice": "Each map arrow label now sits on its own arrow, clear of other arrows, captions, boxes and other labels; where its run has no room it goes to the nearest free spot with a thin line back.",
    "felt_evidence": {
     "shots": {
-     "before_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/before-map-big/d07-rest.png",
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/final-map-big/d07-rest.png"
+     "before_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/before-map-big/d07-rest.png",
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/final-map-big/d07-rest.png"
     },
     "before_from": "starting-commit",
     "measure": {
@@ -3155,7 +3155,7 @@
    ],
    "title": "State machine flowchart: edge labels land on other edges and stack on each other",
    "where": "skills/stage/static/map.js edge labels",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/diagrams out-state/d10-rest.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/diagrams out-state/d10-rest.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Per-edge placement with collision avoidance; fan arrowheads in.",
@@ -3176,10 +3176,10 @@
    "notice": "State-machine labels now sit each on or beside its own arrow, off other labels, parts and arrowheads, and two or more arrows into one part fan their heads in 18 px apart. Some labels still need a short leader line on a crowded board.",
    "felt_evidence": {
     "shots": {
-     "before_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/before-state/d10-rest.png",
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/after2-state/d10-rest.png",
-     "before_390": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/before-state/p20-rest.png",
-     "after_390": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/after2-state/p20-rest.png"
+     "before_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/before-state/d10-rest.png",
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/after2-state/d10-rest.png",
+     "before_390": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/before-state/p20-rest.png",
+     "after_390": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/after2-state/p20-rest.png"
     },
     "before_from": "starting-commit",
     "selector": ".map .m-elabel"
@@ -3193,7 +3193,7 @@
    ],
    "title": "Flowchart nodes have one narrow fixed width, so words break mid-word",
    "where": "skills/stage/static/map.js node width",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/diagrams out-flow-big/d06-point.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/diagrams out-flow-big/d06-point.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Size a node from its longest word (150 to 260 px) and keep trailing punctuation with its word.",
@@ -3212,10 +3212,10 @@
    "notice": "Flowchart parts are as wide as their longest word needs (up to 260 px), so no name breaks in the middle of a word.",
    "felt_evidence": {
     "shots": {
-     "before_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/before-flow-big/d07-rest.png",
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/after2-flow-big/d07-rest.png",
-     "before_390": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/before-flow-big/p14-rest.png",
-     "after_390": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/after2-flow-big/p14-rest.png"
+     "before_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/before-flow-big/d07-rest.png",
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/after2-flow-big/d07-rest.png",
+     "before_390": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/before-flow-big/p14-rest.png",
+     "after_390": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/after2-flow-big/p14-rest.png"
     },
     "before_from": "starting-commit",
     "selector": ".map .m-node b"
@@ -3229,7 +3229,7 @@
    ],
    "title": "A sequence step's ref popup reads .env, .git/config and git-ignored files in the code folder",
    "where": "skills/stage/model.py:step_refs (~685-700)",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/codeboards: refs {path .env, lines [K=v]}",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/codeboards: refs {path .env, lines [K=v]}",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Resolve each ref through locate(root, rel); report a refused ref as a problem; cover compare before: refs. Second door of bd1125-r1-engine-5.",
@@ -3256,7 +3256,7 @@
    ],
    "title": "When a board is refused, later [[point]] tags silently light the previous board of that kind",
    "where": "skills/talk/talk.py Board.point find(title, wanted)",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/codeboards out1/d10-point.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/codeboards out1/d10-point.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Remember refused board titles; drop a pointer after a refused board with a board: line.",
@@ -3288,7 +3288,7 @@
    ],
    "title": "A point at a page board says 'no board has been shown yet', and a partly visible line range is refused whole",
    "where": "skills/talk/talk.py Board.point, point_code",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/codeboards ans2.txt",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/codeboards ans2.txt",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Say the last board is a page; clip a range to the shown lines and say so.",
@@ -3304,7 +3304,7 @@
    "guard": {
     "test": "skills/talk/tests/test_r4_engine.py::test_a_point_at_a_page_says_so_and_a_partly_visible_range_is_clipped; test_an_unknown_flowchart_role_is_a_board_line",
     "file": "skills/talk/tests/test_r4_engine.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "A point at lines partly outside a code board is clipped with a board: line, a point at a page says the last board is a page (the existing \"is a page\" message is pinned), and an unknown flowchart role is named.",
    "felt_evidence": {
@@ -3336,7 +3336,7 @@
    "guard": {
     "test": "skills/stage/tests/test_r4_stage.py::test_a_slug_that_names_no_live_stage_is_exit_2_and_creates_nothing; test_hide_of_an_unknown_name_is_exit_2_with_the_names_that_exist",
     "file": "skills/stage/tests/test_r4_stage.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "stage.py --slug with a typo exits 2 and lists live stages; hide of an unknown name exits 2 and lists the views."
   },
@@ -3348,7 +3348,7 @@
    ],
    "title": "The table gate still matches every comparison and status question: 8 of 18 fresh answers pick a table, and status tables recite their cells",
    "where": "skills/talk/SKILL.md:119, :123-125, :172",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/guidance/trial/a_q*.md, a_w*.md",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/guidance/trial/a_q*.md, a_w*.md",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Narrow the table row to 2 to 4 short measures; at most 4 rows and 4 columns of 1 to 3 words; say the verdict not the cells; status of work goes to flowchart or bars; days and events are lists. SKILL_v2 trial: 8 of 8 to 1 of 8.",
@@ -3370,7 +3370,7 @@
    ],
    "title": "Nothing allows an answer with no board: short turns get a code board, a table or a recap of tool results",
    "where": "skills/talk/SKILL.md:133, :148, :108",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/guidance/trial/a_n1.md ... a_n5.md; 21 of 23 answers carried a board",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/guidance/trial/a_n1.md ... a_n5.md; 21 of 23 answers carried a board",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Add: a turn with nothing for the eye has no board (yes/no, one number, repeat, recap); answer in two or three sentences; limit :148 to what the user works on.",
@@ -3386,7 +3386,7 @@
    "branch": "bd1125-r2-5",
    "guard": "test_the_guide_teaches_the_answer_shape_phases_the_outcome_and_the_map_points + test_the_guide_opens_with_a_decision_table_that_puts_the_table_board_last (skills/talk/tests/test_demo.py). SKILL.md reverted: 2 failed; with fix and restored: 2 passed (evidence/bd1125-r2-idea-answer-shape/guard-runs.txt)",
    "notice": "Table row, no-board rule, :148 limited to files the user works on and asked to see. Fresh-session trial (claude -p, no Azure): table-prone+work-status 8 questions tables 8/8 before, 2/8 after (isolation levels and language comparison keep a table); no-board turns (n1-n5) boards 3/5 before, 0/5 after; 5 shape questions keep their diagram.",
-   "felt_evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r2-idea-answer-shape/"
+   "felt_evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r2-idea-answer-shape/"
   },
   {
    "id": "bd1125-r2-guidance-3",
@@ -3396,7 +3396,7 @@
    ],
    "title": "A rule broken in code is drawn as the dashed red arrow labelled 'never', which reads as 'does not happen'",
    "where": "skills/talk/SKILL.md:141, map example; boards.md Map",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/guidance/trial/r_w5/d08-rest.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/guidance/trial/r_w5/d08-rest.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "A relation that happens and breaks the rule is a solid red arrow labelled 'breaks the rule'; dashed 'never' only when it does not happen. Add example.",
@@ -3418,7 +3418,7 @@
    ],
    "title": "The guide tells sessions to point at `edge a->b` on any diagram, but a map refuses it",
    "where": "skills/talk/SKILL.md:252, :270",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/guidance/trial/r_w5/reply.txt",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/guidance/trial/r_w5/reply.txt",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Split by board kind in the guide; better, accept edge a->b on a map in talk.py point resolution.",
@@ -3434,7 +3434,7 @@
    "branch": "bd1125-r2-5",
    "guard": "test_the_guide_teaches_the_answer_shape_phases_the_outcome_and_the_map_points + test_the_guide_opens_with_a_decision_table_that_puts_the_table_board_last (skills/talk/tests/test_demo.py). SKILL.md reverted: 2 failed; with fix and restored: 2 passed (evidence/bd1125-r2-idea-answer-shape/guard-runs.txt)",
    "notice": "Guide splits point forms by board kind; a map takes box, zone, route and refuses edge a->b (talk.py POINT_FORMS_BY_KIND at bd1125). If b4 makes a map accept edge, the line in SKILL.md 'a map takes only ...' and boards.md Map must change.",
-   "felt_evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r2-idea-answer-shape/"
+   "felt_evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r2-idea-answer-shape/"
   },
   {
    "id": "bd1125-r2-guidance-5",
@@ -3466,7 +3466,7 @@
    ],
    "title": "A question about a structure (a B-tree, a hierarchy) is sent to the flowchart; the lane advice for a tree draws a staircase",
    "where": "skills/talk/SKILL.md:117, :169; boards.md:99",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/guidance/trial/r_q2/d03-point.png, r_btree2/d06-rest.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/guidance/trial/r_q2/d03-point.png, r_btree2/d06-rest.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Route static trees to graph; for a plain tree leave lane out; never use lanes as tree levels; add a B-tree example.",
@@ -3488,7 +3488,7 @@
    ],
    "title": "Flowchart roles are not listed in the core guide, so sessions invent or misuse them",
    "where": "skills/talk/SKILL.md:167; boards.md Flowchart",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/guidance/trial/r_q2, r_w2/d08-rest.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/guidance/trial/r_q2, r_w2/d08-rest.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "List roles in the flowchart row; have the engine report an unknown role in a board: line.",
@@ -3539,7 +3539,7 @@
    ],
    "title": "A map box with a huge row or rows value eats gigabytes and minutes of the talk server",
    "where": "skills/_shared/visuals/map_svg.py:137-139, :297, :321-360",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/robust/f4.py: 20M rows 11.18 s 7.7 GB; 60M rows kept reply open 32 s",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/robust/f4.py: 20M rows 11.18 s 7.7 GB; 60M rows kept reply open 32 s",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Bound row, rows, cols, boxes (60) and arrows (120) in validate. Guard: rows=10**9 raises.",
@@ -3566,7 +3566,7 @@
    ],
    "title": "A lone surrogate in a reply or a typed line gives a 500 and leaves a half-added answer pending forever",
    "where": "skills/talk/talk.py:1954-1959 Call.add/record, post_reply :3160, typed :3030",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/robust/http2.py: UnicodeEncodeError, entry pending",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/robust/http2.py: UnicodeEncodeError, entry pending",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Sanitise text at the door; add the entry only after record succeeds.",
@@ -3582,7 +3582,7 @@
    "guard": {
     "test": "skills/talk/tests/test_r4_server.py::test_a_surrogate_in_a_reply_is_cleaned_at_the_door; test_a_surrogate_in_a_typed_line_is_cleaned_and_a_failed_record_adds_nothing",
     "file": "skills/talk/tests/test_r4_server.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "A lone surrogate is replaced by U+FFFD at the door, and a failed transcript write leaves no half-added answer."
   },
@@ -3594,7 +3594,7 @@
    ],
    "title": "Flowchart, sequence and map labels have no length cap, so one long label wrecks the board",
    "where": "skills/_shared/visuals/flowchart.py, sequence_svg.py, map_svg.py",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/robust/ans_ll1.txt, out-ll1-1/p10-rest.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/robust/ans_ll1.txt, out-ll1-1/p10-rest.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "One shared label check (about 60 chars label, 120 sub) and a spec size cap.",
@@ -3632,7 +3632,7 @@
    ],
    "title": "Phone: a wide table shows 4 of 9 columns with no hint, and pointed steps scroll sideways so cells lose their first characters (56 MiB for 256 MiB)",
    "where": "skills/stage/static/stage.css + stage.js table board at 390x844",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/changed/o/table2/p12-rest.png, p10-point.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/changed/o/table2/p12-rest.png, p10-point.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "On a narrow stage fit columns to the width or turn rows into cards; never scroll mid-cell; edge fade when columns hidden.",
@@ -3646,10 +3646,10 @@
    "fix_job": "bd1125-r4-fix-frontend",
    "commit": "d0ff4d3",
    "guard": {
-    "none": "layout only: harness shots at 390: /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-f-2/before/wide/p11-point.png vs /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-f-2/after/wide/p11-point.png"
+    "none": "layout only: harness shots at 390: ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-f-2/before/wide/p11-point.png vs ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-f-2/after/wide/p11-point.png"
    },
    "notice": "A table that does not fit a phone is a stack of row cards: every cell whole with its column name, nothing cut at the left edge, no 4-of-9 columns.",
-   "felt_evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-f-2/after/wide/p09-board.png, p11-point.png"
+   "felt_evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-f-2/after/wide/p09-board.png, p11-point.png"
   },
   {
    "id": "bd1125-r2-changed-2",
@@ -3660,7 +3660,7 @@
    ],
    "title": "Phone graph board is wider than the screen and pans to the node, cutting lane labels and neighbouring nodes mid-word",
    "where": "skills/stage/static/stage.js:769-772 layoutGraph width, :793 centreAcross; stage.css:872",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/changed/o/demo9/p12-point.png; trials/r2-t6/render/p11-board.png ... p19-point.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/changed/o/demo9/p12-point.png; trials/r2-t6/render/p11-board.png ... p19-point.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Fit the frame to the pane width (font floor 11 px), pan vertically only, or lay out top to bottom on narrow; sticky lane labels and scroll hint otherwise; harness check at 390 px.",
@@ -3682,7 +3682,7 @@
    ],
    "title": "Architecture map demo: the dashed red 'never' arrow runs through the Talk server and Claude session boxes",
    "where": "skills/stage/static/map.js + route.js; demo.md map",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/changed/o/demo7/d11-rest.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/changed/o/demo7/d11-rest.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Route structure arrows of the map through route.js or detour skip-rank arrows; test no segment crosses a box of the demo map.",
@@ -3703,8 +3703,8 @@
    "notice": "The dashed red 'never' arrow in the architecture map now runs round under the Talk server instead of through it and the Claude session box, and leaves the Call page beside the turns arrow.",
    "felt_evidence": {
     "shots": {
-     "before_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/before-demo7/d10-rest.png",
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/final-demo7/d10-rest.png"
+     "before_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/before-demo7/d10-rest.png",
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/final-demo7/d10-rest.png"
     },
     "before_from": "starting-commit",
     "selector": ".vzmap svg.vz path.ar.red",
@@ -3790,7 +3790,7 @@
    ],
    "title": "Before/after sequence: the step-number circle of a self-call row is hidden behind the label chip",
    "where": "skills/stage/static/lanes.js compare layout",
-   "evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/changed/o/demo5/d09-rest.png",
+   "evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/findings/r2/changed/o/demo5/d09-rest.png",
    "rule": "see round 2 find file",
    "why_it_matters": "",
    "fix": "Reserve the number gutter; test no chip overlaps a number circle.",
@@ -3806,14 +3806,14 @@
    "guard": {
     "test": "skills/stage/tests/test_r4_lanes.py::test_a_call_to_itself_on_a_phone_has_its_chip_over_the_loop_its_note_under_it_and_its_number_in_the_gutter",
     "file": "see notes",
-    "notes": "run alone, fix removed (fails) then restored (passes): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/guard-proof.txt"
+    "notes": "run alone, fix removed (fails) then restored (passes): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/guard-proof.txt"
    },
    "notice": "In a before/after board the step number of a call to itself is no longer behind its label; the label stands over the loop and the number keeps its own gutter.",
    "felt_evidence": {
     "selector": ".visual.lanes",
     "shots": {
-     "before_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/cmp-before/d11-point.png",
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/cmp-after/d12-rest.png"
+     "before_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/cmp-before/d11-point.png",
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/cmp-after/d12-rest.png"
     },
     "before_from": "starting-commit"
    }
@@ -3845,10 +3845,10 @@
     "notes": "fail: 13 failed in 0.55s with lanes.js, stage.css and sequence_svg.py at bd1125 (e.g. test_a_sequences_outcome_has_the_scene_key_and_is_lit_at_rest, test_a_point_on_a_moved_step_lights_its_old_place_and_its_new_one_and_never_a_gap); pass: 13 passed in 0.54s with the fix restored (uv run ... pytest skills/stage/tests/test_r2_sequence.py -q -n 0); 390 px harness: harness/r2b3_seq390_check.py fails on bd1125 (notes missing, outcome invisible at rest) and passes on the fix"
    },
    "felt_evidence": [
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/seq-before/d10-rest.png",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/seq-after/d10-rest.png",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-before.log",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-after.log"
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/seq-before/d10-rest.png",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/seq-after/d10-rest.png",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-before.log",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-after.log"
    ]
   },
   {
@@ -3906,17 +3906,17 @@
    "guard": {
     "test": "skills/stage/tests/test_r4_lanes.py::test_an_actors_mark_is_its_first_letter_then_its_words_initials_then_more_letters",
     "file": "see notes",
-    "notes": "run alone, fix removed (fails) then restored (passes): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/guard-proof.txt; skills/stage/tests/test_stage_page.py pins the chip text as letters"
+    "notes": "run alone, fix removed (fails) then restored (passes): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/guard-proof.txt; skills/stage/tests/test_stage_page.py pins the chip text as letters"
    },
    "notice": "On a phone only the steps carry numbers; actors are coloured letters (K, A, E, S, Ku, C) with the names once in a key, and the rest frame shows more rows.",
    "felt_evidence": {
     "selector": ".visual.lanes",
     "shots": {
-     "before_390": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t1-before/p16-rest.png",
-     "after_390": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t1-after/p16-rest.png",
-     "before_390_point": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t1-before/p12-point.png",
-     "after_390_point": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t1-after/p12-point.png",
-     "after_dark": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t1-after/k17-rest.png"
+     "before_390": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t1-before/p16-rest.png",
+     "after_390": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t1-after/p16-rest.png",
+     "before_390_point": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t1-before/p12-point.png",
+     "after_390_point": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t1-after/p12-point.png",
+     "after_dark": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t1-after/k17-rest.png"
     },
     "before_from": "starting-commit"
    }
@@ -3972,7 +3972,7 @@
     "notes": "existing test updated to Board N of M; fails with the fix removed, passes restored"
    },
    "notice": "The board count reads \"Board 2 of 2\", apart from \"Step 3 of 6\".",
-   "felt_evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-f-2/after/wide/p11-point.png"
+   "felt_evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-f-2/after/wide/p11-point.png"
   },
   {
    "id": "bd1125-r2-trial-t2-1",
@@ -4058,10 +4058,10 @@
     "notes": "fail: 13 failed in 0.55s with lanes.js, stage.css and sequence_svg.py at bd1125 (e.g. test_a_sequences_outcome_has_the_scene_key_and_is_lit_at_rest, test_a_point_on_a_moved_step_lights_its_old_place_and_its_new_one_and_never_a_gap); pass: 13 passed in 0.54s with the fix restored (uv run ... pytest skills/stage/tests/test_r2_sequence.py -q -n 0); 390 px harness: harness/r2b3_seq390_check.py fails on bd1125 (notes missing, outcome invisible at rest) and passes on the fix"
    },
    "felt_evidence": [
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/seq-before/d10-rest.png",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/seq-after/d10-rest.png",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-before.log",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-after.log"
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/seq-before/d10-rest.png",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/seq-after/d10-rest.png",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-before.log",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-after.log"
    ]
   },
   {
@@ -4092,10 +4092,10 @@
     "notes": "fail: 13 failed in 0.55s with lanes.js, stage.css and sequence_svg.py at bd1125 (e.g. test_a_sequences_outcome_has_the_scene_key_and_is_lit_at_rest, test_a_point_on_a_moved_step_lights_its_old_place_and_its_new_one_and_never_a_gap); pass: 13 passed in 0.54s with the fix restored (uv run ... pytest skills/stage/tests/test_r2_sequence.py -q -n 0); 390 px harness: harness/r2b3_seq390_check.py fails on bd1125 (notes missing, outcome invisible at rest) and passes on the fix"
    },
    "felt_evidence": [
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/seq-before/p14-point.png",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/seq-after/p14-point.png",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-before.log",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-after.log"
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/seq-before/p14-point.png",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/seq-after/p14-point.png",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-before.log",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-after.log"
    ]
   },
   {
@@ -4122,7 +4122,7 @@
    "branch": "bd1125-r2-5",
    "guard": "test_the_guide_teaches_the_answer_shape_phases_the_outcome_and_the_map_points + test_the_guide_opens_with_a_decision_table_that_puts_the_table_board_last (skills/talk/tests/test_demo.py). SKILL.md reverted: 2 failed; with fix and restored: 2 passed (evidence/bd1125-r2-idea-answer-shape/guard-runs.txt)",
    "notice": "Sequence row says give phases for two stages; new 'sequence in two phases' example validated by the guide-example test.",
-   "felt_evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r2-idea-answer-shape/"
+   "felt_evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r2-idea-answer-shape/"
   },
   {
    "id": "bd1125-r2-trial-t5-2",
@@ -4278,12 +4278,12 @@
    },
    "notice": "On a 390 px phone: the graph is drawn turned (lanes as columns, before above after, pans down only, text 11 px or more); the map fits the width whole with no sideways scroll (its text is small, about 5 px on the demo map: a server-side narrow layout is not built); a short table keeps whole words. Sequence notes belong to b3.",
    "felt_evidence": [
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2b4/before-graph/p05-point.png",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2b4/after-graph/p05-point.png",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2b4/before-map/p10-point.png",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2b4/after-map/p10-point.png",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2b4/before-table/p05-point.png",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2b4/after-table/p05-point.png"
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2b4/before-graph/p05-point.png",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2b4/after-graph/p05-point.png",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2b4/before-map/p10-point.png",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2b4/after-map/p10-point.png",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2b4/before-table/p05-point.png",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2b4/after-table/p05-point.png"
    ]
   },
   {
@@ -4314,10 +4314,10 @@
     "commit": "e645443",
     "notice": "Column width floor at the longest word, cells never break a word, text set to 72% then sideways scroll when the floors do not fit (stage.js wordFloors, stage.css). On bd1125 the Frankfur/t, Strangl/er, 12.5/% breaks did not reproduce at 1440, 1920 or 390 on the wide, long and twotables renders (no mid-word in before logs); the one reproduced break was the phone header Latenc/y of a 4 column table, fixed. Row lighting and tolerant naming are b2.",
     "felt_evidence": [
-     "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r2-idea-small-table-follows/before-wide/d08-rest.png",
-     "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r2-idea-small-table-follows/after-wide/d08-rest.png",
-     "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2b4/before-table/p05-point.png",
-     "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2b4/after-table/p05-point.png"
+     "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r2-idea-small-table-follows/before-wide/d08-rest.png",
+     "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r2-idea-small-table-follows/after-wide/d08-rest.png",
+     "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2b4/before-table/p05-point.png",
+     "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/r2b4/after-table/p05-point.png"
     ],
     "guard_none": "CSS/JS measure: harness-only (phone_fit_r2b4.py)"
    },
@@ -4363,10 +4363,10 @@
    },
    "notice": "one key outcome:end, ghosted until said, lit at rest, plain and compare; compare.py/sequence_svg accept outcome beside compare (verified, no change)",
    "felt_evidence": [
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/seq-before/d10-rest.png",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/seq-after/d10-rest.png",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-before.log",
-    "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-after.log"
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/seq-before/d10-rest.png",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/seq-after/d10-rest.png",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-before.log",
+    "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence-r23/chk-after.log"
    ]
   },
   {
@@ -4601,7 +4601,7 @@
    "guard": {
     "test": "skills/talk/tests/test_r4_engine.py::test_a_point_that_cannot_be_read_at_a_bars_or_graph_board_names_its_forms",
     "file": "skills/talk/tests/test_r4_engine.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "A point at a bars or graph board that cannot be read names \"bars board\" or \"graph board\" and its forms, never the table forms."
   },
@@ -4694,7 +4694,7 @@
    "guard": {
     "test": "skills/talk/tests/test_r4_engine.py::test_a_table_with_a_header_and_no_rows_is_refused_by_name",
     "file": "skills/talk/tests/test_r4_engine.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "A header-only table is refused by name with a board: line instead of an empty stage."
   },
@@ -4750,14 +4750,14 @@
    "guard": {
     "test": "skills/stage/tests/test_r4_lanes.py::test_pointing_at_the_outcome_aims_the_view_at_the_outcome_never_the_top",
     "file": "see notes",
-    "notes": "run alone, fix removed (fails) then restored (passes): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/guard-proof.txt"
+    "notes": "run alone, fix removed (fails) then restored (passes): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/guard-proof.txt"
    },
    "notice": "Pointing at the outcome now brings the outcome into view instead of sending the board to its top; the top still comes at the end of the answer.",
    "felt_evidence": {
     "selector": ".visual.lanes",
     "shots": {
-     "before_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/cmp-before/d11-point.png",
-     "after_1440": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/cmp-after/d11-point.png"
+     "before_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/cmp-before/d11-point.png",
+     "after_1440": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/cmp-after/d11-point.png"
     },
     "before_from": "starting-commit"
    }
@@ -4808,7 +4808,7 @@
    "guard": {
     "test": "skills/stage/tests/test_r4_stage.py::test_lines_no_board_can_carry_are_refused_by_name_never_as_a_daemon_failure; test_a_change_of_a_very_long_line_is_refused_by_name",
     "file": "skills/stage/tests/test_r4_stage.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "Very long lines are refused with exit 2 and a named message, not exit 3 item body too large."
   },
@@ -4836,7 +4836,7 @@
    "guard": {
     "test": "skills/stage/tests/test_r4_stage.py::test_a_binary_file_is_refused_by_the_stage_as_talk_refuses_it",
     "file": "skills/stage/tests/test_r4_stage.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "stage.py refuses a binary file as talk does (one check in model.check_binary, used by talk add_code too)."
   },
@@ -4864,7 +4864,7 @@
    "guard": {
     "test": "skills/stage/tests/test_r4_stage.py::test_stage_prints_a_sequence_refs_problems_on_stderr_and_still_shows_the_step",
     "file": "skills/stage/tests/test_r4_stage.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "stage.py prints a sequence ref that names a missing or far line on stderr; the step is still shown."
   },
@@ -4990,7 +4990,7 @@
    "guard": {
     "test": "skills/talk/tests/test_r4_server.py::test_a_typed_line_must_be_a_string",
     "file": "skills/talk/tests/test_r4_server.py",
-    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
+    "notes": "each guard run alone with the product files at bd1125 (failing) and with the fix (passing): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f-1/guards.txt"
    },
    "notice": "A typed text of None, 123 or a list is refused with 400 \"text must be a string\"."
   },
@@ -5088,8 +5088,8 @@
    "notice": "A flowchart that is taller than its pane now rests whole, scaled down to fit (not below half its size), where it used to be cropped; while a part is said it is at its own size and kept in view. A very tall flowchart still scrolls at its own size.",
    "felt_evidence": {
     "shots": {
-     "before_390": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/before-state/p20-rest.png",
-     "after_390": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/after2-state/p20-rest.png"
+     "before_390": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/before-state/p20-rest.png",
+     "after_390": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-r4-f4/after2-state/p20-rest.png"
     },
     "before_from": "starting-commit",
     "selector": ".visual.map[data-fit]",
@@ -5179,8 +5179,8 @@
    "felt_evidence": {
     "selector": ".visual.lanes",
     "shots": {
-     "before_390": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t5-before/p11-point.png",
-     "after_390": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t5-after/p11-point.png"
+     "before_390": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t5-before/p11-point.png",
+     "after_390": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t5-after/p11-point.png"
     },
     "before_from": "starting-commit"
    }
@@ -5209,14 +5209,14 @@
    "guard": {
     "test": "skills/stage/tests/test_r4_lanes.py::test_a_call_to_itself_on_a_phone_has_its_chip_over_the_loop_its_note_under_it_and_its_number_in_the_gutter",
     "file": "see notes",
-    "notes": "run alone, fix removed (fails) then restored (passes): /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/guard-proof.txt"
+    "notes": "run alone, fix removed (fails) then restored (passes): ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/guard-proof.txt"
    },
    "notice": "On a phone a call to itself has a wide chip over the loop and its note below, no longer drawn over the wrapped chip.",
    "felt_evidence": {
     "selector": ".visual.lanes",
     "shots": {
-     "before_390": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t6-before/p09-point.png",
-     "after_390": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t6-after/p09-point.png"
+     "before_390": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t6-before/p09-point.png",
+     "after_390": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/f3/t6-after/p09-point.png"
     },
     "before_from": "starting-commit"
    }
@@ -5243,10 +5243,10 @@
    "fix_job": "bd1125-r4-fix-frontend",
    "commit": "e398050",
    "guard": {
-    "none": "layout only: harness shots at 390x844 with a long sentence: /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-f-2/before/longcap/p06-point.png vs /Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-f-2/after/final-longcap/p07-point.png"
+    "none": "layout only: harness shots at 390x844 with a long sentence: ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-f-2/before/longcap/p06-point.png vs ~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-f-2/after/final-longcap/p07-point.png"
    },
    "notice": "While a board is up a phone gives the stage 62% (panel 38%), and a sentence longer than its three lines fades out its cut line and ends with an ellipsis. Note: the sentence is the call page reader strip, not the stage caption bar; the stage bar is also clamped to 3 lines.",
-   "felt_evidence": "/Users/petros.makris/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-f-2/after/final-longcap/p07-point.png"
+   "felt_evidence": "~/projects/dashboard/.scratch/bulldozer-talk-bd1125/evidence/bd1125-f-2/after/final-longcap/p07-point.png"
   }
  ]
 }
