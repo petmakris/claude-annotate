@@ -28,8 +28,18 @@ Read this to explain the page to the user or to debug it. Nothing here is needed
 - One talk server on the machine holds the calls of every session, each at its own link.
 - Pressing Talk, sending text or playing an answer in a call gives it the floor: every other call's page pauses its voice at once.
 - An answer that arrives in another call is shown but not played.
-- It shows as new on the strip of other calls at the top of every call page, and on the list of calls at the root of the talk address.
+- When another call takes the voice, this call pauses and the state strip says "Paused: <call> took the voice" with Resume here. No toast covers the board; only the collapsed rail, which has no strip, uses the toast.
 - Nothing changes for this session: it answers its own call by its call id.
+
+## Other calls and coming back
+
+- Every call is said in one set of words, on the Calls popover and on the list of calls at the root of the talk address: **Stalled**, **New answer** (or "N new answers"), **Answering**, **Talking now**, **Waiting for you**, **Ended**. A glyph and a colour go with each word, never the colour alone.
+- The Calls button in the panel's header shows how many other calls need the user (a stalled one or one with answers not heard), amber when one is stalled. The popover lists this call first ("Here"), then the others by need, each with its age. **Next waiting** opens the call that needs the user most (the one waiting longest among equals); it is hidden while none does. **All calls** opens the list at the root.
+- The tab's title and icon say what the call is doing, state word first: `Playing · topic`, `Answering · topic`, `Stalled · topic`, `Ended · topic`, `(2) New · topic` for answers that came while the tab was out of sight, plain `Talk · topic` otherwise. It runs from the poll, so a tab in the background keeps it current.
+- The state strip under the header says the call's state in words (playing which answer and whether the board follows or is pinned, paused, answering with a clock counted from the question, not picked up, queued, on another screen, ended) with a switch for playing new answers by themselves. It is not a live region.
+- After the tab was out of sight for five minutes (or the page was reopened after that), with answers that came meanwhile and were not played, the welcome-back card says how long the user was away and what came, with **Play the N new** (the answers play one after another; the first is the user's play, the rest start by themselves, and an answer that arrives meanwhile waits until they are played) and **Read them** (scrolls to them, plays nothing). A shorter absence (30 seconds) only puts the "Since you left, N not heard" divider before the first of them in the list of earlier answers.
+- One polite live region (`#announcer`) says what happens while nobody watches the panel: Claude starts working or changes what it works on, a call stalls or ends, an answer arrives, a board changes while the voice is silent, another call has a new answer. Each sentence is said once, a burst as one, at least a second and a half apart, never while the user is typing. Other parts say something through `announce(text)`.
+- The panel's first tab stop is "Jump to the latest answer"; the stage's reader is hidden from screen readers (the panel holds the same text).
 
 ## The panel and the gear
 
