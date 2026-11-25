@@ -151,17 +151,39 @@ function inflight() {
 }
 // One number for a step's seconds: 8s, 1:12.
 const stepClock = s => s < 60 ? Math.round(s) + "s" : fmt(s);
-// What the card says now: null when nothing is in flight.
+// A question the card's Send again made: the new entry names (`replaces`) the oldest question it set aside, and its text is
+// the words of everything set aside, in order, joined as one. Read from the entries, so a reload keeps it: {tries: how many
+// times it was sent again, count: how many questions the last send held, first: the question first sent}. null for any
+// other entry (a correction typed in the box has other words).
+function resendOf(e) {
+  let cur = e, tries = 0;
+  const held = x => { const r = resendSet(x); return r ? r.set.reduce((n, y) => n + held(y), 0) : 1; };   // the questions a sent-again entry holds
+  while (cur) { const r = resendSet(cur); if (!r) break; tries++; cur = r.from; }
+  return tries ? {tries, count: held(e), first: cur} : null;
+}
+// The questions an entry holds, one text each: a sent-again entry holds the ones it set aside, so the card still shows each.
+function heldTexts(e) { const r = resendSet(e); return r ? r.set.flatMap(heldTexts) : [e.text]; }
+// The entries a sent-again entry set aside (and the oldest of them), or null when it is no resend.
+function resendSet(e) {
+  if (!e || typeof e.replaces !== "number") return null;
+  const from = view.entries.find(x => x.id === e.replaces); if (!from) return null;
+  const set = view.entries.filter(x => x.who === "you" && x.superseded && x.id >= from.id && x.id < e.id);
+  return set.length && set.map(x => x.text).join("\n") === e.text ? {from, set} : null;
+}
+// What the card says now: null when nothing is in flight. The wait counts from the first send, so a question sent again
+// keeps the time it has already waited.
 function waitModel() {
   const fl = inflight(); if (!fl.length) return null;
   const t = view.turn || {}, picked = fl.some(x => x.state === "picked");
-  const sentAt = fl[0].entry.at, elapsed = Math.max(0, serverNow() - sentAt);
+  const again = resendOf(fl[0].entry);
+  const sentAt = again ? again.first.at : fl[0].entry.at, elapsed = Math.max(0, serverNow() - sentAt);
   const quiet = t.alive_at ? Math.max(0, serverNow() - t.alive_at) : null;
   const step = !picked ? (view.stalled ? "notpicked" : "sent")
     : view.stalled ? "silent" : elapsed >= SLOW_AFTER ? "slow" : "working";
   const acts = (view.activity || []).slice(-4);
   const run = acts.filter(a => a.state === "running").pop();
   return {fl, picked, step, elapsed, quiet, run, acts, sentAt, text: fl.map(x => x.entry.text).join("\n"),
+    again: again ? {...again, at: fl[0].entry.at} : null, rows: fl.flatMap(x => heldTexts(x.entry)),
     pickedAt: picked && t.collected_at ? Math.max(0, t.collected_at - sentAt) : null,
     earlier: (t.earlier || 0) > 0};
 }
@@ -173,6 +195,12 @@ function waitSub(m) {
   if (m.step === "silent") return "No sign of life for " + fmt(m.quiet === null ? m.elapsed : m.quiet) + ".";
   if (m.step === "slow") return m.run ? "Still on the step below." : m.quiet === null ? "Still working on it." : "Last sign of life " + stepClock(m.quiet) + " ago.";
   return m.run ? "" : "Claude has your question.";  // a step running is a row of its own
+}
+// The line that stays on a card whose question was sent again: how long ago, and that several questions went as one.
+function againText(m) {
+  const a = m.again, ago = fmt(Math.max(0, serverNow() - a.at));
+  return (a.tries > 1 ? "Sent again " + a.tries + " times, the last " + ago + " ago" : "Sent again " + ago + " ago")
+    + (a.count > 1 ? ", " + a.count + " questions as one." : ".");
 }
 const WAIT_STEPS = ["Sent", "Picked up", "Working", "Answer"];
 // Where the stepper stands: 0 Sent, 1 Picked up, 2 Working (the session has reported a step).
@@ -200,7 +228,10 @@ function waitButton(icon, label, onclick, primary) {
 function waitActions(m) {
   const newest = m.fl[m.fl.length - 1], collected = m.fl.find(x => x.state === "picked");
   const copy = ["copy", "Copy question", copyQuestion], again = ["again", "Send again", sendAgain, true];
-  const takeBack = ["back", "Take back", () => cancelTurn(newest.id)], cancel = ["x", "Cancel", () => cancelTurn(collected ? collected.id : newest.id)];
+  // Before pickup Take back withdraws every question the card shows, all that nobody has collected, and puts them in the box in order.
+  const unpicked = m.fl.filter(x => x.state === "sent").map(x => x.id), many = unpicked.length > 1;
+  const takeBack = ["back", many ? "Take back all" : "Take back", () => cancelTurn(unpicked.length ? unpicked : [newest.id])];
+  const cancel = ["x", "Cancel", () => cancelTurn([collected ? collected.id : newest.id])];
   return {sent: [takeBack, copy], notpicked: [again, copy, takeBack], working: [cancel], slow: [cancel, copy], silent: [again, copy, cancel]}[m.step];
 }
 // Build the card for a model: the title and clock, the sub line, the question, the stepper, the steps the session reports, the actions.
@@ -215,7 +246,18 @@ function buildWait(m) {
   const clock = document.createElement("span"); clock.className = "wt-clock"; clock.setAttribute("aria-hidden", "true");
   head.append(icon, title, clock);
   const sub = document.createElement("p"); sub.className = "wt-sub";
-  const q = document.createElement("p"); q.className = "wt-q"; q.textContent = m.text;
+  // One row for each question in flight (each one a sent-again question holds too), each with its own clamp; with more than one, each says which it is.
+  const qs = document.createElement("div"); qs.className = "wt-qs";
+  m.rows.forEach((text, i) => {
+    const q = document.createElement("p"); q.className = "wt-q";
+    if (m.rows.length > 1) {
+      q.classList.add("multi");
+      const n = document.createElement("small"); n.className = "wt-qn"; n.textContent = "Question " + (i + 1) + " of " + m.rows.length;
+      const t = document.createElement("span"); t.className = "wt-qt"; t.textContent = text; q.append(n, t);
+    } else q.textContent = text;
+    qs.append(q);
+  });
+  const again = document.createElement("p"); again.className = "wt-again"; again.hidden = !m.again;
   const stepper = document.createElement("ol"); stepper.className = "wt-steps"; stepper.setAttribute("aria-label", "Where your question stands");
   const reach = waitReach(m);
   WAIT_STEPS.forEach((label, i) => {
@@ -224,7 +266,7 @@ function buildWait(m) {
     name.textContent = label; at.className = "wt-at";
     li.append(bar, name, at); stepper.append(li);
   });
-  card.replaceChildren(head, sub, q, stepper);
+  card.replaceChildren(head, sub, again, qs, stepper);
   if (m.acts.length) {
     const list = document.createElement("ul"); list.className = "wt-acts";
     for (const a of m.acts) {
@@ -247,13 +289,14 @@ function buildWait(m) {
 }
 // What the card was built from: change any of it and the card is rebuilt; the seconds and the clock are not in it.
 function waitSigOf(m) {
-  return [m.step, m.fl.map(x => x.id + x.state).join(","), m.text, m.acts.map(a => a.label + a.state).join("|"), m.earlier, waitReach(m)].join("§");
+  return [m.step, m.fl.map(x => x.id + x.state).join(","), m.text, m.again ? m.again.tries + "/" + m.again.count : "", m.acts.map(a => a.label + a.state).join("|"), m.earlier, waitReach(m)].join("§");
 }
 // The numbers on the card: the clock, each step's time, the seconds of each reported step, the sub line. They change each second.
 function tickWait(m) {
   const card = $("waitcard");
   card.querySelector(".wt-clock").textContent = fmt(m.elapsed);
   card.querySelector(".wt-sub").textContent = waitSub(m);
+  card.querySelector(".wt-again").textContent = m.again ? againText(m) : "";
   const times = [0, m.pickedAt];
   card.querySelectorAll(".wt-at").forEach((el, i) => { el.textContent = i < 2 && times[i] !== null && i <= waitReach(m) ? fmt(times[i]) : ""; });
   card.querySelectorAll(".wt-acts li").forEach((li, i) => { if (m.acts[i]) li.querySelector(".wt-sec").textContent = stepClock(m.acts[i].seconds || 0); });
@@ -276,20 +319,33 @@ function copyQuestion() {
   };
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(m.text).then(done, old); else old();
 }
-// Take back (not collected) or Cancel (collected): the server takes the question back or cancels the turn and tells the
-// session. The words go back into the box, so nothing said is lost.
-async function cancelTurn(entry) {
-  const f = inflight().find(x => x.id === entry); if (!f) return;
+// Take back (not collected) or Cancel (collected): the server takes each question back or cancels the turn and tells the
+// session. `ids` are the questions the card shows that this acts on: Take back names every one nobody has collected (the
+// server takes back one entry for each call), Cancel names the collected turn (the server cancels all of it). The words
+// go back into the box, in the order they were sent, so nothing said is lost; the note says how many came back.
+async function cancelTurn(ids) {
+  const fl = inflight().filter(x => ids.includes(x.id)); if (!fl.length) return;
+  const back = [], got = [];
+  let how = "withdrawn";
   try {
-    const r = await api("/api/cancel", {method: "POST", body: JSON.stringify({entry}), headers: {"Content-Type": "application/json"}});
-    const b = await r.json().catch(() => ({}));
-    if (b.cancelled) {
-      const back = (b.entries || [entry]).map(id => (view.entries.find(e => e.id === id) || {}).text).filter(Boolean);
-      const t = $("text"), words = back.length ? back.join("\n") : f.entry.text;
+    for (const f of fl) {
+      if (got.includes(f.id)) continue;   // a collected turn's cancel took this one with it
+      const r = await api("/api/cancel", {method: "POST", body: JSON.stringify({entry: f.id}), headers: {"Content-Type": "application/json"}});
+      const b = await r.json().catch(() => ({}));
+      if (!b.cancelled) continue;
+      if (b.how === "cancelled") how = "cancelled";
+      for (const id of (b.entries || [f.id])) { if (!got.includes(id)) { got.push(id); back.push((view.entries.find(e => e.id === id) || f.entry).text); } }
+    }
+    const words = back.filter(Boolean).join("\n");
+    if (got.length) {
+      const t = $("text");
       t.value = t.value.trim() ? words + "\n" + t.value : words; spoken = false; fitText();
       if (matchMedia("(hover: hover)").matches) t.focus();
-      noteSend(b.how === "cancelled" ? "Cancelled. Your words are back in the box." : "Taken back. Your words are back in the box.");
-    } else noteSend("Too late: Claude already answered it.", "warn");
+    }
+    if (!got.length) noteSend("Too late: Claude already answered it.", "warn");
+    else if (got.length < fl.length) noteSend("Took back " + got.length + " of " + fl.length + " questions. Claude has picked up the rest. Your words are back in the box.", "warn");
+    else if (got.length > 1) noteSend((how === "cancelled" ? "Cancelled " : "Took back ") + got.length + " questions. Your words are back in the box, in order.");
+    else noteSend(how === "cancelled" ? "Cancelled. Your words are back in the box." : "Taken back. Your words are back in the box.");
     view.v = -1; if (wake) wake();
   } catch { showError("Could not take it back: the call server did not answer."); }
 }

@@ -233,14 +233,103 @@ def test_a_correction_in_flight_says_claude_is_finishing_the_earlier_question(tm
     assert page.run() == ["Claude is finishing the earlier question. This one comes next.", "no, ten days", "0:04"]
 
 
-def test_two_questions_in_flight_count_from_the_oldest_and_show_both(tmp_path):
-    second = {**YOU, "id": 1, "text": "and the shots?", "at": NOW - 10}
-    page = run_states(tmp_path, lambda b: [waiting(b, 1, entries=[YOU, second], working=True,
-                                                    turn={"entries": [{"id": 0, "state": "picked"}, {"id": 1, "state": "sent"}], "earlier": 0, "collected_at": NOW - 60, "alive_at": NOW - 3})])
+TWO = lambda b, **extra: waiting(b, 1, working=True, turn={"entries": [{"id": 0, "state": "picked"}, {"id": 1, "state": "sent"}], "earlier": 0, "collected_at": NOW - 60, "alive_at": NOW - 3},
+                                 **{"entries": [YOU, {**YOU, "id": 1, "text": "and the shots?", "at": NOW - 10}], **extra})
+QROWS = "[...$('waitcard').querySelectorAll('.wt-q')].map(q => q.classList.contains('multi') ? [q.querySelector('.wt-qn').textContent, q.querySelector('.wt-qt').textContent] : q.textContent)"
+
+
+def test_two_questions_in_flight_count_from_the_oldest_and_each_has_its_own_row(tmp_path):
+    page = run_states(tmp_path, lambda b: [TWO(b)])
     page.js("await serve(1);")
     page.check(card("querySelector('.wt-clock').textContent"))
-    page.check(card("querySelector('.wt-q').textContent"))
-    assert page.run() == ["1:12", "How do vaccines work?\nand the shots?"]
+    page.check(QROWS)
+    assert page.run() == ["1:12", [["Question 1 of 2", "How do vaccines work?"], ["Question 2 of 2", "and the shots?"]]]
+
+
+def test_a_long_first_question_never_hides_the_second_and_one_question_has_no_label(tmp_path):
+    long = {**YOU, "text": "Explain in plain words how an mRNA vaccine teaches the body to spot a virus, and why a booster is needed, " * 3}
+    page = run_states(tmp_path, lambda b: [TWO(b, entries=[long, {**YOU, "id": 1, "text": "and the shots?", "at": NOW - 10}]), waiting(b, 2)])
+    page.js("await serve(1);")
+    page.check(QROWS)
+    page.check("$('waitcard').querySelectorAll('.wt-q').length")
+    page.js("await serve(2);")
+    page.check(QROWS)
+    page.check("$('waitcard').querySelector('.wt-qn')")
+    assert page.run() == [[["Question 1 of 2", long["text"]], ["Question 2 of 2", "and the shots?"]], 2, ["How do vaccines work?"], None]
+
+
+def test_the_card_css_clamps_each_question_row_on_its_own_not_the_group():
+    import re
+    from pathlib import Path
+    css = (Path(__file__).resolve().parents[1] / "static" / "call-wait.css").read_text()
+    assert re.search(r"\.wt-qt\{[^}]*-webkit-line-clamp:2", css) and re.search(r"\.wt-q\.multi\{[^}]*overflow:visible", css)
+    assert re.search(r"@media \(max-width:760px\)\{.*?\.wt-qt\{-webkit-line-clamp:1\}", css, re.S)
+
+
+def unpicked_two(b):
+    return waiting(b, 1, entries=[YOU, {**YOU, "id": 1, "text": "and the shots?", "at": NOW - 10}],
+                   turn={"entries": [{"id": 0, "state": "sent"}, {"id": 1, "state": "sent"}], "earlier": 0, "collected_at": None, "alive_at": None})
+
+
+CANCEL_EACH = """const f0 = fetch; globalThis.fetch = async (p, o) => String(p) === '/api/cancel'
+  ? (sentTo.push([p, JSON.parse(o.body)]), respond(OUTCOME[JSON.parse(o.body).entry])) : f0(p, o);"""
+
+
+def test_take_back_withdraws_every_unpicked_question_and_puts_them_in_the_box_in_order(tmp_path):
+    page = run_states(tmp_path, lambda b: [unpicked_two(b)]).js("await serve(1);")
+    page.check(TEXTS)
+    page.js("globalThis.OUTCOME = {0: {cancelled: true, how: 'withdrawn', entries: [0]}, 1: {cancelled: true, how: 'withdrawn', entries: [1]}};" + CANCEL_EACH
+            + "[...$('waitcard').querySelectorAll('.wt-btn')].find(b => b.textContent === 'Take back all').click(); await advance(10);")
+    page.check("sentTo.filter(s => s[0] === '/api/cancel')")
+    page.check("$('text').value")
+    page.check("$('sendnote').querySelector('.sn-text').textContent")
+    assert page.run() == [["Take back all", "Copy question"], [["/api/cancel", {"entry": 0}], ["/api/cancel", {"entry": 1}]],
+                          "How do vaccines work?\nand the shots?", "Took back 2 questions. Your words are back in the box, in order."]
+
+
+def test_take_back_says_how_many_came_back_when_claude_picked_one_up_meanwhile(tmp_path):
+    page = run_states(tmp_path, lambda b: [unpicked_two(b)]).js("await serve(1);")
+    page.js("globalThis.OUTCOME = {0: {cancelled: false}, 1: {cancelled: true, how: 'withdrawn', entries: [1]}};" + CANCEL_EACH
+            + "[...$('waitcard').querySelectorAll('.wt-btn')].find(b => b.textContent === 'Take back all').click(); await advance(10);")
+    page.check("$('text').value")
+    page.check("[$('sendnote').querySelector('.sn-text').textContent, $('sendnote').className]")
+    assert page.run() == ["and the shots?", ["Took back 1 of 2 questions. Claude has picked up the rest. Your words are back in the box.", "sendnote warn"]]
+
+
+def again_entries(**fields):
+    """Two questions sent before pickup, then Send again: the server set both aside and holds the joined words as entry 2."""
+    first, second = {**YOU, "superseded": True, "withdrawn": True}, {**YOU, "id": 1, "text": "and the shots?", "at": NOW - 40, "superseded": True, "withdrawn": True}
+    return [first, second, {**YOU, "id": 2, "text": "How do vaccines work?\nand the shots?", "at": NOW - 9, "replaces": 0, **fields}]
+
+
+def test_a_question_sent_again_keeps_a_line_on_the_card_and_its_wait_counts_from_the_first_send(tmp_path):
+    page = run_states(tmp_path, lambda b: [waiting(b, 1, entries=again_entries(), stalled=True,
+                                                    turn={"entries": [{"id": 2, "state": "sent"}], "earlier": 0, "collected_at": None, "alive_at": None}),
+                                           waiting(b, 2, entries=again_entries(), turn={"entries": [{"id": 2, "state": "sent"}], "earlier": 0, "collected_at": None, "alive_at": None})])
+    page.js("await serve(1);")
+    page.check(card("querySelector('.wt-clock').textContent"))
+    page.check(card("querySelector('.wt-again').textContent"))
+    page.check(QROWS)
+    page.js("await advance(7500); await serve(2);")  # the 7 s note is long gone
+    page.check("[$('sendnote').hidden, $('waitcard').querySelector('.wt-again').hidden, $('waitcard').querySelector('.wt-again').textContent]")
+    assert page.run() == ["1:12", "Sent again 0:09 ago, 2 questions as one.",
+                          [["Question 1 of 2", "How do vaccines work?"], ["Question 2 of 2", "and the shots?"]],
+                          [True, False, "Sent again 0:09 ago, 2 questions as one."]]
+
+
+def test_a_question_sent_again_twice_says_how_often_and_a_correction_typed_in_the_box_is_not_a_resend(tmp_path):
+    third = {**YOU, "id": 3, "text": "How do vaccines work?\nand the shots?", "at": NOW - 3, "replaces": 2}
+    entries = again_entries() ; entries[2] = {**entries[2], "superseded": True, "withdrawn": True}; entries.append(third)
+    correction = [{**YOU, "superseded": True}, {**YOU, "id": 1, "text": "no, six year olds", "replaces": 0, "at": NOW - 4}]
+    turn = lambda i: {"entries": [{"id": i, "state": "sent"}], "earlier": 0, "collected_at": None, "alive_at": None}
+    page = run_states(tmp_path, lambda b: [waiting(b, 1, entries=entries, turn=turn(3)), waiting(b, 2, entries=correction, turn=turn(1))])
+    page.js("await serve(1);")
+    page.check(card("querySelector('.wt-clock').textContent"))
+    page.check(card("querySelector('.wt-again').textContent"))
+    page.js("await serve(2);")
+    page.check(card("querySelector('.wt-clock').textContent"))
+    page.check(card("querySelector('.wt-again').hidden"))
+    assert page.run() == ["1:12", "Sent again 2 times, the last 0:03 ago, 2 questions as one.", "0:04", True]
 
 
 def test_without_a_turn_in_the_view_an_older_server_still_gets_a_card_for_the_newest_unanswered_question(tmp_path):
@@ -281,6 +370,18 @@ def replaced(states, **fields):
 def test_an_answer_to_a_replaced_question_never_plays_by_itself_and_is_never_queued(tmp_path):
     html, states = served(tmp_path, ["The old answer."])
     page = CallPage(html, [states[0], replaced(states, superseded=True, superseded_kind="correction")])
+    page.js("await serve(1);")
+    page.check("[audio.paused, audio.getAttribute('src'), queued === null, current]")
+    assert page.run() == [[True, None, True, None]]
+
+
+def test_an_answer_to_a_question_added_to_after_pickup_sits_below_the_addition_and_still_never_plays_or_queues(tmp_path):
+    """The late answer 1 is entered after the correction that was collected as its own turn: below it in the list, so the
+    older rule (a newer you-entry after the answer) cannot see it. The server tags it, and the tag alone keeps it silent."""
+    html, states = served(tmp_path, ["The old answer."])
+    you0, you1 = {**YOU, "text": "Plan me 14 days in Japan"}, {**YOU, "id": 1, "text": "no wait, only 10 days"}
+    late = {**states[1]["entries"][0], "id": 2, "superseded": True, "superseded_kind": "addition"}
+    page = CallPage(html, [states[0], {**states[1], "v": "late", "entries": [you0, you1, late]}])
     page.js("await serve(1);")
     page.check("[audio.paused, audio.getAttribute('src'), queued === null, current]")
     assert page.run() == [[True, None, True, None]]

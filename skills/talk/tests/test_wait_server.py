@@ -366,6 +366,63 @@ def test_the_answer_to_a_question_added_to_since_is_kept_tagged_and_not_spoken(t
     assert voiced == []
 
 
+def test_the_answer_to_a_question_whose_addition_was_collected_as_its_own_turn_is_kept_tagged_and_not_spoken(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            await say(client, "Plan me 14 days in Japan")
+            await call.turns.next(timeout=1)                      # t1 collected
+            await say(client, "no wait, only 10 days, Kyoto first")  # plain Send while Claude works
+            await call.turns.next(timeout=1)                      # the session collects it as t2 before it answers t1
+            carried = (dict(call.said_lines[1]), call.entries[1].get("replaces"), call.turn_of[1])
+            late = await (await client.post("/api/reply", json={"id": "t1", "text": "Here is the 14 day plan."}, headers=AUTH)).json()
+            await settle(call)
+            current = await (await client.post("/api/reply", json={"id": "t2", "text": "Ten days, Kyoto first."}, headers=AUTH)).json()
+            await settle(call)
+            claude = [e for e in call.entries if e["who"] == "claude"]
+            return carried, late, current, claude, fake.spoken
+
+    carried, late, current, claude, voiced = run(go())
+    # the correction carries `while_working` and no `replaces`: only the Replace button sets that
+    assert carried == ({"who": "you", "text": "no wait, only 10 days, Kyoto first", "while_working": True}, None, "t2")
+    assert late["superseded"] is True and late["note"].startswith("superseded: the user added to this question")
+    assert (claude[0]["superseded"], claude[0]["superseded_kind"], claude[0]["speech"]) == (True, "addition", "skipped")
+    assert "superseded" not in current and "superseded" not in claude[1] and claude[1]["speech"] == "ready"
+    assert voiced == ["Ten days, Kyoto first."]
+
+
+def test_the_answer_to_a_question_replaced_by_a_correction_collected_as_its_own_turn_is_tagged_a_correction(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            await say(client, "Plan me 14 days in Japan")
+            await call.turns.next(timeout=1)
+            await say(client, "no wait, only 10 days", replaces=0)
+            await call.turns.next(timeout=1)
+            late = await (await client.post("/api/reply", json={"id": "t1", "text": "Here is the 14 day plan."}, headers=AUTH)).json()
+            await settle(call)
+            claude = [e for e in call.entries if e["who"] == "claude"]
+            return late, claude, fake.spoken
+
+    late, claude, voiced = run(go())
+    assert late["superseded"] is True and late["note"].startswith("superseded: the user replaced this question")
+    assert (claude[0]["superseded_kind"], claude[0]["speech"]) == ("correction", "skipped") and voiced == []
+
+
+def test_an_addition_the_user_took_back_leaves_the_answer_to_the_question_spoken(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            await say(client, "Plan me 14 days in Japan")
+            await call.turns.next(timeout=1)
+            await say(client, "no wait, only 10 days")
+            await call.turns.next(timeout=1)
+            cancelled = call.cancel(1)["cancelled"]
+            reply = await (await client.post("/api/reply", json={"id": "t1", "text": "Here is the 14 day plan."}, headers=AUTH)).json()
+            await settle(call)
+            return cancelled, reply, fake.spoken
+
+    cancelled, reply, voiced = run(go())
+    assert cancelled is True and "superseded" not in reply and voiced == ["Here is the 14 day plan."]
+
+
 def test_an_answer_with_nothing_added_since_is_spoken_as_ever(tmp_path):
     async def go():
         async with running_app(tmp_path) as (client, call, fake):
