@@ -379,7 +379,8 @@ function paintSendNote(m) {
   if (note.dataset.sig === sig) return;
   note.dataset.sig = sig; note.className = "sendnote" + (now && now.tone === "warn" ? " warn" : "");
   const text = document.createElement("span"); text.className = "sn-text";
-  text.textContent = now ? now.text : "Draft kept. Send adds it to your question.";
+  if (now) text.textContent = now.text;
+  else { text.append("Draft kept."); const more = document.createElement("span"); more.className = "sn-more"; more.textContent = " Send adds it to your question."; text.append(more); }
   note.replaceChildren(text);
   if (keep) note.append(waitButton("swap", "Replace question", () => sendText(true)));
 }

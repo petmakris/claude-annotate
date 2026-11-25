@@ -71,7 +71,8 @@
   .wt-actions:has(> :nth-child(3)) .wt-btn:not(.primary) span{display:none}
   .wt-actions{flex-wrap:nowrap}
   .wt-lost{font-size:12px}
-  .sendnote .wt-btn{min-height:44px}
+  .sendnote .wt-btn{min-height:44px;min-width:44px;justify-content:center}
+  .sendnote .wt-btn span,.sn-more{display:none}
   .qr-skip{min-height:44px;min-width:44px;justify-content:center;padding:0 10px}
   .qr-skip span{display:none!important}
 }
