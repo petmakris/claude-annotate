@@ -81,13 +81,10 @@ Rules:
   whole, nothing dimmed. The call page also sets the stage's light or dark theme. The answer that showed a view is
   marked on its row in the list (`A3`). Every answer that steps a view keeps its own scene on it (`scenes`, by answer number), and
   the call page names the answer with each frame, so replaying an earlier answer steps the board as that answer did; an answer
-  that showed the board with no steps of its own shows it whole. A stage opened on its own ignores all of this. Code, change, table, sequence, flowchart, map and scene views
-  can be pointed at from /talk only (a scene is HTML whose `data-part` elements the voice reveals one by one); /talk also keeps a pinned **Key points** board of the call's
-  `[[key: ...]]` tags. Embedded in a call, the stage also shows the sentence being said (`stage:caption`) and an
-  answer's stops (`stage:stop`: a card of buttons, answered with `stage:pick`). A tap on a scene part opens its popup
-  (Ask about this posts `stage:ask`; Play from here posts `stage:play`), and a `<dfn title>` term in a scene or in the
-  caption shows its meaning. A scene with a `<script>` or an `on…` handler runs in a sealed frame (`sandbox="allow-scripts"`,
-  a policy of `default-src 'none'`, the stage's stylesheet and fonts inline), and its frames reach it by message.
+  that showed the board with no steps of its own shows it whole. A stage opened on its own ignores all of this. Code, change, table, sequence, flowchart and map views
+  can be pointed at from /talk only; /talk also keeps a pinned **Key points** board of the call's
+  `[[key: ...]]` tags. Embedded in a call, the stage also shows the sentence being said (`stage:caption`) under a board.
+  A tap on a part of a board opens its popup (Ask about this posts `stage:ask`; Play from here posts `stage:play`).
 
 ## What the stage keeps true
 
@@ -95,10 +92,10 @@ A board that steps with the voice keeps these, and the tests check them on the c
 (`stage_rule_breaks` in `skills/talk/tests/helpers.py`):
 
 1. The part drawn as being said is the part the voice is on: each frame names it (`cur`), and the page draws only that.
-2. A part appears no earlier than the sentence that names it, and is visible when it is named. A slot for a card not said yet is an outline with no words; a part inside a part takes no room until it is said.
+2. A part appears no earlier than the sentence that names it, and is visible when it is named. A part not said yet is faint or an outline with no words.
 3. The pointed highlight and the being-said emphasis never disagree; nothing is emphasised and dimmed at once.
 4. An arrow is lit only with both its ends; an arriving arrow animates once, on a forward step only.
 5. Back, seek and replay give the same picture as playing straight through.
 6. Updates, resizing and a theme change keep the current picture correct.
-7. Text fits its box, and nothing overlaps. On a slide the sentence being said is one bar at the foot, in room the slide keeps for it, and never covers a part.
+7. Text fits its box, and nothing overlaps. The sentence being said is one line under the board, and never covers a part.
 8. Cues fire on the right word.

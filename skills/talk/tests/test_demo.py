@@ -112,3 +112,82 @@ def test_the_demos_small_diagram_shows_whole_and_lights_the_part_each_sentence_n
     assert scene["start"] == "full" and [f["cur"] for f in scene["frames"]] == [
         [], ["node:page"], ["node:talk"], ["node:claude"], []]
     assert call.board.problems == [] and stage_rule_breaks(call, shown) == []
+
+
+# ---- the guide a session reads (SKILL.md, references/, demo.md): what it must teach, and that what it shows runs ----
+GUIDE = talk.SKILL_DIR / "SKILL.md"
+
+
+def _tables(text):
+    """Every markdown table of a document as a list of rows, each row its cells split at unescaped pipes."""
+    out, run = [], []
+    for line in text.splitlines() + [""]:
+        if line.startswith("|"):
+            run.append([c.strip() for c in re.split(r"(?<!\\)\|", line.strip()[1:-1])])
+        elif run:
+            out.append(run)
+            run = []
+    return out
+
+
+def test_the_guide_opens_with_a_decision_table_that_puts_the_table_board_last():
+    text = GUIDE.read_text()
+    decision, boards = text.index("### Choose the board by the question"), text.index("### Teaching with the board")
+    assert decision < boards < text.index("| Board | Use it for | Tag |")
+    table = next(t for t in _tables(text) if t[0][0].startswith("The question is about"))
+    assert [row[1] for row in table[2:]] == ["sequence", "sequence with compare (`compare`)", "map", "flowchart",
+                                             "code, change", "table, last"]
+    assert "could the viewer say what each column means?" in text.lower()
+    assert "5 to 8 rows" in text
+
+
+def test_every_table_of_the_guide_has_the_same_cells_in_every_row():
+    """An unescaped pipe in a cell (a `[[show sequence | T]]` tag) splits it, and the row grows a cell: the compare
+    row of the board table once did, and its tag was lost."""
+    for doc in (GUIDE, *sorted((GUIDE.parent / "references").glob("*.md"))):
+        for table in _tables(doc.read_text()):
+            widths = {len(row) for row in table}
+            assert len(widths) == 1, (doc.name, table[0], widths)
+
+
+def test_the_guides_boards_table_tags_all_survive_their_pipes():
+    table = next(t for t in _tables(GUIDE.read_text()) if t[0][0] == "Board")
+    tags = {row[0]: row[2] for row in table[2:]}
+    assert set(tags) >= {"sequence", "sequence with compare", "map", "flowchart", "code", "change", "table", "page", "screen"}
+    for name, cell in tags.items():
+        assert re.search(r"\[\[show [a-z]+(?::[^\]]*)? \\\| [^\]]+\]\]|\[\[show [a-z]+: [^\]|]+ \\\| [^\]]+\]\]", cell), (name, cell)
+
+
+def test_the_guides_references_exist_and_are_linked_from_it():
+    text = GUIDE.read_text()
+    for name in ("call-page", "server", "boards"):
+        assert (GUIDE.parent / "references" / f"{name}.md").is_file()
+        assert f"references/{name}.md" in text
+    assert len(text.splitlines()) < 330 and max(len(ln) for ln in text.splitlines()) < 700  # no 3,000 character lines
+    assert "scenes and stops" not in (talk.SKILL_DIR.parent / "stage" / "SKILL.md").read_text().lower()
+
+
+def test_every_example_the_guide_gives_is_a_spec_the_real_validators_accept(tmp_path):
+    text = GUIDE.read_text()
+    examples = [b for b in re.findall(r"```\n(\[\[show .*?)```", text, re.S) if not b.startswith("[[show change")]
+    assert len(examples) >= 4  # a map, a wait, a compare and a flowchart
+    for n, example in enumerate(examples):
+        call = talk.Call(make_args(code=talk.SKILL_DIR.parents[1]), "Guide", tmp_path / f"out{n}")
+        shown = call.split_reply(example)
+        assert call.board.problems == [], (example[:60], call.board.problems)
+        assert stage_rule_breaks(call, shown) == []
+
+
+def test_the_demo_teaches_a_zoned_map_a_never_arrow_a_wait_and_a_real_grid(tmp_path):
+    call = talk.Call(make_args(code=talk.SKILL_DIR.parents[1]), "Stage demo", tmp_path / "out")
+    for text in talk.load_demo():
+        call.split_reply(text)
+    boards = {item["title"]: item for item in call.board.items}
+    spec = boards["Where talk's parts live"]["visual"]["spec"]
+    assert any("port 8766" in z["label"] for z in spec["zones"])
+    never = [a for a in spec["arrows"] if a.get("label") == "never"]
+    assert len(never) == 1 and never[0]["tone"] == "red" and never[0]["dash"] is True
+    wait = boards["The doorbell waits"]["visual"]["spec"]["steps"]
+    assert [s.get("reply_to") for s in wait] == [None, None, "w1"]
+    grid = _tables(boards["Four boards a session picks by hand"]["body"])[0]
+    assert len(grid) == 6 and {len(row) for row in grid} == {4}  # a header, a separator and four things on three measures

@@ -23,7 +23,14 @@ Welcome to the stage demo. The stage reads each answer with you, the word being 
   {"id": "s6", "from": "c", "to": "t", "arrow": "request", "label": "sends the answer and its boards", "sub": "talk_client.py reply"},
   {"id": "s7", "from": "t", "to": "a", "arrow": "request", "tone": "service", "label": "reads the whole answer aloud", "sub": "speech.speak"},
   {"id": "s8", "from": "t", "to": "p", "arrow": "event", "tone": "edge", "label": "the answer is ready on the next poll", "sub": "GET /api/state"}]} [[/show]]
-A sequence comes in a step at a time, here the path of one turn. When you stop talking, the call page sends what you said to the talk server. The server hands the recording to Azure, which turns it into words. Azure sends back the words it heard. Your Claude session collects the turn on its doorbell. It reads the code and writes the answer. Then it sends the answer and its boards back. The server has Azure read the whole answer aloud. And the answer is ready for the page on its next poll. [[point: step s5]] The slow part is always this one: Claude reading and writing. [[key: a sequence shows the step being said large, the rest as lines]] Next is a map.
+A sequence comes in a step at a time, here the path of one turn. When you stop talking, the call page sends what you said to the talk server. The server hands the recording to Azure, which turns it into words. Azure sends back the words it heard. Your Claude session collects the turn on its doorbell. It reads the code and writes the answer. Then it sends the answer and its boards back. The server has Azure read the whole answer aloud. And the answer is ready for the page on its next poll. [[point: step s5]] The slow part is always this one: Claude reading and writing. [[key: a sequence shows the step being said large, the rest as lines]] Next is a wait.
+---
+[[show sequence | The doorbell waits]] {"actors": [{"id": "d", "label": "Doorbell", "sub": "talk_client.py"}, {"id": "s", "label": "Talk server", "sub": "talk.py"}, {"id": "p", "label": "Call page"}],
+ "steps": [
+  {"id": "w1", "from": "d", "to": "s", "arrow": "request", "label": "asks for the next turn", "sub": "GET /api/turn", "note": "waits up to 90 s"},
+  {"id": "w2", "from": "p", "to": "s", "arrow": "request", "label": "sends what you said", "sub": "POST /api/say"},
+  {"id": "w3", "from": "s", "to": "d", "arrow": "event", "label": "answers the open request with your turn", "reply_to": "w1"}]} [[/show]]
+A wait is a request that stays open. The doorbell asks the server for the next turn, and the server holds that request, so a bar stays open on the server. Nothing is pushed to the doorbell. When you send something, the server answers the open request with your turn. [[point: step w3]] The reply closes the bar. [[key: a wait is a request held open until its reply]] Next is a before and after.
 ---
 [[show sequence | Backtesting before and after]] {"title": "A shared module takes the Service client's place",
  "compare": {
@@ -50,7 +57,7 @@ A sequence comes in a step at a time, here the path of one turn. When you stop t
     {"id": "b6", "from": "sm", "to": "svc", "arrow": "event", "label": "returns raw values", "reply_to": "b2"},
     {"id": "c1", "from": "svc", "to": "svc", "arrow": "self", "label": "builds the report timeseries", "sub": "ReportBacktestTimeseries"},
     {"id": "b7", "from": "svc", "to": "ui", "arrow": "event", "label": "returns the timeseries", "reply_to": "b1"}]}}} [[/show]]
-A before and after sequence puts the two flows side by side, row for row, so you compare their shape instead of working it out yourself. [[point: before]] On master, the proposal report asks for the backtest. The report service asks the Service client in PMP's module for the backtest data. The client builds the requests with fixed lists, always quarterly. It asks Service for the ex-post measures. Then it requests the backtest series. And it returns report timeseries. [[point: after]] With the PR, a shared backtesting module takes the client's place. The service passes quarterly and its own measures down. The module builds the requests with the lists it is given, and returns raw values. The report service builds the report timeseries itself, the one row the old flow has no step for. [[point: both]] The Service requests are the same on both sides. [[key: a before and after board sets the two flows side by side, with a gap where one has no step]] Next is a map.
+A before and after sequence puts the two flows side by side, row for row, so you compare their shape instead of working it out yourself. [[point: before]] On master, the proposal report asks for the backtest. The report service asks the Service client in PMP's module for the backtest data. The client builds the requests with fixed lists, always quarterly. It asks Service for the ex-post measures. Then it requests the backtest series. And it returns report timeseries. [[point: after]] With the PR, a shared backtesting module takes the client's place. The service passes quarterly and its own measures down. The module builds the requests with the lists it is given, and returns raw values. The report service builds the report timeseries itself, the one row the old flow has no step for. [[point: both]] The Service requests are the same on both sides. [[key: a before and after board sets the two flows side by side, with a gap where one has no step]] Next is a map of connected parts.
 ---
 [[show flowchart | How talk's parts connect]] {"nodes": [{"id": "page", "role": "entry", "label": "Call page", "ref": "call.html · call.js", "sub": "your microphone, the conversation, the controls"},
   {"id": "launchd", "role": "code", "label": "launchd", "ref": "dev.talk", "sub": "keeps the server running, with the speech settings"},
@@ -70,25 +77,25 @@ A map shows how parts connect, all of it faint at first. [[+ page]] Everything s
   {"id": "talk", "col": 1, "row": 0, "rows": 2, "tone": "red", "name": "Talk server", "lines": ["`talk.py`, one per machine", "holds every call"], "b": 2, "r": 1},
   {"id": "claude", "col": 2, "row": 0, "tone": "blue", "name": "Claude session", "lines": ["`talk_client.py`"], "b": 3, "r": 2},
   {"id": "azure", "col": 2, "row": 1, "tone": "amber", "name": "Azure speech", "lines": ["billed per character"], "b": 3, "r": 3}],
- "zones": [{"label": "one browser tab", "boxes": ["page", "stage"]}],
+ "zones": [{"label": "one browser tab", "boxes": ["page", "stage"]}, {"label": "talk server, port 8766", "boxes": ["talk"]}],
  "arrows": [{"from": "page", "to": "talk", "label": "turns", "b": 2}, {"from": "talk", "to": "claude", "b": 3},
   {"from": "talk", "to": "azure", "tone": "amber", "b": 3}, {"from": "talk", "to": "stage", "label": "boards", "b": 4},
+  {"from": "page", "to": "azure", "tone": "red", "dash": true, "label": "never", "b": 4},
   {"layer": "route", "from": "page", "to": "talk", "n": 1, "r": 1, "label": "sends your words"},
   {"layer": "route", "from": "talk", "to": "claude", "tone": "blue", "n": 2, "r": 2, "label": "the doorbell wakes Claude"},
   {"layer": "route", "from": "talk", "to": "azure", "tone": "amber", "n": 3, "r": 3, "label": "reads the answer aloud"},
   {"layer": "route", "from": "talk", "to": "stage", "n": 4, "r": 4, "label": "puts up the boards"}]} [[/show]]
-An architecture map puts each part where it lives. The call page runs in your browser tab. It talks to one talk server on this Mac. The server reaches your Claude session, and Azure speech outside. The stage shows the boards. [[key: a map is built up part by part, then follows one request]] [[point: box talk]] Everything goes through this one server, so now follow one turn. The page sends your words. The doorbell wakes Claude. Azure reads the answer aloud. And the server puts up the boards. Next is a table.
+An architecture map puts each part where it lives. The call page runs in your browser tab. It talks to one talk server on this Mac, on port 8766. The server reaches your Claude session, and Azure speech outside. The stage shows the boards. The page never talks to Azure itself: the dashed red arrow says never. [[key: a map is built up part by part, then follows one request]] [[point: box talk]] Everything goes through this one server, so now follow one turn. The page sends your words. The doorbell wakes Claude. Azure reads the answer aloud. And the server puts up the boards. Next is a table.
 ---
-[[show table | Two speech engines]]
-| | Azure | VoiceStudio |
-|---|---|---|
-| Speed | a second or two per answer | about as long to make as to play |
-| Cost | billed per character | free |
-| Runs on | Microsoft's servers | this Mac |
-| Needs | `TALK_AZURE_KEY_COMMAND` | the VoiceStudio app open |
-| Picked | when a key is found | when no key is found |
+[[show table | Four boards a session picks by hand]]
+| Board | Shows | Reads from | The voice can point at |
+|---|---|---|---|
+| code | existing lines of a file | `--code`, or any git work tree | lines |
+| change | a file against an older version | the file's own repository | new and removed lines |
+| page | a file, an address or another session | a file inside `--code` | nothing, it shows whole |
+| screen | a screen explained part by part | a spotlight spec in `--code` | a part |
 [[/show]]
-A table comes in a row at a time. [[next]] [[point: cell "Speed" / "Azure"]] Azure answers in a second or two. [[point: cell "Speed" / "VoiceStudio"]] VoiceStudio takes about as long to make an answer as to play it. [[next]] Azure is billed per character, and VoiceStudio is free. [[next]] Azure runs on Microsoft's servers, VoiceStudio on this Mac. [[next]] Azure needs a key command, and VoiceStudio needs its app open. [[next]] [[point: cell "Picked" / "Azure"]] And talk picks Azure whenever it finds a key. [[key: a table can light one cell, not only a row]] Next is a diagram.
+A table is for the one case where several things are judged on the same measures and nothing connects them, so it is the last board to pick. Here are four boards, each judged on what it shows, where it reads from and what the voice can point at. [[next]] A code board shows existing lines. [[next]] A change board shows a file against an older version. [[next]] [[point: cell "page" / "The voice can point at"]] A page shows whole, so the voice has nothing to point at. [[focus rows 3-4]] A page and a screen differ in exactly that. [[key: a table fits several things judged on the same measures]] Next is a diagram.
 ---
 [[show flowchart | Live mode's states]] {"nodes": [{"id": "listening", "role": "entry", "label": "Listening", "sub": "the microphone is open"},
   {"id": "hearing", "role": "code", "label": "Hearing you", "sub": "you are speaking"},
