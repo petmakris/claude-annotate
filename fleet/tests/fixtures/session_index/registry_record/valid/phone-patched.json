@@ -1,0 +1,20 @@
+{
+ "version": 1,
+ "sid": "0a1b2c3d-0000-4000-8000-000000000016",
+ "name": "fix the build",
+ "machine": "hub",
+ "account": "first",
+ "cwd": "/home/me/projects/app",
+ "last_prompt": "what is left?",
+ "last_answer": "Only the docs step.",
+ "updated": "2026-11-25T22:10:00+01:00",
+ "live": true,
+ "owner": "phone:prod",
+ "owner_since": "2026-11-25T21:00:00+01:00",
+ "epoch": 2,
+ "kind": "chat",
+ "topic": {
+  "host": "prod",
+  "id": "fix-the-build"
+ }
+}

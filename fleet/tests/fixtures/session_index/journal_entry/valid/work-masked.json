@@ -1,0 +1,19 @@
+{
+ "v": 1,
+ "machine": "laptop",
+ "seq": 43,
+ "as": "laptop",
+ "sid": "0a1b2c3d-0000-4000-8000-000000000002",
+ "epoch_seen": 1,
+ "event": "prompt",
+ "at": 1795600043.0,
+ "fields": {
+  "work": true,
+  "kind": "chat",
+  "observed": {
+   "live": true,
+   "state": "busy",
+   "observed_at": 1795600043.0
+  }
+ }
+}

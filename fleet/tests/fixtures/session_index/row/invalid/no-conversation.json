@@ -1,0 +1,30 @@
+{
+ "why": "every row names its conversation",
+ "expect": "conversation is missing",
+ "doc": {
+  "sid": "0a1b2c3d-0000-4000-8000-000000000011",
+  "name": "fix the build",
+  "name_source": "custom",
+  "kind": "chat",
+  "env": "prod",
+  "machine": "laptop",
+  "cwd": "/home/me/projects/app",
+  "account": "first",
+  "owner": "laptop",
+  "owner_since": 1795600000.0,
+  "epoch": 1,
+  "continues": null,
+  "superseded_by": null,
+  "first_prompt": "the build fails on the docs step, fix it",
+  "last_prompt": "run the tests again",
+  "last_answer": "All 212 tests pass.",
+  "topic": null,
+  "rc_name": "laptop-app",
+  "started": 1795600000.0,
+  "updated": 1795600600.0,
+  "ended": null,
+  "end_reason": null,
+  "description": "Fixed the docs build.",
+  "work": false
+ }
+}

@@ -1,0 +1,22 @@
+{
+ "v": 1,
+ "machine": "laptop",
+ "seq": 40,
+ "as": "laptop",
+ "sid": "0a1b2c3d-0000-4000-8000-000000000001",
+ "epoch_seen": 1,
+ "event": "start",
+ "at": 1795600040.0,
+ "fields": {
+  "kind": "chat",
+  "cwd": "/home/me/projects/app",
+  "account": "first",
+  "work": false,
+  "rc_name": "laptop-app",
+  "observed": {
+   "live": true,
+   "state": "idle",
+   "observed_at": 1795600040.0
+  }
+ }
+}

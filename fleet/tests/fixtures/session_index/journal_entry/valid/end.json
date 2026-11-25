@@ -1,0 +1,19 @@
+{
+ "v": 1,
+ "machine": "laptop",
+ "seq": 42,
+ "as": "laptop",
+ "sid": "0a1b2c3d-0000-4000-8000-000000000001",
+ "epoch_seen": 1,
+ "event": "end",
+ "at": 1795600042.0,
+ "fields": {
+  "end_reason": "prompt_input_exit",
+  "work": false,
+  "observed": {
+   "live": false,
+   "state": "ended",
+   "observed_at": 1795600042.0
+  }
+ }
+}

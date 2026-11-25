@@ -1,0 +1,20 @@
+{
+ "machine": "laptop",
+ "as_of": 1795600598.0,
+ "rows": {
+  "0a1b2c3d-0000-4000-8000-000000000001": {
+   "live": true,
+   "state": "idle",
+   "where": "tmux",
+   "tmux": "app",
+   "pid": 4242
+  },
+  "0a1b2c3d-0000-4000-8000-000000000002": {
+   "live": true,
+   "state": "busy",
+   "where": "window",
+   "tmux": null,
+   "pid": 5151
+  }
+ }
+}

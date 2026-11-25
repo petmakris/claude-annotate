@@ -1,0 +1,16 @@
+{
+ "old_sid": "0a1b2c3d-0000-4000-8000-000000000004",
+ "new_sid": "0a1b2c3d-0000-4000-8000-000000000005",
+ "by": "phone:prod",
+ "expect_epoch": 1,
+ "fields": {
+  "name": "our conversation",
+  "name_source": "topic",
+  "kind": "voice",
+  "topic": {
+   "host": "prod",
+   "id": "our-conversation"
+  },
+  "first_prompt": "Summary of the earlier session: kitchen plans."
+ }
+}

@@ -1,0 +1,70 @@
+{
+ "about": "A row a sandbox server made is env dev:<sandbox> and hidden from default lists.",
+ "parts": {
+  "entry": "journal_entry",
+  "row": "row"
+ },
+ "entry": {
+  "v": 1,
+  "machine": "hub",
+  "seq": 7,
+  "as": "phone:dev:demo",
+  "sid": "0a1b2c3d-0000-4000-8000-000000000003",
+  "epoch_seen": 1,
+  "event": "start",
+  "at": 1795600007.0,
+  "fields": {
+   "kind": "voice",
+   "name": "kitchen plans",
+   "name_source": "topic",
+   "topic": {
+    "host": "dev:demo",
+    "id": "kitchen-plans"
+   },
+   "cwd": "/home/me",
+   "account": "second",
+   "work": false,
+   "observed": {
+    "live": true,
+    "state": "running",
+    "where": "phone",
+    "observed_at": 1795600007.0
+   }
+  }
+ },
+ "row": {
+  "sid": "0a1b2c3d-0000-4000-8000-000000000003",
+  "conversation": "0a1b2c3d-0000-4000-8000-000000000003",
+  "name": "kitchen plans",
+  "name_source": "topic",
+  "kind": "voice",
+  "env": "dev:demo",
+  "machine": "hub",
+  "cwd": "/home/me",
+  "account": "second",
+  "owner": "phone:dev:demo",
+  "owner_since": 1795600000.0,
+  "epoch": 1,
+  "continues": null,
+  "superseded_by": null,
+  "first_prompt": "plan the kitchen",
+  "last_prompt": "run the tests again",
+  "last_answer": "All 212 tests pass.",
+  "topic": {
+   "host": "dev:demo",
+   "id": "kitchen-plans"
+  },
+  "rc_name": null,
+  "started": 1795600000.0,
+  "updated": 1795600600.0,
+  "ended": null,
+  "end_reason": null,
+  "description": null,
+  "work": false
+ },
+ "expected": {
+  "env": "dev:demo",
+  "listed_by_default": false,
+  "listed_with": "env=all"
+ }
+}

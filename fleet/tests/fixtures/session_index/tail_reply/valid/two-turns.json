@@ -1,0 +1,17 @@
+{
+ "sid": "0a1b2c3d-0000-4000-8000-000000000001",
+ "name": "fix the build",
+ "machine": "laptop",
+ "turns": [
+  {
+   "role": "user",
+   "text": "the build fails on the docs step, fix it",
+   "at": "2026-11-25T21:00:05.120Z"
+  },
+  {
+   "role": "assistant",
+   "text": "Fixed: the docs step had a stale path.",
+   "at": "2026-11-25T21:01:40.002Z"
+  }
+ ]
+}

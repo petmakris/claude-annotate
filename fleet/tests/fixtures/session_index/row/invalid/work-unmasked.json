@@ -1,0 +1,31 @@
+{
+ "why": "a work row holds its folder and first prompt",
+ "expect": "cwd",
+ "doc": {
+  "sid": "0a1b2c3d-0000-4000-8000-000000000007",
+  "conversation": "0a1b2c3d-0000-4000-8000-000000000007",
+  "name": "",
+  "name_source": "",
+  "kind": "chat",
+  "env": "prod",
+  "machine": "laptop",
+  "cwd": "/home/me/work/secret",
+  "account": null,
+  "owner": "laptop",
+  "owner_since": 1795600000.0,
+  "epoch": 1,
+  "continues": null,
+  "superseded_by": null,
+  "first_prompt": "the client's numbers",
+  "last_prompt": null,
+  "last_answer": null,
+  "topic": null,
+  "rc_name": null,
+  "started": 1795600000.0,
+  "updated": 1795600600.0,
+  "ended": null,
+  "end_reason": null,
+  "description": null,
+  "work": true
+ }
+}

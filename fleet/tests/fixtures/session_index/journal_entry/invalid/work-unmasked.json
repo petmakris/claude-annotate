@@ -1,0 +1,19 @@
+{
+ "why": "a work entry carries its prompt and folder",
+ "expect": "fits a shape it must not",
+ "doc": {
+  "v": 1,
+  "machine": "laptop",
+  "seq": 45,
+  "as": "laptop",
+  "sid": "0a1b2c3d-0000-4000-8000-000000000002",
+  "epoch_seen": 1,
+  "event": "prompt",
+  "at": 1795600045.0,
+  "fields": {
+   "work": true,
+   "last_prompt": "check the client's numbers",
+   "cwd": "/home/me/work/client"
+  }
+ }
+}

@@ -1,0 +1,84 @@
+{
+ "about": "A Claude Voice sandbox server asks to take a prod session: refused, nothing changes (rulings A.6, E).",
+ "parts": {
+  "row_before": "row",
+  "request": "take_request",
+  "reply": "take_reply",
+  "row_after": "row"
+ },
+ "row_before": {
+  "sid": "0a1b2c3d-0000-4000-8000-000000000018",
+  "conversation": "0a1b2c3d-0000-4000-8000-000000000018",
+  "name": "groceries",
+  "name_source": "topic",
+  "kind": "voice",
+  "env": "prod",
+  "machine": "hub",
+  "cwd": "/home/me",
+  "account": "first",
+  "owner": "phone:prod",
+  "owner_since": 1795600000.0,
+  "epoch": 1,
+  "continues": null,
+  "superseded_by": null,
+  "first_prompt": "the build fails on the docs step, fix it",
+  "last_prompt": "run the tests again",
+  "last_answer": "All 212 tests pass.",
+  "topic": {
+   "host": "prod",
+   "id": "groceries"
+  },
+  "rc_name": null,
+  "started": 1795600000.0,
+  "updated": 1795600600.0,
+  "ended": null,
+  "end_reason": null,
+  "description": "Fixed the docs build.",
+  "work": false
+ },
+ "request": {
+  "sid": "0a1b2c3d-0000-4000-8000-000000000018",
+  "to": "phone:dev:demo",
+  "expect_epoch": 1,
+  "by": "phone:dev:demo"
+ },
+ "reply": {
+  "ok": false,
+  "code": "dev-refused",
+  "error": "a Claude Voice sandbox takes only the sessions it made, and never gives one to phone:prod"
+ },
+ "row_after": {
+  "sid": "0a1b2c3d-0000-4000-8000-000000000018",
+  "conversation": "0a1b2c3d-0000-4000-8000-000000000018",
+  "name": "groceries",
+  "name_source": "topic",
+  "kind": "voice",
+  "env": "prod",
+  "machine": "hub",
+  "cwd": "/home/me",
+  "account": "first",
+  "owner": "phone:prod",
+  "owner_since": 1795600000.0,
+  "epoch": 1,
+  "continues": null,
+  "superseded_by": null,
+  "first_prompt": "the build fails on the docs step, fix it",
+  "last_prompt": "run the tests again",
+  "last_answer": "All 212 tests pass.",
+  "topic": {
+   "host": "prod",
+   "id": "groceries"
+  },
+  "rc_name": null,
+  "started": 1795600000.0,
+  "updated": 1795600600.0,
+  "ended": null,
+  "end_reason": null,
+  "description": "Fixed the docs build.",
+  "work": false
+ },
+ "expected": {
+  "code": "dev-refused",
+  "row_unchanged": true
+ }
+}

@@ -1,0 +1,13 @@
+{
+ "why": "a chain cannot set the owner through fields",
+ "expect": "owner",
+ "doc": {
+  "old_sid": "0a1b2c3d-0000-4000-8000-000000000004",
+  "new_sid": "0a1b2c3d-0000-4000-8000-000000000005",
+  "by": "phone:prod",
+  "expect_epoch": 1,
+  "fields": {
+   "owner": "laptop"
+  }
+ }
+}

@@ -1,0 +1,21 @@
+{
+ "why": "a registry file holds only chat or job",
+ "expect": "kind",
+ "doc": {
+  "version": 1,
+  "sid": "0a1b2c3d-0000-4000-8000-000000000001",
+  "name": "fix the build",
+  "machine": "laptop",
+  "account": "first",
+  "cwd": "/home/me/projects/app",
+  "last_prompt": "run the tests again",
+  "last_answer": "All 212 tests pass.",
+  "updated": "2026-11-25T22:10:00+01:00",
+  "live": true,
+  "owner": "laptop",
+  "owner_since": "2026-11-25T21:00:00+01:00",
+  "epoch": 1,
+  "kind": "voice",
+  "topic": null
+ }
+}

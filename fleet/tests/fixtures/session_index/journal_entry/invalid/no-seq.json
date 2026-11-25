@@ -1,0 +1,16 @@
+{
+ "why": "every entry carries its machine's seq",
+ "expect": "seq is missing",
+ "doc": {
+  "v": 1,
+  "machine": "laptop",
+  "as": "laptop",
+  "sid": "0a1b2c3d-0000-4000-8000-000000000001",
+  "epoch_seen": 1,
+  "event": "prompt",
+  "at": 1795600047.0,
+  "fields": {
+   "work": false
+  }
+ }
+}

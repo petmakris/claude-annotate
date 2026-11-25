@@ -1,0 +1,5 @@
+{
+ "ok": false,
+ "code": "stale-epoch",
+ "error": "session 0a1b2c3d-0000-4000-8000-000000000001 moved meanwhile (epoch 3, expected 2); read it again"
+}

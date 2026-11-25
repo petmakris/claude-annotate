@@ -1,0 +1,10 @@
+{
+ "why": "an epoch starts at 1",
+ "expect": "expect_epoch",
+ "doc": {
+  "sid": "0a1b2c3d-0000-4000-8000-000000000001",
+  "to": "laptop",
+  "by": "laptop",
+  "expect_epoch": 0
+ }
+}

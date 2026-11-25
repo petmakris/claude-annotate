@@ -1,0 +1,1811 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "The session index: shapes of fleet/docs/session-index.md",
+ "description": "Every shape the session index exchanges. Uses only the keywords fleet/tests/schema_check.py knows.",
+ "$defs": {
+  "sid": {
+   "type": "string",
+   "pattern": "^[0-9A-Za-z][0-9A-Za-z_-]{0,127}$"
+  },
+  "machine": {
+   "type": "string",
+   "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+  },
+  "owner": {
+   "type": "string",
+   "pattern": "^(phone:prod|phone:dev:[a-z0-9]+|[a-z0-9][a-z0-9-]{0,62})$"
+  },
+  "env": {
+   "type": "string",
+   "pattern": "^(prod|dev:[a-z0-9]+)$"
+  },
+  "time": {
+   "type": "number",
+   "minimum": 0
+  },
+  "topic": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "additionalProperties": false,
+   "required": [
+    "host",
+    "id"
+   ],
+   "properties": {
+    "host": {
+     "type": "string",
+     "pattern": "^(prod|dev:[a-z0-9]+)$"
+    },
+    "id": {
+     "type": "string",
+     "minLength": 1,
+     "maxLength": 200
+    }
+   }
+  },
+  "name_source": {
+   "enum": [
+    "",
+    "manual",
+    "custom",
+    "topic",
+    "job",
+    "ai",
+    "agent",
+    "fleet",
+    "registry",
+    "prompt"
+   ]
+  },
+  "kind": {
+   "enum": [
+    "chat",
+    "job",
+    "worker",
+    "voice"
+   ]
+  },
+  "where": {
+   "enum": [
+    "tmux",
+    "window",
+    "bg",
+    "phone",
+    "none",
+    null
+   ]
+  },
+  "observed": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "live",
+    "state",
+    "where",
+    "tmux",
+    "pid",
+    "observed_at",
+    "stale",
+    "source"
+   ],
+   "properties": {
+    "live": {
+     "type": [
+      "boolean",
+      "null"
+     ]
+    },
+    "state": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 64
+    },
+    "where": {
+     "$ref": "#/$defs/where"
+    },
+    "tmux": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 200
+    },
+    "pid": {
+     "type": [
+      "integer",
+      "null"
+     ],
+     "minimum": 1
+    },
+    "observed_at": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/time"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "stale": {
+     "type": "boolean"
+    },
+    "source": {
+     "enum": [
+      "machine",
+      "journal",
+      "none"
+     ]
+    }
+   }
+  },
+  "row": {
+   "description": "A row of the hub's `sessions` table: durable facts only.",
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "sid",
+    "conversation",
+    "name",
+    "name_source",
+    "kind",
+    "env",
+    "machine",
+    "cwd",
+    "account",
+    "owner",
+    "owner_since",
+    "epoch",
+    "continues",
+    "superseded_by",
+    "first_prompt",
+    "last_prompt",
+    "last_answer",
+    "topic",
+    "rc_name",
+    "started",
+    "updated",
+    "ended",
+    "end_reason",
+    "description",
+    "work"
+   ],
+   "properties": {
+    "sid": {
+     "$ref": "#/$defs/sid"
+    },
+    "conversation": {
+     "$ref": "#/$defs/sid"
+    },
+    "name": {
+     "type": "string",
+     "maxLength": 200
+    },
+    "name_source": {
+     "$ref": "#/$defs/name_source"
+    },
+    "kind": {
+     "$ref": "#/$defs/kind"
+    },
+    "env": {
+     "$ref": "#/$defs/env"
+    },
+    "machine": {
+     "$ref": "#/$defs/machine"
+    },
+    "cwd": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 4096
+    },
+    "account": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 64
+    },
+    "owner": {
+     "$ref": "#/$defs/owner"
+    },
+    "owner_since": {
+     "$ref": "#/$defs/time"
+    },
+    "epoch": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "continues": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/sid"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "superseded_by": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/sid"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "first_prompt": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 300
+    },
+    "last_prompt": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 200
+    },
+    "last_answer": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 200
+    },
+    "topic": {
+     "$ref": "#/$defs/topic"
+    },
+    "rc_name": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 200
+    },
+    "started": {
+     "$ref": "#/$defs/time"
+    },
+    "updated": {
+     "$ref": "#/$defs/time"
+    },
+    "ended": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/time"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "end_reason": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 64
+    },
+    "description": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 2000
+    },
+    "work": {
+     "type": "boolean"
+    }
+   },
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "work": {
+        "const": true
+       }
+      },
+      "required": [
+       "work"
+      ]
+     },
+     "then": {
+      "properties": {
+       "first_prompt": {
+        "type": "null"
+       },
+       "last_prompt": {
+        "type": "null"
+       },
+       "last_answer": {
+        "type": "null"
+       },
+       "cwd": {
+        "type": "null"
+       },
+       "account": {
+        "type": "null"
+       },
+       "description": {
+        "type": "null"
+       },
+       "rc_name": {
+        "type": "null"
+       },
+       "name_source": {
+        "not": {
+         "enum": [
+          "ai",
+          "registry",
+          "prompt"
+         ]
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  "list_row": {
+   "description": "A row as a list gives it: durable facts, observed facts, key, head, chain.",
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "sid",
+    "conversation",
+    "name",
+    "name_source",
+    "kind",
+    "env",
+    "machine",
+    "cwd",
+    "account",
+    "owner",
+    "owner_since",
+    "epoch",
+    "continues",
+    "superseded_by",
+    "first_prompt",
+    "last_prompt",
+    "last_answer",
+    "topic",
+    "rc_name",
+    "started",
+    "updated",
+    "ended",
+    "end_reason",
+    "description",
+    "work",
+    "observed",
+    "key",
+    "head",
+    "chain"
+   ],
+   "properties": {
+    "sid": {
+     "$ref": "#/$defs/sid"
+    },
+    "conversation": {
+     "$ref": "#/$defs/sid"
+    },
+    "name": {
+     "type": "string",
+     "maxLength": 200
+    },
+    "name_source": {
+     "$ref": "#/$defs/name_source"
+    },
+    "kind": {
+     "$ref": "#/$defs/kind"
+    },
+    "env": {
+     "$ref": "#/$defs/env"
+    },
+    "machine": {
+     "$ref": "#/$defs/machine"
+    },
+    "cwd": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 4096
+    },
+    "account": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 64
+    },
+    "owner": {
+     "$ref": "#/$defs/owner"
+    },
+    "owner_since": {
+     "$ref": "#/$defs/time"
+    },
+    "epoch": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "continues": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/sid"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "superseded_by": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/sid"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "first_prompt": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 300
+    },
+    "last_prompt": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 200
+    },
+    "last_answer": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 200
+    },
+    "topic": {
+     "$ref": "#/$defs/topic"
+    },
+    "rc_name": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 200
+    },
+    "started": {
+     "$ref": "#/$defs/time"
+    },
+    "updated": {
+     "$ref": "#/$defs/time"
+    },
+    "ended": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/time"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "end_reason": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 64
+    },
+    "description": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 2000
+    },
+    "work": {
+     "type": "boolean"
+    },
+    "observed": {
+     "$ref": "#/$defs/observed"
+    },
+    "key": {
+     "type": "string",
+     "pattern": "^[a-z0-9][a-z0-9-]{0,62}:[0-9A-Za-z][0-9A-Za-z_-]{0,127}$"
+    },
+    "head": {
+     "type": "boolean"
+    },
+    "chain": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "$ref": "#/$defs/sid"
+     }
+    }
+   },
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "work": {
+        "const": true
+       }
+      },
+      "required": [
+       "work"
+      ]
+     },
+     "then": {
+      "properties": {
+       "first_prompt": {
+        "type": "null"
+       },
+       "last_prompt": {
+        "type": "null"
+       },
+       "last_answer": {
+        "type": "null"
+       },
+       "cwd": {
+        "type": "null"
+       },
+       "account": {
+        "type": "null"
+       },
+       "description": {
+        "type": "null"
+       },
+       "rc_name": {
+        "type": "null"
+       },
+       "name_source": {
+        "not": {
+         "enum": [
+          "ai",
+          "registry",
+          "prompt"
+         ]
+        }
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "work": {
+        "const": true
+       }
+      },
+      "required": [
+       "work"
+      ]
+     },
+     "then": {
+      "properties": {
+       "observed": {
+        "properties": {
+         "tmux": {
+          "type": "null"
+         }
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  "cache_row": {
+   "description": "One file `$FLEET_HOME/index/cache/<sid>.json`. On the writing machine a work row may be whole.",
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "v",
+    "sid",
+    "conversation",
+    "owner",
+    "epoch",
+    "owner_since",
+    "name",
+    "name_source",
+    "kind",
+    "env",
+    "machine",
+    "work",
+    "superseded_by",
+    "cached_at",
+    "source"
+   ],
+   "properties": {
+    "sid": {
+     "$ref": "#/$defs/sid"
+    },
+    "conversation": {
+     "$ref": "#/$defs/sid"
+    },
+    "name": {
+     "type": "string",
+     "maxLength": 200
+    },
+    "name_source": {
+     "$ref": "#/$defs/name_source"
+    },
+    "kind": {
+     "$ref": "#/$defs/kind"
+    },
+    "env": {
+     "$ref": "#/$defs/env"
+    },
+    "machine": {
+     "$ref": "#/$defs/machine"
+    },
+    "cwd": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 4096
+    },
+    "account": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 64
+    },
+    "owner": {
+     "$ref": "#/$defs/owner"
+    },
+    "owner_since": {
+     "$ref": "#/$defs/time"
+    },
+    "epoch": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "continues": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/sid"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "superseded_by": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/sid"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "first_prompt": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 300
+    },
+    "last_prompt": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 200
+    },
+    "last_answer": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 200
+    },
+    "topic": {
+     "$ref": "#/$defs/topic"
+    },
+    "rc_name": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 200
+    },
+    "started": {
+     "$ref": "#/$defs/time"
+    },
+    "updated": {
+     "$ref": "#/$defs/time"
+    },
+    "ended": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/time"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "end_reason": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 64
+    },
+    "description": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 2000
+    },
+    "work": {
+     "type": "boolean"
+    },
+    "v": {
+     "const": 1
+    },
+    "cached_at": {
+     "$ref": "#/$defs/time"
+    },
+    "source": {
+     "enum": [
+      "hub",
+      "local"
+     ]
+    }
+   }
+  },
+  "journal_fields": {
+   "description": "The only keys a journal entry may carry. Never owner, epoch, env, machine or chain fields.",
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "name": {
+     "type": "string",
+     "maxLength": 200
+    },
+    "name_source": {
+     "$ref": "#/$defs/name_source"
+    },
+    "kind": {
+     "$ref": "#/$defs/kind"
+    },
+    "cwd": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 4096
+    },
+    "account": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 64
+    },
+    "first_prompt": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 300
+    },
+    "last_prompt": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 200
+    },
+    "last_answer": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 200
+    },
+    "topic": {
+     "$ref": "#/$defs/topic"
+    },
+    "rc_name": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 200
+    },
+    "description": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 2000
+    },
+    "end_reason": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 64
+    },
+    "work": {
+     "type": "boolean"
+    },
+    "observed": {
+     "type": "object",
+     "additionalProperties": false,
+     "minProperties": 1,
+     "properties": {
+      "live": {
+       "type": [
+        "boolean",
+        "null"
+       ]
+      },
+      "state": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 64
+      },
+      "where": {
+       "$ref": "#/$defs/where"
+      },
+      "tmux": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 200
+      },
+      "pid": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "minimum": 1
+      },
+      "observed_at": {
+       "$ref": "#/$defs/time"
+      }
+     },
+     "required": [
+      "observed_at"
+     ]
+    }
+   },
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "work": {
+        "const": true
+       }
+      },
+      "required": [
+       "work"
+      ]
+     },
+     "then": {
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "first_prompt"
+         ]
+        },
+        {
+         "required": [
+          "last_prompt"
+         ]
+        },
+        {
+         "required": [
+          "last_answer"
+         ]
+        },
+        {
+         "required": [
+          "cwd"
+         ]
+        },
+        {
+         "required": [
+          "account"
+         ]
+        },
+        {
+         "required": [
+          "description"
+         ]
+        },
+        {
+         "required": [
+          "rc_name"
+         ]
+        }
+       ]
+      },
+      "properties": {
+       "name_source": {
+        "not": {
+         "enum": [
+          "ai",
+          "registry",
+          "prompt"
+         ]
+        }
+       },
+       "observed": {
+        "not": {
+         "required": [
+          "tmux"
+         ]
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  "journal_entry": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "v",
+    "machine",
+    "seq",
+    "as",
+    "sid",
+    "epoch_seen",
+    "event",
+    "at",
+    "fields"
+   ],
+   "properties": {
+    "v": {
+     "const": 1
+    },
+    "machine": {
+     "$ref": "#/$defs/machine"
+    },
+    "seq": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "as": {
+     "$ref": "#/$defs/owner"
+    },
+    "sid": {
+     "$ref": "#/$defs/sid"
+    },
+    "epoch_seen": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "event": {
+     "enum": [
+      "start",
+      "prompt",
+      "stop",
+      "end",
+      "observe",
+      "describe"
+     ]
+    },
+    "at": {
+     "$ref": "#/$defs/time"
+    },
+    "fields": {
+     "$ref": "#/$defs/journal_fields"
+    }
+   }
+  },
+  "journal_batch": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "machine",
+    "entries"
+   ],
+   "properties": {
+    "machine": {
+     "$ref": "#/$defs/machine"
+    },
+    "entries": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/journal_entry"
+     }
+    }
+   }
+  },
+  "journal_reply": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "high_seq",
+    "results",
+    "rows"
+   ],
+   "properties": {
+    "high_seq": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "results": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "seq",
+       "outcome"
+      ],
+      "properties": {
+       "seq": {
+        "type": "integer",
+        "minimum": 1
+       },
+       "outcome": {
+        "enum": [
+         "applied",
+         "duplicate",
+         "invalid",
+         "work-refused",
+         "not-owner",
+         "stale-epoch"
+        ]
+       },
+       "reason": {
+        "type": "string"
+       }
+      }
+     }
+    },
+    "rows": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "owner",
+       "epoch",
+       "conversation",
+       "head",
+       "work"
+      ],
+      "properties": {
+       "owner": {
+        "$ref": "#/$defs/owner"
+       },
+       "epoch": {
+        "type": "integer",
+        "minimum": 1
+       },
+       "conversation": {
+        "$ref": "#/$defs/sid"
+       },
+       "head": {
+        "$ref": "#/$defs/sid"
+       },
+       "work": {
+        "type": "boolean"
+       }
+      }
+     }
+    }
+   }
+  },
+  "journal_state": {
+   "description": "`$FLEET_HOME/index/journal.state.json`.",
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "next_seq",
+    "acked_seq"
+   ],
+   "properties": {
+    "next_seq": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "acked_seq": {
+     "type": "integer",
+     "minimum": 0
+    }
+   }
+  },
+  "take_request": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "sid",
+    "to",
+    "expect_epoch",
+    "by"
+   ],
+   "properties": {
+    "sid": {
+     "$ref": "#/$defs/sid"
+    },
+    "to": {
+     "$ref": "#/$defs/owner"
+    },
+    "expect_epoch": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "by": {
+     "$ref": "#/$defs/owner"
+    },
+    "release": {
+     "enum": [
+      "stopped",
+      "phone",
+      "gone",
+      "none"
+     ]
+    },
+    "cwd": {
+     "type": "string",
+     "maxLength": 4096
+    }
+   }
+  },
+  "take_reply": {
+   "oneOf": [
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "ok",
+      "sid",
+      "owner",
+      "epoch",
+      "owner_since",
+      "previous_owner",
+      "conversation"
+     ],
+     "properties": {
+      "ok": {
+       "const": true
+      },
+      "sid": {
+       "$ref": "#/$defs/sid"
+      },
+      "owner": {
+       "$ref": "#/$defs/owner"
+      },
+      "epoch": {
+       "type": "integer",
+       "minimum": 1
+      },
+      "owner_since": {
+       "$ref": "#/$defs/time"
+      },
+      "previous_owner": {
+       "$ref": "#/$defs/owner"
+      },
+      "conversation": {
+       "$ref": "#/$defs/sid"
+      }
+     }
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "ok",
+      "code",
+      "error"
+     ],
+     "properties": {
+      "ok": {
+       "const": false
+      },
+      "code": {
+       "enum": [
+        "no-session",
+        "superseded",
+        "job",
+        "work",
+        "dev-refused",
+        "stale-epoch",
+        "hub-down",
+        "bad-request"
+       ]
+      },
+      "error": {
+       "type": "string",
+       "minLength": 1
+      }
+     }
+    }
+   ]
+  },
+  "chain_request": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "old_sid",
+    "new_sid",
+    "by",
+    "expect_epoch",
+    "fields"
+   ],
+   "properties": {
+    "old_sid": {
+     "$ref": "#/$defs/sid"
+    },
+    "new_sid": {
+     "$ref": "#/$defs/sid"
+    },
+    "by": {
+     "$ref": "#/$defs/owner"
+    },
+    "expect_epoch": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "fields": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "name": {
+       "type": "string",
+       "maxLength": 200
+      },
+      "name_source": {
+       "$ref": "#/$defs/name_source"
+      },
+      "kind": {
+       "$ref": "#/$defs/kind"
+      },
+      "cwd": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 4096
+      },
+      "account": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 64
+      },
+      "topic": {
+       "$ref": "#/$defs/topic"
+      },
+      "first_prompt": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 300
+      },
+      "last_prompt": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 200
+      },
+      "last_answer": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 200
+      },
+      "observed": {
+       "type": "object",
+       "additionalProperties": false,
+       "minProperties": 1,
+       "properties": {
+        "live": {
+         "type": [
+          "boolean",
+          "null"
+         ]
+        },
+        "state": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "maxLength": 64
+        },
+        "where": {
+         "$ref": "#/$defs/where"
+        },
+        "tmux": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "maxLength": 200
+        },
+        "pid": {
+         "type": [
+          "integer",
+          "null"
+         ],
+         "minimum": 1
+        },
+        "observed_at": {
+         "$ref": "#/$defs/time"
+        }
+       },
+       "required": [
+        "observed_at"
+       ]
+      }
+     }
+    }
+   }
+  },
+  "chain_reply": {
+   "oneOf": [
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "ok",
+      "old",
+      "new"
+     ],
+     "properties": {
+      "ok": {
+       "const": true
+      },
+      "old": {
+       "$ref": "#/$defs/row"
+      },
+      "new": {
+       "$ref": "#/$defs/row"
+      }
+     }
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "ok",
+      "code",
+      "error"
+     ],
+     "properties": {
+      "ok": {
+       "const": false
+      },
+      "code": {
+       "enum": [
+        "no-session",
+        "not-owner",
+        "stale-epoch",
+        "superseded",
+        "exists",
+        "hub-down",
+        "bad-request"
+       ]
+      },
+      "error": {
+       "type": "string",
+       "minLength": 1
+      }
+     }
+    }
+   ]
+  },
+  "sessions_reply": {
+   "description": "GET /api/sessions and `fleet session list --json`.",
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "v",
+    "index",
+    "hub",
+    "as_of",
+    "machines",
+    "counts",
+    "rows"
+   ],
+   "properties": {
+    "v": {
+     "const": 1
+    },
+    "index": {
+     "enum": [
+      "up",
+      "down"
+     ]
+    },
+    "reason": {
+     "type": "string"
+    },
+    "hub": {
+     "$ref": "#/$defs/machine"
+    },
+    "as_of": {
+     "$ref": "#/$defs/time"
+    },
+    "machines": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "reachable",
+       "as_of",
+       "stale",
+       "reason"
+      ],
+      "properties": {
+       "reachable": {
+        "type": "boolean"
+       },
+       "as_of": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/time"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "stale": {
+        "type": "boolean"
+       },
+       "reason": {
+        "type": "string"
+       }
+      }
+     }
+    },
+    "counts": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "rows",
+      "hidden_dev",
+      "superseded"
+     ],
+     "properties": {
+      "rows": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "hidden_dev": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "superseded": {
+       "type": "integer",
+       "minimum": 0
+      }
+     }
+    },
+    "rows": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/list_row"
+     }
+    }
+   }
+  },
+  "observe_reply": {
+   "description": "`fleet sessions observe --json` on one machine.",
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "machine",
+    "as_of",
+    "rows"
+   ],
+   "properties": {
+    "machine": {
+     "$ref": "#/$defs/machine"
+    },
+    "as_of": {
+     "$ref": "#/$defs/time"
+    },
+    "rows": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "live",
+       "state",
+       "where",
+       "tmux",
+       "pid"
+      ],
+      "properties": {
+       "live": {
+        "type": "boolean"
+       },
+       "state": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "maxLength": 64
+       },
+       "where": {
+        "$ref": "#/$defs/where"
+       },
+       "tmux": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "maxLength": 200
+       },
+       "pid": {
+        "type": [
+         "integer",
+         "null"
+        ],
+        "minimum": 1
+       }
+      }
+     }
+    }
+   }
+  },
+  "registry_record": {
+   "description": "A registry file `~/.local/state/claude-sessions/<sid>.json` as Claude Voice reads it today (phase 1, frozen).",
+   "type": "object",
+   "required": [
+    "version",
+    "sid",
+    "owner",
+    "epoch"
+   ],
+   "properties": {
+    "version": {
+     "const": 1
+    },
+    "sid": {
+     "$ref": "#/$defs/sid"
+    },
+    "name": {
+     "type": "string"
+    },
+    "machine": {
+     "type": "string"
+    },
+    "account": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "cwd": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "last_prompt": {
+     "type": "string",
+     "maxLength": 200
+    },
+    "last_answer": {
+     "type": "string",
+     "maxLength": 200
+    },
+    "updated": {
+     "type": "string",
+     "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([+-][0-9]{2}:[0-9]{2}|Z)$"
+    },
+    "live": {
+     "type": "boolean"
+    },
+    "owner": {
+     "$ref": "#/$defs/owner"
+    },
+    "owner_since": {
+     "type": "string",
+     "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([+-][0-9]{2}:[0-9]{2}|Z)$"
+    },
+    "epoch": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "kind": {
+     "enum": [
+      "chat",
+      "job"
+     ]
+    },
+    "topic": {
+     "$ref": "#/$defs/topic"
+    }
+   }
+  },
+  "tail_reply": {
+   "description": "`@claude session tail SID --json` and `fleet session tail SID --json` (phase 1, frozen).",
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "sid",
+    "name",
+    "machine",
+    "turns"
+   ],
+   "properties": {
+    "sid": {
+     "$ref": "#/$defs/sid"
+    },
+    "name": {
+     "type": "string"
+    },
+    "machine": {
+     "type": "string"
+    },
+    "turns": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "role",
+       "text",
+       "at"
+      ],
+      "properties": {
+       "role": {
+        "enum": [
+         "user",
+         "assistant"
+        ]
+       },
+       "text": {
+        "type": "string"
+       },
+       "at": {
+        "type": [
+         "string",
+         "null"
+        ]
+       }
+      }
+     }
+    }
+   }
+  },
+  "env_take_reply": {
+   "description": "The last stdout line of `@claude session take` on success (phase 1, frozen; read by Claude Voice's parseTake).",
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "ok",
+    "sid",
+    "owner",
+    "cwd",
+    "epoch"
+   ],
+   "properties": {
+    "ok": {
+     "const": true
+    },
+    "sid": {
+     "$ref": "#/$defs/sid"
+    },
+    "owner": {
+     "$ref": "#/$defs/owner"
+    },
+    "cwd": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "epoch": {
+     "type": "integer",
+     "minimum": 1
+    }
+   }
+  },
+  "owner_reply": {
+   "description": "`fleet session owner SID --json` and GET /api/session/owner.",
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "sid",
+    "owner",
+    "epoch",
+    "head",
+    "source",
+    "stale"
+   ],
+   "properties": {
+    "sid": {
+     "$ref": "#/$defs/sid"
+    },
+    "owner": {
+     "$ref": "#/$defs/owner"
+    },
+    "epoch": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "head": {
+     "$ref": "#/$defs/sid"
+    },
+    "source": {
+     "enum": [
+      "hub",
+      "cache"
+     ]
+    },
+    "stale": {
+     "type": "boolean"
+    }
+   }
+  },
+  "work_config": {
+   "description": "`$FLEET_HOME/work.json`, written by env.",
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "accounts",
+    "profile_paths",
+    "own_profiles"
+   ],
+   "properties": {
+    "accounts": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "string",
+      "minLength": 1
+     }
+    },
+    "profile_paths": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "minLength": 1
+     }
+    },
+    "own_profiles": {
+     "type": [
+      "string",
+      "null"
+     ]
+    }
+   }
+  }
+ }
+}

@@ -1,0 +1,34 @@
+{
+ "high_seq": 43,
+ "results": [
+  {
+   "seq": 40,
+   "outcome": "applied"
+  },
+  {
+   "seq": 41,
+   "outcome": "applied"
+  },
+  {
+   "seq": 43,
+   "outcome": "stale-epoch",
+   "reason": "row at epoch 3, entry saw 1"
+  }
+ ],
+ "rows": {
+  "0a1b2c3d-0000-4000-8000-000000000001": {
+   "owner": "laptop",
+   "epoch": 1,
+   "conversation": "0a1b2c3d-0000-4000-8000-000000000001",
+   "head": "0a1b2c3d-0000-4000-8000-000000000001",
+   "work": false
+  },
+  "0a1b2c3d-0000-4000-8000-000000000002": {
+   "owner": "laptop",
+   "epoch": 3,
+   "conversation": "0a1b2c3d-0000-4000-8000-000000000002",
+   "head": "0a1b2c3d-0000-4000-8000-000000000002",
+   "work": true
+  }
+ }
+}

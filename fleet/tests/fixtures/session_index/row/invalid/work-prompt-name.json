@@ -1,0 +1,31 @@
+{
+ "why": "a work row holds a name taken from its prompt",
+ "expect": "name_source",
+ "doc": {
+  "sid": "0a1b2c3d-0000-4000-8000-000000000008",
+  "conversation": "0a1b2c3d-0000-4000-8000-000000000008",
+  "name": "the client's numbers",
+  "name_source": "prompt",
+  "kind": "chat",
+  "env": "prod",
+  "machine": "laptop",
+  "cwd": null,
+  "account": null,
+  "owner": "laptop",
+  "owner_since": 1795600000.0,
+  "epoch": 1,
+  "continues": null,
+  "superseded_by": null,
+  "first_prompt": null,
+  "last_prompt": null,
+  "last_answer": null,
+  "topic": null,
+  "rc_name": null,
+  "started": 1795600000.0,
+  "updated": 1795600600.0,
+  "ended": null,
+  "end_reason": null,
+  "description": null,
+  "work": true
+ }
+}

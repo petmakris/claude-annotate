@@ -1,0 +1,16 @@
+{
+ "why": "env prints one entry per message, role and text",
+ "expect": "role is missing",
+ "doc": {
+  "sid": "0a1b2c3d-0000-4000-8000-000000000001",
+  "name": "x",
+  "machine": "laptop",
+  "turns": [
+   {
+    "prompt": "a",
+    "answer": "b",
+    "at": null
+   }
+  ]
+ }
+}

@@ -1,0 +1,5 @@
+{
+ "ok": false,
+ "code": "dev-refused",
+ "error": "a Claude Voice sandbox takes only the sessions it made, and never gives one to phone:prod"
+}

@@ -1,0 +1,246 @@
+{
+ "about": "A 30 % handover: one transaction supersedes the old row and makes the head (rulings A.5).",
+ "parts": {
+  "old_before": "row",
+  "request": "chain_request",
+  "reply": "chain_reply",
+  "old_after": "row",
+  "new_after": "row",
+  "take_old": "take_request",
+  "take_old_reply": "take_reply",
+  "listed_head": "list_row"
+ },
+ "old_before": {
+  "sid": "0a1b2c3d-0000-4000-8000-000000000004",
+  "conversation": "0a1b2c3d-0000-4000-8000-000000000004",
+  "name": "our conversation",
+  "name_source": "topic",
+  "kind": "voice",
+  "env": "prod",
+  "machine": "hub",
+  "cwd": "/home/me",
+  "account": "first",
+  "owner": "phone:prod",
+  "owner_since": 1795600000.0,
+  "epoch": 1,
+  "continues": null,
+  "superseded_by": null,
+  "first_prompt": "the build fails on the docs step, fix it",
+  "last_prompt": "run the tests again",
+  "last_answer": "All 212 tests pass.",
+  "topic": {
+   "host": "prod",
+   "id": "our-conversation"
+  },
+  "rc_name": null,
+  "started": 1795600000.0,
+  "updated": 1795600600.0,
+  "ended": null,
+  "end_reason": null,
+  "description": "Fixed the docs build.",
+  "work": false
+ },
+ "request": {
+  "old_sid": "0a1b2c3d-0000-4000-8000-000000000004",
+  "new_sid": "0a1b2c3d-0000-4000-8000-000000000005",
+  "by": "phone:prod",
+  "expect_epoch": 1,
+  "fields": {
+   "name": "our conversation",
+   "name_source": "topic",
+   "kind": "voice",
+   "topic": {
+    "host": "prod",
+    "id": "our-conversation"
+   },
+   "first_prompt": "Summary of the earlier session: kitchen plans."
+  }
+ },
+ "reply": {
+  "ok": true,
+  "old": {
+   "sid": "0a1b2c3d-0000-4000-8000-000000000004",
+   "conversation": "0a1b2c3d-0000-4000-8000-000000000004",
+   "name": "our conversation",
+   "name_source": "topic",
+   "kind": "voice",
+   "env": "prod",
+   "machine": "hub",
+   "cwd": "/home/me",
+   "account": "first",
+   "owner": "phone:prod",
+   "owner_since": 1795600000.0,
+   "epoch": 1,
+   "continues": null,
+   "superseded_by": "0a1b2c3d-0000-4000-8000-000000000005",
+   "first_prompt": "the build fails on the docs step, fix it",
+   "last_prompt": "run the tests again",
+   "last_answer": "All 212 tests pass.",
+   "topic": {
+    "host": "prod",
+    "id": "our-conversation"
+   },
+   "rc_name": null,
+   "started": 1795600000.0,
+   "updated": 1795600600.0,
+   "ended": 1795600900.0,
+   "end_reason": "handover",
+   "description": "Fixed the docs build.",
+   "work": false
+  },
+  "new": {
+   "sid": "0a1b2c3d-0000-4000-8000-000000000005",
+   "conversation": "0a1b2c3d-0000-4000-8000-000000000004",
+   "name": "our conversation",
+   "name_source": "topic",
+   "kind": "voice",
+   "env": "prod",
+   "machine": "hub",
+   "cwd": "/home/me",
+   "account": "first",
+   "owner": "phone:prod",
+   "owner_since": 1795600900.0,
+   "epoch": 1,
+   "continues": "0a1b2c3d-0000-4000-8000-000000000004",
+   "superseded_by": null,
+   "first_prompt": "Summary of the earlier session: kitchen plans.",
+   "last_prompt": "run the tests again",
+   "last_answer": "All 212 tests pass.",
+   "topic": {
+    "host": "prod",
+    "id": "our-conversation"
+   },
+   "rc_name": null,
+   "started": 1795600900.0,
+   "updated": 1795600960.0,
+   "ended": null,
+   "end_reason": null,
+   "description": null,
+   "work": false
+  }
+ },
+ "old_after": {
+  "sid": "0a1b2c3d-0000-4000-8000-000000000004",
+  "conversation": "0a1b2c3d-0000-4000-8000-000000000004",
+  "name": "our conversation",
+  "name_source": "topic",
+  "kind": "voice",
+  "env": "prod",
+  "machine": "hub",
+  "cwd": "/home/me",
+  "account": "first",
+  "owner": "phone:prod",
+  "owner_since": 1795600000.0,
+  "epoch": 1,
+  "continues": null,
+  "superseded_by": "0a1b2c3d-0000-4000-8000-000000000005",
+  "first_prompt": "the build fails on the docs step, fix it",
+  "last_prompt": "run the tests again",
+  "last_answer": "All 212 tests pass.",
+  "topic": {
+   "host": "prod",
+   "id": "our-conversation"
+  },
+  "rc_name": null,
+  "started": 1795600000.0,
+  "updated": 1795600600.0,
+  "ended": 1795600900.0,
+  "end_reason": "handover",
+  "description": "Fixed the docs build.",
+  "work": false
+ },
+ "new_after": {
+  "sid": "0a1b2c3d-0000-4000-8000-000000000005",
+  "conversation": "0a1b2c3d-0000-4000-8000-000000000004",
+  "name": "our conversation",
+  "name_source": "topic",
+  "kind": "voice",
+  "env": "prod",
+  "machine": "hub",
+  "cwd": "/home/me",
+  "account": "first",
+  "owner": "phone:prod",
+  "owner_since": 1795600900.0,
+  "epoch": 1,
+  "continues": "0a1b2c3d-0000-4000-8000-000000000004",
+  "superseded_by": null,
+  "first_prompt": "Summary of the earlier session: kitchen plans.",
+  "last_prompt": "run the tests again",
+  "last_answer": "All 212 tests pass.",
+  "topic": {
+   "host": "prod",
+   "id": "our-conversation"
+  },
+  "rc_name": null,
+  "started": 1795600900.0,
+  "updated": 1795600960.0,
+  "ended": null,
+  "end_reason": null,
+  "description": null,
+  "work": false
+ },
+ "take_old": {
+  "sid": "0a1b2c3d-0000-4000-8000-000000000004",
+  "to": "laptop",
+  "expect_epoch": 1,
+  "by": "laptop"
+ },
+ "take_old_reply": {
+  "ok": false,
+  "code": "superseded",
+  "error": "session 0a1b2c3d-0000-4000-8000-000000000004 was continued as 0a1b2c3d-0000-4000-8000-000000000005; take 0a1b2c3d-0000-4000-8000-000000000005 instead"
+ },
+ "listed_head": {
+  "sid": "0a1b2c3d-0000-4000-8000-000000000005",
+  "conversation": "0a1b2c3d-0000-4000-8000-000000000004",
+  "name": "our conversation",
+  "name_source": "topic",
+  "kind": "voice",
+  "env": "prod",
+  "machine": "hub",
+  "cwd": "/home/me",
+  "account": "first",
+  "owner": "phone:prod",
+  "owner_since": 1795600900.0,
+  "epoch": 1,
+  "continues": "0a1b2c3d-0000-4000-8000-000000000004",
+  "superseded_by": null,
+  "first_prompt": "Summary of the earlier session: kitchen plans.",
+  "last_prompt": "run the tests again",
+  "last_answer": "All 212 tests pass.",
+  "topic": {
+   "host": "prod",
+   "id": "our-conversation"
+  },
+  "rc_name": null,
+  "started": 1795600900.0,
+  "updated": 1795600960.0,
+  "ended": null,
+  "end_reason": null,
+  "description": null,
+  "work": false,
+  "observed": {
+   "live": true,
+   "state": "running",
+   "where": "phone",
+   "tmux": null,
+   "pid": null,
+   "observed_at": 1795600590.0,
+   "stale": false,
+   "source": "journal"
+  },
+  "key": "hub:0a1b2c3d-0000-4000-8000-000000000005",
+  "head": true,
+  "chain": [
+   "0a1b2c3d-0000-4000-8000-000000000004",
+   "0a1b2c3d-0000-4000-8000-000000000005"
+  ]
+ },
+ "expected": {
+  "head": "0a1b2c3d-0000-4000-8000-000000000005",
+  "conversation": "0a1b2c3d-0000-4000-8000-000000000004",
+  "rows_listed_by_default": [
+   "0a1b2c3d-0000-4000-8000-000000000005"
+  ]
+ }
+}

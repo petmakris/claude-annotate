@@ -1,0 +1,9 @@
+{
+ "why": "refusal codes are fixed",
+ "expect": "oneOf",
+ "doc": {
+  "ok": false,
+  "code": "nope",
+  "error": "x"
+ }
+}

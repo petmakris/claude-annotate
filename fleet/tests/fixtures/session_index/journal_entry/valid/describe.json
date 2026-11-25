@@ -1,0 +1,14 @@
+{
+ "v": 1,
+ "machine": "laptop",
+ "seq": 44,
+ "as": "laptop",
+ "sid": "0a1b2c3d-0000-4000-8000-000000000001",
+ "epoch_seen": 1,
+ "event": "describe",
+ "at": 1795600044.0,
+ "fields": {
+  "description": "Fixed the docs build.",
+  "work": false
+ }
+}

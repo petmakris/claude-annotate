@@ -1,0 +1,22 @@
+{
+ "v": 1,
+ "machine": "laptop",
+ "seq": 41,
+ "as": "laptop",
+ "sid": "0a1b2c3d-0000-4000-8000-000000000001",
+ "epoch_seen": 1,
+ "event": "prompt",
+ "at": 1795600041.0,
+ "fields": {
+  "last_prompt": "run the tests again",
+  "last_answer": "",
+  "work": false,
+  "name": "fix the build",
+  "name_source": "custom",
+  "observed": {
+   "live": true,
+   "state": "busy",
+   "observed_at": 1795600041.0
+  }
+ }
+}
