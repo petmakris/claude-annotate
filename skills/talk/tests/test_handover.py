@@ -9,6 +9,8 @@ from unittest.mock import patch
 from helpers import SERVER_AUTH, SERVER_TOKEN, SKILL_DIR, FakeSpeech, add_call, run, running_server, talk
 
 files = talk.talk_files
+LOST_RETRY = ("this is not the end of the call: run the same doorbell command again. "
+              "Stop only on TALK_END; if TALK_LOST comes 3 times in a row, tell the user the call is lost.")
 CLIENT = str(SKILL_DIR / "talk_client.py")
 
 
@@ -328,7 +330,8 @@ def test_a_doorbell_for_an_old_format_call_still_ends_at_once_when_the_server_is
 
     out = run(go())
     files.call_file("old-bell").unlink()
-    assert json.loads(out.split(" ", 1)[1]) == {"reason": "server unreachable"}
+    assert out.startswith("TALK_LOST ")
+    assert json.loads(out.split(" ", 1)[1]) == {"reason": "server unreachable", "retry": LOST_RETRY}
 
 
 def test_a_doorbell_gives_up_once_no_server_carries_the_call_on(tmp_path):
@@ -342,7 +345,8 @@ def test_a_doorbell_gives_up_once_no_server_carries_the_call_on(tmp_path):
 
     out = run(go())
     files.call_file("lost-call").unlink()
-    assert json.loads(out.split(" ", 1)[1]) == {"reason": "server unreachable"}
+    assert out.startswith("TALK_LOST ")
+    assert json.loads(out.split(" ", 1)[1]) == {"reason": "server unreachable", "retry": LOST_RETRY}
 
 
 # -- the deliberate restart ----------------------------------------------------------------
@@ -404,3 +408,50 @@ def test_a_server_waits_for_the_previous_one_to_exit_before_carrying_its_calls(m
     monkeypatch.setattr(talk.time, "sleep", lambda s: None)
     talk.wait_for_exit(12345)
     assert next(alive, "done") == "done"
+
+
+def test_an_ended_call_its_page_still_reads_is_carried_over_a_restart(tmp_path):
+    async def go():
+        async with running_server() as (old_client, old, fake):
+            call = add_call(old, tmp_path, call_id="ended-call", token="ended-token", topic="Over")
+            old.write_call_file(call)
+            call.offer("question", typed=True)
+            await old_client.get("/api/turn?wait=1", headers=auth("ended-token"))
+            await old_client.post("/api/reply", json={"id": "t1", "text": "Answer."}, headers=auth("ended-token"))
+            await until(lambda: call.entries[-1].get("speech") == "ready")
+            call.end("ended from the page")
+            await old.hand_over()
+            port = old.port
+        async with running_server() as (client, new, fake):
+            new.port = port
+            adopted = talk.adopt_calls(new)
+            resp = await client.get("/api/state", headers=auth("ended-token"))
+            state = await resp.json()
+            on_file = files.read(files.call_file("ended-call"))
+            doorbell = await client.get("/api/turn?wait=0", headers=auth("ended-token"))
+            event = await doorbell.json()
+            for kept in new.calls.values():
+                kept.closed.set()
+            result = ([c.id for c in adopted], resp.status, state["ended"], len(state["entries"]),
+                      on_file["ended"], event["type"], event["reason"])
+        forget("ended-call")
+        return result
+
+    assert run(go()) == (["ended-call"], 200, "ended from the page", 3, True, "end", "ended from the page")
+
+
+def test_an_ended_call_past_its_linger_is_dropped_by_the_next_server(tmp_path):
+    async def go():
+        async with running_server() as (old_client, old, fake):
+            call = add_call(old, tmp_path, call_id="old-ended", token="old-ended-token")
+            old.write_call_file(call)
+            call.end("ended from the page")
+            call.ended_at -= talk.LINGER_S + 10
+            await old.hand_over()
+            port = old.port
+        async with running_server() as (client, new, fake):
+            new.port = port
+            adopted = talk.adopt_calls(new)
+        return adopted, files.call_file("old-ended").exists(), files.state_file("old-ended").exists()
+
+    assert run(go()) == ([], False, False)

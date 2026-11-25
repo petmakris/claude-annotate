@@ -8,6 +8,8 @@ from pathlib import Path
 from helpers import CALL, SKILL_DIR, TOKEN, add_call, run, running_app, running_server, spoken
 
 CLIENT = str(SKILL_DIR / "talk_client.py")
+LOST_RETRY = ("this is not the end of the call: run the same doorbell command again. "
+              "Stop only on TALK_END; if TALK_LOST comes 3 times in a row, tell the user the call is lost.")
 
 
 def run_dir(state_path) -> Path:
@@ -105,7 +107,8 @@ def test_doorbell_ends_when_the_server_is_gone(tmp_path):
 
     code, out, _ = run(go())
     assert code == 0
-    assert json.loads(out.split(" ", 1)[1]) == {"reason": "server unreachable"}
+    assert out.startswith("TALK_LOST ")
+    assert json.loads(out.split(" ", 1)[1]) == {"reason": "server unreachable", "retry": LOST_RETRY}
 
 
 def test_doorbell_ends_when_there_is_no_state_file(tmp_path):
@@ -176,7 +179,8 @@ def test_a_doorbell_for_a_call_the_server_closed_says_it_ended(tmp_path):
             return await finish(await client_proc(state, "doorbell", "--wait", "1"))
 
     _, out, _ = run(go())
-    assert json.loads(out.split(" ", 1)[1]) == {"reason": "the call has ended"}
+    assert out.startswith("TALK_END ")
+    assert json.loads(out.split(" ", 1)[1]) == {"reason": "the call has ended", "transcript": str(tmp_path / f"out-{CALL}" / "transcript.md")}
 
 
 def test_reply_sends_stdin_as_the_spoken_text(tmp_path):
@@ -463,3 +467,60 @@ def test_say_on_a_call_already_over_exits_4(tmp_path):
 
     code, out, _ = run(go())
     assert code == 4 and out.startswith("call ended")
+
+
+def _fake_server(statuses):
+    """A local HTTP server that answers each doorbell request with the next status of `statuses` (200 sends a turn)."""
+    import http.server
+    import threading
+
+    seen = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            code = statuses[min(len(seen), len(statuses) - 1)]
+            seen.append(code)
+            body = json.dumps({"type": "turn", "id": "t9", "said": []} if code == 200 else {"error": "x"}).encode()
+            self.send_response(code)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    httpd = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    return httpd, seen
+
+
+def test_a_doorbell_waits_through_a_server_that_answers_5xx_then_gets_the_turn(tmp_path):
+    state = tmp_path / "state.json"
+    httpd, seen = _fake_server([500, 502, 200])
+
+    async def go():
+        write_state(state, httpd.server_address[1])
+        return await finish(await client_proc(state, "doorbell", "--wait", "1"))
+
+    try:
+        code, out, _ = run(go())
+    finally:
+        httpd.shutdown()
+    assert code == 0 and seen == [500, 502, 200]
+    assert out.startswith("TALK_TURN ") and json.loads(out.split(" ", 1)[1]) == {"id": "t9", "said": []}
+
+
+def test_a_refusal_is_talk_lost_with_the_way_to_re_arm_and_never_talk_end(tmp_path):
+    state = tmp_path / "state.json"
+    httpd, seen = _fake_server([403])
+
+    async def go():
+        write_state(state, httpd.server_address[1])
+        return await finish(await client_proc(state, "doorbell", "--wait", "1"))
+
+    try:
+        code, out, _ = run(go())
+    finally:
+        httpd.shutdown()
+    assert code == 0 and out.startswith("TALK_LOST ") and not out.startswith("TALK_END")
+    assert json.loads(out.split(" ", 1)[1]) == {"reason": "server refused the doorbell: HTTP 403", "retry": LOST_RETRY}

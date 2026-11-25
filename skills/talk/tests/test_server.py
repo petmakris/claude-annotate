@@ -611,3 +611,151 @@ def test_a_voice_sample_is_made_once_and_kept(tmp_path, monkeypatch):
             other = await client.get(f"/c/{CALL}/voice/en-US-Nobody")
             return first.status, again.status, other.status, fake.spoken, sorted(p.name for p in (tmp_path / "data" / "voices").iterdir())
     assert run(go()) == (200, 200, 404, ["Hi, I am Athina. Γεια σας, με λένε Athina."], ["el-GR-AthinaNeural.wav"])
+
+
+# -- the review round: ended calls, saved state, bad bodies, simultaneous replies, one playing page ----------
+
+
+def test_an_ended_call_is_kept_for_the_reply_its_session_is_still_writing(tmp_path, monkeypatch):
+    monkeypatch.setattr(talk, "END_COLLECT_S", 0.2)
+
+    async def go():
+        async with running_server() as (client, server, fake):
+            call = add_call(server, tmp_path)
+            call.offer("hi", typed=True)
+            await client.get("/api/turn?wait=1", headers=AUTH)  # collected: the session is answering it
+            call.end("ended from the page")
+            closing = asyncio.get_running_loop().create_task(server.close(call))
+            await asyncio.sleep(0.6)
+            kept = CALL in server.calls
+            reply = await client.post("/api/reply", json={"id": "t1", "text": "Too late."}, headers=AUTH)
+            body = await reply.json()
+            await asyncio.wait_for(closing, 2)
+            after = await client.get("/api/turn?wait=0", headers=AUTH)
+            return kept, reply.status, body, CALL in server.calls, after.status, await after.json(), str(call.transcript)
+
+    kept, status, body, still, after, after_body, transcript = run(go())
+    assert kept is True and status == 410 and body == {"error": "the call has ended", "transcript": transcript}
+    assert still is False
+    assert after == 410 and after_body == {"error": "the call has ended", "transcript": transcript}
+
+
+def test_an_accepted_reply_is_saved_at_once_not_on_the_next_tick(tmp_path):
+    async def go():
+        async with running_server() as (client, server, fake):
+            call = add_call(server, tmp_path)
+            call.offer("hi", typed=True)
+            await client.get("/api/turn?wait=1", headers=AUTH)
+            resp = await client.post("/api/reply", json={"id": "t1", "text": "The answer."}, headers=AUTH)
+            return resp.status, talk.talk_files.read(talk.talk_files.state_file(CALL))
+
+    status, saved = run(go())
+    assert status == 200
+    assert saved["turns"]["open"] == [] and [e["text"] for e in saved["entries"] if e["who"] == "claude"] == ["The answer."]
+
+
+def test_guess_picks_survive_a_snapshot_and_its_json_round_trip(tmp_path):
+    import json
+    from helpers import make_args
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    call.pick(1, "Which?", "B", "A")
+    call.offer("typed", typed=True)
+    kept = talk.Call.restore(json.loads(json.dumps(call.snapshot())))
+    assert kept.picks == [] and kept.said_lines == call.said_lines
+    call.picks = [{"answer": 1, "question": "Which?", "picked": "B", "right": "A"}]
+    kept = talk.Call.restore(json.loads(json.dumps(call.snapshot())))
+    assert kept.picks == [{"answer": 1, "question": "Which?", "picked": "B", "right": "A"}]
+    assert list(kept.said_lines) == [0]
+
+
+def test_a_body_that_is_not_json_is_a_400_and_a_wait_that_is_not_a_number_is_too(tmp_path):
+    async def go():
+        async with running_server() as (client, server, fake):
+            add_call(server, tmp_path)
+            out = {}
+            for path in ("/api/say", "/api/pick", "/api/reply", "/api/activity", "/api/withdraw", "/api/player"):
+                resp = await client.post(path, data="{not json", headers=AUTH)
+                out[path] = (resp.status, (await resp.json())["error"])
+            for wait in ("nan", "inf", "abc"):
+                resp = await asyncio.wait_for(client.get(f"/api/turn?wait={wait}", headers=AUTH), 3)
+                out[wait] = resp.status
+            return out
+
+    out = run(go())
+    assert out == {**{p: (400, "the body is not valid JSON") for p in
+                      ("/api/say", "/api/pick", "/api/reply", "/api/activity", "/api/withdraw", "/api/player")},
+                   "nan": 400, "inf": 400, "abc": 400}
+
+
+def test_two_replies_at_once_each_keep_their_own_boards_and_answer_number(tmp_path):
+    import time as time_mod
+    from unittest.mock import patch
+    from helpers import make_args
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    original, calls = call.split_reply_safely, []
+
+    def slow_then_blocking(text):
+        calls.append(text)
+        shown = original(text)
+        if len(calls) == 1:  # the loop is busy when the first split ends, as it is under load
+            loop.call_soon_threadsafe(time_mod.sleep, 0.4)
+            time_mod.sleep(0.05)
+        return shown
+
+    async def go():
+        nonlocal loop
+        loop = asyncio.get_running_loop()
+        with patch.object(call, "speak", lambda entry: asyncio.sleep(0)), \
+                patch.object(call, "split_reply_safely", slow_then_blocking):
+            await asyncio.gather(
+                call.answer("[[show table | Alpha]]\n| x |\n|---|\n| 1 |\n[[/show]] About alpha."),
+                call.answer("[[show table | Beta]]\n| y |\n|---|\n| 2 |\n[[/show]] About beta."))
+
+    loop = None
+    run(go())
+    answers = [e for e in call.entries if e["who"] == "claude"]
+    assert [(e["text"], [c["view"] for c in e["cues"]]) for e in answers] == [
+        ("About alpha.", ["alpha"]), ("About beta.", ["beta"])]
+    assert [(i["title"], i["answer"]) for i in call.board.items] == [("Alpha", 1), ("Beta", 2)]
+
+
+def test_one_page_plays_a_call_and_another_takes_over_only_when_asked_or_when_it_is_gone(tmp_path, monkeypatch):
+    async def go():
+        async with running_server() as (client, server, fake):
+            call = add_call(server, tmp_path)
+
+            async def claim(page, **more):
+                resp = await client.post("/api/player", json={"page": page, **more}, headers=AUTH)
+                return resp.status, (await resp.json())
+
+            first = await claim("page-a")
+            second = await claim("page-b")
+            state = await (await client.get("/api/state?page=page-a", headers=AUTH)).json()
+            taken = await claim("page-b", take=True)
+            monkeypatch.setattr(talk, "PLAYER_TTL_S", 0.05)
+            await asyncio.sleep(0.15)
+            gone = await claim("page-c")
+            nameless = await client.post("/api/player", json={}, headers=AUTH)
+            return first, second, state["player"], taken, gone, nameless.status
+
+    first, second, seen, taken, gone, nameless = run(go())
+    assert first == (200, {"player": "page-a"}) and second == (200, {"player": "page-a"}) and seen == "page-a"
+    assert taken == (200, {"player": "page-b"}) and gone == (200, {"player": "page-c"}) and nameless == 400
+
+
+def test_an_ended_call_keeps_for_a_page_that_polls_once_a_minute(tmp_path):
+    import time as time_mod
+
+    async def go():
+        async with running_server() as (client, server, fake):
+            call = add_call(server, tmp_path)
+            call.end("ended from the page")
+            call.last_seen = time_mod.time() - 60  # a hidden tab, polling about once a minute
+            watching = asyncio.get_running_loop().create_task(talk.watch(call))
+            await asyncio.sleep(1.3)
+            still_open = not call.closed.is_set()
+            call.last_seen = time_mod.time() - talk.PAGE_GONE_S - 5
+            await asyncio.wait_for(watching, 3)
+            return still_open, call.closed.is_set()
+
+    assert run(go()) == (True, True)

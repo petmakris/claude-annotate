@@ -30,6 +30,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import talk_files  # noqa: E402
@@ -135,34 +136,72 @@ class Reconnect:
         self.since = None
 
 
+LOST_RETRY = ("this is not the end of the call: run the same doorbell command again. "
+              "Stop only on TALK_END; if TALK_LOST comes 3 times in a row, tell the user the call is lost.")
+LOST_SERVER_S = 90.0  # a doorbell waits this long through a server answering 5xx before it reports TALK_LOST
+
+
+def emit_lost(reason: str) -> int:
+    """The doorbell failed, but the call may well be open: its own line, never TALK_END, so the session
+    re-arms rather than leaves a call the user is still in."""
+    emit("TALK_LOST", {"reason": reason, "retry": LOST_RETRY})
+    return 0
+
+
+def emit_end(reason: str, transcript: str = "") -> int:
+    emit("TALK_END", {"reason": reason, **({"transcript": transcript} if transcript else {})})
+    return 0
+
+
+def ended_transcript(state: dict) -> str:
+    """The transcript of a call whose call file says it ended."""
+    return str(Path(state["out"]) / "transcript.md") if state.get("out") else ""
+
+
 def doorbell(call_id: str | None, wait: float) -> int:
+    """Wait for the next turn. TALK_END is printed only when the call has really ended (the server said so,
+    or its file says so and nothing answers); any other failure is TALK_LOST, which the session re-arms on."""
     call_id = call_id_or_only(call_id) or call_id
     lost = Reconnect()
+    failing_since: float | None = None
     while True:
         state = load_state(call_id)
         if not state:
-            emit("TALK_END", {"reason": no_call_text(call_id)})
-            return 0
+            if not call_id and len(talk_files.open_calls()) > 1:
+                return emit_lost(no_call_text(call_id))
+            return emit_end(no_call_text(call_id))
         try:
             status, raw = request(state, "GET", f"/api/turn?wait={wait:g}", timeout=wait + 10)
         except urllib.error.HTTPError as err:
-            if err.code == 503 and lost.wait(state):
-                continue
             if err.code == 409:
                 # A newer doorbell is listening; re-arming here would only supersede that one in turn.
                 print("doorbell superseded: a newer doorbell is listening. Do not re-arm.", flush=True)
                 return 0
             if err.code == 410:
-                emit("TALK_END", {"reason": "the call has ended"})
-                return 0
-            emit("TALK_END", {"reason": f"server refused the doorbell: HTTP {err.code}"})
-            return 0
+                transcript = ""
+                try:
+                    transcript = json.loads(err.read() or b"{}").get("transcript") or ""
+                except (ValueError, AttributeError, OSError):
+                    pass
+                return emit_end("the call has ended", transcript or ended_transcript(state))
+            if err.code >= 500:
+                if err.code == 503 and lost.wait(state):
+                    continue
+                now = time.monotonic()
+                failing_since = failing_since if failing_since is not None else now
+                if now - failing_since <= LOST_SERVER_S:
+                    time.sleep(1.0)
+                    continue
+                return emit_lost(f"the talk server kept answering HTTP {err.code}")
+            return emit_lost(f"server refused the doorbell: HTTP {err.code}")
         except (urllib.error.URLError, OSError):
+            if state.get("ended"):
+                return emit_end("the call has ended", ended_transcript(state))
             if lost.wait(state):
                 continue
-            emit("TALK_END", {"reason": "server unreachable"})
-            return 0
+            return emit_lost("server unreachable")
         lost.back()
+        failing_since = None
         if status == 204:
             continue
         event = json.loads(raw)

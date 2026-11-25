@@ -59,6 +59,15 @@ def adoptable(data: dict | None) -> bool:
     return bool(data) and data.get("format") == CALL_FORMAT and not data.get("ended")
 
 
+def lingering(data: dict | None, state: dict | None, linger_s: float, now: float | None = None) -> bool:
+    """A call file of an ended call whose page may still read its record: written by code that saves its
+    state, ended, with a state file that says when it ended, and not for longer than `linger_s`."""
+    import time
+    if not data or data.get("format") != CALL_FORMAT or not data.get("ended") or not state or not state.get("ended"):
+        return False
+    return (time.time() if now is None else now) - float(state.get("ended_at") or 0) < linger_s
+
+
 def read(path: Path) -> dict | None:
     try:
         data = json.loads(path.read_text())

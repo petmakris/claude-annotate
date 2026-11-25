@@ -73,7 +73,10 @@ DATA_DIR = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "sha
 SESSIONS_DIR = DATA_DIR / "sessions"
 DEFAULT_PORT = 8766
 LINGER_S = 30 * 60  # after the call ends, the page can still replay its answers for this long
-PAGE_GONE_S = 30.0  # an ended call whose page has not polled for this long shuts down
+PAGE_GONE_S = 180.0  # an ended call whose page has not polled for this long shuts down (a backgrounded tab polls about once a minute)
+END_COLLECT_S = 5.0  # a closing call waits this long for a doorbell to collect its end
+END_GRACE_S = 120.0  # an ended call is kept this long for the open turn of its session to be answered or the end collected
+PLAYER_TTL_S = 90.0  # the page that plays a call's answers is replaced when it has not polled for this long
 STAGE_SETTLE_S = 5.0  # how long a reply waits for its stage shows, so their problems reach it
 MAX_RECORDING_BYTES = 16 * 1024 * 1024  # about eight minutes of 16 kHz speech
 IDLE_EXIT_S = 5 * 60  # the server exits after this long with no call open
@@ -434,6 +437,8 @@ KEY_VIEW = "key-points"  # the one Key points view of a call
 MAX_SENTENCE_WORDS = 30  # the stage shows each sentence as one caption
 MAX_ANSWER_WORDS = 220   # past this, an answer stops being followed: say the rest in the next one
 MAX_KEY_CHARS = 120
+MAX_TABLE_ROWS = 8     # a table of more rows or columns is reported, never refused
+MAX_TABLE_COLUMNS = 6
 _HEAD = re.compile(r"(?:(?P<show>show)(?![a-z0-9])\s*[:\-_]?\s*)?(?P<kind>[a-z][a-z0-9_]*)?(?:(?:\s*:\s*|\s+)(?P<rest>.*))?\Z",
                    re.IGNORECASE | re.DOTALL)
 
@@ -614,14 +619,32 @@ def cut_words(text: str, limit: int) -> str:
 _POINT_HEAD = re.compile(r"point(?![a-z0-9])\s*(?P<rest>.*)\Z", re.IGNORECASE | re.DOTALL)
 _POINT_TARGET = re.compile(
     r"(?:(?:(?P<old>old)\s+)?(?P<line>lines?)\s+(?P<a>\d+)(?:\s*[-–]\s*(?P<b>\d+))?"
-    r"|rows?\s+(?:(?P<n>\d+)(?:\s*[-–]\s*(?P<n2>\d+))?|\"(?P<text>[^\"]+)\"|“(?P<curly>[^”]+)”|'(?P<single>[^']+)')"
-    r"|cells?\s+(?P<cell>[^\[\]]+?/[^\[\]]+?)"
+    r"|rows?\s+(?P<rowlist>\d+(?:\s*,\s*\d+)+)"
+    r"|rows?\s+(?:(?P<n>\d+)(?:\s*[-–]\s*(?P<n2>\d+))?"
+    r"|\"(?P<text>[^\"]+)\"(?:\s*[,+]\s*\"(?P<text2>[^\"]+)\")?|“(?P<curly>[^”]+)”|'(?P<single>[^']+)')"
+    r"|columns?\s+(?P<column>[^\[\]]+?)"
+    r"|cells?\s+(?P<cell>[^\[\]]+?(?:/|,|×)[^\[\]]+?)"
+    r"|edges?\s+(?P<edge>[^\[\]]+?)"
     r"|nodes?\s+(?P<node>[^\s:\[\]][^:\[\]]*?)|steps?\s+(?P<step>[^\s:\[\]][^:\[\]]*?)"
     r"|(?P<mapk>box|zone|route)(?:e?s)?\s+(?P<mapid>[^\s:\[\]][^:\[\]]*?)"
     r"|(?P<mode>before|after|both|merged)"
+    r"|(?P<outcome>outcome)"
     r"|parts?\s+(?P<part>[^\s:\[\]][^:\[\]]*?))\s*\Z", re.IGNORECASE)
-POINT_FORMS = ('expected line N, lines A-B, old line N, row N, rows A-B, row "text", cell "row" / "column", node ID, '
-               "step ID, part ID, box ID, zone N or route N")
+# What a point can name, by the board it points at: a miss on a board lists only these.
+POINT_FORMS_BY_KIND = {
+    "code": "line N or lines A-B",
+    "change": "line N or lines A-B (new line numbers), or old line N",
+    "table": 'row N, rows A-B, rows 2,5, row "text", row "first cell", "second cell", column "header" (or N), '
+             'cell R / C (by number or text, e.g. cell 2 / 3)',
+    "diagram": "node ID",
+    "flowchart": "node ID, edge A->B (a #N after it for the Nth parallel edge) or edge \"label\"",
+    "sequence": "step ID, actor ID, before, after, both or outcome",
+    "map": "box ID, zone N or route N",
+    "scene": "part ID",
+    "screen": "part N or part ID",
+}
+POINT_FORMS = ('expected line N, lines A-B, old line N, row N, rows A-B, rows 2,5, row "text", column "header", '
+               'cell R / C, node ID, edge A->B, step ID, outcome, part ID, box ID, zone N or route N')
 
 
 def parse_point(marker: str) -> tuple[str, str] | None:
@@ -654,27 +677,49 @@ def fold_like_stage(text: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFD", text) if not unicodedata.combining(c)).lower().strip()
 
 
-def table_cells(row: str) -> list[str]:
-    """A markdown table row's cells, split at pipes that are not escaped, with `\\|` read as `|`."""
+def split_row(row: str) -> list[str]:
+    """A markdown table row's cells as written: split at pipes that are not escaped, `\\|` kept."""
     row = row.strip()
     row = row[1:] if row.startswith("|") else row
     row = row[:-1] if row.endswith("|") and not row.endswith("\\|") else row
-    return [c.replace("\\|", "|").strip() for c in re.split(r"(?<!\\)\|", row)]
+    return [c.strip() for c in re.split(r"(?<!\\)\|", row)]
 
 
-def table_first_cells(body: str) -> list[str]:
-    """The first cell of every body row of the first markdown table, as the stage counts its rows:
+def table_cells(row: str) -> list[str]:
+    """A markdown table row's cells, split at pipes that are not escaped, with `\\|` read as `|`."""
+    return [c.replace("\\|", "|") for c in split_row(row)]
+
+
+def table_body_rows(body: str) -> list[list[str]]:
+    """The cells of every body row of the first markdown table, as the stage counts its rows:
     after the separator, every line up to the first blank one, with or without a leading pipe."""
     lines = [ln.strip() for ln in body.splitlines()]
     sep = next((i for i, ln in enumerate(lines) if _TABLE_SEP.match(ln)), None)
     if sep is None:
-        return [table_cells(ln)[0] for ln in lines if ln.startswith("|")][1:]
+        return [table_cells(ln) for ln in lines if ln.startswith("|")][1:]
     rows = []
     for ln in lines[sep + 1 :]:
         if not ln:
             break
-        rows.append(ln)
-    return [table_cells(ln)[0] for ln in rows]
+        rows.append(table_cells(ln))
+    return rows
+
+
+def table_first_cells(body: str) -> list[str]:
+    """The first cell of every body row of the first markdown table (see table_body_rows)."""
+    return [row[0] for row in table_body_rows(body)]
+
+
+def table_count(body: str) -> int:
+    """How many markdown tables a body holds: runs of pipe lines, each with a separator row under its first line."""
+    count, run = 0, []
+    for ln in [*(x.strip() for x in body.splitlines()), ""]:
+        if ln.startswith("|") or (run and _TABLE_SEP.match(ln)):
+            run.append(ln)
+            continue
+        count += bool(len(run) >= 2 and any(_TABLE_SEP.match(x) for x in run[1:2]))
+        run = []
+    return count
 
 
 def table_header(body: str) -> list[str]:
@@ -711,6 +756,97 @@ def spec_tool(body: str) -> str | None:
     return None
 
 
+def strip_trailing_commas(text: str) -> tuple[str, list[tuple[int, int]]]:
+    """`text` with every comma that stands right before a } or ] (outside strings) taken out, and where each
+    was as (line, column), counted from 1."""
+    out, found, in_str, esc, line, col = [], [], False, False, 1, 0
+    for i, c in enumerate(text):
+        col += 1
+        if c == "\n":
+            line, col = line + 1, 0
+        if in_str:
+            esc = (c == "\\") and not esc
+            if c == '"' and not esc:
+                in_str = False
+            out.append(c)
+            continue
+        if c == '"':
+            in_str = True
+        elif c == "," and re.match(r"\s*[}\]]", text[i + 1 :]):
+            found.append((line, col))
+            continue
+        out.append(c)
+    return "".join(out), found
+
+
+def json_problem(kind: str, title: str, body: str, err: ValueError) -> str:
+    """Why a board spec is not JSON, with where: line and column, and the text round it."""
+    line, col = getattr(err, "lineno", 1), getattr(err, "colno", 1)
+    lines = body.splitlines() or [""]
+    near = lines[min(line, len(lines)) - 1][max(0, col - 25): col + 15].strip()
+    msg = getattr(err, "msg", str(err))
+    hint = (" (a double quote inside a text is written \\\"; a comma may not stand before } or ])"
+            if "delimiter" in msg or "Unterminated" in msg or "Expecting" in msg else "")
+    return f'{kind} "{title}" not shown: the spec is not valid JSON, {msg} at line {line} column {col}, near "{near}"{hint}'
+
+
+def check_table(title: str, body: str) -> tuple[str, list[str]]:
+    """A table body made ready: only its first table is kept (the stage counts the rows of one), a row with
+    more or fewer cells than the header is cut or padded to it, and a table past what the stage reads
+    comfortably is reported. Returns the body and what to tell the author."""
+    notes = []
+    if table_count(body) > 1:
+        lines, cut, seen = body.splitlines(), None, 0
+        for i, ln in enumerate(lines):
+            if not ln.strip() and seen:
+                cut = i
+                break
+            seen += bool(ln.strip())
+        if cut is not None:
+            rest = " ".join(" ".join(lines[cut:]).split())
+            body = "\n".join(lines[:cut])
+            notes.append(f'table "{title}" holds more than one table: only the first is shown, and the stage points '
+                         f'at the rows of one table, so put each in its own [[show table | title]] (left out: "{rest[:50]}…")')
+    header, rows = table_header(body), table_body_rows(body)
+    if header:
+        fixed = []
+        for n, (line, row) in enumerate(zip([ln for ln in (x.strip() for x in body.splitlines())
+                                              if ln and not _TABLE_SEP.match(ln)][1:], rows), 1):
+            cells = split_row(line)
+            if len(cells) != len(header):
+                verb = "cut to" if len(cells) > len(header) else "padded to"
+                hint = " (a | inside a cell is written \\|)" if len(cells) > len(header) else ""
+                notes.append(f'table "{title}" row {n} ("{cell_text(row[0])[:30]}") has {len(cells)} cell{"" if len(cells) == 1 else "s"} but the '
+                             f"header has {len(header)}; {verb} {len(header)}{hint}")
+                cells = (cells + [""] * len(header))[: len(header)]
+                line = "| " + " | ".join(cells) + " |"
+            fixed.append(line)
+        if any(n.startswith(f'table "{title}" row') for n in notes):
+            lines = body.splitlines()
+            out, it = [], iter(fixed)
+            past_sep = False
+            for ln in lines:
+                if past_sep and ln.strip():
+                    out.append(next(it, ln))
+                else:
+                    out.append(ln)
+                if _TABLE_SEP.match(ln.strip()):
+                    past_sep = True
+            body = "\n".join(out)
+        if len(rows) > MAX_TABLE_ROWS or len(header) > MAX_TABLE_COLUMNS:
+            notes.append(f'table "{title}" has {len(rows)} rows and {len(header)} columns: the stage reads a table '
+                         f"of up to {MAX_TABLE_ROWS} rows and {MAX_TABLE_COLUMNS} columns, so cut the rows and "
+                         "columns the answer does not talk about, or split it into two boards")
+    return body, notes
+
+
+def file_lines(text: str) -> list[str]:
+    """A file's lines as its line numbers count them: split at newlines only, so a form feed, a vertical tab or a
+    U+2028 inside a line does not start a new one. A last newline ends the last line."""
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    return lines[:-1] if lines and lines[-1] == "" else lines
+
+
 def as_pointed(kind: str) -> str:
     """The kind a point looks for: a change is pointed at as code is, by its lines."""
     return "code" if kind in ("code", "change") else kind
@@ -738,8 +874,35 @@ def scene_model(item: dict) -> stage_scene.SceneModel | None:
     return None
 
 
+# A full stop after one of these does not end a sentence ("e.g. the", "Dr. Smith", "vs. the old one", "the U.S. economy").
+ABBREVIATIONS = {"e.g", "i.e", "vs", "etc", "approx", "dr", "mr", "mrs", "ms", "prof", "sr", "jr", "st", "cf", "fig",
+                 "viz", "resp", "al", "inc", "ltd", "co", "u.s", "u.k", "u.n", "e.u", "a.m", "p.m", "ca", "est", "dept"}
+# These end a sentence when a capital letter follows ("and so on, etc. The next one"), else they do not.
+ABBREVIATION_ENDS = {"etc", "inc", "ltd", "co", "a.m", "p.m", "al", "ca"}
+_SENTENCE_END = re.compile(r"(?:[.!?…][\"')\]]*\s+|\n\s*)(?=\S)")
+_WORD_BEFORE_DOT = re.compile(r"(?:\A|(?<=[\s(\"'\[]))((?:[A-Za-z]\.)*[A-Za-z]+)\Z")
+
+
 def sentence_starts(text: str) -> list[int]:
-    return [m.end() for m in re.finditer(r"(?:[.!?…][\"')\]]*\s+|\n\s*)(?=\S)", text)]
+    """Where each sentence after the first begins. A full stop after an abbreviation (e.g., vs., approx., Dr.,
+    U.S.) or an initial (J. Smith) does not end one. The one splitter of the server and of the page, which
+    reads the starts of an answer's entry (`starts`) rather than splitting again."""
+    starts = []
+    for m in _SENTENCE_END.finditer(text):
+        end = m.start()
+        if text[end] == "." and end:
+            word = _WORD_BEFORE_DOT.search(text[max(0, end - 24):end])
+            if word:
+                w = word[1].lower()
+                follows_capital = text[m.end()].isupper()
+                # "J. R. R. Tolkien": an initial followed by another initial. A lone "plan B. Then" ends a sentence.
+                before = text[: end - len(word[1])]
+                initial = len(w) == 1 and word[1].isupper() and bool(
+                    re.match(r"[A-Z]\.\s", text[m.end():m.end() + 3]) or re.search(r"(?:\A|\s)[A-Z]\.\s+\Z", before))
+                if initial or (w in ABBREVIATIONS and not (w in ABBREVIATION_ENDS and follows_capital)):
+                    continue
+        starts.append(m.end())
+    return starts
 
 
 def _sub_tracked(pattern: str, repl: str, text: str, marks: list[int]) -> tuple[str, list[int]]:
@@ -789,6 +952,35 @@ def place_cues(shown: str) -> tuple[str, list[int]]:
 
 
 BLOCK_TAG = re.compile(r"\[\[([^\[\]]*)\]\]")
+# `[[ -f x ]]`, `[[ $a == b ]]`: a shell test written in speech, which is no tag.
+_SHELL_TEST = re.compile(r"\A\s*(?:!\s*)?(?:-[A-Za-z]\s|\$|[^\s]+\s+(?:==|!=|=~|-eq|-ne|-lt|-gt|-le|-ge)\s)")
+# What a tag is: the first word of a marker is a verb (show, point, key, note, a stop, + - next all focus ...).
+_TAG_WORD = re.compile(r"\A\s*/?\s*([A-Za-z]+)")
+# What an unclosed `[[` must start for the rest of its line to be dropped as a lost tag: a verb of the call.
+_OPENS_TAG = re.compile(r"\s*(?:/?show|point|key(?:s| points?)?|note|check|guess|say\s*(?:it\s*)?back|deeper|next|all|focus|[+])"
+                        r"(?![A-Za-z0-9])", re.IGNORECASE)
+
+
+def shell_test(inner: str) -> bool:
+    return bool(_SHELL_TEST.match(inner))
+
+
+def find_close(buf: str, start: int) -> int:
+    """Where the `]]` closing the tag that opens at `start` is: the first outside single brackets, so
+    `[[note: a[b[0]]]]` ends after the last pair and `[[key: x[i]]]` keeps its `[i]`. With the brackets
+    unbalanced, the first `]]`. -1 when there is none."""
+    depth, i = 0, start + 2
+    while i < len(buf):
+        c = buf[i]
+        if c == "[":
+            depth += 1
+        elif c == "]":
+            if depth:
+                depth -= 1
+            elif buf.startswith("]]", i):
+                return i
+        i += 1
+    return buf.find("]]", start + 2)
 
 
 def block_tag(buf: str, m: re.Match) -> str | None:
@@ -803,11 +995,15 @@ def block_tag(buf: str, m: re.Match) -> str | None:
     return None
 
 
+_CLOSE_AHEAD = re.compile(r"\[\[\s*/\s*show\s*\]\]", re.IGNORECASE)
+
+
 class MarkerFilter:
     """Pulls [[...]] markers out of streamed text, even when split across chunks.
 
     Inside a diagram or table block only [[/show]] is a marker: Mermaid's A[[Sub]] is body text.
     A new [[show ...]] there ends the block as never closed ("unclosed"), and is read as a marker.
+    A shell test (`[[ -f x ]]`) is text, and a `]]` inside single brackets does not end a tag.
     """
 
     def __init__(self):
@@ -815,29 +1011,11 @@ class MarkerFilter:
         self.in_block = False
         self.dropped = ""  # set by flush(): a tag that was never closed with ]]
 
-    def feed(self, text: str) -> tuple[str, list[str]]:
-        self._buf += text
-        spoken, markers = "", []
-        while True:
-            start = self._buf.find("[[")
-            if start < 0:
-                keep = 1 if self._buf.endswith("[") else 0
-                spoken += self._buf[: len(self._buf) - keep]
-                self._buf = self._buf[len(self._buf) - keep :]
-                return spoken, markers
-            spoken += self._buf[:start]
-            close = self._buf.find("]]", start)
-            if close < 0:
-                self._buf = self._buf[start:]
-                return spoken, markers
-            markers.append(self._buf[start + 2 : close].strip())
-            self._buf = self._buf[close + 2 :]
-
     def flush(self) -> str:
         """What is left at the end. A tag never closed with ]] is dropped up to the end of its line,
-        and named in `dropped`; the lines after it are still said."""
+        and named in `dropped`; the lines after it are still said. A lone [[ that starts no tag is text."""
         rest, self.dropped = self._buf, ""
-        if rest.startswith("[[") and not self.in_block:
+        if rest.startswith("[[") and not self.in_block and _OPENS_TAG.match(rest[2:]):
             tag, nl, after = rest.partition("\n")
             rest, self.dropped = nl + after, tag
         self._buf, self.in_block = "", False
@@ -874,7 +1052,9 @@ class MarkerFilter:
         return False
 
     def feed_ordered(self, text: str) -> list[tuple[str, str]]:
-        """Like feed, but keeps text and markers in the order they arrived."""
+        """Like feed, but keeps text and markers in the order they arrived. A marker that opens a block of a
+        kind the board does not know, with no [[/show]] to close it, comes as "bare": nothing after it is
+        taken for its body."""
         self._buf += text
         out: list[tuple[str, str]] = []
         while True:
@@ -889,14 +1069,97 @@ class MarkerFilter:
                 return out
             if start:
                 out.append(("text", self._buf[:start]))
-            close = self._buf.find("]]", start)
+            close = find_close(self._buf, start)
             if close < 0:
                 self._buf = self._buf[start:]
                 return out
+            written = self._buf[start : close + 2]
             marker = self._buf[start + 2 : close].strip()
-            out.append(("marker", marker))
             self._buf = self._buf[close + 2 :]
-            self.in_block = board_block_kind(marker) is not None
+            if shell_test(marker):
+                out.append(("text", written))
+                continue
+            kind = board_block_kind(marker)
+            bare = kind is not None and kind not in BOARD_KINDS and not _CLOSE_AHEAD.search(self._buf)
+            out.append(("bare" if bare else "marker", marker))
+            self.in_block = kind is not None and not bare
+
+
+# What an author means by a tag the call does not have, for the board: line that drops it.
+TAG_SYNONYMS = {
+    "highlight": "[[point: lines 12-14]], [[point: row 2]] or [[point: node X]]",
+    "mark": "[[point: ...]]", "emphasize": "[[point: ...]]", "emphasise": "[[point: ...]]", "underline": "[[point: ...]]",
+    "circle": "[[point: ...]]", "zoom": "[[point: ...]]", "look": "[[point: ...]]", "flash": "[[point: ...]]",
+    "pause": "[[check]] (a stop with buttons) or a sentence boundary",
+    "wait": "[[check]]", "stop": "[[check]]", "beat": "a short sentence", "break": "a new sentence",
+    "hide": "to leave it out? a board stays on the stage until a new one is shown, so there is nothing to hide",
+    "clear": "to leave it out? a board stays on the stage until a new one is shown",
+    "remove": "to leave it out? a board stays on the stage until a new one is shown",
+    "reveal": "[[+ target]]", "add": "[[+ target]]", "step": "[[+ target]] or [[next]]",
+    "image": "[[show diagram]], [[show table]] or [[show page]]", "chart": "[[show flowchart]] or [[show table]]",
+    "picture": "[[show page]]", "slide": "[[show table]] or [[show flowchart]]",
+    "takeaway": "[[key: ...]]", "summary": "[[key: ...]]", "keypoint": "[[key: ...]]", "remember": "[[key: ...]]",
+    "quiz": "[[check: question]]", "ask": "[[check: question]]",
+}
+_KNOWN_TAG_WORDS = ["show", "point", "key", "note", "check", "next", "all", "focus", "deeper", "guess"]
+
+
+def looks_like_tag(marker: str) -> bool:
+    """A marker that is a bare word or `word: text` (`[[highlight: x]]`, `[[pause]]`): written as a tag,
+    so it is dropped from the speech rather than read aloud. A shell test or anything with operators is text."""
+    if shell_test(marker):
+        return False
+    head = marker.split(":", 1)[0].strip()
+    return bool(re.fullmatch(r"/?[A-Za-z][\w-]*(?: [A-Za-z][\w-]*){0,2}", head)) and len(head) <= 30
+
+
+def unknown_tag_problem(marker: str) -> str:
+    word = (_TAG_WORD.match(marker) or [None, ""])[1].lower()
+    guess = TAG_SYNONYMS.get(word)
+    if guess is None:
+        near = difflib.get_close_matches(word, [*_KNOWN_TAG_WORDS, *TAG_SYNONYMS], n=1, cutoff=0.7)
+        guess = TAG_SYNONYMS.get(near[0], f"[[{near[0]}]]") if near else None
+    shown = marker if len(marker) <= 40 else marker[:39] + "…"
+    hint = (f"did you mean {guess}" if guess.startswith("to ") else f"did you mean {guess}?") if guess else \
+        "did you mean [[show ...]], [[point: ...]], [[key: ...]], [[+ target]] or [[next]]?"
+    return f"unknown tag [[{shown}]] was left out of the speech; {hint}"
+
+
+def part_label(model: stage_scene.SceneModel, key: str) -> str:
+    """A part as the author wrote it, for a board: line: its label, else its id."""
+    for name, k in model.names.items():
+        if k == key:
+            return name
+    return key.split(":", 1)[-1].split("#", 1)[-1]
+
+
+def point_for(key: str) -> str:
+    """The [[point ...]] that lights a part, from its key."""
+    if key.startswith("row#"):
+        return f"[[point: row {key[4:]}]]"
+    prefix, _, ident = key.partition(":")
+    return f"[[point: {prefix} {ident}]]" if ident and prefix in ("node", "step", "box", "zone", "route", "part") else \
+        f"[[point: {ident or key}]]"
+
+
+def by_order_problem(title: str, model: stage_scene.SceneModel, by_order: list[str], plan: dict, sentences: list[str]) -> str:
+    """Which parts came in by order, with the sentence each landed on and the tag that would place it."""
+    landed = {}
+    for n, steps in plan.items():
+        for keys in steps:
+            for k in keys:
+                landed.setdefault(k, n)
+    groups: dict[int | None, list[str]] = {}
+    for key in by_order[:4]:
+        groups.setdefault(landed.get(key), []).append(f'"{part_label(model, key)}"')
+    shown = []
+    for n, labels in groups.items():
+        where = f' with "{cut_words(" ".join(sentences[n].split()), 40)}"' if n is not None and n < len(sentences) else ""
+        shown.append(f"{', '.join(labels)}{where}")
+    more = f" and {len(by_order) - 4} more" if len(by_order) > 4 else ""
+    return (f'{len(by_order)} of {len(model.order)} parts of "{title}" are named by no sentence, so they came in by '
+            f"order, not where they are said: {'; '.join(shown)}{more}. Say each part's own words in the sentence "
+            f"about it, or put {point_for(by_order[0])} before that sentence")
 
 
 class Board:
@@ -914,9 +1177,10 @@ class Board:
         self.cues: list[dict] = []  # this reply's cues, in tag order; a show cue gets its view once accepted
         self.spill = ""
 
-    def marker(self, text: str) -> bool:
+    def marker(self, text: str, bare: bool = False) -> bool:
         """Handle a board marker; False if the marker isn't a board marker. Every show tag records a
-        cue where it stood, and so does a point tag that can be shown."""
+        cue where it stood, and so does a point tag that can be shown. `bare`: a block of a kind the
+        board does not know, with no [[/show]] after it, so nothing after the tag is its body."""
         point = parse_point(text)
         if point is not None:
             self.point(*point)
@@ -934,8 +1198,12 @@ class Board:
         if kind in LINE_KINDS:
             self.spill += self.close_block()
             cue, n = self.new_cue(), len(self.items)
-            {"code": self.add_code, "change": self.add_change, "page": self.add_page,
-             "screen": self.add_screen}[kind](rest, title)
+            add = {"code": self.add_code, "change": self.add_change, "page": self.add_page,
+                   "screen": self.add_screen}[kind]
+            try:
+                add(rest, title)
+            except Exception as err:  # noqa: BLE001  one bad board never costs the others of the answer
+                self.problem(f"{kind} not shown, {type(err).__name__}: {err}")
             if len(self.items) > n:
                 cue["view"] = self.items[-1]["view"]
             return True
@@ -944,7 +1212,10 @@ class Board:
         if not kind:
             self.problem("board kind missing after show, use code, change, diagram or table")
         elif kind not in BOARD_KINDS:
-            self.problem(f'unknown board kind "{kind}", use code, change, diagram or table')
+            self.problem(f'unknown board kind "{kind}", use code, change, diagram or table'
+                         + ("; there is no [[/show]] after it, so the text after it was left alone" if bare else ""))
+        if bare:
+            return True
         self.open = {"kind": kind or "?", "title": title, "body": "", "cue": self.new_cue()}
         return True
 
@@ -987,14 +1258,20 @@ class Board:
         self.cues.append({"kind": "frame", "view": item["view"], "verb": step})
 
     def point(self, title: str, raw: str) -> None:
-        """[[point ...]]: a cue that lights up lines of code, a table row or a diagram node."""
+        """[[point ...]]: a cue that lights up lines of code, table rows, a column or a cell, a diagram node or edge."""
         m = _POINT_TARGET.fullmatch(raw.strip())
         if not m:
-            self.problem(f"point not shown: {POINT_FORMS}")
+            item = self.find(title)
+            if item is not None and item["kind"] in POINT_FORMS_BY_KIND:
+                self.problem(f'point not shown: could not read "{raw.strip()}"; "{item.get("title") or item["kind"]}" '
+                             f'is a {item["kind"]}, use {POINT_FORMS_BY_KIND[item["kind"]]}')
+            else:
+                self.problem(f"point not shown: {POINT_FORMS}")
             return
         row_text = m["text"] or m["curly"] or m["single"]
-        wanted = ("code" if m["line"] else "table" if (m["n"] or row_text or m["cell"]) else "scene" if m["part"]
-                  else "diagram")
+        wanted = ("code" if m["line"] else
+                  "table" if (m["n"] or m["rowlist"] or row_text or m["cell"] or m["column"]) else
+                  "scene" if m["part"] else "diagram")
         item = self.find(title, wanted)
         if item is None:
             self.problem(f'point not shown: no board titled "{title}" in this call' if title
@@ -1010,9 +1287,8 @@ class Board:
         if kind in VISUAL_KINDS:
             self.point_visual(item, name, m)
             return
-        use = {"code": "line N or lines A-B", "change": "line N or lines A-B (new line numbers), or old line N",
-               "table": 'row N, rows A-B, row "text" or cell "row" / "column"', "diagram": "node ID"}[kind]
-        if m["step"] or m["part"] or m["mapk"] or m["mode"]:
+        use = POINT_FORMS_BY_KIND[kind]
+        if m["step"] or m["part"] or m["mapk"] or m["mode"] or m["edge"] or m["outcome"]:
             self.problem(f'point not shown: "{name}" is a {kind}; use {use}')
             return
         if as_pointed(kind) != wanted or (m["old"] and kind != "change"):
@@ -1051,29 +1327,10 @@ class Board:
                 self.problem(f'point not shown: {said} outside lines {first}-{last} of "{name}"')
                 return
             target = {"type": "lines", "a": a, "b": b}
-        elif kind == "table" and m["cell"]:
-            # One cell, read as the scene reads it: its row by number or first cell, its column by number or header.
-            keys, _ = stage_scene.resolve(scene_model(item), "cell " + m["cell"], name)
-            if not keys:
-                self.problem(f'point not shown: no cell {m["cell"].strip()} in "{name}"')
-                return
-            target = {"type": "key", "key": keys[0]}
         elif kind == "table":
-            cells = table_first_cells(item["body"])
-            if m["n"]:
-                a, b = sorted((int(m["n"]), int(m["n2"] or m["n"])))
-                if not 1 <= a <= b <= len(cells):
-                    said = f"row {a}" if a == b else f"rows {a}-{b}"
-                    self.problem(f'point not shown: "{name}" has {len(cells)} rows, not {said}')
-                    return
-                target = {"type": "row", "n": a, "b": b}
-            else:
-                # Matched as the stage sees the row: by its first cell's text, not its markdown.
-                said = cell_text(row_text)
-                if fold_like_stage(said) not in [fold_like_stage(cell_text(c)) for c in cells]:
-                    self.problem(f'point not shown: no row of "{name}" starts with "{row_text}"')
-                    return
-                target = {"type": "row", "text": said}
+            target = self.table_target(item, name, m, row_text)
+            if target is None:
+                return
         else:
             # The stage lights what the scene keys, so a node is one the scene found: a subgraph too.
             node, model = m["node"].strip(), scene_model(item)
@@ -1087,6 +1344,61 @@ class Board:
             target = {"type": "key", "key": key}
         self.cues.append({"kind": "frame", "view": item["view"],
                           "verb": stage_scene.Verb("focus", keys=self.target_keys(item, target))})
+
+    def table_target(self, item: dict, name: str, m: re.Match, row_text: str | None) -> dict | None:
+        """What a point at a table names: a cell, a column, rows by number or list, or a row by its first
+        cell (and its second, when the first is not enough). None, with a board: line, when it names nothing."""
+        model, cells = scene_model(item), table_first_cells(item["body"])
+        header = table_header(item["body"])
+        if m["cell"]:
+            # One cell, read as the scene reads it: its row by number or first cell, its column by number or header.
+            keys, _ = stage_scene.resolve(model, "cell " + m["cell"], name)
+            if not keys:
+                self.problem(f'point not shown: no cell {m["cell"].strip()} in "{name}" '
+                             f"({len(cells)} rows, columns: {', '.join(cell_text(h) for h in header) or 'none'})")
+                return None
+            return {"type": "key", "key": keys[0]}
+        if m["column"]:
+            raw = m["column"].strip().strip("\"'“”‘’").strip()
+            col = int(raw) if raw.isdigit() else model.columns.get(stage_scene.fold(raw))
+            if not col or not 1 <= col <= len(header) or not cells:
+                self.problem(f'point not shown: no column {m["column"].strip()} in "{name}" '
+                             f"(columns: {', '.join(cell_text(h) for h in header) or 'none: the table has no header'})")
+                return None
+            return {"type": "keys", "keys": [f"cell#{r}.{col}" for r in range(1, len(cells) + 1)]}
+        if m["rowlist"]:
+            rows = sorted({int(n) for n in re.split(r"\s*,\s*", m["rowlist"])})
+            if rows[-1] > len(cells) or rows[0] < 1:
+                self.problem(f'point not shown: "{name}" has {len(cells)} rows, not row {rows[-1] if rows[-1] > len(cells) else rows[0]}')
+                return None
+            return {"type": "keys", "keys": [f"row#{n}" for n in rows]}
+        if m["n"]:
+            a, b = sorted((int(m["n"]), int(m["n2"] or m["n"])))
+            if not 1 <= a <= b <= len(cells):
+                said = f"row {a}" if a == b else f"rows {a}-{b}"
+                self.problem(f'point not shown: "{name}" has {len(cells)} rows, not {said}')
+                return None
+            return {"type": "row", "n": a, "b": b}
+        # Matched as the stage sees the row: by its first cell's text, not its markdown.
+        said = cell_text(row_text)
+        first = [fold_like_stage(cell_text(c)) for c in cells]
+        hits = [i for i, c in enumerate(first) if c == fold_like_stage(said)]
+        if m["text2"] and hits:
+            second = fold_like_stage(cell_text(m["text2"]))
+            body = table_body_rows(item["body"])
+            both = [i for i in hits if len(body[i]) > 1 and fold_like_stage(cell_text(body[i][1])) == second]
+            if not both:
+                self.problem(f'point not shown: no row of "{name}" starts with "{row_text}" and then "{m["text2"]}"')
+                return None
+            return {"type": "row", "n": both[0] + 1, "b": both[0] + 1}
+        if not hits:
+            self.problem(f'point not shown: no row of "{name}" starts with "{row_text}"')
+            return None
+        if len(hits) > 1:
+            self.problem(f'{len(hits)} rows of "{name}" start with "{row_text}": the first was lit; to light another '
+                         f'name its row number ([[point: row {hits[1] + 1}]]) or its second cell '
+                         f'([[point: row "{row_text}", "second cell"]])')
+        return {"type": "row", "n": hits[0] + 1, "b": hits[0] + 1}
 
     def point_part(self, item: dict, name: str, m: re.Match) -> None:
         """A point at a scene's part, by its id or its name."""
@@ -1103,7 +1415,25 @@ class Board:
         self.cues.append({"kind": "frame", "view": item["view"], "verb": stage_scene.Verb("focus", keys=keys)})
 
     def point_visual(self, item: dict, name: str, m: re.Match) -> None:
-        """A point at a sequence's step, a flowchart's node, or a map's box, zone or route step: lit by its key."""
+        """A point at a sequence's step, a flowchart's node or edge, or a map's box, zone or route step: lit by its key."""
+        kind = item["kind"]
+        if m["column"] or m["rowlist"] or m["n"] or m["text"] or m["curly"] or m["single"] or m["cell"] or m["line"]:
+            self.problem(f'point not shown: "{name}" is a {kind}; use {POINT_FORMS_BY_KIND[kind]}')
+            return
+        if m["edge"]:
+            keys = self.edge_keys(item, name, m["edge"]) if kind == "flowchart" else None
+            if keys is None and kind != "flowchart":
+                self.problem(f'point not shown: "{name}" is a {kind}; use {POINT_FORMS_BY_KIND[kind]}')
+            if keys:
+                self.cues.append({"kind": "frame", "view": item["view"], "verb": stage_scene.Verb("focus", keys=keys)})
+            return
+        if m["outcome"]:
+            keys = self.outcome_keys(item, name) if kind == "sequence" else None
+            if keys is None and kind != "sequence":
+                self.problem(f'point not shown: "{name}" is a {kind}; use {POINT_FORMS_BY_KIND[kind]}')
+            if keys:
+                self.cues.append({"kind": "frame", "view": item["view"], "verb": stage_scene.Verb("focus", keys=keys)})
+            return
         if item["kind"] == "map":
             if not m["mapk"]:
                 self.problem(f'point not shown: "{name}" is a map; use box ID, zone N or route N')
@@ -1137,6 +1467,52 @@ class Board:
             return
         self.cues.append({"kind": "frame", "view": item["view"], "verb": stage_scene.Verb("focus", keys=[key])})
 
+    def edge_keys(self, item: dict, name: str, raw: str) -> list[str] | None:
+        """The keys of a flowchart edge named `A->B` (a `#N` after it for the Nth of several between the
+        same two nodes) or by its label. None, with a board: line, when no edge is named so."""
+        model, spec = scene_model(item), item["visual"]["spec"]
+        raw = raw.strip()
+        valid = ", ".join(dict.fromkeys(f"{e['from']}->{e['to']}" for e in spec.get("edges") or []))
+        pair = re.fullmatch(r"(?P<a>.+?)\s*-+>\s*(?P<b>.+?)(?:\s*#(?P<n>\d+))?", raw)
+        if pair:
+            keys, note = stage_scene.resolve(model, f"{pair['a'].strip()}->{pair['b'].strip()}", name)
+            if pair["n"] and keys:
+                n = int(pair["n"])
+                if not 1 <= n <= len(keys):
+                    self.problem(f'point not shown: only {len(keys)} edge(s) go {pair["a"]}->{pair["b"]} in "{name}", not #{n}')
+                    return None
+                keys = [keys[n - 1]]
+        else:
+            want, seen, keys, note = stage_scene.fold(raw.strip("\"'“”‘’")), {}, [], None
+            for e in spec.get("edges") or []:
+                pair_ = (e["from"], e["to"])
+                key = f"edge:{pair_[0]}->{pair_[1]}#{seen.get(pair_, 0)}"
+                seen[pair_] = seen.get(pair_, 0) + 1
+                if want and stage_scene.fold(str(e.get("label") or "")) == want:
+                    keys.append(key)
+        if not keys:
+            self.problem(f'point not shown: no edge {raw} in "{name}"' + (f" (its edges: {valid})" if valid else
+                                                                          " (it has no edges)"))
+            return None
+        if note:
+            self.problem(note)
+        return keys
+
+    def outcome_keys(self, item: dict, name: str) -> list[str] | None:
+        """A sequence's outcome box; on a before-and-after board (which has none) the rows that differ."""
+        model, spec = scene_model(item), item["visual"]["spec"]
+        if "outcome" in model.keys or spec.get("outcome"):
+            return ["outcome"]  # the stage names the box by this key
+        if spec.get("compare"):
+            keys = [f"step:{s['id']}" for s in spec.get("steps") or []
+                    if s.get("change") in ("changed", "moved", "added", "removed") and f"step:{s['id']}" in model.keys]
+            if keys:
+                return keys
+            self.problem(f'point not shown: "{name}" compares two flows that are the same, so no row differs')
+            return None
+        self.problem(f'point not shown: "{name}" has no outcome box; give the spec an outcome or use step ID')
+        return None
+
     @staticmethod
     def target_keys(item: dict, target: dict) -> list[str]:
         if target["type"] == "lines":
@@ -1164,6 +1540,10 @@ class Board:
             if kind in BOARD_KINDS:
                 self.problem(f'missing [[/show]] after "{title}", closed it at the end of the {kind}')
         if kind not in BOARD_KINDS:
+            gone = " ".join(body.split())
+            if gone:
+                self.problem(f'the body of the unknown board kind "{kind}" was left out and not said: '
+                             f'"{gone[:60]}{"…" if len(gone) > 60 else ""}"')
             return rest
         body = body.strip()
         fence = re.match(r"\A```[\w+-]*[ \t]*\n", body)
@@ -1191,6 +1571,23 @@ class Board:
                 self.problem(f'scene "{title}": {warning}')
             self.add(item)
             return rest
+        if kind == "table":
+            item["body"], notes = check_table(title, item["body"])
+            for note in notes:
+                self.problem(note)
+        if kind in (*VISUAL_KINDS, "diagram") and item["body"].startswith("{"):
+            try:
+                json.loads(item["body"])
+            except ValueError as err:
+                fixed, commas = strip_trailing_commas(item["body"])
+                try:
+                    json.loads(fixed)
+                except ValueError:
+                    self.problem(json_problem(kind, title, item["body"], err))
+                    return rest
+                at = ", ".join(f"line {ln} column {col}" for ln, col in commas[:3])
+                self.problem(f'{kind} "{title}": a comma before a closing bracket was removed ({at}); write it without')
+                item["body"] = fixed
         if kind in VISUAL_KINDS and not item["body"].startswith("{"):
             item["kind"] = kind = "diagram"
         elif kind == "diagram" and item["body"].startswith("{"):
@@ -1273,7 +1670,11 @@ class Board:
         if a < 1 or b < a:
             self.problem(f"code not shown, bad line range {a}-{b} in {m['path'].strip()}")
             return
-        all_lines = path.read_text(errors="replace").splitlines()
+        raw = path.read_bytes()
+        if b"\0" in raw[:8192]:
+            self.problem(f"code not shown, {m['path'].strip()} is a binary file")
+            return
+        all_lines = file_lines(raw.decode(errors="replace"))
         if a > len(all_lines):
             self.problem(f"code not shown, {m['path'].strip()} has only {len(all_lines)} lines")
             return
@@ -1426,6 +1827,12 @@ class Call:
         self.stage_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="stage")
         self.reply_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="reply")
         self.saved_key = None
+        self._add_lock = threading.RLock()  # entries are added from the loop and from the reply thread
+        self.answer_lock = asyncio.Lock()   # one reply is split and shown at a time
+        # The page that plays this call's answers (/api/player claims it, /api/state?page=<id> keeps it); see claim_player.
+        self.player: str | None = None
+        self.player_at = 0.0
+        self.live_revive: dict | None = None  # a hanging thought carried over from the last server
 
     # -- carried over to the next server ------------------------------------
 
@@ -1441,7 +1848,11 @@ class Call:
                 "stage": {"cwd": self.stage_cwd, "slug": self.stage_slug, "sid": self.stage_sid, "url": self.stage_url},
                 "view_names": [[list(k) if isinstance(k, tuple) else k, v] for k, v in list(self.view_names.items())],
                 "keys": list(self.keys), "board": list(self.board.items), "heard_upto": self.heard_upto,
-                "demo": self.demo_at if self.demo is not None else None}
+                "demo": self.demo_at if self.demo is not None else None,
+                "picks": list(self.picks), "said_lines": [[k, v] for k, v in self.said_lines.items()],
+                "live_held": ({"text": self.live_held["text"], "interrupted": self.live_held["interrupted"]}
+                              if self.live_held else None),
+                "ended": self.ended, "ended_at": self.ended_at}
 
     @classmethod
     def restore(cls, state: dict) -> "Call":
@@ -1473,6 +1884,12 @@ class Call:
         call.keys = list(state.get("keys") or [])
         call.board.items = list(state.get("board") or [])
         call.heard_upto = int(state.get("heard_upto", -1))
+        call.picks = list(state.get("picks") or [])
+        call.said_lines = {int(k): v for k, v in state.get("said_lines") or []}
+        call.live_revive = state.get("live_held") or None
+        if state.get("ended"):
+            call.ended, call.ended_at = str(state["ended"]), float(state.get("ended_at") or time.time())
+            call.turns.ended = call.turns.ended or {"reason": call.ended, "transcript": str(call.transcript)}
         return call
 
     def unspoken(self) -> list[dict]:
@@ -1482,17 +1899,18 @@ class Call:
     # -- the record ---------------------------------------------------------
 
     def add(self, who: str, text: str, **extra) -> dict:
-        entry = {"id": len(self.entries), "who": who, "text": text, "at": time.time(), **extra}
-        self.entries.append(entry)
-        self.last_turn = entry["at"]
-        self.changed()
+        with self._add_lock:
+            entry = {"id": len(self.entries), "who": who, "text": text, "at": time.time(), **extra}
+            self.entries.append(entry)
+            self.last_turn = entry["at"]
+            self.changed()
         label = {"you": "You", "claude": "Claude", "status": "Claude, working", "note": "Note",
                  "board": "On the stage", "system": "Call"}[who]
         self.record(label, text)
         return entry
 
     def record(self, label: str, text: str) -> None:
-        with self.transcript.open("a") as f:
+        with self._add_lock, self.transcript.open("a") as f:
             f.write(f"**{label}:** {text}\n\n")
 
     def changed(self) -> None:
@@ -1734,7 +2152,7 @@ class Call:
             for kind, chunk in markers.feed_ordered(text) + [("text", markers.flush())]:
                 if kind == "unclosed":
                     take(self.board.close_block(cut=True))
-                elif kind == "marker":
+                elif kind in ("marker", "bare"):
                     if chunk.lower().startswith("note:"):
                         self.add("note", chunk[5:].strip())
                         continue
@@ -1747,8 +2165,11 @@ class Call:
                         shown += self.add_stop(stop)
                         continue
                     before = len(self.board.cues)
-                    if not self.board.marker(chunk):
-                        shown += f"[[{chunk}]]"
+                    if not self.board.marker(chunk, bare=kind == "bare"):
+                        if looks_like_tag(chunk):
+                            self.board.problem(unknown_tag_problem(chunk))
+                        else:
+                            shown += f"[[{chunk}]]"
                     shown += CUE * (len(self.board.cues) - before)
                     spill, self.board.spill = self.board.spill, ""
                     if spill:
@@ -1887,8 +2308,7 @@ class Call:
                 self.board.problem(f'"{title}" has {len(model.order)} elements and no verbs, '
                                    "so it came in with the sentences said about it (dump); tag the word that names each thing")
             elif by_order:
-                self.board.problem(f'{len(by_order)} of {len(model.order)} parts of "{title}" are named by no sentence, '
-                                   "so they came in by order; point at each where it is said")
+                self.board.problem(by_order_problem(title, model, by_order, plan, sentences))
             for n, reveals in plan.items():
                 brought = [{"kind": "frame", "view": view, "verb": stage_scene.Verb("+", keys=keys)} for keys in reveals]
                 pos, cues = first_run.get(n, (bounds[n], None))
@@ -1977,13 +2397,16 @@ class Call:
     async def answer(self, text: str) -> dict:
         """Show an answer at once, then read it aloud in the background."""
         # Off the loop: a change tag reads git, and the page's polls and audio must not wait for it.
-        # One reply at a time, since splitting writes the board's and the call's state.
-        shown = await asyncio.get_running_loop().run_in_executor(self.reply_pool, self.split_reply_safely, text)
-        if not shown:
-            return {}
-        # Every key the speech thread sets exists already, so a page poll never sees the entry change size.
-        entry = self.add("claude", shown, audio=None, speech="pending", cues=self.reply_cues, words=[],
-                         speech_started=None, speech_estimate=None)
+        # One reply at a time, from its split to its entry: two replies at once would interleave their
+        # boards and take the same answer number.
+        async with self.answer_lock:
+            shown = await asyncio.get_running_loop().run_in_executor(self.reply_pool, self.split_reply_safely, text)
+            if not shown:
+                return {}
+            # Every key the speech thread sets exists already, so a page poll never sees the entry change size.
+            entry = self.add("claude", shown, audio=None, speech="pending", cues=self.reply_cues, words=[],
+                             speech_started=None, speech_estimate=None,
+                             starts=sentence_starts(shown))  # where each sentence after the first begins: the page reads these
         asyncio.get_running_loop().create_task(self.speak(entry))
         return entry
 
@@ -2075,6 +2498,26 @@ class Call:
             talk_files.mark_ended(talk_files.call_file(self.id), os.getpid())
         say(f"talk: call ended ({reason}). Transcript {self.transcript}")
 
+    def player_now(self) -> str | None:
+        """The page that plays this call's answers now, or None when none holds the claim."""
+        if self.player and time.time() - self.player_at > PLAYER_TTL_S:
+            self.player = None
+        return self.player
+
+    def claim_player(self, page: str, take: bool = False) -> str | None:
+        """One page of a call plays its answers by itself, so a second tab of the same call stays quiet.
+        A page asks with its own random id: it gets the claim when none holds it, when the holder has not
+        polled for PLAYER_TTL_S, or when `take` (the user pressed play or Talk in that page). Returns the
+        page that holds it. The state payload carries it as `player` (a page id or null), and a page keeps
+        its claim alive by polling /api/state?page=<its id>."""
+        page = str(page)[:64]
+        holder = self.player_now()
+        if page and (holder is None or take or holder == page):
+            if holder != page:
+                self.changed()
+            self.player, self.player_at = page, time.time()
+        return self.player_now()
+
     def view(self) -> dict:
         return {"v": self.version, "entries": self.entries, "working": self.turns.working,
                 "stalled": self.turns.stalled, "activity": self.activity_view() if self.turns.working else [],
@@ -2109,6 +2552,7 @@ class Server:
         self.home_key = home_key or secrets.token_urlsafe(24)  # the cookie that opens the list of calls
         self.calls: dict[str, Call] = {}
         self.gone_tokens: set[str] = set()  # calls closed since: their session hears that they ended
+        self.gone_transcripts: dict[str, str] = {}  # a closed call's token -> its transcript, told in the 410
         self.floor: str | None = None
         self.floor_n = 0  # counts every change of floor, so a page can tell an old answer from a new one
         self.speech = SpeechQueue()
@@ -2165,13 +2609,13 @@ class Server:
     def stamp(self, call: Call) -> tuple[str, list[dict]]:
         """The page's version of its state, which also moves when the floor or another call changes."""
         others = [s for s in self.summaries() if s["id"] != call.id]
-        sig = hashlib.sha1(json.dumps([others, self.floor, self.floor_n]).encode()).hexdigest()[:8]
+        sig = hashlib.sha1(json.dumps([others, self.floor, self.floor_n, call.player_now()]).encode()).hexdigest()[:8]
         return f"{call.version}.{sig}", others
 
     def view(self, call: Call) -> dict:
         v, others = self.stamp(call)
         return {**call.view(), "v": v, "floor_call": self.floor, "floor_n": self.floor_n, "calls": others,
-                "now": time.time()}
+                "now": time.time(), "player": call.player_now()}
 
     def write_call_file(self, call: Call) -> None:
         talk_files.write_private(talk_files.call_file(call.id), {
@@ -2181,8 +2625,8 @@ class Server:
     def save_state(self, call: Call, force: bool = False) -> None:
         """Write the call's state file when anything in it has changed since it was last written."""
         key = (call.version, call.turns.state_key(), call.owner_session, call.heard_upto, bool(call.last_seen),
-               self.floor == call.id, self.floor_n)
-        if call.ended or (key == call.saved_key and not force):
+               self.floor == call.id, self.floor_n, call.ended, len(call.picks))
+        if key == call.saved_key and not force:
             return
         try:
             talk_files.write_private(talk_files.state_file(call.id),
@@ -2203,13 +2647,21 @@ class Server:
             self.floor = call.id
         self.floor_n = max(self.floor_n, int(state.get("floor_n") or 0))
         self.write_call_file(call)
+        if call.ended:
+            # An ended call whose page may still read its record: kept for the rest of its linger, and its
+            # page gets a fresh PAGE_GONE_S to come back.
+            talk_files.mark_ended(talk_files.call_file(call.id), os.getpid())
+            call.last_seen = time.time()
         self.save_state(call, force=True)
         self.keep(call)
         loop = asyncio.get_running_loop()
+        if call.live_revive:
+            call.live_hold(call.live_revive["text"], call.live_revive.get("interrupted"))
+            call.live_revive = None
         for entry in call.unspoken():
             entry.update(speech="pending", speech_started=None, speech_estimate=None)
             loop.create_task(call.speak(entry))
-        say(f"talk: call {call.id} carried over: {call.topic}")
+        say(f"talk: call {call.id} carried over{' (ended, kept for its page)' if call.ended else ''}: {call.topic}")
         return call
 
     async def hand_over(self) -> None:
@@ -2249,13 +2701,22 @@ class Server:
     async def close(self, call: Call) -> None:
         if self.calls.get(call.id) is not call:
             return
+        if self.handing_over:
+            return  # the server is going: an ended call its page may still read is carried to the next one
         # A doorbell already waiting gets the end at once; a few seconds more cover one re-arming now.
+        # A session still answering a turn is not at its doorbell: its reply (refused with the transcript)
+        # or its next doorbell is how it learns of the end, so the call is kept for that, for END_GRACE_S.
         try:
-            await asyncio.wait_for(call.turns.end_collected.wait(), 5)
+            await asyncio.wait_for(call.turns.end_collected.wait(), END_COLLECT_S)
         except asyncio.TimeoutError:
-            pass
+            if call.turns.open_ids and not self.handing_over:
+                try:
+                    await asyncio.wait_for(call.turns.end_collected.wait(), END_GRACE_S)
+                except asyncio.TimeoutError:
+                    pass
         self.calls.pop(call.id, None)
         self.gone_tokens.add(call.token)
+        self.gone_transcripts[call.token] = str(call.transcript)
         if self.floor == call.id:
             self.floor = None
         talk_files.remove_if_pid(talk_files.call_file(call.id), os.getpid())
@@ -2287,8 +2748,31 @@ def build_app(server: Server):
     def refused(request):
         """A request no open call takes: 410 for a call that has closed since, else 403."""
         if token_of(request) in server.gone_tokens:
-            return web.json_response({"error": "the call has ended"}, status=410)
+            return web.json_response({"error": "the call has ended",
+                                      "transcript": server.gone_transcripts.get(token_of(request), "")}, status=410)
         return forbidden()
+
+    async def read_json(request, default=None):
+        """The request's JSON body. A body that is not JSON is a 400 for the caller, never a 500 traceback;
+        with `default`, an empty or unreadable body is that instead."""
+        try:
+            return await request.json()
+        except (ValueError, UnicodeDecodeError):
+            if default is not None:
+                return default
+            raise web.HTTPBadRequest(text=json.dumps({"error": "the body is not valid JSON"}),
+                                     content_type="application/json") from None
+
+    def parse_wait(raw: str) -> float:
+        """A doorbell's wait, 0 to 60 s. Not a finite number (abc, nan, inf) is a 400: a nan would hang it."""
+        try:
+            wait = float(raw)
+        except ValueError:
+            wait = float("nan")
+        if wait != wait or wait in (float("inf"), float("-inf")):
+            raise web.HTTPBadRequest(text=json.dumps({"error": f"wait must be a number of seconds, not {raw!r}"}),
+                                     content_type="application/json")
+        return min(max(wait, 0.0), 60.0)
 
     def by_link(request) -> Call | None:
         return server.calls.get(request.match_info.get("call", ""))
@@ -2370,10 +2854,7 @@ def build_app(server: Server):
         call = call_of(request)
         if call is None:
             return refused(request)
-        try:
-            body = await request.json()
-        except ValueError:
-            body = {}
+        body = await read_json(request, {})
         voice = body.get("voice") if isinstance(body, dict) else None
         if voice not in {v["id"] for v in speech.voices()}:
             return web.json_response({"error": "not a voice this engine offers"}, status=400)
@@ -2392,6 +2873,9 @@ def build_app(server: Server):
         if call is None:
             return refused(request)
         call.last_seen = time.time()
+        page = request.query.get("page")
+        if page and call.player == page:  # the playing page's poll keeps its claim
+            call.player_at = call.last_seen
         if call.demo is not None and call.demo_at < 0 and not call.demo_starting:
             # A demo starts once its page is open, so the first answer plays by itself.
             call.demo_starting = True
@@ -2478,7 +2962,7 @@ def build_app(server: Server):
         call = call_of(request)
         if call is None:
             return refused(request)
-        body = await request.json() if request.can_read_body else {}
+        body = await read_json(request) if request.can_read_body else {}
         entry = body.get("entry") if isinstance(body, dict) else None
         if not isinstance(entry, int) or isinstance(entry, bool):
             return web.json_response({"error": "name the entry to take back"}, status=400)
@@ -2490,7 +2974,7 @@ def build_app(server: Server):
             return refused(request)
         if call.ended:
             return web.json_response({"error": "the call has ended"}, status=410)
-        body = await request.json()
+        body = await read_json(request)
         text = str(body.get("text", "")).strip() if isinstance(body, dict) else ""
         if not text:
             return web.json_response({"error": "nothing to send"}, status=400)
@@ -2498,14 +2982,16 @@ def build_app(server: Server):
             return web.json_response({"error": "the talk server is restarting; try again in a moment"}, status=503)
         spoken = isinstance(body, dict) and body.get("spoken") is True  # said with Talk, then checked in the field
         answering = str(body.get("answering") or "").strip()[:400] or None  # the [[say back]] question it answers
-        return web.json_response({"text": text, "entry": call.offer(text[:4000], typed=not spoken, answering=answering)})
+        entry = call.offer(text[:4000], typed=not spoken, answering=answering)
+        server.save_state(call)
+        return web.json_response({"text": text, "entry": entry})
 
     async def picked(request):
         """A choice picked on a [[guess]] stop: {answer, i (the stop's place among the answer's stops), choice}."""
         call = call_of(request)
         if call is None:
             return refused(request)
-        body = await request.json()
+        body = await read_json(request)
         body = body if isinstance(body, dict) else {}
         answers = [x for x in call.entries if x["who"] == "claude"]  # answer n is the n-th Claude entry
         n = body.get("answer")
@@ -2518,16 +3004,30 @@ def build_app(server: Server):
         if not isinstance(choice, int) or not 0 <= choice < len(stop["choices"]):
             return web.json_response({"error": "no such choice"}, status=400)
         right = stop["choices"][stop["right"]] if "right" in stop else None
-        return web.json_response({"pick": call.pick(body["answer"], stop["question"], stop["choices"][choice], right)})
+        got = call.pick(body["answer"], stop["question"], stop["choices"][choice], right)
+        server.save_state(call)
+        return web.json_response({"pick": got})
+
+    async def player(request):
+        """The page that plays the call's answers by itself. POST {page: <the page's own random id>,
+        take?: true} claims it (take: the user pressed play or Talk there); the answer and every
+        /api/state carry `player`, the id of the page that holds it, or null. A page plays by itself only
+        when `player` is its own id; it keeps the claim by polling /api/state?page=<id>."""
+        call = call_of(request)
+        if call is None:
+            return refused(request)
+        body = await read_json(request)
+        body = body if isinstance(body, dict) else {}
+        page = body.get("page")
+        if not isinstance(page, str) or not page.strip():
+            return web.json_response({"error": "name the page: {page: <id>}"}, status=400)
+        return web.json_response({"player": call.claim_player(page.strip(), take=body.get("take") is True)})
 
     async def floor(request):
         call = call_of(request)
         if call is None:
             return refused(request)
-        try:
-            body = await request.json() if request.can_read_body else {}
-        except ValueError:
-            body = {}
+        body = await read_json(request, {}) if request.can_read_body else {}
         heard = body.get("heard") if isinstance(body, dict) else None
         return web.json_response({"floor_n": server.take_floor(call, heard)})
 
@@ -2548,7 +3048,7 @@ def build_app(server: Server):
         call = call_of(request)
         if call is None:
             return refused(request)
-        wait = min(max(float(request.query.get("wait", "25")), 0.0), 60.0)
+        wait = parse_wait(request.query.get("wait", "25"))
         call.last_doorbell = time.time()
         event = await call.turns.next(timeout=wait)
         call.last_doorbell = time.time()
@@ -2561,6 +3061,7 @@ def build_app(server: Server):
             return web.Response(status=499)
         if event["type"] == "turn":
             call.collected()
+            server.save_state(call)
         return web.json_response(event)
 
     async def activity(request):
@@ -2569,7 +3070,7 @@ def build_app(server: Server):
         call = call_of(request)
         if call is None and not server.is_server(token_of(request)):
             return forbidden()
-        body = await request.json()
+        body = await read_json(request)
         body = body if isinstance(body, dict) else {}
         if call is not None:
             return web.json_response({"recorded": call.record_activity(body)})
@@ -2586,7 +3087,7 @@ def build_app(server: Server):
         call = call_of(request)
         if call is None:
             return refused(request)
-        body = await request.json()
+        body = await read_json(request)
         if not isinstance(body, dict):
             return web.json_response({"error": "a JSON object is required"}, status=400)
         status, text, end = str(body.get("status", "")).strip(), str(body.get("text", "")), bool(body.get("end"))
@@ -2594,6 +3095,7 @@ def build_app(server: Server):
             return web.json_response({"error": "a status cannot end the call; send the wrap-up with end"},
                                      status=400)
         if call.ended:
+            call.turns.end_collected.set()  # the session knows now: nothing is left to keep the call for
             return web.json_response({"error": "the call has ended", "transcript": str(call.transcript)}, status=410)
         if not status and not text.strip() and not end:
             return web.json_response({"error": "nothing to say: the reply is empty"}, status=400)
@@ -2620,12 +3122,14 @@ def build_app(server: Server):
             if result != "ok":
                 return web.json_response({"ok": True, "ignored": "the turn was already answered; status not shown"})
             call.add("status", status[:120])
+            server.save_state(call)
             return web.json_response({"ok": True})
         if result != "ok":
             return web.json_response({"ok": True, "ignored": "the turn was already answered; this reply was "
                                                              "not shown or said again"})
         problems_from = len(call.board.problems)
         await call.answer(text)
+        server.save_state(call)  # the answer is in the record: a crash now must not lose it
         await call.stage_settled()
         if end:
             call.end("wrapped up by Claude")
@@ -2641,17 +3145,14 @@ def build_app(server: Server):
     async def register(request):
         if not server.is_server(token_of(request)):
             return forbidden()
-        body = await request.json()
+        body = await read_json(request)
         return await register_call(server, body if isinstance(body, dict) else {})
 
     async def quit_server(request):
         """Stop the server. With handover, open calls are left for the next server rather than refused."""
         if not server.is_server(token_of(request)):
             return forbidden()
-        try:
-            body = await request.json() if request.can_read_body else {}
-        except ValueError:
-            body = {}
+        body = await read_json(request, {}) if request.can_read_body else {}
         handover = isinstance(body, dict) and bool(body.get("handover"))
         if server.registering or (server.open_count() and not handover):
             return web.json_response({"error": "calls are open"}, status=409)
@@ -2676,6 +3177,7 @@ def build_app(server: Server):
         web.post("/api/withdraw", withdraw),
         web.post("/api/demo", demo),
         web.post("/api/floor", floor),
+        web.post("/api/player", player),
         web.post("/api/voice", set_voice),
         web.post("/api/stop", stop),
         web.post("/api/close", close),
@@ -2697,7 +3199,8 @@ async def watch(call: Call) -> None:
             if (call.demo is None and now - max(call.last_turn, call.last_doorbell) > idle
                 and not call.turns.waiters and not call.busy(idle)):  # a demo stays ready: it never goes idle
                 call.end(f"nothing was said and no session listened for {call.args.idle_minutes} minutes")
-        elif now - call.ended_at > LINGER_S or now - call.last_seen > PAGE_GONE_S:
+        elif now - call.ended_at > LINGER_S or (now - call.last_seen > PAGE_GONE_S if call.last_seen
+                                                 else now - call.ended_at > PAGE_GONE_S):
             call.closed.set()
 
 
@@ -2827,7 +3330,10 @@ def drop_stale_calls(port: int) -> None:
     files removed. Another port's are not ours."""
     for stale in talk_files.call_ids():
         data = talk_files.read(talk_files.call_file(stale)) or {}
-        if data.get("port") == port and not (talk_files.adoptable(data) and talk_files.state_file(stale).is_file()):
+        if data.get("port") != port:
+            continue
+        state = talk_files.read(talk_files.state_file(stale))
+        if not (talk_files.adoptable(data) and state) and not talk_files.lingering(data, state, LINGER_S):
             drop_stale_call(stale, data)
 
 
@@ -2855,7 +3361,8 @@ def adopt_calls(server: Server) -> list[Call]:
         data = talk_files.read(talk_files.call_file(call_id)) or {}
         state = talk_files.read(talk_files.state_file(call_id)) or {}
         try:
-            if not talk_files.adoptable(data) or state.get("call") != call_id or state.get("token") != data.get("token"):
+            if (not (talk_files.adoptable(data) or talk_files.lingering(data, state, LINGER_S))
+                    or state.get("call") != call_id or state.get("token") != data.get("token")):
                 raise ValueError("its files do not match")
             call = Call.restore(state)
         except (KeyError, TypeError, ValueError, OSError) as err:
