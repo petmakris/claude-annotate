@@ -473,7 +473,7 @@ def test_the_lanes_give_each_actor_its_tones_colour_and_file_and_light_the_bar_o
     # the reply being said: the bar its call opened on Azure is lit, in Azure's colour. A colour carries a meaning,
     # so an actor with no tone is plain, and the older "hot" is the lane sequence's red
     assert page.run() == [{"subs": True, "colours": ["var(--t-plain)", "var(--t-plain)", "var(--t-red)"],
-                           "names": ["1Call pagecall.js", "2Talk server", "3Azure"], "live": [["az", "var(--t-red)"]]}]
+                           "names": ["CCall pagecall.js", "TTalk server", "AAzure"], "live": [["az", "var(--t-red)"]]}]
 
 
 # A spoken turn's path through talk (the stage mockups' flow, cut to three actors), its first step's ref in a

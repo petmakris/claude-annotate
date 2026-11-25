@@ -47,6 +47,8 @@ const CARD = 92;         // narrower than this, the cards take two lines, every 
 const BAR = 10;          // an activation bar's width; a nested one stands NEST to the right
 const NEST = 6;
 const DENSE = 28;       // a numbered card on a phone with many actors
+const SELF_LIFT = 8;     // a call to itself on a narrow board: its chip stands this much higher over the loop
+const NUM_AT = (narrow) => (narrow ? 4 : 20);   // the step number's own gutter, the board's width deciding (not the window's)
 const PHASE_H = 34, HEAD_H = 30, BRANCH_H = 30, CLOSE_H = 18, SUMMARY_H = 46;
 // An actor's colour is its tone's: a colour carries a meaning, so an actor with none is plain.
 const actorColour = (a) => `var(--t-${tone(a.tone) === "dropped" ? "plain" : tone(a.tone)})`;
@@ -55,6 +57,37 @@ const CLOSE = `<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true
 const PLAY = `<svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.5v11l9-5.5z" fill="currentColor"/></svg>`;
 const CODE = `<svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 4 1.5 8 5 12M11 4l3.5 4-3.5 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const CHECK = `<svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true"><path d="m2.5 6.2 2.4 2.4 4.6-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+// Short marks for the actors, so no actor is a digit (the rows' own numbers are the only numbers on a board): its first
+// letter when no other actor has it, else its words' initials, else its first two or three letters, else a digit.
+export function actorMarks(actors) {
+  const used = new Set();
+  return actors.map((a, i) => {
+    const text = String(a.label || a.id).replace(/\n/g, " ").trim();
+    const words = text.split(/[^\p{L}\p{N}]+/u).filter(Boolean), letters = words.join("");
+    const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+    const tries = [cap(letters.slice(0, 1)), words.slice(0, 3).map((w) => w.charAt(0).toUpperCase()).join(""),
+                   cap(letters.slice(0, 2)), cap(letters.slice(0, 3))];
+    const m = tries.find((t) => t && !used.has(t)) ?? String(i + 1);
+    used.add(m);
+    return m;
+  });
+}
+
+// The marks' look and the compact key of a phone board, put in once (the stage's own sheet keeps the rest).
+const LANES_CSS = `.ln-kitem i,.ln-now i{width:auto;min-width:19px;padding:0 4px;border-radius:999px;box-sizing:border-box}
+.ln-dense .ln-key{gap:2px 4px;padding:8px 10px 2px}
+.ln-dense .ln-chip .ln-no{font-size:11px;letter-spacing:-.2px}
+.ln-dense .ln-now{height:18px;padding-top:4px}
+.ln-dense .ln-now:empty{display:none}`;
+function styled() {
+  try {
+    if (document.getElementById("lanes-extra-css")) return;
+    const el = document.createElement("style");
+    el.id = "lanes-extra-css"; el.textContent = LANES_CSS;
+    document.head.appendChild(el);
+  } catch { /* a page with no head keeps the stage's own look */ }
+}
 
 // `more`: the source's `refs` (step id -> {path, start, at, lines}) and `play(stepId, dry)`, which starts the
 // voice at the sentence that says a step (with `dry`, only asks whether one does) and returns false when none does.
@@ -70,6 +103,7 @@ function failed(box, e) {
 }
 
 function drawLanes(box, spec, embedded, more) {
+  styled();
   if (spec.compare && typeof spec.compare.before === "object") return renderCompare(box, spec, embedded, more);
   if (spec.compare) spec = { ...spec, compare: undefined };  // a board saved as one merged diagram: drawn as its rows
   box._cmp = null;
@@ -78,11 +112,12 @@ function drawLanes(box, spec, embedded, more) {
     ? `<div class="ln-legend">${spec.legend.map((l) => `<span class="t-${tone(l.tone)}"><i></i>${esc(l.label)}</span>`).join("")}</div>` : "";
   const name = (a) => String(a.label || a.id).replace(/\n/g, " ");
   // on a phone with many actors the cards are numbers (`ln-dense`), named once in a key above the lifelines
+  const marks = actorMarks(actors);
   const key = `<div class="ln-key" aria-label="Who is who">${actors.map((a, i) =>
-    `<button type="button" class="ln-kitem t-${tone(a.tone)}" style="--ac:${actorColour(a, i)}" data-actor="${esc(a.id)}"><i>${i + 1}</i>${esc(name(a))}</button>`).join("")}</div>`;
+    `<button type="button" class="ln-kitem t-${tone(a.tone)}" style="--ac:${actorColour(a, i)}" data-actor="${esc(a.id)}"><i>${esc(marks[i])}</i>${esc(name(a))}</button>`).join("")}</div>`;
   box.innerHTML = `${key}<div class="ln-head"><div class="ln-actors">${actors.map((a, i) =>
       `<button type="button" class="ln-chip t-${tone(a.tone)}${a.mono ? " ln-mono" : ""}" style="--ac:${actorColour(a, i)}" data-key="actor:${esc(a.id)}" data-actor="${esc(a.id)}"
-        title="Follow ${esc(name(a))}"><b class="ln-no">${i + 1}</b><span>${esc(name(a))}</span>${a.role ? `<em>${esc(a.role)}</em>` : ""}${a.sub ? `<small>${esc(a.sub)}</small>` : ""}${a.tag ? `<i class="ln-tag">${esc(a.tag)}</i>` : ""}</button>`).join("")}</div>
+        title="Follow ${esc(name(a))}"><b class="ln-no">${esc(marks[i])}</b><span>${esc(name(a))}</span>${a.role ? `<em>${esc(a.role)}</em>` : ""}${a.sub ? `<small>${esc(a.sub)}</small>` : ""}${a.tag ? `<i class="ln-tag">${esc(a.tag)}</i>` : ""}</button>`).join("")}</div>
       <div class="ln-now" aria-live="off"></div>${legend}</div>
     <div class="ln-body"></div>`;
   box._lanes = { spec, refs: more.refs || {}, play: embedded ? more.play : null, scene: null, n: null, cur: null, drawn: undefined,
@@ -116,7 +151,7 @@ function model(spec) {
   let last = null;
   let k = 0;
   const nums = steps.some((s) => s.n != null) ? steps.map((s) => (s.gap ? null : (last = s.n ?? last))) : steps.map((s) => (s.gap ? null : ++k));
-  return { steps, at, phases, groups, reply, nums, actors: spec.actors || [], outcome: spec.outcome || null };
+  return { steps, at, phases, groups, reply, nums, marks: actorMarks(spec.actors || []), actors: spec.actors || [], outcome: spec.outcome || null };
 }
 
 // After a frame: which steps are shown, which one is being said, which actors the voice points at.
@@ -300,15 +335,18 @@ function paint(box) {
   }
   if (measure(box, st, rows)) return;  // drawn again, taller where words wrap
   if (st.pop != null) popup(box, st, rows, cols, w);
-  // Where the view goes after this frame: to the step now said, to the top once the answer is over (a rest
-  // view left at the last rows shows the end of a flow and none of its start), or to the outcome when it is said.
+  // Where the view goes after this frame: to the step now said, to the outcome when it is said (a point at the outcome
+  // leaves no step said, so it is tested before the rest), else to the top once the answer is over (a rest view left at
+  // the last rows shows the end of a flow and none of its start).
   const moved = cur != null && st.drawn !== cur;
-  const rested = cur == null && st.drawn != null;
+  const atRest = !!st.scene && st.n != null && st.n >= st.scene.rest;   // after a point at the outcome no step is said, so the rest is told by the frame
+  const rested = cur == null && (st.drawn != null || (atRest && !st.wasRest));
   const outSaid = !!out && outcomeLit(st, fr, cur, steps.length - 1).said;
-  const aim = moved ? "row" : rested ? "top" : outSaid && !st.outSaid ? "outcome" : null;
+  const aim = moved ? "row" : outSaid && !st.outSaid ? "outcome" : rested ? "top" : null;
   st.cur = cur != null ? steps[cur].id : null;
   st.drawn = cur;
   st.outSaid = outSaid;
+  st.wasRest = atRest;
   st.rowTops = rows.filter((r) => r.type === "step" || r.type === "phase" || r.type === "summary" || r.type === "box").map((r) => r.y).sort((a, b) => a - b);
   if (aim) { st.aim = aim; if (!st.managed) requestAnimationFrame(() => land(box)); }
   st.natural = natural;
@@ -342,9 +380,10 @@ function columns(box, st, w, narrow) {
   if (n > 2 && at.cap < CARD) { k = 2; at = fit(2); }
   // Five actors or more on a phone: names would pile up whatever their size, so each card is its number, one
   // small row, and the names stand once in the key above (ln-key); the actors of the step said are named under it.
-  const dense = narrow && n >= 5;
+  // on a compare board both sides are dense when either is (st.peers: the most actors of the two), so the two stand level
+  const dense = narrow && Math.max(n, st.peers || 0) >= 5;
   if (dense) {
-    const lo = left + 6, hi = w - right - 8, d = (hi - lo) / (n - 1);
+    const lo = left + 6, hi = w - right - 8, d = (hi - lo) / Math.max(1, n - 1);
     box.classList.add("ln-dense");
     const xs = new Map(actors.map((a, i) => [a.id, Math.round(lo + d * i)]));
     return { xs, pitch: d, k: 1, cap: DENSE, chips, left, right, notes, noteW, dense };
@@ -379,7 +418,7 @@ function paintCards(box, st, cols, involved) {
   const now = box.querySelector(".ln-now");
   if (now) {
     const named = involved ? st.model.actors.map((a, i) => [a, i]).filter(([a]) => involved.has(a.id)) : [];
-    now.innerHTML = named.map(([a, i]) => `<span class="t-${tone(a.tone)}" style="--ac:${actorColour(a, i)}"><i>${i + 1}</i>${esc(String(a.label || a.id).replace(/\n/g, " "))}</span>`).join("");
+    now.innerHTML = named.map(([a, i]) => `<span class="t-${tone(a.tone)}" style="--ac:${actorColour(a, i)}"><i>${esc(st.model.marks[i])}</i>${esc(String(a.label || a.id).replace(/\n/g, " "))}</span>`).join("");
   }
 }
 
@@ -389,12 +428,16 @@ function baseSize(s, isCur, narrow) {
   if (s.gap) return { h: isCur ? 64 : 46, ay: isCur ? 32 : 23 };
   const checks = (s.checks || []).length ? 32 : 0;
   if (s.arrow === "band") return { h: isCur ? 70 : 54, ay: isCur ? 35 : 27 };
-  if (s.arrow === "self" || s.from === s.to) return { h: (isCur ? 76 : 56) + checks, ay: isCur ? 38 : 28 };
+  if (centred(s, narrow)) return { h: (isCur ? 76 : 56) + checks, ay: isCur ? 38 : 28 };
   // a call's chip sits over its arrow, its label and then its sub; a reply's words over it, with no chip
   const chip = s.arrow === "event" ? 0 : 14, sub = s.sub ? 16 : 0;
-  const ay = (isCur ? (narrow ? 48 : 44) : 32) + chip + sub;
+  const ay = (isCur ? (narrow ? 48 : 44) : 32) + chip + sub + (selfRow(s) ? SELF_LIFT : 0);
   return { h: ay + (isCur ? 28 : 16) + checks, ay };
 }
+// A step whose words sit level with its arrow, in the lane's own row: a band's, and a call to itself on a board wide
+// enough to put its chip beside the loop. On a narrow board a call to itself has its chip over the loop like any call.
+const selfRow = (s) => s.arrow === "self" || s.from === s.to;
+const centred = (s, narrow) => s.arrow === "band" || (selfRow(s) && !narrow);
 const tallKey = (s, isCur) => s.id + (isCur ? ":cur" : "");
 function rowSize(st, s, isCur, narrow) {
   const b = baseSize(s, isCur, narrow), x = st.tall?.get(tallKey(s, isCur)) || { a: 0, b: 0 };
@@ -465,11 +508,12 @@ function stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown) {
   let svg = "", words = "";
   // wide: in the margin right of the last lane; narrow: a line under the arrow's chip (and its checks) of the step said
   const checkH = (s.checks || []).length ? 30 : 0;
+  const bh = (isCur ? 46 : 32) + r.extra.a + r.extra.b;   // a band's height: its words are measured into extra
+  const under = ay + (kind === "band" ? bh / 2 + 6 : 12 + checkH);   // a phone's note: under the arrow, or under the band
   const note = !s.note ? "" : !narrow ? `<span class="ln-note" style="top:${ay}px;max-width:${cols.noteW - 22}px">${esc(s.note)}</span>`
-    : isCur ? `<span class="ln-note ln-under" style="top:${ay + 12 + checkH}px;left:${cols.left}px;right:${EDGE}px">${esc(s.note)}</span>` : "";
+    : isCur ? `<span class="ln-note ln-under" style="top:${under}px;left:${cols.left}px;right:${EDGE}px">${esc(s.note)}</span>` : "";
   if (kind === "band") {
     const lo = Math.max(EDGE, Math.min(fx, tx) - 44), hi = Math.min(w - EDGE, Math.max(fx, tx) + 44);
-    const bh = (isCur ? 46 : 32) + r.extra.a + r.extra.b;
     svg = `<rect class="ln-bandbar" x="${lo}" y="${ay - bh / 2}" width="${hi - lo}" height="${bh}" rx="9"/>`;
     words = `<div class="ln-lbl ln-inband" style="left:${lo + 12}px;width:${hi - lo - 24}px;top:${ay}px">${tag}<b>${said(s, "label")}</b>${s.sub && isCur ? `<code>${said(s, "sub")}</code>` : ""}</div>`;
   } else if (kind === "self" || s.from === s.to) {
@@ -482,7 +526,12 @@ function stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown) {
     // one half-oval out of the lane to xr and back, as sequence_svg draws it
     svg = `<path class="ln-path" pathLength="1" d="M${sx} ${ay - 10}A${Math.abs(xr - sx)} 10 0 0 ${flip ? 0 : 1} ${ex + (flip ? -9 : 9)} ${ay + 10}"/>${head(ex, ay + 10, flip ? 1 : -1, false)}`;
     const room = flip ? xr - 12 - cols.left : w - (xr + 12) - (cols.notes && s.note ? cols.noteW + 6 : EDGE);
-    words = `<div class="ln-lbl ln-beside ln-chipped${flip ? " ln-flip" : ""}" style="${flip ? `right:${w - xr + 12}px` : `left:${xr + 12}px`};top:${ay}px;max-width:${Math.max(100, room)}px">
+    if (narrow) {   // a phone: the chip over the loop, as wide as the board lets it be, its note under the loop (never over the chip)
+      const need = Math.max((s.label || "").length * (isCur ? 8.9 : 7.5), (s.sub || "").length * (isCur ? 7.6 : 7)) + 12;
+      const lw = Math.min(Math.max(need, 180), w - cols.left - EDGE), mid = (fx + xr) / 2;
+      const lc = Math.min(Math.max(mid, lw / 2 + cols.left - 6), w - EDGE - lw / 2);
+      words = `<div class="ln-lbl ln-over ln-chipped" style="left:${lc}px;max-width:${lw}px;top:${ay - SELF_LIFT}px">${tag}<b>${said(s, "label")}</b>${s.sub ? `<code>${said(s, "sub")}</code>` : ""}</div>`;
+    } else words = `<div class="ln-lbl ln-beside ln-chipped${flip ? " ln-flip" : ""}" style="${flip ? `right:${w - xr + 12}px` : `left:${xr + 12}px`};top:${ay}px;max-width:${Math.max(100, room)}px">
       ${tag}<b>${said(s, "label")}</b>${s.sub ? `<code>${said(s, "sub")}</code>` : ""}</div>`;
   } else {
     const dir = Math.sign(tx - fx), x1 = edge(s.from, abs, dir), x2 = edge(s.to, abs, -dir), ret = kind === "event";
@@ -509,7 +558,7 @@ function stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown) {
   return `<div class="${cls.join(" ")}" role="button" tabindex="0" aria-label="Step ${st.model.nums[i] ?? i + 1}: ${esc(s.label)}" data-key="step:${esc(s.id)}"
       data-step="${esc(s.id)}" data-from="${esc(s.from)}" data-to="${esc(s.to)}"${shown(i) ? " data-on" : ""}
       style="top:${y}px;height:${h}px"><svg class="ln-svg" width="${w}" height="${h}" aria-hidden="true">${svg}</svg>
-    <span class="ln-num" style="top:${ay}px">${i > 0 && st.model.nums[i - 1] === st.model.nums[i] ? "" : st.model.nums[i] ?? ""}</span>${words}${note}</div>`;
+    <span class="ln-num" style="top:${ay}px;left:${NUM_AT(narrow)}px">${i > 0 && st.model.nums[i - 1] === st.model.nums[i] ? "" : st.model.nums[i] ?? ""}</span>${words}${note}</div>`;
 }
 
 // A step's words, those a changed step changed marked (compare.py's `marks`: runs of [words, differs]).
@@ -535,9 +584,9 @@ function measure(box, st, rows) {
     for (const x of el ? el.querySelectorAll(".ln-call, .ln-checks, .ln-under") : []) if (x.offsetHeight) ch = Math.max(ch, x.offsetTop + x.offsetHeight - aty - 10);
     if (!sh) continue;
     const isCur = el.classList.contains("ln-cur"), b = baseSize(r.s, isCur, st.w < 600);
-    const centred = r.s.arrow === "self" || r.s.arrow === "band" || r.s.from === r.s.to;
-    const above = centred ? sh / 2 + 10 - b.ay : sh + 12 - b.ay;
-    const below = centred ? sh / 2 + 10 - (b.h - b.ay) : (ch ? ch + 8 : 0) + 10 - (b.h - b.ay);
+    const mid = centred(r.s, st.w < 600);
+    const above = mid ? sh / 2 + 10 - b.ay : sh + 12 + (selfRow(r.s) ? SELF_LIFT : 0) - b.ay;
+    const below = mid ? sh / 2 + 10 - (b.h - b.ay) : (ch ? ch + 8 : 0) + 10 - (b.h - b.ay);
     if (above > 1 || below > 1) tall.set(tallKey(r.s, isCur), { a: Math.ceil(Math.max(0, above)), b: Math.ceil(Math.max(0, below)) });
   }
   const old = st.tall || new Map();
@@ -761,7 +810,12 @@ function layoutCompare(box, scene, n = null) {
   for (const sd of SIDES) box.querySelector(`.ln-s-${sd}`).hidden = !!one && one !== sd;
   box.querySelector(".ln-gutter").hidden = narrow;
   for (const b of box.querySelectorAll(".ln-sidebar [data-side]")) b.setAttribute("aria-pressed", String(b.dataset.side === (one || mode)));
-  for (const sd of SIDES) { if (st.panes[sd]._lanes) st.panes[sd]._lanes.dropGaps = narrow; layoutLanes(st.panes[sd], scene, n); }
+  const most = Math.max(...SIDES.map((sd) => st.panes[sd]._lanes?.model.actors.length || 0));
+  for (const sd of SIDES) {
+    const l = st.panes[sd]._lanes;
+    if (l) { l.dropGaps = narrow; l.peers = most; }
+    layoutLanes(st.panes[sd], scene, n);
+  }
   syncSides(box);
   paintStrip(box);
   landCompare(box);
@@ -799,7 +853,7 @@ function landCompare(box) {
   const pane = shown[shown.length - 1];
   // a side that came on show after the voice moved on (the pane was hidden when the step changed) is brought to it too
   const behind = pane?._lanes && pane._lanes.cur != null && pane._lanes.landed !== pane._lanes.cur;
-  const aim = aims.includes("row") || behind ? "row" : aims.includes("top") ? "top" : c.aimOut ? "outcome" : null;
+  const aim = aims.includes("row") || behind ? "row" : c.aimOut ? "outcome" : aims.includes("top") ? "top" : null;
   c.aimOut = false;
   if (pane?._lanes && aim && pane.clientWidth > 0) pane._lanes.landed = aim === "row" ? pane._lanes.cur : null;
   if (!aim || !pane || !box.isConnected || box.clientWidth === 0) return;
@@ -834,6 +888,10 @@ function syncSides(box) {
   for (const h of heads) h.style.minHeight = "";
   const tall = Math.max(...heads.map((h) => h.offsetHeight || 0));
   if (tall) for (const h of heads) h.style.minHeight = tall + "px";
+  const keys = [st.panes.before, st.panes.after].map((p) => p.querySelector(".ln-key"));   // the key above the cards, as tall on both
+  for (const k of keys) k.style.minHeight = "";
+  const keyTall = Math.max(...keys.map((k) => k.offsetHeight || 0));
+  if (keyTall) for (const k of keys) k.style.minHeight = keyTall + "px";
   const gutter = box.querySelector(".ln-gutter"), body = st.panes.after.querySelector(".ln-body");
   const top = body ? body.offsetTop : 0;   // both measured from the top of their side, which the gutter shares
   gutter.innerHTML = st.spec.steps.map((r) => `<i class="ln-gm ln-gm-${r.change}" data-row="${esc(r.id)}" title="${MARK_SAY[r.change] || ""}"

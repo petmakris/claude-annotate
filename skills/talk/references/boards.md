@@ -44,7 +44,7 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 - A step's `arrow` is `request`, `event` (dashed), `self` or `band` (a sentence laid across actors).
 - `sub` is a monospace line under the label, for a version or a path. `note` is a short right-hand value such as a date.
 - Write every `label` as a short phrase that reads on its own, 3 to 8 words, with the sender as its implied subject ("turns the recording into words").
-- On a phone a sequence of five actors or more draws each actor as its number, with the names once in a key above the lifelines and the actors of the step being said named under the numbers, so name an actor in a few words and do not count on its `role` or `sub` being shown there. Once the answer is over the board returns to its top.
+- On a phone a sequence of five actors or more draws each actor as a coloured letter (its first letter, else its words' initials; only the steps are numbered), with the names once in a key above the lifelines and the actors of the step being said named under the letters, so name an actor in a few words and do not count on its `role` or `sub` being shown there. Once the answer is over the board returns to its top.
 - Each actor's chip is as wide as the space between two columns and wraps its `label`. On a phone a board of many actors puts every other chip on a second line, so keep actor labels to two or three words.
 - With no verbs, each step comes in with the first sentence that names it (more than half the words of its `label`, or its id), each arrow arriving with its second end.
 - A sentence that names nothing, such as an introduction, brings nothing. A `[[point ...]]` brings in what it lights.
