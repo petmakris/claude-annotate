@@ -676,12 +676,12 @@ def _spread(routed: list[tuple[dict, list[Pt]]]) -> None:
     for end in (0, -1):
         seen: dict[tuple, int] = {}
         for a, pts in routed:
-            if a.get("points") or len(pts) < 3:
+            if a.get("points"):
                 continue
             key = (a.get("layer", "base"), round(pts[end][0]), round(pts[end][1]))
             k = seen.get(key, 0)
             seen[key] = k + 1
-            if k == 0:
+            if k == 0 or len(pts) < 3:      # a straight arrow keeps its place, and counts: a bent one beside it moves off it
                 continue
             d = 12 * ((k + 1) // 2) * (1 if k % 2 else -1)
             i, j = (0, 1) if end == 0 else (-1, -2)
@@ -952,7 +952,7 @@ def _draw(spec: dict, uid: str, g: _Grid, keyed: bool = False, report: dict | No
                     continue
                 if any(_overlaps(rect, b) for b in box_rects + labels_by[layer_of(a)]):
                     continue
-                if any(_rect_hits_seg(rect, s) for s in segs_by[layer_of(a)] if s not in own):
+                if any(_rect_hits_seg((rect[0] - 3, rect[1] - 2, rect[2] + 6, rect[3] + 4), s) for s in segs_by[layer_of(a)] if s not in own):
                     continue
                 spot = (rect, where)
                 break

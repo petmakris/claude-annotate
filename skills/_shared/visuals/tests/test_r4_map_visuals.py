@@ -63,8 +63,8 @@ def test_no_arrow_of_the_demo_map_runs_through_a_box_or_a_caption_and_no_label_s
     bad, width, rep = problems(demo_map())
     assert bad == []
     never = next(pts for a, pts in rep["arrows"] if a.get("label") == "never")
-    # the page-to-Azure arrow goes round under the Talk server, not through it
-    assert [(round(x), round(y)) for x, y in never] == [(276, 154), (343, 154), (343, 316), (638, 316), (638, 266), (662, 266)]
+    # the page-to-Azure arrow goes round under the Talk server, not through it, and leaves the page beside the `turns` arrow, not on it
+    assert [(round(x), round(y)) for x, y in never] == [(276, 166), (351, 166), (351, 316), (654, 316), (654, 278), (678, 278)]
 
 
 def test_a_five_column_map_is_tightened_to_1165_px_and_its_labels_stay_on_their_own_arrows():
