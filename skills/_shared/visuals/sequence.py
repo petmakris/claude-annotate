@@ -69,7 +69,7 @@ def validate(spec: dict[str, Any]) -> None:
 
         arrow = s.get("arrow")
         if arrow not in ARROW_TYPES:
-            raise ValidationError(f"step {sid}: unknown arrow type {arrow!r}")
+            raise ValidationError(f"step {sid}: unknown arrow type {arrow!r}; the arrows are " + ", ".join(ARROW_TYPES))
         if arrow == "self" and s.get("from") != s.get("to"):
             raise ValidationError(f"step {sid}: arrow=self requires from == to")
         if arrow == "request" and s.get("from") == s.get("to"):

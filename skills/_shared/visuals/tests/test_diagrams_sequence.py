@@ -169,3 +169,11 @@ def _step(spec, sid):
 def test_validate_refuses_a_bad_reply_box_or_ref(edit, match):
     with pytest.raises(ValidationError, match=match):
         validate(_with(edit))
+
+
+def test_validate_unknown_arrow_message_lists_the_arrows():
+    spec = _minimal_spec()
+    spec["steps"][0]["arrow"] = "x"
+    with pytest.raises(ValidationError) as e:
+        validate(spec)
+    assert str(e.value) == "step s1: unknown arrow type 'x'; the arrows are request, event, self, band"
