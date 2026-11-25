@@ -504,6 +504,13 @@ def test_tmux_is_found_where_homebrew_puts_it_without_a_login_path(monkeypatch, 
     assert fleet.tmux_bin() == brew
 
 
+def test_a_tmux_server_with_no_session_still_counts_as_running(three):
+    t = three
+    t.w.mp.setenv("FLEET_TMUX", script(os.path.join(t.w.base, "tools", "tmux-empty"),
+                                       '#!/bin/sh\ncase "$3" in ls) exit 0;; *) exit 1;; esac\n'))
+    assert t.env_json("--machine", "here")["machines"]["here"]["tmux_server"] is True
+
+
 def test_claude_is_found_in_the_installers_folder_without_a_login_path(monkeypatch, tmp_path):
     home = str(tmp_path)
     b = script(os.path.join(home, ".local", "bin", "claude"), "#!/bin/sh\n")

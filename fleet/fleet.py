@@ -2666,8 +2666,13 @@ def tmux_panes():
                            stdin=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError):
         return {}, False
-    if r.returncode != 0:
-        return {}, False
+    if r.returncode != 0:  # a server with no session fails list-panes but still answers ls
+        try:
+            up = subprocess.run([tmux_bin(), "-L", str(sock), "ls"], capture_output=True, text=True, timeout=5,
+                                stdin=subprocess.DEVNULL).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            up = False
+        return {}, up
     return fs.parse_panes(r.stdout), True
 
 
