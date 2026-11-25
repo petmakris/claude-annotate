@@ -715,15 +715,30 @@ def table_first_cells(body: str) -> list[str]:
 
 
 def table_count(body: str) -> int:
-    """How many markdown tables a body holds: runs of pipe lines, each with a separator row under its first line."""
+    """How many markdown tables a body holds: runs of pipe lines whose second line is a separator row with as
+    many cells as the first line has (the rule the stage's parse_tables reads a table by)."""
     count, run = 0, []
     for ln in [*(x.strip() for x in body.splitlines()), ""]:
         if ln.startswith("|") or (run and _TABLE_SEP.match(ln)):
             run.append(ln)
             continue
-        count += bool(len(run) >= 2 and any(_TABLE_SEP.match(x) for x in run[1:2]))
+        count += bool(len(run) >= 2 and _TABLE_SEP.match(run[1]) and len(split_row(run[1])) == len(split_row(run[0])))
         run = []
     return count
+
+
+def mend_separators(title: str, body: str) -> tuple[str, list[str]]:
+    """A separator row with fewer or more cells than the header above it is no table to the stage (it would be
+    drawn as pipes): it is rewritten to the header's width, and a board: line says so."""
+    lines, notes = body.splitlines(), []
+    for i in range(1, len(lines)):
+        head, sep = lines[i - 1].strip(), lines[i].strip()
+        if "|" in head and _TABLE_SEP.match(sep) and not _TABLE_SEP.match(head) and len(split_row(sep)) != len(split_row(head)):
+            notes.append(f'table "{title}" has a separator row of {len(split_row(sep))} cells under a header of '
+                         f"{len(split_row(head))}, so it was not a table; the separator was rewritten to {len(split_row(head))} "
+                         "(write one --- per header cell)")
+            lines[i] = "|" + "---|" * len(split_row(head))
+    return "\n".join(lines), notes
 
 
 def table_header(body: str) -> list[str]:
@@ -802,7 +817,7 @@ def check_table(title: str, body: str) -> tuple[str, list[str]]:
     """A table body made ready: only its first table is kept (the stage counts the rows of one), a row with
     more or fewer cells than the header is cut or padded to it, and a table past what the stage reads
     comfortably is reported. Returns the body and what to tell the author."""
-    notes = []
+    body, notes = mend_separators(title, body)
     if table_count(body) > 1:
         lines, cut, seen = body.splitlines(), None, 0
         for i, ln in enumerate(lines):
@@ -1535,10 +1550,16 @@ class Board:
         key = f"{want[0]}:{want[1].strip()}"
         if want[0] == "node" and key not in scene_model(item).keys:
             key = f"group:{want[1].strip()}"  # a subgraph of a Mermaid graph drawn as a map
-        if key not in scene_model(item).keys:
+        if key in scene_model(item).keys:
+            keys, note = [key], None
+        else:  # a label or a near id: read as the part it names, with a board: line, as bars and graph boards do
+            keys, note = stage_scene.resolve(scene_model(item), f"{want[0]} {want[1].strip()}", name)
+        if not keys:
             self.problem(f'point not shown: no {want[0]} {want[1]} in "{name}"')
             return
-        self.cues.append({"kind": "frame", "view": item["view"], "verb": stage_scene.Verb("focus", keys=[key])})
+        if note:
+            self.problem(note)
+        self.cues.append({"kind": "frame", "view": item["view"], "verb": stage_scene.Verb("focus", keys=keys)})
 
     def edge_keys(self, item: dict, name: str, raw: str) -> list[str] | None:
         """The keys of a flowchart edge named `A->B` (a `#N` after it for the Nth of several between the
@@ -1574,8 +1595,8 @@ class Board:
     def outcome_keys(self, item: dict, name: str) -> list[str] | None:
         """A sequence's outcome box; on a before-and-after board (which has none) the rows that differ."""
         model, spec = scene_model(item), item["visual"]["spec"]
-        if "outcome" in model.keys or spec.get("outcome"):
-            return ["outcome"]  # the stage names the box by this key
+        if stage_scene.OUTCOME in model.keys or spec.get("outcome"):
+            return [stage_scene.OUTCOME]  # the key the scene names the box by
         if spec.get("compare"):
             keys = [f"step:{s['id']}" for s in spec.get("steps") or []
                     if s.get("change") in ("changed", "moved", "added", "removed") and f"step:{s['id']}" in model.keys]
@@ -2310,6 +2331,7 @@ class Call:
                     if stop is not None:
                         shown += self.add_stop(stop)
                         continue
+                    absorb()  # a key stands inside a table row, a point or a verb after one
                     before = len(self.board.cues)
                     if not self.board.marker(chunk, bare=kind == "bare"):
                         if looks_like_tag(chunk):
@@ -2328,24 +2350,26 @@ class Call:
             if markers.dropped:
                 self.board.problem(f"a tag was not closed with ]]: {markers.dropped[:40]}")
 
+        def absorb() -> None:
+            """Tables and Mermaid written without a tag go on the stage, never into the speech. Done before
+            each tag is read, so a point after an untagged table finds it."""
+            nonlocal shown
+            swaps = []
+            for start, end, kind, title, body in untagged_boards(shown):  # in order: cues are made in order
+                item = {"kind": kind, "title": title, "body": body}
+                if kind == "diagram" and not self.board.from_mermaid(item, title):
+                    swaps.append((start, end, ""))
+                    continue
+                self.board.problem(f"{kind} shown without a tag; wrap it in [[show {kind} | title]] next time")
+                cue = self.board.new_cue()
+                self.board.add({**item, "cue": cue, "ident": f"untagged-{len(self.board.items)}"})
+                swaps.append((start, end, CUE + "\n"))
+            for start, end, board in reversed(swaps):
+                shown = shown[:start] + board + CUE * shown[start:end].count(CUE) + shown[end:]
+
         take(text)
-        # Tables and Mermaid written without a tag still go on the stage, never into the speech.
-        found = untagged_boards(shown)
-        placed = list(zip([i for i, c in enumerate(shown) if c == CUE], self.board.cues))
-        dropped = set()
-        for start, end, kind, title, body in found:
-            item = {"kind": kind, "title": title, "body": body}
-            if kind == "diagram" and not self.board.from_mermaid(item, title):
-                dropped.add(start)
-                continue
-            self.board.problem(f"{kind} shown without a tag; wrap it in [[show {kind} | title]] next time")
-            cue = self.board.new_cue()
-            placed.append((start, cue))
-            self.board.add({**item, "cue": cue, "ident": f"untagged-{len(self.board.items)}"})
-        for start, end, *_ in reversed(found):
-            board = "" if start in dropped else CUE + "\n"
-            shown = shown[:start] + board + CUE * shown[start:end].count(CUE) + shown[end:]
-        placed.sort(key=lambda pc: pc[0])  # stable: the i-th CUE in `shown` is the i-th cue here
+        absorb()
+        placed = list(zip([i for i, c in enumerate(shown) if c == CUE], self.board.cues))  # the i-th CUE is the i-th cue
         shown, marks = place_cues(shown)
         timed = self.compile_scenes(shown, [(at, cue) for (_, cue), at in zip(placed, marks)
                                             if cue["view"] or cue["kind"] == "stop"])

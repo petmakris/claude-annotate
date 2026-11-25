@@ -303,7 +303,7 @@ To control it, write the board once, whole, then put a verb just before the word
 - Prefer a change board over describing an edit line by line.
 - At most 3 key points per answer, in the user's words. A title over 5 words, or more than 3 key points, gets a `board:` line asking you to cut it.
 - Greek titles and text are fine.
-- Close a table or diagram with `[[/show]]`. Tags are forgiving (`show: table`, `mermaid`, `diff`), and a markdown table or mermaid fence without a tag is still moved to the stage. `reply` prints a `board:` line for anything it could not show as asked: fix it in the next answer.
+- Close a table or diagram with `[[/show]]`. Tags are forgiving (`show: table`, `mermaid`, `diff`), and a markdown table or mermaid fence without a tag is still moved to the stage, and a `[[point]]` after it lights its rows; a table's separator row needs one `---` per header cell, or `reply` rewrites it and says so. `reply` prints a `board:` line for anything it could not show as asked: fix it in the next answer.
 - The scene tag and the four stop tags are retired: never write them.
 
 For example, after editing a file:
