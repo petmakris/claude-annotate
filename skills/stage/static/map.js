@@ -12,6 +12,7 @@
 // the arrows and their labels are redrawn when the card being said changes, to meet its edge.
 
 import { beingSaid } from "./scene.js";
+import { routeEdges, rounded } from "./route.js";
 
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 // a long name breaks between its words: before a capital that follows a small letter, after . _ / -
@@ -50,7 +51,16 @@ export function renderMap(box, spec, embedded) {
   place(box);
   if (!box._mapObserved) {
     box._mapObserved = true;
-    new ResizeObserver(() => place(box)).observe(box);
+    // The pane changes height when the sentence strip comes and goes. A pane that shrinks places the board again (it
+    // would not fit); one that grows leaves it where it is, pinned to the pane's top, so the row of parts does not move
+    // when the answer is over and the strip is gone.
+    const ro = new ResizeObserver(() => {
+      const sc = box.closest(".pbody"), now = [box.clientWidth, sc ? sc.clientHeight : 0], was = box._mapPane;
+      if (was && now[0] === was[0] && now[1] >= was[1] - 2) return;
+      place(box);
+    });
+    ro.observe(box);
+    if (box.closest(".pbody")) ro.observe(box.closest(".pbody"));
     document.fonts?.ready.then(() => place(box));  // the cards are measured: again once the stage's fonts are in
   }
 }
@@ -131,8 +141,21 @@ function place(box) {
   const L = layers(st.spec);
   const width = box.clientWidth || 900;
   const scroller = box.closest(".pbody");
-  const height = Math.max(320, (scroller ? scroller.clientHeight - 32 : 480) - (+box.dataset.room || 16));
-  const plan = across(box, st, L, width, height) || down(box, st, L, width, height);
+  // the room the pane leaves the board: its height less everything else in it (padding, gaps, what stands beside the
+  // board), so the board fits whole and the pane never scrolls by a few pixels when a part is said (stage.js `centre`
+  // scrolls it then, and the row of parts jumped)
+  const others = scroller ? Math.max(0, scroller.scrollHeight - box.offsetHeight) : 32;
+  const height = Math.max(320, (scroller ? scroller.clientHeight - others : 480) - (+box.dataset.room || 16));
+  // As large as the pane lets it be (up to 1.8 times; type grows with it, --ms), so a map on a TV does not sit as a
+  // small block in an empty pane; one that does not fit even at its own size scrolls, as before.
+  let plan = null;
+  for (const s of [1.8, 1.6, 1.4, 1.25, 1.12]) {
+    const p = across(box, st, L, width, height, s);
+    if (p && p.tall <= height + 1) { plan = p; break; }
+  }
+  plan = plan || across(box, st, L, width, height) || down(box, st, L, width, height);
+  box.style.setProperty("--ms", plan.s || 1);
+  box._mapPane = [box.clientWidth, scroller ? scroller.clientHeight : 0];
   box.dataset.layout = plan.mode;
   box.style.setProperty("--mw", plan.w + "px");
   box.style.setProperty("--mc", plan.cw + "px");
@@ -155,9 +178,9 @@ const fit = (n, w, room, air, most) => Math.min(most, n > 1 ? (room - (n - 1) * 
 // Left to right while the columns fit, narrowing the parts a little first. In a column the parts are as
 // far apart as either of two neighbours needs when it is the card being said; a column taller than the
 // board makes the board scroll, and the card being said is kept in view (layoutMap).
-function across(box, st, L, width, height) {
+function across(box, st, L, width, height, s = 1) {
   const { cols, back, self } = L, c = cols.length, edges = st.spec.edges || [];
-  const sizes = [[W, 260], [150, 240], [130, 220]];
+  const sizes = [[W * s, 260 * s], [150 * s, 240 * s], [130 * s, 220 * s]];
   for (const [k, [w, most]] of sizes.entries()) {
     const cw = fit(c, w, width - 2 * SIDE, AIR_X, most);
     if (cw < (k < sizes.length - 1 ? Math.min(most, w + 60) : w)) continue;
@@ -174,7 +197,7 @@ function across(box, st, L, width, height) {
       for (let j = 1; j < col.length; j++) {
         const [a, b] = [col[j - 1], col[j]];
         const need = Math.max(hr.get(a) + hc.get(b), hc.get(a) + hr.get(b)) + AIR_Y + (looped.has(b) ? LOOP : 0);
-        ys.push(ys[j - 1] + Math.max(need, Math.min(H + GAP_Y * 2, (height - 40) / col.length)));
+        ys.push(ys[j - 1] + Math.max(need, Math.min((H + GAP_Y * 2) * s, (height - 40) / col.length)));
       }
       const span = ys[ys.length - 1], over = big(col[0]) + (looped.has(col[0]) ? LOOP : 0);
       const top = Math.max(SIDE + over, height / 2 - span / 2);
@@ -184,7 +207,7 @@ function across(box, st, L, width, height) {
       });
     });
     const tall = Math.max(height, lowest + SIDE + (back.size ? 40 + 26 * back.size : 0));
-    return { mode: "across", w, cw, xy, hr, hc, lowest, highest, colOf, tall, back, self, width };
+    return { mode: "across", s, w, cw, xy, hr, hc, lowest, highest, colOf, rank: colOf, tall, back, self, width };
   }
   return null;
 }
@@ -221,112 +244,131 @@ function down(box, st, L, width) {
     const step = row.length > 1 ? Math.min(W + GAP_X, (room - cw) / (row.length - 1)) : 0;
     row.forEach((id, j) => { xy.set(id, [mid + (j - (row.length - 1) / 2) * step, y]); lowest = Math.max(lowest, y + Math.max(hr.get(id), hc.get(id))); });
   });
-  return { mode: "down", w, cw, xy, hr, hc, lowest, tall: lowest + SIDE + 16, back, self, width, lane: SIDE + room };
+  const rank = new Map();
+  rows.forEach((row, r) => row.forEach((id) => rank.set(id, r)));
+  return { mode: "down", w, cw, xy, hr, hc, lowest, tall: lowest + SIDE + 16, back, self, width, lane: SIDE + room, rank };
 }
 
 // The arrows, their heads and their labels, for where the parts are and which of them is the card being
-// said: an arrow stops at the edge of the card it meets, however large that card is now.
+// said: an arrow stops at the edge of the card it meets, however large that card is now. The routes come from
+// route.js (round every part, each on a lane of its own); a label sits on its own arrow, where nothing else is.
+const MAXLINE = 170;   // a label wraps at this width
 function draw(box) {
   const st = box._map, P = st.plan;
   if (!P) return;
   const svg = box.querySelector(".m-edges"), edges = st.spec.edges || [];
   const half = (id) => (st.cur === "node:" + id ? [P.cw / 2, P.hc.get(id)] : [P.w / 2, P.hr.get(id)]);
+  const nodes = new Map([...P.xy].map(([id, [x, y]]) => { const [hw, hh] = half(id); return [id, { x, y, hw, hh }]; }));
+  const list = edges.map((e, i) => ({ i, from: e.from, to: e.to, back: P.back.has(i), self: P.self.has(i) })).filter((e) => P.xy.has(e.from) && P.xy.has(e.to));
+  const routes = routeEdges({ mode: P.mode, nodes, rank: P.rank, edges: list,
+    bounds: { width: P.width, tall: P.tall, side: SIDE, laneBase: P.mode === "across" ? 22 : 16, laneStep: P.mode === "across" ? 26 : 20 } });
+  st.routes = routes;
   const seen = new Map(), labels = [];
   edges.forEach((e, i) => {
-    const g = svg.querySelector(`[data-key="${st.ekeys[i]}"]`), a = P.xy.get(e.from), b = P.xy.get(e.to);
-    if (!g || !a || !b) return;
-    // arrows between the same two parts bend apart, each on its own curve
+    const g = svg.querySelector(`[data-key="${st.ekeys[i]}"]`), r = routes.get(i);
+    if (!g || !r) return;
     const pair = e.from + "->" + e.to, nth = seen.get(pair) || 0, count = st.pairs.get(pair) || 1;
     seen.set(pair, nth + 1);
-    const spread = (nth - (count - 1) / 2);
-    let curve, spots;
-    if (P.self.has(i)) [curve, spots] = selfLoop(P, e.from, half, spread);
-    else if (P.back.has(i)) [curve, spots] = backArrow(P, e, half, [...P.back].indexOf(i));
-    else [curve, spots] = forward(P, e, half, spread);
+    let d, end, toward, start, away, spots = null, pts = r.pts;
+    if (r.kind === "loop") {
+      const [curve, sp] = selfLoop(P, e.from, half, nth - (count - 1) / 2);
+      d = curve.d; end = curve.end; toward = curve.toward; start = curve.start; away = curve.away; spots = sp; pts = [];
+    } else {
+      d = rounded(pts, 12); end = pts[pts.length - 1]; toward = pts[pts.length - 2]; start = pts[0]; away = pts[1];
+    }
     const line = g.querySelector(".m-line");
-    line.setAttribute("d", curve.d);
+    line.setAttribute("d", d);
     if (line.classList.contains("m-draw")) line.style.setProperty("--len", Math.ceil(line.getTotalLength ? line.getTotalLength() : 600));
-    // the head points along the curve's last stretch, into the card; a head at the start along its first
+    // the head points along the last stretch, into the card; a head at the start along its first
     const tip = ([tx, ty], [qx, qy]) => {
-      const ang = Math.atan2(ty - qy, tx - qx), c = Math.cos(ang), s = Math.sin(ang);
-      const pt = (u, v) => `${tx - c * u + s * v} ${ty - s * u - c * v}`;
+      const ang = Math.atan2(ty - qy, tx - qx), c = Math.cos(ang), s2 = Math.sin(ang);
+      const pt = (u, v) => `${tx - c * u + s2 * v} ${ty - s2 * u - c * v}`;
       return `M ${tx} ${ty} L ${pt(12, 6)} L ${pt(12, -6)} Z`;
     };
-    g.querySelector(".m-tip:not(.m-tail)")?.setAttribute("d", tip(curve.end, curve.toward));
-    g.querySelector(".m-tail")?.setAttribute("d", tip(curve.start, curve.away));
+    g.querySelector(".m-tip:not(.m-tail)")?.setAttribute("d", tip(end, toward));
+    g.querySelector(".m-tail")?.setAttribute("d", tip(start, away));
     g.classList.toggle("m-back", P.back.has(i));
     const label = g.querySelector(".m-elabel");
-    // last, the same spots a little off the arrow
-    if (label) labels.push({ label, spots: [...spots, ...spots.flatMap(([x, y]) => [[x, y - 24], [x, y + 24]])] });
+    if (label) labels.push({ i, label, pts, spots, end, start, text: e.label });
   });
-  // each label takes the first of its spots (on its own arrow first) that is clear of the cards and of the
-  // labels placed before it, else the one that covers least
-  const cards = [...P.xy.keys()].map((id) => { const [x, y] = P.xy.get(id), [hw, hh] = half(id); return [x - hw - 2, y - hh - 2, x + hw + 2, y + hh + 2]; });
+  placeLabels(P, labels, nodes, routes);
+}
+
+// Each label (wrapped to MAXLINE, padded 8 by 3) goes to the place on its own arrow that costs least: on a part,
+// on a label already placed, on another arrow or over its own arrow's head all cost; the middle of the longest
+// stretch is the first choice.
+function placeLabels(P, labels, nodes, routes) {
+  const cards = [...nodes.values()].map((n) => [n.x - n.hw - 3, n.y - n.hh - 3, n.x + n.hw + 3, n.y + n.hh + 3]);
+  const lines = [];
+  for (const [i, r] of routes) for (let k = 1; k < r.pts.length; k++) lines.push({ i, a: r.pts[k - 1], b: r.pts[k] });
+  const area = (r, q) => Math.max(0, Math.min(r[2], q[2]) - Math.max(r[0], q[0])) * Math.max(0, Math.min(r[3], q[3]) - Math.max(r[1], q[1]));
+  const cutBy = (r, s) => Math.min(s.a[0], s.b[0]) < r[2] && Math.max(s.a[0], s.b[0]) > r[0] && Math.min(s.a[1], s.b[1]) < r[3] && Math.max(s.a[1], s.b[1]) > r[1];
   const placed = [];
-  const cover = (x, y, w) => [...placed, ...cards].reduce((s, [l, t, r, b]) =>
-    s + Math.max(0, Math.min(x + w / 2, r) - Math.max(x - w / 2, l)) * Math.max(0, Math.min(y + 12, b) - Math.max(y - 12, t)), 0);
-  for (const L of labels) {
+  for (const L of labels.slice().sort((a, b) => (b.text || "").length - (a.text || "").length)) {
     const t = L.label.querySelector("text");
-    t.setAttribute("x", 0);
-    const w = (t.getComputedTextLength ? t.getComputedTextLength() : 60) + 18;
-    const keep = ([x, y]) => [Math.max(SIDE + w / 2, Math.min(P.width - SIDE - w / 2, x)), y];
+    const rows = wrap(t, L.text, MAXLINE);
+    const w = Math.max(...rows.map((x) => x.w)) + 16, h = rows.length * 15 + 6;
+    const cand = [];
+    if (L.spots) L.spots.forEach(([x, y]) => cand.push([x, y]));
+    else {
+      const segs = L.pts.slice(1).map((q, k) => ({ a: L.pts[k], b: q, len: Math.hypot(q[0] - L.pts[k][0], q[1] - L.pts[k][1]) })).sort((x, y) => y.len - x.len);
+      for (const sg of segs) for (const f of [0.5, 0.3, 0.7]) cand.push([sg.a[0] + (sg.b[0] - sg.a[0]) * f, sg.a[1] + (sg.b[1] - sg.a[1]) * f]);
+      // where no stretch has room beside the parts: just clear of them across the flow, with a short leader to the arrow
+      const reach = Math.max(...[...nodes.values()].map((n) => (P.mode === "across" ? n.hh : n.hw))) + h / 2 + 10;
+      for (const sg of segs) {
+        const horizontal = Math.abs(sg.a[1] - sg.b[1]) < 0.01;
+        if (horizontal !== (P.mode === "across")) continue;
+        for (const dir of [-1, 1]) cand.push([(sg.a[0] + sg.b[0]) / 2 + (horizontal ? 0 : dir * (w / 2 + 12)), (sg.a[1] + sg.b[1]) / 2 + (horizontal ? dir * reach : 0), true]);
+      }
+    }
     let best = null;
-    for (const spot of L.spots.map(keep)) {
-      const c = cover(spot[0], spot[1], w + 4);
-      if (!best || c < best.c) best = { spot, c };
-      if (c === 0) break;
-    }
-    const [x, y] = best.spot;
-    placed.push([x - w / 2 - 4, y - 13, x + w / 2 + 4, y + 13]);
-    t.setAttribute("x", x); t.setAttribute("y", y + 4);
-    const r = L.label.querySelector("rect");
-    r.setAttribute("x", x - w / 2); r.setAttribute("y", y - 11); r.setAttribute("width", w); r.setAttribute("height", 22);
+    cand.forEach(([cx, cy, off], k) => {
+      const x = Math.max(SIDE + w / 2, Math.min(P.width - SIDE - w / 2, cx)), y = cy;
+      const r = [x - w / 2, y - h / 2, x + w / 2, y + h / 2];
+      let cost = k * 0.5 + (off ? 30 : 0);
+      for (const c of cards) cost += area(r, c) * 4 + (area(r, c) ? 400 : 0);
+      for (const q of placed) cost += area(r, q) * 4 + (area(r, q) ? 400 : 0);
+      for (const s of lines) if (s.i !== L.i && cutBy(r, s)) cost += 40;
+      for (const q of [L.end, L.start]) if (q && q[0] > r[0] - 14 && q[0] < r[2] + 14 && q[1] > r[1] - 14 && q[1] < r[3] + 14) cost += 500;
+      if (x !== cx) cost += 30;
+      if (!best || cost < best.cost) best = { cost, x, y, r, off, at: [cx, cy] };
+    });
+    const { x, y } = best;
+    placed.push(best.r);
+    const top = y - (rows.length * 15) / 2;
+    t.replaceChildren();
+    rows.forEach((row, k) => {
+      const ts = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+      ts.setAttribute("x", x); ts.setAttribute("y", top + 11.5 + k * 15); ts.textContent = row.text; t.append(ts);
+    });
+    // an arrow's label off the arrow is joined to it by a leader
+    let lead = L.label.querySelector(".m-lead");
+    if (best.off) {
+      const sg = L.pts.slice(1).map((q, k) => [L.pts[k], q]).find(([a, b]) => Math.abs(a[1] - b[1]) < 0.01 ? Math.abs(a[1] - y) < 400 && Math.min(a[0], b[0]) - 1 <= best.at[0] && best.at[0] <= Math.max(a[0], b[0]) + 1 : Math.min(a[1], b[1]) - 1 <= y && y <= Math.max(a[1], b[1]) + 1);
+      if (!lead) { lead = document.createElementNS("http://www.w3.org/2000/svg", "path"); lead.setAttribute("class", "m-lead"); L.label.prepend(lead); }
+      const horizontal = !!sg && Math.abs(sg[0][1] - sg[1][1]) < 0.01;
+      const [lx, ly] = horizontal ? [x, sg[0][1]] : [sg ? sg[0][0] : x, y];
+      lead.setAttribute("d", horizontal ? `M ${lx} ${ly} L ${x} ${y}` : `M ${lx} ${ly} L ${x} ${y}`);
+    } else lead?.remove();
+    const rc = L.label.querySelector("rect");
+    rc.setAttribute("x", x - w / 2); rc.setAttribute("y", y - h / 2); rc.setAttribute("width", w); rc.setAttribute("height", h);
   }
 }
 
-const bezier = (p0, p1, p2, p3) => (t) => [0, 1].map((k) => (1 - t) ** 3 * p0[k] + 3 * (1 - t) ** 2 * t * p1[k] + 3 * (1 - t) * t ** 2 * p2[k] + t ** 3 * p3[k]);
+// A label's words in lines no wider than `max`, each with its width (the text element measures, in its own font).
+function wrap(t, text, max) {
+  const words = String(text || "").split(/\s+/).filter(Boolean), rows = [];
+  const width = (s) => { t.textContent = s; return t.getComputedTextLength ? t.getComputedTextLength() : s.length * 7; };
+  let cur = "";
+  for (const wd of words) {
+    const next = cur ? cur + " " + wd : wd;
+    if (cur && width(next) > max) { rows.push({ text: cur, w: width(cur) }); cur = wd; } else cur = next;
+  }
+  if (cur) rows.push({ text: cur, w: width(cur) });
+  return rows.length ? rows.slice(0, 3) : [{ text: "", w: 0 }];
+}
+
 const path = (p0, p1, p2, p3) => `M ${p0[0]} ${p0[1]} C ${p1[0]} ${p1[1]}, ${p2[0]} ${p2[1]}, ${p3[0]} ${p3[1]}`;
-const ALONG = [0.5, 0.4, 0.6, 0.3, 0.7, 0.22, 0.78];
-
-// An arrow forward: out of one card's side (or foot, top to bottom) into the next's.
-function forward(P, e, half, spread) {
-  const a = P.xy.get(e.from), b = P.xy.get(e.to), [aw, ah] = half(e.from), [bw, bh] = half(e.to);
-  let p0, p3, p1, p2;
-  if (P.mode === "across") {
-    const o = spread * 10, x1 = a[0] + aw, x2 = b[0] - bw - 5, c = (x2 - x1) / 2;
-    p0 = [x1, a[1] + o]; p3 = [x2, b[1] + o]; p1 = [x1 + c, a[1] + spread * 36]; p2 = [x2 - c, b[1] + spread * 36];
-  } else {
-    const o = spread * 10, y1 = a[1] + ah, y2 = b[1] - bh - 5, c = (y2 - y1) / 2;
-    p0 = [a[0] + o, y1]; p3 = [b[0] + o, y2]; p1 = [a[0] + spread * 36, y1 + c]; p2 = [b[0] + spread * 36, y2 - c];
-  }
-  const at = bezier(p0, p1, p2, p3);
-  const top = Math.min(a[1] - ah, b[1] - bh) - 14, foot = Math.max(a[1] + ah, b[1] + bh) + 14, mx = (a[0] + b[0]) / 2;
-  const beside = P.mode === "across" ? [[mx, top], [mx, foot]] : [[Math.max(a[0] + aw, b[0] + bw) + 60, (a[1] + b[1]) / 2]];
-  return [{ d: path(p0, p1, p2, p3), end: p3, toward: p2, start: p0, away: p1 }, [...ALONG.map(at), ...beside]];
-}
-
-// A way back: across, out of the foot of one card, under the map and up into the foot of the other; when a
-// card sits under either end and none over them, out of the top and over the map instead, so the arrow never
-// runs through a card. Top to bottom, out of one card's right side, up the lane on the right and into the other's.
-function backArrow(P, e, half, k) {
-  const a = P.xy.get(e.from), b = P.xy.get(e.to), [aw, ah] = half(e.from), [bw, bh] = half(e.to);
-  let p0, p1, p2, p3;
-  if (P.mode === "across") {
-    const o = (k - (P.back.size - 1) / 2) * 18, above = P.highest - 22 - 26 * k;
-    const beside = (id, sign) => [...P.xy].some(([other, [, y]]) => other !== id && P.colOf.get(other) === P.colOf.get(id) && sign * (y - P.xy.get(id)[1]) > 0);
-    const over = above > SIDE && (beside(e.from, 1) || beside(e.to, 1)) && !beside(e.from, -1) && !beside(e.to, -1);
-    if (over) {
-      p0 = [a[0] + o, a[1] - ah]; p3 = [b[0] + o, b[1] - bh - 5]; p1 = [p0[0], above]; p2 = [p3[0], above];
-    } else {
-      const below = P.lowest + 22 + 26 * k;
-      p0 = [a[0] + o, a[1] + ah]; p3 = [b[0] + o, b[1] + bh + 5]; p1 = [p0[0], below]; p2 = [p3[0], below];
-    }
-  } else {
-    const side = P.lane + 14 + 22 * k;
-    p0 = [a[0] + aw, a[1]]; p3 = [b[0] + bw + 5, b[1]]; p1 = [side, a[1]]; p2 = [side, b[1]];
-  }
-  return [{ d: path(p0, p1, p2, p3), end: p3, toward: p2, start: p0, away: p1 }, ALONG.map(bezier(p0, p1, p2, p3))];
-}
 
 // An arrow from a part to itself: a small loop over its card, its label beyond the loop. Both its ends sit
 // on the card's rim.
@@ -361,6 +403,9 @@ export function layoutMap(box, scene, n, stepped = false) {
   const last = scene ? Math.min(n ?? 0, scene.frames.length - 1) : 0;
   const before = stepped && last > 0 ? new Set(scene.frames[last - 1].show) : null;
   const arrived = new Set(before ? scene.frames[last].show.filter((k) => k.startsWith("edge:") && !before.has(k)) : []);
+  // once the answer is over the whole map shows from its start, not from wherever the last part left the view
+  if (node === null && st.wasCur && box.closest(".pbody")) box.closest(".pbody").scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  st.wasCur = node !== null;
   for (const el of box.querySelectorAll(".m-node")) el.classList.toggle("m-cur", el.dataset.key === node);
   for (const g of box.querySelectorAll(".m-edge")) {
     const key = g.dataset.key, on = key === edge;
