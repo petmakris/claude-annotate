@@ -490,8 +490,10 @@ function paintInputMode() {
   bp.textContent = "Interrupt: " + BARGE_SAYS[barge]; bp.setAttribute("aria-label", "Interrupt Claude by " + BARGE_SAYS[barge] + ". Press to change.");
   pp.textContent = "Send after " + (endPause / 1000) + " s"; pp.setAttribute("aria-label", "Send after a pause of " + (endPause / 1000) + " seconds. Press to change.");
   // A say-back question has its own placeholder (call-stage.js); otherwise the field says how it is used in this mode.
-  if (!answering) $("text").placeholder = inputMode === "type" ? "Type a message" : inputMode === "live" ? "Just speak, or type here" : "Type, or press the mic";
+  if (!answering && $("text").placeholder !== WAIT_PLACEHOLDER) $("text").placeholder = modePlaceholder();
 }
+const WAIT_PLACEHOLDER = "Add to your question";
+function modePlaceholder() { return inputMode === "type" ? "Type a message" : inputMode === "live" ? "Just speak, or type here" : "Type, or press the mic"; }
 // The page's own layers, registered with the core: the gear (the header's and the rail's), and the Keys sheet from its two buttons.
 // A layer opened or closed (the core's showPop) moves the focus into it and, when it closes, back to the button that opened it,
 // unless the user already went elsewhere. The button is remembered here (popButton wraps registerPop), per layer: a layer opened

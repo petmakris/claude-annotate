@@ -365,7 +365,7 @@ function paintWait() {
     }
   } else if (!card.hidden) { card.hidden = true; card.replaceChildren(); waitSig = ""; waitFor = null; waitSaid = null; }
   // The placeholder says what the field does while a question is in flight.
-  if (!answering && !recorder) $("text").placeholder = m ? "Add to your question" : "Type, or press the mic";
+  if (!answering && !recorder) $("text").placeholder = m ? WAIT_PLACEHOLDER : modePlaceholder();
   paintSendNote(m);
   paintQueue();
 }
