@@ -54,6 +54,7 @@ ZL_TRACK = 0.08     # letter-spacing of .zl, in em
 LABEL_H = 18
 ROW_LABEL_H = 26    # room above a row for its label
 LABEL_LINE = 18     # line pitch of a label with more than one line
+LINE_MAX = 200.0     # a line of a box wider than this (px) is wrapped onto more lines, so one long sentence never sets the map's width
 BEND = 40           # what a turn costs when routes are compared by length
 
 CODE = re.compile(r"`([^`]+)`")
@@ -818,6 +819,37 @@ def _draw(spec: dict, uid: str, g: _Grid, keyed: bool = False) -> tuple[list[str
     return out, need, width
 
 
+def _fold_box(box: dict) -> dict:
+    """The box with each long plain line wrapped (a continuation keeps its tone, mono and steps; only the first
+    keeps `gap`), and its children likewise. A `code` span is never broken."""
+    out = dict(box)
+    lines: list[Any] = []
+    for ln in box.get("lines") or []:
+        d = _line(ln)
+        text = d["text"]
+        if _width(text, "vz-sb", bool(d.get("mono"))) <= LINE_MAX:
+            lines.append(ln)
+            continue
+        held = CODE.sub(lambda m: "`" + m.group(1).replace(" ", "\x01") + "`", text)   # a code span is never broken
+        with tm.face("stage"):
+            parts = [x.replace("\x01", " ") for x in tm.wrap(held, "vz-mono" if d.get("mono") else "vz-sb", LINE_MAX)]
+        for k, part in enumerate(parts):
+            piece = dict(d, text=part)
+            if k:
+                piece.pop("gap", None)
+            lines.append(piece)
+    if "lines" in box:
+        out["lines"] = lines
+    if box.get("children"):
+        out["children"] = [_fold_box(c) for c in box["children"]]
+    return out
+
+
+def fold_lines(spec: dict[str, Any]) -> dict[str, Any]:
+    """A copy of the spec whose boxes wrap their long lines (LINE_MAX)."""
+    return dict(spec, boxes=[_fold_box(b) for b in spec["boxes"]])
+
+
 def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
     """Validate and draw `spec` as one SVG string. `uid` prefixes every id, so maps can share a page.
 
@@ -826,6 +858,7 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
     has its own), and on an arrow, its badge and its label the key ``arrow_keys`` gives it. Without it the
     output is exactly what it was before keys existed."""
     validate(spec)
+    spec = fold_lines(spec)
     if not re.fullmatch(r"[A-Za-z][\w-]{0,40}", uid or ""):
         raise ValidationError(f"uid {uid!r}: letters, digits, - and _, starting with a letter")
     extra: dict[int, float] = {}
