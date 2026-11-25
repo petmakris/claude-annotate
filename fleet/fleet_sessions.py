@@ -325,8 +325,8 @@ def plan(key, copies, machines, holders=None, folder_ok=None, registry=None, her
             return out("refuse-live-elsewhere", "%s is live on %s in a window, not in tmux: it is not resumed on %s"
                        % (label, L["machine"], own["machine"]), row=L)
         if L.get("member"):
-            return out("wrap-up-then-resume", "%s: told to wrap up and leave; it resumes in tmux once its process "
-                       "is gone" % label, tmux=slug(own["name"], sid), row=L)
+            return out("wrap-up-then-resume", "%s is a fleet member in a window: it is told to wrap up and leave, "
+                       "then resumed in tmux once its process is gone" % label, tmux=slug(own["name"], sid), row=L)
         idle = (L.get("state") or "") == "idle"
         return out("blocked-window", "open in a window on %s, status %s, pid %s: it is not a fleet member, so it "
                    "cannot be told to leave%s" % (L["machine"], L.get("state") or "unknown", L.get("pid"),

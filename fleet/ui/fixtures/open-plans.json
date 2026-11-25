@@ -55,7 +55,7 @@
   "pid": 4102,
   "state": "idle",
   "member": true,
-  "message": "voice handover: told to wrap up and leave; it resumes in tmux once its process is gone",
+  "message": "voice handover is a fleet member in a window: it is told to wrap up and leave, then resumed in tmux once its process is gone",
   "force": false,
   "run_on_owner": false
  },

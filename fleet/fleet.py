@@ -2646,11 +2646,22 @@ def registry_records():
     return {x["sid"]: x for x in data if isinstance(x, dict) and isinstance(x.get("sid"), str)}
 
 
+TMUX_PLACES = ("/opt/homebrew/bin/tmux", "/usr/local/bin/tmux", "/usr/bin/tmux")
+
+
+def tmux_bin():
+    """FLEET_TMUX, else tmux on PATH, else where Homebrew and the system put it: over ssh without a login shell a
+    Mac's PATH has no /opt/homebrew/bin."""
+    if os.environ.get("FLEET_TMUX"):
+        return os.environ["FLEET_TMUX"]
+    return shutil.which("tmux") or next((p for p in TMUX_PLACES if os.access(p, os.X_OK)), "tmux")
+
+
 def tmux_panes():
     """({pane pid: tmux session} of the claude tmux server, whether that server answered)."""
     sock = sessions_conf().get("tmux_socket") or "claude"
     try:
-        r = subprocess.run([os.environ.get("FLEET_TMUX") or "tmux", "-L", str(sock), "list-panes", "-a", "-F",
+        r = subprocess.run([tmux_bin(), "-L", str(sock), "list-panes", "-a", "-F",
                             "#{pane_pid} #{session_name}"], capture_output=True, text=True, timeout=5,
                            stdin=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError):
@@ -2799,7 +2810,8 @@ def sessions_all(flt, machine=None):
             per[m] = [dict(r, stale=True, as_of=as_of, live_on=r.get("live_on") or []) for r in relabel(m, rows)]
             continue
         entry = dict(next(iter(res["machines"].values()), {}) or {})
-        entry.update(reachable=True, stale=False, reason="", screen=entry.get("screen") or screen_of(m))
+        entry.update(reachable=True, stale=False, reason="",  # this machine's machines.json says what screen it has
+                     screen=screen_of(m) if screen_of(m) != "none" else entry.get("screen") or "none")
         machines[m] = entry
         per[m] = relabel(m, [r for r in res["rows"] if isinstance(r, dict)])
         if not flt.only_id:

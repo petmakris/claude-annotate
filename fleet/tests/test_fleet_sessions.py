@@ -174,6 +174,12 @@ def listing(t):
 def test_the_list_holds_every_machine_with_exact_rows(three):
     t = three
     v = listing(t)
+    conf_path = os.path.join(t.w.here.home, "machines.json")
+    with open(conf_path) as f:
+        conf = json.load(f)
+    conf["cee"]["screen"] = "hyprland"  # the hub's machines.json says which screen another machine has
+    with open(conf_path, "w") as f:
+        json.dump(conf, f)
     env = t.env_json()
     rows = {r["id"]: r for r in env["rows"]}
     assert set(rows) == {V, U, W, S, C}  # the 20-day-old unnamed chat and the job are out of the default view
@@ -194,7 +200,7 @@ def test_the_list_holds_every_machine_with_exact_rows(three):
     assert (rows[C]["stale"], rows[C]["as_of"]) == (True, t.T - 7200)
     assert env["hub"] == "here"
     assert env["machines"]["cee"] == {"reachable": False, "stale": True, "as_of": t.T - 7200,
-                                      "reason": TIMEOUT_LINE % "cee", "fleet": None, "screen": "none",
+                                      "reason": TIMEOUT_LINE % "cee", "fleet": None, "screen": "hyprland",
                                       "unreadable": None, "tmux_server": None}
     bee = dict(env["machines"]["bee"])
     assert bee.pop("as_of") >= t.T
@@ -304,7 +310,8 @@ def test_every_plan_kind(three):
     p = t.plan("bee:" + sid(26))
     assert (p["kind"], p["machine"], p["id"], p["state"]) == ("attach-bg", "bee", sid(26), "blocked")
     p = t.plan("here:" + sid(22))
-    assert (p["kind"], p["name"], p["tmux"], p["member"]) == ("wrap-up-then-resume", "helper", "helper", True)
+    assert (p["kind"], p["name"], p["tmux"], p["member"], p["message"]) == ("wrap-up-then-resume", "helper", "helper", True,
+        "helper is a fleet member in a window: it is told to wrap up and leave, then resumed in tmux once its process is gone")
     p = t.plan("bee:" + W)
     assert (p["kind"], p["force"], p["machine"], p["message"]) == (
         "blocked-window", True, "bee",
@@ -476,6 +483,26 @@ def test_a_machine_without_a_screen_opens_no_window(three):
 
 
 # ---------------------------------------------------------------- fixes
+
+def test_the_hubs_machines_json_names_the_screen_of_a_machine_that_answers(three):
+    t = three
+    conf_path = os.path.join(t.w.here.home, "machines.json")
+    with open(conf_path) as f:
+        conf = json.load(f)
+    conf["bee"]["screen"] = "hyprland"
+    with open(conf_path, "w") as f:
+        json.dump(conf, f)
+    assert t.env_json()["machines"]["bee"]["screen"] == "hyprland"  # bee's own answer says none
+
+
+def test_tmux_is_found_where_homebrew_puts_it_without_a_login_path(monkeypatch, tmp_path):
+    monkeypatch.delenv("FLEET_TMUX", raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    brew = os.path.join(str(tmp_path), "opt", "homebrew", "bin", "tmux")
+    script(brew, "#!/bin/sh\n")
+    monkeypatch.setattr(fleet, "TMUX_PLACES", (brew, "/nowhere/tmux"))
+    assert fleet.tmux_bin() == brew
+
 
 def test_claude_is_found_in_the_installers_folder_without_a_login_path(monkeypatch, tmp_path):
     home = str(tmp_path)
