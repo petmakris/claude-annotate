@@ -1168,7 +1168,8 @@ function updateNav() {
   navEl.querySelector(".next").disabled = i < 0 || i >= tabs.length - 1;
   const changed = tabs.some((t) => t.classList.contains("updated") && t.getAttribute("aria-selected") !== "true");
   navEl.querySelector(".posdot").hidden = !changed;
-  posEl.setAttribute("aria-label", "All boards" + (changed ? ", one changed" : ""));
+  // The name starts with the visible words, so a voice command or a screen reader finds the control by what it shows.
+  posEl.setAttribute("aria-label", navEl.querySelector(".tabpos").textContent + ", all boards" + (changed ? ", one changed" : ""));
 }
 // The pane headers start after the history buttons and Follow the voice, which sit over their left end.
 const barRoom = () => root.querySelector(".stage").style.setProperty("--navw",
