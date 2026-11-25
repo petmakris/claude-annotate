@@ -49,7 +49,6 @@ OWNER_RE = re.compile(r"^(phone:prod|phone:dev:[a-z0-9]+|[a-z0-9][a-z0-9-]{0,62}
 NAME_RANK = ("manual", "custom", "topic", "job", "ai", "agent", "fleet", "registry", "prompt")
 PROMPT_NAME_SOURCES = ("ai", "registry", "prompt")
 # Fields a same-epoch import may fill when the index has them empty.
-FILLABLE = ("name", "cwd", "account", "first_prompt", "last_prompt", "last_answer", "topic", "description")
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"]
 DUMP_TIMEOUT = 120
 COPY_TIMEOUT = 600
@@ -445,10 +444,10 @@ def build_rows(dumps, *, hub, machines, rules=None):
     return rows, conflicts, invalid
 
 
-def classify(existing, row):
+def classify(existing, row, origin=None):
     """What importing `row` does to the index's `existing` row: (outcome, conflict or None). The rule the store's
     `import_row` follows (contract section 15): the higher epoch wins; at the same epoch and owner the index keeps
-    its values and only empty fields are filled."""
+    its values and only empty fields are filled (`merge_same_epoch`)."""
     if existing is None:
         return "new", None
     if row["epoch"] > existing["epoch"]:
@@ -458,9 +457,8 @@ def classify(existing, row):
                                                                                         row["epoch"])
     if row["owner"] != existing["owner"]:
         return "conflict-kept", "same epoch %d, other owner: the index's %s stays" % (row["epoch"], existing["owner"])
-    for f in FILLABLE:
-        if existing.get(f) in (None, "") and row.get(f) not in (None, ""):
-            return "updated", None
+    if _store().merge_same_epoch(existing, row, origin=origin) != existing:
+        return "updated", None
     return "same", None
 
 
@@ -519,7 +517,7 @@ def plan(con, dumps, errors=None, home=None):
     rows, conflicts, invalid = _merge(dumps, home)
     outcomes = {}
     for sid, (row, origin) in rows.items():
-        outcome, why = classify(store.get_row(con, sid), row)
+        outcome, why = classify(store.get_row(con, sid), row, origin)
         outcomes[sid] = outcome
         if why:
             conflicts.append({"sid": sid, "where": "index", "origin": origin, "outcome": outcome, "why": why})
@@ -536,7 +534,7 @@ def apply(con, dumps, errors=None, home=None):
         shim.log(home, "import: %s: registry copies disagree: kept %s, lost %s (%s)"
                  % (c["sid"], json.dumps(c["kept"]), json.dumps(c["lost"]), c["why"]))
     for sid, (row, origin) in rows.items():
-        planned, why = classify(store.get_row(con, sid), row)
+        planned, why = classify(store.get_row(con, sid), row, origin)
         # A row the index already holds as the import would leave it is not written again: a second import
         # changes nothing, whatever the store does with an equal row.
         outcome = "same" if planned == "same" else store.import_row(con, row, origin=origin)

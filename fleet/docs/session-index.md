@@ -899,6 +899,11 @@ _import-dump` (the registry files and `conversations`, work rows masked) and `_d
 `fleet.db`, as bytes, for the backup). `fleet session import` also takes `--json` for the report as JSON. Before it
 writes, it backs up `hub.db` with the label `import` and seeds the registry shim's state from the files it read.
 
+At the index's own epoch an import only fills empty fields (`fleet_index_store.merge_same_epoch`). It never fills a
+work row's words (section 7.2). One exception: an import from the row's own machine, whose rule now says the session
+is not work, clears the flag and fills the row. The writing machine decides what is work, so this undoes rows its
+hook journaled while its rule failed closed, before env had written `work.json` (seen on main, 25 Nov 2026).
+
 ### 18.4 The tests that hold the whole
 
 - `test_one_sid_reads_the_same_through_the_endpoint_the_cli_list_and_the_pick_plan` (`test_fleet_sessions.py`):

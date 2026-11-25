@@ -819,6 +819,25 @@ def _normal_row(row, now):
     return out
 
 
+def merge_same_epoch(cur, row, *, origin):
+    """The row an import at the index's own epoch leaves: the index keeps its values and only empty fields are
+    filled. A work row gets none of the words section 7.2 removes, unless the import comes from the row's own
+    machine and that machine's rule now says it is not work: the writing machine decides what is work, so its
+    verdict clears a flag set while its rule failed closed (no work.json yet)."""
+    new = _normal_row(row, time.time())
+    filled = dict(cur)
+    if filled["work"] and not new["work"] and origin == filled["machine"] == new["machine"]:
+        filled["work"] = False
+    for k in FIELDS:
+        if k in ("owner", "epoch", "work") or filled.get(k) not in (None, "") or new.get(k) in (None, ""):
+            continue
+        if filled["work"] and (k in fleet_work.FORBIDDEN or (k in ("name", "name_source")
+                                                             and new["name_source"] in fleet_work.PROMPT_NAME_SOURCES)):
+            continue
+        filled[k] = new[k]
+    return filled
+
+
 def import_row(con, row, *, origin):
     """Put an imported row in: "new", "same", "updated" or "conflict-kept". The higher epoch wins."""
     now = time.time()
@@ -836,10 +855,7 @@ def import_row(con, row, *, origin):
         elif new["epoch"] < cur["epoch"]:
             outcome = "conflict-kept"
         else:
-            filled = dict(cur)
-            for k in FIELDS:
-                if filled.get(k) in (None, "") and new.get(k) not in (None, "") and k not in ("owner", "epoch"):
-                    filled[k] = new[k]
+            filled = merge_same_epoch(cur, new, origin=origin)
             if filled != cur:
                 _write_row(con, filled)
                 outcome = "updated"

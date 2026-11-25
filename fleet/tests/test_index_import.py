@@ -617,3 +617,37 @@ def test_plan_and_apply_agree_on_every_row(iw):
         con.close()
     assert planned["totals"] == applied["totals"]
     assert planned["machines"] == applied["machines"]
+
+
+def _hub_work_row(iw, sid):
+    """The row the hub holds when the session's machine journaled it while its rule failed closed."""
+    import fleet_index_store
+    con = iw.con()
+    try:
+        fleet_index_store.import_row(con, dict(record(sid, owner="main", epoch=1), machine="main", work=True,
+                                               name="", conversation=sid), origin="main")
+    finally:
+        con.close()
+
+
+def test_the_rows_own_machine_clears_a_work_flag_its_failed_closed_rule_set(iw, capsys):
+    _hub_work_row(iw, SID_A)
+    assert iw.rows()[SID_A]["work"] is True
+    iw["main"].put_record(record(SID_A, owner="main", epoch=1))
+    assert run(["import", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["machines"]["main"]["updated"] == 1
+    row = iw.rows()[SID_A]
+    assert (row["work"], row["name"], row["cwd"], row["last_prompt"], row["account"]) == \
+        (False, "fix the build", "/home/me/projects/app", "run the tests", "me")
+
+
+def test_an_import_from_another_machine_never_fills_a_work_rows_words(iw, capsys):
+    _hub_work_row(iw, SID_A)
+    iw["mac"].put_record(record(SID_A, owner="main", epoch=1, machine="main"))
+    assert run(["import", "--json"]) == 0
+    capsys.readouterr()
+    row = iw.rows()[SID_A]
+    assert (row["work"], row["name"], row["cwd"], row["last_prompt"], row["account"]) == (True, "", None, None, None)
+    import fleet_index_store
+    blob = open(fleet_index_store.hub_db_path(iw.hub.home), "rb").read()
+    assert b"run the tests" not in blob and b"/home/me/projects/app" not in blob
