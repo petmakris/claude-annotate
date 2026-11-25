@@ -5,7 +5,7 @@
 // "For you" inbox.
 // Every value reaches the page through textContent, never as markup.
 const REFRESH = 5000;
-const VIEWS = [{ id: "fleet", label: "Fleet" }, { id: "foryou", label: "For you" }, { id: "history", label: "History" }, { id: "profiles", label: "Profiles" }];
+const VIEWS = [{ id: "sessions", label: "Sessions" }, { id: "fleet", label: "Fleet" }, { id: "foryou", label: "For you" }, { id: "history", label: "History" }, { id: "profiles", label: "Profiles" }];
 
 function el(tag, attrs, ...kids) {
   const n = document.createElement(tag);
@@ -85,9 +85,11 @@ Object.assign(ICONS, {
   "search": [["circle", { cx: "11", cy: "11", r: "8" }], ["path", { d: "m21 21-4.3-4.3" }]],
   "plus": [["path", { d: "M5 12h14" }], ["path", { d: "M12 5v14" }]],
   "send": [["path", { d: "M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" }], ["path", { d: "m21.854 2.147-10.94 10.939" }]],
+  "log-out": [["path", { d: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" }], ["polyline", { points: "16 17 21 12 16 7" }], ["line", { x1: "21", x2: "9", y1: "12", y2: "12" }]],
+  "chevron-down": [["path", { d: "m6 9 6 6 6-6" }]],
   "moon": [["path", { d: "M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" }]],
 });
-const VIEW_ICONS = { fleet: "users", foryou: "inbox", history: "history", profiles: "settings-2" };
+const VIEW_ICONS = { sessions: "terminal", fleet: "users", foryou: "inbox", history: "history", profiles: "settings-2" };
 
 // A list's empty state: an icon and one line.
 const empty = (ic, text) => el("div", { class: "empty-box" }, sicon(ic, "empty-ic"), el("p", {}, text));
@@ -861,6 +863,237 @@ function initProfiles() {
   addEventListener("beforeunload", (e) => { if (isDirty()) { e.preventDefault(); e.returnValue = ""; } });
 }
 
+// ---- Sessions: one list of every Claude session on every machine, from GET /api/sessions (the hub's merged rows).
+// The list refreshes when the tab opens, when the browser tab regains focus and after an action. It adds no interval.
+// Open posts {key, target} and the server runs only its own opener on that machine; Copy never asks the server.
+const S = { data: null, q: "", kind: "chat", machine: null, renaming: null, card: null, busy: false };
+const currentView = () => { const id = location.hash.slice(1); return VIEWS.some((v) => v.id === id) ? id : VIEWS[0].id; };
+const smsg = (text, bad) => flash("s-msg", text, bad);
+const LIVE = ["busy", "idle", "waiting", "blocked"];
+const isLive = (r) => LIVE.includes(r.state);
+const STATE_TIP = { busy: "Working on a turn", idle: "Between turns", waiting: "A prompt is open and waits for an answer", blocked: "Blocked on a permission", done: "Finished its turn", "": "Not running" };
+const STATE_CLS = { busy: "ok", idle: "dimc", waiting: "warn", blocked: "bad", done: "dimc", "": "none" };
+const hhmm = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const pickLine = (r) => "@claude pick --open " + r.key;
+const mInfo = (r) => ((S.data && S.data.machines) || {})[r.machine] || {};
+const isStale = (r) => !!r.stale || mInfo(r).reachable === false;
+const label = (r) => (r.named ? r.name : r.work ? "work session" : (r.about || "(no prompt yet)").slice(0, 30) + ((r.about || "").length > 30 ? "…" : ""));
+const seenText = (r) => (isLive(r) ? "now" : r.last_seen ? ago(r.last_seen, S.data.as_of * 1000) : "");
+
+function targetsOf() {
+  const out = [];
+  for (const [m, i] of Object.entries((S.data && S.data.machines) || {})) {
+    if (!i.screen || i.screen === "none") continue;
+    const ok = i.reachable !== false && !i.stale;
+    out.push({ id: m, label: "Open on " + m, ok, why: ok ? "" : m + " is not answering" });
+  }
+  out.push({ id: "copy", label: "Copy command", ok: true, why: "" });
+  return out;
+}
+function openTarget() {
+  const ts = targetsOf();
+  let saved = null;
+  try { saved = localStorage.getItem("fleet-open-target"); } catch (e) {}
+  if (saved && ts.some((t) => t.id === saved && t.ok)) return saved;
+  const ua = navigator.userAgent, screen = (kind) => Object.entries(S.data.machines).find(([, i]) => i.screen === kind);
+  const g = /Android|iPhone|iPad/.test(ua) ? null : /Macintosh/.test(ua) ? screen("macos") : /Linux/.test(ua) ? screen("hyprland") : null;
+  return g && ts.some((t) => t.id === g[0] && t.ok) ? g[0] : "copy";
+}
+function setOpenTarget(id) { try { localStorage.setItem("fleet-open-target", id); } catch (e) {} renderSessions(); }
+
+async function sAct(path, body, okText) {
+  try { const d = await post(path, body); smsg(okText || d.message || d.output || "Done."); await loadSessions(true); return d; }
+  catch (e) { smsg(e.message, true); }
+}
+function openSession(r, btn) {
+  const t = openTarget();
+  if (t === "copy") { copy(pickLine(r), btn); return smsg("Copied. Run it in a terminal."); }
+  return sAct("/api/sessions/open", { key: r.key, target: t }, "Opened " + label(r) + " on " + t + ".");
+}
+const canWrap = (r) => r.member && isLive(r) && !isStale(r);
+const canForce = (r) => !r.member && r.where === "window" && r.state === "idle" && r.pid && !isStale(r);
+const wrapWhy = (r) => (canWrap(r) ? "Ask it to wrap up and leave" : !r.member ? "Not in the fleet, so it cannot be told to leave" : isStale(r) ? r.machine + " is not answering" : "Not running");
+
+// A button with an icon and a word. The word hides on a narrow screen (CSS). A confirm button asks once, in red.
+function sbtn(ic, text, fn, o) {
+  o = o || {};
+  const b = el("button", { type: "button", class: "s-btn" + (o.cls ? " " + o.cls : ""), title: o.title || text, "aria-label": text, disabled: o.disabled }, icon(ic), el("span", { class: "w" }, text));
+  if (o.confirm) b.addEventListener("click", () => {
+    if (b.dataset.sure) return fn(b);
+    b.dataset.sure = "1"; b.classList.add("confirming"); b.querySelector(".w").textContent = "Confirm"; b.title = "Press again to " + text.toLowerCase();
+    setTimeout(() => { if (b.isConnected) { delete b.dataset.sure; b.classList.remove("confirming"); b.querySelector(".w").textContent = text; b.title = o.title || text; } }, 4000);
+  });
+  else b.addEventListener("click", () => fn(b));
+  return b;
+}
+
+function renameBox(r, done) {
+  const input = el("input", { class: "h-input s-rename", type: "text", value: r.named ? r.name : "", placeholder: "Name", "aria-label": "Name of " + label(r) });
+  const save = async () => {
+    if (!input.value.trim()) return;
+    S.renaming = null;
+    await sAct("/api/sessions/rename", { key: r.key, name: input.value }, "Renamed.");
+    done();
+  };
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") save(); else if (e.key === "Escape") { S.renaming = null; done(); }
+  });
+  setTimeout(() => input.focus(), 0);
+  return input;
+}
+
+function targetMenu(anchor) {
+  document.querySelectorAll(".s-menu").forEach((m) => m.remove());
+  const cur = openTarget();
+  const menu = el("ul", { class: "s-menu", role: "menu" }, targetsOf().map((t) => {
+    const li = el("li", { role: "menuitemradio", "aria-checked": t.id === cur ? "true" : "false", tabindex: t.ok ? "0" : "-1", class: (t.ok ? "" : "off ") + (t.id === cur ? "sel" : ""), title: t.why || t.label }, t.label);
+    if (t.ok) { li.addEventListener("click", () => { menu.remove(); setOpenTarget(t.id); }); li.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") li.click(); }); }
+    return li;
+  }));
+  anchor.parentNode.append(menu);
+  const away = (e) => { if (!menu.contains(e.target) && e.target !== anchor) { menu.remove(); document.removeEventListener("click", away, true); } };
+  setTimeout(() => document.addEventListener("click", away, true), 0);
+  menu.querySelector('[tabindex="0"]').focus();
+}
+
+function rowActions(r) {
+  const stale = isStale(r), t = openTarget();
+  const open = sbtn("terminal", "Open", (b) => openSession(r, b), { cls: "primary", disabled: stale, title: stale ? r.machine + " is not answering, so it is not resumed anywhere else" : "Open: " + (targetsOf().find((x) => x.id === t) || {}).label });
+  const more = el("button", { type: "button", class: "s-btn s-more primary", "aria-label": "Where to open", title: "Where to open", "aria-haspopup": "menu" }, icon("chevron-down"));
+  more.addEventListener("click", () => targetMenu(more));
+  return el("div", { class: "s-acts", "data-col": "acts" },
+    el("div", { class: "s-split" }, open, more),
+    sbtn("log-out", "Wrap up", (b) => sAct("/api/sessions/stop", { key: r.key }, "Asked " + label(r) + " to wrap up. It leaves when its turn ends."), { confirm: true, disabled: !canWrap(r), title: wrapWhy(r) }),
+    sbtn("pencil", "Rename", () => { S.renaming = r.key; renderSessions(); }),
+    sbtn("copy", "Copy", (b) => { copy(pickLine(r), b); smsg("Copied. Run it in a terminal."); }, { title: "Copy " + pickLine(r) }));
+}
+
+const slot = (col, text, tip, kids) => el("div", { class: "s-c" + (text || (kids && kids.length) ? "" : " none"), "data-col": col, title: tip || (text ? "" : "Nothing here") }, kids || (text || "–"));
+
+function sessionRow(r) {
+  const stale = isStale(r);
+  const dot = el("span", { class: "s-dot " + STATE_CLS[r.state || ""], role: "img", "aria-label": STATE_TIP[r.state || ""] });
+  const nameCell = S.renaming === r.key ? el("div", { class: "s-c s-name", "data-col": "name" }, renameBox(r, renderSessions))
+    : el("div", { class: "s-c s-name" + (r.named ? "" : " standin"), "data-col": "name", title: r.named ? r.name : r.work ? "A work session: its details stay on its own machine" : "Not named yet. It started: " + (r.about || "(no prompt yet)").slice(0, 120) }, label(r));
+  const asks = r.unanswered.length ? el("a", { href: "#foryou", title: r.unanswered.length + " unanswered, in For you" }, String(r.unanswered.length)) : null;
+  const row = el("div", { class: "s-row" + (stale ? " stale" : ""), tabindex: "0", "data-key": r.key, "aria-label": label(r) },
+    el("div", { class: "s-c", "data-col": "state", title: STATE_TIP[r.state || ""] }, dot),
+    nameCell,
+    el("div", { class: "s-c", "data-col": "machine", title: stale ? r.machine + " not answering, as of " + hhmm(r.as_of) : r.machine }, chip(r.machine)),
+    slot("where", r.where === "none" ? "" : r.where, r.where === "none" ? "Not running anywhere" : "Runs in " + r.where),
+    slot("folder", r.work ? "" : homeless(r.folder), r.work ? "A work session: its folder stays on its own machine" : r.folder),
+    slot("seen", seenText(r), r.last_seen ? when(r.last_seen) : ""),
+    slot("held", r.held.length ? String(r.held.length) : "", r.held.length ? "To-dos it holds" : "Holds no to-dos"),
+    slot("asks", asks ? "x" : "", asks ? "" : "No unanswered asks", asks ? [asks] : null),
+    rowActions(r));
+  const go = (e) => { if (!e.target.closest("button, a, input, .s-menu")) openCard(r.key); };
+  row.addEventListener("click", go);
+  row.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target === row) { e.preventDefault(); openCard(r.key); } });
+  return row;
+}
+
+function visibleSessions() {
+  const d = S.data, q = S.q.trim().toLowerCase();
+  return d.rows.filter((r) => {
+    if (S.machine && r.machine !== S.machine) return false;
+    if (S.kind === "chat" && !(r.kind === "chat" && (r.named || isLive(r) || d.as_of - r.last_seen <= 14 * 86400))) return false;
+    if (S.kind === "job" && r.kind === "chat") return false;
+    if (!q) return true;
+    return [r.name, r.work ? "" : r.about, r.work ? "" : r.folder, r.machine, r.tmux].join(" ").toLowerCase().includes(q);
+  }).sort((a, b) => (isLive(b) - isLive(a)) || b.last_seen - a.last_seen);
+}
+
+function machineStrip() {
+  const ms = S.data.machines;
+  return Object.entries(ms).map(([m, i]) => {
+    const down = i.reachable === false, stale = down || i.stale;
+    const tip = [m + (down ? " is not answering" : " answers"), stale ? "rows as of " + hhmm(i.as_of) : "", down && i.reason ? i.reason : "", i.tmux_server === false ? "tmux server is not running" : "", i.unreadable ? i.unreadable + " transcripts could not be read" : "", i.awake ? "held awake" : ""].filter(Boolean).join(". ");
+    const b = el("button", { type: "button", class: "s-m" + (stale ? " stale" : ""), "aria-pressed": S.machine === m ? "true" : "false", title: tip },
+      el("span", { class: "s-dot " + (down ? "bad" : stale ? "warn" : "ok") }), el("strong", {}, m),
+      stale ? el("span", { class: "dim" }, "as of " + hhmm(i.as_of)) : null,
+      !stale && i.tmux_server === false ? el("span", { class: "tag warnt" }, "no tmux") : null,
+      i.awake ? el("span", { class: "tag" }, "awake") : null);
+    b.addEventListener("click", () => { S.machine = S.machine === m ? null : m; renderSessions(); });
+    return b;
+  });
+}
+
+function renderSessions() {
+  if (!S.data) return;
+  const rows = visibleSessions();
+  headCount("n-sessions", rows.length);
+  document.getElementById("s-strip").replaceChildren(...machineStrip());
+  const kinds = document.getElementById("s-kinds");
+  if (!kinds.firstChild) for (const [k, t] of [["chat", "Chats"], ["job", "Jobs and workers"], ["all", "All"]]) {
+    const b = el("button", { type: "button", "data-kind": k }, t);
+    b.addEventListener("click", () => { S.kind = k; renderSessions(); });
+    kinds.append(b);
+  }
+  kinds.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.kind === S.kind ? "true" : "false"));
+  const head = el("div", { class: "s-row s-head", "aria-hidden": "true" }, ...[["state", ""], ["name", "Name"], ["machine", "Machine"], ["where", "Where"], ["folder", "Folder"], ["seen", "Last seen"], ["held", "Held"], ["asks", "Asks"], ["acts", ""]].map(([c, t]) => el("div", { class: "s-c", "data-col": c }, t)));
+  const box = document.getElementById("s-rows");
+  const keep = box.scrollTop;
+  box.replaceChildren(rows.length ? el("div", { class: "s-list" }, head, rows.map(sessionRow)) : empty("terminal", "No sessions match."));
+  box.scrollTop = keep;
+  const dlg = document.getElementById("s-card");
+  if (dlg.open && S.card && !S.renaming) renderCard();
+}
+
+function planOf(r) {
+  const m = mInfo(r);
+  if (isStale(r)) return r.machine + " is not answering" + (m.as_of ? ", rows as of " + hhmm(m.as_of) : "") + ". It may still be running there, so it is not resumed anywhere else.";
+  if (r.where === "tmux") return "Attach to the tmux session " + r.tmux + " on " + r.machine + ".";
+  if (r.where === "bg") return "Attach to the background session on " + r.machine + ".";
+  if (r.where === "window") return r.member ? "Ask it to wrap up, wait until it has left, then resume it in tmux on " + r.machine + "." : "It runs in a plain window on " + r.machine + " (pid " + r.pid + ") and cannot be taken over until that window closes.";
+  return "Resume it in a new tmux session on " + r.machine + (r.work ? "." : ", in " + r.folder + ".");
+}
+
+function openCard(key) { S.card = key; const dlg = document.getElementById("s-card"); renderCard(); if (!dlg.open) dlg.showModal(); }
+function closeCard() { S.card = null; S.renaming = null; const dlg = document.getElementById("s-card"); if (dlg.open) dlg.close(); }
+
+function renderCard() {
+  const dlg = document.getElementById("s-card"), r = S.data && S.data.rows.find((x) => x.key === S.card);
+  if (!r) return closeCard();
+  const stale = isStale(r);
+  const title = S.renaming === r.key ? renameBox(r, renderCard) : el("h2", {}, label(r));
+  const fact = (k, v) => (v === "" || v === null || v === undefined ? null : [el("dt", {}, k), el("dd", {}, v)]);
+  const sel = el("select", { class: "h-input s-target", "aria-label": "Where Open goes" }, targetsOf().map((t) => el("option", { value: t.id, disabled: !t.ok, selected: t.id === openTarget() }, t.label)));
+  sel.addEventListener("change", () => { try { localStorage.setItem("fleet-open-target", sel.value); } catch (e) {} renderSessions(); renderCard(); });
+  const close = el("button", { type: "button", class: "ib", "aria-label": "Close", title: "Close" }, icon("x"));
+  close.addEventListener("click", closeCard);
+  dlg.replaceChildren(
+    el("div", { class: "s-card-head" }, title, close),
+    el("div", { class: "s-card-chips" }, chip(r.machine), pill(STATE_CLS[r.state || ""] === "none" ? "left" : STATE_CLS[r.state], r.state || "not running"), r.where !== "none" ? el("span", { class: "tag" }, r.where) : null, r.work ? el("span", { class: "tag" }, "work") : null, r.member ? el("span", { class: "tag" }, "fleet member") : null, stale ? el("span", { class: "tag gone" }, "as of " + hhmm(r.as_of)) : null),
+    el("p", { class: "s-plan" }, el("strong", {}, "Open: "), planOf(r)),
+    el("dl", { class: "s-facts" },
+      fact("Folder", r.work ? "" : r.folder), fact("tmux session", r.tmux), fact("pid", r.pid ? String(r.pid) : ""),
+      fact("Started", r.started ? when(r.started) : ""), fact("Last seen", r.last_seen ? when(r.last_seen) : ""),
+      fact("Held to-dos", r.held.length ? r.held.join(", ") : ""), fact("Unanswered", r.unanswered.length ? r.unanswered.length + " in For you" : ""),
+      fact("Also on", (r.copies || []).join(", ")), fact("Ended", r.ended ? when(r.ended) + (r.end_reason ? " (" + r.end_reason + ")" : "") : ""), fact("Id", r.id)),
+    r.work || !r.about ? null : el("div", { class: "s-about" }, el("h4", {}, "First prompt"), el("p", {}, r.about)),
+    el("div", { class: "s-card-acts" }, sel,
+      sbtn("terminal", "Open", (b) => openSession(r, b), { cls: "primary big", disabled: stale }),
+      sbtn("log-out", "Wrap up", () => sAct("/api/sessions/stop", { key: r.key }, "Asked " + label(r) + " to wrap up."), { cls: "big", confirm: true, disabled: !canWrap(r), title: wrapWhy(r) }),
+      sbtn("pencil", "Rename", () => { S.renaming = r.key; renderCard(); }, { cls: "big" }),
+      sbtn("copy", "Copy", (b) => { copy(pickLine(r), b); }, { cls: "big", title: "Copy " + pickLine(r) }),
+      canForce(r) ? sbtn("circle-stop", "Force stop", () => sAct("/api/sessions/stop", { key: r.key, force: true }, "Stopped pid " + r.pid + "."), { cls: "big danger", confirm: true, title: "Idle plain window, not in the fleet: end pid " + r.pid + " (SIGTERM)" }) : null));
+}
+
+async function loadSessions(quiet) {
+  if (S.busy) return;
+  S.busy = true;
+  if (S.data && !quiet) renderSessions();  // cached rows first, labelled as of
+  try { S.data = await getJSON("/api/sessions"); renderSessions(); }
+  catch (e) { smsg("Sessions: " + e.message, true); }
+  finally { S.busy = false; }
+}
+function initSessions() {
+  document.getElementById("s-q").addEventListener("input", (e) => { S.q = e.target.value; renderSessions(); });
+  const dlg = document.getElementById("s-card");
+  dlg.addEventListener("click", (e) => { if (e.target === dlg) closeCard(); });
+  dlg.addEventListener("close", () => { S.card = null; S.renaming = null; });
+}
+
 function renderNotices(lists) {
   const seen = new Map();
   for (const l of lists) for (const n of (l && l.notices) || []) seen.set(n.text, n);
@@ -896,6 +1129,7 @@ async function refresh(withInbox) {
 
 function showView(id) {
   if (!VIEWS.some((v) => v.id === id)) id = VIEWS[0].id;
+  if (id === "sessions") loadSessions();
   if (id === "history" && !H.loaded) loadHistory();
   if (id === "profiles" && !P.data) loadProfiles();
   document.querySelectorAll(".view").forEach((s) => (s.hidden = s.dataset.view !== id));
@@ -922,6 +1156,7 @@ function start() {
   document.querySelector(".logo").append(sicon("users"));
   initTheme();
   initHistory();
+  initSessions();
   initProfiles();
   initTodoForm();
   const tabs = document.getElementById("tabs");
@@ -931,6 +1166,6 @@ function start() {
   showView(location.hash.slice(1));
   refresh();
   setInterval(() => { if (!document.hidden) refresh(); }, REFRESH);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { refresh(); if (currentView() === "sessions") loadSessions(); } });
 }
 start();

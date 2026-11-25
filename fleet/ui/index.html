@@ -18,7 +18,20 @@
 <div id="notices" role="status"></div>
 <main id="views">
   <!-- One <section class="view" data-view="..."> per view, and one entry in the VIEWS list in app.js. -->
-  <section class="view" id="view-fleet" data-view="fleet">
+  <section class="view" id="view-sessions" data-view="sessions">
+    <div id="s-msg" role="status" class="h-msg toast"></div>
+    <section class="card">
+      <div class="card-head"><span class="head-ic" data-icon="terminal"></span><h3>Sessions</h3><span class="count" id="n-sessions"></span></div>
+      <div id="s-strip" class="s-strip" aria-label="Machines"></div>
+      <form id="s-filter" class="add-bar" role="search" onsubmit="return false">
+        <input id="s-q" type="search" placeholder="Filter by name, folder or machine" aria-label="Filter sessions" autocomplete="off">
+        <div id="s-kinds" class="s-seg" role="group" aria-label="Which sessions"></div>
+      </form>
+      <div id="s-rows" class="s-rows"></div>
+    </section>
+    <dialog id="s-card" class="s-card" aria-label="Session"></dialog>
+  </section>
+  <section class="view" id="view-fleet" data-view="fleet" hidden>
     <div id="m-msg" role="status" class="h-msg toast"></div>
     <section class="card">
       <div class="card-head"><span class="head-ic" data-icon="users"></span><h3>Members</h3><span class="count" id="n-members"></span>
