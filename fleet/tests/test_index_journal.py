@@ -165,3 +165,31 @@ def test_with_the_hub_down_a_mac_session_records_its_cache_shows_its_owner_and_t
         "mac", 1, "mac", "fix the build", "Done: the build passes.")
     assert mac.state() == {"next_seq": 4, "acked_seq": 3}
     assert mac.cache(s)["source"] == "hub"
+
+
+def test_across_machines_a_journal_replayed_at_an_old_epoch_changes_nothing(cluster):
+    """End to end, as real processes on three machines: mac records a session, the session goes to lat and back
+    (epoch 3), then mac loses its journal state and sends its old epoch-1 entries again. The hub drops them and
+    the row, and the list every surface reads, stay exactly as they were."""
+    mac, lat, main = cluster["mac"], cluster["lat"], cluster["main"]
+    s = sid(13)
+    path = transcript(mac.file("t", s + ".jsonl"), ["fix the build"], ["Done."])
+    base = {"session_id": s, "transcript_path": path, "cwd": "/home/me/app"}
+    assert mac.hook(dict(base, hook_event_name="SessionStart", source="startup")).returncode == 0
+    assert mac.hook(dict(base, hook_event_name="UserPromptSubmit", prompt="fix the build")).returncode == 0
+    for to, expect in (("lat", "1"), ("mac", "2")):
+        r = lat.cli("take", s, "--to", to, "--expect-epoch", expect, "--json")
+        assert r.returncode == 0, r.stderr
+    before = main.hub_row(s)
+    listed = json.loads(main.cli("list", "--json").stdout)["rows"]
+    assert (before["owner"], before["epoch"]) == ("mac", 3)
+    os.remove(mac.file("index", "journal.state.json"))
+    r = mac.cli("flush")
+    assert r.returncode == 0, r.stderr
+    assert [(e["seq"], e["epoch_seen"]) for e in mac.journal()] == [(3, 1), (4, 1)]  # renumbered above the high mark
+    assert mac.state() == {"next_seq": 5, "acked_seq": 4}
+    assert main.hub_row(s) == before
+    assert json.loads(main.cli("list", "--json").stdout)["rows"] == listed
+    with open(main.file("hooks.log")) as f:
+        assert f.read().count("stale-epoch") == 2
+    assert (mac.cache(s)["owner"], mac.cache(s)["epoch"], mac.cache(s)["source"]) == ("mac", 3, "hub")

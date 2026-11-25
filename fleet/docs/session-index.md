@@ -845,3 +845,65 @@ and an `expected` outcome the store's tests use:
 
 `schema_check.py` is a small JSON Schema validator for the keywords the schema uses. The contract test fails if the
 schema uses any other keyword, so the schema stays checkable without a dependency.
+
+## 18. What the build settled
+
+The three build jobs (osidx-2-hub, osidx-3-surfaces, osidx-4-importer) landed together, and the full suite passed
+on all three at once. This section adds what the build fixed that the sections above left open. It is the part env
+and Claude Voice read when they call the hub.
+
+### 18.1 The service routes
+
+All are served by `fleet ui` on the hub (`fleet_index_http.handle`), on a loopback bind, with a loopback Host (or one
+in `hosts` of `ui.json`) and `Authorization: Bearer <token>`. The token and base address come from `fleet ui token`.
+
+| Route | Body or query | Reply |
+|---|---|---|
+| `POST /api/session/take` | `take_request` | `take_reply` |
+| `POST /api/session/chain` | `chain_request` | `chain_reply` |
+| `POST /api/session/journal` | `{"sid", "event", "fields", "as"}` | `{"ok", "seq", "result", "row"}` |
+| `POST /api/session/end-host` | `{"owner"}` | `{"ok", "ended": [sid, ...]}` |
+| `GET /api/session/owner?sid=<sid>` | none | `owner_reply` with `source: "hub"` |
+| `GET /api/sessions` | the query of section 10.1 | `sessions_reply` |
+
+- A journal post is appended to the hub machine's own journal and flushed at once. `as` is the hub machine's name
+  (the default) or `phone:prod` / `phone:dev:<sandbox>`. `result` is that entry's outcome (section 5.2) and `row` is
+  the truth the hub sends back (`journal_reply.rows[sid]`), or null.
+- A POST needs `Content-Type: application/json`.
+
+Status codes of the service routes:
+
+| Status | When | `code` |
+|---|---|---|
+| 200 | done, or a take to the owner it already has | none |
+| 400 | the body is not a JSON object, or a journal post is not `{sid, event, fields, as}` | `bad-request` |
+| 401 | no Bearer token, or the wrong one (a cookie is never enough) | `refused` |
+| 403 | not a loopback bind, or a Host not allowed | `refused` |
+| 404 | no such route, or the sid is not in the index | `bad-request`, `no-session` |
+| 405 | the wrong method | `bad-request` |
+| 409 | every other refusal: `stale-epoch`, `superseded`, `job`, `work`, `dev-refused` | that code |
+| 415 | a POST that is not JSON | `bad-request` |
+| 503 | this machine is not the hub | `hub-down` |
+
+### 18.2 The list off the hub
+
+`fleet session list --json` and the page both go through `fleet_sessions_api.envelope`. Off the hub it runs
+`fleet session list --json` on the hub through fleet's remote path, with 30 s in all (`LIST_TIMEOUT`), since the hub
+reads every machine's observed facts before it answers. `fleet_index_cli.list_reply` does the same with ssh alone; it
+runs only when `fleet_sessions_api` cannot be imported.
+
+### 18.3 The importer's remote verbs
+
+The importer runs its own module on the other machines: `<python> <folder of the fleet path>/fleet_index_import.py
+_import-dump` (the registry files and `conversations`, work rows masked) and `_db-copy` (a copy of that machine's
+`fleet.db`, as bytes, for the backup). `fleet session import` also takes `--json` for the report as JSON. Before it
+writes, it backs up `hub.db` with the label `import` and seeds the registry shim's state from the files it read.
+
+### 18.4 The tests that hold the whole
+
+- `test_one_sid_reads_the_same_through_the_endpoint_the_cli_list_and_the_pick_plan` (`test_fleet_sessions.py`):
+  one sid read through `GET /api/sessions`, `fleet session list --json` and the pick plan shows the same name,
+  owner and state, and a phone-owned one plans `take-then-resume` with the row's epoch.
+- `test_across_machines_a_journal_replayed_at_an_old_epoch_changes_nothing` (`test_index_journal.py`): real
+  processes on three machines; a machine that lost its journal state resends its epoch-1 entries after two takes,
+  and the hub row and the list stay exactly as they were.

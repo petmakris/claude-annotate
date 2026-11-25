@@ -889,3 +889,32 @@ def test_the_page_stops_a_member_with_the_wrap_up_tell(three, page):
     assert data["action"] == "interactive" and data["thread"]
     con = three.w.here.db()
     assert con.execute("SELECT body FROM messages WHERE thread=?", (data["thread"],)).fetchone()[0] == fleet.WRAP_UP_TELL
+
+
+# ---------------------------------------------------------------- one sid, three surfaces
+
+def test_one_sid_reads_the_same_through_the_endpoint_the_cli_list_and_the_pick_plan(three, page):
+    """The page's GET /api/sessions, `fleet session list --json` and `fleet sessions open --json` (the pick plan)
+    all read the one index: a session shows the same name, owner and state through each."""
+    t = three
+    listing(t)
+    t.take(U, "phone:prod")  # U moves to the phone: epoch 2, its plan must take it back first
+    code, api_reply = page("GET", "/api/sessions")
+    assert code == 200
+    code, out, err = t.cli("session", "list", "--json")
+    assert code == 0, err
+    cli_reply = json.loads(out)
+    seen = {}
+    for s in (V, W, U):
+        a = next(r for r in api_reply["rows"] if r["sid"] == s)
+        c = next(r for r in cli_reply["rows"] if r["sid"] == s)
+        p = t.plan(a["key"])
+        assert (a["name"], a["owner"], a["epoch"], a["observed"]["state"]) == \
+            (c["name"], c["owner"], c["epoch"], c["observed"]["state"])
+        assert (p["id"], p["head"], p["name"], p["state"] or None) == (s, s, a["name"], a["observed"]["state"])
+        seen[s] = (a["name"], a["owner"], a["observed"]["state"], p["kind"], p["machine"], p["take"])
+    assert seen == {
+        V: ("voice", "here", "idle", "attach-tmux", "here", None),
+        W: ("notes", "bee", "idle", "blocked-window", "bee", None),
+        U: ("", "phone:prod", None, "take-then-resume", "here", {"sid": U, "to": "here", "expect_epoch": 2}),
+    }
