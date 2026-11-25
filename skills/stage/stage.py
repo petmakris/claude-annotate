@@ -294,6 +294,8 @@ def main(argv=None) -> int:
         if args.cmd == "show":
             stdin = sys.stdin.read() if args.source.endswith(":-") else None
             source = model.parse_source(args.source, Path(cwd), stdin)
+            if source.get("note"):  # a long range or change was cut: say so, never silently
+                print(f"stage: {source['note']}", file=sys.stderr)
             extra = None
             if source.get("format") == "screen":  # on its own, Back and Next step through the parts
                 extra = {"scene": model.screen_scene(source, args.title or source.get("title") or args.name)}

@@ -449,3 +449,94 @@ def test_an_outside_path_in_no_repository_and_a_relative_escape_stay_refused(rep
         model.code_source(repo, "../x.py:1-1")
     with pytest.raises(model.SourceError, match="outside the project"):
         model.change_source(repo, "../elsewhere/lib.py")
+
+
+# -- round 1 of the bulldozer run: what a board may read, how lines are counted, and long changes -----------------
+
+def test_a_secret_or_an_ignored_file_inside_the_project_is_refused_with_its_reason(repo):
+    (repo / ".gitignore").write_text("build/\n")
+    (repo / ".env").write_text("TOKEN=secret\n")
+    (repo / ".git" / "extra").write_text("x\n")
+    (repo / "build").mkdir()
+    (repo / "build" / "out.js").write_text("a\n")
+    (repo / ".ssh").mkdir()
+    (repo / ".ssh" / "config").write_text("Host x\n")
+    (repo / ".github").mkdir()
+    (repo / ".github" / "ci.yml").write_text("on: push\n")
+    for raw, why in ((".env", "looks like a secret"), (".git/config", "inside a .git folder"), ("build/out.js", "ignored by git"),
+                     (".ssh/config", "looks like a secret"), (str(repo / ".env"), "looks like a secret")):
+        for call in (model.code_source, model.change_source):
+            with pytest.raises(model.SourceError, match=why):
+                call(repo, f"{raw}:1-1" if call is model.code_source else raw)
+    assert model.code_source(repo, ".github/ci.yml:1-1")["lines"] == ["on: push"]  # a hidden folder of code is fine
+
+
+def test_a_path_that_cannot_be_read_is_a_per_board_error_never_an_exception(repo):
+    for raw in ("~nosuchuser_zz/x.py", "a\0b.py", "x" * 5000, "d/" + "n" * 300 + ".py"):
+        for call in (model.code_source, model.change_source):
+            with pytest.raises(model.SourceError, match="not a usable path|outside the project|no such file|no changes"):
+                call(repo, f"{raw}:1-1" if call is model.code_source else raw)
+    with pytest.raises(model.SourceError, match="not a usable path"):
+        model.locate(repo, "~nosuchuser_zz/x.py")
+
+
+def test_lines_are_split_at_a_newline_only_so_a_form_feed_does_not_shift_the_numbers(tmp_path):
+    assert model.split_lines("a\nb\r\nc\n") == ["a", "b", "c"] and model.split_lines("a\x0cb c\n") == ["a\x0cb c"]
+    assert model.split_lines("") == [] and model.split_lines("\n\n") == ["", ""]
+    (tmp_path / "f.py").write_text("one\ntwo \x0c form feed\nthree\nfour\n")
+    src = model.code_source(tmp_path, "f.py:3-4")
+    assert src["lines"] == ["three", "four"] and src["start"] == 3  # splitlines() would make "three" line 4
+
+
+def test_a_change_in_a_repository_nested_in_the_project_is_diffed_in_its_own_not_shown_whole_as_new(repo):
+    inner = repo / "p2" / "sub"
+    inner.mkdir(parents=True)
+    _git(inner, "init", "-q")
+    (inner / "m.py").write_text("".join(f"v{i} = {i}\n" for i in range(1, 11)))
+    _git(inner, "add", ".")
+    _git(inner, "commit", "-q", "-m", "start")
+    (inner / "m.py").write_text((inner / "m.py").read_text().replace("v4 = 4", "v4 = 40"))
+    src = model.change_source(repo, "p2/sub/m.py")
+    assert (src["added"], src["removed"], src["path"]) == (1, 1, "p2/sub/m.py")
+    assert [r["new"] for h in src["hunks"] for r in h["lines"] if r["op"] == "+"] == [4]
+
+
+LONG_DIFF = ("--- a/f\n+++ b/f\n"
+             + "".join(f"@@ -{h * 100},3 +{h * 100},3 @@\n ctx a\n-old {h}\n+new {h}\n ctx b\n" for h in range(1, 41)))
+
+
+def test_a_long_diff_keeps_whole_hunks_counts_only_changed_lines_and_a_hunk_can_be_picked():
+    hunks, added, removed, more, total = model.parse_diff(LONG_DIFF)
+    assert (len(hunks), added, removed, total) == (20, 40, 40, 40)  # 80 lines of 4: twenty whole hunks, none cut in two
+    assert [h["n"] for h in hunks][:3] == [1, 2, 3] and all(len(h["lines"]) == 4 for h in hunks)
+    assert more == 40  # 20 hunks left out, 2 changed lines each: the context lines are not counted
+    picked = model.parse_diff(LONG_DIFF, (30, 31))
+    assert [h["n"] for h in picked[0]] == [30, 31] and picked[3] == 0 and picked[4] == 40
+    one_long = "@@ -1,200 +1,200 @@\n" + "".join(f"-a{i}\n+b{i}\n" for i in range(100))
+    hunks, _, _, more, total = model.parse_diff(one_long)
+    assert (len(hunks), len(hunks[0]["lines"]), more, total) == (1, 80, 120, 1)  # the only hunk is cut, and the rest counted
+
+
+def test_change_source_picks_hunks_and_says_what_a_long_change_leaves_out(repo):
+    (repo / "big.py").write_text("".join(f"line {i}\n" for i in range(1, 401)))
+    _git(repo, "add", "big.py")
+    _git(repo, "commit", "-q", "-m", "big")
+    (repo / "big.py").write_text("".join(f"line {i}{' changed' if i % 20 == 0 else ''}\n" for i in range(1, 401)))
+    src = model.change_source(repo, "big.py")
+    assert (src["hunks_total"], len(src["hunks"]), src["more"]) == (20, 13, 14)
+    assert src["note"] == ("change cut to the first 13 of 20 hunks: 14 changed lines of big.py are not shown; "
+                           "add `hunk N` to the tag to show one")
+    last = model.change_source(repo, "big.py hunks 19-20")
+    assert [h["n"] for h in last["hunks"]] == [19, 20] and "note" not in last and last["more"] == 0
+    with pytest.raises(model.SourceError, match=r"big.py has only 20 hunks, not hunk 21"):
+        model.change_source(repo, "big.py hunk 21")
+
+
+def test_a_code_range_over_the_limit_is_cut_and_says_so_in_a_note(tmp_path):
+    (tmp_path / "f.py").write_text("".join(f"x{i}\n" for i in range(1, 201)))
+    src = model.code_source(tmp_path, "f.py:10-150")
+    assert (src["truncated"], len(src["lines"]), src["start"]) == (True, 60, 10)
+    assert src["note"] == "code cut to lines 10-69 of f.py: at most 60 lines; lines 70-150 are not shown, so name a second range for them"
+    past = model.code_source(tmp_path, "f.py:190-260")
+    assert past["note"] == "code cut at line 200, the end of f.py" and past["truncated"] is False
+    assert "note" not in model.code_source(tmp_path, "f.py:1-10")

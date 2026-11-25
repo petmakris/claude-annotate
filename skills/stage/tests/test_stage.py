@@ -373,3 +373,11 @@ def test_an_unknown_sid_is_never_created(registry):
     with pytest.raises(stage.wc.SlugMismatch, match="no stage session with sid"):
         stage.wc.create_or_attach("stage", "/a", slug=SID)
     assert registry.posts == []
+
+
+def test_cli_show_of_a_long_code_range_says_on_stderr_that_it_was_cut(fake, tmp_path, capsys):
+    (tmp_path / "f.py").write_text("".join(f"x{i}\n" for i in range(1, 101)))
+    assert stage.main(["show", "c", "code:f.py:1-100", "--cwd", str(tmp_path)]) == 0
+    err = capsys.readouterr().err
+    assert err == ("stage: code cut to lines 1-60 of f.py: at most 60 lines; lines 61-100 are not shown, "
+                   "so name a second range for them\n")
