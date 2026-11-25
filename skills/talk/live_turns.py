@@ -129,19 +129,23 @@ class TurnQueue:
     def note_activity(self) -> None:
         self.last_activity = self.clock()
 
-    def accept_reply(self, turn_id: str, final: bool = True) -> str:
-        """'ok', 'answered' (a status after the answer, or a second answer), or 'unknown'."""
+    def reply_state(self, turn_id: str) -> str:
+        """What accept_reply would say, with nothing changed: 'ok', 'answered' or 'unknown'."""
         if turn_id not in self.offered_ids and turn_id not in self.folded_ids:
             return "unknown"
-        if turn_id in self.folded_ids:
-            if final:
-                self.folded_ids.discard(turn_id)
+        if turn_id in self.folded_ids or turn_id in self.open_ids:
             return "ok"
-        if turn_id not in self.open_ids:
-            return "answered"
-        if final:
-            self.open_ids.discard(turn_id)
-        return "ok"
+        return "answered"
+
+    def accept_reply(self, turn_id: str, final: bool = True) -> str:
+        """'ok', 'answered' (a status after the answer, or a second answer), or 'unknown'."""
+        state = self.reply_state(turn_id)
+        if state == "ok" and final:
+            if turn_id in self.folded_ids:
+                self.folded_ids.discard(turn_id)
+            else:
+                self.open_ids.discard(turn_id)
+        return state
 
     @property
     def working(self) -> bool:

@@ -11,6 +11,7 @@ at every seam. While it is made, the page shows a progress bar timed by estimate
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import threading
 import time
@@ -33,6 +34,7 @@ class Spoken:
 
 
 _lock = threading.Lock()
+_choice_lock = threading.Lock()  # one thread chooses the engine, so its key command runs once
 _engine = None
 _key: tuple[str, str] | None = None
 _key_missed_at = float("-inf")
@@ -91,18 +93,24 @@ def engine():
     """The engine module this process uses, chosen once: azure_speech or voicestudio."""
     global _engine
     if _engine is None:
-        choice = os.environ.get("TALK_SPEECH", "").strip().lower()
-        if choice not in ("", "azure", "voicestudio"):
-            raise SpeechError(f"TALK_SPEECH={choice!r}: use azure or voicestudio")
-        if choice == "azure" or (not choice and azure_key()):
-            import azure_speech as chosen
-        else:
-            import voicestudio as chosen
-            if not choice and key_failure:
-                print(f"speech: TALK_AZURE_KEY_COMMAND gave no key ({key_failure}), so this server speaks with "
-                      "VoiceStudio", flush=True)
-        _engine = chosen
+        with _choice_lock:  # a second caller waits for the first one's choice, never runs the key command again
+            if _engine is None:
+                _engine = _choose()
     return _engine
+
+
+def _choose():
+    choice = os.environ.get("TALK_SPEECH", "").strip().lower()
+    if choice not in ("", "azure", "voicestudio"):
+        raise SpeechError(f"TALK_SPEECH={choice!r}: use azure or voicestudio")
+    if choice == "azure" or (not choice and azure_key()):
+        import azure_speech as chosen
+    else:
+        import voicestudio as chosen
+        if not choice and key_failure:
+            print(f"speech: TALK_AZURE_KEY_COMMAND gave no key ({key_failure}), so this server speaks with "
+                  "VoiceStudio", flush=True)
+    return chosen
 
 
 def name(wait: bool = True) -> str:
@@ -124,8 +132,11 @@ def ensure_running(say=print) -> dict:
     return engine().ensure_running(say=say)
 
 
-def voices() -> list[dict]:
-    """The voices a call can switch to, for the page's picker: none when the engine offers no choice."""
+def voices(wait: bool = True) -> list[dict]:
+    """The voices a call can switch to, for the page's picker: none when the engine offers no choice.
+    With wait=False an engine still being chosen gives none, so the call page never stalls the server."""
+    if not wait and _engine is None:
+        return []
     try:
         offered = getattr(engine(), "VOICES", ())
     except SpeechError:
@@ -164,9 +175,25 @@ def _reopened(call):
         return call()
 
 
+RETRY_S = 1.5  # the pause before the one automatic retry of a transient failure
+TRANSIENT = re.compile(r"\b(?:429|5\d\d)\b|too many requests|cannot reach", re.IGNORECASE)
+
+
+def transient(err: Exception) -> bool:
+    """A failure that is likely gone in a moment: rate limited (429), the engine's own fault (5xx), or not reachable."""
+    return bool(TRANSIENT.search(str(err)))
+
+
 def speak(text: str, voice: str, wav: bool = False) -> Spoken:
-    """The whole text read aloud in one request. `wav` asks for a 16 kHz WAV that transcribe() takes."""
-    return _reopened(lambda: engine().speak(text, voice, wav=wav))
+    """The whole text read aloud in one request. `wav` asks for a 16 kHz WAV that transcribe() takes.
+    A transient failure is tried once more after RETRY_S; any other one is final."""
+    try:
+        return _reopened(lambda: engine().speak(text, voice, wav=wav))
+    except SpeechError as err:
+        if not transient(err):
+            raise
+        time.sleep(RETRY_S)
+        return _reopened(lambda: engine().speak(text, voice, wav=wav))
 
 
 def transcribe(audio: bytes, language: str | None = None) -> str:

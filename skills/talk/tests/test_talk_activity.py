@@ -9,7 +9,7 @@ from helpers import SERVER_TOKEN, SKILL_DIR, add_call, run, running_app, running
 
 sys.path.insert(0, str(SKILL_DIR))
 
-from talk_activity import describe  # noqa: E402
+from talk_activity import describe, rings_doorbell  # noqa: E402
 
 HOOK = str(SKILL_DIR / "talk_activity.py")
 
@@ -23,6 +23,9 @@ def write_server(state_path, port, **extra):
     folder = run_dir(state_path) / "servers"
     folder.mkdir(parents=True, exist_ok=True)
     (folder / f"{port}.json").write_text(json.dumps({"port": port, "token": SERVER_TOKEN, **extra}))
+    calls = run_dir(state_path) / "calls"  # an open call: the shim starts python only when one exists
+    calls.mkdir(parents=True, exist_ok=True)
+    (calls / "a-call.json").write_text(json.dumps({"port": port, "token": "t"}))
 
 
 def test_read_names_the_file_and_lines():
@@ -194,3 +197,44 @@ def test_the_session_stopping_finishes_every_tool_still_running(tmp_path):
     assert run_through_hook(tmp_path, event("me", "PreToolUse", "Read", {"file_path": "/x/A.java"}),
                             event("me", "PreToolUse", "Grep", {"pattern": "x"}), stop) \
         == [("Reading A.java", "done"), ('Searching for "x"', "done")]
+
+
+def test_a_command_that_only_mentions_the_doorbell_does_not_set_doorbell():
+    for mention in ("echo talk_client.py doorbell", "grep -rn 'talk_client.py doorbell' .",
+                    "cat talk_client.py doorbell.md", "git log --grep='python3 talk_client.py doorbell'"):
+        assert rings_doorbell(mention) is False, mention
+
+
+def test_a_command_that_starts_the_doorbell_sets_doorbell():
+    for ring in ('python3 "$SKILL_DIR/talk_client.py" doorbell --call="x"', "python3 /x/talk_client.py doorbell",
+                 "python3 '/x/talk_client.py' doorbell --call 'b'", "X=1 env Y=2 python3 /x/talk_client.py doorbell",
+                 "cd /x && python3 talk_client.py doorbell --wait 5", "/x/talk_client.py doorbell"):
+        assert rings_doorbell(ring) is True, ring
+
+
+def test_the_shim_exits_in_sh_without_starting_python_when_no_call_file_exists(tmp_path):
+    state = tmp_path / "state.json"
+    folder = run_dir(state) / "servers"
+    folder.mkdir(parents=True)
+    marker = tmp_path / "ran"
+    script = tmp_path / "talk_activity.py"
+    (folder / "1.json").write_text(json.dumps({"port": 1, "token": "t"}))
+    shim = tmp_path / "hooks" / "talk-activity.sh"
+    shim.parent.mkdir()
+    shim.write_text(Path(SHIM).read_text())
+    script.write_text(f"open({str(marker)!r}, 'w').write('ran')\n")
+    code, output = run(run_shim_at(shim, state, event("me", "PreToolUse", "Read", {"file_path": "/x"})))
+    assert (code, output, marker.exists()) == (0, b"", False)
+    calls = run_dir(state) / "calls"
+    calls.mkdir()
+    (calls / "c.json").write_text("{}")
+    run(run_shim_at(shim, state, event("me", "PreToolUse", "Read", {"file_path": "/x"})))
+    assert marker.read_text() == "ran"
+
+
+async def run_shim_at(shim, state_path, event):
+    proc = await asyncio.create_subprocess_exec(
+        "/bin/sh", str(shim), env={**os.environ, "TALK_RUN_DIR": str(run_dir(state_path))},
+        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    out, err = await asyncio.wait_for(proc.communicate(json.dumps(event).encode()), 10)
+    return proc.returncode, out + err

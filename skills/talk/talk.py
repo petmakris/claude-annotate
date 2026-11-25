@@ -376,6 +376,17 @@ def _split_humps(token: str) -> str:
     return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", token).lower()
 
 
+NO_SENTENCE = ("a board needs a sentence: this reply held only boards or key points and nothing to say, so it was "
+               "not taken as the answer; send it again with the sentence that introduces each board")
+LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def clean_text(text):
+    """Text from outside with each lone surrogate (a half of an emoji cut in two, or bytes decoded
+    badly) replaced by U+FFFD: it cannot be written to the transcript or sent to the speech engine."""
+    return LONE_SURROGATE.sub("\ufffd", text) if isinstance(text, str) else text
+
+
 def speakable(text: str) -> str:
     """Make text safe to hand to a voice: EXTERNAL_ONLY -> 'external only', no markdown."""
     text = re.sub(r"```.*?```", " ", text, flags=re.DOTALL)
@@ -2065,14 +2076,17 @@ class Call:
     # -- the record ---------------------------------------------------------
 
     def add(self, who: str, text: str, **extra) -> dict:
+        """The entry is listed only after the transcript took it, so a failed write leaves nothing
+        half-added (an answer pending forever)."""
+        text = clean_text(text)
+        label = {"you": "You", "claude": "Claude", "status": "Claude, working", "note": "Note",
+                 "board": "On the stage", "system": "Call"}[who]
         with self._add_lock:
             entry = {"id": len(self.entries), "who": who, "text": text, "at": time.time(), **extra}
+            self.record(label, text)
             self.entries.append(entry)
             self.last_turn = entry["at"]
             self.changed()
-        label = {"you": "You", "claude": "Claude", "status": "Claude, working", "note": "Note",
-                 "board": "On the stage", "system": "Call"}[who]
-        self.record(label, text)
         return entry
 
     def record(self, label: str, text: str) -> None:
@@ -2586,8 +2600,11 @@ class Call:
         # One reply at a time, from its split to its entry: two replies at once would interleave their
         # boards and take the same answer number.
         async with self.answer_lock:
+            boards, keys = len(self.board.items), len(self.keys)
             shown = await asyncio.get_running_loop().run_in_executor(self.reply_pool, self.split_reply_safely, text)
             if not shown:
+                if len(self.board.items) > boards or len(self.keys) > keys:
+                    self.board.problem(NO_SENTENCE)
                 return {}
             # Every key the speech thread sets exists already, so a page poll never sees the entry change size.
             entry = self.add("claude", shown, audio=None, speech="pending", cues=self.reply_cues, words=[],
@@ -3007,7 +3024,7 @@ def build_app(server: Server):
             return await gone(request)
         config = {"topic": call.topic, "token": call.token, "call": call.id, "stageUrl": call.stage_url, "demo": call.demo is not None,
                   "language": call.args.language, "languages": list(speech.LANGUAGES),
-                  "engine": speech.name(), "voice": call.voice, "voices": speech.voices()}
+                  "engine": speech.name(wait=False), "voice": call.voice, "voices": speech.voices(wait=False)}
         html = PAGE.replace("__PRECONNECT__", stage_preconnect(call.stage_url)).replace(
             "__CONFIG__", json.dumps(config).replace("</", "<\\/"))
         resp = web.Response(text=html, content_type="text/html", headers={"Cache-Control": "no-store"})
@@ -3173,7 +3190,10 @@ def build_app(server: Server):
         if call.ended:
             return web.json_response({"error": "the call has ended"}, status=410)
         body = await read_json(request)
-        text = str(body.get("text", "")).strip() if isinstance(body, dict) else ""
+        raw = body.get("text", "") if isinstance(body, dict) else ""
+        if not isinstance(raw, str):
+            return web.json_response({"error": "text must be a string"}, status=400)
+        text = clean_text(raw).strip()
         if not text:
             return web.json_response({"error": "nothing to send"}, status=400)
         if server.handing_over:
@@ -3183,6 +3203,29 @@ def build_app(server: Server):
         entry = call.offer(text[:4000], typed=not spoken, answering=answering)
         server.save_state(call)
         return web.json_response({"text": text, "entry": entry})
+
+    async def speak_again(request):
+        """The play button of an answer whose speech failed: read it again, as it was first, in the background."""
+        call = call_of(request)
+        if call is None:
+            return refused(request)
+        if call.ended:
+            return web.json_response({"error": "the call has ended"}, status=410)
+        body = await read_json(request)
+        n = body.get("entry") if isinstance(body, dict) else None
+        if not isinstance(n, int) or isinstance(n, bool) or not 0 <= n < len(call.entries) \
+                or call.entries[n]["who"] != "claude":
+            return web.json_response({"error": "name an answer of Claude's to read again"}, status=404)
+        entry = call.entries[n]
+        if entry.get("speech") in ("pending", "making"):
+            return web.json_response({"ok": True, "speech": entry["speech"]})
+        if entry.get("speech") != "failed":
+            return web.json_response({"error": "this answer was read already"}, status=409)
+        entry.update(speech="pending", speech_started=None, speech_estimate=None)
+        entry.pop("speech_error", None)
+        call.changed()
+        asyncio.get_running_loop().create_task(call.speak(entry))
+        return web.json_response({"ok": True, "speech": "pending"})
 
     async def picked(request):
         """A choice picked on a [[guess]] stop: {answer, i (the stop's place among the answer's stops), choice}."""
@@ -3288,7 +3331,7 @@ def build_app(server: Server):
         body = await read_json(request)
         if not isinstance(body, dict):
             return web.json_response({"error": "a JSON object is required"}, status=400)
-        status, text, end = str(body.get("status", "")).strip(), str(body.get("text", "")), bool(body.get("end"))
+        status, text, end = clean_text(str(body.get("status", ""))).strip(), clean_text(str(body.get("text", ""))), bool(body.get("end"))
         if status and end:
             return web.json_response({"error": "a status cannot end the call; send the wrap-up with end"},
                                      status=400)
@@ -3304,16 +3347,25 @@ def build_app(server: Server):
                 await call.stage_settled()
             call.end("wrapped up by Claude")
             return web.json_response({"ok": True})
+
+        def refused_reply(problems_from: int):
+            """A reply with no sentence is no answer: the turn stays open for the one sent again."""
+            new = call.board.problems[problems_from:]
+            error = next((p for p in new if p == NO_SENTENCE), "nothing to say: the reply has no sentence to show or say")
+            return web.json_response({"error": error, "board_problems": new}, status=400)
+
         if body.get("say"):
             # An answer with no turn: the session puts right an answer that went wrong, or shows what the
             # user asked for in the terminal. It is shown and said like any reply.
             if status:
                 return web.json_response({"error": "say takes an answer, not a status"}, status=400)
             problems_from = len(call.board.problems)
-            await call.answer(text)
+            if not await call.answer(text):
+                return refused_reply(problems_from)
             await call.stage_settled()
             return web.json_response({"ok": True, "board_problems": call.board.problems[problems_from:]})
-        result = call.turns.accept_reply(str(body.get("id", "")), final=not status)
+        turn_id = str(body.get("id", ""))
+        result = call.turns.accept_reply(turn_id, final=False) if status else call.turns.reply_state(turn_id)
         if result == "unknown":
             return web.json_response({"error": "no such turn in this call"}, status=404)
         if status:
@@ -3322,11 +3374,21 @@ def build_app(server: Server):
             call.add("status", status[:120])
             server.save_state(call)
             return web.json_response({"ok": True})
-        if result != "ok":
-            return web.json_response({"ok": True, "ignored": "the turn was already answered; this reply was "
-                                                             "not shown or said again"})
         problems_from = len(call.board.problems)
-        await call.answer(text)
+        if result != "ok":
+            if not end:
+                return web.json_response({"ok": True, "ignored": "the turn was already answered; this reply was "
+                                                                 "not shown or said again"})
+            # The wrap-up of a turn already answered still ends the call, and is said.
+            if text.strip():
+                await call.answer(text)
+                server.save_state(call)
+                await call.stage_settled()
+            call.end("wrapped up by Claude")
+            return web.json_response({"ok": True, "board_problems": call.board.problems[problems_from:]})
+        if not await call.answer(text):
+            return refused_reply(problems_from)  # no answer number is consumed, the turn is still open
+        call.turns.accept_reply(turn_id, final=True)
         server.save_state(call)  # the answer is in the record: a crash now must not lose it
         await call.stage_settled()
         if end:
@@ -3372,6 +3434,7 @@ def build_app(server: Server):
         web.post("/api/listen", listen),
         web.post("/api/say", typed),
         web.post("/api/pick", picked),
+        web.post("/api/speak", speak_again),
         web.post("/api/withdraw", withdraw),
         web.post("/api/demo", demo),
         web.post("/api/floor", floor),

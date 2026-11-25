@@ -4,8 +4,10 @@
 Every command names its call with --call <call id>, the id in the call's link, since one talk server
 holds the calls of every session on this machine. With exactly one call open, --call may be left out.
 
-reply exit codes: 0 sent (or a status for a turn already answered, ignored), 2 refused, unreachable or no
-such turn, 4 the call has ended.
+reply exit codes: 0 sent (or a status, or an answer, for a turn already answered, ignored; a reply --end
+for an answered turn still ends the call), 2 refused (a reply of only boards or key points, with no
+sentence, is refused and the turn stays open), unreachable or no such turn, 4 the call has ended.
+Stdin is read as UTF-8 whatever the locale.
 
 end closes the call when no turn is left to answer (the user asked in the terminal): a wrap-up on stdin is
 said first. say adds an answer with no turn to answer, shown and read aloud like a reply (to put right an
@@ -237,6 +239,18 @@ def send_reply(call_id: str | None, body: dict):
                 raise
 
 
+def read_stdin() -> str:
+    """The answer on stdin, read as UTF-8 whatever the process locale: a POSIX locale would turn Greek
+    into mojibake that is stored and then refused by the speech engine."""
+    reconfigure = getattr(sys.stdin, "reconfigure", None)
+    if reconfigure is not None:
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+    return sys.stdin.read()
+
+
 def reply(call_id: str | None, turn_id: str | None, status_text: str | None, end: bool, say: bool = False) -> int:
     call_id = call_id_or_only(call_id) or call_id
     state = load_state(call_id)
@@ -247,7 +261,7 @@ def reply(call_id: str | None, turn_id: str | None, status_text: str | None, end
     if status_text:
         body["status"] = status_text
     else:
-        body["text"] = "" if turn_id is None and sys.stdin.isatty() else sys.stdin.read()
+        body["text"] = "" if turn_id is None and sys.stdin.isatty() else read_stdin()
     try:
         _, raw = send_reply(call_id, body)
     except LookupError as err:

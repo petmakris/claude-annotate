@@ -17,7 +17,16 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import talk_files  # noqa: E402
 
 # The doorbell's command, with its path quoted or not, and the call it names.
-DOORBELL = re.compile(r"talk_client\.py['\"]?\s+doorbell\b")
+# It must start the script (after an optional env prefix and python3), never merely mention it: an
+# echo, grep or cat of the text is not a session waiting for the call.
+DOORBELL = re.compile(r"""^\s*(?:[A-Za-z_]\w*=\S*\s+)*(?:env\s+(?:[A-Za-z_]\w*=\S*\s+)*)?(?:python3?(?:\.\d+)?\s+)?"""
+                      r"""['"]?\S*talk_client\.py['"]?\s+doorbell\b""")
+SEGMENTS = re.compile(r"&&|\|\||[;|\n]")
+
+
+def rings_doorbell(command: str) -> bool:
+    """True when one command of the line starts `talk_client.py doorbell`."""
+    return any(DOORBELL.search(part) for part in SEGMENTS.split(command))
 CALL_ARG = re.compile(r"--call[= ]+['\"]?([A-Za-z0-9_-]+)")
 HIDDEN = {"ToolSearch", "TodoWrite", "TaskCreate", "TaskUpdate", "TaskList"}
 # Events that end one tool call (it succeeded, failed, or was denied), and events that end them all.
@@ -93,7 +102,7 @@ def main() -> int:
             "phase": phase,
             "tool": tool,
             "label": describe(tool, args) if tool else None,
-            "doorbell": tool == "Bash" and bool(DOORBELL.search(str(args.get("command", "")))),
+            "doorbell": tool == "Bash" and rings_doorbell(str(args.get("command", ""))),
         }
         if body["doorbell"]:
             found = CALL_ARG.search(str(args.get("command", "")))
