@@ -202,7 +202,7 @@ The call page sends your words to the talk server, on port 8766. The talk server
   {"id": "a3", "from": "s", "to": "d", "arrow": "event", "label": "answers the open request", "reply_to": "a1", "note": "25 s a try"}]} [[/show]]
 ```
 
-**A sequence with compare**: before and after, closed with the verdict:
+**A sequence with compare**: before and after, closed with the verdict in speech and a key point (the board takes no `outcome` beside `compare`):
 
 ```
 [[show sequence | Report path]] {"compare": {
@@ -211,9 +211,8 @@ The call page sends your words to the talk server, on port 8766. The talk server
             {"id": "a2", "from": "cl", "to": "rc", "arrow": "request", "label": "sends requests with fixed lists"}]},
  "after": {"label": "with the PR", "actors": [{"id": "svc", "label": "Report service"}, {"id": "sm", "label": "Shared module", "tone": "amber"}, {"id": "rc", "label": "Service"}],
   "steps": [{"id": "a1", "from": "svc", "to": "sm", "arrow": "request", "label": "asks for its data"},
-            {"id": "a2", "from": "sm", "to": "rc", "arrow": "request", "label": "sends requests with the lists it is given"}]}},
- "outcome": {"tone": "amber", "title": "Two teams now share one module", "lines": ["a change there reaches both reports"]}} [[/show]]
-[[point: before]] Before, the service asks the client for its data. [[point: after]] Now the shared module takes its place. [[point: outcome]] The cost is that one change reaches both reports.
+            {"id": "a2", "from": "sm", "to": "rc", "arrow": "request", "label": "sends requests with the lists it is given"}]}}} [[/show]]
+[[point: before]] Before, the service asks the client for its data. [[point: after]] Now the shared module takes its place. The cost is that one change reaches both reports. [[key: two teams now share one module, so a change there reaches both reports]]
 ```
 
 **Bars**: how big, on a scale you can see. One unit for the board, `scale` `log` when the values span powers of ten, and a bar's `note` for a number you say:

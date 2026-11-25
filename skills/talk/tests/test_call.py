@@ -1631,7 +1631,7 @@ def split_text(tmp_path, text, code=None):
 def test_an_unknown_board_kind_with_no_close_swallows_nothing_and_says_so(tmp_path):
     shown, call = split_text(tmp_path, "[[show image: x.png]]\nThis is the first line. And more.\nStill the same paragraph.\n\nNext.")
     assert shown == "This is the first line. And more.\nStill the same paragraph.\n\nNext."
-    assert call.board.problems == ['unknown board kind "image", use code, change, diagram or table; '
+    assert call.board.problems == ['unknown board kind "image", use code, change, sequence, flowchart, map, bars, graph or table; '
                                    "there is no [[/show]] after it, so the text after it was left alone"]
 
 
