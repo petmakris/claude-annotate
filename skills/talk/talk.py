@@ -380,6 +380,15 @@ def _split_humps(token: str) -> str:
 NO_SENTENCE = ("a board needs a sentence: this reply held only boards or key points and nothing to say, so it was "
                "not taken as the answer; send it again with the sentence that introduces each board")
 LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+CANCELLED_TEXT = ("cancelled: the user took this turn back after you collected it, so nothing was shown or said. "
+                  "Stop working on it; if nothing newer is waiting, re-arm the doorbell.")
+SUPERSEDED_STATUS_TEXT = ("superseded: the user replaced this question with a correction (the turn that carries "
+                          "`replaces`). Stop working on it and answer the newer turn after you re-arm the doorbell.")
+SUPERSEDED_TEXT = ("superseded: the user replaced this question with a correction, so your reply is kept in the "
+                   "conversation tagged as replaced and was not read aloud. Answer the newer turn, which the doorbell brings.")
+AMENDED_TEXT = ("superseded: the user added to this question after you collected it, so your reply is kept in the "
+                "conversation tagged as replaced and was not read aloud. The turn they added is waiting: answer it "
+                "with the whole question in mind.")
 
 
 def clean_text(text):
@@ -2023,6 +2032,7 @@ class Call:
         self.demo_at = -1                     # the demo answer played last
         self.demo_starting = False
         self.said_lines: dict[int, dict] = {}  # entry id -> its line in the turn queue, to take it back
+        self.turn_of: dict[int, str] = {}  # entry id -> the turn id its line was offered in (TurnQueue.resolve follows merges)
         self.filler: str | None = None        # "audio/filler.<ext>": "One moment." in this call's voice
         self.filler_making = False
         self.transcript = out_dir / "transcript.md"
@@ -2092,6 +2102,7 @@ class Call:
                 "keys": list(self.keys), "board": list(self.board.items), "heard_upto": self.heard_upto,
                 "demo": self.demo_at if self.demo is not None else None,
                 "picks": list(self.picks), "said_lines": [[k, v] for k, v in self.said_lines.items()],
+                "turn_of": [[k, v] for k, v in self.turn_of.items()],
                 "live_held": ({"text": self.live_held["text"], "interrupted": self.live_held["interrupted"]}
                               if self.live_held else None),
                 "ended": self.ended, "ended_at": self.ended_at}
@@ -2128,6 +2139,7 @@ class Call:
         call.heard_upto = int(state.get("heard_upto", -1))
         call.picks = list(state.get("picks") or [])
         call.said_lines = {int(k): v for k, v in state.get("said_lines") or []}
+        call.turn_of = {int(k): str(v) for k, v in state.get("turn_of") or []}
         call.live_revive = state.get("live_held") or None
         if state.get("ended"):
             call.ended, call.ended_at = str(state["ended"]), float(state.get("ended_at") or time.time())
@@ -2188,15 +2200,22 @@ class Call:
     # -- turns --------------------------------------------------------------
 
     def offer(self, text: str, typed: bool, interrupted: dict | None = None, live: bool = False,
-              answering: str | None = None) -> dict:
+              answering: str | None = None, replaces: int | None = None) -> dict:
         """What the user said becomes a turn. `answering`: the [[say back]] question it answers. The
-        guesses picked since the last turn go with it (`picks`), so Claude knows what they guessed."""
+        guesses picked since the last turn go with it (`picks`), so Claude knows what they guessed.
+        `replaces`: the entry of a question still in flight that this is a correction of (see `replace`): the
+        question is set aside, and the session is told to answer this one alone."""
         self.turn_count += 1
         extra = {"interrupted": interrupted} if interrupted else {}
         if answering:
             extra["answering"] = answering
+        replaced = self.replace(replaces) if replaces is not None else None
+        if replaced:
+            extra["replaces"] = replaces
         entry = self.add("you", text, typed=typed, **extra)
-        said = {"who": "you", "text": text, **extra}
+        said = {"who": "you", "text": text, **{k: v for k, v in extra.items() if k != "replaces"}}
+        if replaced and replaced["turn"]:
+            said["replaces"] = replaced["turn"]  # the session had it: it is told which turn to drop
         if self.picks:
             said["picks"], self.picks = self.picks, []
         if self.turns.working:  # said while Claude works on the last turn: an addition to it, not a new question
@@ -2205,6 +2224,7 @@ class Call:
         if self.demo is not None:  # no Claude session: what is said picks the demo's next answer
             asyncio.get_running_loop().create_task(self.demo_play(demo_move(text, self.demo_at, len(self.demo))))
             return entry
+        self.turn_of[entry["id"]] = f"t{self.turn_count}"
         self.turns.offer(f"t{self.turn_count}", [said])
         if live:
             self.want_filler()
@@ -2244,6 +2264,88 @@ class Call:
             return True
         last = next((e for e in reversed(self.entries) if e["who"] == "you" and not e.get("withdrawn")), None)
         return last is not None and self.withdraw(last["id"])
+
+    # -- a turn's life: in flight, taken back, replaced ----------------------
+
+    def you_entry(self, entry_id) -> dict | None:
+        entry = self.entries[entry_id] if isinstance(entry_id, int) and not isinstance(entry_id, bool) \
+            and 0 <= entry_id < len(self.entries) else None
+        return entry if entry and entry["who"] == "you" else None
+
+    def turn_state(self, entry: dict) -> str | None:
+        """Where what the user said stands: 'sent' (no doorbell has collected it), 'picked' (the session has it, no
+        answer yet), or None (answered, taken back, replaced, or a line of no turn, as a demo's)."""
+        if entry.get("withdrawn") or entry.get("cancelled") or entry.get("superseded"):
+            return None
+        turn = self.turn_of.get(entry["id"])
+        state = self.turns.state_of(turn) if turn else None
+        return {"pending": "sent", "open": "picked", "folded": "picked"}.get(state)
+
+    def entries_of_turn(self, turn: str) -> list[dict]:
+        turn = self.turns.resolve(turn)
+        return [e for i, t in self.turn_of.items() if self.turns.resolve(t) == turn and (e := self.you_entry(i))]
+
+    def mark(self, entries: list[dict], **fields) -> None:
+        for entry in entries:
+            entry.update(fields)
+        self.changed()
+
+    def replace(self, entry_id) -> dict | None:
+        """A correction of a question still in flight sets the question aside. Not collected yet: its line is taken
+        back, the session never sees it. Collected: it is superseded, and the session is told by the correction's own
+        line (`replaces`) and by its reply, which is kept and shown but never spoken. Returns {"turn": the collected
+        turn's id or None}, or None when there is nothing to replace (answered, taken back, no such question)."""
+        entry = self.you_entry(entry_id)
+        state = self.turn_state(entry) if entry else None
+        if state == "sent":
+            if not self.withdraw(entry_id):
+                return None
+            self.mark([entry], superseded=True)
+            return {"turn": None}
+        if state == "picked":
+            turn = self.turns.resolve(self.turn_of[entry_id])
+            members = self.entries_of_turn(turn)
+            if not self.turns.supersede(turn):
+                return None
+            self.mark(members, superseded=True)
+            return {"turn": turn}
+        return None
+
+    def cancel(self, entry_id) -> dict:
+        """Take back a question in flight. Not collected: as `withdraw`. Collected: the turn stops counting as working,
+        what was added to it while Claude worked is taken back with it, and the session learns of it from its reply
+        or its next doorbell. {"cancelled": bool, "how": "withdrawn" | "cancelled", "entries": [ids]}."""
+        entry = self.you_entry(entry_id)
+        state = self.turn_state(entry) if entry else None
+        if state == "sent":
+            return {"cancelled": self.withdraw(entry_id), "how": "withdrawn", "entries": [entry_id]}
+        if state != "picked":
+            return {"cancelled": False}
+        turn = self.turns.resolve(self.turn_of[entry_id])
+        members = self.entries_of_turn(turn)
+        if not self.turns.cancel(turn):
+            return {"cancelled": False}
+        self.mark(members, cancelled=True, withdrawn=True)
+        taken = [e["id"] for e in members]
+        for other in list(self.entries):  # an addition said while Claude worked on it goes with it
+            if other["who"] == "you" and self.turn_state(other) == "sent" and (self.said_lines.get(other["id"]) or {}).get("while_working"):
+                if self.withdraw(other["id"]):
+                    self.mark([other], cancelled=True)
+                    taken.append(other["id"])
+        return {"cancelled": True, "how": "cancelled", "entries": taken}
+
+    def turn_view(self) -> dict:
+        """What the wait card reads: the you entries in flight with where each stands, when the session collected the
+        turn and when it last showed a sign of life (wall-clock seconds), and how many replaced turns it is still busy with."""
+        flight = [{"id": e["id"], "state": st} for e in self.entries if e["who"] == "you" and (st := self.turn_state(e))]
+
+        def wall(t: float):
+            return None if t == float("-inf") else time.time() - (self.turns.clock() - t)
+
+        picked = any(f["state"] == "picked" for f in flight)
+        return {"entries": flight, "earlier": len(self.turns.stale_ids),
+                "collected_at": wall(self.turns.collected_at) if picked else None,
+                "alive_at": wall(max(self.turns.collected_at, self.turns.last_activity)) if picked else None}
 
     def live_join(self, text: str, interrupted: dict | None) -> tuple[str, dict | None]:
         """What was said, after the thought it finishes, if one was left hanging."""
@@ -2671,8 +2773,12 @@ class Call:
 
         self.stage_pending.append(self.stage_pool.submit(show))
 
-    async def answer(self, text: str) -> dict:
-        """Show an answer at once, then read it aloud in the background."""
+    async def answer(self, text: str, superseded: str | None = None) -> dict:
+        """Show an answer at once, then read it aloud in the background. `superseded`: the answer to a turn the user
+        has since replaced ("correction") or added to ("addition"): its words are kept in the conversation with the
+        tag, never read aloud and no board of it goes on the stage, so it cannot speak over the newer answer."""
+        if superseded:
+            return await self.answer_unspoken(text, superseded)
         # Off the loop: a change tag reads git, and the page's polls and audio must not wait for it.
         # One reply at a time, from its split to its entry: two replies at once would interleave their
         # boards and take the same answer number.
@@ -2689,6 +2795,19 @@ class Call:
                              starts=sentence_starts(shown))  # where each sentence after the first begins: the page reads these
         asyncio.get_running_loop().create_task(self.speak(entry))
         return entry
+
+    async def answer_unspoken(self, text: str, kind: str) -> dict:
+        """An answer kept but not spoken: the markers are taken out (no board reaches the stage, no key point is
+        kept), the words stay. Its speech is `skipped` until the reader asks for it (/api/speak). {} when no
+        sentence is left, as `answer` does."""
+        text = re.sub(r"\[\[\s*show\b(?:(?!\[\[\s*/\s*show\s*\]\]).)*\[\[\s*/\s*show\s*\]\]", "", clean_text(text),
+                      flags=re.IGNORECASE | re.DOTALL)
+        shown = re.sub(r"[ \t]{2,}", " ", plain_shown(re.sub(r"\[\[[^\[\]]*\]\]", "", text))).strip()
+        if not shown:
+            return {}
+        async with self.answer_lock:
+            return self.add("claude", shown, audio=None, speech="skipped", cues=[], words=[], speech_started=None,
+                            speech_estimate=None, starts=sentence_starts(shown), superseded=True, superseded_kind=kind)
 
     async def speak(self, entry: dict) -> None:
         """Read the whole answer in one request, so it plays without a pause or a click between
@@ -2810,7 +2929,7 @@ class Call:
     def view(self) -> dict:
         return {"v": self.version, "entries": self.entries, "working": self.turns.working,
                 "stalled": self.turns.stalled, "listening": self.turns.listening, "activity": self.activity_view() if self.turns.working else [],
-                "ended": self.ended, "heard_upto": self.heard_upto, "filler": self.filler}
+                "turn": self.turn_view(), "ended": self.ended, "heard_upto": self.heard_upto, "filler": self.filler}
 
 
 # ---------------------------------------------------------------------------
@@ -3260,6 +3379,20 @@ def build_app(server: Server):
             return web.json_response({"error": "name the entry to take back"}, status=400)
         return web.json_response({"withdrawn": call.withdraw(entry)})
 
+    async def cancel(request):
+        """Take back a question that is in flight: not collected, as /api/withdraw; collected, the turn is cancelled
+        and the session is told. {"entry": the you entry's id}."""
+        call = call_of(request)
+        if call is None:
+            return refused(request)
+        body = await read_json(request) if request.can_read_body else {}
+        entry = body.get("entry") if isinstance(body, dict) else None
+        if not isinstance(entry, int) or isinstance(entry, bool):
+            return web.json_response({"error": "name the entry to take back"}, status=400)
+        done = call.cancel(entry)
+        server.save_state(call)
+        return web.json_response(done)
+
     async def typed(request):
         call = call_of(request)
         if call is None:
@@ -3277,9 +3410,12 @@ def build_app(server: Server):
             return web.json_response({"error": "the talk server is restarting; try again in a moment"}, status=503)
         spoken = isinstance(body, dict) and body.get("spoken") is True  # said with Talk, then checked in the field
         answering = str(body.get("answering") or "").strip()[:400] or None  # the [[say back]] question it answers
-        entry = call.offer(text[:4000], typed=not spoken, answering=answering)
+        replaces = body.get("replaces") if isinstance(body, dict) else None
+        if replaces is not None and (not isinstance(replaces, int) or isinstance(replaces, bool)):
+            return web.json_response({"error": "replaces names the entry of the question to replace"}, status=400)
+        entry = call.offer(text[:4000], typed=not spoken, answering=answering, replaces=replaces)
         server.save_state(call)
-        return web.json_response({"text": text, "entry": entry})
+        return web.json_response({"text": text, "entry": entry, **({"replaced": "replaces" in entry} if replaces is not None else {})})
 
     async def speak_again(request):
         """The play button of an answer whose speech failed: read it again, as it was first, in the background."""
@@ -3296,7 +3432,7 @@ def build_app(server: Server):
         entry = call.entries[n]
         if entry.get("speech") in ("pending", "making"):
             return web.json_response({"ok": True, "speech": entry["speech"]})
-        if entry.get("speech") != "failed":
+        if entry.get("speech") not in ("failed", "skipped"):  # skipped: a replaced answer, read when the reader asks
             return web.json_response({"error": "this answer was read already"}, status=409)
         entry.update(speech="pending", speech_started=None, speech_estimate=None)
         entry.pop("speech_error", None)
@@ -3445,14 +3581,22 @@ def build_app(server: Server):
         result = call.turns.accept_reply(turn_id, final=False) if status else call.turns.reply_state(turn_id)
         if result == "unknown":
             return web.json_response({"error": "no such turn in this call"}, status=404)
+        if result == "cancelled" and (status or not end):
+            # The user took this turn back after it was collected: told, never shown or said. Nothing is dropped
+            # unseen: the session learns it here and stops.
+            call.turns.accept_reply(turn_id, final=not status)
+            server.save_state(call)
+            return web.json_response({"ok": True, "cancelled": True, "ignored": CANCELLED_TEXT})
         if status:
+            if result == "superseded":
+                return web.json_response({"ok": True, "superseded": True, "ignored": SUPERSEDED_STATUS_TEXT})
             if result != "ok":
                 return web.json_response({"ok": True, "ignored": "the turn was already answered; status not shown"})
             call.add("status", status[:120])
             server.save_state(call)
             return web.json_response({"ok": True})
         problems_from = len(call.board.problems)
-        if result != "ok":
+        if result in ("answered", "cancelled"):
             if not end:
                 return web.json_response({"ok": True, "ignored": "the turn was already answered; this reply was "
                                                                  "not shown or said again"})
@@ -3463,10 +3607,27 @@ def build_app(server: Server):
                 await call.stage_settled()
             call.end("wrapped up by Claude")
             return web.json_response({"ok": True, "board_problems": call.board.problems[problems_from:]})
-        if not await call.answer(text):
+        if result == "superseded":
+            # The user replaced this question while it was being worked on: the reply is kept with its tag, never
+            # spoken. A reply with no sentence is refused as any is, and consumes no answer number.
+            if not await call.answer(text, superseded="correction"):
+                return refused_reply(problems_from)
+            call.turns.accept_reply(turn_id, final=True)
+            server.save_state(call)
+            if end:
+                call.end("wrapped up by Claude")
+            return web.json_response({"ok": True, "superseded": True, "note": SUPERSEDED_TEXT})
+        # A turn the user has added to since (said while Claude worked, not collected yet) is answered, but the
+        # answer is to the question as it was: it is kept and never spoken, and the next answer covers the addition.
+        amended = "addition" if call.turns.pending_id and call.turns.pending_id != turn_id else None
+        if not await call.answer(text, superseded=amended):
             return refused_reply(problems_from)  # no answer number is consumed, the turn is still open
         call.turns.accept_reply(turn_id, final=True)
         server.save_state(call)  # the answer is in the record: a crash now must not lose it
+        if amended:
+            if end:
+                call.end("wrapped up by Claude")
+            return web.json_response({"ok": True, "superseded": True, "note": AMENDED_TEXT})
         await call.stage_settled()
         if end:
             call.end("wrapped up by Claude")
@@ -3513,6 +3674,7 @@ def build_app(server: Server):
         web.post("/api/pick", picked),
         web.post("/api/speak", speak_again),
         web.post("/api/withdraw", withdraw),
+        web.post("/api/cancel", cancel),
         web.post("/api/demo", demo),
         web.post("/api/floor", floor),
         web.post("/api/player", player),

@@ -4,6 +4,12 @@
 Every command names its call with --call <call id>, the id in the call's link, since one talk server
 holds the calls of every session on this machine. With exactly one call open, --call may be left out.
 
+A turn the user takes back after the session collected it is a cancelled turn: the doorbell prints a
+TALK_CANCELLED line (or a `cancelled` list in the TALK_TURN it brings), and a reply for it prints
+`cancelled:` and shows nothing. A turn the user replaced with a correction is a superseded turn: the
+correction's own line carries `replaces`, a status for the old one prints `superseded:` and a reply is kept
+in the conversation, tagged as replaced and never read aloud (it prints `sent` and a `superseded:` line).
+
 reply exit codes: 0 sent (or a status, or an answer, for a turn already answered, ignored; a reply --end
 for an answered turn still ends the call), 2 refused (a reply of only boards or key points, with no
 sentence, is refused and the turn stays open), unreachable or no such turn, 4 the call has ended.
@@ -212,7 +218,7 @@ def doorbell(call_id: str | None, wait: float) -> int:
             continue
         try:
             event = json.loads(raw)
-            kind = "TALK_END" if event.pop("type") == "end" else "TALK_TURN"
+            kind = {"end": "TALK_END", "cancelled": "TALK_CANCELLED"}.get(event.pop("type"), "TALK_TURN")
         except (ValueError, KeyError, AttributeError, TypeError):
             return emit_lost("the talk server's answer was not a turn (not JSON)")
         emit(kind, event)
@@ -299,10 +305,18 @@ def reply(call_id: str | None, turn_id: str | None, status_text: str | None, end
     except (ValueError, AttributeError):
         print("sent, but talk's answer was not JSON; do not resend it: it is probably being shown", file=sys.stderr)
         return 2
+    if result.get("cancelled"):
+        print(result["ignored"])
+        return 0
+    if result.get("superseded") and result.get("ignored"):
+        print(result["ignored"])
+        return 0
     if result.get("ignored"):
         print(f"ignored: {result['ignored']}")
         return 0
     print("ended: re-arm once to collect the TALK_END" if turn_id is None and not say else "sent")
+    if result.get("superseded"):
+        print(result.get("note") or "superseded: this question was replaced; the reply was not read aloud")
     for problem in result.get("board_problems", []):
         print(f"board: {problem}")
     return 0

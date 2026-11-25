@@ -218,6 +218,8 @@ def test_reply_to_a_turn_merged_into_a_newer_one_says_no_such_turn(tmp_path):
 
 
 def test_a_reply_to_an_earlier_turn_is_still_shown_after_a_newer_one_arrives(tmp_path):
+    """Shown, but tagged and not read aloud: the user said more after the session collected the turn, so the
+    answer is to the question as it was (the client says so after `sent`)."""
     state = tmp_path / "state.json"
 
     async def go():
@@ -227,11 +229,11 @@ def test_a_reply_to_an_earlier_turn_is_still_shown_after_a_newer_one_arrives(tmp
             await ctl.turns.next(timeout=1)
             ctl.turns.offer("d2", [{"who": "you", "text": "two"}])
             proc = await client_proc(state, "reply", "d1")
-            return await finish(proc, "The first answer."), spoken(ctl)
+            return await finish(proc, "The first answer."), spoken(ctl), [e.get("superseded_kind") for e in ctl.entries if e["who"] == "claude"]
 
-    (code, out, _), said = run(go())
-    assert code == 0 and out.strip() == "sent"
-    assert said == ["The first answer."]
+    (code, out, _), said, kinds = run(go())
+    assert code == 0 and out.splitlines()[0] == "sent" and out.splitlines()[1].startswith("superseded: the user added to this question")
+    assert said == ["The first answer."] and kinds == ["addition"]
 
 
 def test_reply_status_does_not_read_stdin(tmp_path):
