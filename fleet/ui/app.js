@@ -1071,7 +1071,7 @@ function renderCard() {
       fact("Started", r.started ? when(r.started) : ""), fact("Last seen", r.last_seen ? when(r.last_seen) : ""),
       fact("Held to-dos", r.held.length ? r.held.join(", ") : ""), fact("Unanswered", r.unanswered.length ? r.unanswered.length + " in For you" : ""),
       fact("Also on", (r.copies || []).join(", ")), fact("Ended", r.ended ? when(r.ended) + (r.end_reason ? " (" + r.end_reason + ")" : "") : ""), fact("Id", r.id)),
-    hiddenRow(r) || !r.about ? null : el("div", { class: "s-about" }, el("h4", {}, "First prompt"), el("p", {}, r.about)),
+    hiddenRow(r) || !r.about ? "" : el("div", { class: "s-about" }, el("h4", {}, "First prompt"), el("p", {}, r.about)),
     el("div", { class: "s-card-acts" }, sel,
       sbtn("terminal", "Open", (b) => openSession(r, b), { cls: "primary big", disabled: stale }),
       sbtn("log-out", "Wrap up", () => sAct("/api/sessions/stop", { key: r.key }, "Asked " + label(r) + " to wrap up."), { cls: "big", confirm: true, disabled: !canWrap(r), title: wrapWhy(r) }),
