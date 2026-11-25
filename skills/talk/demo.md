@@ -7,7 +7,7 @@ to the repository root.
 -->
 Welcome to the stage demo. The stage reads each answer with you, the word being said lit, like these words now. Every board the stage can show comes past in turn, explained the way a call explains it, so you can see each one move with the voice. [[key: say next for the next board, again to replay one, back to go back]] Say next, or type it, whenever you are ready for the next board. [[key: the stage follows the voice until you take it in hand]] If you pick a board yourself, it stays in front whatever you play, until you press Follow the voice at the top of the stage or the next answer starts.
 ---
-[[show code: skills/talk/live_turns.py:33-53 | How a turn waits]] This is real code from talk: the turn queue. [[point: lines 33-41]] When you send something, offer puts it in the queue, and a turn sent before Claude collects the last one is merged into it. [[point: lines 43-53]] Withdraw takes a line back again, but only while no doorbell has collected it. [[key: a code board lights the lines being talked about]] Say next to see a change.
+[[show code: skills/talk/live_turns.py:33-53 | How a turn waits]] This is the turn queue, the code that keeps what you say until Claude collects it. [[point: lines 33-41]] When you send something, offer puts it in the queue, and a turn sent before Claude collects the last one is merged into it. [[point: lines 43-53]] Withdraw takes a line back again, but only while Claude has not collected it. [[key: a code board lights the lines being talked about]] Say next to see a change.
 ---
 [[show change: skills/stage/static/scene.js since 352ef9d | Cells and the current one]] A change board shows a file against an older version, here the last edit to the stage's scene engine. [[point: old line 18]] A table used to key only its rows. [[point: lines 18-21]] Now every table cell gets a key of its own, so a single cell can be pointed at. [[point: lines 96-99]] And this new function reads which thing is being said from the frame itself, so the page never has to guess it. [[key: a change board shows what an edit did, line by line]] Next is a sequence.
 ---
@@ -15,22 +15,22 @@ Welcome to the stage demo. The stage reads each answer with you, the word being 
  "legend": [{"tone": "edge", "label": "the browser"}, {"tone": "internal", "label": "talk.py"}, {"tone": "service", "label": "Azure"}],
  "phases": [{"id": "h", "label": "HEAR", "start_at": "s1"}, {"id": "k", "label": "THINK", "start_at": "s4"}, {"id": "v", "label": "SPEAK", "start_at": "s7"}],
  "steps": [
-  {"id": "s1", "from": "p", "to": "t", "arrow": "request", "tone": "edge", "label": "sends what you said as a WAV", "sub": "POST /api/listen"},
+  {"id": "s1", "from": "p", "to": "t", "arrow": "request", "tone": "edge", "label": "sends what you said as a recording", "sub": "POST /api/listen"},
   {"id": "s2", "from": "t", "to": "a", "arrow": "request", "tone": "service", "label": "turns the recording into words", "sub": "speech.transcribe"},
   {"id": "s3", "from": "a", "to": "t", "arrow": "event", "tone": "service", "label": "returns the words it heard"},
-  {"id": "s4", "from": "c", "to": "t", "arrow": "request", "label": "the doorbell collects the turn", "sub": "talk_client.py doorbell"},
+  {"id": "s4", "from": "c", "to": "t", "arrow": "request", "label": "collects the turn", "sub": "talk_client.py doorbell, Claude's waiting command"},
   {"id": "s5", "from": "c", "to": "c", "arrow": "self", "label": "reads the code and writes the answer"},
   {"id": "s6", "from": "c", "to": "t", "arrow": "request", "label": "sends the answer and its boards", "sub": "talk_client.py reply"},
   {"id": "s7", "from": "t", "to": "a", "arrow": "request", "tone": "service", "label": "reads the whole answer aloud", "sub": "speech.speak"},
   {"id": "s8", "from": "t", "to": "p", "arrow": "event", "tone": "edge", "label": "the answer is ready on the next poll", "sub": "GET /api/state"}]} [[/show]]
-A sequence comes in a step at a time, here the path of one turn. When you stop talking, the call page sends what you said to the talk server. The server hands the recording to Azure, which turns it into words. Azure sends back the words it heard. Your Claude session collects the turn on its doorbell. It reads the code and writes the answer. Then it sends the answer and its boards back. The server has Azure read the whole answer aloud. And the answer is ready for the page on its next poll. [[point: step s5]] The slow part is always this one: Claude reading and writing. [[key: a sequence shows the step being said large, the rest as lines]] Next is a wait.
+A sequence comes in a step at a time, here the path of one turn. When you stop talking, the call page sends what you said to the talk server. The server hands the recording to Azure, which turns it into words. Azure sends back the words it heard. Your Claude session collects the turn. It reads the code and writes the answer. Then it sends the answer and its boards back. The server has Azure read the whole answer aloud. And the answer is ready for the page on its next poll. [[point: step s5]] The slow part is always this one: Claude reading and writing. [[key: a sequence shows the step being said large, the rest as lines]] Next is a wait.
 ---
-[[show sequence | The doorbell waits]] {"actors": [{"id": "d", "label": "Doorbell", "sub": "talk_client.py"}, {"id": "s", "label": "Talk server", "sub": "talk.py"}, {"id": "p", "label": "Call page"}],
+[[show sequence | Claude waits for a turn]] {"actors": [{"id": "d", "label": "Claude waits for the turn", "sub": "talk_client.py"}, {"id": "s", "label": "Talk server", "sub": "talk.py"}, {"id": "p", "label": "Call page"}],
  "steps": [
   {"id": "w1", "from": "d", "to": "s", "arrow": "request", "label": "asks for the next turn", "sub": "GET /api/turn", "note": "25 s a try"},
   {"id": "w2", "from": "p", "to": "s", "arrow": "request", "label": "sends what you said", "sub": "POST /api/say"},
   {"id": "w3", "from": "s", "to": "d", "arrow": "event", "label": "answers the open request with your turn", "reply_to": "w1"}]} [[/show]]
-A wait is a request that stays open. The doorbell asks the server for the next turn, and the server holds that request for up to 25 seconds, so a bar stays open on the server. Nothing is pushed to the doorbell. When you send something, the server answers the open request with your turn. [[point: step w3]] The reply closes the bar. [[key: a wait is a request held open until its reply]] Next is a before and after.
+A wait is a request that stays open. Here, Claude asks the server for the next turn, and the server holds that request for up to 25 seconds, so a bar stays open on the server. Nothing is pushed to Claude. When you send something, the server answers the open request with your turn. [[point: step w3]] The reply closes the bar. [[key: a wait is a request held open until its reply]] Next is a before and after.
 ---
 [[show sequence | Backtesting before and after]] {"title": "A shared module takes the Service client's place",
  "compare": {
@@ -61,7 +61,7 @@ A wait is a request that stays open. The doorbell asks the server for the next t
 A before and after sequence puts the two flows side by side, row for row, so you compare their shape instead of working it out yourself. [[point: before]] On master, the proposal report asks for the backtest. The report service asks the Service client in PMP's module for the backtest data. The client builds the requests with fixed lists, always quarterly. It asks Service for the ex-post measures. Then it requests the backtest series. And it returns report timeseries. [[point: after]] With the PR, a shared backtesting module takes the client's place. The service passes quarterly and its own measures down. The module builds the requests with the lists it is given, and returns raw values. The report service builds the report timeseries itself, the one row the old flow has no step for. [[point: both]] The Service requests are the same on both sides. [[point: outcome]] The cost is that one module now serves two teams. [[key: a before and after board sets the two flows side by side, with a gap where one has no step]] Next is a map of connected parts.
 ---
 [[show flowchart | How talk's parts connect]] {"nodes": [{"id": "page", "role": "entry", "label": "Call page", "ref": "call.html · call.js", "sub": "your microphone, the conversation, the controls"},
-  {"id": "launchd", "role": "code", "label": "launchd", "ref": "dev.talk", "sub": "keeps the server running, with the speech settings"},
+  {"id": "launchd", "role": "code", "label": "Launch service", "ref": "the launch service", "sub": "keeps the server running, with the speech settings"},
   {"id": "talk", "role": "code", "label": "Talk server", "ref": "talk.py", "sub": "holds every call, one server per machine"},
   {"id": "azure", "role": "call", "label": "Azure speech", "method": "speech to text · text to speech"},
   {"id": "claude", "role": "code", "label": "Claude session", "ref": "talk_client.py", "sub": "answers with its full history and tools"},
@@ -69,7 +69,7 @@ A before and after sequence puts the two flows side by side, row for row, so you
  "edges": [{"from": "page", "to": "talk", "label": "your words · polls"}, {"from": "launchd", "to": "talk", "label": "starts it"},
   {"from": "talk", "to": "azure", "label": "text ⇄ speech"}, {"from": "talk", "to": "claude", "label": "turns"},
   {"from": "talk", "to": "stage", "label": "boards"}]} [[/show]]
-A map shows how parts connect, all of it faint at first. [[+ page]] Everything starts in the call page, in your browser. [[+ talk]] It talks to one talk server on this Mac. [[+ launchd]] launchd keeps that server running. [[+ azure]] The server sends your words to Azure, and gets each answer's voice back. [[+ claude]] Your Claude session collects turns from it. [[+ stage]] And the boards go to the stage, which the webcompanion daemon serves. [[point: node talk]] The talk server is the one part everything else goes through. [[key: a map is faint at first and lights part by part]] Next is an architecture map.
+A map shows how parts connect, all of it faint at first. [[+ page]] Everything starts in the call page, in your browser. [[+ talk]] It talks to one talk server on this Mac. [[+ launchd]] The launch service keeps that server running. [[+ azure]] The server sends your words to Azure, and gets each answer's voice back. [[+ claude]] Your Claude session collects turns from it. [[+ stage]] And the boards go to the stage, which the webcompanion daemon serves. [[point: node talk]] The talk server is the one part everything else goes through. [[key: a map is faint at first and lights part by part]] Next is an architecture map.
 ---
 [[show map | Where talk's parts live]] {"title": "One talk server sits between the page, Claude and the speech service",
  "columns": ["Your browser", "This Mac", "Outside talk"],
@@ -83,17 +83,17 @@ A map shows how parts connect, all of it faint at first. [[+ page]] Everything s
   {"from": "talk", "to": "azure", "tone": "amber", "b": 3}, {"from": "talk", "to": "stage", "label": "boards", "b": 4},
   {"from": "page", "to": "azure", "tone": "red", "dash": true, "label": "never", "b": 4},
   {"layer": "route", "from": "page", "to": "talk", "n": 1, "r": 1, "label": "sends your words"},
-  {"layer": "route", "from": "talk", "to": "claude", "tone": "blue", "n": 2, "r": 2, "label": "the doorbell wakes Claude"},
+  {"layer": "route", "from": "talk", "to": "claude", "tone": "blue", "n": 2, "r": 2, "label": "the waiting command wakes Claude"},
   {"layer": "route", "from": "talk", "to": "azure", "tone": "amber", "n": 3, "r": 3, "label": "reads the answer aloud"},
   {"layer": "route", "from": "talk", "to": "stage", "n": 4, "r": 4, "label": "puts up the boards"}]} [[/show]]
-An architecture map puts each part where it lives. The call page runs in your browser tab. It talks to one talk server on this Mac, on port 8766. The server reaches your Claude session, and Azure speech outside. The stage shows the boards. The page never talks to Azure itself: the dashed red arrow says never. [[key: a map is built up part by part, then follows one request]] [[point: box talk]] Everything goes through this one server, so now follow one turn. The page sends your words. The doorbell wakes Claude. Azure reads the answer aloud. And the server puts up the boards. Next is a bars board.
+An architecture map puts each part where it lives. The call page runs in your browser tab. It talks to one talk server on this Mac, on port 8766. The server reaches your Claude session, and Azure speech outside. The stage shows the boards. The page never talks to Azure itself: the dashed red arrow says never. [[key: a map is built up part by part, then follows one request]] [[point: box talk]] Everything goes through this one server, so now follow one turn. The page sends your words. The waiting command wakes Claude. Azure reads the answer aloud. And the server puts up the boards. Next is a bars board.
 ---
 [[show bars | How long talk waits]] {"title": "From under a second to an hour", "unit": "s", "scale": "log",
  "bars": [{"id": "pause", "label": "The shortest live pause", "value": 0.8, "note": "before what you said is sent"},
   {"id": "long", "label": "The longest live pause", "value": 2},
   {"id": "server", "label": "A restarted server", "value": 90, "note": "the client waits this long for it", "tone": "amber"},
-  {"id": "idle", "label": "A silent call", "value": 3600, "note": "an hour with no turn and no doorbell ends it", "tone": "red"}]} [[/show]]
-A bars board is for how much, how long or how many, so you see the size and not only the number. These are talk's waits, from under a second to an hour, on a log scale: each tick is ten times the one before. [[point: bar pause]] In live mode the shortest pause before your words are sent is 0.8 seconds. [[point: bar long]] The longest is 2 seconds. [[point: bar server]] The client waits up to 90 seconds for a restarted server. [[point: rows 3-4]] And a silent call with no doorbell ends after an hour, over a thousand times the shortest pause. [[key: bars show how much, with the scale on the board]] Next is a graph.
+  {"id": "idle", "label": "A silent call", "value": 3600, "note": "an hour with no turn and no waiting command ends it", "tone": "red"}]} [[/show]]
+A bars board is for how much, how long or how many, so you see the size and not only the number. These are talk's waits, from under a second to an hour, on a log scale: each tick is ten times the one before. [[point: bar pause]] In live mode the shortest pause before your words are sent is 0.8 seconds. [[point: bar long]] The longest is 2 seconds. [[point: bar server]] The client waits up to 90 seconds for a restarted server. [[point: rows 3-4]] And a silent call with no waiting command ends after an hour, over a thousand times the shortest pause. [[key: bars show how much, with the scale on the board]] Next is a graph.
 ---
 [[show graph | Merge or rebase]] {"title": "A rebase copies your commits and leaves the old ones behind",
  "lanes": ["main", "feature", "after rebase"],
@@ -129,7 +129,7 @@ A map can go round in loops too, like the states of live mode. [[+ listening]] I
   {"id": "talk", "role": "code", "label": "Talk server", "sub": "keeps the turn until it is collected"},
   {"id": "claude", "role": "success", "label": "Claude session", "sub": "answers it"}],
  "edges": [{"from": "page", "to": "talk", "label": "your words"}, {"from": "talk", "to": "claude", "label": "the turn"}]} [[/show]]
-A diagram of three parts or fewer is not stepped, so it shows whole from the start, and this one is written with no points and no reveals. The voice still lights each part as its name is said. Your words begin in the call page. The talk server keeps each turn until it is collected. Then your Claude session collects it on its doorbell. [[key: a small diagram shows whole, and lights the part being said]] Next, a screen explained part by part.
+A diagram of three parts or fewer is not stepped, so it shows whole from the start, and this one is written with no points and no reveals. The voice still lights each part as its name is said. Your words begin in the call page. The talk server keeps each turn until it is collected. Then your Claude session collects it. [[key: a small diagram shows whole, and lights the part being said]] Next, a screen explained part by part.
 ---
 [[show screen: skills/talk/demo-screen.json | The stage's header]] A screen board explains a screen one part at a time: here, the header of this stage. The arrows walk the boards, back and forward. The counter opens the list of boards, newest first. And Follow the voice puts the stage back on the voice after you picked a board by hand. [[key: a screen board lights the part being said and explains it beside the screen]] Next, something you can open.
 ---

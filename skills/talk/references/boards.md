@@ -31,6 +31,7 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 
 - A sequence is drawn as lanes: whole from the start, the steps not said yet faint, the step being said on an accent band.
 - Each actor is a box over its lifeline in its `tone`: `blue` the AI or model path, `red` the central mechanism, `green` a rule that holds, `amber` a cost or a warning. An actor with no tone is plain, since a colour carries a meaning.
+- Order the actors by who talks to whom, so an arrow crosses no unrelated lifeline, with the sender at the left end of a step. An author's guess at the order draws crossing arrows with labels sitting on other lifelines.
 - Under its name go its `role` (what it is) and its `sub` (its file or service, such as `talk.py`).
 - A call carries its `label` and its `sub` in a chip on its arrow. A reply's words sit bare over its dashed arrow.
 - `checks` on a step (`[{"label": "scopes", "ok": true}, {"label": "already paid", "ok": false}]`) are tick and cross badges under its arrow.

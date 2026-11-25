@@ -105,22 +105,23 @@ For every turn:
 
 ### Choose the board by the question
 
-First ask whether the turn has anything for the eye. Then pick the board from what the listener must see, before you write a word. A table is the last resort.
+First ask whether the turn has anything for the eye. Then pick the board from what the listener must see, before you write a word. A table is the last resort, and a flowchart is not the fallback for a table.
 
 | The question is about | Board | Why not a table |
 |---|---|---|
 | what happens in order between actors (a request, a login, a release, a wait) | sequence | a table of steps loses who talks to whom |
 | what changed: how it was and how it is now, or A versus B as a flow | sequence with compare (`compare`) | a table of two columns loses the order |
 | the parts of a system, where one request goes, what must never call what | map | a table lists parts and hides how they connect |
-| a decision, branches, a state machine | flowchart | a table hides the arrows |
+| rules that exist in the thing being explained: its own decision, branches or states (a login's checks, a state machine), never a decision tree you make up | flowchart | a table hides the arrows |
 | how much, how long, how many: sizes, costs, waits, a quantity through a pipeline | bars | a table lists numbers and hides their size |
 | what happens to commits or to a tree: a rebase, a merge, a split, a delete | graph | a table cannot show a shape changing |
 | code, or an edit you made | code, change | never describe it in a table |
+| how a mechanism, loop or piece of code works | code board with `[[point: lines A-B]]` for the lines, or a sequence for its steps | a how or why question about code is never board-less |
 | which of several options to choose, or how three things differ | the verdict first, then one concrete case through each option as a sequence with compare, or bars when one measure decides | a table of options is read aloud cell by cell and teaches nothing the voice did not |
 | the state of the user's work: PRs, tickets, risks, a week | what blocks what as a flowchart, how much as bars, then only the one or two items to act on | a table of every item is the list they already have |
 | a rule that is broken in code | a map with a solid red arrow labelled `breaks the rule` on the call that happens | a dashed arrow labelled `never` says it does not happen |
 | a fixed tree or hierarchy that does not change (an index, a folder tree, a class tree) | graph, with no `lane` on any node | nothing to move, so no steps and no before and after |
-| a yes or no, one number, a repeat, a recap, a thanks, a go-ahead | no board: two or three plain sentences | nothing for the eye, and a board would only decorate |
+| a yes or no, one number, a repeat, a recap, a thanks, a go-ahead (never a how or why question about code) | no board: two or three plain sentences | nothing for the eye, and a board would only decorate |
 | several things judged on the same short measures, and the verdict does not depend on a story | table, last: at most 4 rows and 4 columns, each cell 1 to 3 words | the one case a table is for |
 
 Before a table, ask: could the viewer say what each column measures, and would the voice add something the cells do not say?
@@ -133,14 +134,18 @@ Before a table, ask: could the viewer say what each column measures, and would t
 
 ### Writing the answer
 
+**At most one plain claim sentence of 20 words or fewer before the board's tag.** A lead-in that names a list is still that one sentence, never a second.
+
 - **The stage reads your words aloud with you.** Each sentence appears as it is said and the word being said is lit, so the words on the stage are always the words being spoken. When the voice reaches a board's tag, the board takes the stage for the rest of the answer, and the sentence being said stays under it on one line.
 - **A question about structure or flow is answered with the board.**
-  - At most one plain claim sentence first, then the board's tag, then walk through it with points. The board opens on the first sentence, not after a lead-in.
+  - The board's tag follows the one lead-in sentence above, then walk through it with points.
   - Show the whole board first, then zoom into the part that matters.
   - Any other answer says its plain part first, then puts up what hearing cannot carry.
 - **A turn with nothing for the eye has no board.** A yes or no, one number, a repeat of what you said, a recap, a thanks and a go-ahead are answered in two or three plain sentences. Never put the number, the file or the test result on a code board or a table to look thorough.
+- **Point at every place a sentence refers to**, one `[[point: lines A-B]]` for each range (a list of ranges such as `lines 3-5, 11-14` is refused). Keep an example complete: show a whole short file, and say what it prints.
 - **Short.** One idea per sentence, under 20 words. `reply` prints a `board:` line for a sentence over 30 words or an answer over 220. Plain sentences, with no markdown, lists or symbols. Never read identifiers or values aloud one by one: put them on the stage and say what they mean.
 - **Labels are words you will say.** A part lights when a sentence says its label, so write labels as spoken words (`the new server`), never symbols or primes (`X'`, `->`, `v2'`). Put the symbol in `sub`.
+- **Order the actors by who talks to whom**, so an arrow crosses no unrelated lifeline, and put the sender at the left end of a step.
 - **Say the parts in the order you list them**, one sentence for each, so a part comes in when its sentence is said and not before.
 - **A step an actor does to itself** (it reads, it decides, it waits) is `"arrow": "self"` with the same actor in `from` and `to`. A call between two actors is a `request`.
 - **Every number you say goes on the board**, in a step's `note` or `sub`, or a box's `lines`. Never leave a spoken number out of the picture.
@@ -148,7 +153,7 @@ Before a table, ask: could the viewer say what each column measures, and would t
 - **Draw a wait as a request with a reply.** A long poll is a `request` plus an `event` with `reply_to`, which holds a bar open between them. Never draw a wait as a push from the server.
 - **Draw a relation you speak about.** A relation that must never happen is a dashed red arrow labelled `never`.
 - **Close with the verdict.** End a before and after board with an `outcome` (tone `amber` for a threat or cost) that states what the reader should keep.
-- **One step at a time.** Explain three to six steps, then end the answer and let the user ask for more. A user who asks for another example gets the same thing another way (another example, a picture, smaller steps), never the same words again.
+- **One step at a time.** Explain up to 9 steps if the answer stays under 220 words, then end the answer and let the user ask for more. A user who asks for another example gets the same thing another way (another example, a picture, smaller steps), never the same words again.
 - **Start where the user is.** Never assume they have seen the thing. Carry one concrete example through the whole explanation, with real or made-up values, and say which.
 - **Key facts first.** The first sentence carries what matters.
 - **Say what you changed** when you edited a file, in a few words, and show the edit with a `change` board.
@@ -172,7 +177,7 @@ Board tags are taken out of the speech and drawn on the stage beside the convers
 | sequence | who talks to whom, in time: a request's path, a release, a wait. Say "two stages" or "phases" and give it `phases` | `[[show sequence \| Turn path]]` a JSON spec `[[/show]]` |
 | sequence with compare | how a flow was before a change and how it is after it, side by side, row for row | `[[show sequence \| Report path]]` a spec with `compare` `[[/show]]` |
 | map | an architecture: the parts of a system in columns and zones, where each caller comes in, and one request followed across it | `[[show map \| Where pay lives]]` a map spec `[[/show]]` |
-| flowchart | a decision or process that branches, joins or ends in outcomes, or a state machine (loops are fine) | `[[show flowchart \| Floor rule]]` a JSON spec `[[/show]]` |
+| flowchart | a decision or process that exists in the thing explained and branches, joins or ends in outcomes, or a state machine (loops are fine). A node's `role` is `entry`, `code`, `call`, `decision`, `success` or `error` | `[[show flowchart \| Floor rule]]` a JSON spec `[[/show]]` |
 | bars | how much, how long or how many, one bar a thing on one scale, linear or log | `[[show bars \| Cache costs]]` a bars spec `[[/show]]` |
 | graph | a commit graph or a tree, and what a change does to it, before and after | `[[show graph \| Rebase]]` a graph spec `[[/show]]` |
 | code | existing code you are explaining; the line range is optional | `[[show code: talk/live_turns.py:40-58 \| How a turn waits]]` |
@@ -198,13 +203,13 @@ A spec is the inner object only, never annotate's `{"id", "kind", "spec"}` wrapp
   {"from": "page", "to": "store", "tone": "red", "dash": true, "label": "never", "b": 3},
   {"layer": "route", "from": "page", "to": "talk", "n": 1, "r": 1, "label": "sends your words"},
   {"layer": "route", "from": "talk", "to": "store", "n": 2, "r": 2, "label": "puts up the boards"}]} [[/show]]
-The call page sends your words to the talk server, on port 8766. The talk server puts up the boards in the stage storage, which webcompanion keeps on port 3080. [[point: box talk]] Everything goes through the talk server, and the page never reaches the stage storage itself.
+This map shows where one request goes. The call page sends your words to the talk server, on port 8766. The talk server puts up the boards in the stage storage, which webcompanion keeps on port 3080. [[point: box talk]] Everything goes through the talk server, and the page never reaches the stage storage itself.
 ```
 
 **A sequence with a wait**: a request that stays open until its reply, and a number on the board:
 
 ```
-[[show sequence | The doorbell waits]] {"actors": [{"id": "d", "label": "Doorbell", "sub": "talk_client.py"}, {"id": "s", "label": "Talk server", "sub": "talk.py"}, {"id": "p", "label": "Call page"}],
+[[show sequence | Claude waits for a turn]] {"actors": [{"id": "d", "label": "Claude waits for the turn", "sub": "talk_client.py"}, {"id": "s", "label": "Talk server", "sub": "talk.py"}, {"id": "p", "label": "Call page"}],
  "steps": [{"id": "a1", "from": "d", "to": "s", "arrow": "request", "label": "asks for the next turn", "sub": "GET /api/turn"},
   {"id": "a2", "from": "p", "to": "s", "arrow": "request", "label": "sends what you said"},
   {"id": "a3", "from": "s", "to": "d", "arrow": "event", "label": "answers the open request", "reply_to": "a1", "note": "25 s a try"}]} [[/show]]
@@ -219,7 +224,7 @@ The call page sends your words to the talk server, on port 8766. The talk server
   {"id": "s2", "from": "g", "to": "u", "arrow": "event", "label": "sends back a one-time code", "reply_to": "s1"},
   {"id": "s3", "from": "u", "to": "a", "arrow": "request", "label": "hands the code to the server"},
   {"id": "s4", "from": "a", "to": "u", "arrow": "event", "label": "opens your session", "reply_to": "s3"}]} [[/show]]
-In stage one, the browser asks Google to sign you in. Google sends back a one-time code. In stage two, the browser hands the code to the server. The server opens your session.
+This sequence shows a login in two stages. In stage one, the browser asks Google to sign you in. Google sends back a one-time code. In stage two, the browser hands the code to the server. The server opens your session.
 ```
 
 **A sequence with compare**: before and after, closed with the verdict on the board and in speech. An `outcome` sits beside `compare`, and `[[point: outcome]]` lights it:
@@ -233,7 +238,7 @@ In stage one, the browser asks Google to sign you in. Google sends back a one-ti
   "steps": [{"id": "a1", "from": "svc", "to": "sm", "arrow": "request", "label": "asks for its data"},
             {"id": "a2", "from": "sm", "to": "rc", "arrow": "request", "label": "sends requests with the lists it is given"}]}},
  "outcome": {"tone": "amber", "title": "One module, two reports", "lines": ["a change there reaches both"]}} [[/show]]
-[[point: before]] Before, the service asks the client for its data. [[point: after]] Now the shared module takes its place. [[point: outcome]] The cost is that one change reaches both reports. [[key: two teams now share one module, so a change there reaches both reports]]
+This board compares how a report gets its data before and after a change. [[point: before]] Before, the service asks the client for its data. [[point: after]] Now the shared module takes its place. [[point: outcome]] The cost is that one change reaches both reports. [[key: two teams now share one module, so a change there reaches both reports]]
 ```
 
 **Bars**: how big, on a scale you can see. One unit for the board, `scale` `log` when the values span powers of ten, and a bar's `note` for a number you say:
@@ -242,7 +247,7 @@ In stage one, the browser asks Google to sign you in. Google sends back a one-ti
 [[show bars | Cache costs]] {"title": "A miss costs a hundred times a hit", "unit": "ns", "scale": "log",
  "bars": [{"id": "l1", "label": "L1 cache", "value": 1, "note": "about four cycles"},
   {"id": "l2", "label": "L2 cache", "value": 4}, {"id": "ram", "label": "Main memory", "value": 100, "tone": "red"}]} [[/show]]
-The L1 cache answers in about one nanosecond. [[point: bar l2]] The L2 cache takes four. [[point: bar ram]] Main memory takes a hundred, and that is the miss.
+This bar board shows how long each memory level takes to answer. The L1 cache answers in about one nanosecond. [[point: bar l2]] The L2 cache takes four. [[point: bar ram]] Main memory takes a hundred, and that is the miss.
 ```
 
 **A graph**: commits or a tree, before and after. A node is `new` (after only), `ghost` (still there, faint, after) or `struck` (removed, after): mark every node the change replaces or removes, or it stays in the after as current. Its `lane` is the row it sits in:
@@ -252,7 +257,7 @@ The L1 cache answers in about one nanosecond. [[point: bar l2]] The L2 cache tak
  "nodes": [{"id": "a", "label": "base commit", "lane": "main"}, {"id": "c", "label": "new tip", "lane": "main"},
   {"id": "d", "label": "old work", "lane": "feature", "state": "ghost"}, {"id": "d2", "label": "copied work", "lane": "after rebase", "state": "new"}],
  "edges": [{"from": "a", "to": "c"}, {"from": "a", "to": "d"}, {"from": "c", "to": "d2"}]} [[/show]]
-[[point: before]] Before, your work hangs off the base commit. [[point: after]] Now the copied work hangs off the new tip. [[point: node d]] The old work is still there, but nothing reaches it.
+This graph shows what a rebase does to your commits. [[point: before]] Before, your work hangs off the base commit. [[point: after]] Now the copied work hangs off the new tip. [[point: node d]] The old work is still there, but nothing reaches it.
 ```
 
 For a flowchart:
@@ -297,18 +302,16 @@ To control it, write the board once, whole, then put a verb just before the word
 **Rules.**
 
 - One board per idea. Titles are 2 to 5 plain words, because they are the boards' names in the stage's header and list.
-- The same title updates its board in place, and the changed rows light up. A new title makes a new board.
+- The same title updates its board in place, and the changed rows light up. A new title makes a new board. Prefer a change board over describing an edit line by line. Greek titles are fine.
 - Each answer keeps the steps it said a board with, so a replay of an earlier answer unfolds the board as that answer did.
 - Put each show and point tag before the sentence about it: the stage fronts it when the voice gets there.
-- Prefer a change board over describing an edit line by line.
 - At most 3 key points per answer, in the user's words. A title over 5 words, or more than 3 key points, gets a `board:` line asking you to cut it.
-- Greek titles and text are fine.
 - Close a table or diagram with `[[/show]]`. Tags are forgiving (`show: table`, `mermaid`, `diff`), and a markdown table or mermaid fence without a tag is still moved to the stage, and a `[[point]]` after it lights its rows; a table's separator row needs one `---` per header cell, or `reply` rewrites it and says so. `reply` prints a `board:` line for anything it could not show as asked: fix it in the next answer.
 - The scene tag and the four stop tags are retired: never write them.
 
 For example, after editing a file:
 ```
-[[show change: talk/live_turns.py | Longer wait]] I raised how long the doorbell waits, from 30 to 90 seconds. [[point: line 47]] This is the one line that changed. [[key: the doorbell now waits 90 seconds]] A slow tool call no longer looks like a stalled session. [[key: slow tools no longer look stalled]] Nothing else in the file moved, so the tests did not need to change.
+[[show change: talk/live_turns.py | Longer wait]] I raised how long Claude waits for the next turn, from 30 to 90 seconds. [[point: line 47]] This is the one line that changed. [[key: Claude now waits 90 seconds for a turn]] A slow tool call no longer looks like a stalled session. [[key: slow tools no longer look stalled]] Nothing else in the file moved, so the tests did not need to change.
 ```
 
 ### What a turn may do

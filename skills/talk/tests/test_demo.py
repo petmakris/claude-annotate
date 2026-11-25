@@ -135,7 +135,7 @@ def test_the_guide_opens_with_a_decision_table_that_puts_the_table_board_last():
     decision, boards = text.index("### Choose the board by the question"), text.index("### Teaching with the board")
     assert decision < boards < text.index("| Board | Use it for | Tag |")
     table = next(t for t in _tables(text) if t[0][0].startswith("The question is about"))
-    starts = ["sequence", "sequence with compare", "map", "flowchart", "bars", "graph", "code, change", "the verdict first",
+    starts = ["sequence", "sequence with compare", "map", "flowchart", "bars", "graph", "code, change", "code board with", "the verdict first",
               "what blocks what", "a map with a solid red", "graph, with no `lane`", "no board:", "table, last: at most 4"]
     assert len(table) - 2 == len(starts)
     for row, start in zip(table[2:], starts):
@@ -191,7 +191,7 @@ def test_the_demo_teaches_a_zoned_map_a_never_arrow_a_wait_and_a_real_grid(tmp_p
     assert any("port 8766" in z["label"] for z in spec["zones"])
     never = [a for a in spec["arrows"] if a.get("label") == "never"]
     assert len(never) == 1 and never[0]["tone"] == "red" and never[0]["dash"] is True
-    wait = boards["The doorbell waits"]["visual"]["spec"]["steps"]
+    wait = boards["Claude waits for a turn"]["visual"]["spec"]["steps"]
     assert [s.get("reply_to") for s in wait] == [None, None, "w1"]
     grid = _tables(boards["Four boards, picked by hand"]["body"])[0]
     assert len(grid) == 6 and {len(row) for row in grid} == {4}  # a header, a separator and four things on three measures
