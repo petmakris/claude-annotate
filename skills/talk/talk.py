@@ -1168,16 +1168,8 @@ UNNAMED_SHOWN = 6  # the unnamed parts a board: line lists by name; the rest are
 
 
 def unnamed_parts(model: stage_scene.SceneModel, by_order: list[str]) -> list[str]:
-    """The parts of a board no sentence names (they came in by order): scene.unnamed_parts when the scene
-    module has it, else the list the stepper already returned."""
-    found = getattr(stage_scene, "unnamed_parts", None)
-    if callable(found):
-        try:
-            got = found(model, by_order)
-            if isinstance(got, (list, tuple)) and all(isinstance(k, str) for k in got):
-                return list(got)
-        except TypeError:
-            pass
+    """The parts of a board no sentence names: the ones the stepper put in by order. (scene.unnamed_parts takes
+    sentences and answers with dicts, a different question, so it is not asked here.)"""
     return list(by_order)
 
 

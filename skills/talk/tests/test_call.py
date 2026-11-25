@@ -1441,10 +1441,11 @@ def test_a_point_on_a_map_is_the_reveal_for_its_sentence_and_the_part_it_names_i
         # are never lit by order: they come in with the rest frame
         (3, "Third, sharing a", ["node:share", "node:guard"], ["node:share"])]
     assert call.board.problems == [
-        '4 of 7 parts of "Three paths changed" are named by no sentence, so they came in by order, not where they are '
-        "said. Say each one's words in the sentence about it, or put its tag there, in \"Third, sharing a proposal that "
-        'broke on…": "catch every error" [[point: node catch]], "broken guard first" [[point: node guard]], '
-        '"return latest state" [[point: node state]], "put in error" [[point: node err]]']
+        '3 of 7 parts of "Three paths changed" are named by no sentence, so they came in by order, not where they are '
+        "said. Say each one's words in the sentence about it, or put its tag there, in its sentence: "
+        '"catch every error" [[point: node catch]], "return latest state" [[point: node state]], '
+        '"put in error" [[point: node err]]',
+        '3 of 7 elements of "Three paths changed" are never revealed; they come in with the rest frame']
     assert stage_rule_breaks(call, shown) == []
 
 
