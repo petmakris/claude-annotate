@@ -1100,3 +1100,12 @@ def test_a_phone_keeps_the_whole_grid_and_picks_a_compact_or_a_sideways_form_by_
         page.send({"type": "stage:state", "front": name, "frames": {}})
         page.check(f"[...pane('{name}').querySelectorAll('table')].map((t) => [t.dataset.fit, t.classList.contains('cards')])")
     assert page.run() == [[["fit", False]], [["scroll", False]]]  # never one card per row
+
+
+def test_a_column_pointed_at_cell_by_cell_is_lit_as_a_column_and_lights_no_row(tmp_path):
+    model_ = scene.body_model(ENGINE_GRID)
+    built, _ = scene.compile_scene(model_, [[scene.Verb("focus", keys=[f"cell#{r}.2" for r in range(1, 5)])]], "Engines")
+    page = StagePage(tmp_path).show("t", _board(ENGINE_GRID), title="Engines", extra={"scene": built}).open()
+    page.send({"type": "stage:state", "front": "t", "frames": {"t": 1}}).check(GRID_STATE + "('t')")
+    got = page.run()[0]
+    assert got["cols"] == ["Azure"] and [r[2] for r in got["rows"]] == [False] * 4 and got["on"] is True

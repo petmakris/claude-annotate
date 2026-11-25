@@ -536,6 +536,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .md.grid .g-col{background:var(--hl-soft);color:var(--ink);font-weight:600}
 .md.grid thead th.g-col{color:var(--claude);box-shadow:inset 0 -3px 0 var(--claude)}
 .md.grid tbody tr td.k-focus,.md.grid tbody tr.g-cur td.k-focus{background:var(--word);color:var(--ink);font-weight:600;box-shadow:inset 0 0 0 2px var(--claude)}
+.md.grid tbody tr td.g-col.k-focus{background:var(--hl-soft);box-shadow:none}   /* a column pointed at cell by cell is a column */
 .md.grid td.tone-ok{color:var(--good)} .md.grid td.tone-bad{color:var(--bad)} .md.grid td.tone-warn{color:var(--warn)}
 .md.grid.g-on tbody tr:not(.g-cur) td.tone-ok:not(.g-col):not(.k-focus){color:var(--good)}
 .md.grid.g-on tbody tr:not(.g-cur) td.tone-bad:not(.g-col):not(.k-focus){color:var(--bad)}

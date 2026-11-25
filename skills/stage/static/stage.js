@@ -1322,12 +1322,20 @@ function startFrame(v) {
 function paintGrid(box, scene, n) {
   const said = beingSaid(scene, n), frame = scene.frames[Math.max(0, Math.min(n, scene.frames.length - 1))];
   const cells = new Set((frame.focus || []).filter((k) => k.startsWith("cell#")));
-  const cellRows = new Set([...cells].map((k) => "row#" + k.slice(5).split(".")[0]));
-  const rowsLit = new Set(said.filter((k) => k.startsWith("row#") && !(cellRows.has(k) && !frame.focus.includes(k))));
-  const colsLit = new Set(said.filter((k) => k.startsWith("col#")));
-  for (const tr of box.querySelectorAll("tbody tr")) tr.classList.toggle("g-cur", rowsLit.has(tr.dataset.key));
   const tables = [...box.querySelectorAll("table")], many = tables.length > 1;
   const colKey = (table, c) => (many ? `col#${table.dataset.t}.${c}` : `col#${c}`);
+  const cellRows = new Set([...cells].map((k) => "row#" + k.slice(5).split(".")[0]));
+  const colsLit = new Set(said.filter((k) => k.startsWith("col#")));
+  // every cell of a column pointed at one by one is that column, lit as one
+  for (const table of tables) {
+    const body = [...table.querySelectorAll("tbody tr")];
+    for (let c = 1; body.length > 1 && c <= (body[0]?.children.length || 0); c++) {
+      const own = body.map((tr) => tr.children[c - 1]?.dataset.key);
+      if (own.every((k) => k && cells.has(k))) { colsLit.add(colKey(table, c)); own.forEach((k) => cells.delete(k)); }
+    }
+  }
+  const rowsLit = new Set(said.filter((k) => k.startsWith("row#") && !(cellRows.has(k) && !frame.focus.includes(k))));
+  for (const tr of box.querySelectorAll("tbody tr")) tr.classList.toggle("g-cur", rowsLit.has(tr.dataset.key));
   const litCols = [];
   for (const table of tables) {
     for (const el of table.querySelectorAll("[data-c]")) {
@@ -1337,7 +1345,7 @@ function paintGrid(box, scene, n) {
     }
   }
   box.classList.toggle("g-on", rowsLit.size + colsLit.size + cells.size > 0);
-  const keep = [...box.querySelectorAll("tbody tr.g-cur"), ...box.querySelectorAll("td.k-focus"), ...litCols];
+  const keep = [...box.querySelectorAll("tbody tr.g-cur"), ...box.querySelectorAll("td.k-focus:not(.g-col)"), ...litCols];
   return keep;
 }
 
