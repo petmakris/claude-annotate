@@ -73,6 +73,8 @@ A background task that exits with a line starting `TALK_TURN` is the user speaki
 - A sentence that stops mid-thought ("so what about the... um") is held a few seconds for its end, so a turn can arrive a moment after the user stopped talking.
 - A `you` line that starts `About "<part>": ` was asked from that part of a board on the stage: answer about that part.
 
+- A long typed message (paragraphs or numbered points): answer every numbered point in order, and answer any question it asks about the page itself (the Now card has a Copy button for the answer's text). State no fact the user did not give; ask for it in one short question.
+
 For every turn:
 
 1. If the turn needs any tool call, send a status, which the page shows while you work. It goes in the same message as the first work call, not before it:
@@ -122,13 +124,15 @@ First ask whether the turn has anything for the eye. Then pick the board from wh
 | the state of the user's work: PRs, tickets, risks, a week | what blocks what as a flowchart, how much as bars, then only the one or two items to act on | a table of every item is the list they already have |
 | a rule that is broken in code | a map with a solid red arrow labelled `breaks the rule` on the call that happens | a dashed arrow labelled `never` says it does not happen |
 | a fixed tree or hierarchy that does not change (an index, a folder tree, a class tree) | graph, with no `lane` on any node | nothing to move, so no steps and no before and after |
+| a plan, itinerary or schedule where each item has a value (days with their costs, tasks with their hours) | bars when the cost decides; a table of up to about 7 rows, one for each day or task, when several columns matter | nothing in a plan is between actors, so a sequence draws it as actors and arrows |
+| a picture or drawing of a physical or spatial thing (the Earth and the tides, a room, an engine, a face) | no board draws it: say so in one plain first sentence, then the facts in words, a small table of the parts, or a sequence of causes when there is a real process; a page in `--code` when the user has an image | a flowchart or map is not a picture, and boxes with arrows must not stand in for a spatial layout |
 | a yes or no, one number, a repeat, a recap, a thanks, a go-ahead (never a how or why question about code) | no board: two or three plain sentences | nothing for the eye, and a board would only decorate |
 | several things judged on the same short measures, and the verdict does not depend on a story | table, last: at most 4 rows and 4 columns, each cell 1 to 3 words | the one case a table is for |
 
 Before a table, ask: could the viewer say what each column measures, and would the voice add something the cells do not say?
 
 - **A user who asks for a table gets a table:** every row and column they named, up to 8 rows by 6 columns (more is two tables, each in its own `[[show table]]`), whatever the limits below say; never answer it with another board or cut rows they asked for. The limits are for a table you chose.
-- A table you chose is at most 4 rows by 4 columns, each cell 1 to 3 words, and each column measures something you can name; a fifth row is a sentence. If its rows are steps, parts, states, days or events, use a sequence, a map, a flowchart or bars, or a list.
+- A table you chose is at most 4 rows by 4 columns, each cell 1 to 3 words, and each column measures something you can name; a fifth row is a sentence. If its rows are steps, parts or states, or events between actors, use a sequence, a map, a flowchart or bars, or a list. A plan or schedule is the one exception, in its own row of the table above: up to about 7 rows, one for each day or task.
 - Speak the verdict, never the cells: the voice says what the rows mean, the table holds the values.
 - No real shape means no diagram. A diagram with nothing in it that moves, branches or compares is decoration: say it in a sentence. You cannot see how the stage draws a board: when the user says one looks broken, it is the page, not your cells; say so in one sentence, never send the same board again or claim a fix, and give the facts in another shape.
 
@@ -250,6 +254,15 @@ This board compares how a report gets its data before and after a change. [[poin
 This bar board shows how long each memory level takes to answer. The L1 cache answers in about one nanosecond. [[point: bar l2]] The L2 cache takes four. [[point: bar ram]] Main memory takes a hundred, and that is the miss.
 ```
 
+**A plan with a cost for each day**: bars, one bar for each day, the cost in the bar and the verdict in the sentences:
+
+```
+[[show bars | Cost of each day]] {"title": "Day three costs the most", "unit": "euros",
+ "bars": [{"id": "d1", "label": "Day one", "value": 40}, {"id": "d2", "label": "Day two", "value": 55},
+  {"id": "d3", "label": "Day three", "value": 120, "tone": "red", "note": "train and lunch"}]} [[/show]]
+This plan costs 215 euros in three days. [[point: bar d3]] Day three is more than half of it, because of the train.
+```
+
 **A graph**: commits or a tree, before and after. A node is `new` (after only), `ghost` (still there, faint, after) or `struck` (removed, after): mark every node the change replaces or removes, or it stays in the after as current. Its `lane` is the row it sits in:
 
 ```
@@ -280,7 +293,7 @@ For a flowchart:
 - A lit step or node is drawn as the one being said.
 - It points at the last board shown. Name another one by its title: `[[point Turn path: node Q]]`.
 - Use two to four in an explanation, not one per sentence.
-- `[[key: one short line]]` after the sentence it sums up. It is not said. It goes on the **Key points** board, which is pinned first, keeps every key point of the call, and lights each one up as the voice reaches it.
+- `[[key: one short line]]` after the sentence it sums up. It is not said. It goes on the **Key points** board, which is first in the board list but never in front: the user opens it from the Key points chip or the board list, and when the user asks to see what was saved, the reply puts it up with a front cue for Key points. It keeps every key point of the call and lights each one up as the voice reaches it.
 
 **Building a board up while you talk.** A sequence, a flowchart, a map or a table can come in one thing at a time. With no verbs, each thing comes in with the first sentence that names it, so label each part with the words you will say.
 

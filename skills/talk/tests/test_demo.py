@@ -136,7 +136,7 @@ def test_the_guide_opens_with_a_decision_table_that_puts_the_table_board_last():
     assert decision < boards < text.index("| Board | Use it for | Tag |")
     table = next(t for t in _tables(text) if t[0][0].startswith("The question is about"))
     starts = ["sequence", "sequence with compare", "map", "flowchart", "bars", "graph", "code, change", "code board with", "the verdict first",
-              "what blocks what", "a map with a solid red", "graph, with no `lane`", "no board:", "table, last: at most 4"]
+              "what blocks what", "a map with a solid red", "graph, with no `lane`", "bars when the cost decides", "no board draws it", "no board:", "table, last: at most 4"]
     assert len(table) - 2 == len(starts)
     for row, start in zip(table[2:], starts):
         assert row[1].startswith(start), (row[1], start)
@@ -167,7 +167,7 @@ def test_the_guides_references_exist_and_are_linked_from_it():
     for name in ("call-page", "server", "boards"):
         assert (GUIDE.parent / "references" / f"{name}.md").is_file()
         assert f"references/{name}.md" in text
-    assert len(text.splitlines()) < 340 and max(len(ln) for ln in text.splitlines()) < 700  # no 3,000 character lines
+    assert len(text.splitlines()) < 360 and max(len(ln) for ln in text.splitlines()) < 700  # no 3,000 character lines
     assert "scenes and stops" not in (talk.SKILL_DIR.parent / "stage" / "SKILL.md").read_text().lower()
 
 
