@@ -61,6 +61,13 @@ CODE = re.compile(r"`([^`]+)`")
 MARK = {"plain": "a", "blue": "b", "red": "r", "green": "g", "amber": "m"}
 
 
+# Bounds that keep a map's grid, and the time to draw it, small: a spec past one is refused by name.
+MAX_COLS = 12
+MAX_ROWS = 40
+MAX_BOXES = 60
+MAX_ARROWS = 120
+
+
 class ValidationError(ValueError):
     """Raised when a map spec breaks a structural rule."""
 
@@ -100,6 +107,14 @@ def validate(spec: dict[str, Any]) -> None:
         raise ValidationError("map requires columns: a list of column labels")
     if not boxes:
         raise ValidationError("map requires at least 1 box")
+    if len(cols) > MAX_COLS:
+        raise ValidationError(f"map has {len(cols)} columns; at most {MAX_COLS}")
+    if not isinstance(boxes, list):
+        raise ValidationError("boxes is a list")
+    if len(boxes) > MAX_BOXES:
+        raise ValidationError(f"map has {len(boxes)} boxes; at most {MAX_BOXES}")
+    if len(spec.get("arrows") or []) > MAX_ARROWS:
+        raise ValidationError(f"map has {len(spec['arrows'])} arrows; at most {MAX_ARROWS}")
     ids: dict[str, dict] = {}
     placed: set[str] = set()
     cells: dict[tuple[int, int], str] = {}
@@ -134,9 +149,17 @@ def validate(spec: dict[str, Any]) -> None:
                 v = box.get(k)
                 if not isinstance(v, int) or isinstance(v, bool) or v < 0:
                     raise ValidationError(f"box {bid!r}: {k} must be a whole number 0 or more")
+            if box["row"] >= MAX_ROWS:
+                raise ValidationError(f"box {bid!r}: row {box['row']} is past the last of {MAX_ROWS} rows")
             span_c, span_r = box.get("cols", 1), box.get("rows", 1)
-            if not isinstance(span_c, int) or not isinstance(span_r, int) or span_c < 1 or span_r < 1:
+            if not isinstance(span_c, int) or not isinstance(span_r, int) or isinstance(span_c, bool) or isinstance(span_r, bool) or span_c < 1 or span_r < 1:
                 raise ValidationError(f"box {bid!r}: cols and rows are whole numbers 1 or more")
+            if span_r > MAX_ROWS:
+                raise ValidationError(f"box {bid!r}: rows is {span_r}; at most {MAX_ROWS}")
+            if span_c > MAX_COLS:
+                raise ValidationError(f"box {bid!r}: cols is {span_c}; at most {MAX_COLS}")
+            if box["row"] + span_r > MAX_ROWS:
+                raise ValidationError(f"box {bid!r}: rows reach row {box['row'] + span_r - 1}, past the last of {MAX_ROWS} rows")
             if box["col"] + span_c > len(cols):
                 raise ValidationError(f"box {bid!r}: reaches column {box['col'] + span_c - 1}, but there are {len(cols)} columns")
             for c in range(box["col"], box["col"] + span_c):
