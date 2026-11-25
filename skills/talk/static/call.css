@@ -210,7 +210,7 @@ button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:va
 .spin{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* [shared] .pop and .toast; [I] .segc .row .liveopts .demobtn .endbtn (the gear); [R] .callspop #calls .callrow */
+/* [shared] .pop and .toast; [I] .segc .row .liveopts .demobtn .endbtn (the gear); [R] the Calls popover (call-calls.css) */
 /* ---- glass layers: the popovers and the toast ---- */
 .pop,.toast{position:absolute;z-index:10;background:var(--glass);border:1px solid var(--glass-line);box-shadow:var(--lift);
   -webkit-backdrop-filter:blur(24px) saturate(1.5);backdrop-filter:blur(24px) saturate(1.5);animation:up .18s ease-out}
@@ -219,9 +219,7 @@ button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:va
 .pop{top:56px;right:calc(var(--pw) + 12px);width:300px;max-height:calc(100% - 68px);overflow:auto;padding:14px;border-radius:18px;display:flex;flex-direction:column;gap:14px}
 .app[data-side="left"] .pop{right:auto;left:calc(var(--pw) + 12px)}
 .app[data-rail] .gearpop{top:auto;bottom:12px}
-.callspop{width:320px;gap:4px}
 .pop h4{margin:0 0 6px;font:500 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
-.callspop h4{padding:2px 10px 0}
 .segc{display:flex;gap:3px;padding:3px;border-radius:11px;background:var(--shade)}
 .segc button{flex:1;display:flex;gap:6px;align-items:center;justify-content:center;padding:6px 4px;border-radius:8px;font:500 12.5px var(--sans);color:var(--muted)}
 .segc button[aria-pressed="true"]{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.18)}
@@ -237,15 +235,6 @@ button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:va
 .demobtn small{font:400 12px var(--sans);color:var(--muted)}
 .demobtn:hover{background:color-mix(in srgb,var(--acc-soft) 70%,var(--acc-mid))}
 .endbtn{display:flex;gap:8px;align-items:center;justify-content:center;padding:9px;border-radius:11px;color:var(--bad);background:var(--bad-soft);font-weight:500}
-#calls{display:flex;flex-direction:column;gap:2px}
-.callrow{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:11px;color:inherit;text-decoration:none;min-width:0}
-.callrow:hover{background:var(--shade)}
-.callrow .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px}
-.callrow .s{font-size:12px;color:var(--muted);white-space:nowrap}
-.callrow.new .s{color:var(--claude);font-weight:500}
-.callrow.new .live{background:var(--claude);box-shadow:0 0 10px var(--claude)}
-.callrow.ended .live{background:var(--faint);box-shadow:none}
-.callrow.all{justify-content:center;color:var(--acc);font-size:13px}
 .toast{z-index:11;top:16px;left:calc((100% - var(--pw)) / 2);transform:translateX(-50%);animation:none;display:flex;align-items:center;gap:10px;
   max-width:calc(100% - var(--pw) - 40px);padding:8px 16px;border-radius:999px;font-size:13px}
 .app[data-side="left"] .toast{left:calc(var(--pw) + (100% - var(--pw)) / 2)}

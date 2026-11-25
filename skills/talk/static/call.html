@@ -21,22 +21,34 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"light"');
       <div class="veil" id="veil"><div class="loading" id="veilwait"><span class="spin"></span>Loading the stage…</div>
         <div class="failed" id="veilfail" hidden><p>The stage did not load.</p><div><button class="btn" id="reloadstage" type="button">Reload stage</button><a class="btn" id="openstage" target="_blank" rel="noopener">Open in a new tab</a></div></div></div></div>
     <p class="nostage" id="nostage" hidden>The stage is not available for this call.</p>
-    <div class="reader" id="reader" aria-label="The answer being said"><div class="rtext" id="rtext"></div></div>
+    <div class="reader" id="reader" aria-hidden="true"><div class="rtext" id="rtext"></div></div>
   </div></div>
 
   <aside class="panel" id="panel" aria-label="The call">
     <div class="grip" id="grip" role="separator" aria-orientation="vertical" aria-label="Resize the panel" title="Drag to resize"></div>
     <div class="open">
+      <a class="skip" id="skiplatest" href="#nowcard">Jump to the latest answer</a><!-- R: the panel's first stop -->
       <header class="phead">
         <span class="live" id="live"></span><span class="topic" id="topic"></span><span class="mode" id="modechip"></span>
         <button class="ib" id="searchbtn" type="button" aria-label="Search the conversation" data-tip="Search" aria-expanded="false" aria-controls="tlsearch" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></button><!-- C -->
-        <button class="ib" id="callsbtn" type="button" aria-label="Other calls" data-tip="Other calls" aria-expanded="false" aria-controls="pCalls" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg><span class="dot" id="callsdot" hidden></span></button>
+        <button class="ib callsbtn" id="callsbtn" type="button" aria-label="Calls" data-tip="Calls" aria-expanded="false" aria-controls="pCalls" hidden><span class="cglyph" id="callsglyph"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg></span><span class="clbl" aria-hidden="true">Calls</span><span class="dot" id="callsdot" hidden aria-hidden="true"></span></button>
         <button class="ib" id="fullscreen" type="button" aria-label="Full screen" data-tip="Full screen" aria-pressed="false" hidden><svg class="i-enter" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg><svg class="i-exit" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg></button>
         <button class="ib" id="gear" type="button" aria-label="Settings" data-tip="Settings" aria-expanded="false" aria-controls="pGear"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
         <button class="ib" id="collapse" type="button" aria-label="Collapse the panel" data-tip="Collapse"><svg class="flip" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16M8 10l2 2-2 2"/></svg></button>
       </header>
-      <div class="statestrip" id="statestrip" hidden></div><!-- R: the call's state in words -->
-      <div class="welcome" id="welcome" role="region" aria-label="Welcome back" hidden></div><!-- R: after a real absence -->
+      <div class="statestrip" id="statestrip" hidden><!-- R: the call's state in words (not a live region: #announcer is) -->
+        <span class="ssico" id="ssico" aria-hidden="true"></span><span class="sstext" id="sstext"></span><span class="ssmore" id="ssmore" hidden></span>
+        <button class="ssbtn" id="ssact" type="button" hidden>Resume here</button><button class="ib ssx" id="ssx" type="button" aria-label="Dismiss" hidden><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button class="ib ssauto" id="ssauto" type="button" aria-label="Play new answers by themselves" aria-pressed="true" data-tip="Autoplay"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h4l5 4v-13l-5 4z"/><path class="wv" d="M16.5 9a4 4 0 0 1 0 6M19 6.5a7.5 7.5 0 0 1 0 11"/><path class="mute" d="M17 9.5l4 5M21 9.5l-4 5"/></svg></button>
+      </div>
+      <div class="welcome" id="welcome" role="region" aria-label="Welcome back" hidden><!-- R: after a real absence -->
+        <div class="wbhead"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg><b>Welcome back</b><span class="wbaway" id="wbaway"></span>
+          <button class="ib wbx" id="wbx" type="button" aria-label="Dismiss"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+        <div class="wbfacts" id="wbfacts"></div>
+        <div class="wbwork" id="wbwork" hidden></div>
+        <div class="wbbtns"><button class="wbplay" id="wbplay" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5v14l12-7z"/></svg><span id="wbplaytext">Play the new</span></button>
+          <button class="wbread" id="wbread" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9"/></svg><span>Read them</span></button></div>
+      </div>
       <section class="convo" id="convo" aria-label="Conversation">
         <!-- C: the Now card, the current turn. Its frame is C's; #waitcard inside it is W's. -->
         <div class="now" id="nowcard" hidden>
@@ -125,7 +137,9 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"light"');
     <button class="endbtn" id="end" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.7 13.3a16 16 0 0 0 3.4 2.5l1.3-1.3a2 2 0 0 1 2.1-.4 12.8 12.8 0 0 0 2.8.7 2 2 0 0 1 1.7 2v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 3.2 4.2 2 2 0 0 1 5.2 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.9.7 2.8a2 2 0 0 1-.4 2.1L9.2 9.9"/><path d="M22 2L2 22"/></svg><span id="endlbl">End call</span></button>
   </div>
 
-  <div class="pop callspop" id="pCalls" role="dialog" aria-label="Other calls" hidden><h4>Open calls</h4><div id="nextwait" hidden></div><nav id="calls" aria-label="Other calls"></nav></div><!-- R: #nextwait holds Next waiting -->
+  <div class="pop callspop" id="pCalls" role="dialog" aria-label="Calls" hidden><!-- R: every call with its state; #nextwait is the foot: Next waiting and All calls -->
+    <div class="pophead"><h4>Calls</h4><button class="ib" id="callsclose" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <nav id="calls" aria-label="Calls"></nav><div class="callsfoot" id="nextwait"></div></div>
   <div class="pop keyspop" id="pKeys" role="dialog" aria-label="Keyboard shortcuts" hidden></div><!-- I: the Keys sheet -->
 
   <div class="sr-only" id="announcer" role="status" aria-live="polite"></div><!-- R: the polite live region: status, new answers, board changes -->

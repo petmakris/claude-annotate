@@ -1,2 +1,100 @@
-/* Batch R's rules for the panel's rebuild: the state strip (#statestrip), the welcome-back card (#welcome), the since-you-left divider (#sinceleft), the Calls popover's new parts (#nextwait, state words).
-   Loaded after call.css and the other batches' sheets; use the page's tokens (tokens.css) and the same two themes. */
+/* Batch R: the Calls button and popover, the state strip (#statestrip), the welcome-back card (#welcome), the since-you-left
+   divider (#sinceleft) and the skip link. Loaded after call.css; tokens only, both themes through <html data-theme>. */
+
+/* the first stop of the panel for the keyboard and a screen reader: hidden above the panel until it has focus */
+.skip{position:absolute;z-index:30;left:8px;top:6px;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border-radius:9px;background:var(--ink);color:var(--panel);font:500 13px var(--sans);text-decoration:none}
+.skip:focus{width:auto;height:auto;padding:8px 12px;clip-path:none}
+
+/* the Calls button: icon, word and count when wide; icon and count on a phone */
+.ib.callsbtn{width:auto;min-width:34px;height:34px;padding:0 9px;display:flex;align-items:center;gap:6px}
+.callsbtn .cglyph{display:grid;place-items:center}
+.callsbtn .clbl{display:none;font:500 12.5px var(--sans)}
+/* the word "Calls" goes with the icon only where the header has room for it (the topic comes first) */
+.phead{container-type:inline-size}
+@container (min-width:450px){.callsbtn .clbl{display:inline}}
+.callsbtn .dot{position:static;width:auto;height:auto;min-width:18px;padding:0 5px;border-radius:9px;font:600 11px/18px var(--sans);text-align:center;color:var(--on-acc);background:var(--acc);box-shadow:none}
+.callsbtn[data-need="new"]{color:var(--acc)}
+.callsbtn[data-need="stalled"]{color:var(--warn)}
+.callsbtn[data-need="stalled"] .dot{background:var(--warn);color:var(--panel)}
+.callsbtn[aria-expanded="true"]{background:var(--shade)}
+
+/* the popover: one row per call on a shared grid, glyph / topic over state word / age; the call here first, then by need */
+.callspop{width:340px;gap:8px;padding:12px;overflow:hidden}
+.pophead{display:flex;align-items:center;justify-content:space-between;padding-left:10px}
+.callspop .pophead h4{margin:0;padding:0}
+#calls{display:flex;flex-direction:column;gap:2px;flex:0 1 auto;min-height:0;overflow:auto}
+.callrow{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:10px;min-height:52px;padding:8px 10px;border-radius:11px;border-left:3px solid transparent;color:inherit;text-decoration:none}
+a.callrow:hover{background:var(--shade)}
+.callrow.here{background:var(--acc-soft);border-left-color:var(--acc)}
+.callrow .cg{display:grid;place-items:center;color:var(--muted)}
+.callrow .cm{display:flex;flex-direction:column;min-width:0}
+.callrow .ct{font:500 13.5px/1.35 var(--sans);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.callrow .cs{font:500 12px var(--sans);color:var(--muted)}
+.callrow .ca{font:400 12px var(--sans);color:var(--faint);white-space:nowrap;font-variant-numeric:tabular-nums}
+.callrow[data-state="stalled"] :is(.cg,.cs){color:var(--warn)}
+.callrow[data-state="new"] :is(.cg,.cs){color:var(--acc)}
+.callrow[data-state="answering"] :is(.cg,.cs){color:var(--acc)}
+.callrow[data-state="playing"] :is(.cg,.cs),.callrow[data-state="talking"] :is(.cg,.cs){color:var(--good)}
+.callrow[data-state="ended"] :is(.cg,.cs){color:var(--faint)}
+.callrow[data-state="answering"] .cg svg{animation:spin .9s linear infinite}
+.callsfoot{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--line)}
+.callsfoot .btn{min-height:40px;gap:6px}
+.callsfoot .callsnext{background:var(--acc);color:var(--on-acc);border-color:var(--acc)}
+.callsfoot .callsnext:hover{background:color-mix(in srgb,var(--acc) 85%,white)}
+
+/* the state strip: one line under the header, the call's state in words */
+.statestrip{flex:none;display:flex;align-items:center;gap:8px;min-height:38px;padding:2px 6px 2px 14px;border-bottom:1px solid var(--line);font:500 12.5px var(--sans);color:var(--muted)}
+.statestrip .ssico{display:grid;place-items:center;flex:none;color:var(--muted)}
+.statestrip .sstext{flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--ink);font-variant-numeric:tabular-nums}
+.statestrip .ssmore{flex:none;white-space:nowrap;color:var(--acc)}
+.statestrip .ssbtn{flex:none;min-height:30px;padding:0 12px;border-radius:999px;background:var(--acc);color:var(--on-acc);font:500 12.5px var(--sans)}
+.statestrip .ib{width:30px;height:30px}
+.statestrip .ssauto .mute{display:none}
+.statestrip .ssauto[aria-pressed="false"] .wv{display:none}
+.statestrip .ssauto[aria-pressed="false"] .mute{display:block}
+.statestrip .ssauto[aria-pressed="true"]{color:var(--acc)}
+.statestrip[data-key="answering"] .ssico svg{animation:spin .9s linear infinite;color:var(--acc)}
+.statestrip[data-key="playing"] .ssico{color:var(--good)}
+.statestrip[data-key="new"] .ssico{color:var(--acc)}
+.statestrip[data-key="talking"] .ssico{color:var(--rec)}
+.statestrip.warn{background:var(--warn-soft)}
+/* a warning has room to say itself in two lines and its button; the calls count and the autoplay switch wait */
+.statestrip.warn .sstext{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.statestrip.warn :is(.ssmore,.ssauto){display:none}
+.statestrip.warn .ssico{color:var(--warn)}
+
+/* the welcome-back card: after a real absence, what came while you were away and one press to hear it */
+.welcome{flex:none;display:grid;gap:8px;margin:8px 10px 0;padding:10px 12px;border:1px solid var(--acc-mid);border-radius:14px;background:var(--acc-soft)}
+.wbhead{display:flex;align-items:center;gap:8px;color:var(--acc)}
+.wbhead b{font:600 14px var(--sans);color:var(--ink)}
+.wbaway{margin-left:auto;font:400 12.5px var(--sans);color:var(--muted);white-space:nowrap}
+.welcome .wbx{width:28px;height:28px;margin-right:-6px}
+.wbfacts{display:flex;flex-wrap:wrap;gap:2px 12px;font:500 13px var(--sans);color:var(--ink)}
+.wbwork{padding:6px 10px;border-radius:9px;background:var(--warn-soft);color:var(--warn);font:500 12.5px var(--sans)}
+.wbbtns{display:flex;gap:8px}
+.wbbtns button{flex:1 1 0;min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 12px;border-radius:12px;font:600 13.5px var(--sans)}
+.wbplay{background:var(--acc);color:var(--on-acc)}
+.wbplay:hover:not(:disabled){background:color-mix(in srgb,var(--acc) 85%,white)}
+.wbread{background:var(--panel);border:1px solid var(--line);color:var(--ink)}
+.wbread:hover{background:var(--bg)}
+
+/* the since-you-left divider in the list of earlier answers */
+.sinceleft{grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:6px 0;padding:4px 6px 4px 12px;border-radius:10px;background:var(--acc-soft);font:500 12.5px var(--sans);color:var(--acc)}
+.sinceleft .slabel{font-weight:600}
+.sinceleft .scount{flex:1;min-width:0;color:var(--muted)}
+.sinceleft .splay{display:inline-flex;align-items:center;gap:5px;min-height:36px;padding:0 12px;border-radius:999px;color:var(--acc);font:500 12.5px var(--sans)}
+.sinceleft .splay:hover{background:color-mix(in srgb,var(--acc) 14%,transparent)}
+
+@media (max-width:760px){
+  .ib.callsbtn{min-width:40px;height:40px;padding:0 8px}
+  .statestrip .ssmore{display:none}
+  .statestrip .ib{width:36px;height:36px}
+  .callspop{padding:10px}
+  .welcome{margin:6px 8px 0;padding:8px 10px;gap:6px}
+  .welcome .wbx{width:36px;height:36px}
+}
+.app[data-tv] .statestrip{font-size:16px;min-height:46px}
+.app[data-tv] .callrow .ct{font-size:17px}
+@media (prefers-reduced-motion:reduce){
+  .callrow[data-state="answering"] .cg svg,.statestrip[data-key="answering"] .ssico svg{animation:none}
+}
