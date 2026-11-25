@@ -1,4 +1,4 @@
-"""The call page's own JavaScript (call.js) run under node on a small DOM (skills/_shared/tests/dom_shim.mjs):
+"""The call page's own JavaScript (call.js and the call-*.js files its HTML loads after it) run under node on a small DOM (skills/_shared/tests/dom_shim.mjs):
 no browser, no microphone, no stage page.
 
 A call is served as the other tests serve it (a fake speech engine, each answer `seconds` long with its words
@@ -25,6 +25,14 @@ STATIC = Path(__file__).resolve().parents[1] / "static"
 SHIM = Path(__file__).resolve().parents[2] / "_shared" / "tests" / "dom_shim.mjs"
 STAGE = "http://stage.test/s/abc/"
 PAGE = f"http://127.0.0.1:8000/c/{CALL}"
+
+def page_scripts(html: str) -> list[str]:
+    """The call page's own scripts, as its HTML loads them (`<script src="/static/call-*.js">`), in that order:
+    the page is one program in several files, and a test runs them the way the browser does."""
+    names = re.findall(r'<script src="/static/(call[\w-]*\.js)"></script>', html)
+    assert names and names[0] == "call.js", names
+    return [str(STATIC / name) for name in names]
+
 
 needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 
@@ -83,7 +91,7 @@ globalThis.fetch = async (path, opts = {}) => {
 document.documentElement.dataset.theme = "light";
 setBody(HTML);
 window.CFG = JSON.parse(%(cfg)s);
-vm.runInThisContext(readFileSync(%(call)s, "utf8"), { filename: "call.js" });
+for (const f of %(files)s) vm.runInThisContext(readFileSync(f, "utf8"), { filename: f.split("/").pop() });
 const $ = (id) => document.getElementById(id);
 const audio = $("audio");
 audio.duration = %(seconds)s;
@@ -131,7 +139,7 @@ class CallPage:
         prelude = PRELUDE % {
             "shim": json.dumps(SHIM.as_uri()), "url": json.dumps(PAGE), "html": json.dumps(self.html),
             "states": json.dumps(self.states), "start": self.start, "cfg": json.dumps(cfg),
-            "call": json.dumps(str(STATIC / "call.js")), "seconds": self.seconds,
+            "files": json.dumps(page_scripts(self.html)), "seconds": self.seconds,
             "storage": ("" if self.autoplay else 'localStorage.setItem("talk.autoplay", "false");')
                        + "".join(f"localStorage.setItem({json.dumps('talk.' + k)}, {json.dumps(json.dumps(v))});" for k, v in self.stored.items()),
         }

@@ -21,6 +21,10 @@ svg{display:block;flex:none}
 .app[data-side="left"] .panel{order:-1;border-left:0;border-right:1px solid var(--line)}
 .app[data-rail]{--pw:60px}
 
+/* Owners (the feature batches of the panel's rebuild): each region below says whose it is. New rules go in the owner's own
+   file (call-shell.css C, call-wait.css W, call-calls.css R, call-input.css I, loaded after this one); a rule that already
+   lives here is changed here, in its owner's region only. "shared" regions are changed only at the hooks the design names. */
+/* [shared] the stage's frame and the page grid */
 /* ---- the stage, in a frame whose ring shows who is talking ---- */
 @property --a{syntax:"<angle>";initial-value:0deg;inherits:false}
 @keyframes orbit{to{--a:360deg}}
@@ -42,6 +46,7 @@ svg{display:block;flex:none}
 .app[data-live][data-state="idle"] .frame::before{opacity:.7;animation:none;background:var(--ring)}
 .stage{position:relative;height:100%;overflow:hidden;background:var(--bg);display:grid;grid-template-rows:minmax(0,1fr) auto}
 .stage>.stagewrap,.stage>.nostage{grid-row:1;grid-column:1}
+/* [C] the reader: the answer being said on the stage */
 /* The answer being said, in large type: each sentence appears as it is said and the word being said is lit.
    When the voice reaches a board, the board takes the stage and the sentence stays under it on one strip. */
 .reader{display:none;position:absolute;inset:0;z-index:2;overflow:auto;background:var(--bg);scrollbar-gutter:stable}
@@ -63,6 +68,7 @@ svg{display:block;flex:none}
 .reader.strip .rs:not(.cur){display:none}
 .reader.strip .rtext>:not(.rs){display:none}
 @media (prefers-reduced-motion:reduce){.reader .w{transition:none}}
+/* [shared] the stage frame, the veil, plain buttons */
 .stagewrap{position:relative;min-height:0;display:grid}
 #stage{width:100%;height:100%;border:0;display:block;background:var(--bg)}
 .veil{position:absolute;inset:0;display:grid;place-items:center;background:var(--bg);color:var(--muted);font-size:14px;text-align:center;padding:16px}
@@ -85,6 +91,7 @@ svg{display:block;flex:none}
 .grip:hover,.grip.on{background:linear-gradient(90deg,transparent 3px,var(--acc-mid) 3px 5px,transparent 5px)}
 .app[data-rail] .grip{display:none}
 .app[data-side="left"] .flip{transform:scaleX(-1)}
+/* [shared] the header; [I] .mode and the voices list below it */
 .phead{flex:none;height:48px;display:flex;align-items:center;gap:6px;padding:0 6px 0 14px;border-bottom:1px solid var(--line)}
 .topic{flex:1;min-width:0;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mode{flex:none;padding:1px 7px;border-radius:999px;font:500 11px var(--sans);color:var(--muted);white-space:nowrap;background:var(--shade)}
@@ -101,6 +108,7 @@ svg{display:block;flex:none}
 .live{width:8px;height:8px;border-radius:50%;background:var(--acc);box-shadow:0 0 8px var(--acc);flex:none}
 .live.off{background:var(--faint);box-shadow:none}
 
+/* [C] the conversation: turns, chips (T4: chips and the Now card change this region) */
 /* the conversation: your turns on the right, Claude's answers as text with their boards above them */
 .convo{flex:1;min-height:0;overflow:auto;padding:14px 14px 10px;display:flex;flex-direction:column;gap:12px}
 .empty{margin:12px 0;color:var(--faint);text-align:center}
@@ -138,6 +146,7 @@ button.chip.board.front svg{color:var(--acc)}
 button.chip.board.missing{opacity:.6;text-decoration:line-through;border-style:dashed}
 button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:var(--acc-soft)}
 
+/* [shared] the foot. [W] .info .status .undo .prep; [C] .player #seek .time; [I] .compose .wave .bars */
 /* the foot: what Claude is doing, the player, then typing and talking */
 .foot{position:relative;flex:none;border-top:1px solid var(--line);padding:8px 12px 12px;display:flex;flex-direction:column;gap:8px}
 .jump{position:absolute;z-index:2;left:50%;bottom:calc(100% + 10px);transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:6px 12px;
@@ -177,6 +186,7 @@ button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:va
 .bars i{width:3px;height:4px;border-radius:2px;background:var(--rec);transition:height .08s}
 .rectime{font:500 13px var(--mono);color:var(--rec)}
 
+/* [shared] the rail: [C] the player ring, [I] the mic */
 /* ---- the rail: the panel collapsed, the mic and the player still in reach ---- */
 .rail{min-height:0;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0}
 .rail .sp{flex:1}
@@ -186,6 +196,7 @@ button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:va
 .ring .ib.pp{width:38px;height:38px;background:var(--panel)}
 .rail .ib.mic{width:44px;height:44px}
 
+/* [shared] .ib and the mic. [I] the tooltips (T7) */
 /* ---- buttons ---- */
 .ib{position:relative;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:var(--muted);flex:none;
   transition:background-color .15s,color .15s,transform .15s}
@@ -222,6 +233,7 @@ button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:va
 .spin{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
+/* [shared] .pop and .toast; [I] .segc .row .liveopts .demobtn .endbtn (the gear); [R] .callspop #calls .callrow */
 /* ---- glass layers: the popovers and the toast ---- */
 .pop,.toast{position:absolute;z-index:10;background:var(--glass);border:1px solid var(--glass-line);box-shadow:var(--lift);
   -webkit-backdrop-filter:blur(24px) saturate(1.5);backdrop-filter:blur(24px) saturate(1.5);animation:up .18s ease-out}
@@ -263,6 +275,7 @@ button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:va
 .toast:has(#retry:not([hidden])){padding-right:8px}
 .tbtn{padding:4px 12px;border-radius:999px;background:var(--shade);font:500 12.5px var(--sans)}
 
+/* [I] TV and the phone */
 /* TV: read from across the room. The panel grows and its words with it; the stage zooms itself (stage:zoom). */
 .app[data-tv]:not([data-rail]){--pw:520px}
 .app[data-tv] .turn .text{font-size:20px}
@@ -294,6 +307,7 @@ button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:va
   .status.shimmer{background:none;color:var(--muted)}
   .bars i,.turn .w{transition:none}
 }
+/* [C] folded answers and stops (the fold rule is reversed by the Now card) */
 /* An answer said on the stage: its text folds to its first line, and Show text opens it */
 .turn.claude.folded .text{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;color:var(--muted)}
 .turn .fold{border:0;background:none;padding:2px 6px;border-radius:6px;font:500 11.5px var(--sans);color:var(--muted);cursor:pointer}
@@ -307,3 +321,6 @@ button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:va
 .stopcard .btn.right{border-color:var(--good);color:var(--good);font-weight:600}
 .stopcard .btn.wrong{border-color:var(--bad);color:var(--bad);text-decoration:line-through}
 .stopcard .shint{margin:0;font-size:13px;color:var(--muted)}
+
+/* [shared] visible to a screen reader only: the live region (#announcer) and any label that has no room on screen */
+.sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}

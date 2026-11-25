@@ -1,0 +1,2 @@
+/* Batch W's rules for the panel's rebuild: the wait card (#waitcard), the note under the field (#sendnote), the queued answer's row (#queuerow).
+   Loaded after call.css and the other batches' sheets; use the page's tokens (tokens.css) and the same two themes. */

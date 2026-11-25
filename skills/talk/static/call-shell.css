@@ -1,0 +1,2 @@
+/* Batch C's rules for the panel's rebuild: the Now card (#nowcard), the list of earlier answers (#earlier, .tlrow), search, the transport and the Following strip.
+   Loaded after call.css and the other batches' sheets; use the page's tokens (tokens.css) and the same two themes. */

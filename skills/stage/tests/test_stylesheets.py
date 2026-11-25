@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 
 SKILLS = Path(__file__).resolve().parents[2]
-SHEETS = [SKILLS / "stage" / "static" / "stage.css", SKILLS / "talk" / "static" / "call.css", SKILLS / "talk" / "static" / "tokens.css"]
+SHEETS = [SKILLS / "stage" / "static" / "stage.css", SKILLS / "talk" / "static" / "call.css", SKILLS / "talk" / "static" / "tokens.css",
+          *sorted((SKILLS / "talk" / "static").glob("call-*.css"))]
 
 
 def depth_slips(css: str) -> list[int]:

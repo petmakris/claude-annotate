@@ -7,7 +7,12 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"light"');
 <link rel="preconnect" href="https://fonts.googleapis.com">__PRECONNECT__
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/tokens.css">
+<link rel="icon" id="favicon" href="data:,"><!-- R: call-return.js draws the call's state on it -->
 <link rel="stylesheet" href="/static/call.css">
+<link rel="stylesheet" href="/static/call-shell.css"><!-- C -->
+<link rel="stylesheet" href="/static/call-wait.css"><!-- W -->
+<link rel="stylesheet" href="/static/call-calls.css"><!-- R -->
+<link rel="stylesheet" href="/static/call-input.css"><!-- I -->
 </head>
 <body>
 <div class="app" id="app" data-state="idle">
@@ -24,12 +29,30 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"light"');
     <div class="open">
       <header class="phead">
         <span class="live" id="live"></span><span class="topic" id="topic"></span><span class="mode" id="modechip"></span>
+        <button class="ib" id="searchbtn" type="button" aria-label="Search the conversation" data-tip="Search" aria-expanded="false" aria-controls="tlsearch" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></button><!-- C -->
         <button class="ib" id="callsbtn" type="button" aria-label="Other calls" data-tip="Other calls" aria-expanded="false" aria-controls="pCalls" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg><span class="dot" id="callsdot" hidden></span></button>
         <button class="ib" id="fullscreen" type="button" aria-label="Full screen" data-tip="Full screen" aria-pressed="false" hidden><svg class="i-enter" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg><svg class="i-exit" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg></button>
         <button class="ib" id="gear" type="button" aria-label="Settings" data-tip="Settings" aria-expanded="false" aria-controls="pGear"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
         <button class="ib" id="collapse" type="button" aria-label="Collapse the panel" data-tip="Collapse"><svg class="flip" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16M8 10l2 2-2 2"/></svg></button>
       </header>
-      <section class="convo" id="convo" aria-label="Conversation"><p class="empty" id="empty">Nothing has been said yet.</p></section>
+      <div class="statestrip" id="statestrip" hidden></div><!-- R: the call's state in words -->
+      <div class="welcome" id="welcome" role="region" aria-label="Welcome back" hidden></div><!-- R: after a real absence -->
+      <section class="convo" id="convo" aria-label="Conversation">
+        <!-- C: the Now card, the current turn. Its frame is C's; #waitcard inside it is W's. -->
+        <div class="now" id="nowcard" hidden>
+          <div class="now-head" id="nowhead"><span class="now-state" id="nowstate"></span><span class="now-num" id="nownum"></span><span class="now-clock" id="nowclock"></span></div>
+          <div class="wait-card" id="waitcard" role="group" aria-label="Your question is being answered" hidden></div><!-- W -->
+          <div class="now-body" id="nowbody"><p class="now-q" id="nowq"></p><div class="now-text" id="nowtext"></div><div class="now-chips" id="nowchips"></div></div>
+          <div class="now-transport" id="nowtransport"></div>
+          <div class="now-follow" id="nowfollow"></div>
+        </div>
+        <div class="queuerow" id="queuerow" hidden></div><!-- W: the answer waiting for this one to end, with Skip -->
+        <section class="tl" id="earlier" aria-label="Earlier answers" hidden><!-- C: the list of earlier answers -->
+          <div class="tl-head" id="tlhead"><h3 id="tlcount"></h3><input type="search" id="tlsearch" aria-label="Search the conversation" hidden><button class="tl-expand" id="tlexpand" type="button" hidden></button></div>
+          <div class="tl-list" id="tllist" role="list"></div><!-- the rows are C's (.tlrow); the since-you-left divider #sinceleft inside is R's -->
+        </section>
+        <p class="empty" id="empty">Nothing has been said yet.</p>
+      </section>
       <div class="foot" id="foot">
         <button class="jump" id="jump" type="button" hidden><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>Back to the voice</button>
         <div class="info" id="info">
@@ -43,6 +66,10 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"light"');
           <input type="range" id="seek" min="0" max="0" step="0.1" value="0" aria-label="Position in the answer">
           <span class="time" id="time">0:00</span>
         </div>
+        <div class="sendnote" id="sendnote" hidden></div><!-- W: the draft kept, what happened to the last send -->
+        <div class="modebar" id="modebar" hidden><!-- I: the Type / Talk / Live switch and the Your turn pill -->
+          <div class="modesw" id="modesw" role="group" aria-label="How you talk"></div><span class="yourturn" id="yourturn"></span>
+        </div>
         <div class="compose" id="pill" role="toolbar" aria-label="Talk or type">
           <button class="ib" id="cancel" type="button" aria-label="Cancel" data-tip="Cancel" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
           <textarea id="text" rows="1" placeholder="Type, or press the mic" aria-label="Type a message"></textarea>
@@ -51,6 +78,7 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"light"');
           <button class="ib send" id="send" type="button" aria-label="Done" data-tip="Done" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></button>
           <button class="ib mic" id="talk" type="button" aria-label="Talk" data-tip="Talk"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg><span class="spin" aria-hidden="true"></span></button>
         </div>
+        <div class="keyhint" id="keyhint" hidden></div><!-- I: the keys that matter, and the button that opens the Keys sheet -->
       </div>
     </div>
     <div class="rail" id="rail">
@@ -94,7 +122,10 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"light"');
     <button class="endbtn" id="end" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.7 13.3a16 16 0 0 0 3.4 2.5l1.3-1.3a2 2 0 0 1 2.1-.4 12.8 12.8 0 0 0 2.8.7 2 2 0 0 1 1.7 2v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 3.2 4.2 2 2 0 0 1 5.2 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.9.7 2.8a2 2 0 0 1-.4 2.1L9.2 9.9"/><path d="M22 2L2 22"/></svg><span id="endlbl">End call</span></button>
   </div>
 
-  <div class="pop callspop" id="pCalls" role="dialog" aria-label="Other calls" hidden><h4>Open calls</h4><nav id="calls" aria-label="Other calls"></nav></div>
+  <div class="pop callspop" id="pCalls" role="dialog" aria-label="Other calls" hidden><h4>Open calls</h4><div id="nextwait" hidden></div><nav id="calls" aria-label="Other calls"></nav></div><!-- R: #nextwait holds Next waiting -->
+  <div class="pop keyspop" id="pKeys" role="dialog" aria-label="Keyboard shortcuts" hidden></div><!-- I: the Keys sheet -->
+
+  <div class="sr-only" id="announcer" role="status" aria-live="polite"></div><!-- R: the polite live region: status, new answers, board changes -->
 
 
 
@@ -102,4 +133,13 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"light"');
 </div>
 <script>window.CFG = __CONFIG__;</script>
 <script src="/static/call.js"></script>
+<script src="/static/call-calls.js"></script>
+<script src="/static/call-wait.js"></script>
+<script src="/static/call-player.js"></script>
+<script src="/static/call-stage.js"></script>
+<script src="/static/call-shell.js"></script>
+<script src="/static/call-return.js"></script>
+<script src="/static/call-input.js"></script>
+<script src="/static/call-live.js"></script>
+<script src="/static/call-boot.js"></script>
 </body></html>

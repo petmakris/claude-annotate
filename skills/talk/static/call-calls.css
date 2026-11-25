@@ -1,0 +1,2 @@
+/* Batch R's rules for the panel's rebuild: the state strip (#statestrip), the welcome-back card (#welcome), the since-you-left divider (#sinceleft), the Calls popover's new parts (#nextwait, state words).
+   Loaded after call.css and the other batches' sheets; use the page's tokens (tokens.css) and the same two themes. */
