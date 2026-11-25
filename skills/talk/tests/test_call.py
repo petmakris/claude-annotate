@@ -381,7 +381,8 @@ def split(tmp_path, text):
 def test_an_unknown_board_kind_is_named_and_its_body_kept_out_of_the_speech(tmp_path):
     spoken, items, problems = split(tmp_path, "Hi. [[show chart | Sales]] a,b [[/show]] Bye.")
     assert spoken == "Hi. Bye." and items == []
-    assert len(problems) == 1 and 'unknown board kind "chart"' in problems[0]
+    assert problems == ['unknown board kind "chart", use code, change, diagram or table',
+                        'the body of the unknown board kind "chart" was left out and not said: "a,b"']
 
 
 def test_tag_heads_are_forgiving(tmp_path):
@@ -522,7 +523,7 @@ def test_a_point_lights_up_lines_of_the_last_board_and_a_bad_point_is_reported(t
     _, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point Nope: row 1]] There.", code)
     assert problems == ['point not shown: no board titled "Nope" in this call']
     entry, problems = cues_of(tmp_path, "[[show code: a.py:1-5 | C]] Look. [[point: wibble]] There.", code)
-    assert problems == ['point not shown: expected line N, lines A-B, old line N, row N, rows A-B, row "text", cell "row" / "column", node ID, step ID, part ID, box ID, zone N or route N']
+    assert problems == ['point not shown: could not read "wibble"; "C" is a code, use line N or lines A-B']
     assert [c["kind"] for c in entry["cues"]] == ["front"] and "wibble" not in entry["text"]
 
 
@@ -539,7 +540,7 @@ def test_points_name_rows_and_nodes_and_a_titled_board(tmp_path):
     _, problems = cues_of(tmp_path, "[[show table | T]]| a |\n|---|\n| 1 |[[/show]] One. [[point: row 4]] No.")
     assert problems == ['point not shown: "T" has 1 rows, not row 4']
     _, problems = cues_of(tmp_path, "[[show table | T]]| a |\n|---|\n| 1 |[[/show]] One. [[point: line 1]] No.")
-    assert problems == ['point not shown: "T" is a table; use row N, rows A-B, row "text" or cell "row" / "column"']
+    assert problems == ['point not shown: "T" is a table; use row N, rows A-B, rows 2,5, row "text", row "first cell", "second cell", column "header" (or N), cell R / C (by number or text, e.g. cell 2 / 3)']
 
 
 def test_boards_all_placed_at_the_end_are_reported(tmp_path):
@@ -717,7 +718,7 @@ def test_a_scene_that_cannot_be_shown_or_pointed_at_is_a_problem(tmp_path):
              ['scene "S" not shown: a javascript: link never runs in a scene; use a button with a handler'],
              SCENE + "Hi. [[point: part nothing]] There.": ['point not shown: no part nothing in "Ben\'s product name"'],
              SCENE + "Hi. [[point: row 2]] There.": ['point not shown: "Ben\'s product name" is a scene; use part ID'],
-             "[[show table | T]]| a |\n|---|\n| 1 |[[/show]] Hi. [[point: part a]] There.": ['point not shown: "T" is a table; use row N, rows A-B, row "text" or cell "row" / "column"']}
+             "[[show table | T]]| a |\n|---|\n| 1 |[[/show]] Hi. [[point: part a]] There.": ['point not shown: "T" is a table; use row N, rows A-B, rows 2,5, row "text", row "first cell", "second cell", column "header" (or N), cell R / C (by number or text, e.g. cell 2 / 3)']}
     for text, want in cases.items():
         _, problems = cues_of(tmp_path, text)
         assert want[0] in problems and len(problems) <= 2, (text, problems)  # beside the note that no sentence names a part
@@ -1437,8 +1438,11 @@ def test_a_point_on_a_map_is_the_reveal_for_its_sentence_and_the_part_it_names_i
         # the four parts no sentence names come in with the last one named, which stays the one said
         (3, "Third, sharing a", ["node:share", "node:catch", "node:guard", "node:state", "node:err"],
          ["node:share", "edge:share->state#0"])]
-    assert call.board.problems == ['4 of 7 parts of "Three paths changed" are named by no sentence, so they came in by '
-                                   "order; point at each where it is said"]
+    assert call.board.problems == [
+        '4 of 7 parts of "Three paths changed" are named by no sentence, so they came in by order, not where they are '
+        'said: "catch every error", "broken guard first", "return latest state", "put in error" with "Third, sharing a '
+        "proposal that broke on…\". Say each part's own words in the sentence about it, or put [[point: node catch]] "
+        "before that sentence"]
     assert stage_rule_breaks(call, shown) == []
 
 
@@ -1612,3 +1616,167 @@ def test_a_change_and_code_in_another_repository_show_by_absolute_path_and_can_b
     assert problems == [] and items[0]["path"] == "other/a.py" and items[0]["lines"][0] == "def new_name():"
     _, items, problems = split_in(tmp_path, "[[show code: ../other/a.py:1-2 | Relative]] No.", code)
     assert items == [] and problems and "outside the project" in problems[0]
+
+
+# -- the review round: tags, sentences, points, tables, specs, paths ---------------------------------------------
+
+
+def split_text(tmp_path, text, code=None):
+    """A reply split by a call with no stage: (shown text, the call)."""
+    from helpers import make_args
+    call = talk.Call(make_args(code=code), "T", tmp_path / "out")
+    return call.split_reply_safely(text), call
+
+
+def test_an_unknown_board_kind_with_no_close_swallows_nothing_and_says_so(tmp_path):
+    shown, call = split_text(tmp_path, "[[show image: x.png]]\nThis is the first line. And more.\nStill the same paragraph.\n\nNext.")
+    assert shown == "This is the first line. And more.\nStill the same paragraph.\n\nNext."
+    assert call.board.problems == ['unknown board kind "image", use code, change, diagram or table; '
+                                   "there is no [[/show]] after it, so the text after it was left alone"]
+
+
+def test_unrecognised_tags_are_left_out_of_the_speech_with_a_did_you_mean(tmp_path):
+    shown, call = split_text(tmp_path, "[[highlight: foo]] Hello there. [[pause]] And more. [[hide]] Ok.")
+    assert shown == "Hello there. And more. Ok."
+    assert call.board.problems == [
+        "unknown tag [[highlight: foo]] was left out of the speech; did you mean [[point: lines 12-14]], "
+        "[[point: row 2]] or [[point: node X]]?",
+        "unknown tag [[pause]] was left out of the speech; did you mean [[check]] (a stop with buttons) or a sentence boundary?",
+        "unknown tag [[hide]] was left out of the speech; did you mean to leave it out? a board stays on the stage "
+        "until a new one is shown, so there is nothing to hide"]
+
+
+def test_a_sentence_does_not_end_at_an_abbreviation_and_the_answer_carries_its_starts(tmp_path):
+    text = "Use it e.g. here vs. there. Ask Dr. Smith about the U.S. economy, approx. now. Then stop."
+    assert [text[i:] for i in talk.sentence_starts(text)] == [
+        "Ask Dr. Smith about the U.S. economy, approx. now. Then stop.", "Then stop."]
+    assert talk.sentence_starts("Plan B. Then C. Done etc. The end. J. R. R. Tolkien wrote it.") == [8, 16, 26, 35]
+    from helpers import make_args
+    call = talk.Call(make_args(), "T", tmp_path / "out")
+    with __import__("unittest.mock").mock.patch.object(call, "speak", lambda entry: asyncio.sleep(0)):
+        entry = run(call.answer(text))
+    assert entry["starts"] == talk.sentence_starts(entry["text"]) == [28, 79]
+
+
+def test_brackets_in_speech_and_in_a_tag_are_not_tag_syntax(tmp_path):
+    shown, call = split_text(tmp_path, "Use [[ -f x ]] and [[ $a == b ]] to test. [[note: arr[i[0]] is bad]] Then [[key: use a[b[0]] here]] fine.")
+    assert shown == "Use [[ -f x ]] and [[ $a == b ]] to test. Then fine."
+    assert [e["text"] for e in call.entries if e["who"] == "note"] == ["arr[i[0]] is bad"]
+    assert call.keys == [{"answer": 1, "text": "use a[b[0]] here"}] and call.board.problems == []
+    shown, call = split_text(tmp_path, "A stray [[ here and more text. Still said.")
+    assert shown == "A stray [[ here and more text. Still said." and call.board.problems == []
+
+
+def test_a_spec_with_a_trailing_comma_is_drawn_and_one_that_is_broken_says_where(tmp_path):
+    spec = '{"actors":[{"id":"a","label":"A"},{"id":"b","label":"B"},],"steps":[{"id":"s1","from":"a","to":"b","arrow":"request","label":"x"}]}'
+    shown, call = split_text(tmp_path, f"[[show sequence | T]]\n{spec}\n[[/show]] After.")
+    assert shown == "After." and [i["kind"] for i in call.board.items] == ["sequence"]
+    assert call.board.problems == ['sequence "T": a comma before a closing bracket was removed (line 1 column 57); write it without']
+    broken = '{"actors": [\n  {"id": "a", "label": "A"},\n  {"id": "b", "label": "B"}\n],\n"steps": [{"id": "s1", "from": "a", "to": "b", "label": "say "hi" now"}]}'
+    shown, call = split_text(tmp_path, f"[[show sequence | T]]\n{broken}\n[[/show]] After.")
+    assert shown == "After." and call.board.items == []
+    assert call.board.problems[0].startswith('sequence "T" not shown: the spec is not valid JSON, Expecting \',\' delimiter at line 5 column ')
+    assert "a double quote inside a text is written" in call.board.problems[0]
+
+
+def test_a_table_with_ragged_rows_two_tables_or_too_much_is_reported(tmp_path):
+    table = "| a | b |\n|---|---|\n| 1 | 2 | 3 |\n| x |\n| ok | fine |"
+    shown, call = split_text(tmp_path, f"[[show table | T]]\n{table}\n[[/show]] Done.")
+    assert call.board.items[0]["body"] == "| a | b |\n|---|---|\n| 1 | 2 |\n| x |  |\n| ok | fine |"
+    assert call.board.problems == [
+        'table "T" row 1 ("1") has 3 cells but the header has 2; cut to 2 (a | inside a cell is written \\|)',
+        'table "T" row 2 ("x") has 1 cell but the header has 2; padded to 2']
+    two = "| a |\n|---|\n| 1 |\n\n| c |\n|---|\n| 2 |"
+    shown, call = split_text(tmp_path, f"[[show table | T]]\n{two}\n[[/show]] Done.")
+    assert call.board.items[0]["body"] == "| a |\n|---|\n| 1 |"
+    assert call.board.problems == ['table "T" holds more than one table: only the first is shown, and the stage points '
+                                   'at the rows of one table, so put each in its own [[show table | title]] '
+                                   '(left out: "| c | |---| | 2 |…")']
+    big = "| a | b | c | d | e | f | g |\n|" + "---|" * 7 + "\n" + "\n".join(f"| {n} | 1 | 1 | 1 | 1 | 1 | 1 |" for n in range(1, 10))
+    shown, call = split_text(tmp_path, f"[[show table | Big]]\n{big}\n[[/show]] Done.")
+    assert len(call.board.items) == 1
+    assert call.board.problems == ['table "Big" has 9 rows and 7 columns: the stage reads a table of up to 8 rows and '
+                                   "6 columns, so cut the rows and columns the answer does not talk about, or split it into two boards",
+                                   '"Big" has 9 elements and no verbs, so it came in with the sentences said about it (dump); '
+                                   "tag the word that names each thing"]
+
+
+def test_a_binary_file_is_no_code_board_and_lines_count_by_newlines_only(tmp_path):
+    code = tmp_path / "code"
+    code.mkdir()
+    (code / "bin.dat").write_bytes(b"\x00\x01\x02 hello\nworld\n")
+    (code / "ff.py").write_text("one\ntwo \x0c three four\nfive\n")
+    shown, call = split_text(tmp_path, "[[show code: bin.dat:1-2 | Bin]] Look. [[show code: ff.py:1-3 | Ff]] Then.", code)
+    assert call.board.problems == ["code not shown, bin.dat is a binary file"]
+    assert [i["lines"] for i in call.board.items] == [["one", "two \x0c three four", "five"]]
+    assert talk.file_lines("a\r\nb\rc\n") == ["a", "b", "c"] and talk.file_lines("") == []
+
+
+def test_one_bad_board_path_fails_only_its_own_board(tmp_path):
+    code = tmp_path / "code"
+    code.mkdir()
+    (code / "a.py").write_text("x = 1\ny = 2\n")
+    text = ("[[show code: ~nosuchuser/x.py:1-2 | Home]] One. [[show code: a\x00b.py:1-2 | Nul]] Two. "
+            f"[[show code: {'n' * 400}.py:1-2 | Long]] Three. [[show code: a.py:1-2 | Good]] Four.")
+    shown, call = split_text(tmp_path, text, code)
+    assert shown == "One. Two. Three. Four."
+    assert [i["title"] for i in call.board.items] == ["Good"]
+    assert len(call.board.problems) == 3 and all(p.startswith("code not shown") for p in call.board.problems)
+
+
+TABLE3 = ("[[show table | Routes]]| Verb | Path | Note |\n|---|---|---|\n| GET | /users | list |\n| GET | /orders | list |\n"
+          "| POST | /users | add |[[/show]] ")
+FLOW3 = ('[[show flowchart | Flow]]{"nodes":[{"id":"a","label":"Alpha"},{"id":"b","label":"Beta"},{"id":"c","label":"Gamma"}],'
+         '"edges":[{"from":"a","to":"b","label":"yes"},{"from":"a","to":"b","label":"retry"},{"from":"b","to":"c"}]}[[/show]] ')
+
+
+def test_a_point_names_a_column_rows_by_list_a_cell_or_a_row_by_two_cells(tmp_path):
+    def lit(tag):
+        _, problems, focus = focus_cues(tmp_path, TABLE3 + f"Hi. {tag} Next.")
+        return problems, focus
+
+    assert lit("[[point: column Path]]") == ([], [("routes", ["cell#1.2", "cell#2.2", "cell#3.2"])])
+    assert lit("[[point: column 3]]") == ([], [("routes", ["cell#1.3", "cell#2.3", "cell#3.3"])])
+    assert lit("[[point: rows 1,3]]") == ([], [("routes", ["row#1", "row#3"])])
+    assert lit("[[point: cell 2,3]]") == ([], [("routes", ["cell#2.3"])])
+    assert lit('[[point: cell "POST" / "Note"]]') == ([], [("routes", ["cell#3.3"])])
+    assert lit('[[point: row "GET", "/orders"]]') == ([], [("routes", ["row#2"])])
+    assert lit('[[point: row "GET"]]') == (
+        ['2 rows of "Routes" start with "GET": the first was lit; to light another name its row number '
+         '([[point: row 2]]) or its second cell ([[point: row "GET", "second cell"]])'], [("routes", ["row#1"])])
+    assert lit('[[point: column "Nope"]]')[0] == ['point not shown: no column "Nope" in "Routes" (columns: Verb, Path, Note)']
+    assert lit("[[point: rows 1,9]]")[0] == ['point not shown: "Routes" has 3 rows, not row 9']
+    assert lit("[[point: cell 2 / 9]]")[0] == ['point not shown: no cell 2 / 9 in "Routes" (3 rows, columns: Verb, Path, Note)']
+
+
+def test_a_point_names_a_flowchart_edge_by_its_ends_its_number_or_its_label(tmp_path):
+    def lit(tag):
+        _, problems, focus = focus_cues(tmp_path, FLOW3 + f"Hi. {tag} Next.")
+        return problems, focus
+
+    assert lit("[[point: edge a->b]]") == ([], [("flow", ["edge:a->b#0", "edge:a->b#1"])])
+    assert lit("[[point: edge a->b #2]]") == ([], [("flow", ["edge:a->b#1"])])
+    assert lit('[[point: edge "retry"]]') == ([], [("flow", ["edge:a->b#1"])])
+    assert lit("[[point: edge c->a]]")[0] == ['point not shown: no edge c->a in "Flow" (its edges: a->b, b->c)']
+    assert lit("[[point: edge a->b #3]]")[0] == ['point not shown: only 2 edge(s) go a->b in "Flow", not #3']
+
+
+def test_a_point_that_misses_lists_only_the_forms_of_that_board(tmp_path):
+    _, problems = cues_of(tmp_path, TABLE3 + "Hi. [[point: edge a->b]] No. [[point: wibble]] No.")
+    assert problems == [
+        'point not shown: "Routes" is a table; use row N, rows A-B, rows 2,5, row "text", row "first cell", "second cell", '
+        'column "header" (or N), cell R / C (by number or text, e.g. cell 2 / 3)',
+        'point not shown: could not read "wibble"; "Routes" is a table, use row N, rows A-B, rows 2,5, row "text", '
+        'row "first cell", "second cell", column "header" (or N), cell R / C (by number or text, e.g. cell 2 / 3)']
+    _, problems = cues_of(tmp_path, FLOW3 + "Hi. [[point: column 2]] No.")
+    assert problems == ['point not shown: "Flow" is a flowchart; use node ID, edge A->B (a #N after it for the Nth '
+                        'parallel edge) or edge "label"']
+
+
+def test_a_point_at_a_sequence_outcome_names_the_box_and_a_flowchart_has_none(tmp_path):
+    seq = ('[[show sequence | Seq]]{"actors":[{"id":"a","label":"A"},{"id":"b","label":"B"}],"steps":[{"id":"s1","from":"a",'
+           '"to":"b","arrow":"request","label":"asks"}],"outcome":{"title":"Done","lines":["ok"],"tone":"green"}}[[/show]] ')
+    _, problems, focus = focus_cues(tmp_path, seq + "Hi. [[point: outcome]] End.")
+    assert problems == []
+    _, problems = cues_of(tmp_path, FLOW3 + "Hi. [[point: outcome]] End.")
+    assert problems and problems[0].startswith('point not shown: "Flow" is a flowchart; use node ID, edge A->B')
