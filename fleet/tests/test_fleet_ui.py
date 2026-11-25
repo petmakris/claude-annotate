@@ -143,6 +143,8 @@ def test_the_page_never_uses_innerhtml_or_an_external_script():
     import os
     d = os.path.join(os.path.dirname(fleet.__file__), "ui")
     for name in os.listdir(d):
+        if not os.path.isfile(os.path.join(d, name)):
+            continue  # fixtures/ holds test data, never served (static files come from ui/ itself)
         text = open(os.path.join(d, name)).read()
         assert "innerHTML" not in text and "http://" not in text and "https://" not in text, name
 
