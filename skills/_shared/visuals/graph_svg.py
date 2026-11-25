@@ -334,8 +334,7 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
         out.append(_text("zl", PAD, y1 - 14, "AFTER"))
         out += parts_b + parts_a
         total_w, total_h = PAD + max(wb, wa) + PAD, y1 + ha + PAD
-        title_h = top - PAD
-        vb = {"before": (0, title_h, total_w, y0 + hb + PAD - title_h),
+        vb = {"before": (0, y0 - HEAD_H, total_w, hb + HEAD_H + PAD),  # a frame alone leaves the title out: the stage's header has it
               "after": (0, y1 - HEAD_H, total_w, total_h - (y1 - HEAD_H)),
               "both": (0, 0, total_w, total_h)}
     else:

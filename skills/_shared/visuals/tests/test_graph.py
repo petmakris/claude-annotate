@@ -97,7 +97,7 @@ def test_a_node_and_an_edge_carry_the_same_key_in_both_frames():
 def test_the_svg_gives_each_frame_its_own_viewbox_for_a_phone_to_show_one_at_a_time():
     svg = graph_svg.render(REBASE, "g5")
     vb = {k: tuple(map(int, v.split())) for k, v in re.findall(r'data-vb-(\w+)="([^"]*)"', svg)}
-    assert vb == {"before": (0, 40, 759, 224), "after": (0, 276, 759, 284), "both": (0, 0, 759, 560)}
+    assert vb == {"before": (0, 64, 759, 200), "after": (0, 276, 759, 284), "both": (0, 0, 759, 560)}
     assert 'viewBox="0 0 759 560"' in svg and 'data-frames="2"' in svg
 
 

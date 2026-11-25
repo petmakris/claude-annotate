@@ -769,7 +769,7 @@ function layoutGraph(box, svg, frame, playing) {
   const pick = narrow ? (box.dataset.gframe || "after") : "both";
   const vb = svg.dataset["vb" + pick.charAt(0).toUpperCase() + pick.slice(1)];
   if (vb) svg.setAttribute("viewBox", vb);
-  svg.style.width = narrow ? Math.max(box.clientWidth - 32, +vb.split(" ")[2] * 0.9) + "px" : "";
+  svg.style.width = narrow ? Math.max(box.clientWidth - 32, +vb.split(" ")[2] * 0.75) + "px" : "";
   let sw = box.querySelector(":scope > .gsw");
   if (narrow && !sw) {
     sw = document.createElement("div");

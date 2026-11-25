@@ -862,10 +862,14 @@ svg.sb-link circle{fill:var(--acc);stroke:var(--panel);stroke-width:2}
 /* Bars and graph boards (bars_svg.py, graph_svg.py): drawn like the map, keyed, revealed and lit by the same frames */
 .visual.vzmap.vzbars{flex:1 1 0;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center}  /* the rows share the pane */
 .vzmap.vzbars svg.vz{min-width:0;width:auto;height:100%;max-width:100%;max-height:100%;margin:0}
+@media (max-width:640px){  /* a phone's pane is short: the bars take its width and the pane scrolls to the one being said */
+  .visual.vzmap.vzbars{flex:1 0 auto;overflow:visible;display:block}
+  .vzmap.vzbars svg.vz{width:100%;height:auto;max-height:none}
+}
 .vzmap.vzbars svg.vz [data-key].k-hidden{opacity:.18!important}
 .vzmap.vzbars svg.vz rect.bar.k-focus{fill:var(--vz-accent)}
 .vzmap.vzbars svg.vz rect.chp.k-focus{stroke:var(--vz-accent);stroke-width:2.6}
-.vzmap.vzgraph svg.vz{min-width:0;max-width:1500px}
+.vzmap.vzgraph svg.vz{min-width:0;max-width:1500px;overflow:hidden}  /* a frame alone is cut to its own viewBox */
 .vzmap.vzgraph svg.vz .ed.k-hidden,.vzmap.vzgraph svg.vz .lb.k-hidden{opacity:0!important}
 .vzmap.vzgraph svg.vz .ed.k-focus{stroke:var(--vz-accent);stroke-width:3.2}
 .vzmap.vzgraph .gsw{display:flex;gap:6px;justify-content:center;margin:0 0 10px;position:sticky;left:0}

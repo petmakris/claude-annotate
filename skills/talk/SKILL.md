@@ -133,6 +133,8 @@ Before a table, ask: could the viewer say what each column means?
   - Any other answer says its plain part first, then puts up what hearing cannot carry.
 - **Short.** One idea per sentence, under 20 words. `reply` prints a `board:` line for a sentence over 30 words or an answer over 220. Plain sentences, with no markdown, lists or symbols. Never read identifiers or values aloud one by one: put them on the stage and say what they mean.
 - **Labels are words you will say.** A part lights when a sentence says its label, so write labels as spoken words (`the new server`), never symbols or primes (`X'`, `->`, `v2'`). Put the symbol in `sub`.
+- **Say the parts in the order you list them**, one sentence for each, so a part comes in when its sentence is said and not before.
+- **A step an actor does to itself** (it reads, it decides, it waits) is `"arrow": "self"` with the same actor in `from` and `to`. A call between two actors is a `request`.
 - **Every number you say goes on the board**, in a step's `note` or `sub`, or a box's `lines`. Never leave a spoken number out of the picture.
 - **Draw a process as a zone with its name and port**, around the boxes it serves. A named part gets its own box.
 - **Draw a wait as a request with a reply.** A long poll is a `request` plus an `event` with `reply_to`, which holds a bar open between them. Never draw a wait as a push from the server.
@@ -248,7 +250,7 @@ For a flowchart:
 - `[[point: lines 12-14]]` before a sentence lights up those lines and dims the rest.
 - Code: `line N`, `lines A-B`. On a change board, line numbers are the new ones and a range takes any line removed inside it; `old line N` (or `old lines A-B`) points at a removed line, by its number before the change.
 - Table: `row N`, `rows A-B`, `rows 2,5`, `row "name"` (by its first cell), `column "header"`, `cell "row" / "column"` (by its row's first cell and its column's header, or by numbers: `cell 2 / 3`).
-- Diagrams: `node X` (a flowchart or graph node id), `edge a->b`, `step S` (a sequence step id), and on a map `box X`, `zone N` or `route N`. On a before and after sequence or a graph: `before`, `after`, `both`; on the sequence also `outcome`.
+- Diagrams: `node X` (a flowchart or graph node id), `edge a->b`, `step S` (a sequence step id), and on a map `box X`, `zone N` (the first zone is 0) or `route N`. On a before and after sequence or a graph: `before`, `after`, `both`; on the sequence also `outcome`.
 - Bars: `bar X` (a bar id) or `rows A-B`. A name that is nearly an id is read as it, with a `board:` line; one that is not names the ids.
 - A lit step or node is drawn as the one being said.
 - It points at the last board shown. Name another one by its title: `[[point Turn path: node Q]]`.
@@ -266,7 +268,7 @@ To control it, write the board once, whole, then put a verb just before the word
 | `[[all]]` | reveal everything still hidden |
 | `[[focus api->db]]`, `[[focus 42-45]]`, `[[focus rows 2-3]]`, `[[focus none]]` | light these and dim the rest. `point` does the same. The next reveal with no point of its own turns the light off |
 
-- Targets are node and subgraph ids, edges as `a->b`, sequence step and actor ids, a map's `box X`, `zone N` and `route N`, a bars board's `bar X`, code lines and table rows, or their labels. Name another board by its title first: `[[+ Turn path: Q]]`.
+- Targets are node and subgraph ids, edges as `a->b`, sequence step and actor ids, a map's `box X`, `zone N` (from 0) and `route N`, a bars board's `bar X`, code lines and table rows, or their labels. Name another board by its title first: `[[+ Turn path: Q]]`.
 - At most three things before the first verb.
 - A board of more than three things with no verbs comes in with the sentences that name each thing, and a `board:` line says so.
 - A target that names nothing exactly is read as the nearest id or label, or dropped. Each such repair is a `board:` line and is counted on the board's header.
