@@ -2933,13 +2933,14 @@ def sessions_cmd(a):
 
 def pick_command(key):
     """What a new window runs to land in `key`: sessions.json `pick` (a command), else the env checkout's
-    `@claude pick`, then --open KEY."""
+    `@claude pick` by its implementation's full path (libexec/claude/pick; `@claude` itself lives in a
+    profile's bin, not in the checkout's bin), then --open KEY."""
     cmd = sessions_conf().get("pick")
     if not (isinstance(cmd, list) and cmd and all(isinstance(c, str) for c in cmd)):
         d = env_dir()
         if not d:
             raise FleetError("fleet: no picker to open a window with (set `pick` in sessions.json).")
-        cmd = [os.path.join(d, "bin", "@claude"), "pick"]
+        cmd = [os.path.join(d, "libexec", "claude", "pick")]
     return [os.path.expanduser(c) for c in cmd] + ["--open", key]
 
 

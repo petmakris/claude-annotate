@@ -445,7 +445,7 @@ def test_open_window_on_a_mac_runs_ghostty_with_the_picker_in_a_login_shell(thre
     t.w.mp.setenv("SHELL", "/bin/zsh")
     code, out, err = t.cli("_open-window", "here:" + V)
     assert code == 0, err
-    line = "%s pick --open here:%s" % (os.path.join(t.env, "bin", "@claude"), V)
+    line = "%s --open here:%s" % (os.path.join(t.env, "libexec", "claude", "pick"), V)
     assert window_log(t) == [["open", "-na", "Ghostty", "--args", "-e", "/bin/zsh", "-lic", line]]
     assert json.loads(out) == {"opened": "here", "screen": "macos", "command": line}
 
@@ -466,7 +466,7 @@ def test_open_window_on_hyprland_uses_the_live_instance(three, tmp_path):
     script(os.path.join(t.w.base, "bin", "hyprctl"), LOGGER % sys.executable)
     code, _, err = t.cli("_open-window", "here:" + V)
     assert code == 0, err
-    line = "%s pick --open here:%s" % (os.path.join(t.env, "bin", "@claude"), V)
+    line = "%s --open here:%s" % (os.path.join(t.env, "libexec", "claude", "pick"), V)
     assert window_log(t) == [["hyprctl", "--instance", "abc_123", "dispatch", "exec",
                               "ghostty -e /bin/bash -lic '%s'" % line]]
 
@@ -605,7 +605,7 @@ def test_the_page_opens_a_window_through_the_internal_verb_only(three, page):
     three.w.mp.setenv("SHELL", "/bin/zsh")
     code, data = page("POST", "/api/sessions/open", {"key": "bee:" + W, "target": "here", "command": "touch /tmp/x"})
     assert code == 200, data
-    line = "%s pick --open bee:%s" % (os.path.join(three.env, "bin", "@claude"), W)
+    line = "%s --open bee:%s" % (os.path.join(three.env, "libexec", "claude", "pick"), W)
     assert window_log(three) == [["open", "-na", "Ghostty", "--args", "-e", "/bin/zsh", "-lic", line]]
     assert data == {"opened": "here", "screen": "macos", "command": line, "copy": "@claude pick --open bee:" + W}
 
