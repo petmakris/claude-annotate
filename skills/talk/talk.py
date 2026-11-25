@@ -2291,25 +2291,29 @@ class Call:
         self.changed()
 
     def replace(self, entry_id) -> dict | None:
-        """A correction of a question still in flight sets the question aside. Not collected yet: its line is taken
-        back, the session never sees it. Collected: it is superseded, and the session is told by the correction's own
-        line (`replaces`) and by its reply, which is kept and shown but never spoken. Returns {"turn": the collected
-        turn's id or None}, or None when there is nothing to replace (answered, taken back, no such question)."""
+        """A correction sets aside everything the user has in flight, which is the question it names and whatever was
+        added to it. What no doorbell has collected is taken back: the session never sees it. What the session has
+        is superseded: it is told by the correction's own line (`replaces`, the newest collected turn) and by its
+        reply, which is kept and shown but never spoken. Returns {"turn": that turn's id or None}, or None when the
+        named question is not in flight (answered, taken back, replaced, no such entry)."""
         entry = self.you_entry(entry_id)
-        state = self.turn_state(entry) if entry else None
-        if state == "sent":
-            if not self.withdraw(entry_id):
-                return None
-            self.mark([entry], superseded=True)
-            return {"turn": None}
-        if state == "picked":
-            turn = self.turns.resolve(self.turn_of[entry_id])
+        if not entry or not self.turn_state(entry):
+            return None
+        flight = [e for e in self.entries if e["who"] == "you" and self.turn_state(e)]
+        collected = []
+        for e in flight:
+            if self.turn_state(e) == "picked":
+                turn = self.turns.resolve(self.turn_of[e["id"]])
+                if turn not in collected:
+                    collected.append(turn)
+        for turn in collected:
             members = self.entries_of_turn(turn)
-            if not self.turns.supersede(turn):
-                return None
-            self.mark(members, superseded=True)
-            return {"turn": turn}
-        return None
+            if self.turns.supersede(turn):
+                self.mark(members, superseded=True)
+        for e in flight:
+            if self.turn_state(e) == "sent" and self.withdraw(e["id"]):
+                self.mark([e], superseded=True)
+        return {"turn": collected[-1] if collected else None}
 
     def cancel(self, entry_id) -> dict:
         """Take back a question in flight. Not collected: as `withdraw`. Collected: the turn stops counting as working,

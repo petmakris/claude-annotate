@@ -428,15 +428,15 @@ def test_a_page_plays_when_no_other_page_holds_the_voice(tmp_path):
     assert page.run() == [[False, 8]]
 
 
-def test_an_answer_that_comes_while_another_plays_is_announced_and_starts_when_that_one_ends(tmp_path):
+def test_an_answer_that_comes_while_another_plays_waits_in_a_row_and_starts_when_that_one_ends(tmp_path):
     html, states = served(tmp_path, ["The first answer is here.", "The second answer is here."], seconds=3.0)
     page = CallPage(html, states, seconds=3.0).js("await serve(1); await playTo(1.0);")
     page.js("await serve(2);")
-    page.check("[audio.getAttribute('src'), $('status').textContent]")
+    page.check("[audio.getAttribute('src'), $('queuerow').hidden, $('queuerow').querySelector('.qr-text').textContent, $('status').hidden]")
     page.js("await end(); await advance(50);")
-    page.check("[audio.getAttribute('src'), audio.paused, $('status').hidden]")
-    assert page.run() == [["/c/test-call-id/audio/0000.wav", "Next answer ready: it plays when this one ends."],
-                          ["/c/test-call-id/audio/0001.wav", False, True]]
+    page.check("[audio.getAttribute('src'), audio.paused, $('queuerow').hidden, $('status').hidden]")
+    assert page.run() == [["/c/test-call-id/audio/0000.wav", False, "Next: answer 2. It plays when this one ends.", True],
+                          ["/c/test-call-id/audio/0001.wav", False, True, True]]
 
 
 def test_the_poll_loop_goes_on_while_the_tab_is_hidden_and_at_once_when_it_is_seen(tmp_path):

@@ -84,7 +84,7 @@ function startQueued() {
   if (!queued || stopped) return;   // an answer waiting at a question keeps the next one waiting
   const e = view.entries.find(x => x.id === queued.id) || queued; queued = null;
   const at = view.entries.findIndex(x => x.id === e.id);
-  if (at < 0 || view.entries.slice(at + 1).some(x => x.who === "you" && !x.withdrawn)) { paintAll(); return; }
+  if (at < 0 || e.superseded || view.entries.slice(at + 1).some(x => x.who === "you" && !x.withdrawn)) { paintAll(); return; }
   if (userBusy() || recorder || !autoplay) { paintAll(); return; }
   if (playingElsewhere()) { elsewhere = true; load(e, false); paintAll(); return; }
   load(e, true); paintAll();
@@ -94,7 +94,12 @@ function maybeAutoplay() {
   const fresh = view.entries.filter(e => e.who === "claude" && e.speech === "ready" && !seen.has(e.id));
   if (!fresh.length) return;
   for (const e of fresh) seen.add(e.id);
-  const last = fresh[fresh.length - 1];
+  // An answer to a question the user has since replaced or added to is kept unspoken (the server never read it aloud): it
+  // plays only when the reader asks for it (playAnyway), never by itself and never into the queue.
+  const asked = fresh.find(e => e.superseded && e.id === playAnywayId);
+  if (asked) { playAnywayId = null; readerPlays(asked); takeVoice(); load(asked, true); return; }
+  const last = fresh.filter(e => !e.superseded).pop();
+  if (!last) return;
   // An answer the user has already spoken or typed past (its voice was still being made) never starts by
   // itself: it would play the old board after they moved on, and hold the player from the newer answer.
   const at = view.entries.findIndex(e => e.id === last.id);

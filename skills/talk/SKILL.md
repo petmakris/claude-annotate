@@ -65,7 +65,8 @@ A background task that exits with a line starting `TALK_TURN` is the user speaki
 - A `you` line with `interrupted` is the user cutting into answer `answer` in live mode. `heard` is its last words before they spoke, and `rest_unheard` says the rest was never played.
   - Answer what they asked, as a person who was interrupted would.
   - If something they did not hear still matters, say it briefly, never the whole rest again.
-- A `you` line with `while_working: true` was said while you were still working on their previous turn. Treat it as an addition to that question (a correction, an afterthought, "and also...") and fold it into the one answer.
+- A `you` line with `while_working: true` was said while you were still working on their previous turn. Treat it as an addition to that question (a correction, an afterthought, "and also...") and fold it into the one answer. If you reply to the earlier turn before you have seen it, that reply is kept in the conversation, tagged as replaced, and not read aloud (it prints `superseded:`): the answer that covers the addition is the one spoken.
+- A `you` line with `replaces: "<turn id>"` is a correction the user marked: they set that earlier turn aside, so answer this one alone and stop the earlier one (a status for it prints `superseded:` and is not shown). A `TALK_CANCELLED` line, or a `cancelled` list on a `TALK_TURN`, names turns the user took back after you collected them: drop them and send no reply (one prints `cancelled:` and shows nothing). Re-arm the doorbell after either.
 - In live mode some words never reach you: spoken commands ("go on", "pause", "repeat that", "go back", "never mind", "stop listening") are acted on by the page.
   - "never mind" or the Undo button take back a turn you have not collected yet.
   - If you see a plain "never mind", you already had the turn: drop what you were doing with it and say so in a few words.
@@ -91,7 +92,7 @@ For every turn:
 
 `reply` exit codes:
 
-- 0: sent. A status for a turn already answered prints `ignored` and is not shown; an answer for a turn already answered prints `ignored`, except `--end`, which still says its wrap-up and ends the call.
+- 0: sent. A status for a turn already answered prints `ignored` and is not shown; an answer for a turn already answered prints `ignored`, except `--end`, which still says its wrap-up and ends the call. A cancelled or replaced turn prints `cancelled:` or `superseded:` (see above): the user has moved on from it.
 - 2: refused, unreachable or no such turn. A reply of only boards or key points, with no sentence, is refused (`a board needs a sentence`) and the turn stays open: send it again with the sentence that introduces each board.
 - 4: the call has ended, so nothing was shown and you do not re-arm. When it names a transcript, write the recap from it as for `TALK_END`.
 - `board:` lines after `sent` name a tag that was not shown as asked, or was shown only after a fix. Fix it in the next answer.

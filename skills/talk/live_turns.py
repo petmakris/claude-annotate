@@ -10,9 +10,9 @@ from __future__ import annotations
 import asyncio
 import time
 
-STALLED_AFTER = 20.0  # a turn nobody collected for this long, with no tool call either: check the terminal
+STALLED_AFTER = 20.0  # a turn nobody collected for this long, with no tool call either: the page says it was not picked up
 ACTIVE_WITHIN = 20.0  # tool calls this recent mean the session is alive, just busy
-STALLED_OPEN_AFTER = 180.0  # a turn is waiting while the session answers an older one: silent this long, check the terminal
+STALLED_OPEN_AFTER = 180.0  # a turn is waiting while the session answers an older one (or a collected turn went unanswered): silent this long, the page says Claude has gone quiet
 
 
 class TurnQueue:

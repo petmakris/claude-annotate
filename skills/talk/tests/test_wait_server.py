@@ -455,3 +455,21 @@ def test_the_client_prints_a_superseded_note_after_sent(tmp_path):
     code, out, _ = run(go())
     lines = out.strip().splitlines()
     assert code == 0 and lines[0] == "sent" and lines[1].startswith("superseded: the user replaced this question")
+
+
+def test_a_correction_sets_aside_everything_in_flight_the_collected_turn_and_what_was_added(tmp_path):
+    async def go():
+        async with running_app(tmp_path) as (client, call, fake):
+            await say(client, "Plan fourteen days")
+            await call.turns.next(timeout=1)
+            await say(client, "and include Osaka")  # an addition, not collected
+            _, body = await say(client, "forget it: ten days only", replaces=0)
+            view = await state(client)
+            turn = await call.turns.next(timeout=1)
+            return body, view["turn"], [(e["id"], e.get("superseded"), e.get("withdrawn")) for e in call.entries if e["who"] == "you"], turn["said"]
+
+    body, turn_view, flags, said = run(go())
+    assert body["replaced"] is True
+    assert turn_view["entries"] == [{"id": 2, "state": "sent"}] and turn_view["earlier"] == 1
+    assert flags == [(0, True, None), (1, True, True), (2, None, None)]
+    assert said == [{"who": "you", "text": "forget it: ten days only", "replaces": "t1"}]

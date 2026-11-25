@@ -14,6 +14,15 @@ Read this to explain the page to the user or to debug it. Nothing here is needed
 - Then it plays the answer without a pause between sentences, lighting each word as it is said.
 - A tap on a word plays from there, and the panel keeps that word in view until the user scrolls away.
 
+### The wait card
+
+- From Send until the answer lands, the top of the panel holds a wait card instead of the answer. It says where the question stands: **Sent** (no doorbell has collected it), **Claude is working** (the session has it), **Taking longer than usual** (90 seconds on), **Not picked up** (the server says nothing collected it, after 20 seconds with no tool call) and **Claude has gone quiet** (the session collected it and stopped, after 180 seconds).
+- Its clock counts from the question's own time, so a reload keeps it; the stepper shows Sent, Picked up, Working and Answer; the step the session reports (its tool calls) and the finished ones are rows with their seconds.
+- Each state has its way out. **Take back** (not collected) and **Cancel** (collected) put the words back in the box; **Send again** sends the question once more and replaces the first; **Copy question** copies it. The amber states say the question is saved. None of it asks the user to go to a terminal.
+- A draft typed meanwhile is kept, with a note, and **Replace question** sends it as a correction of the question in flight; plain Send adds to it instead.
+- A correction replaces the question: what no doorbell had collected is taken back, and what the session had is marked replaced. That session's answer is kept in the list with its tag, never read aloud and never queued; the reader hears it only by asking. An answer that lands after the user added to its question is kept the same way, and the answer covering the addition is the one that plays.
+- An answer that arrives while another plays waits in a row, "Next: answer N", with **Skip**, which only drops it from the queue: the answer stays in the list, unplayed.
+
 ## The floor
 
 - One talk server on the machine holds the calls of every session, each at its own link.
