@@ -477,14 +477,24 @@ function lightKey(n, glow = true) {
 
 // ---- Tables --------------------------------------------------------------------------------
 
-const NUM = /^[-+]?[\d.,]+ ?(%|ms|s|KB|MB|GB|€|\$)?$/;
+// A number as a column of numbers holds it: a sign or ~, a currency sign before, a unit or k/M/B/x after.
+const NUM = /^[-+~≈<>≤≥]?\s?(?:[$€£¥]\s?)?[-+]?\d[\d.,\u202f ]*\s?(?:%|ms|µs|s|min|h|d|KB|MB|GB|TB|[kKMBT]|[x×]|€|\$|£|¥|pp|bps)?\+?$/;
 
 // Markdown as the stage shows it: sanitized; a relative link or image read against the file it came
 // from; a link out opening in a new tab, so the stage is never navigated away; headings given ids
 // (prefixed, never clashing with the page's own) that the document's #links scroll to.
 const slug = (t) => "md-" + String(t).trim().toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").replace(/\s+/g, "-");
-function markdownInto(box, text, base = null) {
-  box.innerHTML = DOMPurify.sanitize(marked.parse(text), { FORBID_TAGS: ["form", "meta", "iframe", "style", "base"] });
+// A table board's cells hold text and a small markdown set only: raw HTML is shown as written (List<T> is `List<T>`,
+// not a tag the sanitizer would drop), except <br>, a line break.
+const BOARD_TAGS = ["table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "colgroup", "col", "code", "strong", "em", "b", "i",
+  "del", "a", "br", "p", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre", "hr"];
+function boardHtml(text) {
+  const renderer = new marked.Renderer();
+  renderer.html = (h) => (/^<br\s*\/?>$/i.test(String(h.text ?? h).trim()) ? "<br>" : esc(String(h.text ?? h)));
+  return DOMPurify.sanitize(marked.parse(text, { renderer }), { ALLOWED_TAGS: BOARD_TAGS, ALLOWED_ATTR: ["href", "align", "title", "colspan", "rowspan"] });
+}
+function markdownInto(box, text, base = null, board = false) {
+  box.innerHTML = board ? boardHtml(text) : DOMPurify.sanitize(marked.parse(text), { FORBID_TAGS: ["form", "meta", "iframe", "style", "base"] });
   for (const el of box.querySelectorAll("[src], a[href]")) {
     const attr = el.hasAttribute("src") ? "src" : "href", raw = el.getAttribute(attr);
     if (raw.startsWith("#")) { el.setAttribute("href", "#" + slug(decodeURIComponent(raw.slice(1)))); continue; }
@@ -522,11 +532,76 @@ function shapeTables(box) {
   }
 }
 
+// ---- The table board -----------------------------------------------------------------------
+// The whole table is drawn once, at its final size and place (fixed layout, column widths set from the text), and
+// never changes shape: what is not said yet is dim, what has been said is plain, what is being said is lit by colour
+// and weight only. A row, several rows, a column or a pair of cells can be lit. Rows are numbered across every table
+// of the board, as the server counts them (row#<n>, cell#<row>.<column>, col#<column> or col#<table>.<column>).
+const TONES = [[/^(?:✓|✔|✅|☑)/, "ok"], [/^(?:✗|✘|✖|❌|⛔)/, "bad"], [/^(?:⚠|🟡)/, "warn"]];
+const FIT_CHARS = 50;  // a phone wraps a grid whose columns need no more than this many characters across, else it scrolls sideways
+function shapeBoard(box) {
+  const tables = [...box.querySelectorAll("table")];
+  tables.forEach((table, t) => {
+    const wrap = document.createElement("div"); wrap.className = "tablewrap board";
+    table.before(wrap); wrap.append(table);
+    const heads = [...table.querySelectorAll("thead th")];
+    const rows = [...table.querySelectorAll("tbody tr")].map((tr) => [...tr.children]);
+    const cols = Math.max(heads.length, ...rows.map((r) => r.length), 0);
+    table.dataset.t = String(t + 1);
+    heads.forEach((th, i) => { th.dataset.c = String(i + 1); });
+    for (const r of rows) r.forEach((td, i) => { td.dataset.c = String(i + 1); });
+    const col = (i) => rows.map((r) => r[i]).filter(Boolean);
+    const text = (td) => td.textContent.trim();
+    const widths = [], phone = [], scrolled = []; let need = 0;
+    for (let i = 0; i < cols; i++) {
+      const cells = col(i).map(text).filter(Boolean);
+      const numeric = cells.length > 0 && cells.filter((x) => NUM.test(x)).length >= Math.ceil(cells.length * 0.75);
+      for (const td of [...col(i), heads[i]]) if (td && numeric) td.classList.add("num");
+      const longest = Math.max(0, ...cells.map((x) => x.length)), head = (heads[i]?.textContent || "").trim().length;
+      widths.push(Math.min(40, Math.max(6, Math.ceil(head * 1.1), Math.min(longest, 40))) + 4.5);  // its text, and the cell's padding
+      // a phone wraps the words, so what a column needs is its longest word, with a share of its text beyond that
+      const word = Math.max(0, ...cells.flatMap((x) => x.split(/\s+/).map((w) => w.length)), Math.ceil((heads[i]?.textContent || "").trim().length * 0.85));
+      phone.push(Math.min(word, 22) + 2.5 + Math.sqrt(Math.min(longest, 60)));
+      need += Math.min(word, 22) + 2.5;
+      scrolled.push(Math.max(8, Math.min(word, 22) + 3, Math.min(longest, 26) + 3));  // a sideways grid's column, in characters
+      widths[i] = Math.max(widths[i], word * 1.05 + 4.5);
+    }
+    if (col(0).length && col(0).every((td) => text(td).length <= 28)) {
+      for (const td of [...col(0), heads[0]]) td?.classList.add("key");
+    }
+    wrap.classList.toggle("sticky-key", col(0).length > 0 && col(0).every((td) => td.classList.contains("key")));
+    for (const r of rows) for (const td of r) for (const [re, tone] of TONES) if (re.test(text(td))) td.classList.add("tone-" + tone);
+    // columns share the width by their text, never by what is lit: nothing moves when a row is said
+    const sum = widths.reduce((a, b) => a + b, 0) || 1;
+    const group = document.createElement("colgroup");
+    const psum = phone.reduce((a, b) => a + b, 0) || 1;
+    widths.forEach((w, i) => {
+      const c = document.createElement("col");
+      c.style.setProperty("--w", (100 * w / sum).toFixed(2) + "%"); c.style.setProperty("--wp", (100 * phone[i] / psum).toFixed(2) + "%");
+      c.style.setProperty("--wn", scrolled[i].toFixed(1));
+      group.append(c);
+    });
+    table.prepend(group);
+    const ch = Math.round(sum);   // narrow tables size to their text, centred; wide ones span the stage
+    wrap.style.setProperty("--tw", ch + "ch");
+    wrap.classList.toggle("span", cols >= 6);
+    table.style.setProperty("--tws", String(Math.round(scrolled.reduce((a, b) => a + b, 0))));
+    table.dataset.fit = need <= FIT_CHARS ? "fit" : "scroll";  // the phone's form: a compact grid, or a sideways one
+    wrap.addEventListener("scroll", () => scrollCue(wrap), { passive: true });
+  });
+}
+// A table taller than its board keeps its header and shows it goes on: the foot fades until the end is reached.
+function scrollCue(wrap) {
+  const more = wrap.scrollHeight > wrap.clientHeight + 2;
+  wrap.classList.toggle("scrolls", more);
+  wrap.classList.toggle("at-end", !more || wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 2);
+}
+
 function paintTable(v, box, src) {
   if (!hasMarkdown()) { box.innerHTML = `<pre>${esc(src.body)}</pre>`; return; }
-  markdownInto(box, src.body);
-  shapeTables(box);
-  box.classList.add("grid");  // a table board: the wide grid, its row being said the large one
+  markdownInto(box, src.body, null, true);
+  shapeBoard(box);
+  box.classList.add("grid");  // a table board: the grid, its row, rows, column or cells being said lit
   pulseDiff(v, box, "rows", [...box.querySelectorAll("tbody tr")].map((tr) => tr.textContent));
   paintFrame(v, box);
 }
@@ -856,9 +931,11 @@ function fillPane(v, update = false) {
     const box = renderInline(v, seq);
     body.append(box);
     if (src.format === "code" && first) requestAnimationFrame(() => scrollToMark(box));
-    if (src.format === "change" && src.more > 0) {
+    const left = src.format === "change" && src.hunks_total ? src.hunks_total - src.hunks.length : 0;
+    if (src.format === "change" && (src.more > 0 || (left > 0 && src.hunks.length && src.hunks[0].n))) {
       const more = document.createElement("p"); more.className = "more";
-      more.textContent = `${src.more} more changed ${src.more === 1 ? "line" : "lines"} not shown`;
+      const picked = src.hunks.length && src.hunks_total && !src.more ? `hunks ${src.hunks.map((h) => h.n).join(", ")} of ${src.hunks_total} shown` : "";
+      more.textContent = picked || `${src.more} more changed ${src.more === 1 ? "line" : "lines"} not shown` + (left > 0 ? `, in ${left} more ${left === 1 ? "hunk" : "hunks"}` : "");
       body.append(more);
     }
     return;
@@ -1239,6 +1316,69 @@ function startFrame(v) {
   v.frame = body.scene && embedded && live ? 0 : null;
 }
 
+// The grid of a table board in frame n: the rows being said (`g-cur`), the columns (`g-col`), and the cells pointed at
+// (`k-focus`, set with the frame's keys). A pair of cells lights those two and not the rows round them. Returns what to
+// keep in view: the lit rows, cells, or for a column its header.
+function paintGrid(box, scene, n) {
+  const said = beingSaid(scene, n), frame = scene.frames[Math.max(0, Math.min(n, scene.frames.length - 1))];
+  const cells = new Set((frame.focus || []).filter((k) => k.startsWith("cell#")));
+  const cellRows = new Set([...cells].map((k) => "row#" + k.slice(5).split(".")[0]));
+  const rowsLit = new Set(said.filter((k) => k.startsWith("row#") && !(cellRows.has(k) && !frame.focus.includes(k))));
+  const colsLit = new Set(said.filter((k) => k.startsWith("col#")));
+  for (const tr of box.querySelectorAll("tbody tr")) tr.classList.toggle("g-cur", rowsLit.has(tr.dataset.key));
+  const tables = [...box.querySelectorAll("table")], many = tables.length > 1;
+  const colKey = (table, c) => (many ? `col#${table.dataset.t}.${c}` : `col#${c}`);
+  const litCols = [];
+  for (const table of tables) {
+    for (const el of table.querySelectorAll("[data-c]")) {
+      const on = colsLit.has(colKey(table, el.dataset.c));
+      el.classList.toggle("g-col", on);
+      if (on && el.tagName === "TH") litCols.push(el);
+    }
+  }
+  box.classList.toggle("g-on", rowsLit.size + colsLit.size + cells.size > 0);
+  const keep = [...box.querySelectorAll("tbody tr.g-cur"), ...box.querySelectorAll("td.k-focus"), ...litCols];
+  return keep;
+}
+
+// Layout has settled when the pane is shown and its boxes have stopped changing size: a board fronted this moment is
+// still hidden or growing, and one scroll right then lands on the wrong place. So the view is brought to what is lit
+// once a frame later, again as the box resizes (when the browser can say so) and once more when the animations are done.
+function settleThen(v, box, n, run) {
+  const go = () => { if (box.isConnected && !v.pane.hidden && v.applied === n) run(); };
+  requestAnimationFrame(() => requestAnimationFrame(go));
+  setTimeout(go, 450);
+  if (typeof ResizeObserver === "function") {
+    let quiet = 0;
+    const ro = new ResizeObserver(() => { clearTimeout(quiet); quiet = setTimeout(go, 80); });
+    ro.observe(box); const wrap = box.querySelector(".tablewrap"); if (wrap) ro.observe(wrap);
+    setTimeout(() => ro.disconnect(), 1500);
+  }
+}
+
+// Scroll the table's own box (rows under its sticky header, columns beside the sticky first one) and the boxes round
+// it so every lit element is in view: centred when they fit, else their top and left edge first.
+function bringInView(box, els) {
+  const lit = els.filter((e) => e && e.isConnected);
+  if (!lit.length) return;
+  const wrap = lit[0].closest(".tablewrap");
+  if (wrap) {
+    scrollCue(wrap);
+    const b = wrap.getBoundingClientRect(), rs = lit.map((e) => e.getBoundingClientRect());
+    const head = wrap.querySelector("thead")?.getBoundingClientRect().height || 0;
+    const key = wrap.classList.contains("sticky-key") ? (wrap.querySelector("td.key")?.getBoundingClientRect().width || 0) : 0;
+    const top = Math.min(...rs.map((r) => r.top)), bottom = Math.max(...rs.map((r) => r.bottom));
+    const left = Math.min(...rs.map((r) => r.left)), right = Math.max(...rs.map((r) => r.right));
+    const behavior = reduced() ? "auto" : "smooth";
+    const y = bottom - top <= b.height - head ? (top + bottom) / 2 - (b.top + head + (b.height - head) / 2) : top - b.top - head - 8;
+    const lone = lit.every((e) => e.tagName === "TD" || e.tagName === "TH") && !lit.some((e) => e.matches(".key"));
+    const x = lone && wrap.scrollWidth > wrap.clientWidth + 1
+      ? (right - left <= b.width - key ? (left + right) / 2 - (b.left + key + (b.width - key) / 2) : left - b.left - key - 8) : 0;
+    if (Math.abs(y) > 1 || Math.abs(x) > 1) wrap.scrollTo({ top: wrap.scrollTop + y, left: wrap.scrollLeft + x, behavior });
+  }
+  if (!wrap || wrap.scrollHeight <= wrap.clientHeight + 1) centre(lit);  // a table that scrolls itself is placed above
+}
+
 function paintFrame(v, box, animate = false) {
   const on = painted(v);
   box = box || v.pane.querySelector(".code, .md, .visual");
@@ -1279,18 +1419,13 @@ function paintFrame(v, box, animate = false) {
     paintScreen(box, scene, n, beingSaid);  // the screen of the part being said, lit, with its text beside it
     done.focused = [];  // the board fits its pane: nothing to scroll into view
   }
-  if (box.classList.contains("grid")) {
-    const cur = new Set(beingSaid(scene, n).filter((k) => k.startsWith("row#")));
-    for (const tr of box.querySelectorAll("tbody tr")) tr.classList.toggle("g-cur", cur.has(tr.dataset.key));
-    box.classList.toggle("g-on", cur.size > 0);
-    const said = [...box.querySelectorAll("tbody tr.g-cur")];
-    if (said.length) done.focused = said;  // keep the rows being said in view
-  }
+  if (box.classList.contains("grid")) done.focused = paintGrid(box, scene, n);
   v.applied = n;
   // Checked a frame later: a pane filled as it is fronted is still hidden while it paints.
   const room = box.classList.contains("map") ? +box.dataset.room || 0 : 0;
   const keep = [done.focused].flat().filter(Boolean);
-  if (keep.length) requestAnimationFrame(() => { if (!v.pane.hidden) centre(keep, room); });
+  if (keep.length && box.classList.contains("grid")) settleThen(v, box, n, () => bringInView(box, keep));
+  else if (keep.length) requestAnimationFrame(() => { if (!v.pane.hidden) centre(keep, room); });
   if (captionText) requestAnimationFrame(() => placeCaption());
   const step = v.pane.querySelector(".vstep");
   if (step) step.textContent = stepLabel(scene, n);

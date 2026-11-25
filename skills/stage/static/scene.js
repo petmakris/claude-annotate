@@ -14,7 +14,7 @@ function stampKeys(kind, box) {
     return lines.length > 0;
   }
   if (kind === "rows") {
-    const rows = [...(box.querySelector("table")?.querySelectorAll("tbody tr") || [])];
+    const rows = [...box.querySelectorAll("table tbody tr")];  // every table of the board, numbered across
     rows.forEach((tr, i) => {
       tr.dataset.key = "row#" + (i + 1);
       [...tr.children].forEach((td, j) => { td.dataset.key = `cell#${i + 1}.${j + 1}`; });

@@ -236,17 +236,6 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
   .stepbar,.pbtns{padding-bottom:6px}
   .pbody{padding:12px}
   .framewrap{min-height:70vh}
-  .tablewrap .key{white-space:normal;max-width:40%}
-  .tablewrap.cards{width:100%}
-  .tablewrap table.cards{min-width:0;width:100%}
-  .tablewrap table.cards thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-  .tablewrap table.cards,.tablewrap table.cards tbody,.tablewrap table.cards tr,.tablewrap table.cards td{display:block}
-  .tablewrap table.cards tr{padding:10px 14px;border-bottom:1px solid var(--line)}
-  .tablewrap table.cards tbody tr:last-child{border-bottom:0}
-  .tablewrap table.cards td{display:grid;grid-template-columns:minmax(5.5em,34%) minmax(0,1fr);gap:10px;padding:3px 0;border:0;max-width:none;
-    width:auto;white-space:normal;text-align:left;overflow-wrap:anywhere}  /* a long path breaks inside its card */
-  .tablewrap table.cards td::before{content:attr(data-label);font:600 12px/1.6 var(--sans);color:var(--muted)}
-  .tablewrap table.cards td.key{font-weight:600;width:auto}  /* its label and value line up with the card's other cells */
   .tiles{grid-template-columns:repeat(2,1fr)}
   .code.change .ln{grid-template-columns:2.4em 2.4em 1.3em 1fr;padding-right:12px}
   .code.change .ln>i{padding-right:8px}
@@ -522,27 +511,52 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 }
 @media (prefers-reduced-motion:reduce){.ln-enter .ln-path,.ln-enter .ln-tip,.ln-pop{animation:none}}
 
-/* A table board, the wide grid: it spans the stage, row names in bold, headers in small capitals, code
-   in chips. Rows arrive as they are said; the one being said is large on an amber band, the ones
-   before it step back, and a cell that is pointed at gets a spot of its own. */
-.pbody>.md.grid{align-self:stretch;width:100%;margin-inline:0}  /* not centred and shrunk to its content */
-.md.grid>.tablewrap{width:100%;border-radius:16px}
-.md.grid table{width:100%;font:16px/1.4 var(--sans)}
-.md.grid thead th{padding:12px 20px;font:600 12px/1.4 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
-.md.grid td{padding:12px 20px;vertical-align:middle;transition:font-size .35s cubic-bezier(.2,.7,.2,1),padding .35s,background-color .3s,color .3s}
-.md.grid td.key{font-weight:600;color:var(--ink);width:20%;white-space:normal}
+/* A table board, the grid: drawn once at its final size and place (table-layout fixed, column widths set from the text
+   by the stage, so nothing moves between steps), sized to its text and centred, spanning the stage only with six
+   columns or more. What is not said yet is dim, what was said plain, and what is being said (a row, rows, a column,
+   a pair of cells) is lit by colour, weight and a band: never by size, padding or margin, which would move the rest. */
+.pbody>.md.grid{align-self:stretch;width:100%;margin-inline:0;align-items:center}
+.md.grid>.tablewrap{font-size:16px;width:min(100%,var(--tw,60ch));max-width:100%;border-radius:16px;flex:0 1 auto;margin-inline:auto}
+.md.grid>.tablewrap.span{width:100%;font-size:14px}   /* six columns or more: denser, so the words stay whole */
+.md.grid>.tablewrap.span th,.md.grid>.tablewrap.span td{padding:10px 10px}
+.md.grid>.tablewrap:not(.span){max-width:72rem}
+.md.grid table{width:100%;min-width:0;table-layout:fixed;font:inherit;line-height:1.4}
+.md.grid col{width:var(--w)}
+.md.grid th,.md.grid td{padding:12px 18px;vertical-align:middle;overflow-wrap:break-word;text-align:left;transition:background-color .25s,color .25s}
+.md.grid thead th{font:600 12px/1.4 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.md.grid td.key{font-weight:600;color:var(--ink);width:auto;white-space:normal}
+.md.grid th.num,.md.grid td.num{text-align:right;font-variant-numeric:tabular-nums}
 .md.grid tbody tr:nth-child(even){background:none}
-.md.grid tbody tr.k-hidden{display:none}
-.md.grid.g-on tbody tr:not(.g-cur) td{color:var(--muted);font-size:15px}
-.md.grid tbody tr.g-cur td{font-size:21px;padding-top:18px;padding-bottom:18px;background:var(--hl-soft)}
-.md.grid tbody tr.g-cur td:first-child{box-shadow:inset 4px 0 0 var(--claude)}
+.md.grid tbody tr.k-hidden{opacity:.3!important;pointer-events:auto}   /* not said yet: still drawn, so the table never grows */
+.md.grid tbody tr td.k-hidden{opacity:1!important}   /* the row carries the dimming, so a cell is not dimmed twice */
 .md.grid.k-dim tbody tr:not(.k-focus){opacity:1}
-.md.grid tbody tr td.k-focus,.md.grid tbody tr.g-cur td.k-focus{background:var(--word);color:var(--ink);font-weight:600}  /* over the row's band */
+.md.grid.g-on tbody tr:not(.g-cur) td:not(.g-col):not(.k-focus){color:var(--muted)}
+.md.grid tbody tr.g-cur td{background:var(--hl-soft);color:var(--ink);font-weight:600}
+.md.grid tbody tr.g-cur td:first-child{box-shadow:inset 4px 0 0 var(--claude)}
+.md.grid .g-col{background:var(--hl-soft);color:var(--ink);font-weight:600}
+.md.grid thead th.g-col{color:var(--claude);box-shadow:inset 0 -3px 0 var(--claude)}
+.md.grid tbody tr td.k-focus,.md.grid tbody tr.g-cur td.k-focus{background:var(--word);color:var(--ink);font-weight:600;box-shadow:inset 0 0 0 2px var(--claude)}
+.md.grid td.tone-ok{color:var(--good)} .md.grid td.tone-bad{color:var(--bad)} .md.grid td.tone-warn{color:var(--warn)}
+.md.grid.g-on tbody tr:not(.g-cur) td.tone-ok:not(.g-col):not(.k-focus){color:var(--good)}
+.md.grid.g-on tbody tr:not(.g-cur) td.tone-bad:not(.g-col):not(.k-focus){color:var(--bad)}
+.md.grid.g-on tbody tr:not(.g-cur) td.tone-warn:not(.g-col):not(.k-focus){color:var(--warn)}
 .md.grid code{font-size:.86em}
-@media (max-width:600px){.md.grid tbody tr.g-cur td{font-size:17px}
-  /* a row being said, as a card: the band and the bar run down the whole card */
-  .md.grid table.cards tbody tr.g-cur{background:var(--hl-soft);box-shadow:inset 4px 0 0 var(--claude)}
-  .md.grid table.cards tbody tr.g-cur td:first-child{box-shadow:none}}
+.tablewrap.board.scrolls:not(.at-end){-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 32px),transparent)}
+.tablewrap.sticky-key td.key,.tablewrap.sticky-key th.key{position:sticky;left:0;z-index:1;background:var(--panel)}
+.tablewrap.sticky-key th.key{z-index:2;background:var(--row-alt)}
+.md.grid tbody tr.g-cur td.key,.md.grid .g-col.key{background-color:var(--hl-soft)}
+@media (max-width:600px){
+  /* a phone keeps the whole grid: compact when its words are short, else scrolling sideways with the first column kept */
+  .pbody>.md.grid{padding:0}
+  .md.grid>.tablewrap,.md.grid>.tablewrap:not(.span),.md.grid>.tablewrap.span{width:100%;max-width:100%;border-radius:12px;font-size:13px}
+  .md.grid table{line-height:1.35}
+  .md.grid table[data-fit="fit"] col{width:var(--wp)}
+  .md.grid th,.md.grid td,.md.grid>.tablewrap.span th,.md.grid>.tablewrap.span td{padding:8px 8px}
+  .md.grid thead th{font-size:10.5px;letter-spacing:.06em}
+  .md.grid table[data-fit="scroll"]{width:calc(var(--tws) * 1ch);min-width:100%}   /* fixed too: lit weight moves no column */
+  .md.grid table[data-fit="scroll"] col{width:calc(var(--wn) * 1ch)}
+  .md.grid tbody tr.g-cur td:first-child{box-shadow:inset 3px 0 0 var(--claude)}
+}
 
 /* The map: a flowchart the stage draws itself (map.js). Parts not said yet are faint dashed ghosts;
    the part being said is a large card with its detail; the arrow that just arrived draws in. */

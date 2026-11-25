@@ -1027,3 +1027,76 @@ def test_a_board_saved_as_one_merged_diagram_is_drawn_as_a_plain_sequence(tmp_pa
     page.check("[pane('old').querySelectorAll('.ln-cmp').length, [...pane('old').querySelectorAll('.ln-row')].map((r) => r.dataset.step)]")
     assert page.run() == [[0, ["s1"]]]
     assert page.errors == []
+
+
+# -- the table board: drawn once, never reshaped, lit by colour ---------------------------------------------------
+
+def _board(body):
+    return {"type": "inline", "format": "table", "body": body}
+
+
+ENGINE_GRID = ("| | Azure | Local | Browser |\n|---|---|---|---|\n| Speed | fast | slow | instant |\n"
+               "| Cost | $16 | $0 | $0 |\n| Offline | ✗ no | ✓ yes | ✓ yes |\n| Timing | ✓ exact | ⚠ estimated | ✗ none |")
+GRID_STATE = """(n => { const p = pane(n);
+  return { rows: [...p.querySelectorAll('tbody tr')].map((r) => [r.dataset.key, r.classList.contains('k-hidden'), r.classList.contains('g-cur')]),
+           cols: keys(p.querySelectorAll('[data-c].g-col')).length ? [...p.querySelectorAll('th.g-col')].map((e) => e.textContent) : [],
+           cells: keys(p.querySelectorAll('td.k-focus')), on: p.querySelector('.md.grid').classList.contains('g-on') }; })"""
+
+
+def test_a_table_board_draws_every_row_from_the_start_and_lights_a_column_rows_and_a_pair_of_cells(tmp_path):
+    model_ = scene.body_model(ENGINE_GRID)
+    focus = lambda target: [scene.Verb("focus", targets=[target])]  # a target is not split at its commas
+    built, _ = scene.compile_scene(model_, [[scene.parse_verb("+ row 1")], focus("column Azure"), focus("rows 2, 4"),
+                                            focus("cells Azure / Cost; Browser / Offline")], "Engines")
+    page = (StagePage(tmp_path).show("t", _board(ENGINE_GRID), title="Engines", extra={"scene": built}).open())
+    page.send({"type": "stage:state", "front": "t", "frames": {"t": 0}}).check(GRID_STATE + "('t')")
+    for n in (1, 2, 3, 4):
+        page.send({"type": "stage:frame", "view": "t", "n": n}).check(GRID_STATE + "('t')")
+    page.send({"type": "stage:frame", "view": "t", "n": 5}).check(GRID_STATE + "('t')")
+    got = page.run()
+    pending = [["row#1", True, False], ["row#2", True, False], ["row#3", True, False], ["row#4", True, False]]
+    assert got[0] == {"rows": pending, "cols": [], "cells": [], "on": False}  # every row is in the table, dim, from frame 0
+    assert got[1]["rows"] == [["row#1", False, True], ["row#2", True, False], ["row#3", True, False], ["row#4", True, False]]
+    assert got[2] == {"rows": [[k, False, False] for k in ("row#1", "row#2", "row#3", "row#4")], "cols": ["Azure"], "cells": [], "on": True}
+    assert [r[2] for r in got[3]["rows"]] == [False, True, False, True]  # two rows together
+    assert got[4]["cells"] == ["cell#2.2", "cell#3.4"] and [r[2] for r in got[4]["rows"]] == [False] * 4  # a pair: the cells, not their rows
+    assert got[5]["on"] is False and all(not r[1] for r in got[5]["rows"])  # the rest frame: everything shown, nothing lit
+
+
+def test_a_board_with_two_tables_numbers_their_rows_across_and_sizes_each_to_its_text(tmp_path):
+    body = "| Plan | Old |\n|---|---|\n| Free | 10 |\n| Pro | 100 |\n\n| Plan | New |\n|---|---|\n| Free | 25 |\n| Pro | 250 |"
+    built = _scene(scene.body_model(body), [["focus row 4"]], "Limits")
+    page = StagePage(tmp_path).show("t", _board(body), title="Limits", extra={"scene": built}).open()
+    page.send({"type": "stage:state", "front": "t", "frames": {"t": 1}})
+    page.check("[...pane('t').querySelectorAll('tbody tr')].map((r) => [r.dataset.key, r.classList.contains('g-cur')])")
+    page.check("[...pane('t').querySelectorAll('table')].map((t) => t.dataset.t)")
+    page.check("[...pane('t').querySelectorAll('.tablewrap')].map((w) => [w.style.getPropertyValue('--tw'), w.classList.contains('span')])")
+    got = page.run()
+    assert got[0] == [["row#1", False], ["row#2", False], ["row#3", False], ["row#4", True]]
+    assert got[1] == ["1", "2"]
+    assert got[2] == [["21ch", False], ["21ch", False]]  # as wide as their text, not the stage
+
+
+def test_a_cell_keeps_what_it_says_when_it_holds_angle_brackets_and_numbers_line_up_with_their_units(tmp_path):
+    body = ("| Field | Type | Cost |\n|---|---|---|\n| index | Map<String, List<Integer>> | $4,200 |\n"
+            "| order | `List<T>` | 12k |\n| ttl | <b>5</b> s | 3.5x |")
+    page = StagePage(tmp_path).show("t", _board(body), title="Types").open()
+    page.send({"type": "stage:state", "front": "t", "frames": {}})
+    page.check("[...pane('t').querySelectorAll('tbody tr')].map((r) => [...r.children].map((c) => c.textContent))")
+    page.check("[...pane('t').querySelectorAll('tbody tr')].map((r) => r.children[2].classList.contains('num'))")
+    page.check("pane('t').querySelectorAll('b').length")
+    got = page.run()
+    assert got[0] == [["index", "Map<String, List<Integer>>", "$4,200"], ["order", "List<T>", "12k"], ["ttl", "<b>5</b> s", "3.5x"]]
+    assert got[1] == [True, True, True]  # a currency sign before and k or x after still make a number
+    assert got[2] == 0  # raw HTML is shown as typed, never run
+
+
+def test_a_phone_keeps_the_whole_grid_and_picks_a_compact_or_a_sideways_form_by_its_text(tmp_path):
+    short = "| Plan | Free | Pro |\n|---|---|---|\n| Seats | 3 | 30 |\n| Support | none | chat |"
+    long = ("| Region | Users | Latency | Error rate | Cost per month | Uptime | Owner | Status |\n|---|---|---|---|---|---|---|---|\n"
+            "| Frankfurt | 12,400 | 38 | 0.4% | $4,200 | 99.95% | Platform | Live |")
+    page = StagePage(tmp_path, width=390).show("a", _board(short), title="Short").show("b", _board(long), title="Long").open()
+    for name in ("a", "b"):
+        page.send({"type": "stage:state", "front": name, "frames": {}})
+        page.check(f"[...pane('{name}').querySelectorAll('table')].map((t) => [t.dataset.fit, t.classList.contains('cards')])")
+    assert page.run() == [[["fit", False]], [["scroll", False]]]  # never one card per row
