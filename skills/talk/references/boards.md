@@ -9,7 +9,7 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 - Its change is read in that file's own repository, and the board names it `<repo folder>/<path>`.
 - A file git ignores, a path through `.git` and a hidden folder of the home folder (`~/.ssh`, `~/.config`) are refused, since the stage is served to other machines.
 - A `page` file still has to be inside `--code`.
-- `code` shows at most 60 lines you read in this turn. `highlight 44-47` before the bar marks lines.
+- `code` shows at most 60 lines you read in this turn. `highlight 44-47` before the bar marks lines. The line range is optional: a bare path (`[[show code: talk/live_turns.py | How a turn waits]]`) is accepted.
 - `change` is read from git: the file against HEAD, or against another revision with `since <rev>` (`talk/talk.py since HEAD~2`). A new file shows as all added.
 
 ## Map
@@ -24,7 +24,7 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 - The box a route step arrives at is said with it, and the parts the request has not reached yet are faint.
 - An answer that never names a route step leaves the route alone.
 - Verbs: `[[next]]`, `[[all]]`, `[[+ box ask]]`, `[[+ zone 0]]` (a zone by its place in `zones`, from 0), `[[+ route 2]]` and `[[+ ask->svc]]` (a structure arrow by its two boxes).
-- Points: `[[point: box ask]]`, `[[point: zone 0]]`, `[[point: route 2]]`.
+- Points: `[[point: box ask]]`, `[[point: zone 0]]`, `[[point: route 2]]`. A map has no `edge a->b` point (that is a flowchart's): point at the box the arrow ends in, or at its `route N`. A map point of any other form is refused with a `board:` line naming these three.
 - The reader can tap any part shown for Ask about this and Play from here.
 
 ## Sequence
@@ -34,8 +34,8 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 - Under its name go its `role` (what it is) and its `sub` (its file or service, such as `talk.py`).
 - A call carries its `label` and its `sub` in a chip on its arrow. A reply's words sit bare over its dashed arrow.
 - `checks` on a step (`[{"label": "scopes", "ok": true}, {"label": "already paid", "ok": false}]`) are tick and cross badges under its arrow.
-- A phase is a band behind its steps. `n` numbers the walkthrough (several arrows may share one).
-- An `outcome` (`{"tone", "title", "lines"}`) is a box that closes the diagram once the last step is shown.
+- A phase is a band behind its steps, `{"id", "label", "start_at": <step id>}` in step order. When you say "two stages" or "phases" aloud, give the sequence `phases`, one for each stage, or the board draws no split. `n` numbers the walkthrough (several arrows may share one).
+- An `outcome` (`{"tone", "title", "lines"}`) is a box that closes the diagram once the last step is shown. `[[point: outcome]]` lights it.
 - `reply_to` on an `event` names the `request` it answers, and it must go back the way the call came. The call then holds a bar open on its receiver until the reply, with calls made inside it nesting their bars. This is how a wait is drawn.
 - `groups` puts boxes round runs of steps: `{"id", "kind": "alt" | "par", "branches": [conditions]}` or `{"id", "kind": "loop" | "opt", "label": condition}`. A step joins one with `"group"` (and `"branch": 0, 1, ...` in an `alt` or `par`; a branch written `else` or `otherwise` reads as else).
 - `ref` on a step (`talk/talk.py:2213`, relative to `--code`) gives its popup the source lines round that line.
@@ -98,6 +98,7 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 - The spec is `{"title", "lanes"?, "nodes": [{"id", "label", "lane", "state"?, "sub"?}], "edges": [{"from", "to"}]}`. An edge runs from the older node to the newer one.
 - A `lane` is the row a node sits in (a branch name, or a level of a tree). Lanes run top to bottom in the order they first appear, or in `lanes`. A node's column is how many parents deep it is.
 - Leave `lane` out of every node and the rows are made for you, one per leaf, as a tree is drawn.
+- A tree that does not change (a B-tree index, a folder tree, a class hierarchy) is a graph with every node `same` and no `lane`: no before and after, no steps beyond naming each node as you say it. Use no lanes, and no diagram at all when the answer has no shape to draw.
 - `state` is `same` (default), `new` (in the after only), `ghost` (there before, and after faint and dashed: still there, but nothing reaches it) or `struck` (there before, struck through after: removed).
 - A node a change replaces or removes is `ghost` or `struck`: a node left `same` stays in the after as it was, so the old and the new would both show as current.
 - With every node `same` the board is one graph. With any other state it is a before and an after, one above the other, and `[[point: before]]`, `[[point: after]]` and `[[point: both]]` point at a frame.
@@ -106,6 +107,20 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 - A duplicate id, an edge to a node that is not there, and a cycle are refused, and a `board:` line names the id.
 - Points: `[[point: node d2]]`. A name that is nearly an id is read as it, with a `board:` line.
 - Label a node with words you will say (`new tip`, `your first commit`), never a hash or a letter alone: the node lights when a sentence says its label.
+
+## Table
+
+- A table is two to four short measures of a few things: at most 4 rows by 4 columns, each cell 1 to 3 words. The voice says the verdict, never the cells, and a fifth row is a sentence.
+- Rows that are steps, parts, states, days or events belong on a sequence, a map, a flowchart or bars, or in plain sentences.
+
+## No board
+
+- A yes or no, one number, a repeat, a recap, a thanks and a go-ahead carry no board: two or three plain sentences.
+- Never put a number, a file or a test result on a code board or a table to look thorough.
+
+## Nudges
+
+- `reply` prints a `board:` line when an answer holds more than 3 key points, or a board's title is over 5 words. Cut it in the next answer.
 
 ## Mermaid
 

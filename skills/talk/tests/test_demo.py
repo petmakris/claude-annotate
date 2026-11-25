@@ -135,10 +135,14 @@ def test_the_guide_opens_with_a_decision_table_that_puts_the_table_board_last():
     decision, boards = text.index("### Choose the board by the question"), text.index("### Teaching with the board")
     assert decision < boards < text.index("| Board | Use it for | Tag |")
     table = next(t for t in _tables(text) if t[0][0].startswith("The question is about"))
-    assert [row[1] for row in table[2:]] == ["sequence", "sequence with compare (`compare`)", "map", "flowchart",
-                                             "bars", "graph", "code, change", "table, last"]
-    assert "could the viewer say what each column means?" in text.lower()
-    assert "5 to 8 rows" in text
+    starts = ["sequence", "sequence with compare", "map", "flowchart", "bars", "graph", "code, change", "the verdict first",
+              "what blocks what", "a map with a solid red", "graph, with no `lane`", "no board:", "table, last: at most 4"]
+    assert len(table) - 2 == len(starts)
+    for row, start in zip(table[2:], starts):
+        assert row[1].startswith(start), (row[1], start)
+    assert table[-1][1].startswith("table, last")  # the table board is the last row
+    assert "could the viewer say what each column measures" in text.lower()
+    assert "5 to 8 rows" not in text and "at most 4 rows by 4 columns" in text
 
 
 def test_every_table_of_the_guide_has_the_same_cells_in_every_row():
@@ -163,7 +167,7 @@ def test_the_guides_references_exist_and_are_linked_from_it():
     for name in ("call-page", "server", "boards"):
         assert (GUIDE.parent / "references" / f"{name}.md").is_file()
         assert f"references/{name}.md" in text
-    assert len(text.splitlines()) < 330 and max(len(ln) for ln in text.splitlines()) < 700  # no 3,000 character lines
+    assert len(text.splitlines()) < 340 and max(len(ln) for ln in text.splitlines()) < 700  # no 3,000 character lines
     assert "scenes and stops" not in (talk.SKILL_DIR.parent / "stage" / "SKILL.md").read_text().lower()
 
 
@@ -191,3 +195,21 @@ def test_the_demo_teaches_a_zoned_map_a_never_arrow_a_wait_and_a_real_grid(tmp_p
     assert [s.get("reply_to") for s in wait] == [None, None, "w1"]
     grid = _tables(boards["Four boards, picked by hand"]["body"])[0]
     assert len(grid) == 6 and {len(row) for row in grid} == {4}  # a header, a separator and four things on three measures
+
+
+def test_the_guide_teaches_the_answer_shape_phases_the_outcome_and_the_map_points():
+    """r2 guidance: no board for a turn with nothing for the eye, phases for a two-stage story, an outcome beside
+    compare that [[point: outcome]] lights, and a map that takes no `edge a->b`."""
+    text = GUIDE.read_text()
+    assert "**A turn with nothing for the eye has no board.**" in text
+    assert "No real shape means no diagram." in text
+    assert "Say \"two stages\" or \"phases\" and give it `phases`" in text
+    assert "**A sequence in two phases**" in text and '"start_at": "s3"' in text
+    assert "(the board takes no `outcome` beside `compare`)" not in text
+    assert '"outcome": {"tone": "amber", "title": "One module, two reports"' in text and "[[point: outcome]]" in text
+    assert "a map takes only `box X`, `zone N` (the first zone is 0) and `route N`, and refuses `edge a->b`" in text
+    assert "A file the user is working on and asked to see goes on the stage by name" in text
+    boards = (GUIDE.parent / "references" / "boards.md").read_text()
+    assert "A tree that does not change (a B-tree index" in boards and "a bare path" in boards and "More than 3 key points" not in boards
+    assert "outcome" in (talk.SKILL_DIR.parent / "annotate" / "references" / "block-kinds" / "sequence.md").read_text().split("## Before and after")[1]
+    assert "`phases`, `groups`, `outcome` and `captions` are refused" not in (talk.SKILL_DIR.parent / "annotate" / "references" / "block-kinds" / "sequence.md").read_text()

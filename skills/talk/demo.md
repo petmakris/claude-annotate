@@ -56,8 +56,9 @@ A wait is a request that stays open. The doorbell asks the server for the next t
     {"id": "b5", "from": "sm", "to": "rc", "arrow": "request", "label": "requests the backtest series"},
     {"id": "b6", "from": "sm", "to": "svc", "arrow": "event", "label": "returns raw values", "reply_to": "b2"},
     {"id": "c1", "from": "svc", "to": "svc", "arrow": "self", "label": "builds the report timeseries", "sub": "ReportBacktestTimeseries"},
-    {"id": "b7", "from": "svc", "to": "ui", "arrow": "event", "label": "returns the timeseries", "reply_to": "b1"}]}}} [[/show]]
-A before and after sequence puts the two flows side by side, row for row, so you compare their shape instead of working it out yourself. [[point: before]] On master, the proposal report asks for the backtest. The report service asks the Service client in PMP's module for the backtest data. The client builds the requests with fixed lists, always quarterly. It asks Service for the ex-post measures. Then it requests the backtest series. And it returns report timeseries. [[point: after]] With the PR, a shared backtesting module takes the client's place. The service passes quarterly and its own measures down. The module builds the requests with the lists it is given, and returns raw values. The report service builds the report timeseries itself, the one row the old flow has no step for. [[point: both]] The Service requests are the same on both sides. [[key: a before and after board sets the two flows side by side, with a gap where one has no step]] Next is a map of connected parts.
+    {"id": "b7", "from": "svc", "to": "ui", "arrow": "event", "label": "returns the timeseries", "reply_to": "b1"}]}},
+ "outcome": {"tone": "amber", "title": "One module, two teams", "lines": ["the lists are now passed in", "a change there reaches both reports"]}} [[/show]]
+A before and after sequence puts the two flows side by side, row for row, so you compare their shape instead of working it out yourself. [[point: before]] On master, the proposal report asks for the backtest. The report service asks the Service client in PMP's module for the backtest data. The client builds the requests with fixed lists, always quarterly. It asks Service for the ex-post measures. Then it requests the backtest series. And it returns report timeseries. [[point: after]] With the PR, a shared backtesting module takes the client's place. The service passes quarterly and its own measures down. The module builds the requests with the lists it is given, and returns raw values. The report service builds the report timeseries itself, the one row the old flow has no step for. [[point: both]] The Service requests are the same on both sides. [[point: outcome]] The cost is that one module now serves two teams. [[key: a before and after board sets the two flows side by side, with a gap where one has no step]] Next is a map of connected parts.
 ---
 [[show flowchart | How talk's parts connect]] {"nodes": [{"id": "page", "role": "entry", "label": "Call page", "ref": "call.html · call.js", "sub": "your microphone, the conversation, the controls"},
   {"id": "launchd", "role": "code", "label": "launchd", "ref": "dev.talk", "sub": "keeps the server running, with the speech settings"},
@@ -106,12 +107,12 @@ A graph board shows what happens to commits or to a tree, before and after. [[po
 [[show table | Four boards, picked by hand]]
 | Board | Shows | Reads from | The voice can point at |
 |---|---|---|---|
-| code | existing lines of a file | `--code`, or any git work tree | lines |
-| change | a file against an older version | the file's own repository | new and removed lines |
-| page | a file, an address or another session | a file inside `--code` | nothing, it shows whole |
-| screen | a screen explained part by part | a spotlight spec in `--code` | a part |
+| code | file lines | `--code` or git | lines |
+| change | file against old | its repository | changed lines |
+| page | a file or address | inside `--code` | nothing |
+| screen | a screen's parts | a spotlight spec | a part |
 [[/show]]
-A table is for the one case where several things are judged on the same measures and nothing connects them, so it is the last board to pick. Here are four boards, each judged on what it shows, where it reads from and what the voice can point at. [[next]] A code board shows existing lines. [[next]] A change board shows a file against an older version. [[next]] [[point: cell "page" / "The voice can point at"]] A page shows whole, so the voice has nothing to point at. [[focus rows 3-4]] A page and a screen differ in exactly that. [[key: a table fits several things judged on the same measures]] Next is a diagram.
+A table is for the one case where a few short things are judged on the same measures and nothing connects them. It is the last board to pick, and its cells hold one to three words. Here are four boards judged on what they show, where they read from and what the voice can point at. The verdict is that two of them show code and two show whole pages, and the voice says that instead of reading each cell. [[next]] A code board shows existing lines. [[next]] A change board shows a file against an older version. [[next]] [[point: cell "page" / "The voice can point at"]] A page shows whole, so the voice has nothing to point at. [[focus rows 3-4]] A page and a screen differ in exactly that. [[key: a table fits several things judged on the same measures]] Next is a diagram.
 ---
 [[show flowchart | Live mode's states]] {"nodes": [{"id": "listening", "role": "entry", "label": "Listening", "sub": "the microphone is open"},
   {"id": "hearing", "role": "code", "label": "Hearing you", "sub": "you are speaking"},

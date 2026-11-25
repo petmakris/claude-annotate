@@ -99,7 +99,7 @@ A sequence spec may carry `"compare": {"before": {...}, "after": {...}}` in plac
 show how a flow changed. Only the talk stage draws it, as two lane diagrams side by side, row for row
 (`skills/stage/compare.py` lines the two sides up; the annotate page, `sequence_svg` and this block kind do not
 read `compare`). A side holds `label` (its name over its diagram), `actors` and `steps`, each checked as a sequence of its own; `title`, `subtitle` and `legend`
-sit beside `compare`, and `phases`, `groups`, `outcome` and `captions` are refused.
+sit beside `compare`, and `phases`, `groups` and `captions` are refused. An `outcome` is taken: one verdict box drawn once under both sides.
 
     {"title": "<the claim>", "legend": [...],
      "compare": {"before": {"label": "master", "actors": [...], "steps": [...]},
