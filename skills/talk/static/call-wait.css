@@ -80,3 +80,7 @@
 .app[data-tv] .wt-title,.app[data-tv] .wt-clock{font-size:21px}
 .app[data-tv] :is(.wt-sub,.wt-q,.wt-acts li,.wt-btn,.wt-steps li,.wt-lost,.sendnote,.queuerow){font-size:16px}
 @media (prefers-reduced-motion:reduce){.step-working .wt-icon svg,.wt-acts .run .wt-mark svg,.wt-steps .now i{animation:none!important}}
+
+/* The wait card sits inside the Now card, which already has the border and the eyebrow: one box, not a box in a box. */
+.now .wait-card{border-width:1px 0 0;border-radius:0}
+.now .wait-card.warn{border-color:var(--warn)}

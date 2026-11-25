@@ -56,7 +56,12 @@ const KIND_ICONS = {
   points: '<path d="M6 4h8M6 8h8M6 12h8"/><circle cx="2.6" cy="4" r=".9"/><circle cx="2.6" cy="8" r=".9"/><circle cx="2.6" cy="12" r=".9"/>',
   page: '<path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M9.5 1.5v3h3M5.5 8.5h5M5.5 11h5"/>',
   scene: '<rect x="1.5" y="2.5" width="5.5" height="5" rx="1.2"/><rect x="9" y="2.5" width="5.5" height="5" rx="1.2"/><rect x="1.5" y="10" width="13" height="3.5" rx="1.2"/>',
+  sequence: '<path d="M4 1.5v13M12 1.5v13M4 5h8M9.5 2.8 12 5l-2.5 2.2M12 11H4M6.5 8.8 4 11l2.5 2.2"/>',
+  bars: '<path d="M2 14h12M4.5 14V8M8 14V3.5M11.5 14V6"/>',
+  graph: '<path d="M2 2v12h12"/><path d="m4.5 10.5 3-3.5 2.5 2 3.5-5"/>',
+  screen: '<rect x="1.5" y="2.5" width="13" height="9" rx="1.6"/><path d="M5.5 14h5M8 11.5V14"/>',
 };
+KIND_ICONS.flowchart = KIND_ICONS.map = KIND_ICONS.diagram;   // every board kind has its own icon: no chip falls back to the page icon
 const kindIcon = (kind, size = 13) => `<svg viewBox="0 0 16 16" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${KIND_ICONS[kind] || KIND_ICONS.page}</svg>`;
 const ICON = (d, size = 14) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 
@@ -266,7 +271,7 @@ function marked(text, q) {
 function gistLine(t, q) {
   const e = t.a;
   if (q && !(t.q && matchAt(t.q.text, q)) && matchAt(e.text, q)) {
-    const m = matchAt(e.text, q), a = Math.max(0, m.from - 28), b = Math.min(e.text.length, m.to + 56);
+    const m = matchAt(e.text, q), a = Math.max(0, m.from - 14), b = Math.min(e.text.length, m.to + 70);
     const snip = (a > 0 ? "…" : "") + e.text.slice(a, b).replace(/\s+/g, " ") + (b < e.text.length ? "…" : "");
     return marked(snip, q);
   }
@@ -340,6 +345,7 @@ const rowSig = (t, q, isNow) => [t.a.id, t.a.n, t.a.text.length, t.a.speech, t.a
 // placed its rows it calls returnMarkEarlier(#tllist) so call-return.js can put the since-you-left divider in.
 function paintEarlier() {
   const list = $("tllist"), turns = turnsOf(view.entries), shown = shownAnswer(), q = foldCached(tlQuery.trim()).out;
+  list.classList.toggle("searching", !!q);   // a search shows the words round its match on two lines, also on a phone
   const rest = turns.filter((t) => !shown || t.a.id !== shown.id);
   // A search looks through every answer, the one on the card too.
   const items = q ? turns.filter((t) => turnMatches(t, q)) : rest;

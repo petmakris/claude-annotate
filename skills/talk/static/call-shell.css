@@ -123,3 +123,5 @@
   .tl-expand{padding:0 8px}
 }
 @media (prefers-reduced-motion:reduce){.eq i{animation:none}.now-text .w{transition:none}}
+/* While searching, the gist is the words round the match: two lines, on a phone too, so the mark is never cut off. */
+#tllist.searching .tl-gist{display:-webkit-box;white-space:normal;-webkit-line-clamp:2;-webkit-box-orient:vertical}

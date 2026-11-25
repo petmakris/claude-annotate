@@ -218,3 +218,25 @@ def test_the_stages_board_list_runs_in_the_order_its_counter_counts_and_says_no_
     tabs = re.search(r"\.tabs\{([^}]*)\}", css).group(1)
     assert "flex-direction:column;" in tabs and "column-reverse" not in tabs
     assert "<h4>Boards</h4>" in js and "newest first" not in js
+
+
+def test_a_search_that_matches_the_words_of_an_answer_shows_the_match_near_the_start_of_the_snippet_on_two_lines(tmp_path):
+    long_first = "This opening runs on for a good while before it reaches anything of interest to the reader. Frankfurt is the healthiest of the three."
+    html, states = asked(tmp_path, answers=(long_first, SECOND, THIRD))
+    page = CallPage(html, states, autoplay=False, seconds=3.0).js("await serve(3);")
+    page.js("$('tlsearch').value = 'frankfurt'; $('tlsearch').dispatchEvent(new ShimEvent('input'));")
+    page.check("[$('tllist').classList.contains('searching'), document.querySelector('#tllist .tl-gist').textContent]")
+    page.js("$('tlsearch').value = ''; $('tlsearch').dispatchEvent(new ShimEvent('input'));").check("$('tllist').classList.contains('searching')")
+    assert page.run() == [[True, "…o the reader. Frankfurt is the healthiest of the three."], False]
+    css = (STATIC / "call-shell.css").read_text()
+    assert "#tllist.searching .tl-gist{display:-webkit-box;white-space:normal;-webkit-line-clamp:2" in css
+
+
+def test_every_board_kind_has_its_own_chip_icon_and_none_falls_back_to_the_page_icon():
+    import re as _re
+    js = (STATIC / "call-shell.js").read_text()
+    kinds = _re.search(r'BOARD_KINDS = \(([^)]*)\)', (Path(__file__).resolve().parents[1] / "talk.py").read_text()).group(1)
+    have = set(_re.findall(r"^  (\w+): '<", js.split("const KIND_ICONS = {")[1].split("};")[0], _re.M))
+    have |= set(_re.findall(r"KIND_ICONS\.(\w+) =", js))
+    want = set(_re.findall(r'"(\w+)"', kinds))
+    assert sorted(want - have) == []
