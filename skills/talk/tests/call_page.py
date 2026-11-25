@@ -66,10 +66,13 @@ const HTML = %(html)s, STATES = %(states)s;
 let served = STATES[%(start)d];
 const respond = (body) => ({ ok: true, status: 200, json: async () => JSON.parse(JSON.stringify(body)), text: async () => JSON.stringify(body) });
 const sentTo = [];  // what the page sent the server besides its polls: [path, body]
+const claims = [];  // what the page asked of /api/player: {page, take}
 const polls = {n: 0};
 globalThis.fetch = async (path, opts = {}) => {
   if (String(path).startsWith("/api/state")) polls.n++;
-  if (!String(path).startsWith("/api/state")) sentTo.push([String(path), opts.body ? JSON.parse(opts.body) : null]);
+  if (String(path) === "/api/player") claims.push(JSON.parse(opts.body));
+  else if (!String(path).startsWith("/api/state")) sentTo.push([String(path), opts.body ? JSON.parse(opts.body) : null]);
+  if (String(path) === "/api/player" && globalThis.playerReply) return respond(globalThis.playerReply(JSON.parse(opts.body)));
   if (String(path).startsWith("/api/state")) {
     const v = new URL(path, location.href).searchParams.get("v");
     return respond(v === served.v ? { v, same: true } : served);

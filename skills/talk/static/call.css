@@ -57,6 +57,9 @@ svg{display:block;flex:none}
 .reader.strip{--sf:clamp(17px,.5vw + 12px,24px);display:flex;align-items:stretch;position:relative;inset:auto;grid-row:2;grid-column:1;z-index:2;overflow:hidden;
   height:calc(3 * 1.45 * var(--sf) + 24px);max-height:40vh;background:var(--panel);border-top:1px solid var(--line)}
 .reader.strip .rtext{max-width:none;width:100%;margin:auto 0;padding:12px 28px;white-space:normal;font-size:var(--sf);line-height:1.45}
+/* a sentence longer than its three lines: the half line under them fades out and an ellipsis ends the last one */
+.reader.strip.more{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 12px),transparent calc(100% - 2px));mask-image:linear-gradient(to bottom,#000 calc(100% - 12px),transparent calc(100% - 2px))}
+.reader.strip.more::after{content:"…";position:absolute;right:0;bottom:12px;padding:0 28px 0 36px;font-size:var(--sf);line-height:1.45;color:var(--muted);background:linear-gradient(to right,transparent,var(--panel) 55%)}
 .reader.strip .rs:not(.cur){display:none}
 .reader.strip .rtext>:not(.rs){display:none}
 @media (prefers-reduced-motion:reduce){.reader .w{transition:none}}
@@ -274,13 +277,15 @@ button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:va
 
 /* a phone: the stage on top, the panel under it; the rail becomes a bar */
 @media (max-width:760px){
-  .app,.app[data-side="left"]{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) 46%}
+  .app{--ph:46%}
+  .app[data-board]{--ph:38%}   /* a board is up: the stage takes more of the height, the panel keeps the player and its words */
+  .app,.app[data-side="left"]{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) var(--ph)}
   .app[data-rail]{grid-template-rows:minmax(0,1fr) 60px}
   .app[data-side="left"] .panel,.panel{order:0;border:0;border-top:1px solid var(--line)}
   .grip,.nowline{display:none}
   .rail{flex-direction:row;justify-content:center;padding:0 8px}
   /* a bottom sheet: it sits on the panel and never grows past the space above it, scrolling inside */
-  .pop,.app[data-side="left"] .pop{top:auto;bottom:calc(46% + 10px);left:10px;right:10px;width:auto;max-height:calc(54% - 24px)}
+  .pop,.app[data-side="left"] .pop{top:auto;bottom:calc(var(--ph) + 10px);left:10px;right:10px;width:auto;max-height:calc(100% - var(--ph) - 24px)}
   .app[data-rail] .pop,.app[data-rail] .gearpop{top:auto;bottom:70px;max-height:calc(100% - 82px)}
   .toast,.app[data-side="left"] .toast{left:50%;max-width:calc(100vw - 40px)}
 }

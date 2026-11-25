@@ -381,8 +381,9 @@ _CSS = (_Path(__file__).resolve().parents[1] / "static" / "call.css").read_text(
 
 
 def test_a_phone_gear_panel_is_a_sheet_capped_to_the_space_above_the_panel():
-    # callpage-1: the sheet sits 46% + 10px up and was as tall as the page less 68px, so its top left the screen
-    assert ".pop,.app[data-side=\"left\"] .pop{top:auto;bottom:calc(46% + 10px);left:10px;right:10px;width:auto;max-height:calc(54% - 24px)}" in _CSS
+    # callpage-1: the sheet sits one panel height + 10px up (46%, or 38% while a board is up) and was as tall as the page less 68px, so its top left the screen
+    assert ".pop,.app[data-side=\"left\"] .pop{top:auto;bottom:calc(var(--ph) + 10px);left:10px;right:10px;width:auto;max-height:calc(100% - var(--ph) - 24px)}" in _CSS
+    assert ".app{--ph:46%}" in _CSS and ".app[data-board]{--ph:38%}" in _CSS
     assert ".app[data-rail] .pop,.app[data-rail] .gearpop{top:auto;bottom:70px;max-height:calc(100% - 82px)}" in _CSS
 
 
@@ -457,3 +458,65 @@ def test_the_poll_loop_goes_on_while_the_tab_is_hidden_and_at_once_when_it_is_se
     page = CallPage(html, states, seconds=3.0).js("document.visibilityState = 'hidden'; let n0 = polls.n; await advance(5000);")
     page.check("polls.n - n0 >= 5")
     assert page.run() == [True]
+
+
+def test_a_tab_out_of_sight_stops_at_a_check_on_the_audios_own_timeupdate(tmp_path):
+    html, states = served(tmp_path, [CHECK_ANSWER], seconds=4.0)
+    page = CallPage(html, states, seconds=4.0).js("await serve(1); await playOn(1.0);")
+    # a hidden tab runs no animation frames: only the audio's timeupdate reports the time
+    page.js("document.visibilityState = 'hidden'; stopHighlight(); audio._t = 2.8; audio.dispatchEvent(new ShimEvent('timeupdate'));")
+    page.check(f"[audio.paused, {STOPS}]")
+    assert page.run() == [[True, [[1, 0, "check", None]]]]
+
+
+def test_a_page_that_holds_the_server_claim_plays_and_one_that_does_not_stays_silent(tmp_path):
+    html, states = served(tmp_path, ["Said to two screens."])
+    mine = CallPage(html, states).js("globalThis.playerReply = (b) => ({player: b.page}); claimPlayer(false); await serve(1);")
+    mine.check("[audio.paused, claims.map((c) => c.take), $('status').textContent]")
+    other = CallPage(html, [dict(st, player="the-tv") for st in states]).js("globalThis.playerReply = () => ({player: 'the-tv'}); await claimPlayer(false); await serve(1);")
+    other.check("[audio.paused, $('status').textContent]")
+    # the storage lock is not consulted once the server answers: a lock another page holds there does not silence this page
+    free = CallPage(html, states).js("localStorage.setItem('talk.playing.test-call-id', JSON.stringify({id: 'x', at: Date.now()})); globalThis.playerReply = (b) => ({player: b.page}); await claimPlayer(false); await serve(1);")
+    free.check("audio.paused")
+    assert mine.run() == [[False, [False, False, False], ""]]
+    assert other.run() == [[True, "Playing on another screen."]]
+    assert free.run() == [False]
+
+
+def test_pressing_play_takes_the_claim_and_a_page_that_loses_it_pauses(tmp_path):
+    html, states = served(tmp_path, ["Said to two screens."], seconds=3.0)
+    page = CallPage(html, states, seconds=3.0).js("globalThis.playerReply = (b) => ({player: b.page}); await claimPlayer(false); await serve(1); await playTo(0.5);")
+    page.js("audio.pause(); claims.length = 0; $('playpause').click();").check("[audio.paused, claims.map((c) => c.take)]")
+    # the next answer's state says another page holds the voice (it took it): this page stops
+    page.js("tookAt = 0; audio.play(); seeHolder('the-tv');").check("[audio.paused, $('status').textContent]")
+    assert page.run() == [[False, [True]], [True, "Playing on another screen."]]
+
+
+def test_an_audio_file_that_cannot_load_says_so_with_retry_and_a_blocked_play_says_blocked(tmp_path):
+    html, states = served(tmp_path, ["Said once."])
+    page = CallPage(html, states).js("await serve(1);")
+    toast = "[$('toast').hidden, $('toasttext').textContent, $('retry').hidden, $('retry').textContent]"
+    page.js("audio.error = {code: 4}; audio.dispatchEvent(new ShimEvent('error'));").check(toast)
+    page.js("$('retry').click();").check("[$('toast').hidden, audio.getAttribute('src'), audio.paused]")
+    # a refused play is "blocked" only for NotAllowedError; a file the player cannot decode is not that
+    page.js("playFailed(Object.assign(new Error('x'), {name: 'NotAllowedError'}));").check("$('toasttext').textContent")
+    page.js("playFailed(Object.assign(new Error('x'), {name: 'NotSupportedError'}));").check("$('toasttext').textContent")
+    page.js("playFailed(Object.assign(new Error('x'), {name: 'AbortError'}));").check("$('toasttext').textContent")
+    assert page.run() == [
+        [False, "Cannot load the audio file: it is missing or not supported.", False, "Retry"],
+        [True, "/c/test-call-id/audio/0000.wav", False],
+        "The browser blocked playback. Press Play.",
+        "Cannot play this audio file.",
+        "Cannot play this audio file."]
+
+
+def test_a_conversation_at_its_end_is_scrolled_to_the_end_again_after_the_foot_changes_its_height(tmp_path):
+    html, states = served(tmp_path, ["The first answer."])
+    page = CallPage(html, states, autoplay=False)
+    # the box is 100 px tall and scrolled to the end of 500; the foot painted at the end of a render makes the content 600 px tall
+    page.js("const box = $('convo'); let h = 500; Object.defineProperty(box, 'scrollHeight', {get: () => h}); box.clientHeight = 100; box.scrollTop = 400;"
+            " let inRender = false; const draw = render, was = paintAll;"
+            " render = () => { inRender = true; try { draw(); } finally { inRender = false; } };"
+            " paintAll = () => { was(); if (inRender) h = 600; }; await serve(1);")
+    page.check("$('convo').scrollTop")
+    assert page.run() == [600]

@@ -172,6 +172,7 @@ function paintMissing(gone) {
 setInterval(() => { if (stageViews) paintMissing(); }, MISSING_AFTER_MS / 2);
 // The chip of the board in front of the stage is drawn as chosen, wherever it is in the conversation.
 function paintFront() {
+  $("app").toggleAttribute("data-board", !!frontBoard);   // a phone gives the stage more height while a board is up
   for (const el of document.querySelectorAll("button.chip.board[data-view]")) el.classList.toggle("front", !!frontBoard && el.dataset.view === frontBoard);
 }
 
@@ -263,11 +264,13 @@ let unsent = null;          // a recording the server did not take: kept, so the
 function paintToast() {
   const text = connText || errText || (unsent ? "Your recording was not sent." : "");
   $("toast").hidden = !text; $("toasttext").textContent = text;
-  $("retry").hidden = !connDown && !unsent; $("retry").textContent = connDown ? "Retry" : "Send again";
+  const audioBad = audioFailed !== null;   // an entry id can be 0
+  $("retry").hidden = !connDown && !unsent && !audioBad; $("retry").textContent = connDown || (!unsent && audioBad) ? "Retry" : "Send again";
 }
+let audioFailed = null;     // the answer whose audio file would not load: the toast offers Retry
 function showError(text) {
   errText = text || ""; clearTimeout(errTimer);
-  if (errText) errTimer = setTimeout(() => { errText = ""; paintToast(); }, 12000);
+  if (errText) errTimer = setTimeout(() => { errText = ""; audioFailed = null; paintToast(); }, 12000);
   paintToast();
 }
 
@@ -328,7 +331,7 @@ function buildEntry(e) {
     if (e.who === "claude") {
       if (e.speech === "ready") {
         const b = document.createElement("button"); b.className = "play"; b.type = "button";
-        b.onclick = () => { if (current && current.id === e.id && !audio.paused) { audio.pause(); return; } readerPlays(e); load(view.entries.find(x => x.id === e.id) || e, true); };
+        b.onclick = () => { if (current && current.id === e.id && !audio.paused) { audio.pause(); return; } readerPlays(e); takeVoice(); load(view.entries.find(x => x.id === e.id) || e, true); };
         who.append(b);
       } else if (e.speech === "failed") {   // the voice being made shows in the foot, with its progress
         const s = document.createElement("div"); s.className = "speech bad";
@@ -379,6 +382,8 @@ function chipRow(id) {
   return row;
 }
 
+let pinnedEnd = false;      // the conversation was at its end when it last painted, so a resize of its box keeps it there
+if (typeof ResizeObserver === "function") new ResizeObserver(() => { const box = $("convo"); if (pinnedEnd) box.scrollTop = box.scrollHeight; }).observe($("convo"));
 function render() {
   const box = $("convo"), atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
   $("empty").hidden = !!view.entries.length;
@@ -398,10 +403,15 @@ function render() {
   for (const [id, rec] of nodes) if (!live.has(id)) { rec.el.remove(); nodes.delete(id); }
   for (const [id, r] of chipRows) if (!rows.has(id)) { r.remove(); chipRows.delete(id); }
   // New lines land at the end: a reader already there sees them, unless the voice is being followed elsewhere.
-  if (atEnd && !(current && !audio.paused && convoFollow)) box.scrollTop = box.scrollHeight;
+  const stick = atEnd && !(current && !audio.paused && convoFollow);
+  if (stick) box.scrollTop = box.scrollHeight;
   paintFront();
   paintCalls();
   paintAll();
+  // paintAll changes the foot (the working line, the status), so the conversation's box is shorter or taller
+  // than it was: the newest message goes to the end again, never cut off at the bottom.
+  pinnedEnd = stick;
+  if (stick) box.scrollTop = box.scrollHeight;
   rendered = true;
   if (audio.paused) highlight(); else paintReader();
 }
@@ -489,6 +499,8 @@ function followVoice(force) {
   } else if (turn && force) scrollConvo(Math.max(0, turn.offsetTop - box.offsetTop - 12));
 }
 $("convo").addEventListener("scroll", () => {
+  const box = $("convo");
+  pinnedEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
   if (performance.now() - ownScroll < 900) return;   // a scroll this page made
   const reading = !!current && !audio.paused && !!lastWord;
   convoFollow = !reading || inView(lastWord);
@@ -587,7 +599,7 @@ const BACK_MS = 4000;
 async function pollOnce() {
   try {
     const epoch = floorEpoch;
-    const r = await api("/api/state?v=" + view.v);
+    const r = await api("/api/state?v=" + view.v + "&page=" + PAGE_ID);
     if (r.status === 403 || r.status === 410) {
       if (!view.ended) { view = {...view, ended: "the talk server no longer holds this call", working: false}; render(); }
       return true;
@@ -596,6 +608,7 @@ async function pollOnce() {
     const body = await r.json();
     if (!body.same) {
       view = body;
+      seeHolder(body.player);
       if (view.now) clockSkew = view.now - Date.now() / 1000;
       // A floor taken here after this poll left is newer than what it brought back.
       if (epoch === floorEpoch && view.floor_n > floorN) {
@@ -635,7 +648,7 @@ async function poll() {
 // A tab out of sight keeps polling (the loop never checks): a call that ended meanwhile is found, and the tab
 // polls at once when it is seen again, since a browser slows the timers of a hidden tab.
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && wake) wake(); });
-$("retry").onclick = () => { if (connDown) { if (wake) wake(); } else if (unsent) sendWav(unsent); };
+$("retry").onclick = () => { if (connDown) { if (wake) wake(); } else if (unsent) sendWav(unsent); else if (audioFailed !== null) retryAudio(); };
 
 // ---- the floor: one call talks at a time ----------------------------------
 // Pressing Talk, sending text or playing an answer takes the floor for this call. Every other call's
@@ -723,23 +736,75 @@ function paintPrep(e) {
 // ---- the player --------------------------------------------------------
 function audioUrl(path) { return location.pathname.replace(/\/$/, "") + "/" + path; }
 function setSrc(path) { const url = audioUrl(path); if (audio.dataset.src !== url) { audio.src = url; audio.dataset.src = url; } }
+// Why a play() was refused: only a NotAllowedError is the browser blocking playback; a pause before playback
+// starts (AbortError) is nothing; anything else is the file or the player, and says so.
+function playFailed(err) {
+  const name = err && err.name;
+  if (name === "AbortError") return;
+  if (name === "NotAllowedError") showError("The browser blocked playback. Press Play.");
+  else if (name === "NotSupportedError") { audioFailed = current ? current.id : null; showError("Cannot play this audio file."); }
+  else showError("Playback failed" + (err && err.message ? ": " + err.message : "") + ". Press Play.");
+}
+// The audio element could not load its file (gone, damaged, the connection dropped): said so, with Retry.
+audio.addEventListener("error", () => {
+  if (!current || !audio.dataset.src) return;
+  const code = audio.error && audio.error.code;
+  audioFailed = current.id;
+  showError(code === 2 ? "Cannot load the audio file: the connection dropped." : code === 3 ? "Cannot load the audio file: it is damaged."
+    : code === 4 ? "Cannot load the audio file: it is missing or not supported." : "Cannot load the audio file.");
+});
+audio.addEventListener("loadeddata", () => { if (audioFailed !== null) { audioFailed = null; showError(""); } });
+function retryAudio() {
+  const e = current; audioFailed = null; showError("");
+  if (!e) return;
+  const at = audio.currentTime || 0;
+  audio.src = audioUrl(e.audio); audio.dataset.src = audioUrl(e.audio);
+  if (audio.load) audio.load();
+  if (at) audio.currentTime = at;
+  audio.playbackRate = speed;
+  audio.play().catch(playFailed);
+}
 function load(e, play) {
   current = e; cueSync = true;
   if (queued && queued.id === e.id) queued = null;
   setSrc(e.audio);
   audio.playbackRate = speed; audio.preservesPitch = true;
   // A pause before playback starts (another call took the floor) rejects with AbortError: not a block.
-  if (play) audio.play().catch(err => { if (!err || err.name !== "AbortError") showError("The browser blocked playback. Press Play."); });
+  if (play) audio.play().catch(playFailed);
   if ("mediaSession" in navigator) navigator.mediaSession.metadata = new MediaMetadata({title: "Answer " + (e.n || ""), artist: "Claude", album: CFG.topic});
   paintNow(); paintAll();
 }
 // One page of a call speaks. Two pages of one call (a laptop and the TV) would otherwise both start each
-// answer. The page that plays holds a lock in this origin's storage, renewed while it plays; another page of
-// the call finds it and stays silent ("Playing on another screen"). Pages on other devices do not share this
-// storage: the server-side claim of the talk-core batch is not in this tree, so a lock here is the fallback.
+// answer. The server holds the claim: POST /api/player {page, take} names the page that plays, /api/state
+// carries it as `player`, and this page plays only when `player` is its own id. A page that opens claims
+// it when nobody holds it; one where the user presses play takes it (the other pauses at its next poll).
+// When the claim cannot be made (an older server, the request failed) the page falls back to a lock in
+// this origin's storage, renewed while it plays: pages on other devices do not share it.
 const PAGE_ID = Math.random().toString(36).slice(2, 10);  // this page among the call's pages (live mode too)
 const LOCK_KEY = "playing." + CFG.call, LOCK_MS = 3000;
+let claimOk = false;        // the server answered a claim: its holder is the truth, the storage lock is not used
+let holder = null;          // the page the server says plays: an id, or null when none
+let tookAt = 0;             // when this page last took the claim: a poll older than that cannot say otherwise
+async function claimPlayer(take) {
+  const sent = Date.now();
+  try {
+    const r = await api("/api/player", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({page: PAGE_ID, take: !!take})});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const b = await r.json();
+    if (b && (b.player === null || typeof b.player === "string")) { claimOk = true; holder = b.player; if (take) tookAt = sent; return; }
+  } catch (err) { /* the lock below stays the fallback */ }
+  claimOk = false;
+}
+function takeVoice() { if (claimOk) { holder = PAGE_ID; tookAt = Date.now(); } claimPlayer(true); }
+// A poll's `player`: another page took the voice, so this page stops playing and says so.
+function seeHolder(p) {
+  if (!claimOk || p === undefined || Date.now() - tookAt < 3000) return;
+  holder = p;
+  if (p === null) { claimPlayer(false); return; }
+  if (p !== PAGE_ID && !audio.paused) { elsewhere = true; audio.pause(); paintAll(); }
+}
 function playingElsewhere() {
+  if (claimOk) return holder !== null && holder !== PAGE_ID;
   const l = store.get(LOCK_KEY, null);
   return !!l && l.id !== PAGE_ID && Date.now() - l.at < LOCK_MS;
 }
@@ -797,7 +862,7 @@ function playFrom(e, t, board = false) {
   readerPlays(e);
   if (board) followAgain();
   load(e, false); audio.currentTime = t;
-  audio.playbackRate = speed; audio.play().catch(() => {});
+  audio.playbackRate = speed; takeVoice(); audio.play().catch(playFailed);
 }
 function wordAt(e, t) {
   // The last word that has started by time t, or -1.
@@ -907,11 +972,13 @@ function paintReader() {
 }
 // The strip shows one sentence in a box of three lines: a longer one scrolls so the word being said stays in it.
 function keepWordInStrip(box, word) {
-  if (!word) return;
+  const more = () => box.classList?.toggle("more", box.scrollHeight > box.clientHeight + 2 && box.scrollTop + box.clientHeight < box.scrollHeight - 2);
+  if (!word) { more(); return; }
   const b = box.getBoundingClientRect(), r = word.getBoundingClientRect();
   if (r.top < b.top || r.bottom > b.bottom) box.scrollTop = Math.max(0, box.scrollTop + (r.top + r.bottom) / 2 - (b.top + b.bottom) / 2);
   // a word wider than the box (a long path or identifier) is brought into view across as well
   if (r.left < b.left || r.right > b.right) box.scrollLeft = Math.max(0, box.scrollLeft + (r.left + r.right) / 2 - (b.left + b.right) / 2);
+  more();   // a sentence longer than the strip says so: its cut line fades into an ellipsis instead of showing half a line
 }
 
 // ---- the sentence being said, shown on the stage -------------------------------
@@ -1165,8 +1232,8 @@ function togglePlay() {
   if (stopped && audio.paused) { if (stopped.stop.type === "deeper" || stopped.stop.type === "check") pickStop(0); else goOn(); return; }
   const b = boardStart();
   if (b) { playFrom(b.e, b.t, true); return; }
-  if (!current) { const e = lastAnswer(); if (e) { readerPlays(e); load(e, true); } return; }
-  if (audio.paused) { readerPlays(current); audio.play().catch(() => {}); } else audio.pause();
+  if (!current) { const e = lastAnswer(); if (e) { readerPlays(e); takeVoice(); load(e, true); } return; }
+  if (audio.paused) { readerPlays(current); takeVoice(); audio.play().catch(playFailed); } else audio.pause();
 }
 $("playpause").onclick = $("railpp").onclick = togglePlay;
 $("back").onclick = $("railback").onclick = () => skip(-10);
@@ -1179,6 +1246,9 @@ for (const s of SPEEDS) {
 $("autoplay").onclick = () => { autoplay = !autoplay; store.set("autoplay", autoplay); paintSettings(); };
 for (const ev of ["play", "pause", "ended", "durationchange", "loadedmetadata"]) audio.addEventListener(ev, paintAll);
 audio.addEventListener("timeupdate", paintPill);
+// The frame loop does not run in a tab out of sight: the audio's own timeupdate still does, so a hidden tab
+// stops at a check or guess too.
+audio.addEventListener("timeupdate", () => { if (current) checkStop(view.entries.find(x => x.id === current.id) || current); });
 for (const ev of ["play", "pause", "ended"]) audio.addEventListener(ev, paintNow);
 audio.addEventListener("play", startHighlight);
 for (const ev of ["pause", "ended"]) audio.addEventListener(ev, stopHighlight);
@@ -1706,4 +1776,5 @@ applyTheme();
 setMode("idle");
 if (talkMode === "live") startLive();
 if (matchMedia("(hover: hover) and (pointer: fine)").matches) $("text").focus();
+claimPlayer(false);
 poll();
