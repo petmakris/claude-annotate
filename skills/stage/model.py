@@ -684,7 +684,15 @@ def step_refs(spec: dict, root: Path) -> tuple[dict, list[str]]:
             continue
         rel, _, line = ref.strip().rpartition(":")
         path = (base / rel).resolve()
-        if not path.is_relative_to(base) or not path.is_file():
+        if not path.is_relative_to(base):
+            problems.append(f"step {sid}: ref {ref} names no file in the code folder")
+            continue
+        try:
+            locate(base, rel)  # the same refusals as a code board: .env, .git, a git-ignored file
+        except SourceError as e:
+            problems.append(f"step {sid}: ref {ref} is refused: {e}")
+            continue
+        if not path.is_file():
             problems.append(f"step {sid}: ref {ref} names no file in the code folder")
             continue
         lines = split_lines(path.read_text(errors="replace"))

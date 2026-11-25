@@ -1159,9 +1159,10 @@ def test_two_boards_with_no_verbs_in_one_answer_each_come_in_with_their_own_sent
 def test_fewer_sentences_than_things_bring_several_in_at_once(tmp_path):
     from helpers import make_args
     call = talk.Call(make_args(), "T", tmp_path / "out")
-    call.split_reply("[[show diagram | D]]graph TD; A-->B; B-->C; C-->D[[/show]] It starts at A. It ends at D.")
+    call.split_reply("[[show diagram | D]]graph TD; A[Alpha]-->B[Beta]; B-->C[Gamma]; C-->D[Delta][[/show]] Alpha is first. Delta is last.")
     built = call.board.items[0]["scene"]
-    assert [len(f["show"]) for f in built["frames"]] == [0, 3, 7, 7]
+    # Beta and Gamma, named by no sentence, are never lit by order: they come in with the rest frame
+    assert [len(f["show"]) for f in built["frames"]] == [0, 1, 2, 7]
 
 
 def test_a_small_board_code_and_a_board_said_last_are_never_stepped(tmp_path):
@@ -1436,9 +1437,9 @@ def test_a_point_on_a_map_is_the_reveal_for_its_sentence_and_the_part_it_names_i
     assert _frames_said(call, shown) == [
         (1, "First, opening a", ["node:open"], ["node:open"]),
         (2, "Second, the nightly", ["node:batch"], ["node:batch"]),
-        # the four parts no sentence names come in with the last one named, which stays the one said
-        (3, "Third, sharing a", ["node:share", "node:catch", "node:guard", "node:state", "node:err"],
-         ["node:share", "edge:share->state#0"])]
+        # "broke" says "Broken guard first" (a word of it no other part holds); the three parts no sentence names
+        # are never lit by order: they come in with the rest frame
+        (3, "Third, sharing a", ["node:share", "node:guard"], ["node:share"])]
     assert call.board.problems == [
         '4 of 7 parts of "Three paths changed" are named by no sentence, so they came in by order, not where they are '
         "said. Say each one's words in the sentence about it, or put its tag there, in \"Third, sharing a proposal that "

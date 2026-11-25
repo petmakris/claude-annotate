@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import difflib
 import html
+import os
 import re
 import unicodedata
 from dataclasses import dataclass, field, replace
@@ -33,16 +34,53 @@ _LINES = re.compile(r"(?:(?P<old>old)\s+)?(?:lines?\s+)?(?P<a>\d+)(?:\s*[-–]\s
 _CELL = re.compile(r"cells?\s+(?P<r>.+?)\s*(?:/|,|×)\s*(?P<c>.+)", re.IGNORECASE)
 
 
-def _column(model: "SceneModel", raw: str, table: int = 0) -> int | None:
-    """A column by its number or its header, quoted or not, in the table `table` (counted from 0)."""
+_PAREN = re.compile(r"\s*[(\[][^()\[\]]*[)\]]\s*\Z")
+
+
+def _bare(text: str) -> str:
+    """A name without its trailing parenthetical (a unit, a note): "Cost (USD)" is "cost"."""
+    return fold(_PAREN.sub("", text.strip()))
+
+
+def _by_text(names: list[str], text: str, owner: list | None = None) -> tuple[int | None, bool]:
+    """Which of `names` (an index) a text says: its full text, else the text without its trailing parenthetical on
+    either side, else a whole word of exactly one name, else a prefix of exactly one name or of one of its words (three letters at least).
+    Two names that fit a step name nothing there (names of one `owner` count as one). The flag is true when the last, loose step was the one that read."""
+    want = fold(text)
+    if not want:
+        return None, False
+    owner = owner or list(range(len(names)))
+    exact = [i for i, n in enumerate(names) if fold(n) == want]
+    if exact:
+        return exact[0], False  # the same header twice is read as its first
+    hits = [i for i, n in enumerate(names) if _bare(n) == _bare(text) and _bare(n) != ""]
+    if hits:
+        return (hits[0], False) if len({owner[i] for i in hits}) == 1 else (None, False)
+    for fit in (lambda n: want in re.findall(r"[^\W_]+", fold(n)), lambda n: len(want) >= 3 and (fold(n).startswith(want)
+                                                    or any(w.startswith(want) for w in re.findall(r"[^\W_]+", fold(n))))):
+        hits = [i for i, n in enumerate(names) if fit(n)]
+        if len({owner[i] for i in hits}) == 1:
+            return hits[0], True
+        if hits:
+            return None, False
+    return None, False
+
+
+def _column_read(model: "SceneModel", raw: str, table: int = 0) -> tuple[int | None, bool]:
+    """A column by its number or its header (see _by_text), quoted or not, in the table `table` (counted from 0);
+    the flag says it was read loosely, by a word or a prefix."""
     text = raw.strip().strip("\"'“”‘’").strip()
     if text.isdigit():
-        return int(text)
+        return int(text), False
     heads = model.headers[table] if table < len(model.headers) else []
     if heads:
-        found = [c for c, h in enumerate(heads, 1) if fold(h) and fold(h) == fold(text)]
-        return found[0] if found else None
-    return model.columns.get(fold(text))
+        i, loose = _by_text(heads, text)
+        return (i + 1 if i is not None else None), loose
+    return model.columns.get(fold(text)), False
+
+
+def _column(model: "SceneModel", raw: str, table: int = 0) -> int | None:
+    return _column_read(model, raw, table)[0]
 
 
 _ROW = re.compile(r"rows?\s+(?:(?P<n>\d+)(?:\s*[-–]\s*(?P<n2>\d+))?|\"(?P<q>[^\"]+)\"|“(?P<c>[^”]+)”|'(?P<s>[^']+)'|(?P<bare>\S.*))",
@@ -855,24 +893,42 @@ def _says(rows: list[str]) -> str:
     return "rows " + " and ".join(nums) if len(nums) == 2 else "rows " + ", ".join(nums[:-1]) + " and " + nums[-1]
 
 
-def _column_key(model: SceneModel, raw: str) -> str | None:
-    """A column's key from its number or header; with more than one table, `2.3` is the third column of the second
-    and a header names its first table that has it."""
+def _column_key(model: SceneModel, raw: str) -> tuple[str | None, bool]:
+    """A column's key and whether it was read loosely: a number, a header, or `table.column` over several tables;
+    a header names its first table that has it."""
     text = raw.strip().strip("\"'“”‘’").strip()
     many = len(model.headers) > 1
     pair = re.fullmatch(r"(\d+)\.(\d+)", text)
-    key = None
+    key, loose = None, False
     if pair and many:
         key = f"col#{pair[1]}.{pair[2]}"
     elif text.isdigit():
         key = f"col#1.{text}" if many else f"col#{text}"
     else:
-        for t, heads in enumerate(model.headers):
-            c = next((c for c, h in enumerate(heads, 1) if fold(h) and fold(h) == fold(text)), None)
-            if c:
-                key = f"col#{t + 1}.{c}" if many else f"col#{c}"
+        for step in (False, True):  # a whole header first in every table, a loose word or prefix after
+            for t, heads in enumerate(model.headers):
+                c, was = _column_read(model, text, t)
+                if c and was == step:
+                    key, loose = (f"col#{t + 1}.{c}" if many else f"col#{c}"), was
+                    break
+            if key:
                 break
-    return key if key in model.keys else None
+    return (key, loose) if key in model.keys else (None, False)
+
+
+def _row_by_text(model: SceneModel, word: str) -> tuple[str | None, bool]:
+    """A row named by its text without a trailing parenthetical, else by a whole word or a prefix of one name that
+    belongs to one row only (see _by_text). A text a second row has too names nothing."""
+    texts = list(model.names)
+    i, loose = _by_text(texts, word, [model.names[t] for t in texts])
+    return (model.names[texts[i]], loose) if i is not None else (None, False)
+
+
+def _span(keys: list[str]) -> str:
+    nums = [int(k.split("#")[1]) for k in keys]
+    if len(nums) == 1:
+        return f"row {nums[0]}"
+    return f"rows {nums[0]}-{nums[-1]}" if nums == list(range(nums[0], nums[-1] + 1)) else "rows " + ", ".join(map(str, nums))
 
 
 def _resolve_row(model: SceneModel, text: str, raw: str, title: str, dropped: str) -> tuple[list[str], str | None]:
@@ -890,6 +946,9 @@ def _resolve_row(model: SceneModel, text: str, raw: str, title: str, dropped: st
                     'say the row by its number, or by its first and second cell like "first / second"; dropped')
     if fold(word) in model.names:
         return [model.names[fold(word)]], None
+    key, loose = _row_by_text(model, word)
+    if key:
+        return [key], (f'"{raw}" in "{title}" read as {key}' if loose else None)
     key = _closest(model, word)
     return ([key], f'"{raw}" in "{title}" read as {key}') if key else ([], dropped)
 
@@ -905,7 +964,8 @@ def _resolve_rows(model: SceneModel, raw: str, title: str, dropped: str) -> tupl
         return keys, "; ".join(notes) or None
     if (cell := _CELL.fullmatch(raw)):
         row, note = _resolve_row(model, cell["r"], raw, title, dropped)
-        if not row and any(_column(model, cell["r"], t) for t in range(max(1, len(model.headers)))):
+        if not row and any(c and not loose for c, loose in (_column_read(model, cell["r"], t)
+                                                           for t in range(max(1, len(model.headers))))):
             swapped, _ = _resolve_row(model, cell["c"], raw, title, dropped)  # written column first, then row
             if swapped:
                 row, note = swapped, None
@@ -913,16 +973,26 @@ def _resolve_rows(model: SceneModel, raw: str, title: str, dropped: str) -> tupl
         if not row:
             return [], note
         r = int(row[0].split("#")[1])
-        col = _column(model, cell["c"], model.row_table.get(row[0], 0))
+        col, loose = _column_read(model, cell["c"], model.row_table.get(row[0], 0))
         key = f"cell#{r}.{col}" if col else None
-        return ([key], note) if key in model.keys else ([], dropped)
+        if key not in model.keys:
+            return [], dropped
+        if loose:
+            heads = model.headers[model.row_table.get(row[0], 0)]
+            note = "; ".join(x for x in (note, f'"{cell["c"].strip()}" in "{title}" read as column "{heads[col - 1]}"') if x)
+        return [key], note
     if (m := _COLUMN.fullmatch(raw)):
         keys, notes = [], []
         for item in (i for i in re.split(r"\s*[,;]\s*", m["list"]) if i.strip()):
-            key = _column_key(model, item)
+            key, loose = _column_key(model, item)
             if key is None:
                 notes.append(f'no column {item.strip()} in "{title}"')
-            elif key not in keys:
+                continue
+            if loose:
+                t, _, c = key.removeprefix("col#").rpartition(".")
+                head = model.headers[int(t) - 1 if t else 0][int(c) - 1]
+                notes.append(f'"{item.strip()}" in "{title}" read as column "{head}"')
+            if key not in keys:
                 keys.append(key)
         return keys, "; ".join(notes) or None
     if (m := _ROW_LIST.fullmatch(raw)):
@@ -933,6 +1003,9 @@ def _resolve_rows(model: SceneModel, raw: str, title: str, dropped: str) -> tupl
             keys += [f"row#{k}" for k in range(lo, hi + 1) if f"row#{k}" not in keys]
         if all(k in model.keys for k in keys):
             return keys, None
+        kept = [k for k in keys if k in model.keys]
+        if kept:
+            return kept, f'"{title}" has {len(model.order)} rows, so {raw.strip()} is read as {_span(kept)}'
         return [], f'"{title}" has {len(model.order)} rows, not {raw.strip()}; dropped'
     m = _ROW.fullmatch(raw)
     if m and m["n"]:
@@ -943,6 +1016,9 @@ def _resolve_rows(model: SceneModel, raw: str, title: str, dropped: str) -> tupl
         if a == b and fold(m["n"]) in model.names:
             return [model.names[fold(m["n"])]], None  # a row whose first cell is the number
         said = f"row {a}" if a == b else f"rows {a}-{b}"
+        kept = [k for k in keys if k in model.keys]
+        if kept:  # a range that runs past the table is cut at its end
+            return kept, f'"{title}" has {len(model.order)} rows, so {said} is read as {_span(kept)}'
         return [], f'"{title}" has {len(model.order)} rows, not {said}; dropped'
     text = (m["q"] or m["c"] or m["s"] or m["bare"]) if m else raw
     return _resolve_row(model, '"' + text + '"', raw, title, dropped)
@@ -1055,7 +1131,7 @@ def _said(model: SceneModel, keys: list[str], before: set, shown: set) -> list[s
 _STOP = frozenset("""a an and are as at be but by can did does for from had has have her his how into its just not now
 off once one only our out over she than that the their them then there these they this those too two very was way
 were what when where which who why will with you your yours it's is it of on or so to in up we us he if do no all
-any each few more most other some such own same both here""".split())
+any each few more most other some such own same both here first finally""".split())
 
 
 def _words(text: str) -> list[str]:
@@ -1087,30 +1163,82 @@ def part_names(model: SceneModel) -> dict[str, list[list[str]]]:
     return out
 
 
-def names_part(sentence: list[str], names: list[list[str]]) -> bool:
-    """A sentence names a part when it says more than half of the words of one of its names."""
-    return any(sum(any(_same(w, s) for s in sentence) for w in name) > len(name) // 2 for name in names)
+def _near(a: str, b: str) -> bool:
+    """One distinctive word said for another, in any alphabet: the same word, a plain inflection of a short one
+    (hit, hits), or words that share a prefix of five letters, or of four that is 70 percent of the longer (both of five or more)."""
+    a, b = sorted((a, b), key=len)
+    if a == b:
+        return True
+    if len(a) < 4:
+        return len(a) == 3 and b in (a + "s", a + "es", a + "d", a + "ed")
+    n = len(os.path.commonprefix([a, b]))
+    return n >= 5 or (n >= 4 and len(a) >= 5 and n >= 0.7 * len(b))
+
+
+def distinctive(model: SceneModel) -> dict[str, frozenset]:
+    """Per part, the words of its names that no other part's names hold, in that form or a close one (ask, asks):
+    a word that names this part alone. A short word (under five letters) counts only when it is the one word of its
+    name that tells the part from the others (hit, miss in "Cache hit" and "Cache miss"): next to a longer
+    distinctive word, a short one ("puts" in "puts up the boards") is as likely a common verb."""
+    names = part_names(model)
+    held = {key: {w for words in texts for w in words} for key, texts in names.items()}
+    held["~"] = {w for text in model.ambiguous for w in _words(text)}  # a table text two rows share names none of them
+    out: dict[str, frozenset] = {}
+    for key, texts in names.items():
+        alone = {w for words in texts for w in words
+                 if not any(o != key and any(_same(w, x) or _near(w, x) for x in theirs) for o, theirs in held.items())}
+        keep: set[str] = set()
+        for words in texts:
+            mine = [w for w in words if w in alone]
+            # in a sentence-long name (a table row's text) only the long words count
+            keep |= {w for w in mine if len(w) >= 5 or (len(mine) == 1 and len(words) <= 3)}
+        out[key] = frozenset(keep)
+    return out
+
+
+def _said_as(word: str, said: str, dist=frozenset()) -> bool:
+    return _same(word, said) or (word in dist and _near(word, said))
+
+
+def names_part(sentence: list[str], names: list[list[str]], dist=frozenset()) -> bool:
+    """A sentence names a part when it says more than half of the words of one of its names, or a word of them that
+    no other part holds (`dist`, see distinctive), in the same word or a close form of it."""
+    return any(sum(any(_said_as(w, s, dist) for s in sentence) for w in name) > len(name) // 2
+               or any(w in dist and any(_said_as(w, s, dist) for s in sentence) for w in name) for name in names)
+
+
+def _ambiguous_said(model: SceneModel, words: list[str]) -> int:
+    """The most words of a table text that names more than one row which a sentence says whole, else 0."""
+    best = 0
+    for text in model.ambiguous:
+        ws = _words(text)
+        if ws and all(any(_same(w, s) for s in words) for w in ws):
+            best = max(best, len(ws))
+    return best
 
 
 def said_parts(model: SceneModel, sentences: list[str]) -> dict[int, list[str]]:
     """A diagram too small to step (AUTO_STEP_OVER parts or fewer) still follows the voice: it shows whole, and
     each sentence that names a part marks it as being said. Per sentence index, the one part it names most
     fully: the largest share of one of its names said, then the most words of it ("Copy Production" is the copy,
-    not Production)."""
-    if model.kind not in ("flowchart", "sequence", "map", "bars", "graph") or len(model.order) < 2:
+    not Production). A table does the same by its rows, named by their cells and never by a column header; a
+    text that two rows have names neither."""
+    if model.kind not in ("flowchart", "sequence", "map", "bars", "graph", "rows") or len(model.order) < 2:
         return {}
-    names = part_names(model)
+    names, dist = part_names(model), distinctive(model)
     out: dict[int, list[str]] = {}
     for i, sentence in enumerate(sentences):
         words = _words(sentence)
         best, score = None, (0.0, 0)
         for p in model.order:
-            if not names_part(words, names.get(p, [])):
+            if not names_part(words, names.get(p, []), dist.get(p, frozenset())):
                 continue
             for name in names.get(p, []):
-                said = sum(any(_same(w, s) for s in words) for w in name)
+                said = sum(any(_said_as(w, s, dist.get(p, frozenset())) for s in words) for w in name)
                 if (said / len(name), said) >= score:
                     best, score = p, (said / len(name), said)
+        if best and model.kind == "rows" and _ambiguous_said(model, words) >= score[1]:
+            best = None  # a text two rows share is said as much as the row's own: the voice names no one row
         if best:
             out[i] = [best]
     return out
@@ -1121,23 +1249,47 @@ def auto_steps(model: SceneModel, sentences: list[str], pointed: dict[int, list[
     """A board with no reveals of its own, brought in over the sentences said about it.
 
     Each part arrives with the first sentence that names it (a sequence's steps keep their order), or with
-    the sentence that points at it when that comes first. The parts no sentence names fill the sentences
-    that name nothing, in order and spread evenly, between the named parts around them; with no sentence
-    left there, they come in with the next named part. A first sentence that names nothing is the board's
-    introduction and brings nothing, unless no sentence names anything and there are no more sentences
-    than parts. `pointed` holds, per sentence index, the parts the board's own points light there.
+    the sentence that points at it when that comes first. A part no sentence names is never lit by order: it
+    comes in with the rest frame, and is listed in the second result (unnamed_parts says where the order would
+    have put it). Only a sequence's steps and a table's rows, which are ordered by nature, fill the sentences
+    that name nothing, each after the one named before it. A sentence that names a part is never given to another. A first
+    sentence that names nothing is the board's introduction and brings nothing, unless no sentence names
+    anything and there are no more sentences than parts. `pointed` holds, per sentence index, the parts the
+    board's own points light there.
     Returns, per sentence index, the reveals for it (each a list of keys; the last is what the sentence
-    is about), and the parts that came in by order rather than by name."""
+    is about), and the parts no sentence named."""
+    plan, later, _ = _place(model, sentences, pointed)
+    return plan, later
+
+
+def unnamed_parts(model: SceneModel, sentences: list[str], pointed: dict[int, list[str]] | None = None) -> list[dict]:
+    """The parts no sentence names, each as {key, label, sentence}: the sentence the order would have put it with
+    (empty when none), so the author can say the part's own words there."""
+    _, later, landed = _place(model, sentences, pointed)
+    labels: dict[str, str] = {}
+    for text, key in model.names.items():
+        labels.setdefault(key, text)
+    return [{"key": k, "label": labels.get(k) or k.split(":", 1)[-1],
+             "sentence": " ".join(sentences[landed[k]].split()) if landed.get(k) is not None and landed[k] < len(sentences) else ""}
+            for k in later]
+
+
+def _place(model: SceneModel, sentences: list[str], pointed: dict[int, list[str]] | None
+           ) -> tuple[dict[int, list[list[str]]], list[str], dict[str, int]]:
     parts, m = model.order, len(sentences)
     # a scene always steps: a page must never come up whole at once
     if not model.can_hide or len(parts) <= (1 if model.kind == "parts" else AUTO_STEP_OVER) or m < 1:
-        return {}, []
-    words, names = [_words(s) for s in sentences], part_names(model)
+        return {}, [], {}
+    words, names, dist = [_words(s) for s in sentences], part_names(model), distinctive(model)
+
+    def says(i: int, p: str) -> bool:
+        return names_part(words[i], names.get(p, []), dist.get(p, frozenset()))
+
     if model.kind == "map":
         # a map follows its route only when the answer follows the request: a sentence or a point names a step of it
         route = [p for p in parts if p.startswith("route:")]
         said = {k for keys in (pointed or {}).values() for k in keys}
-        if not any(p in said or any(names_part(w, names.get(p, [])) for w in words) for p in route):
+        if not any(p in said or any(says(i, p) for i in range(m)) for p in route):
             parts = [p for p in parts if p not in route]
     point_at: dict[str, int] = {}
     for i in sorted(pointed or {}):
@@ -1146,14 +1298,12 @@ def auto_steps(model: SceneModel, sentences: list[str], pointed: dict[int, list[
             if part in parts:
                 point_at.setdefault(part, i)
     anchor: dict[str, int] = {}
-    by_name: set[str] = set()
     floor = 0
     for p in parts:
         lo = floor if model.kind == "sequence" else 0
-        hit = next((i for i in range(lo, min(m, point_at.get(p, m))) if names_part(words[i], names.get(p, []))), None)
+        hit = next((i for i in range(lo, min(m, point_at.get(p, m))) if says(i, p)), None)
         if hit is not None:
             anchor[p] = hit
-            by_name.add(p)
         elif p in point_at:
             anchor[p] = point_at[p]
         elif model.kind in ("parts", "map") and model.up.get(p, [None])[0] in anchor \
@@ -1161,12 +1311,14 @@ def auto_steps(model: SceneModel, sentences: list[str], pointed: dict[int, list[
             anchor[p] = anchor[model.up[p][0]]  # a part no sentence names rides in with the part it sits in
         if p in anchor and model.kind == "sequence":
             floor = max(floor, anchor[p])
-    busy = set(anchor.values()) | set(point_at.values())
+    named = {i for i in range(m) if any(says(i, p) for p in parts)}  # a sentence that names a part is that part's
+    busy = set(anchor.values()) | set(point_at.values()) | named
     intro = 0 not in busy and (bool(anchor) or m > len(parts))
     free = [i for i in range(m) if i not in busy and not (i == 0 and intro)]
     fills: dict[int, list[list[str]]] = {}
     rides: dict[int, list[str]] = {}
     later: list[str] = []
+    landed: dict[str, int] = {}
     run: list[str] = []
     for j, p in enumerate([*parts, None]):
         if p is not None and p not in anchor:
@@ -1176,13 +1328,22 @@ def auto_steps(model: SceneModel, sentences: list[str], pointed: dict[int, list[
             before = [anchor[q] for q in parts[:j] if q in anchor]
             lo, hi = (before[-1] if before else -1), (anchor[p] if p is not None else m)
             window = [i for i in free if lo < i < hi]
+            # the order places a part only where the items are ordered by nature: a sequence's steps, a table's rows
+            keep = model.kind in ("sequence", "rows")
             if window:
                 k = min(len(window), len(run))
                 for i in range(k):
-                    fills[window[i]] = [run[i * len(run) // k:(i + 1) * len(run) // k]]
-                free = [i for i in free if i not in window[:k]]
+                    chunk = run[i * len(run) // k:(i + 1) * len(run) // k]
+                    landed.update({q: window[i] for q in chunk})
+                    if keep:
+                        fills[window[i]] = [chunk]
+                if keep:
+                    free = [i for i in free if i not in window[:k]]
             else:
-                rides.setdefault(hi if p is not None else max(lo, 0), []).extend(run)
+                at = hi if p is not None else max(lo, 0)
+                landed.update({q: at for q in run})
+                if keep:
+                    rides.setdefault(at, []).extend(run)
             later += run
             run = []
     plan: dict[int, list[list[str]]] = {}
@@ -1191,7 +1352,7 @@ def auto_steps(model: SceneModel, sentences: list[str], pointed: dict[int, list[
         steps = [s for s in ([rides.get(i, [])] + fills.get(i, []) + [own]) if s]
         if steps:
             plan[i] = steps
-    return plan, later
+    return plan, later, landed
 
 
 def compile_scene(model: SceneModel, groups: list[list[Verb]], title: str) -> tuple[dict | None, list[str]]:

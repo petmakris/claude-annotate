@@ -65,7 +65,8 @@ def test_a_point_lights_a_bar_by_its_id_its_label_or_a_range_of_rows(tmp_path):
     call, _ = reply(tmp_path, f"[[show bars | Costs]] {json.dumps(BARS)} [[/show]] Hear. [[point: bar l2]] One. [[point: rows 3-4]] Two. "
                               "[[point: row \"Main memory\"]] Three. [[point: bar ram]] Four.")
     _, fr = frames(call)
-    assert call.board.problems == []
+    # the bar no sentence or point reaches is never lit by order: it comes in with the rest frame
+    assert call.board.problems == ['1 of 4 elements of "Costs" are never revealed; they come in with the rest frame']
     assert [f["focus"] for f in fr[1:-1]] == [["bar:l2"], ["bar:l3", "bar:ram"], ["bar:ram"], ["bar:ram"]]
     assert fr[-1]["show"] == ["bar:l1", "bar:l2", "bar:l3", "bar:ram"] and fr[-1]["focus"] == []  # the rest view shows every row
 
@@ -74,9 +75,10 @@ def test_a_bar_that_is_nearly_an_id_is_read_as_it_and_one_that_is_not_names_the_
     call, _ = reply(tmp_path, f"[[show bars | Costs]] {json.dumps(BARS)} [[/show]] Hear. [[point: bar l22]] One. [[point: bar swap]] Two. [[point: rows 5-6]] Three.")
     assert call.board.problems == ['"bar l22" in "Costs" read as bar:l2',
                                    '"bar swap" in "Costs" matches nothing; the bars are l1, l2, l3, ram',
-                                   '"Costs" has 4 bars, not rows 5-6; dropped']
+                                   '"Costs" has 4 bars, not rows 5-6; dropped',
+                                   '3 of 4 elements of "Costs" are never revealed; they come in with the rest frame']
     _, fr = frames(call)
-    assert [f["focus"] for f in fr[1:-1]] == [["bar:l2"], [], []]  # a dropped point still has its place in the speech
+    assert [f["focus"] for f in fr[1:-1]] == [["bar:l2"]]  # a dropped point lights nothing, and no part is lit by order in its place
 
 
 def test_a_point_on_a_graph_lights_a_node_or_a_frame_and_a_flat_graph_has_no_frames(tmp_path):

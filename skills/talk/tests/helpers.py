@@ -200,10 +200,10 @@ def stage_rule_breaks(call, shown: str) -> list[str]:
             continue
         bounds = [front] + [s for s in starts if front < s < end]
         spans = list(zip(bounds, bounds[1:] + [end]))
-        names = scene_mod.part_names(model)
+        names, dist = scene_mod.part_names(model), scene_mod.distinctive(model)
         for k in model.order:
             first = next((n for n, f in enumerate(frames) if k in f["show"]), None)
-            said = next(((a, b) for a, b in spans if scene_mod.names_part(scene_mod._words(shown[a:b]), names.get(k, []))), None)
+            said = next(((a, b) for a, b in spans if scene_mod.names_part(scene_mod._words(shown[a:b]), names.get(k, []), dist.get(k, frozenset()))), None)
             if first is None or first == built["rest"] or said is None:
                 continue
             if at.get(first, -1) < said[0]:

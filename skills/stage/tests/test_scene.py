@@ -196,11 +196,11 @@ def test_next_reveals_in_declaration_order_and_says_when_nothing_is_left():
 
 def test_a_board_with_more_than_three_elements_and_no_verbs_is_stepped_per_sentence():
     model = _flow(EXAMPLE)
+    # sentences that name no part never light one by order: every part is unnamed and comes in with the rest frame
     plan, later = scene.auto_steps(model, ["One.", "Two.", "Three."])
-    assert plan == {0: [["node:pws"]], 1: [["node:legacy"]], 2: [["node:wf", "node:engine"]]} and later == model.order
-    # more sentences than parts, none naming one: the first is the board's introduction and brings nothing
-    plan, _ = scene.auto_steps(model, [f"S{i}." for i in range(20)])
-    assert plan == {1: [["node:pws"]], 2: [["node:legacy"]], 3: [["node:wf"]], 4: [["node:engine"]]}
+    assert plan == {} and later == model.order
+    plan, later = scene.auto_steps(model, [f"S{i}." for i in range(20)])
+    assert plan == {} and later == model.order
     assert scene.auto_steps(_flow("graph TD; P-->Q"), ["a."] * 5) == ({}, [])
     assert scene.auto_steps(scene.lines_model(range(1, 30)), ["a."] * 5) == ({}, [])
     assert scene.auto_steps(model, []) == ({}, [])
@@ -259,12 +259,12 @@ def test_steps_actors_and_nodes_are_found_by_id_by_word_or_by_label():
 
 
 def test_auto_steps_spread_evenly_and_never_end_on_an_empty_sentence():
-    model = _flow("graph TD; A-->B; B-->C; C-->D; D-->E")
-    plan, _ = scene.auto_steps(model, ["One.", "Two.", "Three.", "Four."])
-    assert [len(steps[0]) for _, steps in sorted(plan.items())] == [1, 1, 1, 2]
+    model = _flow("graph TD; A[Alpha]-->B[Beta]; B-->C[Gamma]; C-->D[Delta]; D-->E[Epsilon]")
+    plan, _ = scene.auto_steps(model, ["Alpha first.", "Nothing here.", "Then Beta and Gamma.", "Nothing again.", "Last Delta and Epsilon."])
+    assert plan == {0: [["node:A"]], 2: [["node:B", "node:C"]], 4: [["node:D", "node:E"]]}
     groups = [[scene.Verb("+", keys=keys) for keys in steps] for _, steps in sorted(plan.items())]
     built, notes = scene.compile_scene(model, groups, "T")
-    assert notes == [] and built["frames"][4]["show"] == model.keys
+    assert notes == [] and built["frames"][3]["show"] == model.keys
 
 
 def test_next_and_all_name_their_board_by_title():
@@ -442,10 +442,9 @@ ONE_TURN_SAID = ["A sequence comes in a step at a time, here the path of one tur
 def test_each_part_arrives_with_the_sentence_that_names_it_and_an_introduction_brings_nothing():
     m = scene.sequence_model(ONE_TURN_SPEC)
     plan, later = scene.auto_steps(m, ONE_TURN_SAID, {9: ["step:s5"]})
-    # s2 and s8 are named by no sentence: they fill the sentences between the named steps around them
     assert plan == {1: [["step:s1"]], 2: [["step:s2"]], 3: [["step:s3"]], 4: [["step:s4"]], 5: [["step:s5"]],
                     6: [["step:s6"]], 7: [["step:s7"]], 8: [["step:s8"]]}
-    assert later == ["step:s2", "step:s8"]
+    assert later == ["step:s8"]  # s2 is named by "recording", a word no other step holds; s8 by no sentence
     assert scene.names_part(scene._words("Then it sends the answer and its boards back."),
                             scene.part_names(m)["step:s6"])
 
@@ -462,12 +461,13 @@ def test_a_point_is_the_reveal_for_its_sentence_and_parts_named_nowhere_ride_wit
     # with fewer sentences: s1 fills the sentence before the named ones, and s4, named nowhere and with no
     # sentence left after them, comes in with them (before them, so they are what is said)
     plan, later = scene.auto_steps(m, said[:3], {2: ["step:s3"]})
-    assert plan == {1: [["step:s1"]], 2: [["step:s4"], ["step:s2", "step:s3"]]} and later == ["step:s1", "step:s4"]
+    assert plan == {1: [["step:s1"]], 2: [["step:s4"], ["step:s2", "step:s3"]]} and later == ["step:s4"]
 
 
 def test_rows_take_a_range_as_lines_do():
     assert scene.resolve(TIMELINE, "rows 2-4", "T") == (["row#2", "row#3", "row#4"], None)
-    assert scene.resolve(TIMELINE, "rows 4-6", "T") == ([], '"T" has 5 rows, not rows 4-6; dropped')
+    assert scene.resolve(TIMELINE, "rows 4-6", "T") == (["row#4", "row#5"], '"T" has 5 rows, so rows 4-6 is read as rows 4-5')
+    assert scene.resolve(TIMELINE, "rows 6-8", "T") == ([], '"T" has 5 rows, not rows 6-8; dropped')
     built, _ = scene.compile_scene(TIMELINE, [verbs("focus rows 1-2")], "T")
     assert built["frames"][1]["focus"][:2] == ["row#1", "row#2"] and _cur(built)[1] == ["row#1", "row#2"]
 
@@ -737,7 +737,8 @@ def test_a_column_a_list_of_rows_and_a_pair_of_cells_resolve_to_their_keys():
     assert scene.resolve(m, "column Nope", "T") == ([], 'no column Nope in "T"')
     assert scene.resolve(m, "rows 1, 3", "T") == (["row#1", "row#3"], None)
     assert scene.resolve(m, "rows 1-2, 3", "T") == (["row#1", "row#2", "row#3"], None)
-    assert scene.resolve(m, "rows 1, 7", "T") == ([], '"T" has 3 rows, not rows 1, 7; dropped')
+    assert scene.resolve(m, "rows 1, 7", "T") == (["row#1"], '"T" has 3 rows, so rows 1, 7 is read as row 1')
+    assert scene.resolve(m, "rows 7, 9", "T") == ([], '"T" has 3 rows, not rows 7, 9; dropped')
     assert scene.resolve(m, "cells Cost / Azure; Offline / Local", "T") == (["cell#2.2", "cell#3.3"], None)
     assert scene.resolve(m, "cell Azure / Cost", "T") == (["cell#2.2"], None)  # written column first: still that cell
     # a column brings every row of its table; a column pointed at alone says no row
