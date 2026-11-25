@@ -5,7 +5,7 @@ import re
 
 UI = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui")
 ROW_KEYS = {"key", "id", "machine", "name", "named", "folder", "about", "kind", "where", "tmux", "state", "pid", "member",
-            "held", "unanswered", "free", "started", "last_seen", "ended", "end_reason", "live_on", "copies", "stale", "as_of"}
+            "held", "unanswered", "free", "started", "last_seen", "ended", "end_reason", "live_on", "copies", "stale", "as_of", "masked", "registry"}
 
 
 def read(name):
@@ -15,7 +15,7 @@ def read(name):
 
 def test_the_fixture_rows_carry_the_whole_row_contract():
     doc = json.loads(read("fixtures/sessions.json"))
-    assert doc["hub"] == "main" and set(doc["machines"]) == {"main", "mac", "lat"}
+    assert doc["hub"] == "server" and set(doc["machines"]) == {"server", "laptop", "spare"}
     for row in doc["rows"]:
         assert ROW_KEYS <= set(row), sorted(ROW_KEYS - set(row))
         assert re.match(r"^[a-z0-9-]+:[0-9a-f-]{8,36}$", row["key"])

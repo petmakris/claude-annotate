@@ -873,11 +873,12 @@ const LIVE = ["busy", "idle", "waiting", "blocked"];
 const isLive = (r) => LIVE.includes(r.state);
 const STATE_TIP = { busy: "Working on a turn", idle: "Between turns", waiting: "A prompt is open and waits for an answer", blocked: "Blocked on a permission", done: "Finished its turn", "": "Not running" };
 const STATE_CLS = { busy: "ok", idle: "dimc", waiting: "warn", blocked: "bad", done: "dimc", "": "none" };
+const hiddenRow = (r) => !!(r.work || r.masked);  // a work-rule row seen from another machine: no folder, prompt or tmux name
 const hhmm = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 const pickLine = (r) => "@claude pick --open " + r.key;
 const mInfo = (r) => ((S.data && S.data.machines) || {})[r.machine] || {};
 const isStale = (r) => !!r.stale || mInfo(r).reachable === false;
-const label = (r) => (r.named ? r.name : r.work ? "work session" : (r.about || "(no prompt yet)").slice(0, 30) + ((r.about || "").length > 30 ? "…" : ""));
+const label = (r) => (r.named ? r.name : hiddenRow(r) ? "work session" : (r.about || "(no prompt yet)").slice(0, 30) + ((r.about || "").length > 30 ? "…" : ""));
 const seenText = (r) => (isLive(r) ? "now" : r.last_seen ? ago(r.last_seen, S.data.as_of * 1000) : "");
 
 function targetsOf() {
@@ -974,14 +975,14 @@ function sessionRow(r) {
   const stale = isStale(r);
   const dot = el("span", { class: "s-dot " + STATE_CLS[r.state || ""], role: "img", "aria-label": STATE_TIP[r.state || ""] });
   const nameCell = S.renaming === r.key ? el("div", { class: "s-c s-name", "data-col": "name" }, renameBox(r, renderSessions))
-    : el("div", { class: "s-c s-name" + (r.named ? "" : " standin"), "data-col": "name", title: r.named ? r.name : r.work ? "A work session: its details stay on its own machine" : "Not named yet. It started: " + (r.about || "(no prompt yet)").slice(0, 120) }, label(r));
+    : el("div", { class: "s-c s-name" + (r.named ? "" : " standin"), "data-col": "name", title: r.named ? r.name : hiddenRow(r) ? "A work session: its details stay on its own machine" : "Not named yet. It started: " + (r.about || "(no prompt yet)").slice(0, 120) }, label(r));
   const asks = r.unanswered.length ? el("a", { href: "#foryou", title: r.unanswered.length + " unanswered, in For you" }, String(r.unanswered.length)) : null;
   const row = el("div", { class: "s-row" + (stale ? " stale" : ""), tabindex: "0", "data-key": r.key, "aria-label": label(r) },
     el("div", { class: "s-c", "data-col": "state", title: STATE_TIP[r.state || ""] }, dot),
     nameCell,
     el("div", { class: "s-c", "data-col": "machine", title: stale ? r.machine + " not answering, as of " + hhmm(r.as_of) : r.machine }, chip(r.machine)),
     slot("where", r.where === "none" ? "" : r.where, r.where === "none" ? "Not running anywhere" : "Runs in " + r.where),
-    slot("folder", r.work ? "" : homeless(r.folder), r.work ? "A work session: its folder stays on its own machine" : r.folder),
+    slot("folder", hiddenRow(r) ? "" : homeless(r.folder), hiddenRow(r) ? "A work session: its folder stays on its own machine" : r.folder),
     slot("seen", seenText(r), r.last_seen ? when(r.last_seen) : ""),
     slot("held", r.held.length ? String(r.held.length) : "", r.held.length ? "To-dos it holds" : "Holds no to-dos"),
     slot("asks", asks ? "x" : "", asks ? "" : "No unanswered asks", asks ? [asks] : null),
@@ -999,7 +1000,7 @@ function visibleSessions() {
     if (S.kind === "chat" && !(r.kind === "chat" && (r.named || isLive(r) || d.as_of - r.last_seen <= 14 * 86400))) return false;
     if (S.kind === "job" && r.kind === "chat") return false;
     if (!q) return true;
-    return [r.name, r.work ? "" : r.about, r.work ? "" : r.folder, r.machine, r.tmux].join(" ").toLowerCase().includes(q);
+    return [r.name, hiddenRow(r) ? "" : r.about, hiddenRow(r) ? "" : r.folder, r.machine, r.tmux].join(" ").toLowerCase().includes(q);
   }).sort((a, b) => (isLive(b) - isLive(a)) || b.last_seen - a.last_seen);
 }
 
@@ -1045,7 +1046,7 @@ function planOf(r) {
   if (r.where === "tmux") return "Attach to the tmux session " + r.tmux + " on " + r.machine + ".";
   if (r.where === "bg") return "Attach to the background session on " + r.machine + ".";
   if (r.where === "window") return r.member ? "Ask it to wrap up, wait until it has left, then resume it in tmux on " + r.machine + "." : "It runs in a plain window on " + r.machine + " (pid " + r.pid + ") and cannot be taken over until that window closes.";
-  return "Resume it in a new tmux session on " + r.machine + (r.work ? "." : ", in " + r.folder + ".");
+  return "Resume it in a new tmux session on " + r.machine + (hiddenRow(r) ? "." : ", in " + r.folder + ".");
 }
 
 function openCard(key) { S.card = key; const dlg = document.getElementById("s-card"); renderCard(); if (!dlg.open) dlg.showModal(); }
@@ -1063,14 +1064,14 @@ function renderCard() {
   close.addEventListener("click", closeCard);
   dlg.replaceChildren(
     el("div", { class: "s-card-head" }, title, close),
-    el("div", { class: "s-card-chips" }, chip(r.machine), pill(STATE_CLS[r.state || ""] === "none" ? "left" : STATE_CLS[r.state], r.state || "not running"), r.where !== "none" ? el("span", { class: "tag" }, r.where) : null, r.work ? el("span", { class: "tag" }, "work") : null, r.member ? el("span", { class: "tag" }, "fleet member") : null, stale ? el("span", { class: "tag gone" }, "as of " + hhmm(r.as_of)) : null),
+    el("div", { class: "s-card-chips" }, chip(r.machine), pill(STATE_CLS[r.state || ""] === "none" ? "left" : STATE_CLS[r.state], r.state || "not running"), r.where !== "none" ? el("span", { class: "tag" }, r.where) : null, hiddenRow(r) ? el("span", { class: "tag" }, "work") : null, r.member ? el("span", { class: "tag" }, "fleet member") : null, stale ? el("span", { class: "tag gone" }, "as of " + hhmm(r.as_of)) : null),
     el("p", { class: "s-plan" }, el("strong", {}, "Open: "), planOf(r)),
     el("dl", { class: "s-facts" },
-      fact("Folder", r.work ? "" : r.folder), fact("tmux session", r.tmux), fact("pid", r.pid ? String(r.pid) : ""),
+      fact("Folder", hiddenRow(r) ? "" : r.folder), fact("tmux session", r.tmux), fact("pid", r.pid ? String(r.pid) : ""),
       fact("Started", r.started ? when(r.started) : ""), fact("Last seen", r.last_seen ? when(r.last_seen) : ""),
       fact("Held to-dos", r.held.length ? r.held.join(", ") : ""), fact("Unanswered", r.unanswered.length ? r.unanswered.length + " in For you" : ""),
       fact("Also on", (r.copies || []).join(", ")), fact("Ended", r.ended ? when(r.ended) + (r.end_reason ? " (" + r.end_reason + ")" : "") : ""), fact("Id", r.id)),
-    r.work || !r.about ? null : el("div", { class: "s-about" }, el("h4", {}, "First prompt"), el("p", {}, r.about)),
+    hiddenRow(r) || !r.about ? null : el("div", { class: "s-about" }, el("h4", {}, "First prompt"), el("p", {}, r.about)),
     el("div", { class: "s-card-acts" }, sel,
       sbtn("terminal", "Open", (b) => openSession(r, b), { cls: "primary big", disabled: stale }),
       sbtn("log-out", "Wrap up", () => sAct("/api/sessions/stop", { key: r.key }, "Asked " + label(r) + " to wrap up."), { cls: "big", confirm: true, disabled: !canWrap(r), title: wrapWhy(r) }),
