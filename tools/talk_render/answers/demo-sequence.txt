@@ -1,0 +1,13 @@
+[[show sequence | One turn, end to end]] {"actors": [{"id": "p", "label": "Call page", "tone": "edge"}, {"id": "t", "label": "Talk server", "tone": "internal"}, {"id": "a", "label": "Azure speech", "tone": "service"}, {"id": "c", "label": "Claude session"}],
+ "legend": [{"tone": "edge", "label": "the browser"}, {"tone": "internal", "label": "talk.py"}, {"tone": "service", "label": "Azure"}],
+ "phases": [{"id": "h", "label": "HEAR", "start_at": "s1"}, {"id": "k", "label": "THINK", "start_at": "s4"}, {"id": "v", "label": "SPEAK", "start_at": "s7"}],
+ "steps": [
+  {"id": "s1", "from": "p", "to": "t", "arrow": "request", "tone": "edge", "label": "sends what you said as a WAV", "sub": "POST /api/listen"},
+  {"id": "s2", "from": "t", "to": "a", "arrow": "request", "tone": "service", "label": "turns the recording into words", "sub": "speech.transcribe"},
+  {"id": "s3", "from": "a", "to": "t", "arrow": "event", "tone": "service", "label": "returns the words it heard"},
+  {"id": "s4", "from": "c", "to": "t", "arrow": "request", "label": "the doorbell collects the turn", "sub": "talk_client.py doorbell"},
+  {"id": "s5", "from": "c", "to": "c", "arrow": "self", "label": "reads the code and writes the answer"},
+  {"id": "s6", "from": "c", "to": "t", "arrow": "request", "label": "sends the answer and its boards", "sub": "talk_client.py reply"},
+  {"id": "s7", "from": "t", "to": "a", "arrow": "request", "tone": "service", "label": "reads the whole answer aloud", "sub": "speech.speak"},
+  {"id": "s8", "from": "t", "to": "p", "arrow": "event", "tone": "edge", "label": "the answer is ready on the next poll", "sub": "GET /api/state"}]} [[/show]]
+A sequence comes in a step at a time, here the path of one turn. When you stop talking, the call page sends what you said to the talk server. The server hands the recording to Azure, which turns it into words. Azure sends back the words it heard. Your Claude session collects the turn on its doorbell. It reads the code and writes the answer. Then it sends the answer and its boards back. The server has Azure read the whole answer aloud. And the answer is ready for the page on its next poll. [[point: step s5]] The slow part is always this one: Claude reading and writing. [[key: a sequence shows the step being said large, the rest as lines]] Next is a map.

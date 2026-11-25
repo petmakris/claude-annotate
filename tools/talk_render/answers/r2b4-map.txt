@@ -1,0 +1,15 @@
+[[show map | Where talk's parts live]] {"title": "One talk server sits between the page, Claude and the speech service",
+ "columns": ["Your browser", "This Mac", "Outside talk"],
+ "boxes": [{"id": "page", "col": 0, "row": 0, "name": "Call page", "lines": ["`call.js`: microphone and player"], "b": 1, "r": 1},
+  {"id": "stage", "col": 0, "row": 1, "name": "Stage", "lines": ["`stage.js`: the boards"], "b": 4, "r": 4},
+  {"id": "talk", "col": 1, "row": 0, "rows": 2, "tone": "red", "name": "Talk server", "lines": ["`talk.py`, one per machine", "holds every call"], "b": 2, "r": 1},
+  {"id": "claude", "col": 2, "row": 0, "tone": "blue", "name": "Claude session", "lines": ["`talk_client.py`"], "b": 3, "r": 2},
+  {"id": "azure", "col": 2, "row": 1, "tone": "amber", "name": "Azure speech", "lines": ["billed per character"], "b": 3, "r": 3}],
+ "zones": [{"label": "one browser tab", "boxes": ["page", "stage"]}],
+ "arrows": [{"from": "page", "to": "talk", "label": "turns", "b": 2}, {"from": "talk", "to": "claude", "b": 3},
+  {"from": "talk", "to": "azure", "tone": "amber", "b": 3}, {"from": "talk", "to": "stage", "label": "boards", "b": 4},
+  {"layer": "route", "from": "page", "to": "talk", "n": 1, "r": 1, "label": "sends your words"},
+  {"layer": "route", "from": "talk", "to": "claude", "tone": "blue", "n": 2, "r": 2, "label": "the doorbell wakes Claude"},
+  {"layer": "route", "from": "talk", "to": "azure", "tone": "amber", "n": 3, "r": 3, "label": "reads the answer aloud"},
+  {"layer": "route", "from": "talk", "to": "stage", "n": 4, "r": 4, "label": "puts up the boards"}]} [[/show]]
+An architecture map puts each part where it lives. The call page runs in your browser tab. It talks to one talk server on this Mac. The server reaches your Claude session, and Azure speech outside. The stage shows the boards. [[key: a map is built up part by part, then follows one request]] [[point: box talk]] Everything goes through this one server. [[point: edge talk->azure]] This arrow goes to the speech service, so now follow one turn. The page sends your words. The doorbell wakes Claude. Azure reads the answer aloud. And the server puts up the boards. Next is a table.

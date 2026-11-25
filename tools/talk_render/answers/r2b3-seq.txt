@@ -1,0 +1,14 @@
+Before any encryption, the browser needs an address, a connection and a shared secret, in that order.
+[[show sequence | HTTPS setup]] {"actors": [{"id": "b", "label": "Browser"}, {"id": "d", "label": "DNS resolver"}, {"id": "s", "label": "Web server", "sub": "example.com, made-up"}],
+ "steps": [{"id": "s1", "from": "b", "to": "d", "arrow": "request", "label": "asks where the site lives", "sub": "DNS lookup"},
+  {"id": "s2", "from": "d", "to": "b", "arrow": "event", "label": "answers with an address", "reply_to": "s1", "note": "one address"},
+  {"id": "s3", "from": "b", "to": "s", "arrow": "request", "label": "opens a connection", "sub": "TCP handshake", "note": "port 443, 1 round trip"},
+  {"id": "s4", "from": "b", "to": "s", "arrow": "request", "label": "says hello", "sub": "TLS 1.3 ClientHello", "note": "sends its half of the key"},
+  {"id": "s5", "from": "s", "to": "b", "arrow": "event", "label": "sends its certificate", "reply_to": "s4", "note": "plus its half of the key"},
+  {"id": "s6", "from": "b", "to": "b", "arrow": "self", "label": "checks the certificate", "note": "name, issuer, dates"},
+  {"id": "s7", "from": "b", "to": "s", "arrow": "request", "label": "sends the first encrypted byte", "sub": "Finished, then HTTP", "note": "2 round trips in all"}], "outcome": {"title": "A secret key, built on both sides", "lines": ["2 round trips", "nothing secret was sent"], "tone": "green"}} [[/show]]
+The browser first asks the DNS resolver where the site lives. [[point: step s2]] The resolver answers with an address, and I made this example up.
+[[point: step s3]] Next the browser opens a connection to that address, on port 443. That costs one round trip.
+[[point: step s4]] Then it says hello and sends its half of a secret key. [[point: step s5]] The server replies with its certificate and its own half.
+[[point: step s6]] The browser checks that the certificate names this site, is in date, and comes from a trusted issuer. [[key: the certificate proves who the server is]]
+Both sides now mix the two halves into the same key. [[point: step s7]] The browser sends its first encrypted byte, which is the web request itself. [[key: the key is built, never sent]] [[point: outcome]] So the whole setup costs two round trips.

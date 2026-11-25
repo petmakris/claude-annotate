@@ -1,0 +1,9 @@
+Here are three regions side by side.
+[[show table | Three regions]]
+| Region | Latency | Error rate | Owner |
+|---|---|---|---|
+| Frankfurt | 38 ms | 12.5% | Platform |
+| Strangler | 52 ms | 0.7% | Infrastructure |
+| Dublin | 190 ms | 2.1% | Observability |
+[[/show]]
+[[next]] Frankfurt is the healthiest. [[next]] Strangler is close behind. [[next]] Dublin is the slowest, with an error rate above two percent. [[point: cell "Dublin" / "Error rate"]] That is the number to watch.

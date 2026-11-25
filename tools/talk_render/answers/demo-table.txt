@@ -1,0 +1,10 @@
+[[show table | Two speech engines]]
+| | Azure | VoiceStudio |
+|---|---|---|
+| Speed | a second or two per answer | about as long to make as to play |
+| Cost | billed per character | free |
+| Runs on | Microsoft's servers | this Mac |
+| Needs | `TALK_AZURE_KEY_COMMAND` | the VoiceStudio app open |
+| Picked | when a key is found | when no key is found |
+[[/show]]
+A table comes in a row at a time. [[next]] [[point: cell "Speed" / "Azure"]] Azure answers in a second or two. [[point: cell "Speed" / "VoiceStudio"]] VoiceStudio takes about as long to make an answer as to play it. [[next]] Azure is billed per character, and VoiceStudio is free. [[next]] Azure runs on Microsoft's servers, VoiceStudio on this Mac. [[next]] Azure needs a key command, and VoiceStudio needs its app open. [[next]] [[point: cell "Picked" / "Azure"]] And talk picks Azure whenever it finds a key. [[key: a table can light one cell, not only a row]] Next is a diagram.

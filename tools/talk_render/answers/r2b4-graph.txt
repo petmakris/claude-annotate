@@ -1,0 +1,8 @@
+[[show graph | Merge or rebase]] {"title": "A rebase copies your commits and leaves the old ones behind",
+ "lanes": ["main", "feature", "after rebase"],
+ "nodes": [{"id": "a", "label": "first commit", "lane": "main"}, {"id": "b", "label": "second commit", "lane": "main"},
+  {"id": "c", "label": "new tip", "lane": "main", "sub": "someone else's work"},
+  {"id": "d", "label": "your first", "lane": "feature", "state": "ghost"}, {"id": "e", "label": "your second", "lane": "feature", "state": "ghost"},
+  {"id": "d2", "label": "your first, copied", "lane": "after rebase", "state": "new"}, {"id": "e2", "label": "your second, copied", "lane": "after rebase", "state": "new"}],
+ "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": "c"}, {"from": "b", "to": "d"}, {"from": "d", "to": "e"}, {"from": "c", "to": "d2"}, {"from": "d2", "to": "e2"}]} [[/show]]
+A graph board shows what happens to commits or to a tree, before and after. [[point: before]] Before, main has a first commit and a second commit. Your first and your second commit branch off the second one, and someone else has added a new tip to main. [[point: after]] A rebase copies your commits onto the new tip. [[point: node d2]] Your first commit, copied, is a new commit with a new parent, and your second, copied, follows it. [[point: node d]] The originals are still there, faint, but nothing reaches them. [[point: both]] That is why a rebase rewrites history and a merge does not.
