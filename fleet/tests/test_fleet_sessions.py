@@ -522,7 +522,7 @@ def test_claude_is_found_in_the_installers_folder_without_a_login_path(monkeypat
     assert fleet.claude_bin() == "/x/claude"
 
 
-def test_history_ls_into_a_closed_pipe_ends_quietly(tmp_path):
+def test_history_and_sessions_into_a_closed_pipe_end_quietly(tmp_path):
     home = str(tmp_path)
     env = dict(os.environ, FLEET_HOME=home, FLEET_NO_UPDATE="1")
     env.pop("FLEET_CLAUDE_BIN", None)
@@ -538,12 +538,14 @@ def test_history_ls_into_a_closed_pipe_ends_quietly(tmp_path):
             os.environ.pop("FLEET_HOME")
         else:
             os.environ["FLEET_HOME"] = old
-    p = subprocess.Popen([sys.executable, fleet.__file__, "history", "ls", "--json"], stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE, env=env)
-    p.stdout.read(10)
-    p.stdout.close()
-    err = p.stderr.read().decode()
-    assert (p.wait(30), err) == (0, "")
+    env["FLEET_ENV_DIR"] = ""
+    for argv in (["history", "ls", "--json"], ["sessions", "--local", "--json", "--kind", "all", "--limit", "3000"],
+                 ["sessions", "--local", "--kind", "all", "--limit", "3000"]):
+        p = subprocess.Popen([sys.executable, fleet.__file__] + argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+        p.stdout.read(10)
+        p.stdout.close()
+        err = p.stderr.read().decode()
+        assert (argv, p.wait(30), err) == (argv, 0, "")
 
 
 # ---------------------------------------------------------------- the page

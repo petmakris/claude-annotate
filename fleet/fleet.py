@@ -2857,22 +2857,21 @@ def sessions_envelope(flt, direct=False, machine=None):
 
 
 def sessions_text(env):
-    now = time.time()
+    now, lines = time.time(), []
     for m, e in sorted(env["machines"].items()):
         if e.get("stale"):
-            print("%s: not answering (%s)%s" % (m, e.get("reason") or "no answer",
-                  "; rows as of " + history_ago(e["as_of"]) if e.get("as_of") else "; never seen"))
+            lines.append("%s: not answering (%s)%s" % (m, e.get("reason") or "no answer",
+                         "; rows as of " + history_ago(e["as_of"]) if e.get("as_of") else "; never seen"))
     if env.get("note"):
-        print(env["note"])
+        lines.append(env["note"])
     for r in env["rows"]:
         dot = "*" if r["live_on"] else " "
         name = r["name"] or "(unnamed) " + hist.clip(r["about"], 30) if not r["masked"] else (r["name"] or "(work)")
         seen = int((now - (r["last_seen"] or now)) / 60)
-        print("%s %-8s %-7s %-6s %-40s %-6s %s" % (dot, r["machine"], r["state"] or "-", r["where"],
-              name[:40], "%dm" % seen if seen < 120 else "%dh" % (seen // 60) if seen < 2880 else "%dd" % (seen // 1440),
-              r["folder"]))
-    if not env["rows"]:
-        print("no sessions")
+        lines.append("%s %-8s %-7s %-6s %-40s %-6s %s" % (
+            dot, r["machine"], r["state"] or "-", r["where"], name[:40],
+            "%dm" % seen if seen < 120 else "%dh" % (seen // 60) if seen < 2880 else "%dd" % (seen // 1440), r["folder"]))
+    emit("\n".join(lines) if env["rows"] or lines else "no sessions")
 
 
 def check_key(key):
