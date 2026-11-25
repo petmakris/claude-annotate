@@ -57,6 +57,7 @@
 import { applyFrame, beingSaid, settled, stepLabel } from "./scene.js";
 import { layoutLanes, renderLanes } from "./lanes.js";
 import { layoutMap, renderMap } from "./map.js";
+import { centreTarget, columnWidths } from "./fit.js";
 import { paintScreen, renderScreen } from "./screenboard.js";
 
 const VENDOR = ["highlight.min.js", "marked.min.js", "purify.min.js"]
@@ -129,6 +130,10 @@ let follow = true;                  // embedded: boards come to the front as the
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const narrow = () => matchMedia("(max-width: 600px)").matches;
+// A board whose words are Greek is marked lang="el": the browser then drops the tonos from a Greek capital
+// (text-transform: uppercase), as Greek is written, and the stylesheet gives it Greek-fit heads.
+const GREEK = /[\u0370-\u03ff\u1f00-\u1fff]/;
+const langOf = (src) => (src.type === "inline" && GREEK.test(JSON.stringify(src)) ? "el" : "");
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, val) { try { localStorage.setItem(k, val); } catch {} },
@@ -226,8 +231,11 @@ function header(v) {
     const bar = document.createElement("span"); bar.className = "stepbar";
     const back = button("", () => stepBy(v, -1), "stepback"), next = button("", () => stepBy(v, 1), "stepnext");
     back.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>`; next.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>`;
-    const step = document.createElement("span"); step.className = "vstep";
+    // the middle is a button too: it steps on, and from "All shown" starts the steps again
+    const step = document.createElement("button"); step.type = "button"; step.className = "vstep";
+    step.onclick = () => { const sc = sceneOf(v) || painted(v)?.scene; if (sc) stepBy(v, (v.frame ?? sc.rest) >= sc.rest ? -sc.rest : 1); };
     back.setAttribute("aria-label", "Previous step"); next.setAttribute("aria-label", "Next step");
+    back.title = "Previous step"; next.title = "Next step";
     bar.append(back, step, next);
     h.querySelector(".prow").insertBefore(bar, h.querySelector(".pbtns"));
   }
@@ -256,7 +264,7 @@ function header(v) {
       const on = wrap.getAttribute("aria-pressed") !== "true";
       store.set("stage.wrap", on ? "1" : "0");
       for (const b of panesEl.querySelectorAll(".btn.wrapbtn")) b.setAttribute("aria-pressed", String(on));
-      for (const c of panesEl.querySelectorAll(".code.lines-box")) c.classList.toggle("wrap", on);
+      for (const c of panesEl.querySelectorAll(".code.lines-box")) { c.classList.toggle("wrap", on); codeCue(c); }
     }, "wrapbtn");
     wrap.setAttribute("aria-pressed", String(wrapOn()));
     btns.append(wrap);
@@ -266,7 +274,16 @@ function header(v) {
 
 function wrapOn() {
   const saved = store.get("stage.wrap");
-  return saved === null ? narrow() : saved === "1";
+  return saved === null ? true : saved === "1";   // wrapped unless the reader turned it off: a cut line is a line not read
+}
+// A code box that is not wrapped and holds more to the right fades at its right edge, so a cut line is seen to go on.
+function watchCut(box) {
+  box.addEventListener("scroll", () => codeCue(box), { passive: true });
+  if (typeof ResizeObserver === "function") new ResizeObserver(() => codeCue(box)).observe(box);
+}
+function codeCue(box) {
+  const more = !box.classList.contains("wrap") && box.scrollWidth > box.clientWidth + 2 && box.scrollLeft + box.clientWidth < box.scrollWidth - 2;
+  box.classList.toggle("cut-right", more);
 }
 
 // A one-line note above a fallback, with a visible button when trying again can help.
@@ -317,6 +334,7 @@ function paintCode(v, box, src) {
   box.replaceChildren(inner);
   pulseDiff(v, box, "code", src.lines);
   paintFrame(v, box);
+  requestAnimationFrame(() => codeCue(box));
 }
 
 // A line's leading whitespace in columns (a tab is 4), so a wrapped line continues under its first word.
@@ -424,6 +442,7 @@ function paintChange(v, box, src) {
   box.replaceChildren(inner);
   pulseDiff(v, box, "code", texts);
   paintFrame(v, box);
+  requestAnimationFrame(() => codeCue(box));
 }
 
 // ---- Key points ----------------------------------------------------------------------------
@@ -582,6 +601,7 @@ function shapeBoard(box) {
     widths.forEach((w, i) => {
       const c = document.createElement("col");
       c.style.setProperty("--w", (100 * w / sum).toFixed(2) + "%"); c.style.setProperty("--wp", (100 * phone[i] / psum).toFixed(2) + "%");
+      c.dataset.w = String(w / sum); c.dataset.wp = String(phone[i] / psum);   // the shares wordFloors turns into px
       c.style.setProperty("--wn", scrolled[i].toFixed(1));
       group.append(c);
     });
@@ -609,6 +629,7 @@ function wordFloors(table, wrap) {
   const cols = [...table.querySelectorAll(":scope > colgroup > col")];
   if (!measureCtx || !cols.length) return;
   const word = cols.map(() => 0), pad = cols.map(() => 0);
+  const lang = GREEK.test(table.textContent) ? "el" : undefined;   // as the pane is marked, so a Greek head is measured without its tonos
   for (const td of table.querySelectorAll("th, td")) {
     const i = (+td.dataset.c || 0) - 1;
     if (i < 0 || i >= cols.length) continue;
@@ -622,7 +643,7 @@ function wordFloors(table, wrap) {
       const track = (parseFloat(hs.letterSpacing) || 0) / sc, caps = hs.textTransform === "uppercase";
       for (const w of n.nodeValue.split(/\s+/)) {
         if (!w) continue;
-        const text = caps ? w.toUpperCase() : w;
+        const text = caps ? w.toLocaleUpperCase(lang) : w;
         word[i] = Math.max(word[i], measureCtx.measureText(text).width + track * text.length + (host === td ? 0 : 12));
       }
     }
@@ -631,9 +652,14 @@ function wordFloors(table, wrap) {
   if (!avail || !wordSum) return;
   const tf = padSum + wordSum <= avail ? 1 : Math.max(0.72, Math.min(1, (avail - padSum) / wordSum));
   wrap.style.setProperty("--tf", tf.toFixed(3));
-  cols.forEach((c, i) => c.style.setProperty("--min", (word[i] * tf + pad[i]).toFixed(1) + "px"));
-  const total = word.reduce((a, w, i) => a + w * tf + pad[i], 0);
+  const floors = word.map((w, i) => w * tf + pad[i]);
+  cols.forEach((c, i) => c.style.setProperty("--min", floors[i].toFixed(1) + "px"));
+  const total = floors.reduce((a, f) => a + f, 0);
   table.style.minWidth = total > avail ? Math.ceil(total) + "px" : "";   // the floors do not fit: the table scrolls, unbroken
+  // the columns' widths in px, floors held (fit.js): a calc with a % and a px on a <col> is read as `auto`
+  const phone = (typeof matchMedia === "function" && matchMedia("(max-width:600px)").matches) && table.dataset.fit === "fit";
+  const px = columnWidths(cols.map((c) => +(phone ? c.dataset.wp : c.dataset.w) || 0), floors, Math.max(avail + 2, total));
+  cols.forEach((c, i) => { c.style.width = px[i] + "px"; });
 }
 // A table taller than its board keeps its header and shows it goes on: the foot fades until the end is reached.
 function scrollCue(wrap) {
@@ -687,6 +713,7 @@ function renderInline(v, seq) {
   const retryLibs = () => { libsP = null; fillPane(v); };
   if (src.format === "code") {
     box.className = "code lines-box" + (wrapOn() ? " wrap" : "");
+    watchCut(box);
     paintCode(v, box, src);
     if (!window.hljs) libsReady().then(() => {
       if (!current()) return;
@@ -694,6 +721,7 @@ function renderInline(v, seq) {
     });
   } else if (src.format === "change") {
     box.className = "code lines-box change" + (wrapOn() ? " wrap" : "");
+    watchCut(box);
     paintChange(v, box, src);
     if (!window.hljs) libsReady().then(() => {
       if (!current()) return;
@@ -971,7 +999,7 @@ function paintSandbox(v, box, src) {
   v.sandbox = { frame, last: null };
   Promise.all([fontFaces(), stageSheet()]).then(([faces, sheet]) => {
     const theme = document.documentElement.dataset.theme;
-    frame.srcdoc = `<!doctype html><html${theme ? ` data-theme="${theme}"` : ""}><head><meta charset="utf-8">`
+    frame.srcdoc = `<!doctype html><html${theme ? ` data-theme="${theme}"` : ""}${GREEK.test(src.html) ? ' lang="el"' : ""}><head><meta charset="utf-8">`
       + `<meta http-equiv="Content-Security-Policy" content="${esc(policy)}">`
       + `<style>${faces}\n${sheet.replace(/<\/style/gi, "<\\/style")}\nhtml{height:100%}body{height:auto;min-height:100%;background:transparent}[data-part]:not(.k-key){opacity:0}</style>`
       + `<script>${SANDBOX_SHIM}<\/script></head><body class="visual scene sealed">${src.html}</body></html>`;
@@ -1049,6 +1077,7 @@ function fillPane(v, update = false) {
   v.filled = true; v.stale = false; v.applied = null;
   const body = document.createElement("div"); body.className = "pbody";
   v.pane.replaceChildren(header(v), body);
+  if (langOf(src)) v.pane.setAttribute("lang", "el"); else v.pane.removeAttribute("lang");
   if (src.type === "inline") {
     const box = renderInline(v, seq);
     body.append(box);
@@ -1365,8 +1394,17 @@ function centre(el, room = 0) {
   for (let box = els[0].parentElement; box && box !== panesEl; box = box.parentElement) {
     if (box.scrollHeight <= box.clientHeight + 1 || !/auto|scroll/.test(getComputedStyle(box).overflowY)) continue;
     const rs = els.map((e) => e.getBoundingClientRect()), b = box.getBoundingClientRect();
-    const top = Math.min(...rs.map((r) => r.top)), height = Math.max(...rs.map((r) => r.bottom)) - top, view = b.height - room;
-    box.scrollTo({ top: box.scrollTop + (height <= view ? top + height / 2 - (b.top + view / 2) : top - b.top - 12), behavior });
+    const lead = box.querySelector(".slide .title");   // a slide's title is not left cut at the pane's edge
+    box.scrollTo({ top: centreTarget({ top: Math.min(...rs.map((r) => r.top)), bottom: Math.max(...rs.map((r) => r.bottom)), box: b, view: b.height - room,
+      scroll: box.scrollTop, lead: lead ? lead.getBoundingClientRect().bottom - b.top + box.scrollTop : 0 }), behavior });
+  }
+}
+
+// Every box around `el` that scrolls, inside the pane only, back to its top.
+function toTop(el) {
+  const behavior = reduced() ? "auto" : "smooth";
+  for (let box = el; box && box !== panesEl; box = box.parentElement) {
+    if (box.scrollTop > 0 && /auto|scroll/.test(getComputedStyle(box).overflowY)) box.scrollTo({ top: 0, behavior });
   }
 }
 
@@ -1523,8 +1561,7 @@ function paintFrame(v, box, animate = false) {
     const last = scene.frames.length - 1, frame = scene.frames[Math.max(0, Math.min(n, last))];
     postSandbox(v, { show: frame.show, focus: frame.focus, cur: beingSaid(scene, n), animate });
     v.applied = n;
-    const step = v.pane.querySelector(".vstep");
-    if (step) step.textContent = stepLabel(scene, n);
+    stepText(v, scene, n);
     return;
   }
   // a scene's nested parts rise in on a forward step only, so the class is set before the frame shows them
@@ -1557,12 +1594,21 @@ function paintFrame(v, box, animate = false) {
   const keep = [done.focused].flat().filter(Boolean);
   if (keep.length && box.classList.contains("grid")) settleThen(v, box, n, () => bringInView(box, keep));
   else if (keep.length) requestAnimationFrame(() => { if (!v.pane.hidden) centre(keep, room); });
+  else if (box.classList.contains("scene") && n >= scene.rest) requestAnimationFrame(() => { if (!v.pane.hidden) toTop(box); });  // at rest a slide shows from its title
   if (captionText) requestAnimationFrame(() => placeCaption());
-  const step = v.pane.querySelector(".vstep");
-  if (step) step.textContent = stepLabel(scene, n);
+  stepText(v, scene, n);
   const back = v.pane.querySelector(".stepback"), next = v.pane.querySelector(".stepnext");
   if (back) back.disabled = n <= 0;
   if (next) next.disabled = n >= scene.rest;
+}
+
+// The step button's words, and what pressing it does: step on, or from the rest frame start again.
+function stepText(v, scene, n) {
+  const step = v.pane.querySelector(".vstep");
+  if (!step) return;
+  step.textContent = stepLabel(scene, n);
+  const label = n >= scene.rest ? "All shown. Start the steps again" : stepLabel(scene, n) + ". Next step";
+  step.title = label; step.setAttribute("aria-label", label);
 }
 
 // Back and Next move one frame, from the empty start to the rest frame. Stepping by hand takes the
@@ -1624,7 +1670,10 @@ function onMessage(m) {
   else if (m.type === "stage:rest") restAfter(Array.isArray(m.views) ? m.views : [], m.answer);
   else if (m.type === "stage:zoom") {
     const z = Number(m.zoom);
-    if (z >= 0.5 && z <= 3) document.documentElement.style.zoom = z === 1 ? "" : String(z);
+    if (z >= 0.5 && z <= 3) {
+      document.documentElement.style.zoom = z === 1 ? "" : String(z);
+      document.documentElement.style.setProperty("--z", String(z));   // the stylesheet's vh and vw units are of the window, not of the zoomed page
+    }
   }
   else if (m.type === "stage:theme") {
     const theme = m.theme === "dark" ? "dark" : "light";

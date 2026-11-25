@@ -278,7 +278,7 @@ function paint(box) {
   const life = (a, y1, y2) => `<line class="ln-life${st.focus && st.focus !== a.id ? " ln-dim" : ""}" data-actor="${esc(a.id)}" x1="${xs.get(a.id)}" x2="${xs.get(a.id)}" y1="${y1}" y2="${y2}"/>`;
   for (const r of rows.filter((r) => r.type === "band")) {  // a phase is a band behind its steps
     const pos = cur == null ? "" : cur > r.p.b ? " ln-past" : cur >= r.p.a ? " ln-here" : "";
-    bg.push(`<rect class="ln-band${phaseOn(r.p) ? "" : " ln-ghost"}${pos}" x="${EDGE}" y="${r.y}" width="${w - 2 * EDGE}" height="${r.h}" rx="10"/>`);
+    bg.push(`<rect class="ln-band${phaseOn(r.p) ? "" : " ln-ghost"}${pos}" x="${EDGE}" y="${r.y}" width="${Math.max(0, w - 2 * EDGE)}" height="${r.h}" rx="10"/>`);
   }
   // a compare board's gap: a hatched band behind the lifelines, so a bar that runs through it stays whole
   const gaps = rows.filter((r) => r.type === "step" && r.s.gap);
@@ -471,10 +471,10 @@ function boxDrawing(r, st, cols, w, narrow, shown, fills, frames, spans, html) {
   for (const lx of xs.values()) if (Math.abs(x2 - lx) < 18) x2 = lx > x2 && lx - 18 - x1 >= need ? lx - 18 : Math.min(w - EDGE, lx + 18);
   const y1 = r.y + 4, h = r.y2 - r.y - 4;
   spans.push({ inv, y1, y2: y1 + h });
-  fills.push(`<rect class="ln-boxbg${ghost}" x="${x1}" y="${y1}" width="${x2 - x1}" height="${h}" rx="8"/>`);
+  fills.push(`<rect class="ln-boxbg${ghost}" x="${x1}" y="${y1}" width="${Math.max(0, x2 - x1)}" height="${h}" rx="8"/>`);
   frames.push(`<path class="ln-boxhead${ghost}" d="M${x1} ${y1 + 26}V${y1 + 8}a8 8 0 0 1 8-8H${x2 - 8}a8 8 0 0 1 8 8V${y1 + 26}Z"/>`,
     `<line class="ln-boxline${ghost}" x1="${x1}" x2="${x2}" y1="${y1 + 26}" y2="${y1 + 26}"/>`,
-    `<rect class="ln-boxframe${ghost}" x="${x1}" y="${y1}" width="${x2 - x1}" height="${h}" rx="8"/>`);
+    `<rect class="ln-boxframe${ghost}" x="${x1}" y="${y1}" width="${Math.max(0, x2 - x1)}" height="${h}" rx="8"/>`);
   for (const b of r.branches) frames.push(`<line class="ln-boxdiv${ghost}" x1="${x1}" x2="${x2}" y1="${b.y + 6}" y2="${b.y + 6}"/>`);
   html.push(`<button type="button" class="ln-kind ln-k-${esc(g.kind)}${ghost}" data-fold="g:${esc(g.id)}" data-group="${esc(g.id)}"
       title="${r.folded ? "Open" : "Fold"} this ${esc(g.kind)}" aria-expanded="${!r.folded}" style="left:${x1 + 7}px;top:${y1 + 5}px">${r.folded ? "▸" : "▾"} ${esc(g.kind)}</button>`,
@@ -514,7 +514,7 @@ function stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown) {
     : isCur ? `<span class="ln-note ln-under" style="top:${under}px;left:${cols.left}px;right:${EDGE}px">${esc(s.note)}</span>` : "";
   if (kind === "band") {
     const lo = Math.max(EDGE, Math.min(fx, tx) - 44), hi = Math.min(w - EDGE, Math.max(fx, tx) + 44);
-    svg = `<rect class="ln-bandbar" x="${lo}" y="${ay - bh / 2}" width="${hi - lo}" height="${bh}" rx="9"/>`;
+    svg = `<rect class="ln-bandbar" x="${lo}" y="${ay - bh / 2}" width="${Math.max(0, hi - lo)}" height="${bh}" rx="9"/>`;
     words = `<div class="ln-lbl ln-inband" style="left:${lo + 12}px;width:${hi - lo - 24}px;top:${ay}px">${tag}<b>${said(s, "label")}</b>${s.sub && isCur ? `<code>${said(s, "sub")}</code>` : ""}</div>`;
   } else if (kind === "self" || s.from === s.to) {
     const x0 = edge(s.from, abs + 6, 1);

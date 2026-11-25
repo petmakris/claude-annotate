@@ -60,14 +60,16 @@ const follows = () => posted.filter((m) => m.type === "stage:follow").map((m) =>
 const errors = [];
 const logError = console.error;
 console.error = (...a) => { errors.push(a.map(String).join(" ")); logError(...a); };
+%(before)s
 await import(%(stage)s);
 await settle();
 """
 
 
 class StagePage:
-    def __init__(self, tmp_path, width: int = 1300, embedded: bool = True):
+    def __init__(self, tmp_path, width: int = 1300, embedded: bool = True, before: str = ""):
         self.cwd = str(tmp_path)
+        self.before = before   # JavaScript run before the page loads: a measure the shim lacks
         self.width, self.embedded = width, embedded
         self.items: dict = {}
         self.store: dict = {}
@@ -129,7 +131,7 @@ class StagePage:
         prelude = PRELUDE % {
             "shim": json.dumps(SHIM.as_uri()), "width": self.width, "embedded": "true" if self.embedded else "false",
             "store": json.dumps(self.store), "marked": json.dumps(str(STATIC / "vendor" / "marked.min.js")),
-            "stage": json.dumps((STATIC / "stage.js").as_uri()),
+            "stage": json.dumps((STATIC / "stage.js").as_uri()), "before": self.before,
         }
         code = prelude + "\n".join(self.steps) + "\nprocess.stdout.write(JSON.stringify({out, posted, errors}));\nprocess.exit(0);\n"
         done = subprocess.run(["node", "--input-type=module", "-e", code], capture_output=True, text=True, timeout=60)

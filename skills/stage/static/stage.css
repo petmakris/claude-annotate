@@ -30,11 +30,11 @@
   --syn-kw:#F28B82;--syn-str:#81C995;--syn-com:#9AA0A6;--syn-title:#C58AF9;--syn-num:#8AB4F8;--syn-meta:#C58AF9;--syn-attr:#FDD663}
 
 html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
-.stage{display:grid;grid-template-rows:auto minmax(0,1fr);grid-template-columns:minmax(0,1fr);height:100vh;height:100dvh}
+.stage{display:grid;grid-template-rows:auto minmax(0,1fr);grid-template-columns:minmax(0,1fr);height:calc(100vh / var(--z,1));height:calc(100dvh / var(--z,1))}   /* --z is the stage:zoom: a zoomed root lays out in zoomed px, so the window is shorter in them */
 
 /* The history: ‹ › and "2 of 5" over the left end of the pane's header row; the list of boards opens under it */
 .stage{position:relative;grid-template-rows:minmax(0,1fr)}
-.tabbar{position:absolute;z-index:5;top:0;left:0;height:40px;display:flex;align-items:center;padding-left:8px}
+.tabbar{position:absolute;z-index:10;top:0;left:0;height:40px;display:flex;align-items:center;padding-left:8px}
 .tabnav{display:flex;align-items:center;gap:2px}
 .tabnav[hidden]{display:none}
 .nb{width:30px;height:30px;border-radius:8px;border:0;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer;padding:0}
@@ -59,7 +59,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
     -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E") center/contain no-repeat;
     mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E") center/contain no-repeat}
 }
-.boards{position:absolute;top:38px;left:8px;width:min(360px,calc(100vw - 16px));max-height:min(60vh,420px);overflow:auto;box-sizing:border-box;
+.boards{position:absolute;top:38px;left:8px;width:min(360px,calc(100vw / var(--z,1) - 16px));max-height:min(calc(60vh / var(--z,1)),420px);overflow:auto;box-sizing:border-box;
   padding:6px;border-radius:14px;background:var(--panel);border:1px solid var(--line);box-shadow:0 18px 50px -18px rgba(15,23,42,.45)}
 .boards[hidden]{display:none}
 .boards h4{margin:4px 10px 6px;font:500 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
@@ -120,7 +120,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .waiting{color:var(--faint);font-size:14px;margin:0}
 
 /* Frames keep the full width and height */
-.framewrap{position:relative;flex:1 0 auto;align-self:stretch;min-height:60vh}
+.framewrap{position:relative;flex:1 0 auto;align-self:stretch;min-height:calc(60vh / var(--z,1))}
 .frame{position:absolute;inset:0;width:100%;height:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;background:#fff}
 .frame.incoming{visibility:hidden}
 .pulse{animation:pulse .6s ease-out}
@@ -131,6 +131,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
   border:1px solid var(--code-line);border-radius:12px;padding:12px 0}
 .code .lines{display:grid;min-width:100%;width:max-content}
 .code.wrap .lines{width:auto}
+.code.cut-right{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 40px),transparent)}   /* an unwrapped line goes on past the edge */
 .code .ln{display:grid;grid-template-columns:3.6em 1fr;padding-right:18px;white-space:pre;transition:opacity .2s,background-color .2s,box-shadow .2s}
 .code .ln>i{font-style:normal;color:var(--code-faint);text-align:right;padding-right:14px;user-select:none}
 .code .ln>span{min-height:1.65em}
@@ -242,7 +243,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
   .vhead{flex:1 1 60%;min-height:40px}
   .stepbar,.pbtns{padding-bottom:6px}
   .pbody{padding:12px}
-  .framewrap{min-height:70vh}
+  .framewrap{min-height:calc(70vh / var(--z,1))}
   .tiles{grid-template-columns:repeat(2,1fr)}
   .code.change .ln{grid-template-columns:2.4em 2.4em 1.3em 1fr;padding-right:12px}
   .code.change .ln>i{padding-right:8px}
@@ -258,9 +259,12 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .k-card{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;
   font:600 22px/1.3 var(--sans);color:var(--ink);pointer-events:none}
 .stepbar{flex:none;display:inline-flex;align-items:center;gap:2px;padding:1px;border:1px solid var(--line);border-radius:9px}
-.stepbar .btn{min-height:26px;width:28px;padding:0;border:0;color:var(--muted)}
+.stepbar .btn{min-height:26px;width:28px;padding:0;border:0;color:var(--ink)}
 .stepbar .btn:disabled{opacity:.4;cursor:default;background:none}
-.vstep{font:500 12px/1 var(--sans);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;min-width:5.5em;text-align:center}
+.vstep{font:500 12px/1 var(--sans);color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap;min-width:5.5em;text-align:center;
+  height:26px;padding:0 8px;border:0;border-radius:7px;background:var(--row-alt);cursor:pointer}
+.vstep:hover{background:var(--acc-soft)}
+.vstep:focus-visible,.stepbar .btn:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 
 /* Fonts ship beside this file: the stage's diagrams are measured in them (visuals/text_metrics.py, face "stage"). */
@@ -549,12 +553,12 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
    columns or more. What is not said yet is dim, what was said plain, and what is being said (a row, rows, a column,
    a pair of cells) is lit by colour, weight and a band: never by size, padding or margin, which would move the rest. */
 .pbody>.md.grid{align-self:stretch;width:100%;margin-inline:0;align-items:center}
-.md.grid>.tablewrap{font-size:calc(16px * var(--tf,1));width:min(100%,var(--tw,60ch));max-width:100%;border-radius:16px;flex:0 1 auto;margin-inline:auto}
+.md.grid>.tablewrap{font-size:calc(16px * var(--tf,1));width:min(100%,max(var(--tw,60ch),34rem));max-width:100%;border-radius:16px;flex:0 1 auto;margin-inline:auto}
 .md.grid>.tablewrap.span{width:100%;font-size:calc(14px * var(--tf,1))}   /* six columns or more: denser, so the words stay whole */
 .md.grid>.tablewrap.span th,.md.grid>.tablewrap.span td{padding:10px 10px}
 .md.grid>.tablewrap:not(.span){max-width:72rem}
 .md.grid table{width:100%;min-width:0;table-layout:fixed;font:inherit;line-height:1.4}
-.md.grid col{width:max(var(--w),var(--min,0px))}
+.md.grid col{width:var(--w)}   /* only until wordFloors sets each col's width in px, floors held (fit.js) */
 .md.grid th,.md.grid td{padding:12px 18px;vertical-align:middle;overflow-wrap:normal;word-break:keep-all;text-align:left;transition:background-color .25s,color .25s}
 .md.grid thead th{font:600 calc(12px * var(--tf,1))/1.4 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .md.grid td.key{font-weight:600;color:var(--ink);width:auto;white-space:normal}
@@ -581,7 +585,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .tablewrap.sticky-key td.key,.tablewrap.sticky-key th.key{position:sticky;left:0;z-index:1;background:var(--panel)}
 .tablewrap.sticky-key th.key{z-index:2;background:var(--row-alt)}
 /* a sticky cell leaves the collapsed table's border behind it, so its row rule is drawn on the cell itself (empty cells too) */
-.tablewrap.sticky-key td.key{box-shadow:inset 0 -1px 0 var(--line)}
+.tablewrap.sticky-key td.key{box-shadow:inset 0 -1px 0 var(--line);border-bottom-color:transparent}   /* the rule is the shadow's alone: with the border too it is drawn twice, a thicker line in this column */
 .tablewrap.sticky-key tbody tr:last-child td.key{box-shadow:none}
 .tablewrap.sticky-key th.key{box-shadow:inset 0 -1px 0 var(--line)}
 .md.grid tbody tr.g-cur td.key,.md.grid .g-col.key{background-color:var(--hl-soft)}
@@ -590,11 +594,11 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
   .pbody>.md.grid{padding:0}
   .md.grid>.tablewrap,.md.grid>.tablewrap:not(.span),.md.grid>.tablewrap.span{width:100%;max-width:100%;border-radius:12px;font-size:calc(13px * var(--tf,1))}
   .md.grid table{line-height:1.35}
-  .md.grid table[data-fit="fit"] col{width:max(var(--wp),var(--min,0px))}
+  .md.grid table[data-fit="fit"] col{width:var(--wp)}
   .md.grid th,.md.grid td,.md.grid>.tablewrap.span th,.md.grid>.tablewrap.span td{padding:8px 8px}
   .md.grid thead th{font-size:calc(10.5px * var(--tf,1));letter-spacing:.06em}
   .md.grid table[data-fit="scroll"]{width:calc(var(--tws) * 1ch);min-width:100%}   /* fixed too: lit weight moves no column */
-  .md.grid table[data-fit="scroll"] col{width:max(calc(var(--wn) * 1ch),var(--min,0px))}
+  .md.grid table[data-fit="scroll"] col{width:calc(var(--wn) * 1ch)}
   .md.grid tbody tr.g-cur td:first-child{box-shadow:inset 3px 0 0 var(--claude)}
   .md.grid .tablewrap.sticky-key tbody tr.g-cur td.key{box-shadow:inset 3px 0 0 var(--claude),inset 0 -1px 0 var(--line)}
   .md.grid .tablewrap.sticky-key tbody tr.g-cur:last-child td.key{box-shadow:inset 3px 0 0 var(--claude)}
@@ -860,7 +864,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
   box-shadow:0 1px 2px rgba(15,25,40,.06),0 8px 24px rgba(15,25,40,.08)}
 .sb-crop{position:relative;overflow:hidden;max-width:100%}
 .sb-crop img{position:absolute;display:block;max-width:none;height:auto}
-.sb-html{padding:16px;max-height:70vh;overflow:auto;color:#202124}
+.sb-html{padding:16px;max-height:calc(70vh / var(--z,1));overflow:auto;color:#202124}
 .sb-src{margin:0;font-size:12.5px;color:var(--muted);justify-self:start;max-width:100%}
 svg.sb-shade{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 svg.sb-shade .dim{fill:var(--sb-shade)}
@@ -923,3 +927,8 @@ svg.sb-link circle{fill:var(--acc);stroke:var(--panel);stroke-width:2}
 /* a board whose spec the lanes cannot draw says so (lanes.js failed) */
 .ln-fail{display:flex;flex-direction:column;gap:4px;margin:16px 12px;padding:12px 16px;border-radius:10px;border:1.5px solid var(--t-red);background:var(--t-red-bg);color:var(--ink)}
 .ln-fail b{font:700 14px var(--sans);color:var(--t-red)} .ln-fail span{font:400 13px/1.4 var(--sans)}
+
+/* Greek: lang="el" is set on the pane (stage.js), so a capital loses its tonos; Greek heads are not tracked wide, and
+   a note or a call's sub is set in the sans, which carries Greek better than the mono */
+:lang(el) :is(.boards h4,.kcap,.ln-sph,.ln-stitle,.ln-popph,.ln-tag,.md.grid thead th,.scene .cap,.scene th,.scene .slide .kicker,.sb-chip){letter-spacing:.02em}
+:lang(el) :is(.ln-note,.ln-lbl code,.ln-call code){font-family:var(--sans)}

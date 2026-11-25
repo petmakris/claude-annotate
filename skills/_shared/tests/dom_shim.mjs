@@ -554,6 +554,12 @@ export function install({ width = 1300, embedded = false, url = "http://stage.te
       return { overflowY: "visible", overflowX: "visible", display: "block", opacity: "1" }[p] ?? "";
     },
   });
+  // the text nodes under a root, in order (SHOW_TEXT only): what a page reads to measure its words
+  g.NodeFilter = { SHOW_TEXT: 4 };
+  document.createTreeWalker = (root) => {
+    const texts = []; const walk = (n) => { for (const c of n.childNodes) { if (c.nodeType === 3) texts.push(c); else walk(c); } }; walk(root);
+    let i = 0; return { nextNode: () => texts[i++] || null };
+  };
   g.CSS = { escape: (s) => String(s).replace(/([^\w-])/g, "\\$1") };
   g.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
   g.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
