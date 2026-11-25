@@ -490,6 +490,30 @@ def describe(con, limit=DESCRIBE_LIMIT, pause=None, log=None, folder=None):
     return {"described": ok, "failed": bad, "left": max(0, len(todo) - limit)}
 
 
+def describe_one(con, ident):
+    """Describe one session now (one headless call), whatever its state; returns the description. The session
+    index's `fleet session describe` runs it on the row's machine."""
+    r = find(con, ident)
+    p = r["transcript_path"]
+    if not p or not os.path.exists(p):
+        raise HistoryError("fleet: the transcript of %s is not on this machine." % r["session_id"])
+    c = conversation(p)
+    if not c["prompts"]:
+        raise HistoryError("fleet: %s has no prompt to describe." % r["session_id"])
+    now = time.time()
+    model = os.environ.get("FLEET_DESCRIBE_MODEL") or "haiku"
+    try:
+        text = " ".join(headless(describe_prompt(r["cwd"], c["prompts"], c["replies"]), model, 180).split())
+        if len(text) < 20:
+            raise HistoryError("the model gave no description")
+    except HistoryError as e:
+        update(con, r["session_id"], describe_error=str(e)[:300], describe_tried_at=now)
+        raise
+    update(con, r["session_id"], description=clip(text, 800), described_size=os.path.getsize(p), described_at=now,
+           describe_error=None, describe_tried_at=now, **c["names"])
+    return clip(text, 800)
+
+
 # ---------------------------------------------------------------- ask and search
 
 def ask_prompt(r, question, ts):
