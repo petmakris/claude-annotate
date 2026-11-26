@@ -59,7 +59,7 @@ def test_the_stage_status_line_says_what_following_means_in_both_languages():
     from call_page import STATIC
     import re
     text = (STATIC / "call-i18n.js").read_text()
-    assert re.findall(r'"s\.fol\.following": "([^"]*)"', text) == ["The stage follows the voice", "Η σκηνή ακολουθεί τη φωνή"]
+    assert re.findall(r'"s\.fol\.following": "([^"]*)"', text) == ["Following the voice", "Ακολουθεί τη φωνή"]
 
 
 BOARDS = ("[[show table | Heat pump or gas boiler]]| a | b |\n|---|---|\n| 1 | 2 |[[/show]] A heat pump moves heat. It costs more to install. [[key: Install costs more]]")
