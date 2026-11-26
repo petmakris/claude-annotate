@@ -21,7 +21,7 @@ def node(src: str):
 
 
 def fit(call: str):
-    return node('import { centreTarget, columnWidths } from %s; console.log(JSON.stringify(%s));' % (json.dumps((STATIC / "fit.js").as_uri()), call))
+    return node('import { centreTarget, columnWidths, keepTarget } from %s; console.log(JSON.stringify(%s));' % (json.dumps((STATIC / "fit.js").as_uri()), call))
 
 
 # -- QF-7: a table column is never narrower than its longest word ---------------------------------------------------
@@ -207,3 +207,26 @@ def test_a_slide_at_rest_scrolls_back_to_its_top_and_while_a_part_is_said_it_doe
     page.send({"type": "stage:frame", "view": "sl", "n": 1}).check("window.__tops.length")
     page.send({"type": "stage:frame", "view": "sl", "n": built["rest"]}).check("window.__tops")
     assert page.run() == [0, [0]]
+
+
+# -- vote-3: a bars board on a phone starts at its title; only a lit bar out of view moves it -------------------------
+
+BOX = "box: {top: 100}, view: 400"
+
+
+@needs_node
+def test_a_lit_bar_inside_the_first_screenful_leaves_the_board_at_its_top():
+    # bar at 300..330 on the screen, the box top at 100, so 200..230 down the board, inside the 400 px view: scroll 0
+    assert fit("keepTarget({top: 300, bottom: 330, %s, scroll: 0})" % BOX) == 0
+    # the board was left scrolled to 150: everything lit fits the first screenful, so it comes back to the top
+    assert fit("keepTarget({top: 150, bottom: 180, %s, scroll: 150})" % BOX) == 0
+
+
+@needs_node
+def test_a_lit_bar_below_the_view_scrolls_the_least_that_shows_it_and_one_in_view_stays_put():
+    # bar 850..880 on the screen = 750..780 down the board, view 400: bottom at 780 + 12 - 400 = 392 from the top
+    assert fit("keepTarget({top: 850, bottom: 880, %s, scroll: 0})" % BOX) == 392
+    # already in view (scrolled 392: the bar is at 358..388 inside the view, 12 px clear of both edges)
+    assert fit("keepTarget({top: 458, bottom: 488, %s, scroll: 392})" % BOX) == 392
+    # above the view: its top comes in 12 px under the edge
+    assert fit("keepTarget({top: 100, bottom: 130, %s, scroll: 600})" % BOX) == 588

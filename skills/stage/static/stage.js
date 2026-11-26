@@ -61,7 +61,7 @@
 import { applyFrame, beingSaid, settled, stepLabel } from "./scene.js";
 import { closeLanesPop, layoutLanes, renderLanes } from "./lanes.js";
 import { layoutMap, renderMap } from "./map.js";
-import { centreTarget, columnWidths, restScale } from "./fit.js";
+import { centreTarget, columnWidths, keepTarget, restScale } from "./fit.js";
 import { paintScreen, renderScreen } from "./screenboard.js";
 import { getLang, setLang, w as wd, wn as wdn } from "./words.js";
 
@@ -1488,7 +1488,7 @@ document.addEventListener("click", (e) => {
 // Centre `el` (an element, or several taken together, such as the lines of a range) in each box around it
 // that scrolls, inside the pane only: never the page around the stage. What is taller than the box starts at
 // its top instead. `room`: the foot of the board kept clear, which the element is centred above.
-function centre(el, room = 0) {
+function centre(el, room = 0, keepOnly = false) {
   const els = (Array.isArray(el) ? el : [el]).filter((e) => e && e.isConnected && e.getClientRects().length);  // not one drawn nowhere (the other orientation of a graph)
   if (!els.length) return;
   const behavior = reduced() ? "auto" : "smooth";
@@ -1496,8 +1496,8 @@ function centre(el, room = 0) {
     if (box.scrollHeight <= box.clientHeight + 1 || !/auto|scroll/.test(getComputedStyle(box).overflowY)) continue;
     const rs = els.map((e) => e.getBoundingClientRect()), b = box.getBoundingClientRect();
     const lead = box.querySelector(".slide .title");   // a slide's title is not left cut at the pane's edge
-    box.scrollTo({ top: centreTarget({ top: Math.min(...rs.map((r) => r.top)), bottom: Math.max(...rs.map((r) => r.bottom)), box: b, view: b.height - room,
-      scroll: box.scrollTop, lead: lead ? lead.getBoundingClientRect().bottom - b.top + box.scrollTop : 0 }), behavior });
+    const at = { top: Math.min(...rs.map((r) => r.top)), bottom: Math.max(...rs.map((r) => r.bottom)), box: b, view: b.height - room, scroll: box.scrollTop };
+    box.scrollTo({ top: keepOnly ? keepTarget(at) : centreTarget({ ...at, lead: lead ? lead.getBoundingClientRect().bottom - b.top + box.scrollTop : 0 }), behavior });
   }
 }
 
@@ -1708,8 +1708,9 @@ function paintFrame(v, box, animate = false) {
   const room = box.classList.contains("map") ? +box.dataset.room || 0 : 0;
   const keep = [done.focused].flat().filter(Boolean);
   if (keep.length && box.classList.contains("grid")) settleThen(v, box, n, () => bringInView(box, keep));
-  else if (keep.length) requestAnimationFrame(() => { if (!v.pane.hidden) centre(keep, room); });
+  else if (keep.length) requestAnimationFrame(() => { if (!v.pane.hidden) centre(keep, room, box.classList.contains("vzbars")); });  // bars start at their title
   else if (box.classList.contains("scene") && n >= scene.rest) requestAnimationFrame(() => { if (!v.pane.hidden) toTop(box); });  // at rest a slide shows from its title
+  else if (box.classList.contains("vzbars") && n >= scene.rest) requestAnimationFrame(() => { if (!v.pane.hidden) toTop(box); });  // at rest bars show from their title
   if (captionText) requestAnimationFrame(() => placeCaption());
   stepText(v, scene, n);
   const back = v.pane.querySelector(".stepback"), next = v.pane.querySelector(".stepnext");

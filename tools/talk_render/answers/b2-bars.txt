@@ -1,0 +1,6 @@
+[[show bars | Cost of each day]] {"title": "Day six costs the most", "unit": "euros",
+ "bars": [{"id": "d1", "label": "Day one", "value": 40}, {"id": "d2", "label": "Day two", "value": 55},
+  {"id": "d3", "label": "Day three", "value": 70, "note": "train"}, {"id": "d4", "label": "Day four", "value": 60},
+  {"id": "d5", "label": "Day five", "value": 80}, {"id": "d6", "label": "Day six", "value": 140, "tone": "red", "note": "flight home"},
+  {"id": "d7", "label": "Day seven", "value": 30}]} [[/show]]
+This plan costs 475 euros in seven days. [[point: bar d1]] Day one is cheap. [[point: bar d4]] Day four is average. [[point: bar d6]] Day six is the flight home, and it is the biggest. [[point: bar d7]] Day seven is cheap again.

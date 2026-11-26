@@ -45,6 +45,16 @@ export function centreTarget({ top, bottom, box, view, scroll, lead = 0 }) {
   return to;
 }
 
+// Where a box scrolls to so a lit element is in view and nothing more: a board that shows from its top (title, first rows)
+// whenever the lit part is inside the first screenful, the scroll left alone when the part is already in view, else the
+// least move that brings it in (its top first when it is taller than the view). Same measures as centreTarget.
+export function keepTarget({ top, bottom, box, view, scroll, pad = 12 }) {
+  const t = top - box.top + scroll, b = bottom - box.top + scroll;
+  if (b <= view) return 0;
+  if (t >= scroll + pad && b <= scroll + view - pad) return scroll;
+  return Math.max(0, t < scroll + pad || b - t > view - 2 * pad ? t - pad : b - view + pad);
+}
+
 // How much a board at rest is scaled up on a wide screen. `natural`: its width at its own size, `pane`: the room across
 // it (both in the page's own px), `height` and `paneHeight` the same down the pane, `zoom` the page's zoom (the TV
 // layout's). A small table fills about `share` of the pane's width, never more than `max` times its size on the
