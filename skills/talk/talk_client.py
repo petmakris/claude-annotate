@@ -15,6 +15,10 @@ for an answered turn still ends the call), 2 refused (a reply of only boards or 
 sentence, is refused and the turn stays open), unreachable or no such turn, 4 the call has ended.
 Stdin is read as UTF-8 whatever the locale.
 
+reply --board-for N sends boards alone for answer N, already given (no turn id, nothing is said): a board that
+was refused inside that answer is mended without saying the answer again. Exit 2 with the board: lines when
+no board is shown.
+
 end closes the call when no turn is left to answer (the user asked in the terminal): a wrap-up on stdin is
 said first. say adds an answer with no turn to answer, shown and read aloud like a reply (to put right an
 answer that went wrong, or to show what the user asked for in the terminal). Both use reply's exit codes.
@@ -257,13 +261,15 @@ def read_stdin() -> str:
     return sys.stdin.read()
 
 
-def reply(call_id: str | None, turn_id: str | None, status_text: str | None, end: bool, say: bool = False) -> int:
+def reply(call_id: str | None, turn_id: str | None, status_text: str | None, end: bool, say: bool = False,
+          board_for: int | None = None) -> int:
     call_id = call_id_or_only(call_id) or call_id
     state = load_state(call_id)
     if not state:
         print(f"talk is not reachable: {no_call_text(call_id)}", file=sys.stderr)
         return 2
-    body: dict = {"id": turn_id or "", "end": end, **({"say": True} if say else {})}
+    body: dict = {"id": turn_id or "", "end": end, **({"say": True} if say else {}),
+                  **({"board_for": board_for} if board_for is not None else {})}
     if status_text:
         body["status"] = status_text
     else:
@@ -314,7 +320,10 @@ def reply(call_id: str | None, turn_id: str | None, status_text: str | None, end
     if result.get("ignored"):
         print(f"ignored: {result['ignored']}")
         return 0
-    print("ended: re-arm once to collect the TALK_END" if turn_id is None and not say else "sent")
+    if board_for is not None:
+        print(f"boards added to answer {board_for}: {result.get('boards', 0)}")
+    else:
+        print("ended: re-arm once to collect the TALK_END" if turn_id is None and not say else "sent")
     if result.get("superseded"):
         print(result.get("note") or "superseded: this question was replaced; the reply was not read aloud")
     for problem in result.get("board_problems", []):
@@ -330,10 +339,13 @@ def main() -> int:
     bell.add_argument("--call", help="the call id, from the call's link; write --call=<id>")
     bell.add_argument("--wait", type=float, default=25.0, help="seconds per long-poll")
     rep = sub.add_parser("reply", help="send a reply (read from stdin) for a turn; it is shown and read aloud")
-    rep.add_argument("id")
+    rep.add_argument("id", nargs="?", help="the turn's id (left out with --board-for)")
     rep.add_argument("--call", help="the call id, from the call's link; write --call=<id>")
     rep.add_argument("--status", help="a few words shown while working, instead of a reply")
     rep.add_argument("--end", action="store_true", help="this reply wraps up the call")
+    rep.add_argument("--board-for", type=int, metavar="N",
+                     help="send only boards ([[show ...]] blocks) for answer N, already given: they are shown with it "
+                          "and nothing is said, so a refused board is sent again without saying the answer twice")
     fin = sub.add_parser("end", help="end the call with no turn to answer; a wrap-up on stdin is said first")
     fin.add_argument("--call", help="the call id, from the call's link; write --call=<id>")
     say = sub.add_parser("say", help="say an answer (read from stdin) with no turn to answer; it is shown and "
@@ -342,13 +354,17 @@ def main() -> int:
     args = parser.parse_args()
     if args.command == "reply" and args.status and args.end:
         parser.error("--status cannot be combined with --end: send the wrap-up as a reply with --end")
+    if args.command == "reply" and args.board_for is not None and (args.status or args.end):
+        parser.error("--board-for sends boards alone: it cannot be combined with --status or --end")
+    if args.command == "reply" and args.board_for is None and not args.id:
+        parser.error("reply needs the turn's id (or --board-for N)")
     if args.command == "doorbell":
         return doorbell(args.call, args.wait)
     if args.command == "end":
         return reply(args.call, None, None, True)
     if args.command == "say":
         return reply(args.call, None, None, False, say=True)
-    return reply(args.call, args.id, args.status, args.end)
+    return reply(args.call, args.id, args.status, args.end, board_for=args.board_for)
 
 
 if __name__ == "__main__":

@@ -45,7 +45,15 @@ function load(e, play) {
 // it when nobody holds it; one where the user presses play takes it (the other pauses at its next poll).
 // When the claim cannot be made (an older server, the request failed) the page falls back to a lock in
 // this origin's storage, renewed while it plays: pages on other devices do not share it.
-const PAGE_ID = Math.random().toString(36).slice(2, 10);  // this page among the call's pages (live mode too)
+// The id is kept in this tab's session storage: a reload is the same page, so its claim is still its own and the
+// open claim succeeds; a new tab has no entry and gets an id of its own (and sees "Playing on another screen").
+const PAGE_ID = (() => {
+  const key = "talk.page." + CFG.call;
+  try { const kept = sessionStorage.getItem(key); if (kept) return kept; } catch {}
+  const id = Math.random().toString(36).slice(2, 10);  // this page among the call's pages (live mode too)
+  try { sessionStorage.setItem(key, id); } catch {}
+  return id;
+})();
 const LOCK_KEY = "playing." + CFG.call, LOCK_MS = 3000;
 let claimOk = false;        // the server answered a claim: its holder is the truth, the storage lock is not used
 let holder = null;          // the page the server says plays: an id, or null when none
@@ -60,6 +68,13 @@ async function claimPlayer(take) {
   } catch (err) { /* the lock below stays the fallback */ }
   claimOk = false;
 }
+// Closing or reloading the page that holds the voice gives it up at once, so the next page of the call (the same
+// tab after a reload) never waits for the server's timeout. A request that outlives the page: fetch with keepalive,
+// since sendBeacon cannot carry the token header.
+window.addEventListener("pagehide", () => {
+  if (!claimOk || holder !== PAGE_ID) return;
+  try { api("/api/player", {method: "POST", keepalive: true, headers: {"Content-Type": "application/json"}, body: JSON.stringify({page: PAGE_ID, release: true})}).catch(() => {}); } catch {}
+});
 function takeVoice() { if (claimOk) { holder = PAGE_ID; tookAt = Date.now(); } claimPlayer(true); }
 // A poll's `player`: another page took the voice, so this page stops playing and says so.
 function seeHolder(p) {

@@ -88,6 +88,11 @@ globalThis.fetch = async (path, opts = {}) => {
   return respond({});
 };
 %(storage)s
+{
+  const session = new Map(Object.entries(%(session)s));  // this tab's sessionStorage: it survives a reload, a new tab starts empty
+  globalThis.sessionStorage = { getItem: (k) => (session.has(k) ? session.get(k) : null), setItem: (k, v) => session.set(k, String(v)),
+                                removeItem: (k) => session.delete(k), clear: () => session.clear(), dump: () => Object.fromEntries(session) };
+}
 document.documentElement.dataset.theme = "light";
 setBody(HTML);
 window.CFG = JSON.parse(%(cfg)s);
@@ -121,9 +126,10 @@ await settle();
 
 class CallPage:
     def __init__(self, html: str, states: list, *, start: int = 0, seconds: float = 4.0, autoplay: bool = True,
-                 stored: dict | None = None, query: str = ""):
+                 stored: dict | None = None, query: str = "", session: dict | None = None):
         self.html, self.states, self.start, self.seconds, self.autoplay = html, states, start, seconds, autoplay
         self.query = query  # the address' query string, "?screen=tv" and the like
+        self.session = session or {}  # what this tab's sessionStorage holds when the page opens, by full key
         self.stored = stored or {}  # what this origin's localStorage holds when the page opens, by key after "talk."
         self.steps: list = []
 
@@ -140,7 +146,7 @@ class CallPage:
         prelude = PRELUDE % {
             "shim": json.dumps(SHIM.as_uri()), "url": json.dumps(PAGE + self.query), "html": json.dumps(self.html),
             "states": json.dumps(self.states), "start": self.start, "cfg": json.dumps(cfg),
-            "files": json.dumps(page_scripts(self.html)), "seconds": self.seconds,
+            "files": json.dumps(page_scripts(self.html)), "seconds": self.seconds, "session": json.dumps(self.session),
             "storage": ("" if self.autoplay else 'localStorage.setItem("talk.autoplay", "false");')
                        + "".join(f"localStorage.setItem({json.dumps('talk.' + k)}, {json.dumps(json.dumps(v))});" for k, v in self.stored.items()),
         }

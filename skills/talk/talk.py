@@ -2120,6 +2120,7 @@ class Call:
         self.view_names: dict[str, str] = {"\0keys": KEY_VIEW}
         self.keys: list[dict] = []  # every [[key: ...]] of the call, in order: {answer, text}
         self.answer_no = 0  # the number the reply being split will get
+        self.repairing = False  # the reply being split mends an answer already given (see answer_boards)
         self.reply_cues: list[dict] = []  # the cues of the reply just split: {at, view, kind, n?, index?, stop?}
         self.picks: list[dict] = []  # guesses picked since the last turn, which goes with the next one
         self.reply_shows = 0  # boards of the reply being split put on the stage so far: only the first fronts
@@ -2235,7 +2236,7 @@ class Call:
         """Board's hook: every item it adds is listed in the conversation, with its view and answer."""
         item["answer"] = self.answer_no
         self.add("board", item.get("title") or item["kind"], view=item["view"], kind=item["kind"],
-                 answer=item["answer"], search=board_text(item))
+                 answer=item["answer"], search=board_text(item), **({"repair": True} if self.repairing else {}))
 
     def view_name(self, title: str, kind: str, ident: str = "") -> str:
         """The stage view for a board: the same title (compared as fold() compares it, the way a point
@@ -2563,12 +2564,18 @@ class Call:
 
     # -- answers ------------------------------------------------------------
 
-    def split_reply(self, text: str) -> str:
+    def split_reply(self, text: str, repair_of: int | None = None) -> str:
         """Take the markers out of a reply: board tags go to the stage, notes to the record.
         Returns what is left, the text that is shown and read aloud. Where each board or point tag
-        stood becomes a cue in `reply_cues`, so the stage can follow the voice."""
-        self.answer_no = sum(1 for e in self.entries if e["who"] == "claude") + 1
+        stood becomes a cue in `reply_cues`, so the stage can follow the voice. `repair_of`: the answer
+        number a board-only reply mends (`answer_boards`): its boards belong to that answer, are shown whole
+        with a chip and no cue, and the words, points and verbs it holds are dropped."""
+        count = sum(1 for e in self.entries if e["who"] == "claude")
+        self.answer_no = count + 1 if repair_of is None else repair_of
+        self.repairing = repair_of is not None
         self.board.cues, self.reply_shows, self.reply_items = [], 0, []
+        if repair_of is not None and repair_of != count:
+            self.reply_shows = 1  # an earlier answer's board never takes the stage from the answer being heard
         self.board.begin_reply()
         keys_before = len(self.keys)
         shown = ""
@@ -2637,8 +2644,15 @@ class Call:
                                "plain text; the answer is spoken and captioned, so write plain sentences")
         placed = list(zip([i for i, c in enumerate(shown) if c == CUE], self.board.cues))  # the i-th CUE is the i-th cue
         shown, marks = place_cues(shown)
-        timed = self.compile_scenes(shown, [(at, cue) for (_, cue), at in zip(placed, marks)
-                                            if cue["view"] or cue["kind"] == "stop"])
+        timed = [(at, cue) for (_, cue), at in zip(placed, marks) if cue["view"] or cue["kind"] == "stop"]
+        if self.repairing:
+            # The answer was said already: a point or verb has no sentence to stand in, so the board is shown whole.
+            if any(cue["kind"] == "frame" for _, cue in timed):
+                self.board.problem("points and verbs are dropped in a board repair: the answer was said already, "
+                                   "so the board is shown whole")
+            timed = []
+        else:
+            timed = self.compile_scenes(shown, timed)
         self.reply_cues = [{"at": at, **{k: v for k, v in cue.items() if v is not None}} for at, cue in timed]
         self.check_length(shown)
         self.check_stops(shown)
@@ -2876,6 +2890,38 @@ class Call:
         asyncio.get_running_loop().create_task(self.speak(entry))
         return entry
 
+    async def answer_boards(self, text: str, number: int) -> tuple[int, str]:
+        """Mend answer `number` with boards alone: the boards a reply holds are put on the stage and listed with
+        that answer (a chip each, `repair` on the entry), shown whole with no cue. Nothing is said: no answer
+        number, turn or speech is used, and any words, points or verbs in `text` are dropped with a board: line.
+        A board of the same title that was refused before simply was never listed, so the new one takes its place.
+        Returns (shown boards, error): the error is set, and nothing listed, when no board was shown."""
+        async with self.answer_lock:
+            answers = [e for e in self.entries if e["who"] == "claude"]
+            if not 1 <= number <= len(answers):
+                return 0, f"no answer {number} in this call: it holds {len(answers)}"
+            if answers[number - 1].get("superseded"):
+                return 0, f"answer {number} was set aside and never shown on the stage: say what is needed in a new answer"
+            boards, from_problem = len(self.board.items), len(self.board.problems)
+            try:
+                shown = await asyncio.get_running_loop().run_in_executor(
+                    self.reply_pool, lambda: self.split_reply(text, repair_of=number))
+            except Exception as err:  # noqa: BLE001
+                traceback.print_exc()
+                self.board.open, self.board.spill, self.board.cues = None, "", []
+                self.reply_cues, self.reply_items = [], []
+                self.board.problem(f"the boards of this repair failed ({type(err).__name__}: {err})")
+                shown = ""
+            finally:
+                self.repairing = False
+            added = len(self.board.items) - boards
+            if added and shown.strip():
+                self.board.problem("a board repair says nothing: its words were dropped, the answer was said already")
+            if not added:
+                new = self.board.problems[from_problem:]
+                return 0, new[0] if new else "no board in the reply: send [[show ...]] ... [[/show]] for answer " + str(number)
+            return added, ""
+
     async def answer_unspoken(self, text: str, kind: str) -> dict:
         """An answer kept but not spoken: the markers are taken out (no board reaches the stage, no key point is
         kept), the words stay. Its speech is `skipped` until the reader asks for it (/api/speak). {} when no
@@ -2992,14 +3038,21 @@ class Call:
             self.player = None
         return self.player
 
-    def claim_player(self, page: str, take: bool = False) -> str | None:
+    def claim_player(self, page: str, take: bool = False, release: bool = False) -> str | None:
         """One page of a call plays its answers by itself, so a second tab of the same call stays quiet.
         A page asks with its own random id: it gets the claim when none holds it, when the holder has not
         polled for PLAYER_TTL_S, or when `take` (the user pressed play or Talk in that page). Returns the
         page that holds it. The state payload carries it as `player` (a page id or null), and a page keeps
-        its claim alive by polling /api/state?page=<its id>."""
+        its claim alive by polling /api/state?page=<its id>. `release`: the holder is leaving (its page was
+        closed or reloaded), so the claim is free at once instead of after PLAYER_TTL_S; anyone else's release
+        changes nothing."""
         page = str(page)[:64]
         holder = self.player_now()
+        if release:
+            if holder is not None and holder == page:
+                self.player = None
+                self.changed()
+            return self.player_now()
         if page and (holder is None or take or holder == page):
             if holder != page:
                 self.changed()
@@ -3545,8 +3598,9 @@ def build_app(server: Server):
         return web.json_response({"pick": got})
 
     async def player(request):
-        """The page that plays the call's answers by itself. POST {page: <the page's own random id>,
-        take?: true} claims it (take: the user pressed play or Talk there); the answer and every
+        """The page that plays the call's answers by itself. POST {page: <the page's own id, kept across a
+        reload>, take?: true} claims it (take: the user pressed play or Talk there), {page, release: true} gives it up
+        (the holder's page is closing); the answer and every
         /api/state carry `player`, the id of the page that holds it, or null. A page plays by itself only
         when `player` is its own id; it keeps the claim by polling /api/state?page=<id>."""
         call = call_of(request)
@@ -3557,7 +3611,8 @@ def build_app(server: Server):
         page = body.get("page")
         if not isinstance(page, str) or not page.strip():
             return web.json_response({"error": "name the page: {page: <id>}"}, status=400)
-        return web.json_response({"player": call.claim_player(page.strip(), take=body.get("take") is True)})
+        return web.json_response({"player": call.claim_player(page.strip(), take=body.get("take") is True,
+                                                              release=body.get("release") is True)})
 
     async def floor(request):
         call = call_of(request)
@@ -3635,6 +3690,21 @@ def build_app(server: Server):
             return web.json_response({"error": "the call has ended", "transcript": str(call.transcript)}, status=410)
         if not status and not text.strip() and not end:
             return web.json_response({"error": "nothing to say: the reply is empty"}, status=400)
+        board_for = body.get("board_for")
+        if board_for is not None:
+            # Boards for an answer already given: shown with it, nothing said, no number or turn used.
+            if status or end or body.get("say"):
+                return web.json_response({"error": "board_for takes only boards: no status, say or end"}, status=400)
+            if not isinstance(board_for, int) or isinstance(board_for, bool):
+                return web.json_response({"error": "board_for is an answer number"}, status=400)
+            problems_from = len(call.board.problems)
+            added, error = await call.answer_boards(text, board_for)
+            new = call.board.problems[problems_from:]
+            if error:
+                return web.json_response({"error": error, "board_problems": new}, status=400)
+            server.save_state(call)
+            await call.stage_settled()
+            return web.json_response({"ok": True, "boards": added, "board_problems": call.board.problems[problems_from:]})
         if end and not str(body.get("id", "")).strip():
             # The session ends the call with no turn to answer: the user asked for it in the terminal.
             if text.strip():
