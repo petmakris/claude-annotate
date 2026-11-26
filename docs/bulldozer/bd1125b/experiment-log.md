@@ -47,3 +47,9 @@ Ledger (181 entries): fixed 181, confirmed 0. Nothing still confirmed.
 
 Full suite on bd1125b (uv run ... pytest skills fleet/tests -q): 3528 passed in 68.29s, first run, no failure, no fix commit needed.
 Ledger (186 entries): fixed 186, confirmed 0. Nothing still confirmed.
+
+## Finish (third pass)
+
+Full suite on bd1125b (uv run ... pytest skills fleet/tests -q): 3730 passed in 73.48s, first run, no failure, no fix commit needed.
+Ledger (193 entries): fixed 192, confirmed 1.
+Still confirmed: bd1125b-vote-12 (from the final vote summary, not yet checked by skeptics; the voters' shots are under .scratch/run/trials/vote/): after a correction the session drew a narrower board (a rent-only bar chart) instead of redoing the table, because the guide did not say so. Commit b818a18 changed the guide for this, but the ledger entry was not verified or moved to fixed.

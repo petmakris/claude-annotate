@@ -193,7 +193,7 @@ html_slide('intro', 'What this is', (
     f'<tr><td>After round 1</td><td>{plain(r1_r)}</td><td>{min(r1_r)}</td><td>{max(r1_r)}</td></tr>'
     f'<tr><td>After round 2</td><td>{plain(r2_r)}</td><td>{min(r2_r)}</td><td>{max(r2_r)}</td></tr></table>'
     '</div></div>'),
-    'Claude fixed all 181 problems in the call page\'s side panel; test users rate it 6.8, up from 6.3',
+    'Claude fixed all 193 problems in the call page\'s side panel; test users rate it 6.8, up from 6.3',
     ['Every slide after this one is one change you can see or feel, with the page before and after. '
      'The rating rose after round 1 and stayed level after round 2 (6.9, then 6.8): each new group of test users found new problems (6 serious ones in round 1, 3 in round 2), so it did not climb further. The ratings are an AI\'s impression, a rough sign and not a measurement.'])
 
@@ -261,7 +261,7 @@ html_slide('keys-sr', 'Keyboard and screen reader', rows_box([
     ('The conversation had no headings', 'Each answer is a heading a screen reader can jump between, and the first stop in the panel is the newest answer'),
     ('Enter on an earlier answer\'s Play dropped the keyboard to the page', 'The keyboard stays on the player\'s button'),
 ]), 'People who use a keyboard or a screen reader can now reach, hear and replay every answer',
-    ['A screen reader is software that reads the page aloud for people who cannot see it. These seven are the main changes; the second page lists all 181 entries.'])
+    ['A screen reader is software that reads the page aloud for people who cannot see it. These seven are the main changes; the second page lists all 193 entries.'])
 
 html_slide('tv-phone', 'TV and phone', rows_box([
     ('TV size was a buried setting; a big screen opened in desk size', 'A big screen offers TV size once, in a line above the box, and never changes size by itself; the Full screen button enlarges the panel too'),
@@ -346,12 +346,13 @@ else:
 
 # 6. decisions
 html_slide('decisions', 'Decisions without you', (
-    '<div class="ba three"><div class="side today"><h4>Today</h4><p>One AI designer split the call page\'s one big script into ten files, each owned by one of five AI builders, before they started. It is on the run\'s own branch; nothing is merged to main or live yet. After the vote, the session that ran this merges the whole run to main.</p></div>'
+    '<div class="ba three"><div class="side today"><h4>Today</h4><p>One AI designer split the call page\'s one big script into ten files, each owned by one of five AI builders, before they started. The whole run is merged to main and pushed. The live talk on the Mac picks it up as soon as the Mac answers again (it did not answer when the run ended).</p></div>'
     '<div class="side after"><h4>If you agree</h4><p>Nothing to do. The page behaves the same and each builder worked without clashing with the others.</p></div>'
-    '<div class="side no"><h4>If you do not</h4><p>The ten files can be joined back into one before the merge. It only moves code between files, so it can be undone and loses no behaviour.</p></div></div>'),
+    '<div class="side no"><h4>If you do not</h4><p>The ten files can be joined back into one. It only moves code between files, so it can be undone and loses no behaviour.</p></div></div>'),
     'One decision was made without you: the page\'s script was split so five builders could work at once',
     ['Your rule is that a shared file gets one owner instead of builders waiting for each other; the split is how that was done. The tests passed after every landing (3368 at the end of the build), and undoing it costs one rework of the file layout plus one test run. Nothing in this run needs your password, a payment or a device. '
-     'Write "no to the split" in the chat to have it undone, or "wait" to stop the merge. <a href="details.html" target="_blank">The second page</a> lists all 181 entries.'])
+     'A second call: the final vote named five defects after the rounds had ended, so one more pass checked and fixed them before the merge. '
+     'Write "no to the split" in the chat to have it undone. <a href="details.html" target="_blank">The second page</a> lists all 193 entries.'])
 
 
 # ---------------------------------------------------------------- the second page
