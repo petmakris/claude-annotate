@@ -26,8 +26,12 @@
 //     {type:'stage:key', view, index}     key point number index (from 1) was just said: it gets the bar
 //                                         and a short glow; the Key points tab is never fronted for it
 //     {type:'stage:theme', theme}         'light' or 'dark', chosen on the call page
+//     {type:'stage:lang', lang}           'en' or 'el': the language the page's words are in; the stage says its own words
+//                                         (words.js) in it. A stage opened alone follows the browser's language
 //     {type:'stage:zoom', zoom}           how large everything draws: 1 at a desk, more on a TV across the room
-//     {type:'stage:follow', on}           the call page's switch turned following on or off
+//     {type:'stage:follow', on, front}    the call page's switch turned following on or off; with `front` the stage also goes
+//                                         back to the board the voice fronted last (a board picked by hand, Key points among them,
+//                                         stops holding it)
 //     {type:'stage:frame', view, n, animate, answer}  show frame n of the scene answer number `answer` said
 //                                         the view with (body.scenes[answer]; without an answer, body.scene),
 //                                         clamped to its rest frame, animated only as the next one; never for
@@ -59,6 +63,7 @@ import { closeLanesPop, layoutLanes, renderLanes } from "./lanes.js";
 import { layoutMap, renderMap } from "./map.js";
 import { centreTarget, columnWidths, restScale } from "./fit.js";
 import { paintScreen, renderScreen } from "./screenboard.js";
+import { getLang, setLang, w as wd, wn as wdn } from "./words.js";
 
 const VENDOR = ["highlight.min.js", "marked.min.js", "purify.min.js"]
   .map((f) => new URL("vendor/" + f, import.meta.url).href);
@@ -97,25 +102,24 @@ const icon = (kind) => `<svg class="ico" viewBox="0 0 16 16" width="14" height="
 const kindOf = (src) => (src.type !== "inline" ? "page" : src.format === "visual" ? "diagram"
   : src.format in ICON_PATHS ? src.format : "page");
 
-const EMPTY_LINE = "When Claude shows code, a diagram, a table or a page, it appears here.";
 const WC = window.WebCompanion;
 const root = document.querySelector("[data-wc-root]") || document.body;
 const embedded = window.parent !== window;
 root.innerHTML = `<div class="stage">
-  <div class="tabbar"><div class="tabnav" role="group" aria-label="Boards" hidden>
-      <button type="button" class="nb navbtn prev" aria-label="Previous board"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
-      <button type="button" class="nb navbtn next" aria-label="Next board"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
-      <button type="button" class="pos" aria-haspopup="true" aria-expanded="false" aria-label="All boards"><span class="tabpos"></span><span class="posdot" hidden></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+  <div class="tabbar"><div class="tabnav" role="group" aria-label="${wd("boards")}" hidden>
+      <button type="button" class="nb navbtn prev" aria-label="${wd("board.prev")}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <button type="button" class="nb navbtn next" aria-label="${wd("board.next")}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
+      <button type="button" class="pos" aria-haspopup="true" aria-expanded="false" aria-label="${wd("board.all")}"><span class="tabpos"></span><span class="posdot" hidden></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
     </div>
-    <button type="button" class="follow" title="Back to the voice" aria-label="Back to the voice" hidden>Back to the voice</button>
-    <div class="boards" hidden><h4>Boards</h4><nav class="tabs" role="tablist" aria-label="Stage" aria-orientation="vertical"></nav></div></div>
+    <button type="button" class="follow" title="${wd("back.voice")}" aria-label="${wd("back.voice")}" hidden>${wd("back.voice")}</button>
+    <div class="boards" hidden><h4>${wd("boards")}</h4><nav class="tabs" role="tablist" aria-label="${wd("stage.label")}" aria-orientation="vertical"></nav></div></div>
   <div class="panes"><div class="empty"><div class="emptycard">
-    <h2>The stage is empty</h2><p class="msg">${EMPTY_LINE}</p>
+    <h2>${wd("empty.title")}</h2><p class="msg">${wd("empty.line")}</p>
     <div class="tiles">${["code", "diagram", "table", "page"].map((k) =>
-      `<span class="tile">${icon(k)}<span>${k[0].toUpperCase() + k.slice(1)}</span></span>`).join("")}</div>
+      `<span class="tile">${icon(k)}<span>${wd("kind." + k)}</span></span>`).join("")}</div>
   </div></div></div>
   <div class="caption" hidden></div>
-  <div class="stopcard" role="group" aria-label="The answer asks" hidden></div>
+  <div class="stopcard" role="group" aria-label="${wd("stop.group")}" hidden></div>
   <div class="spop" role="dialog" hidden></div>
 </div>`;
 const tabsEl = root.querySelector(".tabs"), panesEl = root.querySelector(".panes");
@@ -172,11 +176,11 @@ function metaText(src) {
     if (src.truncated) t += " · showing the first 60 lines";
     return t;
   }
-  if (src.format === "table") { const n = tableRows(src.body); return `Table · ${n} ${n === 1 ? "row" : "rows"}`; }
+  if (src.format === "table") return wdn("meta.table", tableRows(src.body));
   if (src.format === "change") return `Change · ${src.path} · +${src.added} −${src.removed}` + (src.rev ? ` · since ${src.rev}` : "");
-  if (src.format === "points") { const n = src.items.length; return `${n} key ${n === 1 ? "point" : "points"} from this call`; }
+  if (src.format === "points") return wdn("meta.points", src.items.length);
   if (src.format === "diagram") return "Mermaid source";
-  if (src.format === "scene") { const n = (src.parts || []).length; return `Scene · ${n} ${n === 1 ? "part" : "parts"}`; }
+  if (src.format === "scene") return "Scene · " + wdn("meta.parts", (src.parts || []).length);
   if (src.format === "visual") {
     const names = { sequence: "Sequence diagram", map: "Architecture map", bars: "Comparison chart", graph: "Graph", flowchart: "Flowchart" };
     const t = String(src.tool || "");
@@ -184,17 +188,17 @@ function metaText(src) {
   }
   if (src.format === "screen") {
     const n = (src.screens || []).reduce((a, s) => a + (s.steps || []).length, 0);
-    return `Screen · ${n} ${n === 1 ? "part" : "parts"} · ${src.spec}`;
+    return `Screen · ${wdn("meta.parts", n)} · ${src.spec}`;
   }
   return "Board";
 }
 
 function ago(t) {
   const s = (Date.now() - t) / 1000;
-  if (s < 60) return "Updated just now";
-  if (s < 3600) return `Updated ${Math.floor(s / 60)} min ago`;
+  if (s < 60) return wd("ago.now");
+  if (s < 3600) return wd("ago.min", { n: Math.floor(s / 60) });
   const h = Math.floor(s / 3600);
-  return h < 24 ? `Updated ${h} ${h === 1 ? "hour" : "hours"} ago` : `Updated ${Math.floor(h / 24)} d ago`;
+  return h < 24 ? wdn("ago.hour", h) : wd("ago.day", { n: Math.floor(h / 24) });
 }
 setInterval(() => { for (const v of views.values()) { const a = v.pane.querySelector(".vage"); if (a) a.textContent = ago(v.changedAt); } }, 30000);
 
@@ -212,30 +216,37 @@ async function copyText(text) {
   try { if (!document.execCommand("copy")) throw new Error("copy failed"); } finally { ta.remove(); }
 }
 
+// A board with one step, or none, has nothing to step through: its header has no step control ("All shown" over a board with
+// nothing to show one by one is noise, and on a phone a second row of the pane's short height).
+function hasSteps(v) {
+  const all = [v.body.scene, ...Object.values(v.body.scenes || {})].filter(Boolean);
+  return all.some((sc) => (sc.steps || 0) > 1);
+}
+
 function header(v) {
-  const { source: src, title, caption } = v.body;
+  const { source: src, caption } = v.body;
   const h = document.createElement("header"); h.className = "phead";
   // One row: the title, with what the board is and when it changed in a tooltip, then its steps and buttons.
   h.innerHTML = `<div class="prow"><div class="vhead" tabindex="0">${icon(kindOf(src))}<h2 class="vtitle"></h2>
     <div class="vtip" role="tooltip"><p class="vmeta"><span></span></p><span class="vage"></span></div></div><div class="pbtns"></div></div>`;
-  h.querySelector(".vtitle").textContent = title;
+  h.querySelector(".vtitle").textContent = shownTitle(v);
   const meta = h.querySelector(".vmeta span");
   if (src.type === "inline" && src.format === "change") {
     meta.innerHTML = `Change · ${esc(src.path)} · <b class="plus">+${+src.added}</b> <b class="minus">−${+src.removed}</b>` +
       (src.rev ? ` · since ${esc(src.rev)}` : "");
   } else meta.textContent = metaText(src);
-  if (v.body.answer && !(src.type === "inline" && src.format === "points")) meta.append(` · from answer ${+v.body.answer}`);
-  if (hasScene(v)) {
+  if (v.body.answer && !(src.type === "inline" && src.format === "points")) meta.append(wd("from.answer", { n: +v.body.answer }));
+  if (hasSteps(v)) {
     const repairs = +(painted(v)?.scene.repairs) || 0;
-    if (repairs) meta.append(` · ${repairs} ${repairs === 1 ? "repair" : "repairs"}`);
+    if (repairs) meta.append(wdn("repairs", repairs));
     const bar = document.createElement("span"); bar.className = "stepbar";
     const back = button("", () => stepBy(v, -1), "stepback"), next = button("", () => stepBy(v, 1), "stepnext");
     back.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>`; next.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>`;
     // the middle is a button too: it steps on, and from "All shown" starts the steps again
     const step = document.createElement("button"); step.type = "button"; step.className = "vstep";
     step.onclick = () => { const sc = sceneOf(v) || painted(v)?.scene; if (sc) stepBy(v, (v.frame ?? sc.rest) >= sc.rest ? -sc.rest : 1); };
-    back.setAttribute("aria-label", "Previous step"); next.setAttribute("aria-label", "Next step");
-    back.title = "Previous step"; next.title = "Next step";
+    back.setAttribute("aria-label", wd("step.prev")); next.setAttribute("aria-label", wd("step.next"));
+    back.title = wd("step.prev"); next.title = wd("step.next");
     bar.append(back, step, next);
     h.querySelector(".prow").insertBefore(bar, h.querySelector(".pbtns"));
   }
@@ -246,21 +257,21 @@ function header(v) {
   const btns = h.querySelector(".pbtns");
   if (src.type !== "inline") {
     const a = document.createElement("a");
-    a.className = "btn sm open"; a.target = "_blank"; a.rel = "noopener"; a.textContent = "Open ↗";
+    a.className = "btn sm open"; a.target = "_blank"; a.rel = "noopener"; a.textContent = wd("open");
     a.href = frameUrl(src, v.body.rev);
     btns.append(a);
   } else if (["code", "table", "diagram", "change", "points", "visual"].includes(src.format)) {
     const text = () => src.format === "code" ? src.lines.join("\n") : src.format === "change" ? unifiedText(src)
       : src.format === "points" ? src.items.map((it) => `${it.n}. ${it.text}`).join("\n")
       : src.format === "visual" ? JSON.stringify(src.spec, null, 2) : src.body;
-    const copy = button("Copy", async () => {
-      copy.textContent = await copyText(text()).then(() => "Copied", () => "Copy failed");
-      clearTimeout(copy._t); copy._t = setTimeout(() => { copy.textContent = "Copy"; }, 1500);
+    const copy = button(wd("copy"), async () => {
+      copy.textContent = await copyText(text()).then(() => wd("copied"), () => wd("copy.failed"));
+      clearTimeout(copy._t); copy._t = setTimeout(() => { copy.textContent = wd("copy"); }, 1500);
     });
     btns.append(copy);
   }
   if (src.type === "inline" && (src.format === "code" || src.format === "change")) {
-    const wrap = button("Wrap lines", () => {
+    const wrap = button(wd("wrap"), () => {
       const on = wrap.getAttribute("aria-pressed") !== "true";
       store.set("stage.wrap", on ? "1" : "0");
       for (const b of panesEl.querySelectorAll(".btn.wrapbtn")) b.setAttribute("aria-pressed", String(on));
@@ -290,7 +301,7 @@ function codeCue(box) {
 function note(box, text, retry) {
   const p = document.createElement("p"); p.className = "note";
   p.append(text);
-  if (retry) p.append(button("Try again", retry));
+  if (retry) p.append(button(wd("retry"), retry));
   box.before(p);
 }
 
@@ -462,7 +473,7 @@ function paintPoints(v, box, src) {
   v.snap = { points: src.items.map((it) => it.n + "|" + it.text) };
   box.replaceChildren(...[...groups.entries()].sort((a, b) => a[0] - b[0]).map(([answer, items]) => {
     const sec = document.createElement("section"); sec.className = "kgroup";
-    const cap = document.createElement("p"); cap.className = "kcap"; cap.textContent = answer ? `Answer ${answer}` : "Earlier";
+    const cap = document.createElement("p"); cap.className = "kcap"; cap.dataset.answer = answer || ""; cap.textContent = answer ? wd("points.cap", { n: answer }) : wd("points.earlier");
     const ol = document.createElement("ol"); ol.className = "klist";
     for (const it of items.sort((a, b) => a.n - b.n)) {
       const li = document.createElement("li"); li.dataset.n = it.n;
@@ -639,7 +650,7 @@ function restFit(box) {
 }
 function refit(box) {
   restFit(box);
-  for (const wrap of box.querySelectorAll(".tablewrap")) { const table = wrap.querySelector("table"); if (table) wordFloors(table, wrap); }
+  for (const wrap of box.querySelectorAll(".tablewrap")) { const table = wrap.querySelector("table"); if (table) wordFloors(table, wrap); scrollCue(wrap); }
 }
 
 // A column is never narrower than its longest word, so a word never breaks across lines (no `Latenc/y`): each column's
@@ -686,10 +697,24 @@ function wordFloors(table, wrap) {
   cols.forEach((c, i) => { c.style.width = px[i] + "px"; });
 }
 // A table taller than its board keeps its header and shows it goes on: the foot fades until the end is reached.
+// A table taller than its board says how much is below: the foot fades, and a pill under it counts the rows out of sight
+// ("2 more rows") and scrolls them in when pressed, since a fade alone is easy to miss on a short phone pane.
 function scrollCue(wrap) {
   const more = wrap.scrollHeight > wrap.clientHeight + 2;
+  const atEnd = !more || wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 2;
   wrap.classList.toggle("scrolls", more);
-  wrap.classList.toggle("at-end", !more || wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 2);
+  wrap.classList.toggle("at-end", atEnd);
+  const host = wrap.parentElement;
+  let pill = host?.querySelector(":scope > .more-rows");
+  const out = atEnd ? 0 : [...wrap.querySelectorAll("tbody tr")].filter((tr) => tr.getBoundingClientRect().bottom > wrap.getBoundingClientRect().bottom + 2).length;
+  if (!out) { pill?.remove(); return; }
+  if (!pill) {
+    pill = document.createElement("button"); pill.type = "button"; pill.className = "more-rows";
+    pill.onclick = () => wrap.scrollBy({ top: wrap.clientHeight * 0.8, behavior: reduced() ? "auto" : "smooth" });
+    host.append(pill);
+  }
+  pill.textContent = "↓ " + wdn("rows.more", out);
+  pill.style.bottom = Math.max(6, host.getBoundingClientRect().bottom - wrap.getBoundingClientRect().bottom + 8) + "px";
 }
 
 function paintTable(v, box, src) {
@@ -711,11 +736,11 @@ function tapRow(v, box, e) {
   const tr = e.target.closest?.("tbody tr");
   if (!tr || !box.contains(tr)) { closePop(); return; }
   const n = [...box.querySelectorAll("tbody tr")].indexOf(tr) + 1, key = "row#" + n;
-  const name = (tr.children[0]?.textContent || "").trim().replace(/\s+/g, " ") || `row ${n}`;
-  const acts = [button("Ask about this", () => { closePop(); post({ type: "stage:ask", text: `About "${name}": ` }); }, "pri")];
+  const name = (tr.children[0]?.textContent || "").trim().replace(/\s+/g, " ") || wd("row.n", { n });
+  const acts = [button(wd("ask.about"), () => { closePop(); post({ type: "stage:ask", text: `About "${name}": ` }); }, "pri")];
   const said = playKey(v, key, true);
-  if (said) acts.push(button("Play from here", () => { closePop(); playKey(v, key); }));
-  openPop(name.charAt(0).toUpperCase() + name.slice(1), said ? null : "Not said in the voice.", acts, tr);
+  if (said) acts.push(button(wd("play.here"), () => { closePop(); playKey(v, key); }));
+  openPop(name.charAt(0).toUpperCase() + name.slice(1), said ? null : wd("not.said"), acts, tr);
 }
 
 // ---- Motion --------------------------------------------------------------------------------
@@ -758,7 +783,7 @@ function renderInline(v, seq) {
     paintCode(v, box, src);
     if (!window.hljs) libsReady().then(() => {
       if (!current()) return;
-      if (window.hljs) paintCode(v, box, src); else note(box, "Highlighting did not load, so this is plain text.", retryLibs);
+      if (window.hljs) paintCode(v, box, src); else note(box, wd("note.highlight"), retryLibs);
     });
   } else if (src.format === "change") {
     box.className = "code lines-box change" + (wrapOn() ? " wrap" : "");
@@ -766,7 +791,7 @@ function renderInline(v, seq) {
     paintChange(v, box, src);
     if (!window.hljs) libsReady().then(() => {
       if (!current()) return;
-      if (window.hljs) paintChange(v, box, src); else note(box, "Highlighting did not load, so this is plain text.", retryLibs);
+      if (window.hljs) paintChange(v, box, src); else note(box, wd("note.highlight"), retryLibs);
     });
   } else if (src.format === "points") {
     box.className = "points";
@@ -783,7 +808,7 @@ function renderInline(v, seq) {
     paintVzMap(v, box, src);
     if (!window.DOMPurify) libsReady().then(() => {
       if (!current()) return;
-      if (window.DOMPurify) paintVzMap(v, box, src); else note(box, "The map could not be made safe to show, so it is not shown.", retryLibs);
+      if (window.DOMPurify) paintVzMap(v, box, src); else note(box, wd("note.map"), retryLibs);
     });
   } else if (src.format === "visual" && src.tool === "flowchart") {
     // A flowchart is a map the stage draws itself: ghosts first, lit part by part with the voice.
@@ -800,7 +825,7 @@ function renderInline(v, seq) {
     paintScene(v, box, src);
     if (!window.DOMPurify) libsReady().then(() => {
       if (!current()) return;
-      if (window.DOMPurify) paintScene(v, box, src); else note(box, "The scene could not be made safe to show, so it is not shown.", retryLibs);
+      if (window.DOMPurify) paintScene(v, box, src); else note(box, wd("note.scene"), retryLibs);
     });
   } else if (src.format === "screen") {
     // A spotlight: one screen at a time, the part being said lit and explained beside it (screenboard.js).
@@ -813,14 +838,14 @@ function renderInline(v, seq) {
     // A Mermaid board saved before the stage stopped drawing Mermaid: its source, as written.
     box.className = "md legacy";
     const said = document.createElement("p"); said.className = "note";
-    said.textContent = "The stage no longer draws Mermaid, so this is the diagram's source.";
+    said.textContent = wd("note.mermaid");
     box.append(said, sourceFrame(src.body));
   } else {
     box.className = "md";
     paintTable(v, box, src);
     if (!hasMarkdown()) libsReady().then(() => {
       if (!current()) return;
-      if (hasMarkdown()) paintTable(v, box, src); else note(box, "The table formatter did not load, so this is the plain text.", retryLibs);
+      if (hasMarkdown()) paintTable(v, box, src); else note(box, wd("note.table"), retryLibs);
     });
   }
   return box;
@@ -848,8 +873,26 @@ function paintVzMap(v, box, src) {
     svg.classList.add("outline");  // what is still to come is an outline, as in the player
     for (const el of svg.querySelectorAll("[marker-end]")) el.dataset.mk = el.getAttribute("marker-end");
   }
+  if (svg) svg.after(readingOf(src.reading));
   box.onclick = (e) => tapMap(v, e);
   requestAnimationFrame(() => { if (box.isConnected) paintFrame(v, box); });
+}
+// What a screen reader says of a drawn board: its arrows (map, graph) or rows (bars), one line each, in a list kept out of
+// sight but in the accessibility tree (the .vz-reading rule). The server made the items (reading.py); the connecting words
+// are the stage's own, in the page's language.
+function readingLine(it) {
+  if (it.kind === "state") return wd("read.state." + it.state, { label: it.label });
+  if (it.kind === "bar") return it.note ? wd("read.bar.note", it) : wd("read.bar", it);
+  if (it.kind === "threshold") return wd("read.threshold", it);
+  const key = it.kind === "link" ? "read.link" : "read.edge";
+  return wd(it.label ? key + ".label" : key, it) + (it.dashed ? wd("read.dashed") : "");
+}
+function readingOf(list) {
+  const ul = document.createElement("ul"); ul.className = "vz-reading";
+  if (!list || !Array.isArray(list.items) || !list.items.length) { ul.hidden = true; return ul; }
+  ul.setAttribute("aria-label", wd(list.title === "values" ? "read.values" : "read.arrows"));
+  ul.replaceChildren(...list.items.map((it) => { const li = document.createElement("li"); li.textContent = readingLine(it); return li; }));
+  return ul;
 }
 // After a frame: the parts being said take the accent (vz.css's `now`, with the accent's arrowhead), and while
 // the voice follows the request (a route step shown before the rest frame) the map is in route mode: the route's
@@ -955,8 +998,8 @@ function tapMap(v, e) {
   const part = e.target.closest("[data-key]:not(.k-hidden)");
   if (!part) { closePop(); return; }
   const key = part.dataset.key, name = mapPartName(v.body.source.spec || {}, key);
-  const acts = [button("Ask about this", () => { closePop(); post({ type: "stage:ask", text: `About "${name}": ` }); }, "pri")];
-  if (playKey(v, key, true)) acts.push(button("Play from here", () => { closePop(); playKey(v, key); }));
+  const acts = [button(wd("ask.about"), () => { closePop(); post({ type: "stage:ask", text: `About "${name}": ` }); }, "pri")];
+  if (playKey(v, key, true)) acts.push(button(wd("play.here"), () => { closePop(); playKey(v, key); }));
   openPop(name.charAt(0).toUpperCase() + name.slice(1), null, acts, part);
 }
 function mapPartName(spec, key) {
@@ -1068,15 +1111,15 @@ function tapScene(v, e) {
   const part = e.target.closest("[data-part]:not(.k-hidden)");
   if (!part) { closePop(); return; }
   const id = part.dataset.part, name = (v.body.source.parts || []).find((p) => p.id === id)?.name || id;
-  const acts = [button("Ask about this", () => { closePop(); post({ type: "stage:ask", text: `About "${name}": ` }); }, "pri")];
-  if (playKey(v, "part:" + id, true)) acts.push(button("Play from here", () => { closePop(); playKey(v, "part:" + id); }));
+  const acts = [button(wd("ask.about"), () => { closePop(); post({ type: "stage:ask", text: `About "${name}": ` }); }, "pri")];
+  if (playKey(v, "part:" + id, true)) acts.push(button(wd("play.here"), () => { closePop(); playKey(v, "part:" + id); }));
   openPop(name.charAt(0).toUpperCase() + name.slice(1), null, acts, part);
 }
 function showTerm(term, means, anchor) { openPop(term.trim(), means, [], anchor); }
 // The popup sits under what was tapped, or over it near the stage's foot, inside a 16px gutter.
 function openPop(title, text, acts, anchor) {
   spopEl.replaceChildren();
-  const x = document.createElement("button"); x.type = "button"; x.className = "spop-x"; x.title = "Close"; x.setAttribute("aria-label", "Close");
+  const x = document.createElement("button"); x.type = "button"; x.className = "spop-x"; x.title = wd("close"); x.setAttribute("aria-label", wd("close"));
   x.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
   x.onclick = () => closePop();
   const h = document.createElement("h3"); h.textContent = title;
@@ -1144,7 +1187,7 @@ function fillPane(v, update = false) {
   v.prev = null;
   if (src.type === "file" && src.missing) {
     const p = document.createElement("p"); p.className = "waiting";
-    p.textContent = `Waiting for ${src.path}`; body.append(p); return;
+    p.textContent = wd("file.wait", { path: src.path }); body.append(p); return;
   }
   if (src.type === "file" && src.display && src.display !== "page") { paintFile(v, body, seq); return; }
   const wrap = document.createElement("div"); wrap.className = "framewrap";
@@ -1183,7 +1226,7 @@ function paintFile(v, body, seq) {
       paint(text);
       if (src.display === "markdown" && !hasMarkdown()) libsReady().then(() => { if (current() && hasMarkdown()) paint(text); });
     })
-    .catch((err) => { if (current()) note(box, `${src.path} could not be read (${err.message}).`, () => fillPane(v)); });
+    .catch((err) => { if (current()) note(box, wd("file.fail", { path: src.path, why: err.message }), () => fillPane(v)); });
 }
 
 // Double-buffered: the new frame loads hidden over the old one and takes its place only once
@@ -1217,23 +1260,25 @@ function reloadFrame(v) {
 
 // ---- Tabs ----------------------------------------------------------------------------------
 
+// The Key points board is the one the call names itself, in English; the stage says its name in the page's language.
+const shownTitle = (v) => (v.body.source?.type === "inline" && v.body.source.format === "points" ? wd("points.title") : v.body.title);
 function setTabTitle(v) {
-  v.tab.querySelector(".ttl").textContent = v.body.title;
-  v.tab.title = v.body.title;
+  v.tab.querySelector(".ttl").textContent = shownTitle(v);
+  v.tab.title = shownTitle(v);
   v.tab.querySelector(".ico")?.remove();
   v.tab.insertAdjacentHTML("afterbegin", icon(kindOf(v.body.source)));
   v.tab.querySelector(".count")?.remove();
   const src = v.body.source;
   if (src.type === "inline" && src.format === "points") {
     const c = document.createElement("span"); c.className = "count";
-    c.textContent = src.items.length; c.title = `${src.items.length} key points`;
+    c.textContent = src.items.length; c.title = wdn("points.count", src.items.length);
     v.tab.append(c);
   }
   markUpdated(v, v.tab.classList.contains("updated"));
 }
 function markUpdated(v, on) {
   v.tab.classList.toggle("updated", on);
-  if (on) v.tab.setAttribute("aria-label", v.body.title + ", updated"); else v.tab.removeAttribute("aria-label");
+  if (on) v.tab.setAttribute("aria-label", wd("updated.aria", { title: shownTitle(v) })); else v.tab.removeAttribute("aria-label");
   updateNav();
 }
 
@@ -1242,13 +1287,13 @@ function updateNav() {
   const tabs = [...tabsEl.children], i = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
   navEl.hidden = tabs.length < 2;
   if (navEl.hidden) showBoards(false);
-  navEl.querySelector(".tabpos").textContent = i >= 0 ? `Board ${i + 1} of ${tabs.length}` : `${tabs.length} boards`;
+  navEl.querySelector(".tabpos").textContent = i >= 0 ? wd("board.pos", { i: i + 1, n: tabs.length }) : wd("board.count", { n: tabs.length });
   navEl.querySelector(".prev").disabled = i <= 0;
   navEl.querySelector(".next").disabled = i < 0 || i >= tabs.length - 1;
   const changed = tabs.some((t) => t.classList.contains("updated") && t.getAttribute("aria-selected") !== "true");
   navEl.querySelector(".posdot").hidden = !changed;
   // The name starts with the visible words, so a voice command or a screen reader finds the control by what it shows.
-  posEl.setAttribute("aria-label", navEl.querySelector(".tabpos").textContent + ", all boards" + (changed ? ", one changed" : ""));
+  posEl.setAttribute("aria-label", wd("board.all.aria", { pos: navEl.querySelector(".tabpos").textContent }) + (changed ? wd("board.changed") : ""));
 }
 // The pane headers start after the history buttons and Back to the voice, which sit over their left end.
 const barRoom = () => root.querySelector(".stage").style.setProperty("--navw",
@@ -1433,7 +1478,7 @@ function setFollow(on) {
   barRoom();
   post({ type: "stage:follow", on });
 }
-followEl.onclick = () => setFollow(true);
+followEl.onclick = () => { setFollow(true); frontVoice(); };
 // After a click with the pointer (not Enter or Space on the button, which have no click position: detail 0), a step,
 // board or follow button hands focus back to the page, so Space plays or pauses the answer instead of pressing it again.
 document.addEventListener("click", (e) => {
@@ -1466,7 +1511,18 @@ function toTop(el) {
 
 // The board the voice fronted before it reached the stage, {name, answer}: fronted when it arrives.
 let lateFront = null;
+// The board the voice fronted last, whether or not the stage followed it at the time. When following comes back (Back to the
+// voice, the gear, a new answer with no board of its own) the stage returns to it: a board the reader picked by hand, Key
+// points among them, does not keep the stage once the voice is followed again.
+let voiceFront = null;
+function frontVoice() {
+  const v = voiceFront && views.get(voiceFront);
+  if (!v || v.body.pinned || selectedName() === voiceFront) return false;
+  select(voiceFront, true);
+  return true;
+}
 function front(name, manual, answer = null) {
+  if (!manual && name) voiceFront = name;
   if (!views.has(name) && manual) post({ type: "stage:missing", view: name });
   if (!follow && !manual) return false;
   lateFront = !views.has(name) && !manual ? { name, answer: answerKey(answer) } : null;
@@ -1666,7 +1722,7 @@ function stepText(v, scene, n) {
   const step = v.pane.querySelector(".vstep");
   if (!step) return;
   step.textContent = stepLabel(scene, n);
-  const label = n >= scene.rest ? "All shown. Start the steps again" : stepLabel(scene, n) + ". Next step";
+  const label = n >= scene.rest ? wd("step.all.again") : wd("step.then.next", { label: stepLabel(scene, n) });
   step.title = label; step.setAttribute("aria-label", label);
 }
 
@@ -1722,6 +1778,46 @@ function restUnstepped() {
   }
 }
 
+// The stage's own words again, in the language just set: the toolbar and its lists, the empty card, every board's header,
+// and the boards whose drawing holds words (a diagram's lanes, the key points).
+function relabel() {
+  document.documentElement.lang = getLang();
+  root.querySelector(".tabbar").setAttribute("lang", getLang());
+  followEl.textContent = wd("back.voice"); followEl.title = wd("back.voice"); followEl.setAttribute("aria-label", wd("back.voice"));
+  navEl.setAttribute("aria-label", wd("boards"));
+  navEl.querySelector(".prev").setAttribute("aria-label", wd("board.prev"));
+  navEl.querySelector(".next").setAttribute("aria-label", wd("board.next"));
+  boardsEl.querySelector("h4").textContent = wd("boards");
+  tabsEl.setAttribute("aria-label", wd("stage.label"));
+  stopEl.setAttribute("aria-label", wd("stop.group"));
+  const card = panesEl.querySelector(".emptycard");
+  if (card && !panesEl.querySelector(".empty").classList.contains("failed")) {
+    card.querySelector("h2").textContent = wd("empty.title"); card.querySelector(".msg").textContent = wd("empty.line");
+  }
+  const tiles = card ? [...card.querySelectorAll(".tile > span")] : [];
+  ["code", "diagram", "table", "page"].forEach((k, i) => { if (tiles[i]) tiles[i].textContent = wd("kind." + k); });
+  card?.querySelector(".retry")?.replaceChildren(wd("retry"));
+  for (const v of views.values()) {
+    setTabTitle(v);
+    if (!v.filled) continue;
+    const src = v.body.source;
+    if (src.type === "inline" && (src.format === "visual" || src.format === "points")) {
+      if (v.pane.hidden) v.stale = true; else fillPane(v, true);
+      continue;
+    }
+    const old = v.pane.querySelector("header.phead");
+    if (old) old.replaceWith(header(v));
+    const sc = hasScene(v) ? sceneOf(v) || painted(v)?.scene : null;
+    if (sc && v.applied != null) {
+      stepText(v, sc, v.applied);
+      const back = v.pane.querySelector(".stepback"), next = v.pane.querySelector(".stepnext");
+      if (back) back.disabled = v.applied <= 0;
+      if (next) next.disabled = v.applied >= sc.rest;
+    }
+  }
+  updateNav(); barRoom();
+}
+
 function onMessage(m) {
   if (m.type === "stage:front") front(String(m.view), !!m.manual, m.answer);
   else if (m.type === "stage:key") {
@@ -1753,7 +1849,8 @@ function onMessage(m) {
     for (const f of document.querySelectorAll("iframe.frame")) themeFrame(f);
     for (const v of views.values()) if (v.sandbox && v.sandbox.last) postSandbox(v, v.sandbox.last);
   }
-  else if (m.type === "stage:follow") setFollow(!!m.on);
+  else if (m.type === "stage:lang") { if (setLang(m.lang)) relabel(); }
+  else if (m.type === "stage:follow") { setFollow(!!m.on); if (m.on && m.front) frontVoice(); }
   else if (m.type === "stage:caption") { captionText = String(m.text || ""); placeCaption(); }
   else if (m.type === "stage:stop") paintStop(m.stop && typeof m.stop === "object" ? m : null);
   else if (m.type === "stage:frame") setFrame(String(m.view), Number(m.n), !!m.animate, m.answer);
@@ -1763,7 +1860,10 @@ function onMessage(m) {
       try { setFrame(name, Number(n), false, m.answer); } catch (e) { console.error("stage:", e); }  // one board never stops the rest
     }
     if (m.front) front(String(m.front), false, m.answer);
-    else if (!Object.keys(m.frames || {}).length) restUnstepped();   // an answer with no board of its own
+    else if (!Object.keys(m.frames || {}).length) {   // an answer with no board of its own
+      restUnstepped();
+      if (follow && views.get(selectedName())?.body.pinned) frontVoice();   // Key points was fronted by hand: back to the board the voice showed
+    }
     lightKey(Number(m.keys) || 0, false);
   }
 }
@@ -1787,7 +1887,7 @@ function paintStop(m) {
       }
       row.append(b);
     });
-    if (stop.type === "sayback") { const h = document.createElement("p"); h.className = "shint"; h.textContent = "Answer in the text field, or press Talk."; row.append(h); }
+    if (stop.type === "sayback") { const h = document.createElement("p"); h.className = "shint"; h.textContent = wd("say.hint"); row.append(h); }
     stopEl.append(q, row);
   }
   placeCaption();
@@ -1916,15 +2016,15 @@ async function loadSnapshot() {
     failed = true;
     buffered.length = 0;
     panel.classList.add("failed");
-    card.querySelector("h2").textContent = "The stage did not load";
-    card.querySelector(".msg").textContent = `Could not load the stage: ${e?.message || e}.`;
-    if (!card.querySelector(".retry")) card.append(button("Try again", loadSnapshot, "retry"));
+    card.querySelector("h2").textContent = wd("fail.title");
+    card.querySelector(".msg").textContent = wd("fail.line", { why: e?.message || e });
+    if (!card.querySelector(".retry")) card.append(button(wd("retry"), loadSnapshot, "retry"));
     postReady();  // the stage has painted, with its own message and button
     return;
   }
   panel.classList.remove("failed");
-  card.querySelector("h2").textContent = "The stage is empty";
-  card.querySelector(".msg").textContent = EMPTY_LINE;
+  card.querySelector("h2").textContent = wd("empty.title");
+  card.querySelector(".msg").textContent = wd("empty.line");
   card.querySelector(".retry")?.remove();
   for (const [anchor, item] of Object.entries(snapshot)) {
     versions.set(anchor, item.version);

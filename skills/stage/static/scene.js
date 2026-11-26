@@ -49,9 +49,9 @@ function paintCard(scene, box, n) {
 
 export function stepLabel(scene, n) {
   if (!scene.steps) return "";
-  if (n >= scene.rest) return "All shown";
+  if (n >= scene.rest) return wd("step.all");
   const at = Math.min(Math.max(n, 0), scene.steps);
-  return at === 0 ? `${scene.steps} ${scene.steps === 1 ? "step" : "steps"}` : `Step ${at} of ${scene.steps}`;
+  return at === 0 ? wdn("steps", scene.steps) : wd("step.of", { n: at, total: scene.steps });
 }
 
 export function applyFrame(scene, box, n, from = null) {
@@ -136,3 +136,6 @@ export function settled(scene) {
   });
   return { ...scene, frames };
 }
+
+// (an import runs first wherever it stands; it is kept here so the demo's line numbers into this file hold)
+import { w as wd, wn as wdn } from "./words.js";

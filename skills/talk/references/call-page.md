@@ -91,5 +91,6 @@ Read this to explain the page to the user or to debug it. Nothing here is needed
 - An answer with no board of its own is read on the stage in large type, under the label of its answer, when the stage has no board in front; with a board in front the board stays and the sentence being said goes on the strip under it. The panel's Now card holds the full text either way.
 - When the voice reaches a board's tag, the board takes the stage and the sentence being said stays under it on one line.
 - At rest an answer with a board shows the board, and one with none leaves the board that was in front.
-- A board the reader picked by hand stays in front until **Back to the voice**.
+- A board the reader picked by hand stays in front until **Back to the voice**, which returns to the board the voice showed last (Key points, which no cue fronts, never keeps the stage). While it stays, the strip under it names its answer ("Answer 2:") and dims when that answer did not put the board up.
+- The stage's own words (its toolbar, board counter, Copy, step control, Key points) follow the page's language, English or Greek.
 - A tap on a part of a board offers Ask about this and Play from here.

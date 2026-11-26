@@ -145,7 +145,7 @@ def test_a_phone_shows_the_note_of_the_step_said_under_its_arrow_and_a_wide_boar
     built = _scene(SEQ, [["focus step s1"]])
     wide = StagePage(tmp_path, width=1400).show("seq", visual("sequence", SEQ), title="T", extra={"scene": built}).open()
     wide.send({"type": "stage:frame", "view": "seq", "n": 1}).check(NOTES + "('seq')")
-    assert wide.run()[0]["notes"] == [["port 443, 1 round trip", False, "153px"]]   # 22 characters at 6.7 px and 28 of padding: 175 reserved, 22 less for its edges
+    assert wide.run()[0]["notes"] == [["port 443, 1 round trip", False, "169px"]]   # 22 characters at 7.4 px (13.5 px sans) and 28 of padding: 191 reserved, 22 less for its edges
     phone = StagePage(tmp_path, width=390).show("seq", visual("sequence", SEQ), title="T", extra={"scene": built}).open()
     phone.check("(() => { pane('seq').querySelector('.visual.lanes').clientWidth = 390; })()")
     phone.send({"type": "stage:frame", "view": "seq", "n": 1}).check(NOTES + "('seq')")

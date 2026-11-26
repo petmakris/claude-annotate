@@ -56,6 +56,11 @@ def _release_scenes():
     return one, two
 
 
+def _release_two_steps():
+    """An answer's scene of two steps: a board with one step has no step control (r2-phone-1)."""
+    return _scene(scene.sequence_model(RELEASE), [["focus step s6"], ["focus step s7"]], "Release path")
+
+
 def test_replaying_an_earlier_answer_steps_the_scene_it_was_said_with(tmp_path):
     one, two = _release_scenes()
     page = StagePage(tmp_path, width=1400).show("rp", visual("sequence", RELEASE), title="Release path",
@@ -174,7 +179,7 @@ FADE = ("(n => ({frame: frames()[n], step: pane(n).querySelector('.vstep').textC
 
 def test_when_an_answer_ends_each_board_it_stepped_shows_whole_and_undimmed(tmp_path):
     # call 9BH6, answer 1: it ended on a focus of the last step, which left the rest of the board faded
-    one, two = _release_scenes()
+    one = _release_two_steps()
     page = (StagePage(tmp_path, width=1400).show("rp", visual("sequence", RELEASE), title="Release path",
                                                  extra={"scene": one, "scenes": {"1": one}, "answer": 1})
             .show("rp2", visual("sequence", RELEASE), title="Release path 2", background=True,
@@ -191,9 +196,9 @@ def test_when_an_answer_ends_each_board_it_stepped_shows_whole_and_undimmed(tmp_
     page.js("pane('rp').querySelector('.stepback').click();")
     page.send({"type": "stage:rest", "views": ["rp", "rp2"], "answer": 1}).check(FADE + "('rp')")
     page.check("frames().rp2")  # behind, it still goes whole
-    whole = {"frame": 2, "step": "All shown", "dim": False}
-    assert page.run() == [{"frame": 1, "step": "Step 1 of 1", "dim": True}, whole, whole, [1, 1],
-                          {"frame": 0, "step": "1 step", "dim": False}, 2]
+    whole = {"frame": 3, "step": "All shown", "dim": False}
+    assert page.run() == [{"frame": 1, "step": "Step 1 of 2", "dim": True}, whole, whole, [1, 1],
+                          {"frame": 0, "step": "2 steps", "dim": False}, 3]
 
 
 # -- the map: what each frame lights, and what draws in ------------------------------------------------

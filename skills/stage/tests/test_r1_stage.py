@@ -11,7 +11,7 @@ from pathlib import Path
 from skills.stage import scene
 from skills.stage.tests.stage_page import StagePage, needs_node, visual
 from skills.stage.tests.test_scene import TIMELINE
-from skills.stage.tests.test_stage_page import (CLICK, FADE, RELEASE, SPOP, TERM_HTML, THREE_PATHS, TIMELINE_BODY, TURN, _release_scenes,
+from skills.stage.tests.test_stage_page import (CLICK, FADE, RELEASE, SPOP, TERM_HTML, THREE_PATHS, TIMELINE_BODY, TURN, _release_scenes, _release_two_steps, _release_two_steps,
                                                 _scene, _turn)
 
 pytestmark = needs_node
@@ -22,7 +22,7 @@ CSS = (STATIC / "stage.css").read_text()
 # -- S-listener-6: a board an answer with no board of its own leaves in front is shown whole ----------------------------
 
 def test_an_answer_with_no_board_of_its_own_leaves_the_board_in_front_whole_not_half_stepped(tmp_path):
-    one, _ = _release_scenes()
+    one = _release_two_steps()
     page = StagePage(tmp_path, width=1400).show("rp", visual("sequence", RELEASE), title="Release path",
                                                 extra={"scene": one, "scenes": {"1": one}, "answer": 1}).open()
     page.send({"type": "stage:answer", "n": 1})
@@ -35,9 +35,9 @@ def test_an_answer_with_no_board_of_its_own_leaves_the_board_in_front_whole_not_
     page.js("pane('rp').querySelector('.stepback').click();")
     page.send({"type": "stage:answer", "n": 3, "follow": False})
     page.send({"type": "stage:state", "front": None, "frames": {}, "keys": 0, "answer": 3}).check(FADE + "('rp')")
-    assert page.run() == [{"frame": 1, "step": "Step 1 of 1", "dim": True},
-                          {"frame": 2, "step": "All shown", "dim": False},
-                          {"frame": 0, "step": "1 step", "dim": False}]
+    assert page.run() == [{"frame": 1, "step": "Step 1 of 2", "dim": True},
+                          {"frame": 3, "step": "All shown", "dim": False},
+                          {"frame": 0, "step": "2 steps", "dim": False}]
 
 
 # -- r1-phone-4: a popup is of the board and the step it opened on -----------------------------------------------------

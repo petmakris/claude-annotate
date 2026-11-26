@@ -14,6 +14,7 @@
 import { beingSaid } from "./scene.js";
 import { routeEdges, rounded } from "./route.js";
 import { placeEdgeLabels } from "./map_labels.js";
+import { w as wd } from "./words.js";
 
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 // a long name breaks between its words: before a capital that follows a small letter, after . _ / -
@@ -30,8 +31,12 @@ const LOOP = 58;               // above a part with an arrow to itself: the loop
 function readingList(nodes, edges) {
   if (!edges.length) return "";
   const name = (id) => String((nodes.find((n) => n.id === id) || {}).label || id).replace(/\s+/g, " ").trim();
-  return `<ul class="m-reading" aria-label="Arrows">${edges.map((e) =>
-    `<li>${esc(name(e.from))}${e.label ? `, ${esc(String(e.label).replace(/\s+/g, " ").trim())},` : ""} goes to ${esc(name(e.to))}</li>`).join("")}</ul>`;
+  const line = (e) => {
+    const vars = { from: name(e.from), to: name(e.to), label: e.label ? String(e.label).replace(/\s+/g, " ").trim() : "" };
+    const key = e.heads === "none" ? "read.link" : "read.edge";
+    return wd(vars.label ? key + ".label" : key, vars) + (e.line === "dashed" ? wd("read.dashed") : "");
+  };
+  return `<ul class="m-reading" aria-label="${esc(wd("read.arrows"))}">${edges.map((e) => `<li>${esc(line(e))}</li>`).join("")}</ul>`;
 }
 
 export function renderMap(box, spec, embedded) {

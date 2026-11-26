@@ -145,7 +145,7 @@ function playFrom(e, t, board = false) {
   e = view.entries.find(x => x.id === e.id) || e;
   if (e.speech !== "ready") return;
   readerPlays(e);
-  if (board) followAgain();
+  if (board) followAgain(false);   // the board in front is the one wanted: the stage keeps it (the answer's own cue fronts it)
   load(e, false); audio.currentTime = t;
   audio.playbackRate = speed; takeVoice(); audio.play().catch(playFailed);
 }

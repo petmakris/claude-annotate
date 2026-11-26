@@ -242,7 +242,8 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
   .prow{flex-wrap:wrap;gap:4px 8px}
   .vhead{flex:1 1 60%;min-height:40px}
   .stepbar,.pbtns{padding-bottom:6px}
-  .pbody{padding:12px}
+  /* the pane is short: a board starts at its top (no centring, no padding above it), so a table gets every row it can */
+  .pbody{padding:2px 12px 8px;justify-content:flex-start}
   .framewrap{min-height:calc(70vh / var(--z,1))}
   .tiles{grid-template-columns:repeat(2,1fr)}
   .code.change .ln{grid-template-columns:2.4em 2.4em 1.3em 1fr;padding-right:12px}
@@ -444,24 +445,25 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 @keyframes ln-draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
 @keyframes ln-fade{from{opacity:0}}
 .ln-dot{fill:var(--ac)}
+.ln-lead{stroke:color-mix(in srgb,var(--muted) 60%,transparent);stroke-width:1.2;stroke-dasharray:1.5 3.5;stroke-linecap:round}
 .ln-bandbar{fill:var(--tb);stroke:color-mix(in srgb,var(--tc) 40%,transparent);stroke-width:1}
 .ln-dropped .ln-path,.t-dropped .ln-path{opacity:.6}
 .t-dropped .ln-lbl b{text-decoration:line-through}
 
-.ln-num{position:absolute;left:20px;width:24px;height:24px;margin-top:-12px;border-radius:50%;display:grid;place-items:center;
-  font:600 11.5px var(--sans);color:var(--muted);background:var(--row-alt);font-variant-numeric:tabular-nums}
+.ln-num{position:absolute;left:20px;width:26px;height:26px;margin-top:-13px;border-radius:50%;display:grid;place-items:center;
+  font:700 13px var(--sans);color:var(--muted);background:var(--row-alt);font-variant-numeric:tabular-nums}
 .ln-cur .ln-num{background:var(--acc);color:var(--on-acc)}
 .lanes .ln-num:not(:empty){border:1.5px solid var(--t-blue);color:var(--t-blue);background:var(--t-blue-bg);box-sizing:border-box}
 .lanes .ln-cur .ln-num:not(:empty){border-color:var(--acc);background:var(--acc);color:var(--on-acc)}
 .lanes .ln-num:empty{display:none}
-.ln-note{position:absolute;right:14px;transform:translateY(-50%);font:500 11px/1.35 var(--mono);color:var(--muted);background:var(--row-alt);border-radius:6px;padding:3px 7px;width:max-content;overflow-wrap:anywhere;text-align:left}
-.ln-note.ln-under{transform:none;width:auto;max-width:none;box-sizing:border-box;font-size:11.5px;color:var(--ink);pointer-events:none}   /* a phone: under the chip of the step said, in the row's own width */
+.ln-note{position:absolute;right:14px;transform:translateY(-50%);font:500 13.5px/1.35 var(--sans);color:var(--ink);background:var(--row-alt);border-radius:6px;padding:3px 7px;width:max-content;overflow-wrap:anywhere;text-align:left}
+.ln-note.ln-under{transform:none;width:auto;max-width:none;box-sizing:border-box;font-size:13.5px;color:var(--ink);pointer-events:none}   /* a phone: under the chip of the step said, in the row's own width */
 .ln-lbl,.ln-call{position:absolute;pointer-events:none}
 .ln-lbl b{display:block;font:500 13.5px/1.3 var(--sans);color:var(--ink)}
-.ln-lbl code,.ln-call code{display:block;font:400 11.5px/1.35 var(--mono);color:var(--muted);font-variant-ligatures:none;overflow-wrap:anywhere}
+.ln-lbl code,.ln-call code{display:block;font:400 12.5px/1.35 var(--mono);color:var(--muted);font-variant-ligatures:none;overflow-wrap:anywhere}
 .ln-over{transform:translate(-50%,calc(-100% - 5px));text-align:center}
 .ln-call{transform:translate(-50%,5px);text-align:center}
-.ln-event .ln-lbl b{font-weight:400;color:var(--muted)}
+.ln-event .ln-lbl b{font-weight:600;color:var(--ink)}   /* a reply's words read as plainly as a call's: its dashed arrow already says it is a reply */
 /* a reply's words are bare over its dashed arrow: a backing keeps lifelines and bars from striking them */
 .ln-event .ln-lbl:not(.ln-chipped){padding:1px 7px;border-radius:6px;background:var(--panel);width:max-content;box-sizing:border-box}
 .ln-pl,.ln-phase em{padding:2px 7px;border-radius:5px;background:var(--panel)}
@@ -480,16 +482,17 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 .ln-narrow .ln-cgrid{grid-template-columns:minmax(0,1fr)}
 .ln-side{position:relative;min-width:0;transition:opacity .25s}
 .ln-side[hidden],.ln-gutter[hidden]{display:none}
-.ln-stitle{font:600 11px/1 var(--sans);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);padding:2px 0 8px 14px}
+.ln-stitle{font:600 14.5px/1.2 var(--sans);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:2px 0 8px 14px}
 .ln-stitle b{font-weight:700;color:var(--ink)}
 .ln-m-before .ln-s-after,.ln-m-after .ln-s-before{opacity:.4}
 .ln-gutter{position:relative;align-self:stretch}
-.ln-gm{position:absolute;left:0;right:0;transform:translateY(-50%);text-align:center;font:700 15px/1 var(--mono);font-style:normal;color:var(--faint)}
+.ln-gm{position:absolute;left:0;right:0;transform:translateY(-50%);text-align:center;font:700 20px/1 var(--mono);font-style:normal;color:var(--muted)}
 .ln-gconn{position:absolute;left:50%;width:2px;margin-left:-1px;border-radius:2px;background:color-mix(in srgb,var(--t-amber) 45%,transparent);pointer-events:none}
 .ln-gconn.ln-lit{background:var(--t-amber);width:3px;margin-left:-1.5px}
 .ln-gm-changed,.ln-gm-moved{color:var(--t-amber)} .ln-gm-added{color:var(--t-green)} .ln-gm-removed{color:var(--t-red)}
 .ln-row.ln-gap{cursor:default}
-.ln-hatch-bg{fill:var(--row-alt)} .ln-hatch-line{fill:color-mix(in srgb,var(--line) 75%,var(--row-alt))}
+.ln-gapband{fill:var(--row-alt);stroke:var(--line);stroke-width:1}
+.ln-gaptext{font:600 13.5px var(--sans);fill:var(--ink);paint-order:stroke;stroke:var(--row-alt);stroke-width:6px;stroke-linejoin:round}
 .ln-row.ln-hov:not(.ln-cur){background:color-mix(in srgb,var(--ink) 6%,transparent)}
 .ln-s-before mark.ln-w,.ln-s-after mark.ln-w{background:none;font-weight:700}
 .ln-s-before mark.ln-w{color:var(--t-red)} .ln-s-after mark.ln-w{color:var(--t-green)}
@@ -955,3 +958,14 @@ svg.sb-link circle{fill:var(--acc);stroke:var(--panel);stroke-width:2}
   .spop{padding-right:52px;min-height:44px}
 }
 @media (max-width:600px){.follow{width:44px;min-width:44px;margin-left:2px}}
+
+/* What a screen reader says of a drawing (the arrows of a flowchart, of a map or a graph, the rows of a bars board): a list
+   that stays in the accessibility tree and is never seen (display:none would take it out of the tree). */
+.m-reading,.vz-reading{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;list-style:none}
+
+/* "N more rows": a table taller than its pane counts what is below the fold, over the faded foot */
+.md.grid{position:relative}
+.more-rows{position:absolute;left:50%;transform:translateX(-50%);z-index:4;padding:4px 12px;border:0;border-radius:999px;background:var(--acc);color:var(--on-acc);
+  font:600 12.5px/1.3 var(--sans);box-shadow:0 4px 14px -4px rgba(15,23,42,.5);cursor:pointer;white-space:nowrap}
+.more-rows:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+@media (max-width:760px){.more-rows{min-height:44px;padding:4px 16px}}

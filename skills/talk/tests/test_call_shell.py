@@ -222,7 +222,7 @@ def test_the_stages_board_list_runs_in_the_order_its_counter_counts_and_says_no_
     js = (Path(__file__).resolve().parents[2] / "stage" / "static" / "stage.js").read_text()
     tabs = re.search(r"\.tabs\{([^}]*)\}", css).group(1)
     assert "flex-direction:column;" in tabs and "column-reverse" not in tabs
-    assert "<h4>Boards</h4>" in js and "newest first" not in js
+    assert '<h4>${wd("boards")}</h4>' in js and "newest first" not in js
 
 
 def test_a_search_that_matches_the_words_of_an_answer_shows_the_match_near_the_start_of_the_snippet_on_two_lines(tmp_path):

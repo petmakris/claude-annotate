@@ -340,8 +340,9 @@ def render(spec: dict[str, Any], uid: str, keyed: bool = False) -> str:
                 y += CHECK_H + 8
             y += ROW_GAP - 6
         if s.get("note"):
-            g.append(_text("sb mono", note_x, arrow_y + 4, s["note"]))
-            notes_w = max(notes_w, _width(s["note"], "vz-mono", True))
+            # a step's note reads as plainly as the words of a call: sans, in ink (the lanes on the stage draw it so)
+            g.append(_text("lb", note_x, arrow_y + 4, s["note"]))
+            notes_w = max(notes_w, _width(s["note"], "vz-sb"))
         for who in (s["from"], s["to"]):
             life_y.setdefault(who, [0.0, 0.0])
             life_y[who][1] = max(life_y[who][1], y - 4)

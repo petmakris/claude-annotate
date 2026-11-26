@@ -32,7 +32,11 @@ if (CFG.stageUrl) {
 //   {type:'stage:rest', views, answer}  that answer ended a moment ago: these boards, still on its scenes, show whole
 //   {type:'stage:key', view, index}     key point number index (from 1) was just said: light it up
 //   {type:'stage:theme', theme}         'light' or 'dark': the theme chosen here
-//   {type:'stage:follow', on}           the gear's switch turned following on or off
+//   {type:'stage:follow', on, front}    the gear's switch (or Back to the voice) turned following on or off; with front
+//                                       the stage also fronts the board the voice fronted last (a board picked by hand,
+//                                       Key points among them, stops holding it)
+//   {type:'stage:lang', lang}           'en' or 'el': the page's language, said on load and on every change; the stage's
+//                                       own words (toolbar, counters, Copy, step control) follow it
 //   {type:'stage:caption', text, answer}  the sentence being said, of an answer that has boards ('' clears it)
 // Stage to talk: {type:'stage:ready'}, {type:'stage:views', list:[{name, title, kind, answer}]} on every
 // change, {type:'stage:changed', name, title, isNew}, and {type:'stage:follow', on} when following
@@ -49,6 +53,16 @@ function toStage(msg) {
   if (!stageUp) { stageOutbox.push(msg); if (stageOutbox.length > 20) stageOutbox.shift(); return; }
   try { $("stage").contentWindow.postMessage(msg, stageOrigin); } catch {}
 }
+// The stage says its own words (Back to the voice, Board 2 of 3, Copy, the step control) in the page's language: it is told on
+// load and whenever the page's language changes (applyLang sets <html lang>, which is the one event that says so).
+let langSent = "";
+function sendStageLang() {
+  const lang = typeof uiLang === "string" ? uiLang : "en";
+  if (lang === langSent) return;
+  langSent = lang;
+  toStage({type: "stage:lang", lang});
+}
+new MutationObserver(sendStageLang).observe(document.documentElement, {attributes: true, attributeFilter: ["lang"]});
 window.addEventListener("message", ev => {
   if (!stageOrigin || !$("stage") || ev.source !== $("stage").contentWindow || ev.origin !== stageOrigin) return;
   const m = ev.data;
@@ -58,9 +72,10 @@ window.addEventListener("message", ev => {
     // theme and following go first, and the queue's older copies of them are dropped.
     stageUp = true; stageReady();
     toStage({type: "stage:theme", theme: document.documentElement.dataset.theme});
+    langSent = ""; sendStageLang();
     toStage({type: "stage:zoom", zoom: screenMode === "tv" ? TV_ZOOM : 1});
     toStage({type: "stage:follow", on: follow});
-    for (const msg of stageOutbox.splice(0)) if (msg.type !== "stage:theme" && msg.type !== "stage:follow") toStage(msg);
+    for (const msg of stageOutbox.splice(0)) if (msg.type !== "stage:theme" && msg.type !== "stage:follow" && msg.type !== "stage:lang") toStage(msg);
     resync();
   }
   else if (m.type === "stage:follow") { follow = !!m.on; paintSettings(); paintFollow(); if (follow) resync(); }
@@ -145,7 +160,7 @@ function paintFront() {
 
 // ---- following the voice: the stage keeps it, the gear shows it -------------
 let follow = true;
-$("follow").onclick = () => { follow = !follow; toStage({type: "stage:follow", on: follow}); paintSettings(); paintFollow(); if (follow) resync(); };
+$("follow").onclick = () => { follow = !follow; toStage({type: "stage:follow", on: follow, front: follow}); paintSettings(); paintFollow(); if (follow) resync(); };
 
 // ---- the reader: the answer being said, in large type on the stage ----------------------------
 // Each sentence appears as it is said, and the word being said is lit; a tap on a word plays from there. When
@@ -198,12 +213,19 @@ function paintReader() {
   // an answer with no board of its own leaves the board in front where it is (its words are on the strip, and the card holds the text)
   const keeps = !!e && !!CFG.stageUrl && !!frontBoard && !(e.cues || []).some(c => c.kind === "front");
   const mode = !e ? "off" : onBoard || keeps ? (active ? "strip" : "off") : "text";
+  // following off, the board in front is not one this answer put up (the reader picked it, or an older answer's): the strip's
+  // sentence is of another answer than the board over it, so it is named and dimmed until Back to the voice
+  const foreign = mode === "strip" && !follow && !!frontBoard && !!e && !(e.cues || []).some(c => c.view === frontBoard);
   const j = k < 0 ? -1 : rSents.findIndex(s => k >= s.first && k <= s.last);
-  const paint = `${mode}|${active}|${k}|${sig}`;
+  const paint = `${mode}|${active}|${k}|${sig}|${foreign ? 1 : 0}`;
   if (paint === rPaint) return;
   const [was, wasOn] = rPaint.split("|"), movedSentence = !rPaint.startsWith(`${mode}|${active}|`) || rSents[j]?.el.className.indexOf("cur") < 0;
   rPaint = paint;
   readerEl.className = "reader " + mode;
+  readerEl.toggleAttribute("data-foreign", foreign);
+  readerEl.style.opacity = foreign ? "0.62" : "";
+  const rhead = readerEl.querySelector(".rhead");
+  if (rhead) { rhead.textContent = tr("s.answer", {n: e.n || ""}) + (foreign ? ":" : ""); rhead.style.display = foreign ? "inline" : ""; rhead.style.margin = foreign ? "0 .6em 0 0" : ""; rhead.style.textTransform = foreign ? "none" : ""; rhead.style.letterSpacing = foreign ? "0" : ""; }
   rSents.forEach((s, i) => { s.el.className = "rs" + (!active ? "" : i < j ? " past" : i === j ? " cur" : " future"); });
   rWords.forEach((w, i) => { w.classList.toggle("said", active && i < k); w.classList.toggle("now-word", active && i === k); });
   if (mode === "text" && active && j >= 0 && movedSentence) {
@@ -392,6 +414,7 @@ function stateAt(e, pos) {
 }
 function syncStage(e, pos) {
   const st = stateAt(e, pos);
+  if (st.front) voiceFront = {view: st.front, answer: e.n || null};
   if (cueSync || !sent || sent.id !== e.id) {
     toStage({type: "stage:state", front: st.front, frames: st.frames, keys: st.key ? st.key.index : 0, answer: e.n || null});
   } else {
@@ -413,9 +436,26 @@ function readerPlays(e) {
   cueSync = true;
   if (e) readerAnswer = e.id;
 }
-function followAgain() {
+// `front`: the stage also goes back to the board the voice fronted last (Back to the voice, the gear, the key), so a board the
+// reader picked by hand, Key points among them, does not keep the stage; a play of the board in front passes false.
+function followAgain(front = true) {
   cueSync = true;
-  if (!follow) { follow = true; toStage({type: "stage:follow", on: true}); paintSettings(); paintFollow(); }
+  if (!follow) { follow = true; toStage({type: "stage:follow", on: true, front}); paintSettings(); paintFollow(); }
+}
+// The latest real board a front cue fronted (never Key points, which no cue fronts): {view, answer, title}, or null when the
+// stage does not hold it. The Following strip can offer it ("Show <board>") when the stage is on something else.
+let voiceFront = null;     // {view, answer}
+function voiceBoard() {
+  if (!voiceFront || !stageViews || !stageViews.has(voiceFront.view)) return null;
+  return {view: voiceFront.view, answer: voiceFront.answer, title: boardTitle(voiceFront.view), shown: frontBoard === voiceFront.view};
+}
+// Brings it to the front and follows the voice again; nothing when there is none.
+function showVoiceBoard() {
+  if (!voiceBoard()) return false;
+  followAgain(true);
+  if (follow && frontBoard !== voiceFront.view) toStage({type: "stage:front", view: voiceFront.view, manual: false, answer: voiceFront.answer});
+  resync();
+  return true;
 }
 // An answer played to its end holds its last frame a moment, then each of its boards shows whole, undimmed.
 const REST_HOLD_MS = 1500;

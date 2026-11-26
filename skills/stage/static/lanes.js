@@ -13,14 +13,14 @@
 // A compare spec (compare.py: its `steps` are rows, each holding the `before` and the `after` step) is two lane
 // boards side by side, the before flow on the left and the after one on the right, each a whole flow with its
 // own actors and numbers. A row has the same height on both sides, so a step in both flows sits level with
-// itself, and a side with no step in a row shows a hatched gap there. A gutter between them marks each row
+// itself, and a side with no step in a row shows a plain box that says "No step here" there. A gutter between them marks each row
 // (= same, ~ changed, + new, − removed, ↕ moved), the words a changed step changed are bold in its colour, and
 // an actor on one side only is red and "removed" or green and "new". The voice points at a side with
 // `mode:before` or `mode:after` in a frame's focus, which dims the other (`mode:both` lifts it); on a board too
 // narrow for two, one side shows at a time, with a Before / After toggle.
 // A step that moved is two rows (its old place, its new one): a point on it lights both with a connector in the
 // gutter, never an empty gap. At rest both sides are whole and undimmed. On a board narrow enough for one side
-// the hatched gaps are left out and the side on show is the one that has the step being said.
+// the gap boxes are left out and the side on show is the one that has the step being said.
 // A step's `note` stands in a margin right of the last lane, as wide as the longest note needs; on a phone it is
 // a line under the arrow of the step being said. A spec the board cannot draw is a message on the stage, not a blank.
 //
@@ -33,6 +33,7 @@
 // said, and gives the keyed elements back the classes the frame set on them.
 
 import { beingSaid } from "./scene.js";
+import { w as wd, wn as wdn } from "./words.js";
 
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 // the four tones of the lane sequence; the older tones map onto them as sequence_svg maps them
@@ -99,7 +100,7 @@ export function renderLanes(box, spec, embedded, more = {}) {
 function failed(box, e) {
   console.error("lanes:", e);
   box._lanes = null; box._cmp = null;
-  box.innerHTML = `<div class="ln-fail" role="alert"><b>This diagram could not be drawn.</b><span>${esc(e?.message || e)}</span></div>`;
+  box.innerHTML = `<div class="ln-fail" role="alert"><b>${esc(wd("lanes.fail"))}</b><span>${esc(e?.message || e)}</span></div>`;
 }
 
 function drawLanes(box, spec, embedded, more) {
@@ -113,11 +114,11 @@ function drawLanes(box, spec, embedded, more) {
   const name = (a) => String(a.label || a.id).replace(/\n/g, " ");
   // on a phone with many actors the cards are numbers (`ln-dense`), named once in a key above the lifelines
   const marks = actorMarks(actors);
-  const key = `<div class="ln-key" aria-label="Who is who">${actors.map((a, i) =>
+  const key = `<div class="ln-key" aria-label="${esc(wd("who.key"))}">${actors.map((a, i) =>
     `<button type="button" class="ln-kitem t-${tone(a.tone)}" style="--ac:${actorColour(a, i)}" data-actor="${esc(a.id)}"><i>${esc(marks[i])}</i>${esc(name(a))}</button>`).join("")}</div>`;
   box.innerHTML = `${key}<div class="ln-head"><div class="ln-actors">${actors.map((a, i) =>
       `<button type="button" class="ln-chip t-${tone(a.tone)}${a.mono ? " ln-mono" : ""}" style="--ac:${actorColour(a, i)}" data-key="actor:${esc(a.id)}" data-actor="${esc(a.id)}"
-        title="Follow ${esc(name(a))}"><b class="ln-no">${esc(marks[i])}</b><span>${esc(name(a))}</span>${a.role ? `<em>${esc(a.role)}</em>` : ""}${a.sub ? `<small>${esc(a.sub)}</small>` : ""}${a.tag ? `<i class="ln-tag">${esc(a.tag)}</i>` : ""}</button>`).join("")}</div>
+        title="${esc(wd("follow.actor", { name: name(a) }))}"><b class="ln-no">${esc(marks[i])}</b><span>${esc(name(a))}</span>${a.role ? `<em>${esc(a.role)}</em>` : ""}${a.sub ? `<small>${esc(a.sub)}</small>` : ""}${a.tag ? `<i class="ln-tag">${esc(a.tag)}</i>` : ""}</button>`).join("")}</div>
       <div class="ln-now" aria-live="off"></div>${legend}</div>
     <div class="ln-body"></div>`;
   box._lanes = { spec, refs: more.refs || {}, play: embedded ? more.play : null, scene: null, n: null, cur: null, drawn: undefined,
@@ -240,7 +241,7 @@ function paint(box) {
       }
       if (box_) box_.last = i;
       if (box_ && box_.folded) continue;
-      if (s.gap && st.dropGaps) continue;   // one side at a time (a phone): no hatched filler to scroll past
+      if (s.gap && st.dropGaps) continue;   // one side at a time (a phone): no empty filler to scroll past
       let { h, ay, extra } = rowSize(st, s, i === cur, narrow);
       natural.set(s.id, { h, ay });
       const pad = st.pad?.get(s.id);   // on a compare board, the row as tall as on the other side
@@ -288,12 +289,13 @@ function paint(box) {
     const pos = cur == null ? "" : cur > r.p.b ? " ln-past" : cur >= r.p.a ? " ln-here" : "";
     bg.push(`<rect class="ln-band${phaseOn(r.p) ? "" : " ln-ghost"}${pos}" x="${EDGE}" y="${r.y}" width="${Math.max(0, w - 2 * EDGE)}" height="${r.h}" rx="10"/>`);
   }
-  // a compare board's gap: a hatched band behind the lifelines, so a bar that runs through it stays whole
+  // a compare board's gap, a side with no step in this row: a plain box with its words, behind the lifelines so a bar that
+  // runs through it stays whole (its words are drawn over them, with a halo, so no lifeline strikes them)
   const gaps = rows.filter((r) => r.type === "step" && r.s.gap);
-  if (gaps.length) {
-    const pid = st.hatch || (st.hatch = "lnh" + (++hatches));
-    bg.push(`<defs><pattern id="${pid}" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="ln-hatch-bg" width="9" height="9"/><rect class="ln-hatch-line" width="3" height="9"/></pattern></defs>`);
-    for (const r of gaps) bg.push(`<rect class="ln-gapband" x="${cols.left - 14}" y="${r.y + 5}" width="${Math.max(0, w - cols.left + 6)}" height="${Math.max(0, r.h - 10)}" rx="8" fill="url(#${pid})"/>`);
+  for (const r of gaps) {
+    const gx = cols.left - 14, gw = Math.max(0, w - cols.left + 6);
+    bg.push(`<rect class="ln-gapband" x="${gx}" y="${r.y + 5}" width="${gw}" height="${Math.max(0, r.h - 10)}" rx="8"/>`);
+    top.push(`<text class="ln-gaptext" x="${gx + gw / 2}" y="${r.y + r.h / 2 + 5}" text-anchor="middle">${esc(wd("gap.none"))}</text>`);
   }
   const outRow = rows.find((r) => r.type === "outcome");
   for (const a of actors) bg.push(life(a, 0, outRow ? outRow.y - 6 : H));  // the lifelines end where the outcome closes the diagram
@@ -312,13 +314,13 @@ function paint(box) {
     if (r.type === "phase") {
       const pos = cur == null ? "" : cur > r.p.b ? " ln-past" : cur >= r.p.a ? " ln-here" : "";
       html.push(`<button type="button" class="ln-phase${pos}${phaseOn(r.p) ? "" : " ln-ghost"}" data-at="${esc(r.p.start_at)}"${phaseOn(r.p) ? " data-on" : ""}
-        data-fold="p:${esc(r.p.id)}" title="Fold this phase" style="top:${r.y}px;height:${r.h}px"><span class="ln-pl">${esc(r.p.label)}</span><em>steps ${r.p.a + 1}–${r.p.b + 1}</em></button>`);
+        data-fold="p:${esc(r.p.id)}" title="${esc(wd("phase.fold"))}" style="top:${r.y}px;height:${r.h}px"><span class="ln-pl">${esc(r.p.label)}</span><em>${esc(wd("phase.steps", { a: r.p.a + 1, b: r.p.b + 1 }))}</em></button>`);
     } else if (r.type === "summary") {
       const p = r.p, k = p.b - p.a + 1, done = cur != null ? cur > p.b : shown(p.b);
       const said = steps.slice(p.a, p.b + 1).map((s) => s.label);
       const gist = done && said.length > 1 ? `<b>${esc(said[0])}</b> → … → <b>${esc(said[said.length - 1])}</b>` : esc(said.join(" · "));
-      html.push(`<button type="button" class="ln-summary${done ? "" : " ln-later"}" data-fold="p:${esc(p.id)}" title="Open this phase" style="top:${r.y}px;height:${r.h}px">
-        <span class="ln-chk">${done ? CHECK : ""}</span><span class="ln-sph">${esc(p.label)}</span><span class="ln-gist">${gist}</span><span class="ln-n">${k} ${k === 1 ? "step" : "steps"}</span></button>`);
+      html.push(`<button type="button" class="ln-summary${done ? "" : " ln-later"}" data-fold="p:${esc(p.id)}" title="${esc(wd("phase.open"))}" style="top:${r.y}px;height:${r.h}px">
+        <span class="ln-chk">${done ? CHECK : ""}</span><span class="ln-sph">${esc(p.label)}</span><span class="ln-gist">${gist}</span><span class="ln-n">${esc(wdn("steps", k))}</span></button>`);
     } else if (r.type === "step") {
       html.push(stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown));
     } else if (r.type === "outcome") {
@@ -333,7 +335,7 @@ function paint(box) {
   if (st.scene) {
     for (const el of box.querySelectorAll("[data-key]")) {
       el.classList.add("k-key");
-      const pointed = fr.focus.has(el.dataset.key) && !el.classList.contains("ln-gap")   // a hatched gap is never lit
+      const pointed = fr.focus.has(el.dataset.key) && !el.classList.contains("ln-gap")   // a gap is never lit
         || [...mateOf].some(([said, mine]) => mine === el.dataset.key && fr.focus.has(said));   // the old place of a moved step lights with the new one
       el.classList.toggle("k-focus", pointed);
       el.classList.toggle("k-hidden", !!fr.show && !fr.show.has(el.dataset.key));
@@ -368,10 +370,10 @@ function paint(box) {
 function columns(box, st, w, narrow) {
   const actors = st.model.actors, n = actors.length;
   const notes = !narrow && st.model.steps.some((s) => s.note);
-  // a step's note stands in the margin right of the last lane: as wide as the longest (11 px mono, 6.7 px a
+  // a step's note stands in the margin right of the last lane: as wide as the longest (13.5 px sans, 7.4 px a
   // character), up to a third of the board, the rest of a long one wrapping inside it; never over a lane or a bar
   const longest = notes ? Math.max(...st.model.steps.map((s) => String(s.note || "").length)) : 0;
-  const noteW = notes ? Math.round(Math.min(Math.max(112, longest * 6.7 + 28), Math.max(112, w * 0.34))) : 0;
+  const noteW = notes ? Math.round(Math.min(Math.max(112, longest * 7.4 + 28), Math.max(112, w * 0.34))) : 0;
   const left = narrow ? 34 : 58, right = notes ? noteW : narrow ? 10 : 24;
   box.classList.remove("ln-tight", "ln-dense");
   const chips = actors.map((a) => box.querySelector(`.ln-chip[data-actor="${CSS.escape(String(a.id))}"]`));
@@ -485,7 +487,7 @@ function boxDrawing(r, st, cols, w, narrow, shown, fills, frames, spans, html) {
     `<rect class="ln-boxframe${ghost}" x="${x1}" y="${y1}" width="${Math.max(0, x2 - x1)}" height="${h}" rx="8"/>`);
   for (const b of r.branches) frames.push(`<line class="ln-boxdiv${ghost}" x1="${x1}" x2="${x2}" y1="${b.y + 6}" y2="${b.y + 6}"/>`);
   html.push(`<button type="button" class="ln-kind ln-k-${esc(g.kind)}${ghost}" data-fold="g:${esc(g.id)}" data-group="${esc(g.id)}"
-      title="${r.folded ? "Open" : "Fold"} this ${esc(g.kind)}" aria-expanded="${!r.folded}" style="left:${x1 + 7}px;top:${y1 + 5}px">${r.folded ? "▸" : "▾"} ${esc(g.kind)}</button>`,
+      title="${esc(wd(r.folded ? "group.open" : "group.fold", { kind: g.kind }))}" aria-expanded="${!r.folded}" style="left:${x1 + 7}px;top:${y1 + 5}px">${r.folded ? "▸" : "▾"} ${esc(g.kind)}</button>`,
     `<span class="ln-guard${ghost}" style="left:${x1 + tag}px;top:${y1 + 6}px;max-width:${x2 - x1 - tag - 10}px">${esc(label)}</span>`);
   for (const b of r.branches) {
     const plain = /^(else|otherwise)$/i.test(b.guard.trim());
@@ -494,14 +496,25 @@ function boxDrawing(r, st, cols, w, narrow, shown, fills, frames, spans, html) {
   }
   if (r.folded) {
     const k = r.last - r.first + 1;
-    html.push(`<button type="button" class="ln-guard ln-branch ln-folded" data-fold="g:${esc(g.id)}" style="left:${x1 + 12}px;top:${r.foldY + 2}px">${k} ${k === 1 ? "step" : "steps"} folded · open</button>`);
+    html.push(`<button type="button" class="ln-guard ln-branch ln-folded" data-fold="g:${esc(g.id)}" style="left:${x1 + 12}px;top:${r.foldY + 2}px">${esc(wd("group.folded", { steps: wdn("steps", k) }))}</button>`);
   }
 }
 
 // One step: a row the width of the board, keyed, with its arrow, its number, its sentence, its call and its note.
+// A step's name for a screen reader, the row's and its dialog's alike: its number as the board shows it, who sends to whom (the
+// actors' names as the cards say them), and what is said. A call to itself, a reply (an event arrow) and a stretch say so.
+export function stepName(model, i) {
+  const s = model.steps[i], n = model.nums[i] ?? i + 1, label = String(s.label || s.sub || "").replace(/\s+/g, " ").trim();
+  const actor = (id) => { const a = model.actors.find((x) => x.id === id); return String(a?.label || id).replace(/\s+/g, " ").trim(); };
+  const from = actor(s.from), to = actor(s.to);
+  if (s.arrow === "band") return wd("seq.band", { n, label });
+  if (s.arrow === "self" || s.from === s.to) return wd("seq.self", { n, from, label });
+  return wd(s.arrow === "event" ? "seq.reply" : "seq.call", { n, from, to, label });
+}
+
 function stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown) {
   const { s, i, y, h, ay } = r, { xs } = cols;
-  if (s.gap) {   // a compare board's side with no step in this row: a hatched band the row's height
+  if (s.gap) {   // a compare board's side with no step in this row: a plain box the row's height, drawn in the background svg
     return `<div class="ln-row ln-gap${i === cur ? " ln-cur" : ""}" data-key="step:${esc(s.id)}" data-step="${esc(s.id)}"${shown(i) ? " data-on" : ""}
       style="top:${y}px;height:${h}px" aria-hidden="true"></div>`;
   }
@@ -514,6 +527,7 @@ function stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown) {
   const fx = xs.get(s.from), tx = xs.get(s.to);
   const abs = y + ay;
   let svg = "", words = "";
+  let numLeft = NUM_AT(narrow), leadTo = null;   // the step's number: beside the start of a call's or a reply's arrow on a wide board, else in its own gutter with a faint line along the row to the arrow
   // wide: in the margin right of the last lane; narrow: a line under the arrow's chip (and its checks) of the step said
   const checkH = (s.checks || []).length ? 30 : 0;
   const bh = (isCur ? 46 : 32) + r.extra.a + r.extra.b;   // a band's height: its words are measured into extra
@@ -522,9 +536,11 @@ function stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown) {
     : isCur ? `<span class="ln-note ln-under" style="top:${under}px;left:${cols.left}px;right:${EDGE}px">${esc(s.note)}</span>` : "";
   if (kind === "band") {
     const lo = Math.max(EDGE, Math.min(fx, tx) - 44), hi = Math.min(w - EDGE, Math.max(fx, tx) + 44);
+    leadTo = lo - 2;
     svg = `<rect class="ln-bandbar" x="${lo}" y="${ay - bh / 2}" width="${Math.max(0, hi - lo)}" height="${bh}" rx="9"/>`;
     words = `<div class="ln-lbl ln-inband" style="left:${lo + 12}px;width:${hi - lo - 24}px;top:${ay}px">${tag}<b>${said(s, "label")}</b>${s.sub && isCur ? `<code>${said(s, "sub")}</code>` : ""}</div>`;
   } else if (kind === "self" || s.from === s.to) {
+    leadTo = fx - BAR - 2;
     const x0 = edge(s.from, abs + 6, 1);
     const right = w - (fx + 52) - EDGE, left = fx - 52 - cols.left;  // a chip goes where it has room, left on a narrow board
     const flip = (fx > w * 0.62 && fx - 300 > cols.left) || (right < 170 && left > right);
@@ -543,6 +559,8 @@ function stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown) {
       ${tag}<b>${said(s, "label")}</b>${s.sub ? `<code>${said(s, "sub")}</code>` : ""}</div>`;
   } else {
     const dir = Math.sign(tx - fx), x1 = edge(s.from, abs, dir), x2 = edge(s.to, abs, -dir), ret = kind === "event";
+    if (narrow) leadTo = Math.min(x1, x2) - 4;
+    else numLeft = Math.max(NUM_AT(false), Math.min(dir > 0 ? x1 - 34 : x1 + 10, w - EDGE - 26));
     svg = `<line class="ln-path" pathLength="1" x1="${x1}" x2="${x2 - dir * 2}" y1="${ay}" y2="${ay}"/>${head(x2, ay, dir, ret)}`;
     if (isCur && st.drawn !== cur) svg += `<circle class="ln-dot" r="4.5" cx="${x1}" cy="${ay}"><animate attributeName="cx" from="${x1}" to="${x2}" dur=".6s" fill="freeze"/><animate attributeName="opacity" values="1;1;0" dur="1s" fill="freeze"/></circle>`;
     const mid = (x1 + x2) / 2, span = Math.abs(x2 - x1);
@@ -563,10 +581,12 @@ function stepRow(r, st, cols, w, narrow, edge, cur, lit, touches, shown) {
     words += `<div class="ln-checks" style="left:${Math.max(cols.left, at - 150)}px;top:${ay + (kind === "self" || s.from === s.to ? 22 : 10)}px;max-width:${room}px">${s.checks.map((c) =>
       `<span class="ln-ck ${c.ok === false ? "ln-no" : "ln-ok"}">${c.ok === false ? "✗" : "✓"} ${esc(c.label)}</span>`).join("")}</div>`;
   }
-  return `<div class="${cls.join(" ")}" role="button" tabindex="0" aria-label="Step ${st.model.nums[i] ?? i + 1}: ${esc(s.label)}" data-key="step:${esc(s.id)}"
+  const numText = i > 0 && st.model.nums[i - 1] === st.model.nums[i] ? "" : st.model.nums[i] ?? "";
+  if (numText !== "" && leadTo != null && leadTo - (numLeft + 28) > 10) svg = `<line class="ln-lead" x1="${numLeft + 28}" x2="${leadTo}" y1="${ay}" y2="${ay}"/>` + svg;   // which arrow the number is of
+  return `<div class="${cls.join(" ")}" role="button" tabindex="0" aria-label="${esc(stepName(st.model, i))}" data-key="step:${esc(s.id)}"
       data-step="${esc(s.id)}" data-from="${esc(s.from)}" data-to="${esc(s.to)}"${shown(i) ? " data-on" : ""}
       style="top:${y}px;height:${h}px"><svg class="ln-svg" width="${w}" height="${h}" aria-hidden="true">${svg}</svg>
-    <span class="ln-num" style="top:${ay}px;left:${NUM_AT(narrow)}px">${i > 0 && st.model.nums[i - 1] === st.model.nums[i] ? "" : st.model.nums[i] ?? ""}</span>${words}${note}</div>`;
+    <span class="ln-num" style="top:${ay}px;left:${numLeft}px">${numText}</span>${words}${note}</div>`;
 }
 
 // A step's words, those a changed step changed marked (compare.py's `marks`: runs of [words, differs]).
@@ -617,9 +637,9 @@ function popup(box, st, rows, cols, w) {
   const g = s.group != null ? groups.get(s.group) : null;
   const cond = g ? (g.kind === "alt" || g.kind === "par" ? (g.branches || [])[Number(s.branch ?? 0)] : g.label) : null;
   const answers = s.reply_to ? at.get(s.reply_to) : null, answered = reply.has(s.id) ? at.get(reply.get(s.id)) : null;
-  const link = (k) => `<button type="button" class="ln-link" data-popgo="${k}">step ${st.model.nums[k] ?? k + 1}: ${esc(steps[k].label)}</button>`;
+  const link = (k) => `<button type="button" class="ln-link" data-popgo="${k}">${esc(wd("pop.link", { n: st.model.nums[k] ?? k + 1, label: steps[k].label }))}</button>`;
   const code = src ? src.lines.map((t, k) => `<div class="ln-cl${src.start + k === src.at ? " ln-at" : ""}"><i>${src.start + k}</i><span>${esc(t) || " "}</span></div>`).join("") : "";
-  const kind = s.arrow === "event" ? "reply" : s.arrow === "self" ? "own call" : s.arrow === "band" ? "stretch" : "call";
+  const kind = wd(s.arrow === "event" ? "kind.reply" : s.arrow === "self" ? "kind.own" : s.arrow === "band" ? "kind.stretch" : "kind.call");
   const pw = Math.min(580, w - 24);
   const mid = (cols.xs.get(s.from) + cols.xs.get(s.to)) / 2 + (s.from === s.to ? 60 : 0);
   const left = Math.max(12, Math.min(mid - pw / 2, w - pw - 12));
@@ -628,20 +648,20 @@ function popup(box, st, rows, cols, w) {
   const el = document.createElement("div");
   el.className = "ln-pop" + (below ? "" : " ln-above");
   el.setAttribute("role", "dialog");
-  el.setAttribute("aria-label", `Step ${r.i + 1}: ${s.label}`);
+  el.setAttribute("aria-label", stepName(st.model, r.i));
   el.style.cssText = `left:${left}px;top:${below ? r.y + r.h - 2 : r.y + 6}px;width:${pw}px;--caret:${Math.max(18, Math.min(pw - 18, mid - left))}px`;
   el.innerHTML = `<div class="ln-pophead"><span class="ln-badge${r.i === (st.drawn ?? -1) ? " ln-said" : ""}">${st.model.nums[r.i] ?? r.i + 1}</span><span class="ln-popph">${esc(p?.label || "")}</span>
-      <button type="button" class="ln-x" data-close title="Close" aria-label="Close">${CLOSE}</button></div>
+      <button type="button" class="ln-x" data-close title="${esc(wd("close"))}" aria-label="${esc(wd("close"))}">${CLOSE}</button></div>
     <h3>${esc(String(s.label || s.sub || "").charAt(0).toUpperCase() + String(s.label || s.sub || "").slice(1))}</h3>
-    <div class="ln-whos">${who(s.from)}${s.from === s.to ? "<em>to itself</em>" : ARROW(s.arrow === "event") + who(s.to)}<span class="ln-kindtag">${kind}</span></div>
+    <div class="ln-whos">${who(s.from)}${s.from === s.to ? `<em>${esc(wd("pop.itself"))}</em>` : ARROW(s.arrow === "event") + who(s.to)}<span class="ln-kindtag">${kind}</span></div>
     ${s.sub ? `<div class="ln-popcall">${esc(s.sub)}</div>` : ""}
     ${src ? `<div class="ln-src"><div class="ln-srchead">${CODE}${esc(src.path)}:${src.at}</div><div class="ln-lines">${code}</div></div>` : s.ref ? `<div class="ln-srchead ln-nosrc">${CODE}${esc(s.ref)}</div>` : ""}
     ${cond || answers != null || answered != null || s.note ? `<div class="ln-meta">
-      ${cond ? `<div><b>${esc(g.kind)}</b> · only when ${esc(cond)}</div>` : ""}
-      ${answers != null ? `<div><b>Answers</b> ${link(answers)}</div>` : ""}
-      ${answered != null ? `<div><b>Answered by</b> ${link(answered)}</div>` : ""}
-      ${s.note ? `<div><b>Note</b> ${esc(s.note)}</div>` : ""}</div>` : ""}
-    ${st.play && st.play(s.id, true) ? `<div class="ln-popact"><button type="button" class="ln-btn ln-pri" data-playfrom="${esc(s.id)}">${PLAY}Play from here</button></div>` : ""}`;
+      ${cond ? `<div><b>${esc(g.kind)}</b> · ${esc(wd("pop.only", { cond }))}</div>` : ""}
+      ${answers != null ? `<div><b>${esc(wd("pop.answers"))}</b> ${link(answers)}</div>` : ""}
+      ${answered != null ? `<div><b>${esc(wd("pop.answered"))}</b> ${link(answered)}</div>` : ""}
+      ${s.note ? `<div><b>${esc(wd("pop.note"))}</b> ${esc(s.note)}</div>` : ""}</div>` : ""}
+    ${st.play && st.play(s.id, true) ? `<div class="ln-popact"><button type="button" class="ln-btn ln-pri" data-playfrom="${esc(s.id)}">${PLAY}${esc(wd("play.here"))}</button></div>` : ""}`;
   body.appendChild(el);
   if (st.popNew) { st.popNew = false; requestAnimationFrame(() => el.scrollIntoView({ block: "nearest", behavior: "smooth" })); }
 }
@@ -654,7 +674,7 @@ function onClick(box, e) {
   const pf = at("[data-playfrom]");
   if (pf) {
     const ok = st.play && st.play(pf.dataset.playfrom);
-    if (ok) { st.pop = null; paint(box); } else pf.textContent = "No answer says this step";
+    if (ok) { st.pop = null; paint(box); } else pf.textContent = wd("play.none");
     return;
   }
   const pg = at("[data-popgo]");
@@ -726,9 +746,8 @@ function toOutcome(box, headBox) {
 // -- a before/after board: two lane boards side by side, row for row ------------------------------------------
 
 const SIDES = ["before", "after"];
-let hatches = 0;   // each side's hatch pattern has an id of its own
 const MARK = { same: "=", changed: "~", added: "+", removed: "−", moved: "↕" };
-const MARK_SAY = { same: "the same", changed: "changed", added: "new", removed: "removed", moved: "moved" };
+const MARK_SAY = { same: 1, changed: 1, added: 1, removed: 1, moved: 1 };   // the words of each are the stage's (words.js: mark.*)
 const NARROW = 860;   // a board narrower than this shows one side at a time
 
 // One side as a sequence of its own: its actors (one the other side lacks red and "removed", or green and "new"),
@@ -761,10 +780,10 @@ function sideRefs(spec, refs, side) {
 
 function renderCompare(box, spec, embedded, more) {
   const cmp = spec.compare;
-  box.innerHTML = `<div class="ln-cmp"><div class="ln-sidebar" role="group" aria-label="Which flow">${SIDES.map((sd) =>
+  box.innerHTML = `<div class="ln-cmp"><div class="ln-sidebar" role="group" aria-label="${esc(wd("cmp.which"))}">${SIDES.map((sd) =>
       `<button type="button" class="ln-mode" data-side="${sd}" aria-pressed="false">${esc(cmp[sd].label)}</button>`).join("")}</div>
     <div class="ln-cgrid">${SIDES.map((sd, k) => `${k ? `<div class="ln-gutter" aria-hidden="true"></div>` : ""}<div class="ln-side ln-s-${sd}" data-side="${sd}">
-      <div class="ln-stitle"><b>${sd === "before" ? "Before" : "After"}</b>${String(cmp[sd].label).toLowerCase() === sd ? "" : ` · ${esc(cmp[sd].label)}`}</div><div class="ln-pane"></div></div>`).join("")}</div>
+      <div class="ln-stitle"><b>${esc(wd(sd === "before" ? "cmp.before" : "cmp.after"))}</b>${String(cmp[sd].label).toLowerCase() === sd ? "" : ` · ${esc(cmp[sd].label)}`}</div><div class="ln-pane"></div></div>`).join("")}</div>
     <div class="ln-cout"></div></div>`;
   box._lanes = null;
   const st = box._cmp = { spec, scene: null, n: null, mode: "both", pinned: false, pick: "after", panes: {} };
@@ -902,7 +921,7 @@ function syncSides(box) {
   if (keyTall) for (const k of keys) k.style.minHeight = keyTall + "px";
   const gutter = box.querySelector(".ln-gutter"), body = st.panes.after.querySelector(".ln-body");
   const top = body ? body.offsetTop : 0;   // both measured from the top of their side, which the gutter shares
-  gutter.innerHTML = st.spec.steps.map((r) => `<i class="ln-gm ln-gm-${r.change}" data-row="${esc(r.id)}" title="${MARK_SAY[r.change] || ""}"
+  gutter.innerHTML = st.spec.steps.map((r) => `<i class="ln-gm ln-gm-${r.change}" data-row="${esc(r.id)}" title="${MARK_SAY[r.change] ? esc(wd("mark." + r.change)) : ""}"
     style="top:${top + (b.rowAt.get(r.id) ?? 0)}px">${MARK[r.change] || ""}</i>`).join("")
     + st.spec.steps.filter((r) => r.replaces && b.rowAt.has(r.id) && b.rowAt.has(r.replaces)).map((r) => {   // a moved step: its old place joined to its new
       const y1 = top + b.rowAt.get(r.replaces), y2 = top + b.rowAt.get(r.id);

@@ -81,7 +81,7 @@ Rules:
   in the conversation, or Back and Next on its steps) turns it off, and the board stays in front whatever the
   reader plays. **Back to the voice**, a button beside the board counter while following is off, the gear's
   switch, Play on the board in front, or the next answer starting by itself turns it on again and puts the board
-  back where the voice is. A board the voice reaches before it has come up
+  back where the voice is: the board the voice fronted last, never Key points, which the reader opened by hand. A board the voice reaches before it has come up
   is fronted when it arrives. When an answer has ended, after a short hold, each board it stepped shows
   whole, nothing dimmed. The call page also sets the stage's light or dark theme. The answer that showed a view is
   marked on its row in the list (`A3`). Every answer that steps a view keeps its own scene on it (`scenes`, by answer number), and

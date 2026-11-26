@@ -57,7 +57,7 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 - Each side is a sequence of its own, with the same fields and checks, so every step is a real call. Its `label` names it over its diagram. `title` and `legend` sit beside `compare`.
 - `phases`, `groups` and `captions` are not supported with it. An `outcome` (`{"tone", "title", "lines"}`) is one verdict drawn once across both sides under the last row, faint until the last step is shown, lit by `[[point: outcome]]`, by the sentence that says the last step and at rest. Close a before/after answer by pointing at it (`amber` for a warning).
 - The stage draws the two flows side by side, the before on the left and the after on the right, lined up row by row.
-- A step in both flows sits level with itself. A side with no step in a row shows a hatched gap.
+- A step in both flows sits level with itself. A side with no step in a row shows a plain box that says "No step here".
 - A gutter marks each row: `=` the same, `~` changed, `+` new, `-` removed, an up-down arrow for moved.
 - The stage pairs steps by id, else by the same `label` and `arrow`. Give a step the same id on both sides when it is the same step.
 - A pair is the same row when only a replaced actor tells them apart, changed when its words differ too (the words that changed are bold, red on the left and green on the right), and moved when it runs between other actors that are on both sides or stands out of order.

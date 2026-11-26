@@ -9,7 +9,7 @@ import subprocess
 from html.parser import HTMLParser
 from pathlib import Path
 
-from skills._shared.visuals import bars_svg, flowchart, graph_svg, label_check, map_svg, sequence, sequence_svg
+from skills._shared.visuals import bars_svg, flowchart, graph_svg, label_check, map_svg, reading, sequence, sequence_svg
 from skills.stage import compare, scene
 
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
@@ -651,7 +651,8 @@ def visual_source(tool: str, text: str, root: Path | None = None) -> dict:
     """A sequence, flowchart or map spec (JSON), checked and kept as its spec. The stage draws a sequence as its
     lanes (lanes.js) and a flowchart as its map (map.js), so no drawing is stored with them. An architecture map
     is drawn here, by map_svg, keyed for the stage's frames, and kept as `svg` beside its spec: it is measured and
-    routed in Python, so the page cannot draw it. Its words reach the SVG only as escaped text, and the stage
+    routed in Python, so the page cannot draw it. A drawn board also keeps `reading`, its arrows or rows as data for a
+    screen reader (reading.py), since the page has only the svg. Its words reach the SVG only as escaped text, and the stage
     still runs it through DOMPurify before it goes in.
     With `root`, a sequence also keeps the lines round each step's `ref` (see step_refs), for its popups."""
     try:
@@ -685,6 +686,7 @@ def visual_source(tool: str, text: str, root: Path | None = None) -> dict:
         uid = "vz" + tool[0] + hashlib.sha1(json.dumps(spec, sort_keys=True).encode()).hexdigest()[:8]
         try:
             source["svg"] = DRAWN[tool].render(spec, uid, keyed=True, **({"floor": True} if tool == "map" else {}))
+            source["reading"] = reading.reading(tool, spec)   # what a screen reader says of the drawing
         except Exception as e:
             raise SourceError(f"{tool}:-: the {tool} board could not be drawn ({type(e).__name__}: {e})") from None
     if tool == "sequence" and root is not None:
