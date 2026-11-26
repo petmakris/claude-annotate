@@ -292,6 +292,8 @@ While presenting, `→` / `Space` / `PageDown` reveals the next step before movi
   callout on a screenshot and its line in the legend. Without `data-frag`, each `.frag` is its
   own step in document order.
 - **Current step:** the latest step also carries `.frag-current`; the earlier ones carry `.frag-past`.
+- **The whole slide last:** one press after the last step shows the slide complete, nothing faded
+  (`data-out` parts stay gone); stepping back into a slide lands on that complete view.
 - **Focus (framework 3.2.0):** put `focus` on `.deck` (or on one `.slide`) and each earlier step fades
   back to 12% grey once the next one shows, so the room looks at the newest step only. `data-keep`
   on a `.frag` keeps it bright (a spotlight that the next steps build on). Leave `focus` off for a
