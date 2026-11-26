@@ -77,10 +77,10 @@ def test_a_picture_of_a_physical_thing_is_said_to_be_undrawable_and_boxes_with_a
     assert "A flowchart or a map is not a picture: never let boxes with arrows stand in for a spatial layout." in BOARDS
 
 
-def test_a_long_typed_message_is_answered_point_by_point_and_the_now_card_copy_is_named():
+def test_a_long_typed_message_is_answered_point_by_point_and_the_copy_icon_is_named_by_where_it_is():
     loop = GUIDE.split("## 3. Answering a turn")[1].split("`reply` exit codes")[0]
     assert "answer every numbered point in order, and answer any question it asks about the page itself" in loop
-    assert "the Now card has a Copy button for the answer's text" in loop
+    assert "the copy icon at the top right of the answer card copies the whole answer" in loop
     assert "State no fact the user did not give" in loop
     page = (talk.SKILL_DIR / "references" / "call-page.md").read_text()
     assert "a **Copy** button for the answer's text" in page

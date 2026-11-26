@@ -129,6 +129,14 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 - A yes or no, one number, a repeat, a recap, a thanks and a go-ahead carry no board: two or three plain sentences.
 - Never put a number, a file or a test result on a code board or a table to look thorough.
 
+## A refused board
+
+- A board the tool refuses is not on the stage and has no chip. The `board:` line after `sent` says why.
+- Resend only that board for the answer already given, and never say the answer again: `reply --call="<call id>" --board-for <answer number>` with the `[[show ...]]` block alone on stdin (no turn id).
+- The board is shown with that answer, whole, with a chip and no cue; a point or verb in it is dropped with a `board:` line, and any words are dropped too. It uses no answer number and no turn, and a board refused again comes back with the same `board:` lines.
+- An answer a correction replaced was never shown on the stage: a repair for it is refused.
+- A reply with no `--board-for` and no sentence is still refused (`a board needs a sentence`).
+
 ## Nudges
 
 - `reply` prints a `board:` line when an answer holds more than 3 key points, a board's title is over 5 words, or the first board comes after more than one sentence. Cut it in the next answer.
@@ -157,6 +165,11 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 - It goes in the answer with `[[show page: ... | title]]`, before the sentence about it. The voice brings it forward there and on every replay.
 - A page put up with `stage.py show` during a call opens behind the board in front and the voice can never bring it forward. The tag takes over a copy of the same page already put up by hand.
 - A page has nothing to point at.
+- An email or draft the user will copy is the one page you do build: write it to a .txt file in --code and show it as a page, and never leave an unrelated board in front during a draft turn. A .txt page keeps every line break (a .md page is rendered, so a single line break is lost) and does not wrap a long line. The copy icon at the top right of the answer card copies the whole answer, not the draft alone.
+
+```
+[[show page: draft.txt | Email to Sam]] Here is the email, ready to copy.
+```
 - Never show a page from a site that refuses to be framed (Jira, Confluence, GitHub, sign-in pages): it draws as an empty board. Give the link in the answer instead (`skills/stage/SKILL.md`).
 
 ## Retired: scenes and stops
