@@ -47,18 +47,41 @@ function load(e, play) {
 // this origin's storage, renewed while it plays: pages on other devices do not share it.
 // The id is kept in this tab's session storage: a reload is the same page, so its claim is still its own and the
 // open claim succeeds; a new tab has no entry and gets an id of its own (and sees "Playing on another screen").
-const PAGE_ID = (() => {
-  const key = "talk.page." + CFG.call;
-  try { const kept = sessionStorage.getItem(key); if (kept) return kept; } catch {}
-  const id = Math.random().toString(36).slice(2, 10);  // this page among the call's pages (live mode too)
-  try { sessionStorage.setItem(key, id); } catch {}
+// A browser's Duplicate tab copies the session storage, so the copy would share its source's id and both pages would
+// count as the holder. So a page asks the call's other pages on a BroadcastChannel before it uses its id: a live page
+// that holds the same id answers, and the asking page draws a fresh id and keeps that instead. A reload has no such
+// page (the old one is gone), so it keeps its id; with no BroadcastChannel nothing is asked.
+const PAGE_KEY = "talk.page." + CFG.call, PAGE_ASK_MS = 150;
+const newPageId = () => Math.random().toString(36).slice(2, 10);  // this page among the call's pages (live mode too)
+let PAGE_ID = (() => {
+  try { const kept = sessionStorage.getItem(PAGE_KEY); if (kept) return kept; } catch {}
+  const id = newPageId();
+  try { sessionStorage.setItem(PAGE_KEY, id); } catch {}
   return id;
+})();
+const pageIdSettled = (() => {
+  if (!("BroadcastChannel" in window)) return Promise.resolve();
+  let ch, nonce = newPageId(), settled = false, done;
+  try { ch = new BroadcastChannel("talk-page-" + CFG.call); } catch { return Promise.resolve(); }
+  const finish = () => { if (!settled) { settled = true; done(); } };
+  ch.onmessage = ev => {
+    const m = ev.data || {};
+    if (m.id !== PAGE_ID || m.nonce === nonce) return;
+    if (m.t === "who") ch.postMessage({t: "mine", id: PAGE_ID, to: m.nonce, nonce});  // the same id: the asker is the copy
+    else if (m.t === "mine" && m.to === nonce && !settled) {
+      PAGE_ID = newPageId();
+      try { sessionStorage.setItem(PAGE_KEY, PAGE_ID); } catch {}
+      finish();
+    }
+  };
+  return new Promise(res => { done = res; ch.postMessage({t: "who", id: PAGE_ID, nonce}); setTimeout(finish, PAGE_ASK_MS); });
 })();
 const LOCK_KEY = "playing." + CFG.call, LOCK_MS = 3000;
 let claimOk = false;        // the server answered a claim: its holder is the truth, the storage lock is not used
 let holder = null;          // the page the server says plays: an id, or null when none
 let tookAt = 0;             // when this page last took the claim: a poll older than that cannot say otherwise
 async function claimPlayer(take) {
+  await pageIdSettled;
   const sent = Date.now();
   try {
     const r = await api("/api/player", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({page: PAGE_ID, take: !!take})});

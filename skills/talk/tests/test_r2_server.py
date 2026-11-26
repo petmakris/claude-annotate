@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 import talk_client
+import call_page
 from call_page import CallPage, needs_node, served
 from helpers import AUTH, CALL, make_args, run, running_app, talk
 
@@ -177,7 +178,7 @@ def test_the_holder_releases_the_claim_and_nobody_else_can(tmp_path, monkeypatch
 def test_a_reloaded_page_keeps_its_id_and_a_new_tab_gets_its_own(tmp_path):
     html, states = served(tmp_path, ["Said to one tab."])
     first = CallPage(html, states).js("globalThis.playerReply = (b) => ({player: b.page}); await claimPlayer(false);")
-    first.check("[PAGE_ID, claims.map((c) => c.page), sessionStorage.dump()]")
+    first.check("[PAGE_ID, [...new Set(claims.map((c) => c.page))], sessionStorage.dump()]")
     [[page_id, claimed, stored]] = first.run()
     assert set(claimed) == {page_id} and stored == {f"talk.page.{CALL}": page_id}
     # the same tab after a reload: the storage is kept, and the old id still holds the claim
@@ -188,6 +189,55 @@ def test_a_reloaded_page_keeps_its_id_and_a_new_tab_gets_its_own(tmp_path):
     tab = CallPage(html, [dict(st, player=page_id) for st in states]).js("globalThis.playerReply = () => ({player: %s}); await claimPlayer(false); await serve(1);" % json.dumps(page_id))
     tab.check("[PAGE_ID !== %s, playingElsewhere(), audio.paused, $('status').textContent]" % json.dumps(page_id))
     assert tab.run() == [[True, True, True, "Playing on another screen."]]
+
+
+# A browser's Duplicate tab copies sessionStorage. The page node runs has no BroadcastChannel, so the tests give it one
+# that delivers to the other channels of the same name, and (when asked) a "source tab" that holds an id and answers.
+FAKE_CHANNEL = """
+{
+  const open = new Map();
+  globalThis.BroadcastChannel = class {
+    constructor(name) { this.name = name; this.onmessage = null; (open.get(name) || open.set(name, new Set()).get(name)).add(this); }
+    postMessage(data) { for (const c of open.get(this.name)) if (c !== this) Promise.resolve().then(() => c.onmessage && c.onmessage({data})); }
+  };
+  globalThis.asked = [];
+  const source = %s;
+  if (source) { const ch = new BroadcastChannel("talk-page-" + JSON.parse(%s).call);
+    ch.onmessage = ({data}) => { asked.push(data.t); if (data.t === "who" && data.id === source) ch.postMessage({t: "mine", id: source, to: data.nonce, nonce: "source-tab"}); }; }
+}
+"""
+
+
+_PRELUDE = call_page.PRELUDE
+
+
+def _tab(monkeypatch, html, states, *, source=None, session=None):
+    cfg = re.search(r"window\.CFG = (.*?);</script>", html).group(1).replace("<\\/", "</")
+    fake = FAKE_CHANNEL % (json.dumps(source), json.dumps(cfg))
+    monkeypatch.setattr(call_page, "PRELUDE", _PRELUDE.replace("%(storage)s", "%(storage)s\n" + fake.replace("%", "%%")))
+    return CallPage(html, states, session=session)
+
+
+@needs_node
+def test_a_duplicated_tab_gets_a_new_id_a_reload_keeps_its_id_and_a_new_tab_gets_its_own(tmp_path, monkeypatch):
+    html, states = served(tmp_path, ["Said to one tab."])
+    key = f"talk.page.{CALL}"
+    # the page waits PAGE_ASK_MS for an answer before it claims, so the clock moves on
+    reply = "globalThis.playerReply = (b) => ({player: b.page}); const sent = claimPlayer(false); await advance(200); await sent;"
+    # Duplicate tab: the copied storage holds the source's id and the source tab, still open, says it is its own
+    dup = _tab(monkeypatch, html, states, source="srcid", session={key: "srcid"}).js(reply)
+    dup.check("[PAGE_ID, [...new Set(claims.map((c) => c.page))], sessionStorage.dump()[%s], asked]" % json.dumps(key))
+    [[new_id, claimed, stored, asked]] = dup.run()
+    assert new_id != "srcid" and len(new_id) == 8 and claimed == [new_id] and stored == new_id and asked == ["who"]
+    # Reload: the old tab is gone, nobody answers, the id stays and the first claim is made under it
+    reload = _tab(monkeypatch, html, states, session={key: "srcid"}).js(reply)
+    reload.check("[PAGE_ID, [...new Set(claims.map((c) => c.page))], asked]")
+    assert reload.run() == [["srcid", ["srcid"], []]]
+    # New tab: no storage, an id of its own that differs from another tab's, and no one to change it
+    tab = _tab(monkeypatch, html, states, source="srcid").js(reply)
+    tab.check("[PAGE_ID, [...new Set(claims.map((c) => c.page))], sessionStorage.dump()[%s]]" % json.dumps(key))
+    [[own, claimed, stored]] = tab.run()
+    assert own != "srcid" and claimed == [own] and stored == own
 
 
 @needs_node
