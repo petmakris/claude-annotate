@@ -1,20 +1,27 @@
-"""fleet sessions: one list of every Claude Code session on every machine, and the plan that lands in one.
+"""fleet sessions: the rows `@claude pick` shows, and the plan that lands in one.
 
-Stdlib only, Python 3.9+, no fleet imports: fleet.py reads the sources (history, `claude agents --json`, tmux,
-ps, the registry, other machines) and hands them in; this module only shapes them. Shared contract (tests pin
-it; `fleet/ui/fixtures/sessions.json` and `open-plans.json` are its examples):
+Stdlib only, Python 3.9+, no fleet imports: fleet.py reads the sources (the session index through
+fleet_sessions_api, and this machine's history, `claude agents --json`, tmux and ps) and hands them in; this module
+only shapes them. Shared contract (tests pin it; `fleet/ui/fixtures/sessions.json` and `open-plans.json` are its
+examples):
 
   envelope = {"machines": {name: {reachable, stale, as_of, reason, fleet, screen, unreadable, tmux_server}},
               "hub": name, "as_of": t, "rows": [row, ...]}
   row = {key, id, machine, name, named, folder, about, kind, where, tmux, state, pid, member, held, unanswered,
          free, started, last_seen, ended, end_reason, live_on, copies, stale, as_of, masked, registry}
-  plan = {kind, key, id, machine, name, tmux, folder, pid, state, member, message, force, run_on_owner}
+  plan = {kind, key, id, machine, name, tmux, folder, pid, state, member, message, force, run_on_owner, head, take}
+
+The list holds one row per session id, from the session index (fleet/docs/session-index.md); `registry` is the
+row's owner. `fleet sessions --local` gives this machine's own facts, which the plan reads.
 
 `where` is tmux (a live interactive session inside a pane of the claude tmux server, found by walking the pid's
 parents up to a pane pid), window (live and interactive, outside tmux), bg (a background job of the daemon) or
-none. `kind` is worker, job or chat (`kind_of`). A row of the work rule (a work account's transcript, or a
-folder under a path profile, as the env repo's own test says) is `masked` when it leaves its machine: no
+none. `kind` is worker, job or chat (`kind_of`). A row of the work rule is `masked` when it leaves its machine: no
 folder, first prompt or tmux name, and a name only when it is not taken from the prompt.
+
+A plan's `head` is the sid it acts on (a superseded sid resolves to its chain's head) and `take` is null, or
+{sid, to, expect_epoch}: `take-then-resume` means the picker runs `@claude session take SID --to <machine>` and
+then resumes there.
 """
 import fnmatch
 import re
@@ -28,8 +35,9 @@ KINDS = ("chat", "job", "worker")
 RECENT = 14 * 86400   # an unnamed chat older than this is left out of the default view
 LIMIT = 300           # rows per machine, newest first; live rows always come
 SLUG_MAX = 40
-PLAN_KINDS = ("attach-tmux", "attach-bg", "resume", "wrap-up-then-resume", "blocked-window", "refuse-offline",
-              "refuse-no-folder", "refuse-live-elsewhere", "refuse-registry")
+PLAN_KINDS = ("attach-tmux", "attach-bg", "resume", "take-then-resume", "wrap-up-then-resume", "blocked-window",
+              "refuse-offline", "refuse-no-folder", "refuse-live-elsewhere")
+NEVER_TAKEN = ("job", "worker")  # the index refuses to move them: they are read, or resumed where they are
 
 
 # ---------------------------------------------------------------- kinds and names
@@ -242,43 +250,35 @@ def tmux_holders(panes, parents, agents, alive=None):
     return out
 
 
-# ---------------------------------------------------------------- every machine
+# ---------------------------------------------------------------- rows of the index
 
-def owner_of(rows, record):
-    """The row that owns a session id among its copies (one per machine). The seamless registry's owner wins
-    when it holds a copy; else the machine where it is live; else the newest last_seen."""
-    if record:
-        target = record.get("_machine")
-        hit = [r for r in rows if r["machine"] == target]
-        if hit:
-            return hit[0]
+def newest_copy(rows):
+    """Of the copies machines hold of one session: the live one, else the newest."""
     live = [r for r in rows if r["live_on"] and not r["stale"]]
     if live:
         return live[0]
     return max(rows, key=lambda r: (r["last_seen"] or r["started"] or 0, not r["stale"]))
 
 
-def merge(per_machine, registry=None, hub_main=None):
-    """Rows of every machine -> one row per session id. per_machine: {machine: rows}; registry: {sid: record}
-    with `owner` (a machine, or phone:...), whose machine a phone owner maps to is `hub_main`."""
-    by_id = {}
-    for machine in sorted(per_machine):
-        for r in per_machine[machine]:
-            by_id.setdefault(r["id"], []).append(r)
-    out = []
-    for sid, copies in by_id.items():
-        rec = dict((registry or {}).get(sid) or {}) or None
-        if rec:
-            owner = str(rec.get("owner") or rec.get("machine") or "")
-            rec["_machine"] = hub_main if owner.startswith("phone:") else owner
-        first = owner_of(copies, rec)
-        own = dict(first)
-        own["live_on"] = sorted({m for r in copies for m in r["live_on"]})
-        own["copies"] = sorted(r["machine"] for r in copies if r is not first)
-        own["registry"] = (rec or {}).get("owner") or (rec or {}).get("machine") or None
-        out.append(own)
-    out.sort(key=lambda r: r["last_seen"] or r["started"] or 0, reverse=True)
-    return out
+def from_index(r, machines, me, member=None):
+    """A row of `GET /api/sessions` in the shape the picker reads. machines: that reply's machine entries;
+    member: the fleet member that holds the row's conversation, or None."""
+    o = r.get("observed") or {}
+    live = o.get("live") is True
+    m = machines.get(r["machine"]) or {}
+    masked = bool(r.get("work")) and r["machine"] != me
+    where = o.get("where") if live and o.get("where") in ("tmux", "window", "bg") else "none"
+    return {"key": r["key"], "id": r["sid"], "machine": r["machine"], "name": r.get("name") or "",
+            "named": bool(r.get("name")), "folder": r.get("cwd") or "", "about": r.get("first_prompt") or "",
+            "kind": r["kind"] if r.get("kind") in KINDS else "chat", "where": where,
+            "tmux": o.get("tmux") if where == "tmux" else None, "state": (o.get("state") or "") if live else "",
+            "pid": o.get("pid") if live else None, "member": bool(member),
+            "held": list(member.get("held") or []) if member else [],
+            "unanswered": list(member.get("unanswered") or []) if member else [],
+            "free": bool(member and member.get("free")), "started": r.get("started"),
+            "last_seen": r.get("updated"), "ended": r.get("ended"), "end_reason": r.get("end_reason") or "",
+            "live_on": [r["machine"]] if live else [], "copies": [], "stale": m.get("reachable", True) is False,
+            "as_of": o.get("observed_at") or m.get("as_of"), "masked": masked, "registry": r.get("owner")}
 
 
 # ---------------------------------------------------------------- the plan
@@ -287,64 +287,114 @@ def when_words(t):
     return time.strftime("%H:%M", time.localtime(t)) if t else "an unknown time"
 
 
-def plan(key, copies, machines, holders=None, folder_ok=None, registry=None, here=None):
+def owner_words(owner):
+    return "the phone" if str(owner).startswith("phone:") else str(owner)
+
+
+def index_copy(index, machines, here):
+    """The copy of a session no machine gave facts of (a phone's own session, or a machine that did not answer),
+    from its index row."""
+    m = machines.get(index["machine"]) or {}
+    down = bool(m.get("stale")) or m.get("reachable", True) is False
+    return {"key": "%s:%s" % (index["machine"], index["sid"]), "id": index["sid"], "machine": index["machine"],
+            "name": index.get("name") or "", "folder": index.get("cwd") or "", "tmux": None, "pid": None,
+            "state": "", "where": "none", "member": False, "live_on": [], "stale": down,
+            "as_of": m.get("as_of"), "masked": bool(index.get("work")) and here not in (None, index["machine"]),
+            "started": index.get("started"), "last_seen": index.get("updated")}
+
+
+def plan(key, copies, machines, holders=None, folder_ok=None, index=None, here=None, to=None):
     """What landing in session `key` means, as data (the contract in the module's docstring).
 
-    copies: every row of that id, one per machine that has it (stale ones from the cache); machines: the
-    envelope's machine entries; holders: {machine: tmux_holders}; folder_ok: {machine: bool}; registry: the
-    registry record of the id, or None; here: the machine computing the plan (a masked row it cannot land in
-    from here is `run_on_owner`)."""
+    copies: one row of live facts per machine that has the session (`fleet sessions --local`); machines: the
+    envelope's machine entries; holders: {machine: tmux_holders}; folder_ok: {machine: bool}; index: the chain
+    head's row of the session index, or None when the index does not hold it; here: the machine computing the plan
+    (a masked row it cannot land in from here is `run_on_owner`); to: where the session should land, a machine or a
+    phone owner; by default the machine of `key`.
+
+    The index says who owns a session. A session owned elsewhere and live nowhere is `take-then-resume`: only take
+    moves it. A live session is attached or refused, never moved over."""
     machine_key, sid = key.split(":", 1)
     holders, folder_ok = holders or {}, folder_ok or {}
-    rec = dict(registry or {}) or None
-    if rec:
-        o = str(rec.get("owner") or rec.get("machine") or "")
-        rec["_machine"] = None if o.startswith("phone:") else o
-    own = owner_of(copies, rec)
+    own = None
+    if index:
+        own = next((r for r in copies if r["machine"] == index["machine"]), None) or index_copy(index, machines, here)
+    own = own or newest_copy(copies)
+    owner = index["owner"] if index else own["machine"]
+    phone = str(owner).startswith("phone:")
+    takes = bool(index) and not index.get("work") and index.get("kind") not in NEVER_TAKEN
+    dest = to or (machine_key if takes else own["machine"])
+    to_phone = str(dest).startswith("phone:")
+    moves = bool(index) and (takes or to_phone) and dest != owner  # take itself refuses what it never moves
     live = [r for r in copies if r["live_on"] and not r["stale"]]
     live.sort(key=lambda r: r["machine"] != own["machine"])
     L = live[0] if live else None
     base = L or own
 
-    def out(kind, message="", tmux=None, force=False, row=None):
+    def out(kind, message="", tmux=None, force=False, row=None, machine=None, take=None):
         r = row or base
         name = r.get("_fleet_name") or r["name"] if r.get("member") else r["name"]
-        return {"kind": kind, "key": r["key"], "id": r["id"], "machine": r["machine"], "name": name,
+        if index:  # one session, one name: the index's
+            name = name if r.get("member") else index.get("name") or name
+        return {"kind": kind, "key": r["key"], "id": r["id"], "machine": machine or r["machine"], "name": name,
                 "tmux": "" if r.get("masked") else (tmux if tmux is not None else (r.get("tmux") or "")),
                 "folder": "" if r.get("masked") else (r.get("folder") or ""), "pid": r.get("pid"),
                 "state": r.get("state") or "", "member": bool(r.get("member")), "message": message,
-                "force": bool(force), "run_on_owner": bool(r.get("masked") and here and here != r["machine"])}
+                "force": bool(force), "run_on_owner": bool(r.get("masked") and here and here != r["machine"]),
+                "head": r["id"], "take": take}
 
-    label = own["name"] or base["name"] or sid[:8]
-    if L:
-        if L["where"] == "tmux":
-            return out("attach-tmux", row=L)
-        if L["where"] == "bg":
-            return out("attach-bg", row=L)
-        if L["machine"] != own["machine"]:
-            return out("refuse-live-elsewhere", "%s is live on %s in a window, not in tmux: it is not resumed on %s"
-                       % (label, L["machine"], own["machine"]), row=L)
-        if L.get("member"):
-            return out("wrap-up-then-resume", "%s is a fleet member in a window: it is told to wrap up and leave, "
-                       "then resumed in tmux once its process is gone" % label, tmux=slug(own["name"], sid), row=L)
-        idle = (L.get("state") or "") == "idle"
-        return out("blocked-window", "open in a window on %s, status %s, pid %s: it is not a fleet member, so it "
-                   "cannot be told to leave%s" % (L["machine"], L.get("state") or "unknown", L.get("pid"),
-                                                  "" if idle else "; it is never stopped while it works"),
-                   force=idle, row=L)
-    if rec and rec["_machine"] is None:
-        return out("refuse-registry", "%s is on the phone now: take it back with @claude -r first" % label, row=own)
-    m = machines.get(own["machine"]) or {}
-    if own["stale"] or not m.get("reachable", True):
+    def offline(machine, row):
+        m = machines.get(machine) or {}
         why = m.get("reason") or "no answer"
         return out("refuse-offline", "%s: not answering (%s); last answer at %s. It may still be running there, so "
-                   "it is not resumed anywhere else." % (own["machine"], why, when_words(m.get("as_of") or own["as_of"])),
-                   row=own)
+                   "it is not resumed anywhere else." % (machine, why, when_words(m.get("as_of") or row.get("as_of"))),
+                   row=row)
+
+    def down(machine):
+        m = machines.get(machine) or {}
+        return bool(m.get("stale")) or m.get("reachable", True) is False
+
+    def session_name(machine):
+        name = slug(label_name, sid)
+        held = (holders.get(machine) or {}).get(name)
+        return "%s-%s" % (name[:SLUG_MAX - 9], sid[:8]) if held is not None and sid not in held else name
+
+    label_name = (index or {}).get("name") or own["name"] or base["name"]
+    label = label_name or sid[:8]
+    if L:
+        wrong = bool(index) and not phone and L["machine"] != owner or phone or \
+            not index and L["machine"] != own["machine"]
+        if not (to_phone and L["machine"] == owner):
+            if to_phone:
+                return out("refuse-live-elsewhere", "%s is live on %s, which does not own it (%s does): it is not "
+                           "given to the phone" % (label, L["machine"], owner_words(owner)), row=L)
+            if L["where"] == "tmux":
+                return out("attach-tmux", row=L)
+            if L["where"] == "bg":
+                return out("attach-bg", row=L)
+            if wrong:
+                return out("refuse-live-elsewhere", "%s is live on %s in a window, not in tmux: it is not resumed "
+                           "on %s" % (label, L["machine"], owner_words(owner) if index else own["machine"]), row=L)
+            if L.get("member"):
+                return out("wrap-up-then-resume", "%s is a fleet member in a window: it is told to wrap up and "
+                           "leave, then resumed in tmux once its process is gone" % label,
+                           tmux=slug(label_name, sid), row=L)
+            idle = (L.get("state") or "") == "idle"
+            return out("blocked-window", "open in a window on %s, status %s, pid %s: it is not a fleet member, so "
+                       "it cannot be told to leave%s" % (L["machine"], L.get("state") or "unknown", L.get("pid"),
+                                                          "" if idle else "; it is never stopped while it works"),
+                       force=idle, row=L)
+    if moves:
+        for needed in (None if phone else owner, None if to_phone else dest):
+            if needed and down(needed):
+                return offline(needed, own)
+        return out("take-then-resume", "%s is on %s: it is taken to %s first, then resumed there"
+                   % (label, owner_words(owner), owner_words(dest)),
+                   tmux="" if to_phone else session_name(dest), row=own, machine=dest,
+                   take={"sid": own["id"], "to": dest, "expect_epoch": index["epoch"]})
+    if own["stale"] or (machines.get(own["machine"]) or {}).get("reachable", True) is False:
+        return offline(own["machine"], own)
     if folder_ok.get(own["machine"]) is False:
         return out("refuse-no-folder", "%s: the folder %s is gone; it is not created again"
                    % (own["machine"], own.get("folder") or "of this session"), tmux="", row=own)
-    name = slug(own["name"], sid)
-    held = (holders.get(own["machine"]) or {}).get(name)
-    if held is not None and sid not in held:
-        name = "%s-%s" % (name[:SLUG_MAX - 9], sid[:8])
-    return out("resume", tmux=name, row=own)
+    return out("resume", tmux=session_name(own["machine"]), row=own)

@@ -1,0 +1,5 @@
+{
+ "ok": false,
+ "code": "hub-down",
+ "error": "ownership cannot change while the hub is down"
+}

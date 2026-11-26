@@ -30,7 +30,10 @@ from urllib.parse import parse_qs, urlparse
 
 import fleet_history as hist
 import fleet_profiles as prof
+import fleet_index_cache as idxcache
 import fleet_sessions as fs
+import fleet_sessions_api as sapi
+import fleet_work
 
 PREVIEW = 300  # a message as one line of a list (`fleet inbox`)
 WAKE_MAX = 2000  # the text a message carries into the receiver's conversation; longer is cut, naming its thread
@@ -60,7 +63,7 @@ class FleetError(Exception):
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS members (
   session_id TEXT PRIMARY KEY, name TEXT NOT NULL, host TEXT, cwd TEXT, branch TEXT,
-  pid INTEGER, proc_start TEXT, socket TEXT, respawn TEXT, joined_at REAL, left_at REAL, transcript_path TEXT);
+  pid INTEGER, proc_start TEXT, socket TEXT, respawn TEXT, joined_at REAL, left_at REAL, transcript_path TEXT, conversation TEXT);
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT, thread TEXT NOT NULL, kind TEXT NOT NULL,
   sender TEXT, sender_session TEXT, recipient TEXT, recipient_session TEXT, body TEXT,
@@ -70,7 +73,8 @@ CREATE INDEX IF NOT EXISTS messages_thread ON messages(thread);
 CREATE TABLE IF NOT EXISTS todos (
   id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, ref TEXT, notes TEXT,
   created_by TEXT, state TEXT NOT NULL DEFAULT 'open', claimed_by TEXT, claimed_session TEXT,
-  reserved_for TEXT, created_at REAL, claimed_at REAL, done_at REAL, owner TEXT, after TEXT);
+  reserved_for TEXT, created_at REAL, claimed_at REAL, done_at REAL, owner TEXT, after TEXT,
+  claimed_conversation TEXT);
 CREATE TABLE IF NOT EXISTS names (
   session_id TEXT PRIMARY KEY, chosen TEXT, seen_title TEXT, asks INTEGER NOT NULL DEFAULT 0, updated_at REAL);
 CREATE TABLE IF NOT EXISTS aliases (old TEXT NOT NULL, new TEXT NOT NULL, session_id TEXT NOT NULL, at REAL);
@@ -142,8 +146,8 @@ def db():
             time.sleep(0.05)
     for table, cols in (("messages", (("machine", "TEXT"), ("remote_id", "INTEGER"), ("delivery", "TEXT"),
                                       ("nonce", "TEXT"), ("scan_from", "INTEGER"), ("confirmed_at", "REAL"), ("wake", "TEXT"))),
-                        ("members", (("transcript_path", "TEXT"),)),
-                        ("todos", (("owner", "TEXT"), ("after", "TEXT"))),
+                        ("members", (("transcript_path", "TEXT"), ("conversation", "TEXT"))),
+                        ("todos", (("owner", "TEXT"), ("after", "TEXT"), ("claimed_conversation", "TEXT"))),
                         ("conversations", (("unreadable", "INTEGER"),))):  # a store made by an older version
         have = {r["name"] for r in con.execute("PRAGMA table_info(%s)" % table)}
         for col, typ in cols:
@@ -511,6 +515,17 @@ def git_branch(cwd):
         return None
 
 
+def conversation_of(sid):
+    """The conversation a session belongs to (its chain's first sid, fleet/docs/session-index.md section 8), from
+    this machine's cache; the sid itself when the cache has no row. Members and to-dos are keyed by it, so a
+    session that continues another holds what it held."""
+    try:
+        row = idxcache.read(fleet_home(), sid)
+    except (OSError, ValueError):
+        row = None
+    return (row or {}).get("conversation") or sid
+
+
 def join(name=None, transcript=None):
     con = db()
     info = find_self()
@@ -533,6 +548,7 @@ def join(name=None, transcript=None):
         r = con.execute("SELECT transcript_path FROM conversations WHERE session_id=?", (info["sessionId"],)).fetchone()
         transcript = r[0] if r else None
     branch = git_branch(cwd)
+    conversation = conversation_of(info["sessionId"])
     con.execute("BEGIN IMMEDIATE")  # the name check and the insert are one step: two joins cannot both win a name
     try:
         for m in con.execute("SELECT * FROM members WHERE left_at IS NULL AND session_id!=?",
@@ -544,9 +560,10 @@ def join(name=None, transcript=None):
                                  % (name, m["session_id"], m["cwd"]))
             con.execute("UPDATE members SET left_at=? WHERE session_id=?", (time.time(), m["session_id"]))
         con.execute("INSERT OR REPLACE INTO members (session_id, name, host, cwd, branch, pid, proc_start, socket,"
-                    " respawn, joined_at, left_at, transcript_path) VALUES (?,?,?,?,?,?,?,?,?,?,NULL,?)",
+                    " respawn, joined_at, left_at, transcript_path, conversation) VALUES (?,?,?,?,?,?,?,?,?,?,NULL,?,?)",
                     (info["sessionId"], name, socket.gethostname(), cwd, branch, info["pid"],
-                     info.get("procStart"), info.get("messagingSocketPath"), respawn, time.time(), transcript))
+                     info.get("procStart"), info.get("messagingSocketPath"), respawn, time.time(), transcript,
+                     conversation))
         con.execute("COMMIT")
     except BaseException:
         con.execute("ROLLBACK")
@@ -810,7 +827,8 @@ def local_members(show_all=False, agents=_UNSET):
     con.execute("BEGIN")
     try:
         members = con.execute("SELECT * FROM members ORDER BY joined_at").fetchall()
-        held = con.execute("SELECT id, title, claimed_session FROM todos WHERE state='claimed'").fetchall()
+        held = con.execute("SELECT id, title, COALESCE(claimed_conversation, claimed_session) AS conversation"
+                           " FROM todos WHERE state='claimed'").fetchall()
         owed = con.execute("SELECT id, kind, sender, recipient_session, created_at FROM messages WHERE kind IN"
                            " ('ask','tell') AND answered_at IS NULL AND recipient_session IS NOT NULL ORDER BY id").fetchall()
     finally:
@@ -826,10 +844,11 @@ def local_members(show_all=False, agents=_UNSET):
         activity = None
         if st == "alive":
             activity = "unknown" if not entry else str(entry.get("status") or entry.get("state") or "unknown")
-        mine = [{"id": t["id"], "title": t["title"]} for t in held if t["claimed_session"] == sid]
+        conversation = m["conversation"] or sid
+        mine = [{"id": t["id"], "title": t["title"]} for t in held if t["conversation"] == conversation]
         due = [{"id": x["id"], "kind": x["kind"], "sender": x["sender"], "created_at": x["created_at"]}
                for x in owed if x["recipient_session"] == sid]
-        out.append({"name": m["name"], "session_id": sid, "host": m["host"], "cwd": m["cwd"],
+        out.append({"name": m["name"], "session_id": sid, "conversation": conversation, "host": m["host"], "cwd": m["cwd"],
                     "branch": m["branch"], "status": st, "respawn": m["respawn"], "joined_at": m["joined_at"],
                     "activity": activity, "agent_kind": entry.get("kind") if entry else None,
                     "held": mine, "unanswered": due,
@@ -2232,9 +2251,10 @@ def todo_claim(tid):
         if w:
             raise FleetError("fleet: to-do %d waits on %s, not done yet." % (tid, ", ".join("#%d" % i for i in w)))
         return con.execute(
-            "UPDATE todos SET state='claimed', claimed_by=?, claimed_session=?, claimed_at=?"
-            " WHERE id=? AND state='open' AND (reserved_for IS NULL OR reserved_for=?)",
-            (me["name"], me["session_id"], time.time(), tid, me["name"])).rowcount
+            "UPDATE todos SET state='claimed', claimed_by=?, claimed_session=?, claimed_conversation=?,"
+            " claimed_at=? WHERE id=? AND state='open' AND (reserved_for IS NULL OR reserved_for=?)",
+            (me["name"], me["session_id"], me["conversation"] or me["session_id"], time.time(), tid,
+             me["name"])).rowcount
     if in_write(con, write) != 1:
         r = todo_row(con, tid)
         if r["state"] == "open" and r["reserved_for"]:
@@ -2250,7 +2270,8 @@ def todo_claim(tid):
 def todo_holder_guard(con, tid, verb):
     info, me = need_member(con)
     r = todo_row(con, tid)
-    if r["state"] != "claimed" or r["claimed_session"] != me["session_id"]:
+    mine = me["conversation"] or me["session_id"]
+    if r["state"] != "claimed" or (r["claimed_conversation"] or r["claimed_session"]) != mine:
         raise FleetError("fleet: to-do %d is %s%s; only the member holding it can %s it."
                          % (tid, r["state"], " by %s" % r["claimed_by"] if r["claimed_by"] else "", verb))
 
@@ -2265,8 +2286,8 @@ def todo_done(tid):
 def todo_release(tid):
     con = db()
     todo_holder_guard(con, tid, "release")
-    con.execute("UPDATE todos SET state='open', claimed_by=NULL, claimed_session=NULL, claimed_at=NULL,"
-                " reserved_for=NULL WHERE id=?", (tid,))
+    con.execute("UPDATE todos SET state='open', claimed_by=NULL, claimed_session=NULL, claimed_conversation=NULL,"
+                " claimed_at=NULL, reserved_for=NULL WHERE id=?", (tid,))
     print("todo %d released" % tid)
 
 
@@ -2528,23 +2549,20 @@ def hook_record():
     return 0
 
 
-# ---------------------------------------------------------------- sessions (fleet_sessions.py)
+# ---------------------------------------------------------------- sessions (fleet_sessions.py, fleet_sessions_api.py)
 #
-# `fleet sessions` lists every Claude Code session of every machine with its live state, and `fleet sessions open
-# KEY` says, as data, how to land in one (fleet_sessions.py holds the contract). Everything is read when it is
-# asked for: the history, `claude agents --json`, the claude tmux server's panes and `ps`, the seamless registry,
-# and the other machines over ssh (5 s to connect, 8 s in all). A machine that answers leaves its rows and the time
-# in $FLEET_HOME/seen/<machine>.json; one that does not is served from there, marked stale, with the reason this
-# run's ssh gave. Nothing remembers reachability, and nothing polls.
+# The list comes from the session index (fleet/docs/session-index.md): `GET /api/sessions`, `fleet sessions --json`
+# and the pick plan all read it through fleet_sessions_api, and no surface merges rows itself. What a session is doing
+# is read at that moment from its machine: this file reads this machine's history, `claude agents --json`, the claude
+# tmux server's panes and `ps`, and asks the other machines over ssh (5 s to connect, 8 s in all). Nothing polls.
 
 SESSIONS_TIMEOUT = 8
 HUB_TIMEOUT = 30
-REGISTRY_TIMEOUT = 10
 
 
 def sessions_conf():
     """$FLEET_HOME/sessions.json: machine-specific settings, never in the repo. Keys: worker_prefixes, job_folders
-    (added to the kind rules), tmux_socket (default claude), env_dir, registry (a command), pick (a command)."""
+    (added to the kind rules), tmux_socket (default claude), env_dir, pick (a command)."""
     try:
         with open(os.path.join(fleet_home(), "sessions.json")) as f:
             conf = json.load(f)
@@ -2570,7 +2588,7 @@ def screen_of(machine):
 
 
 def env_dir():
-    """The env checkout that holds the seamless-sessions tools (the work rule and the registry), or None.
+    """The env checkout that holds `@claude pick`, or None.
     FLEET_ENV_DIR (empty: none), else sessions.json env_dir, else $ENV_HOME, else ~/projects/env."""
     if "FLEET_ENV_DIR" in os.environ:
         cands = [os.environ["FLEET_ENV_DIR"]]
@@ -2584,66 +2602,22 @@ def env_dir():
     return None
 
 
-_WORK = {"key": None, "fn": None}
-
-
 def work_rule():
-    """is_work(folder, transcript) from the env checkout's own test (`_session/_core.py`: a work account's
-    transcript, or a folder under a path profile), or None when there is no env checkout. A rule that is there but
-    fails says yes: a row that cannot be judged never leaves its machine in full."""
-    d = env_dir()
-    if not d:
-        return None
-    if _WORK["key"] == d:
-        return _WORK["fn"]
-    import importlib.util
+    """is_work(folder, transcript) by the one work rule (fleet_work, whose settings env writes into
+    $FLEET_HOME/work.json). A rule that fails says yes: a row that cannot be judged never leaves its machine in
+    full."""
     try:
-        spec = importlib.util.spec_from_file_location("fleet_env_session_core",
-                                                      os.path.join(d, "libexec", "claude", "_session", "_core.py"))
-        core = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(core)
-        paths = core.profile_paths()
-        accounts = core.listed_accounts()
-    except Exception as e:  # noqa: B902 - any failure of a foreign module means: judge everything as work
-        log_line("sessions: the work rule in %s failed (%s); every row counts as work" % (d, e))
-        _WORK.update(key=d, fn=lambda folder, transcript: True)
-        return _WORK["fn"]
-    home = os.path.expanduser("~")
+        rules = fleet_work.load_rules(fleet_home())
+    except Exception as e:  # noqa: B902 - judge everything as work
+        log_line("sessions: the work rule failed (%s); every row counts as work" % e)
+        return lambda folder, transcript: True
 
     def is_work(folder, transcript):
         try:
-            if transcript and "/projects/" in transcript:
-                cfg = os.path.normpath(transcript[:transcript.index("/projects/")])
-                base = os.path.basename(cfg)
-                listed = cfg == os.path.join(home, ".claude") or (
-                    os.path.dirname(cfg) == home and base.startswith(".claude-") and base[8:] in accounts[1:])
-                if not listed:
-                    return True
-            return bool(folder) and bool(core.is_work_folder(folder, paths))
+            return bool(fleet_work.is_work(folder, transcript, rules))
         except Exception:  # noqa: B902
             return True
-    _WORK.update(key=d, fn=is_work)
     return is_work
-
-
-def registry_records():
-    """{sid: record} of the seamless-sessions registry (sessions.json `registry`, else the env checkout's
-    `_session/list --json`), or None when there is none or it does not answer."""
-    cmd = sessions_conf().get("registry")
-    if not (isinstance(cmd, list) and cmd and all(isinstance(c, str) for c in cmd)):
-        d = env_dir()
-        if not d:
-            return None
-        cmd = [os.path.join(d, "libexec", "claude", "_session", "list"), "--json"]
-    try:
-        r = subprocess.run([os.path.expanduser(c) for c in cmd], capture_output=True, text=True,
-                           timeout=REGISTRY_TIMEOUT, stdin=subprocess.DEVNULL)
-        data = json.loads(r.stdout)
-    except (OSError, subprocess.SubprocessError, ValueError):
-        return None
-    if r.returncode != 0 or not isinstance(data, list):
-        return None
-    return {x["sid"]: x for x in data if isinstance(x, dict) and isinstance(x.get("sid"), str)}
 
 
 TMUX_PLACES = ("/opt/homebrew/bin/tmux", "/usr/local/bin/tmux", "/usr/bin/tmux")
@@ -2744,31 +2718,6 @@ def sessions_local(flt, mask_work=False, internal=False):
     return {"machines": {me: entry}, "hub": hub_name(), "as_of": now, "rows": rows}
 
 
-def seen_path(machine):
-    d = os.path.join(private_home(), "seen")
-    os.makedirs(d, mode=0o700, exist_ok=True)
-    return os.path.join(d, re.sub(r"[^A-Za-z0-9_.-]", "_", machine) + ".json")
-
-
-def remember_rows(machine, as_of, rows):
-    """The last answer of a machine: its rows and when, nothing about whether it was reachable."""
-    path = seen_path(machine)
-    tmp = "%s.%d.tmp" % (path, os.getpid())
-    fd = os.open(tmp, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
-        json.dump({"as_of": as_of, "rows": rows}, f)
-    os.replace(tmp, path)
-
-
-def recall_rows(machine):
-    try:
-        with open(seen_path(machine)) as f:
-            data = json.load(f)
-        return data.get("as_of"), [r for r in data.get("rows") or [] if isinstance(r, dict)]
-    except (OSError, ValueError, AttributeError):
-        return None, []
-
-
 def ask_machine(machine, flt):
     return run_remote_json(machine, ["sessions", "--local", "--json", "--internal", "--mask-work"] + flt.args(),
                            timeout=SESSIONS_TIMEOUT, kind=dict, keys=("machines", "rows"))
@@ -2785,45 +2734,69 @@ def relabel(machine, rows):
     return out
 
 
-def sessions_all(flt, machine=None):
-    """Every machine, asked in parallel from here -> (envelope with internal fields, rows per machine)."""
+def machine_facts(flt):
+    """Every machine's own live facts of `flt`, asked in parallel from here, for the pick plan: nothing is kept.
+    -> (machine entries, rows per machine)."""
     me = self_machine()
     others = sorted(other_machines())
-    if machine:
-        if machine != me and machine not in others:
-            raise FleetError("fleet: no machine named %r in machines.json." % machine)
-        others = [m for m in others if m == machine]
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
-        reg_f = ex.submit(registry_records)
-        far = ex.submit(fan_out, others, lambda m: ask_machine(m, flt))
-        local = sessions_local(flt, internal=True) if machine in (None, me) else None
-        got, registry = far.result(), reg_f.result()
-    machines, per = {}, {}
-    if local:
-        machines[me] = local["machines"][me]
-        per[me] = local["rows"]
+    local = sessions_local(flt, internal=True)
+    got = fan_out(others, lambda m: ask_machine(m, flt))
+    machines, per = {me: local["machines"][me]}, {me: local["rows"]}
     for m in others:
         res = got.get(m)
         if isinstance(res, RemoteError) or res is None:
-            as_of, rows = recall_rows(m)
-            if flt.only_id:
-                rows = [r for r in rows if str(r.get("id", "")).startswith(flt.only_id)]
             unreachable = res is None or res.unreachable
-            machines[m] = {"reachable": not unreachable, "stale": True, "as_of": as_of, "reason": str(res or "no answer"),
-                           "fleet": None if unreachable else False, "screen": screen_of(m), "unreadable": None,
-                           "tmux_server": None}
-            per[m] = [dict(r, stale=True, as_of=as_of, live_on=r.get("live_on") or []) for r in relabel(m, rows)]
+            machines[m] = {"reachable": not unreachable, "stale": True, "as_of": None,
+                           "reason": str(res or "no answer"), "fleet": None if unreachable else False,
+                           "screen": screen_of(m), "unreadable": None, "tmux_server": None}
+            per[m] = []
             continue
         entry = dict(next(iter(res["machines"].values()), {}) or {})
         entry.update(reachable=True, stale=False, reason="",  # this machine's machines.json says what screen it has
                      screen=screen_of(m) if screen_of(m) != "none" else entry.get("screen") or "none")
         machines[m] = entry
         per[m] = relabel(m, [r for r in res["rows"] if isinstance(r, dict)])
-        if not flt.only_id:
-            remember_rows(m, entry.get("as_of") or time.time(), per[m])
-    rows = fs.merge(per, registry, hub_main=hub_name())
-    env = {"machines": machines, "hub": hub_name(), "as_of": time.time(), "rows": rows}
-    return env, per, registry
+    return machines, per
+
+
+def sessions_envelope(flt, machine=None):
+    """The list as `@claude pick` reads it: the rows of the session index (one per session id, heads only), in
+    the picker's shape. Off the hub, the hub's answer; when it does not answer, the last one, saying so."""
+    me = self_machine()
+    if machine and machine != me and machine not in other_machines():
+        raise FleetError("fleet: no machine named %r in machines.json." % machine)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        def members():
+            with db_scope():
+                return all_members(False, always_machine=True)[0]
+        asked = ex.submit(members)
+        listed = sapi.envelope({"limit": sapi.EVERY, "machine": machine})
+        members = asked.result()
+    holds = {(m["machine"], m.get("conversation") or m["session_id"]): m for m in members if m["status"] == "alive"}
+    here = {}
+    if listed["index"] == "up" and any(r.get("work") and r["machine"] == me for r in listed["rows"]):
+        here = {r["id"]: r for r in sessions_local(Filters(kind="all", limit=sapi.EVERY))["rows"]}
+    per = {}
+    for r in listed["rows"]:
+        if flt.only_id and not r["sid"].startswith(flt.only_id):
+            continue
+        row = fs.from_index(r, listed["machines"], me, holds.get((r["machine"], r["conversation"])))
+        own = here.get(row["id"]) if r.get("work") and row["machine"] == me else None
+        if own:  # a work row is masked in the index; its own machine shows it in full
+            row.update(name=own["name"], named=own["named"], folder=own["folder"], about=own["about"],
+                       tmux=own["tmux"], masked=False)
+        per.setdefault(row["machine"], []).append(row)
+    rows = []
+    for mine in per.values():
+        rows += mine if flt.only_id else fs.select(mine, flt.kinds, flt.named, flt.since, flt.limit, time.time(),
+                                                   default_recent=not flt.kind)
+    rows.sort(key=lambda r: r["last_seen"] or r["started"] or 0, reverse=True)
+    machines = {m: dict(e, fleet=True if e["reachable"] else None, screen=screen_of(m), unreadable=None,
+                        tmux_server=None) for m, e in listed["machines"].items()}
+    out = {"machines": machines, "hub": listed["hub"], "as_of": listed["as_of"], "rows": rows}
+    if listed["index"] == "down":
+        out["note"] = listed.get("reason") or "the hub did not answer"
+    return out
 
 
 def public_envelope(env):
@@ -2831,29 +2804,6 @@ def public_envelope(env):
     out["machines"] = {m: {k: v for k, v in e.items() if not k.startswith("_")} for m, e in env["machines"].items()}
     out["rows"] = [fs.public(r) for r in env["rows"]]
     return out
-
-
-def sessions_envelope(flt, direct=False, machine=None):
-    """The list as this machine sees it. On the hub, or with `direct`, it asks every machine itself; elsewhere it
-    asks the hub, and asks the machines itself when the hub does not answer (saying so in `note`)."""
-    me, hub = self_machine(), hub_name()
-    if not direct and not machine and hub != me and hub in other_machines():
-        try:
-            env = run_remote_json(hub, ["sessions", "--json"] + flt.args(), timeout=HUB_TIMEOUT, kind=dict,
-                                  keys=("machines", "rows"))
-        except RemoteError as e:
-            env, _, _ = sessions_all(flt)
-            env = public_envelope(env)
-            env["note"] = "the hub %s did not answer (%s); this machine asked the others itself" % (hub, e)
-            return env
-        own = {r["id"]: r for r in sessions_local(flt)["rows"]}  # this machine's own rows, in full
-        env["rows"] = [dict(own[r["id"]], live_on=r.get("live_on") or own[r["id"]]["live_on"],
-                            copies=r.get("copies") or [], registry=r.get("registry"))
-                       if r.get("machine") == me and r.get("masked") and r.get("id") in own else r
-                       for r in env.get("rows") or []]
-        return env
-    env, _, _ = sessions_all(flt, machine)
-    return public_envelope(env)
 
 
 def sessions_text(env):
@@ -2880,37 +2830,52 @@ def check_key(key):
     return key.split(":", 1)
 
 
-def sessions_open(key):
-    """The plan for landing in session `key`, worked out from every machine this one can ask."""
+def sessions_open(key, to=None):
+    """The plan for landing in session `key`: who owns it and where its chain ends from the session index, what it
+    is doing now from every machine this one can ask. `to` (a machine, or a phone owner) says where it should
+    land; by default the machine of the key."""
     machine, sid = check_key(key)
     me = self_machine()
-    if machine != me and machine not in other_machines():
+    known = {me} | set(other_machines())
+    if machine not in known:
         raise FleetError("fleet: no machine named %r in machines.json." % machine)
-    env, per, registry = sessions_all(Filters(kind="all", only_id=sid))
-    copies = [r for rows in per.values() for r in rows]
-    ids = {r["id"] for r in copies}
+    if to and to not in known and not re.match(r"^phone:(prod|dev:[a-z0-9]+)$", to):
+        raise FleetError("fleet: --to takes a machine of machines.json or phone:<host>, not %r." % to)
+    listed, _ = sapi.index_rows()
+    ids = {r["sid"] for r in listed if r["sid"] == sid} or {r["sid"] for r in listed if r["sid"].startswith(sid)}
     if len(ids) > 1:
         raise FleetError("fleet: %r matches %d sessions; give more of the id." % (sid, len(ids)))
-    if not copies:
-        m = env["machines"].get(machine) or {}
+    head = sapi.head_row(listed, ids.pop()) if ids else None
+    if head and head["sid"] not in (sid,) and not head["sid"].startswith(sid):
+        machine = head["machine"]  # a superseded sid: the plan is the chain head's, where that one is
+    machines, per = machine_facts(Filters(kind="all", only_id=head["sid"] if head else sid))
+    copies = [r for rows in per.values() for r in rows]
+    found = {r["id"] for r in copies}
+    if len(found) > 1:
+        raise FleetError("fleet: %r matches %d sessions; give more of the id." % (sid, len(found)))
+    if not copies and not head:
+        m = machines.get(machine) or {}
         if m.get("stale"):
             return {"kind": "refuse-offline", "key": key, "id": sid, "machine": machine, "name": "", "tmux": "",
                     "folder": "", "pid": None, "state": "", "member": False, "force": False, "run_on_owner": False,
+                    "head": sid, "take": None,
                     "message": "%s: not answering (%s), and nothing is known of %s there. It may be running there, so "
                                "it is not resumed anywhere else." % (machine, m.get("reason") or "no answer", sid[:8])}
         raise FleetError("fleet: no session %s on any machine that answered." % key)
-    full = ids.pop()
-    holders = {m: e.get("_holders") or {} for m, e in env["machines"].items()}
+    full = head["sid"] if head else found.pop()
+    holders = {m: e.get("_holders") or {} for m, e in machines.items()}
     folder_ok = {r["machine"]: r.get("_folder_ok") for r in copies if "_folder_ok" in r}
-    return fs.plan("%s:%s" % (machine, full), copies, env["machines"], holders, folder_ok,
-                   (registry or {}).get(full), here=me)
+    return fs.plan("%s:%s" % (machine, full), copies, machines, holders, folder_ok, head, here=me, to=to)
 
 
 def sessions_cmd(a):
+    if a.what == "observe":
+        emit(json.dumps(sapi.observe_local(), indent=2))
+        return 0
     if a.what == "open":
         if not a.key:
             raise FleetError("fleet: sessions open KEY")
-        p = sessions_open(a.key)
+        p = sessions_open(a.key, a.to)
         if a.json:
             print(json.dumps(p, indent=2))
         else:
@@ -2923,7 +2888,7 @@ def sessions_cmd(a):
     if a.local:
         env = sessions_local(flt, a.mask_work, a.internal)
     else:
-        env = sessions_envelope(flt, a.direct, a.machine)
+        env = public_envelope(sessions_envelope(flt, a.machine))
     if a.json:
         emit(json.dumps(env, indent=2))
     else:
@@ -3450,6 +3415,9 @@ def history_refusal(bound, headers, post):
     return None
 
 
+# The page no longer calls these two (History is part of Sessions). They stay served until their tests, in
+# test_fleet_history.py, go with them.
+
 def ui_history():
     con = db()
     names = fleet_names(con)
@@ -3632,57 +3600,6 @@ def ui_page_write(path, body):
     return 404, {"error": "not found"}
 
 
-class SessionsFeed:
-    """The page's session list. It answers at once with the last list it has (each row says `as_of`) and fetches a
-    fresh one in the background when that is older than the TTL, so a sleeping machine's 8 s never holds the page.
-    The first request, and one with ?fresh=1 (after an action), waits for a fresh list. The page asks on focus."""
-
-    def __init__(self, ttl=UI_TTL):
-        self.ttl, self.lock, self.val, self.at, self.busy = ttl, threading.Lock(), None, 0.0, False
-
-    def fetch(self):
-        with db_scope():
-            env, _, _ = sessions_all(Filters(kind="all"))
-        with self.lock:
-            self.val, self.at, self.busy = env, time.time(), False
-        return env
-
-    def refresh(self):
-        try:
-            self.fetch()
-        except Exception as e:  # noqa: B902 - a failed background refresh keeps the last list
-            log_line("sessions: the page's refresh failed: %s" % e)
-            with self.lock:
-                self.busy = False
-
-    def get(self, fresh=False):
-        with self.lock:
-            val, at, busy = self.val, self.at, self.busy
-            start = val is not None and not fresh and not busy and time.time() - at >= self.ttl
-            if start:
-                self.busy = True
-        if val is None or fresh:
-            return self.fetch()
-        if start:
-            threading.Thread(target=self.refresh, daemon=True).start()
-        return val
-
-    def forget(self):
-        with self.lock:
-            self.at = 0.0
-
-
-def session_row(feed, key):
-    """The row of `key` in the page's list (a fresh list when it is not in the last one), or a FleetError. The page
-    can only act on a session the list holds."""
-    check_key(key)
-    for fresh in (False, True):
-        hit = next((r for r in feed.get(fresh)["rows"] if r["key"] == key), None)
-        if hit:
-            return hit
-    raise FleetError("fleet: no session %s in the list." % key)
-
-
 def on_machine(machine, verb, key, quiet_fn):
     """Run an internal verb about `key` on `machine` (this one: in process)."""
     if machine == self_machine():
@@ -3693,63 +3610,25 @@ def on_machine(machine, verb, key, quiet_fn):
         raise FleetError("fleet: %s: %s" % (machine, str(e).splitlines()[-1] if str(e) else "failed"))
 
 
-def ui_sessions_write(path, body, feed):
-    """The Sessions tab's writes. A request names a session by its key and a machine by name, both checked against
-    the list and machines.json; it never carries a command. -> (status, json)."""
-    try:
-        key = text_field(body, "key", limit=80)
-        row = session_row(feed, key)
-        line = "@claude pick --open %s" % key
-        if path == "/api/sessions/open":
-            target = text_field(body, "target", limit=64)
-            if target == "copy":
-                return 200, {"copy": line}
-            if target != self_machine() and target not in other_machines():
-                raise FleetError("fleet: no machine named %r." % target)
-            if screen_of(target) == "none":
-                raise FleetError("fleet: %s has no screen to open a window on; copy the line instead." % target)
-            return 200, dict(on_machine(target, "_open-window", key, open_window), copy=line)
-        if path == "/api/sessions/stop":
-            if body.get("force") is True:
-                res = on_machine(row["machine"], "_force-stop", key, force_stop)
-            elif row["member"]:
-                tgt = "%s@%s" % (row.get("_fleet_name") or row["name"], row["machine"])
-                res = control("stop", tgt)
-                if res["action"] != "stopped":
-                    res["thread"], _ = captured(send, "tell", tgt, WRAP_UP_TELL, PAGE)
-            else:
-                raise FleetError("fleet: %s is not a fleet member, so it cannot be told to wrap up; an idle one in a "
-                                 "window can be stopped with force." % (row["name"] or key))
-            feed.forget()
-            return 200, res
-        if path == "/api/sessions/rename":
-            name = text_field(body, "name", limit=200)
-            if row["machine"] == self_machine():
-                _, out = captured(history_rename, row["id"], name)
-            else:
-                try:
-                    out = run_remote(row["machine"], ["history", "rename", row["id"]] + name.split(), timeout=30).strip()
-                except RemoteError as e:
-                    raise FleetError("fleet: %s: %s" % (row["machine"], e))
-            feed.forget()
-            return 200, {"output": out}
-    except FleetError as e:
-        return 400, {"error": str(e).splitlines()[0] if str(e) else "failed"}
-    return 404, {"error": "not found"}
-
-
-SESSION_WRITES = ("/api/sessions/open", "/api/sessions/stop", "/api/sessions/rename")
+HISTORY_WRITES = ("/api/history/rename", "/api/history/delete", "/api/history/ask", "/api/history/search")
 PROFILE_WRITES = ("/api/profiles/folder", "/api/profiles/save")
 PAGE_WRITES = ("/api/todos/add", "/api/tell", "/api/inbox/answer", "/api/inbox/dismiss", "/api/members/stop",
                "/api/members/respawn", "/api/members/attach")
 
 
+def ui_machines():
+    """Which machines have a screen to open a window on, for the page's Open targets."""
+    me = self_machine()
+    return {"self": me, "hub": hub_name(),
+            "machines": {m: {"screen": screen_of(m)} for m in [me] + sorted(other_machines())}}
+
+
 def make_ui_handler(cache, token):
-    api = {"/api/members": ui_members, "/api/todos": ui_todos, "/api/threads": ui_threads}
-    writes = ("/api/history/rename", "/api/history/delete", "/api/history/ask", "/api/history/search") + PAGE_WRITES \
-        + PROFILE_WRITES + SESSION_WRITES
+    api = {"/api/members": ui_members, "/api/todos": ui_todos, "/api/threads": ui_threads,
+           "/api/machines": ui_machines}
+    writes = HISTORY_WRITES + PAGE_WRITES + PROFILE_WRITES + sapi.PAGE_POSTS
     guarded = ("/api/history", "/api/inbox", "/api/profiles", "/api/sessions")  # served only on loopback, like the writes
-    feed = SessionsFeed(cache.ttl)
+    feed = sapi.IndexFeed(cache.ttl)
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "fleet-ui"
@@ -3807,9 +3686,34 @@ def make_ui_handler(cache, token):
                 cookie += "; Secure"  # only ever added, never trusted to loosen anything
             self.send_body(303, "text/plain", b"signed in", [("Location", "/"), ("Set-Cookie", cookie)])
 
+        def service(self, method):
+            """The hub's service routes (take, journal, chain, end-host, owner): fleet_index_http holds their
+            guard (loopback, Host, a Bearer token, never the cookie)."""
+            import fleet_index_http
+            url = urlparse(self.path)
+            routes = fleet_index_http.SERVICE_POSTS if method == "POST" else fleet_index_http.SERVICE_GETS
+            if url.path not in routes:
+                return False
+            body = b""
+            if method == "POST":
+                try:
+                    n = int(self.headers.get("Content-Length") or 0)
+                except ValueError:
+                    n = -1
+                if not 0 <= n <= POST_MAX:
+                    self.send_json(400, {"ok": False, "code": "bad-request", "error": "the body is too large"})
+                    return True
+                body = self.rfile.read(n)
+            with sapi.HUB_LOCK:
+                code, data = fleet_index_http.handle(method, url.path, parse_qs(url.query), body, self.headers,
+                                                     self.server.server_address[0], token)
+            self.send_json(code, data)
+            return True
+
         def do_POST(self):
             with db_scope():
-                self.handle_post()
+                if not self.service("POST"):
+                    self.handle_post()
 
         def handle_post(self):
             path = urlparse(self.path).path
@@ -3836,8 +3740,8 @@ def make_ui_handler(cache, token):
                     cache.items.clear()
                 elif path in PROFILE_WRITES:
                     code, data = ui_profiles_write(path, body)
-                elif path in SESSION_WRITES:
-                    code, data = ui_sessions_write(path, body, feed)
+                elif path in sapi.PAGE_POSTS:
+                    code, data = sapi.post(path, body, feed)
                 else:
                     code, data = ui_history_write(path, body)
             except Exception as e:
@@ -3846,7 +3750,8 @@ def make_ui_handler(cache, token):
 
         def do_GET(self):
             with db_scope():
-                self.handle_get()
+                if not self.service("GET"):
+                    self.handle_get()
 
         def handle_get(self):
             path = urlparse(self.path).path
@@ -3860,8 +3765,12 @@ def make_ui_handler(cache, token):
                         refresh = (parse_qs(urlparse(self.path).query).get("refresh") or [""])[0] == "1"
                         return self.send_json(200, ui_profiles(refresh))
                     if path == "/api/sessions":
-                        fresh = (parse_qs(urlparse(self.path).query).get("fresh") or [""])[0] == "1"
-                        return self.send_json(200, public_envelope(feed.get(fresh)))
+                        query = parse_qs(urlparse(self.path).query)
+                        try:
+                            query = dict(sapi.parse_query(query), fresh=(query.get("fresh") or [""])[0] == "1")
+                        except ValueError as e:
+                            return self.send_json(400, {"error": str(e)})
+                        return self.send_json(200, feed.get(query, query.pop("fresh")))
                     data = ui_history() if path == "/api/history" else cache.get(path, ui_inbox)
                     return self.send_json(200, data)
                 except Exception as e:
@@ -3954,8 +3863,9 @@ def statusline_object(con, session_id):
         out["knock_from"] = inbox[0]["sender"] if inbox else None
         out["waiting"] = con.execute("SELECT count(DISTINCT thread) FROM messages WHERE sender_session=? "
                                      "AND kind='ask' AND answered_at IS NULL", (session_id,)).fetchone()[0]
-        out["todos"] = con.execute("SELECT count(*) FROM todos WHERE state='claimed' AND claimed_session=?",
-                                   (session_id,)).fetchone()[0]
+        out["todos"] = con.execute(
+            "SELECT count(*) FROM todos WHERE state='claimed' AND COALESCE(claimed_conversation, claimed_session) IN"
+            " (SELECT COALESCE(conversation, session_id) FROM members WHERE session_id=?)", (session_id,)).fetchone()[0]
     return out
 
 
@@ -3963,6 +3873,10 @@ def statusline_object(con, session_id):
 
 def main(argv=None):
     os.umask(0o077)  # anything this command creates is private to the user
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv[:1] == ["session"]:  # the session index's own command line (fleet/docs/session-index.md, section 13)
+        import fleet_index_cli
+        return fleet_index_cli.main(argv[1:])
     p = argparse.ArgumentParser(prog="fleet", description="Claude Code sessions that talk to each other.")
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("join", help="register this session"); s.add_argument("name", nargs="?")
@@ -4013,7 +3927,9 @@ def main(argv=None):
     s = t.add_parser("spawn"); s.add_argument("id", type=int); s.add_argument("--name"); s.add_argument("--cwd")
     s.add_argument("--on", metavar="MACHINE", help="start it on another machine")
     s = sub.add_parser("ui", help="serve the fleet page, or print its sign-in link"); s.add_argument("--port", type=int)
-    s.add_argument("--host"); s.add_argument("what", nargs="?", choices=["url"], help="`url`: print the sign-in link")
+    s.add_argument("--host")
+    s.add_argument("what", nargs="?", choices=["url", "token"],
+                   help="`url`: print the sign-in link; `token`: the address and token as JSON, for a local server")
     sub.add_parser("_threads").add_argument("limit", type=int, nargs="?", default=30)
     sub.add_parser("_deliver"); sub.add_parser("_answer"); sub.add_parser("_thread").add_argument("thread")
     sub.add_parser("statusline", help="one JSON line for a status line").add_argument("session_id")
@@ -4032,9 +3948,10 @@ def main(argv=None):
     s = h.add_parser("import", help="copy conversations from another store"); s.add_argument("path")
     s.add_argument("--descriptions", help="a store with a digests table, when it is not the same file")
     s = sub.add_parser("sessions", help="every session on every machine with its live state; `open KEY` says how to land in one")
-    s.add_argument("what", nargs="?", choices=["open"]); s.add_argument("key", nargs="?")
+    s.add_argument("what", nargs="?", choices=["open", "observe"]); s.add_argument("key", nargs="?")
+    s.add_argument("--to", help="open: where it should land, a machine or phone:<host> (default: the key's machine)")
     s.add_argument("--json", action="store_true"); s.add_argument("--local", action="store_true", help="this machine only")
-    s.add_argument("--direct", action="store_true", help="ask every machine from here, not through the hub")
+    s.add_argument("--direct", action="store_true", help="accepted for older pickers: the list comes from the hub")
     s.add_argument("--limit", type=int, default=fs.LIMIT, help="rows per machine that are not live (default %d)" % fs.LIMIT)
     s.add_argument("--since", help="seen since: 14d, 6h, 30m or epoch seconds")
     s.add_argument("--kind", help="chat (default), job, worker, a comma list, or all")
@@ -4080,6 +3997,9 @@ def main(argv=None):
             elif a.todo_cmd == "spawn": todo_spawn(a.id, a.name, a.cwd, a.on)
         elif a.cmd == "ui":
             if a.what == "url": print(ui_url(a.port, a.host))
+            elif a.what == "token":
+                port, _ = ui_settings(a.port, a.host)
+                print(json.dumps({"url": "http://127.0.0.1:%d" % port, "token": ui_token()}))
             else: ui(a.port, a.host)
         elif a.cmd == "_threads": cmd_threads(a.limit)
         elif a.cmd == "_deliver": cmd_deliver()
@@ -4112,6 +4032,7 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    sys.modules.setdefault("fleet", sys.modules[__name__])  # the modules that `import fleet` get this one
     code = main()
     try:
         sys.stdout.flush()

@@ -1,2 +1,8 @@
 #!/bin/sh
-exec python3 "$(dirname "$0")/../fleet.py" "$@"
+# `fleet session ...` goes straight to the session index's CLI; everything else to fleet.py.
+here="$(dirname "$0")/.."
+if [ "$1" = session ]; then
+    shift
+    exec python3 "$here/fleet_index_cli.py" "$@"
+fi
+exec python3 "$here/fleet.py" "$@"

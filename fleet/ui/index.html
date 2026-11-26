@@ -23,10 +23,13 @@
     <section class="card">
       <div class="card-head"><span class="head-ic" data-icon="terminal"></span><h3>Sessions</h3><span class="count" id="n-sessions"></span></div>
       <div id="s-strip" class="s-strip" aria-label="Machines"></div>
-      <form id="s-filter" class="add-bar" role="search" onsubmit="return false">
-        <input id="s-q" type="search" placeholder="Filter by name, folder or machine" aria-label="Filter sessions" autocomplete="off">
+      <form id="s-filter" class="add-bar" role="search">
+        <input id="s-q" type="search" placeholder="Filter by name, folder or machine, or describe what you remember" aria-label="Filter sessions, or describe one to search by meaning" autocomplete="off">
+        <button class="act" type="submit" id="s-meaning">Search by meaning</button>
+        <button class="act" type="button" id="s-clear" hidden>Clear</button>
         <div id="s-kinds" class="s-seg" role="group" aria-label="Which sessions"></div>
       </form>
+      <p class="h-found" id="s-found" hidden></p>
       <div id="s-rows" class="s-rows"></div>
     </section>
     <dialog id="s-card" class="s-card" aria-label="Session"></dialog>
@@ -58,26 +61,10 @@
       <div id="foryou" class="card-body"></div>
     </section>
   </section>
-  <section class="view" id="view-history" data-view="history" hidden>
-    <div id="h-msg" role="status" class="h-msg toast"></div>
-    <div class="p-layout">
-      <aside class="p-side" aria-label="Folders"><div class="p-side-head">Folders</div><div id="h-tree"></div></aside>
-      <section class="card">
-        <div class="card-head"><span class="head-ic" data-icon="history"></span><h3 id="h-crumb">All sessions</h3><span class="count" id="n-history"></span></div>
-        <form id="h-search" class="add-bar" role="search">
-          <input id="h-q" type="search" placeholder="Filter by name or folder, or describe what you remember" aria-label="Filter sessions, or describe one to search by meaning" autocomplete="off">
-          <button class="act" type="submit" id="h-meaning">Search by meaning</button>
-          <button class="act" type="button" id="h-clear" hidden>Clear</button>
-        </form>
-        <p class="dim h-note" id="h-note"></p>
-        <div id="h-rows"></div>
-      </section>
-    </div>
-  </section>
   <section class="view" id="view-profiles" data-view="profiles" hidden>
     <div id="p-msg" role="status" class="h-msg toast"></div>
     <div class="p-layout">
-      <aside class="p-side" aria-label="Folders"><div class="p-side-head">Folders <span class="count" id="n-profiles"></span></div><div id="p-tree"></div></aside>
+      <aside class="p-side" aria-label="Folders"><div class="p-side-head"><span id="p-where">Folders on this machine</span> <span class="count" id="n-profiles"></span></div><div id="p-tree"></div></aside>
       <div id="p-main" class="p-main"></div>
     </div>
   </section>

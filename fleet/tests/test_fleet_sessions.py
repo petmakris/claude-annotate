@@ -1,9 +1,10 @@
 """`fleet sessions`: every session of every machine, the plan that lands in one, and the page's Sessions API.
 
 Three machines: `here` (the hub, a Mac-like screen), `bee` (reachable) and `cee` (in machines.json, never
-answers). Each machine's tmux server and process tree are files in its FLEET_HOME read by a fake `tmux` and `ps`;
-the env checkout is a fake one whose `_core.py` work rule calls a folder under $FAKE_WORK_DIR work, and whose
-registry (`_session/list --json`) prints $FAKE_REGISTRY.
+answers). The hub holds the real session index; a seeded session is in its machine's history and, through a journal
+batch, in the index. Each machine's tmux server and process tree are files in its FLEET_HOME read by a fake `tmux`
+and `ps`; each machine's work.json calls a folder under WORK work; the env checkout is a fake one that only has to
+be there for the picker's command.
 """
 import json
 import os
@@ -18,21 +19,18 @@ import uuid
 
 import pytest
 
+import schema_check
 from fleet_testkit import fleet, world  # noqa: F401
 
-fs = fleet.fs
+import fleet_index_cli as cli  # noqa: E402
+import fleet_index_store as store  # noqa: E402
+import fleet_sessions_api as sapi  # noqa: E402
+import fleet_work  # noqa: E402
 
-FAKE_CORE = '''import os
-def profile_paths():
-    return [os.environ["FAKE_WORK_DIR"]]
-def listed_accounts():
-    return ["me", "other"]
-def is_work_folder(folder, paths=None):
-    return any(folder == p or folder.startswith(p + "/") for p in paths)
-'''
-FAKE_LIST = '''#!/bin/sh
-cat "$FAKE_REGISTRY" 2>/dev/null || echo "[]"
-'''
+fs = fleet.fs
+SCHEMA_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs",
+                           "session-index.schema.json")
+
 FAKE_TMUX = '''#!/bin/sh
 if [ -f "$FLEET_HOME/tmux.txt" ]; then cat "$FLEET_HOME/tmux.txt"; else echo "no server running" >&2; exit 1; fi
 '''
@@ -45,6 +43,22 @@ open(os.environ["FAKE_WINDOW_LOG"], "a").write(json.dumps([os.path.basename(sys.
 print("ok")
 '''
 TIMEOUT_LINE = "ssh: connect to host %s port 22: Operation timed out"
+# A headless `claude -p` that says which machine ran it (its FLEET_HOME's folder), and `agents` as the shared stub
+# does it, so the list still sees the fake sessions.
+MODEL = '''#!%s
+import json, os, sys
+a = sys.argv[1:]
+if a[:1] == ["agents"]:
+    os.execv(os.path.join(os.environ["STUB_DIR"], "claude"), ["claude"] + a)
+where = "bee" if "/h-bee/" in os.environ["FLEET_HOME"] else "here"
+prompt = sys.stdin.read()
+if "They are looking for" in prompt:
+    print('[{"n": 1, "why": "it planned the export"}]')
+elif "Question:" in prompt:
+    print("ANSWER of %%s: %%s" %% (where, prompt.split("Question: ")[1].splitlines()[0]))
+else:
+    print("Described on %%s, from its own transcript." %% where)
+'''
 
 
 def sid(n):
@@ -66,21 +80,62 @@ class Three:
         conf = {"hub": "here", "screen": "macos", "cee": {"ssh": "cee", "fleet": "/x/fleet.py"}}
         conf.update(here_conf or {})
         world.link(self.bee, extra=conf)
+        bee_file = os.path.join(self.bee.home, "machines.json")
+        with open(bee_file) as f:
+            theirs = json.load(f)
+        theirs["hub"] = conf["hub"]
+        with open(bee_file, "w") as f:
+            json.dump(theirs, f)
         self.env = os.path.join(b, "env")
-        script(os.path.join(self.env, "libexec", "claude", "_session", "_core.py"), FAKE_CORE)
-        script(os.path.join(self.env, "libexec", "claude", "_session", "list"), FAKE_LIST)
+        script(os.path.join(self.env, "libexec", "claude", "_session", "_core.py"), "")
         self.work = "/home/u/work"  # outside /tmp, which the kind rules call a job folder
-        self.registry = os.path.join(b, "registry.json")
         self.window_log = os.path.join(b, "windows.jsonl")
-        for k, v in {"FLEET_ENV_DIR": self.env, "FAKE_WORK_DIR": self.work, "FAKE_REGISTRY": self.registry,
+        for host in (world.here, self.bee):
+            with open(os.path.join(host.home, "work.json"), "w") as f:
+                json.dump({"accounts": ["me", "other"], "profile_paths": [self.work],
+                           "own_profiles": os.path.join(b, "profiles")}, f)
+        for k, v in {"FLEET_ENV_DIR": self.env, "FLEET_BACKUP_DIR": os.path.join(b, "backups"),
+                     "CLAUDE_SESSIONS_DIR": os.path.join(b, "registry"),  # the registry shim writes here only
                      "FLEET_TMUX": script(os.path.join(b, "tools", "tmux"), FAKE_TMUX),
                      "FLEET_PS": script(os.path.join(b, "tools", "ps"), FAKE_PS),
                      "FAKE_WINDOW_LOG": self.window_log}.items():
             world.mp.setenv(k, v)
-        fleet._WORK.update(key=None, fn=None)
+        store._ON_CHANGE.clear()
+        store._BEFORE_READ.clear()
+        cli._HUBS.clear()
+        sapi._ATTEMPTS.clear()
         self.T = float(int(time.time()))
+        self.seqs = {}
 
-    def seed(self, host, s, cwd, ago, name=None, ai=None, prompt="", transcript="", ended=None):
+    def hub_db(self, host=None):
+        return store.connect(os.path.join((host or self.w.here).home, "index", "hub.db"))
+
+    def index(self, machine, s, fields, ago=0, event="start", writer=None, epoch=1, hub=None):
+        """One journal entry of `machine`, applied to the hub's index `ago` seconds ago."""
+        self.seqs[machine] = self.seqs.get(machine, 0) + 1
+        con = self.hub_db(hub)
+        hub_name = hub.name if hub else "here"
+        reply = store.apply_batch(con, {"machine": machine, "entries": [{
+            "v": 1, "machine": machine, "seq": self.seqs[machine], "as": writer or machine, "sid": s,
+            "epoch_seen": epoch, "event": event, "at": self.T - ago, "fields": fields}]},
+            hub=hub_name, machines={"here", "bee", "cee"}, now=self.T - ago)
+        con.close()
+        assert reply["results"][0]["outcome"] == "applied", reply
+
+    def take(self, s, to, expect=1):
+        con = self.hub_db()
+        store.take(con, s, to, expect, "here" if to.startswith("phone:") else to, hub="here",
+                   machines={"here", "bee", "cee"})
+        con.close()
+
+    def row(self, s):
+        con = self.hub_db()
+        r = store.get_row(con, s)
+        con.close()
+        return r
+
+    def seed(self, host, s, cwd, ago, name=None, ai=None, prompt="", transcript="", ended=None, kind=None,
+             index=True, hub=None):
         self.w.mp.setenv("FLEET_HOME", host.home)
         con = fleet.db()
         con.execute("INSERT INTO conversations(session_id, cwd, transcript_path, started_at, last_seen_at, ended_at,"
@@ -89,6 +144,19 @@ class Three:
                      name, ai, prompt))
         con.close()
         self.w.here_env()
+        if not index:
+            return
+        label = name or ai
+        fields = {"cwd": cwd, "first_prompt": prompt, "kind": kind or fs.kind_of(label, cwd),
+                  "work": cwd.startswith(self.work) or "/.claude-work/" in transcript}
+        if label:
+            fields.update(name=label, name_source="custom" if name else "ai")
+        if fields["work"]:
+            fields = fleet_work.mask_fields(fields)
+        machine = "here" if host is self.w.here else host.name
+        self.index(machine, s, fields, ago, hub=hub)
+        if ended:
+            self.index(machine, s, {"work": fields["work"], "end_reason": "exit"}, ago, event="end", hub=hub)
 
     def live(self, host, name, s, cwd):
         """A running interactive session with session id `s`."""
@@ -113,10 +181,6 @@ class Three:
     def status(self, name, status):
         with open(os.path.join(self.w.stub_dir, "status.json"), "w") as f:
             json.dump({name: {"status": status}}, f)
-
-    def reg(self, records):
-        with open(self.registry, "w") as f:
-            json.dump(records, f)
 
     def cli(self, *argv):
         self.w.here_env()
@@ -145,11 +209,16 @@ def three(world):
     t = Three(world)
     yield t
     world.here_env()
+    for con in cli._HUBS.values():
+        con.close()
+    cli._HUBS.clear()
+    store._ON_CHANGE.clear()
+    store._BEFORE_READ.clear()
 
 
 def listing(t):
     """here: voice (live in tmux, a member), an unnamed chat of yesterday, an unnamed chat of 20 days ago, a job;
-    bee: notes (live in a window), a work-rule chat; cee: one row in the cache of its last answer."""
+    bee: notes (live in a window), a work-rule chat; cee (never answers): one session the index holds."""
     w = t.w
     v = t.live(w.here, "voice", V, "/home/u/projects/a")
     t.seed(w.here, V, "/home/u/projects/a", 60, name="voice", prompt="Plan the voice work")
@@ -161,17 +230,118 @@ def listing(t):
     t.live(t.bee, "notes", W, "/home/u/b")
     t.seed(t.bee, W, "/home/u/b", 120, name="notes", prompt="Take notes")
     t.seed(t.bee, S, os.path.join(t.work, "a"), 300, ai="Secret plan", prompt="the secret prompt")
-    t.reg([{"sid": V, "owner": "here"}])
-    cached = {"key": "cee:" + C, "id": C, "machine": "cee", "name": "gym notes", "named": True, "folder": "/home/u/c",
-              "about": "x", "kind": "chat", "where": "tmux", "tmux": "gym-notes", "state": "idle", "pid": 300,
-              "member": False, "held": [], "unanswered": [], "free": False, "started": t.T - 9000,
-              "last_seen": t.T - 8000, "ended": None, "end_reason": "", "live_on": ["cee"], "copies": [],
-              "stale": False, "as_of": t.T - 7200, "masked": False, "registry": None}
-    fleet.remember_rows("cee", t.T - 7200, [cached])
+    t.index("cee", C, {"name": "gym notes", "name_source": "custom", "kind": "chat", "cwd": "/home/u/c",
+                       "first_prompt": "x", "work": False}, 8000)
+    w.here_env()
     return v
 
 
-def test_the_list_holds_every_machine_with_exact_rows(three):
+def api(t, query=None, **kw):
+    t.w.here_env()
+    return sapi.envelope(query, **kw)
+
+
+def test_one_sid_is_one_row_on_the_sessions_endpoint(three):
+    """Two machines hold a transcript of one session: the endpoint gives one row, the index's."""
+    t = three
+    t.seed(t.w.here, W, "/home/u/b", 500, name="notes", prompt="Take notes", index=False)
+    listing(t)
+    rows = [r for r in api(t, {"env": "all", "chains": "all", "kind": "all"})["rows"] if r["sid"] == W]
+    assert [(r["key"], r["machine"], r["owner"], r["name"]) for r in rows] == [("bee:" + W, "bee", "bee", "notes")]
+    picked = [r for r in t.env_json("--kind", "all")["rows"] if r["id"] == W]
+    assert [(r["key"], r["name"], r["registry"], r["copies"]) for r in picked] == [("bee:" + W, "notes", "bee", [])]
+
+
+def test_the_endpoint_gives_the_contracts_reply_with_what_each_session_does_now(three):
+    t = three
+    v = listing(t)
+    reply = api(t)
+    with open(SCHEMA_PATH) as f:
+        schema = json.load(f)
+    assert schema_check.errors(schema, reply, "sessions_reply") == []
+    assert (reply["index"], reply["hub"]) == ("up", "here")
+    rows = {r["sid"]: r for r in reply["rows"]}
+    o = rows[V]["observed"]
+    assert (o["live"], o["state"], o["where"], o["tmux"], o["pid"], o["stale"], o["source"]) == \
+        (True, "idle", "tmux", "voice", v.pid, False, "machine")
+    assert o["observed_at"] >= t.T
+    assert (rows[W]["observed"]["live"], rows[W]["observed"]["where"]) == (True, "window")
+    assert (rows[U]["observed"]["live"], rows[U]["observed"]["state"]) == (False, "ended")
+    assert (rows[C]["observed"]["live"], rows[C]["observed"]["source"], rows[C]["observed"]["stale"]) == \
+        (None, "none", True)
+    assert (rows[S]["work"], rows[S]["cwd"], rows[S]["first_prompt"], rows[S]["name"]) == (True, None, None, "")
+    cee = reply["machines"]["cee"]
+    assert cee == {"reachable": False, "as_of": None, "stale": True, "reason": TIMEOUT_LINE % "cee"}
+    assert [r["sid"] for r in reply["rows"]] == [r["sid"] for r in sorted(reply["rows"], key=lambda r: -r["updated"])]
+
+
+def test_a_machine_that_stops_answering_keeps_its_last_values_which_turn_stale(three):
+    t = three
+    listing(t)
+    first = {r["sid"]: r for r in api(t)["rows"]}[W]["observed"]
+    path = sapi._observed_path("bee")
+    with open(path) as f:
+        kept = json.load(f)
+    kept["as_of"] = t.T - 61
+    with open(path, "w") as f:
+        json.dump(kept, f)
+    with open(os.path.join(t.w.base, "hosts.json")) as f:
+        hosts = json.load(f)
+    del hosts["bee"]
+    with open(os.path.join(t.w.base, "hosts.json"), "w") as f:
+        json.dump(hosts, f)
+    reply = api(t)
+    o = {r["sid"]: r for r in reply["rows"]}[W]["observed"]
+    assert (o["live"], o["pid"], o["observed_at"], o["stale"]) == (True, first["pid"], t.T - 61, True)
+    assert (reply["machines"]["bee"]["reachable"], reply["machines"]["bee"]["reason"]) == \
+        (False, TIMEOUT_LINE % "bee")
+
+
+def test_the_server_answers_from_its_last_list_and_refreshes_behind_it(monkeypatch):
+    calls = []
+
+    def fake(query=None, *, fresh=False):
+        calls.append(fresh)
+        return {"n": len(calls)}
+    monkeypatch.setattr(sapi, "envelope", fake)
+    feed = sapi.IndexFeed(ttl=0)
+    assert feed.get()["n"] == 1
+    assert feed.get()["n"] == 1  # the last list at once; the next one is being read behind it
+    end = time.time() + 5
+    while len(calls) < 2 or feed.busy:
+        assert time.time() < end
+        time.sleep(0.01)
+    assert feed.get()["n"] == 2
+    assert feed.get(fresh=True)["n"] >= 3 and calls[-1] is True
+
+
+def test_a_voice_chain_shows_as_one_row_its_head(three):
+    t = three
+    old, new = sid(40), sid(41)
+    t.index("here", old, {"name": "kitchen plans", "name_source": "topic", "kind": "voice",
+                          "topic": {"host": "prod", "id": "kitchen"}, "work": False}, 900, writer="phone:prod")
+    con = t.hub_db()
+    store.chain(con, old, new, "phone:prod", 1, {"name": "kitchen plans", "name_source": "topic", "kind": "voice",
+                                                   "topic": {"host": "prod", "id": "kitchen"}}, hub="here")
+    con.close()
+    got = [(r["sid"], r["head"], r["chain"], r["conversation"]) for r in api(t)["rows"]]
+    assert got == [(new, True, [old, new], old)]
+    assert [r["id"] for r in t.env_json()["rows"]] == [new]
+    every = api(t, {"chains": "all"})
+    assert sorted(r["sid"] for r in every["rows"]) == sorted([old, new]) and every["counts"]["superseded"] == 0
+    assert api(t)["counts"] == {"rows": 1, "hidden_dev": 0, "superseded": 1}
+
+
+def test_dev_rows_are_hidden_unless_asked_for(three):
+    t = three
+    t.index("here", sid(42), {"name": "sandbox topic", "name_source": "topic", "kind": "voice", "work": False},
+            writer="phone:dev:box1")
+    assert api(t)["rows"] == [] and api(t)["counts"]["hidden_dev"] == 1
+    assert [r["sid"] for r in api(t, {"env": "dev:box1"})["rows"]] == [sid(42)]
+    assert [r["sid"] for r in api(t, {"env": "all"})["rows"]] == [sid(42)]
+
+
+def test_the_picker_reads_the_index_in_its_own_row_shape(three):
     t = three
     v = listing(t)
     conf_path = os.path.join(t.w.here.home, "machines.json")
@@ -188,36 +358,26 @@ def test_the_list_holds_every_machine_with_exact_rows(three):
     assert voice == {"key": "here:" + V, "id": V, "machine": "here", "name": "voice", "named": True,
                      "folder": "/home/u/projects/a", "about": "Plan the voice work", "kind": "chat", "where": "tmux",
                      "tmux": "voice", "state": "idle", "pid": v.pid, "member": True, "held": [], "unanswered": [],
-                     "free": True, "started": t.T - 3660, "last_seen": t.T - 60, "ended": None, "end_reason": "",
+                     "free": True, "started": t.T - 60, "last_seen": t.T - 60, "ended": None, "end_reason": "",
                      "live_on": ["here"], "copies": [], "stale": False, "masked": False, "registry": "here"}
     notes = rows[W]
     assert (notes["machine"], notes["where"], notes["tmux"], notes["state"], notes["member"], notes["live_on"]) == \
         ("bee", "window", None, "idle", False, ["bee"])
     secret = rows[S]  # a work-rule row through another machine: no folder, no prompt, no name taken from it
-    assert (secret["masked"], secret["folder"], secret["about"], secret["name"], secret["named"], secret["kind"],
-            secret["last_seen"]) == (True, "", "", "", False, "chat", t.T - 300)
+    assert (secret["masked"], secret["folder"], secret["about"], secret["name"], secret["named"]) == \
+        (True, "", "", "", False)
     assert (rows[U]["name"], rows[U]["named"], rows[U]["about"]) == ("", False, "Fix the feed")
-    assert (rows[C]["stale"], rows[C]["as_of"]) == (True, t.T - 7200)
-    assert env["hub"] == "here"
-    assert env["machines"]["cee"] == {"reachable": False, "stale": True, "as_of": t.T - 7200,
-                                      "reason": TIMEOUT_LINE % "cee", "fleet": None, "screen": "hyprland",
-                                      "unreadable": None, "tmux_server": None}
-    bee = dict(env["machines"]["bee"])
-    assert bee.pop("as_of") >= t.T
-    assert bee == {"reachable": True, "stale": False, "reason": "", "fleet": True, "screen": "none",
-                   "unreadable": 0, "tmux_server": False}
-    here = env["machines"]["here"]
-    assert (here["screen"], here["tmux_server"], here["stale"]) == ("macos", True, False)
+    assert (rows[C]["stale"], rows[C]["where"], rows[C]["state"]) == (True, "none", "")
+    assert (env["machines"]["cee"]["reachable"], env["machines"]["cee"]["screen"],
+            env["machines"]["here"]["screen"]) == (False, "hyprland", "macos")
     assert set(env) == {"machines", "hub", "as_of", "rows"}
-    assert [r["id"] for r in env["rows"]] == [V, W, S, C, U]  # newest last_seen first
-
+    assert [r["id"] for r in env["rows"]] == [V, W, S, C, U]  # newest change first
     every = {r["id"]: r for r in t.env_json("--kind", "all")["rows"]}
     assert every[JOB]["kind"] == "job" and OLD in every
-    assert {r["id"] for r in t.env_json("--named")["rows"]} == {V, W, S, C}  # named on its own machine, or live
     assert {r["id"] for r in t.env_json("--machine", "bee")["rows"]} == {W, S}
 
 
-def test_the_own_machine_lists_its_work_rows_in_full(three):
+def test_a_machines_own_facts_hold_its_work_rows_in_full(three):
     t = three
     listing(t)
     t.w.mp.setenv("FLEET_HOME", t.bee.home)
@@ -229,68 +389,46 @@ def test_the_own_machine_lists_its_work_rows_in_full(three):
         (False, os.path.join(t.work, "a"), "the secret prompt", "Secret plan")
 
 
-def test_a_work_account_transcript_is_masked_whatever_its_folder(three):
+def test_observe_never_names_a_work_sessions_tmux(three):
+    t = three
+    s = t.live(t.w.here, "client", sid(43), os.path.join(t.work, "a"))
+    t.tmux(t.w.here, s, "client-secret")
+    t.w.here_env()
+    reply = sapi.observe_local()
+    with open(SCHEMA_PATH) as f:
+        assert schema_check.errors(json.load(f), reply, "observe_reply") == []
+    assert reply["rows"][sid(43)] == {"live": True, "state": "idle", "where": "tmux", "tmux": None, "pid": s.pid}
+
+
+def test_a_work_account_transcript_is_masked_on_its_own_machine_whatever_its_folder(three):
     t = three
     tr = os.path.join(os.path.expanduser("~"), ".claude-work", "projects", "x", S + ".jsonl")
-    t.seed(t.bee, S, "/home/u/projects/plain", 300, name="standup", prompt="what did we ship", transcript=tr)
-    row = {r["id"]: r for r in t.env_json()["rows"]}[S]
+    t.seed(t.bee, S, "/home/u/projects/plain", 300, name="standup", prompt="what did we ship", transcript=tr,
+           index=False)
+    t.w.mp.setenv("FLEET_HOME", t.bee.home)
+    con = fleet.db()
+    rows = fs.build_rows("bee", fleet.history_dicts(con), [], [], {}, {}, is_work=fleet.work_rule())
+    con.close()
+    row = fs.mask(rows[0])
     assert (row["masked"], row["folder"], row["about"], row["name"]) == (True, "", "", "standup")
-
-
-def test_the_last_answer_is_served_stale_with_this_runs_reason(three):
-    t = three
-    listing(t)
-    first = t.env_json()
-    with open(fleet.seen_path("bee")) as f:
-        saved = json.load(f)
-    assert set(saved) == {"as_of", "rows"}  # rows and when; nothing about reachability
-    assert {r["id"] for r in saved["rows"]} == {W, S}
-    with open(os.path.join(t.w.base, "hosts.json")) as f:
-        hosts = json.load(f)
-    del hosts["bee"]
-    with open(os.path.join(t.w.base, "hosts.json"), "w") as f:
-        json.dump(hosts, f)
-    asks = len([x for x in t.w.ssh_log() if x[0] == "bee"])
-    env = t.env_json()
-    assert len([x for x in t.w.ssh_log() if x[0] == "bee"]) == asks + 1  # asked again: no memo of the failure
-    m = env["machines"]["bee"]
-    assert (m["reachable"], m["stale"], m["reason"], m["as_of"]) == \
-        (False, True, TIMEOUT_LINE % "bee", first["machines"]["bee"]["as_of"])
-    rows = {r["id"]: r for r in env["rows"]}
-    assert (rows[W]["stale"], rows[W]["as_of"], rows[W]["masked"]) == (True, m["as_of"], False)
-    assert rows[S]["masked"] and rows[S]["about"] == ""  # the cache holds only what bee sent: masked
-
-
-def test_a_machine_whose_fleet_is_older_answers_but_has_no_sessions_verb(three, tmp_path):
-    t = three
-    old = script(os.path.join(str(tmp_path), "old_fleet.py"),
-                 "import sys\nsys.stderr.write(\"fleet: error: argument cmd: invalid choice: 'sessions'\\n\")\nsys.exit(2)\n")
-    conf_path = os.path.join(t.w.here.home, "machines.json")
-    with open(conf_path) as f:
-        conf = json.load(f)
-    conf["bee"]["fleet"] = old
-    with open(conf_path, "w") as f:
-        json.dump(conf, f)
-    m = t.env_json()["machines"]["bee"]
-    assert (m["reachable"], m["fleet"], m["stale"], m["reason"]) == \
-        (True, False, True, "fleet: error: argument cmd: invalid choice: 'sessions'")
 
 
 def plans_world(t):
     w = t.w
     listing(t)
-    t.seed(w.here, sid(20), str(w.base), 7200, name="lungo plan review", ended=t.T - 7200)
-    t.seed(w.here, sid(21), str(w.base), 7300, name="voice", ended=t.T - 7300)
-    helper = t.live(w.here, "helper", sid(22), str(w.base))
-    t.seed(w.here, sid(22), str(w.base), 10, name="helper")
+    base = str(w.base)
+    t.seed(w.here, sid(20), base, 7200, name="lungo plan review", kind="chat", ended=t.T - 7200)
+    t.seed(w.here, sid(21), base, 7300, name="voice", kind="chat", ended=t.T - 7300)
+    helper = t.live(w.here, "helper", sid(22), base)
+    t.seed(w.here, sid(22), base, 10, name="helper", kind="chat")
     assert w.member(helper, "helper")[0] == 0
-    t.seed(w.here, sid(23), "/no/such/folder", 9000, name="gone away", ended=t.T - 9000)
-    t.seed(w.here, sid(24), str(w.base), 9100, name="moved", ended=t.T - 9100)
+    t.seed(w.here, sid(23), "/no/such/folder", 9000, name="gone away", kind="chat", ended=t.T - 9000)
+    t.seed(w.here, sid(24), base, 9100, name="moved", kind="chat", ended=t.T - 9100)
     t.live(t.bee, "moved-copy", sid(24), "/home/u/b")
-    t.seed(w.here, sid(25), str(w.base), 9200, name="phone talk")
+    t.seed(w.here, sid(25), base, 9200, name="phone talk", kind="chat")
+    t.take(sid(25), "phone:prod")
     t.agents(t.bee, [{"id": "bg123456", "sessionId": sid(26), "name": "admin", "cwd": "/home/u/l",
                       "kind": "background", "state": "blocked", "startedAt": 1000}])
-    t.reg([{"sid": V, "owner": "here"}, {"sid": sid(24), "owner": "here"}, {"sid": sid(25), "owner": "phone:prod"}])
     w.here_env()
 
 
@@ -301,14 +439,15 @@ def test_every_plan_kind(three):
     p = t.plan("here:" + sid(20))
     assert p == {"kind": "resume", "key": "here:" + sid(20), "id": sid(20), "machine": "here",
                  "name": "lungo plan review", "tmux": "lungo-plan-review", "folder": base, "pid": None, "state": "",
-                 "member": False, "message": "", "force": False, "run_on_owner": False}
+                 "member": False, "message": "", "force": False, "run_on_owner": False, "head": sid(20),
+                 "take": None}
     p = t.plan("here:" + sid(21))  # "voice" is taken by another conversation's tmux session
     assert (p["kind"], p["tmux"]) == ("resume", "voice-" + sid(21)[:8])
     p = t.plan("here:" + V)
     assert (p["kind"], p["machine"], p["tmux"], p["folder"], p["member"]) == \
         ("attach-tmux", "here", "voice", "/home/u/projects/a", True)
-    p = t.plan("bee:" + sid(26))
-    assert (p["kind"], p["machine"], p["id"], p["state"]) == ("attach-bg", "bee", sid(26), "blocked")
+    p = t.plan("bee:" + sid(26))  # a session the index does not hold yet: what its machine says
+    assert (p["kind"], p["machine"], p["id"], p["state"], p["take"]) == ("attach-bg", "bee", sid(26), "blocked", None)
     p = t.plan("here:" + sid(22))
     assert (p["kind"], p["name"], p["tmux"], p["member"], p["message"]) == ("wrap-up-then-resume", "helper", "helper", True,
         "helper is a fleet member in a window: it is told to wrap up and leave, then resumed in tmux once its process is gone")
@@ -321,16 +460,71 @@ def test_every_plan_kind(three):
     assert p["message"].startswith("cee: not answering (%s); last answer at " % (TIMEOUT_LINE % "cee"))
     p = t.plan("here:" + sid(23))
     assert (p["kind"], p["message"]) == ("refuse-no-folder", "here: the folder /no/such/folder is gone; it is not created again")
-    p = t.plan("here:" + sid(24))  # the registry says here; it runs in a window on bee
+    p = t.plan("here:" + sid(24))  # the index says here owns it; it runs in a window on bee
     assert (p["kind"], p["machine"], p["message"]) == (
         "refuse-live-elsewhere", "bee", "moved is live on bee in a window, not in tmux: it is not resumed on here")
-    p = t.plan("here:" + sid(25))
-    assert (p["kind"], p["message"]) == ("refuse-registry", "phone talk is on the phone now: take it back with @claude -r first")
     p = t.plan("bee:" + S)  # a work-rule row of bee, planned on here: bee works it out itself, and no folder leaks
-    assert (p["kind"], p["machine"], p["folder"], p["tmux"], p["run_on_owner"], p["message"]) == \
-        ("refuse-no-folder", "bee", "", "", True, "bee: the folder of this session is gone; it is not created again")
-    assert {k for k in fs.PLAN_KINDS} == {"attach-tmux", "attach-bg", "resume", "wrap-up-then-resume", "blocked-window",
-                                          "refuse-offline", "refuse-no-folder", "refuse-live-elsewhere", "refuse-registry"}
+    assert (p["kind"], p["machine"], p["folder"], p["tmux"], p["run_on_owner"], p["take"], p["message"]) == \
+        ("refuse-no-folder", "bee", "", "", True, None,
+         "bee: the folder of this session is gone; it is not created again")
+    assert {k for k in fs.PLAN_KINDS} == {"attach-tmux", "attach-bg", "resume", "take-then-resume",
+                                          "wrap-up-then-resume", "blocked-window", "refuse-offline",
+                                          "refuse-no-folder", "refuse-live-elsewhere"}
+
+
+def test_a_phone_owned_session_plans_a_take_then_a_resume(three):
+    t = three
+    plans_world(t)
+    p = t.plan("here:" + sid(25))
+    assert p == {"kind": "take-then-resume", "key": "here:" + sid(25), "id": sid(25), "machine": "here",
+                 "name": "phone talk", "tmux": "phone-talk", "folder": str(t.w.base), "pid": None, "state": "",
+                 "member": False, "message": "phone talk is on the phone: it is taken to here first, then resumed there",
+                 "force": False, "run_on_owner": False, "head": sid(25),
+                 "take": {"sid": sid(25), "to": "here", "expect_epoch": 2}}
+    code, out, err = t.cli("sessions", "open", "here:" + sid(25), "--to", "bee", "--json")
+    assert code == 0, err
+    p = json.loads(out)
+    assert (p["kind"], p["machine"], p["take"]) == \
+        ("take-then-resume", "bee", {"sid": sid(25), "to": "bee", "expect_epoch": 2})
+
+
+def test_a_session_owned_by_a_machine_where_it_is_not_live_is_taken_to_the_asked_one(three):
+    t = three
+    plans_world(t)
+    code, out, err = t.cli("sessions", "open", "here:" + sid(20), "--to", "bee", "--json")
+    assert code == 0, err
+    p = json.loads(out)
+    assert (p["kind"], p["machine"], p["take"], p["message"]) == (
+        "take-then-resume", "bee", {"sid": sid(20), "to": "bee", "expect_epoch": 1},
+        "lungo plan review is on here: it is taken to bee first, then resumed there")
+    code, out, _ = t.cli("sessions", "open", "cee:" + C, "--to", "here", "--json")
+    assert json.loads(out)["kind"] == "refuse-offline"  # its owner does not answer: it may be running there
+
+
+def test_continue_on_the_phone_plans_a_take_to_the_phone(three):
+    t = three
+    plans_world(t)
+    code, out, err = t.cli("sessions", "open", "here:" + sid(20), "--to", "phone:prod", "--json")
+    assert code == 0, err
+    p = json.loads(out)
+    assert (p["kind"], p["machine"], p["tmux"], p["take"]) == (
+        "take-then-resume", "phone:prod", "", {"sid": sid(20), "to": "phone:prod", "expect_epoch": 1})
+    code, _, err = t.cli("sessions", "open", "here:" + sid(20), "--to", "phone:everyone", "--json")
+    assert (code, err.strip()) == (1, "fleet: --to takes a machine of machines.json or phone:<host>, not "
+                                      "'phone:everyone'.")
+
+
+def test_a_superseded_sid_plans_the_chain_head(three):
+    t = three
+    base = str(t.w.base)
+    old, new = sid(44), sid(45)
+    t.seed(t.w.here, old, base, 900, name="kitchen plans")
+    con = t.hub_db()
+    store.chain(con, old, new, "here", 1, {"name": "kitchen plans", "name_source": "topic"}, hub="here")
+    con.close()
+    p = t.plan("here:" + old)
+    assert (p["kind"], p["id"], p["head"], p["key"], p["folder"], p["take"]) == \
+        ("resume", new, new, "here:" + new, base, None)
 
 
 def test_a_busy_window_is_never_offered_a_force_stop(three):
@@ -347,16 +541,6 @@ def test_a_key_that_is_not_one_is_refused(three):
     assert (code, err.strip()) == (1, "fleet: 'here:not-hex!' is not a session key (machine:id).")
     code, _, err = three.cli("sessions", "open", "nowhere:" + V, "--json")
     assert (code, err.strip()) == (1, "fleet: no machine named 'nowhere' in machines.json.")
-
-
-def test_the_registry_owner_wins_over_the_newest_copy():
-    a = {"id": V, "machine": "a", "live_on": [], "stale": False, "last_seen": 100, "started": 0}
-    b = dict(a, machine="b", last_seen=200)
-    assert fs.merge({"a": [a], "b": [b]})[0]["machine"] == "b"
-    got = fs.merge({"a": [a], "b": [b]}, {V: {"sid": V, "owner": "a"}})[0]
-    assert (got["machine"], got["copies"], got["registry"]) == ("a", ["b"], "a")
-    phone = fs.merge({"a": [a], "b": [b]}, {V: {"sid": V, "owner": "phone:prod"}}, hub_main="a")[0]
-    assert (phone["machine"], phone["registry"]) == ("a", "phone:prod")
 
 
 def test_the_pane_walk_and_the_kind_rules():
@@ -378,26 +562,27 @@ def test_the_pane_walk_and_the_kind_rules():
     assert fs.slug("", V) == V[:8] and len(fs.slug("x" * 80, V)) == 40
 
 
-def test_a_machine_off_the_hub_asks_the_hub_and_keeps_its_own_rows_in_full(world):
+def test_off_the_hub_the_hubs_list_is_shown_and_a_down_hub_says_so_with_the_last_one(world):
     t = Three(world, here_conf={"hub": "bee"})
-    with open(os.path.join(t.bee.home, "machines.json")) as f:
-        conf = json.load(f)
-    conf["hub"] = "bee"
-    with open(os.path.join(t.bee.home, "machines.json"), "w") as f:
-        json.dump(conf, f)
-    t.seed(world.here, S, os.path.join(t.work, "a"), 300, name="standup", prompt="the secret prompt")
-    env = t.env_json()
-    assert any(h == "bee" and " sessions --json" in cmd for h, cmd in world.ssh_log())
-    row = {r["id"]: r for r in env["rows"]}[S]
-    assert (row["machine"], row["masked"], row["about"]) == ("here", False, "the secret prompt")
+    t.index("bee", W, {"name": "notes", "name_source": "custom", "kind": "chat", "cwd": "/home/u/b",
+                       "work": False}, 100, hub=t.bee)
+    t.index("here", U, {"name": "stale name", "name_source": "custom", "kind": "chat", "cwd": "/home/u/p",
+                        "work": False}, 200, hub=t.bee)
+    sapi._cache().write(fleet.fleet_home(), dict(store.get_row(t.hub_db(t.bee), U), name="my own name"),
+                        source="local")
+    env = api(t)
+    assert (env["index"], env["hub"], sorted(r["sid"] for r in env["rows"])) == ("up", "bee", sorted([U, W]))
+    assert any(h == "bee" and " session list --json" in cmd for h, cmd in world.ssh_log())
     with open(os.path.join(world.base, "hosts.json")) as f:
         hosts = json.load(f)
     del hosts["bee"]
     with open(os.path.join(world.base, "hosts.json"), "w") as f:
         json.dump(hosts, f)
-    env = t.env_json()
-    assert env["note"] == "the hub bee did not answer (%s); this machine asked the others itself" % (TIMEOUT_LINE % "bee")
-    assert S in {r["id"] for r in env["rows"]}
+    env = api(t)
+    assert (env["index"], env["reason"]) == ("down", "the hub bee did not answer (%s)" % (TIMEOUT_LINE % "bee"))
+    assert {r["sid"]: r["name"] for r in env["rows"]} == {W: "notes", U: "my own name"}
+    picked = t.env_json()
+    assert picked["note"] == env["reason"] and {r["id"] for r in picked["rows"]} == {W, U}
     world.here_env()
 
 
@@ -508,7 +693,7 @@ def test_a_tmux_server_with_no_session_still_counts_as_running(three):
     t = three
     t.w.mp.setenv("FLEET_TMUX", script(os.path.join(t.w.base, "tools", "tmux-empty"),
                                        '#!/bin/sh\ncase "$3" in ls) exit 0;; *) exit 1;; esac\n'))
-    assert t.env_json("--machine", "here")["machines"]["here"]["tmux_server"] is True
+    assert t.env_json("--local")["machines"]["here"]["tmux_server"] is True
 
 
 def test_claude_is_found_in_the_installers_folder_without_a_login_path(monkeypatch, tmp_path):
@@ -570,6 +755,7 @@ def page(three):
             return r.status, json.loads(r.read())
         except urllib.error.HTTPError as e:
             return e.code, json.loads(e.read())
+    call.token = srv.fleet_token
     yield call
     srv.shutdown()
     srv.server_close()
@@ -578,9 +764,11 @@ def page(three):
 def test_the_sessions_api_lists_and_is_guarded(three, page):
     listing(three)
     code, data = page("GET", "/api/sessions")
-    assert code == 200 and set(data) == {"machines", "hub", "as_of", "rows"}
-    assert {r["id"] for r in data["rows"]} >= {V, W, S, C}
+    assert code == 200 and set(data) == {"v", "index", "hub", "as_of", "machines", "counts", "rows"}
+    assert {r["sid"] for r in data["rows"]} >= {V, W, S, C}
     assert not any(k.startswith("_") for r in data["rows"] for k in r)
+    assert [r["sid"] for r in page("GET", "/api/sessions?kind=job")[1]["rows"]] == [JOB]
+    assert page("GET", "/api/sessions?env=prodd") == (400, {"error": "env takes prod, all or dev:<sandbox>"})
     assert page("GET", "/api/sessions", headers={"Host": "evil.example"})[0] == 403
     assert page("GET", "/api/sessions", headers={"Authorization": None})[0] == 401
     body = {"key": "here:" + V, "target": "copy"}
@@ -599,6 +787,29 @@ def test_the_sessions_api_lists_and_is_guarded(three, page):
         "with force.")})
 
 
+def test_the_service_routes_take_a_bearer_token_and_never_the_cookie(three, page):
+    listing(three)
+    assert page("GET", "/api/session/owner?sid=" + V) == \
+        (200, {"sid": V, "owner": "here", "epoch": 1, "head": V, "source": "hub", "stale": False})
+    code, _ = page("GET", "/api/session/owner?sid=" + V,
+                   headers={"Authorization": None, "Cookie": "fleet_ui=" + page.token})
+    assert code == 401
+    code, data = page("POST", "/api/session/take", {"sid": U, "to": "phone:prod", "expect_epoch": 1, "by": "here"})
+    assert (code, data["owner"], data["epoch"]) == (200, "phone:prod", 2)
+    code, data = page("POST", "/api/session/take", {"sid": U, "to": "here", "expect_epoch": 1})
+    assert (code, data["code"]) == (409, "stale-epoch")
+
+
+def test_the_cli_serves_the_session_verb_and_the_token(three):
+    t = three
+    listing(t)
+    code, out, err = t.cli("session", "show", W, "--json")
+    assert (code, json.loads(out)["key"]) == (0, "bee:" + W)
+    code, out, _ = t.cli("ui", "token")
+    got = json.loads(out)
+    assert set(got) == {"url", "token"} and got["url"].startswith("http://127.0.0.1:") and got["token"]
+
+
 def test_the_page_opens_a_window_through_the_internal_verb_only(three, page):
     listing(three)
     script(os.path.join(three.w.base, "bin", "open"), LOGGER % sys.executable)
@@ -610,13 +821,65 @@ def test_the_page_opens_a_window_through_the_internal_verb_only(three, page):
     assert data == {"opened": "here", "screen": "macos", "command": line, "copy": "@claude pick --open bee:" + W}
 
 
-def test_the_page_renames_in_the_owners_history(three, page):
-    listing(three)
-    assert page("POST", "/api/sessions/rename", {"key": "bee:" + W, "name": "field notes"})[0] == 200
-    con = three.bee.db()
+def test_history_actions_work_on_index_rows(three, page):
+    """Rename, describe, ask, search and delete on a row whose transcript is on another machine: the index changes
+    on the hub, and the work that reads the transcript runs on the row's own machine."""
+    t = three
+    t.w.mp.setenv("FLEET_DESCRIBE_PAUSE", "0")
+    t.w.mp.setenv("FLEET_NO_RECORD", "1")
+    tr = os.path.join(t.w.base, "bee-transcript.jsonl")
+    with open(tr, "w") as f:
+        f.write(json.dumps({"type": "user", "message": {"role": "user", "content": "Plan the export"}}) + "\n")
+        f.write(json.dumps({"type": "assistant", "message": {"role": "assistant", "content": [
+            {"type": "text", "text": "The export runs nightly."}]}}) + "\n")
+    os.utime(tr, (t.T - 3600, t.T - 3600))
+    script(os.path.join(t.w.base, "model"), MODEL % sys.executable)
+    t.w.mp.setenv("FLEET_CLAUDE_BIN", os.path.join(t.w.base, "model"))
+    t.seed(t.bee, W, "/home/u/b", 120, name="notes", prompt="Plan the export", transcript=tr, ended=t.T - 120)
+    key = "bee:" + W
+    os.makedirs(os.path.join(t.bee.home, "index"), exist_ok=True)
+    with open(os.path.join(t.bee.home, "index", "journal.state.json"), "w") as f:
+        json.dump({"next_seq": 100, "acked_seq": 99}, f)
+
+    code, data = page("POST", "/api/sessions/rename", {"key": key, "name": "field  notes"})
+    assert code == 200, data
+    row = t.row(W)
+    assert (row["name"], row["name_source"]) == ("field notes", "manual")
+    con = t.bee.db()
     assert con.execute("SELECT name_custom FROM conversations WHERE session_id=?", (W,)).fetchone()[0] == "field notes"
-    code, data = page("GET", "/api/sessions?fresh=1")
-    assert {r["id"]: r["name"] for r in data["rows"]}[W] == "field notes"
+    assert {r["sid"]: r["name"] for r in page("GET", "/api/sessions?fresh=1")[1]["rows"]}[W] == "field notes"
+
+    code, data = page("POST", "/api/sessions/ask", {"key": key, "question": "when does it run?"})
+    assert (code, data) == (200, {"answer": "ANSWER of bee: when does it run?"})
+
+    code, data = page("POST", "/api/sessions/describe", {"key": key})
+    assert code == 200, data
+    assert t.row(W)["description"] == "Described on bee, from its own transcript."
+
+    t.w.here_env()
+    code, data = page("POST", "/api/sessions/search", {"query": "the export"})
+    assert (code, data) == (200, {"hits": [{"key": key, "why": "it planned the export"}], "described": 1, "total": 1})
+
+    code, data = page("POST", "/api/sessions/delete", {"key": key})
+    assert code == 200, data
+    assert t.row(W) is None and os.path.exists(tr)
+    assert con.execute("SELECT COUNT(*) FROM conversations WHERE session_id=?", (W,)).fetchone()[0] == 0
+    con.close()
+
+
+def test_the_page_refuses_to_describe_a_session_its_machine_does_not_own(three, page):
+    plans_world(three)
+    assert page("POST", "/api/sessions/describe", {"key": "here:" + sid(25)}) == (400, {"error": (
+        "fleet: phone:prod owns this session, not here: take it there first, then describe it.")})
+
+
+def test_the_page_refuses_to_delete_a_running_session_and_to_ask_about_a_work_session_elsewhere(three, page):
+    listing(three)
+    assert page("POST", "/api/sessions/delete", {"key": "bee:" + W}) == \
+        (400, {"error": "session %s has not ended; stop it first" % W})
+    assert three.row(W)["name"] == "notes"
+    assert page("POST", "/api/sessions/ask", {"key": "bee:" + S, "question": "what was said?"}) == \
+        (400, {"error": "fleet: %s is a work session: it is read only on bee." % S[:8]})
 
 
 def test_the_page_stops_a_member_with_the_wrap_up_tell(three, page):
@@ -626,3 +889,32 @@ def test_the_page_stops_a_member_with_the_wrap_up_tell(three, page):
     assert data["action"] == "interactive" and data["thread"]
     con = three.w.here.db()
     assert con.execute("SELECT body FROM messages WHERE thread=?", (data["thread"],)).fetchone()[0] == fleet.WRAP_UP_TELL
+
+
+# ---------------------------------------------------------------- one sid, three surfaces
+
+def test_one_sid_reads_the_same_through_the_endpoint_the_cli_list_and_the_pick_plan(three, page):
+    """The page's GET /api/sessions, `fleet session list --json` and `fleet sessions open --json` (the pick plan)
+    all read the one index: a session shows the same name, owner and state through each."""
+    t = three
+    listing(t)
+    t.take(U, "phone:prod")  # U moves to the phone: epoch 2, its plan must take it back first
+    code, api_reply = page("GET", "/api/sessions")
+    assert code == 200
+    code, out, err = t.cli("session", "list", "--json")
+    assert code == 0, err
+    cli_reply = json.loads(out)
+    seen = {}
+    for s in (V, W, U):
+        a = next(r for r in api_reply["rows"] if r["sid"] == s)
+        c = next(r for r in cli_reply["rows"] if r["sid"] == s)
+        p = t.plan(a["key"])
+        assert (a["name"], a["owner"], a["epoch"], a["observed"]["state"]) == \
+            (c["name"], c["owner"], c["epoch"], c["observed"]["state"])
+        assert (p["id"], p["head"], p["name"], p["state"] or None) == (s, s, a["name"], a["observed"]["state"])
+        seen[s] = (a["name"], a["owner"], a["observed"]["state"], p["kind"], p["machine"], p["take"])
+    assert seen == {
+        V: ("voice", "here", "idle", "attach-tmux", "here", None),
+        W: ("notes", "bee", "idle", "blocked-window", "bee", None),
+        U: ("", "phone:prod", None, "take-then-resume", "here", {"sid": U, "to": "here", "expect_epoch": 2}),
+    }

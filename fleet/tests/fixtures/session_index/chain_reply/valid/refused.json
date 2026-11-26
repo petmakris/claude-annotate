@@ -1,0 +1,5 @@
+{
+ "ok": false,
+ "code": "superseded",
+ "error": "session 0a1b2c3d-0000-4000-8000-000000000004 was continued as 0a1b2c3d-0000-4000-8000-000000000005; take 0a1b2c3d-0000-4000-8000-000000000005 instead"
+}

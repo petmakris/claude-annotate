@@ -1,0 +1,28 @@
+{
+ "v": 1,
+ "machine": "hub",
+ "seq": 7,
+ "as": "phone:dev:demo",
+ "sid": "0a1b2c3d-0000-4000-8000-000000000003",
+ "epoch_seen": 1,
+ "event": "start",
+ "at": 1795600007.0,
+ "fields": {
+  "kind": "voice",
+  "name": "kitchen plans",
+  "name_source": "topic",
+  "topic": {
+   "host": "dev:demo",
+   "id": "kitchen-plans"
+  },
+  "cwd": "/home/me",
+  "account": "second",
+  "work": false,
+  "observed": {
+   "live": true,
+   "state": "running",
+   "where": "phone",
+   "observed_at": 1795600007.0
+  }
+ }
+}

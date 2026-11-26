@@ -1,0 +1,46 @@
+{
+ "why": "a work row's tmux name never leaves its machine",
+ "expect": "tmux",
+ "doc": {
+  "sid": "0a1b2c3d-0000-4000-8000-000000000002",
+  "conversation": "0a1b2c3d-0000-4000-8000-000000000002",
+  "name": "",
+  "name_source": "",
+  "kind": "chat",
+  "env": "prod",
+  "machine": "laptop",
+  "cwd": null,
+  "account": null,
+  "owner": "laptop",
+  "owner_since": 1795600000.0,
+  "epoch": 1,
+  "continues": null,
+  "superseded_by": null,
+  "first_prompt": null,
+  "last_prompt": null,
+  "last_answer": null,
+  "topic": null,
+  "rc_name": null,
+  "started": 1795600000.0,
+  "updated": 1795600600.0,
+  "ended": null,
+  "end_reason": null,
+  "description": null,
+  "work": true,
+  "observed": {
+   "live": true,
+   "state": "idle",
+   "where": "tmux",
+   "tmux": "client-repo",
+   "pid": 4242,
+   "observed_at": 1795600590.0,
+   "stale": false,
+   "source": "machine"
+  },
+  "key": "laptop:0a1b2c3d-0000-4000-8000-000000000002",
+  "head": true,
+  "chain": [
+   "0a1b2c3d-0000-4000-8000-000000000002"
+  ]
+ }
+}

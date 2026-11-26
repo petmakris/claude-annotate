@@ -43,7 +43,7 @@ def test_members_endpoint_shape_across_machines(world, server):
     rows = {m["name"]: m for m in data["members"]}
     assert set(rows) == {"alpha", "beta"}
     assert set(rows["alpha"]) == {"name", "session_id", "host", "cwd", "branch", "status", "respawn", "machine", "joined_at",
-                                  "activity", "agent_kind", "held", "unanswered", "free", "as_of"}
+                                  "activity", "agent_kind", "held", "unanswered", "free", "as_of", "conversation"}
     assert (rows["beta"]["activity"], rows["beta"]["free"]) == ("idle", True)  # worked out on bee, by bee's fleet
     assert (rows["alpha"]["machine"], rows["beta"]["machine"]) == ("here", "bee")
     assert data["home"] == os.path.expanduser("~")  # the page shortens this machine's folders to ~

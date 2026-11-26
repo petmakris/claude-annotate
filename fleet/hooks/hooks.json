@@ -1,5 +1,5 @@
 {
-  "description": "Fleet: every session is noted in the history (record.sh, bounded and silent); every prompt keeps the session's Claude name and fleet name one name, and asks an unnamed interactive session to name itself (name.sh); a session started with FLEET_JOIN_NAME also joins at start and leaves at end. The scripts exit at once when they have nothing to do.",
+  "description": "Fleet: every session is noted in the history and in the session index's journal (record.sh, bounded and silent, on start, prompt, stop and end); every prompt keeps the session's Claude name and fleet name one name, and asks an unnamed interactive session to name itself (name.sh); a session started with FLEET_JOIN_NAME also joins at start and leaves at end. The scripts exit at once when they have nothing to do.",
   "hooks": {
     "SessionStart": [
       {
@@ -58,6 +58,15 @@
           {
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/name.sh\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/record.sh\"",
             "timeout": 5
           }
         ]

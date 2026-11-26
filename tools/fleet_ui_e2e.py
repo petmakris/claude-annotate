@@ -97,6 +97,8 @@ shutil.rmtree(BASE, ignore_errors=True)
 os.makedirs(FH, mode=0o700)
 ENV = dict(os.environ, HOME=HOME, FLEET_HOME=FH, FLEET_SESSIONS_DIR=os.path.join(BASE, "sessions"),
            FLEET_CLAUDE_BIN=os.path.join(BASE, "bin", "claude"), FLEET_NO_RECORD="1",
+           CLAUDE_SESSIONS_DIR=os.path.join(BASE, "registry"), FLEET_BACKUP_DIR=os.path.join(BASE, "backups"),
+           FLEET_DESCRIBE_PAUSE="0",
            GIT_AUTHOR_NAME="E2E", GIT_AUTHOR_EMAIL="e2e@example.invalid", GIT_COMMITTER_NAME="E2E",
            GIT_COMMITTER_EMAIL="e2e@example.invalid", GIT_CONFIG_NOSYSTEM="1")
 for k in ("FLEET_JOIN_NAME", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_MESSAGING_SOCKET", "FLEET_AS"):
@@ -164,6 +166,62 @@ for i, (sid, cwd, name, prompt) in enumerate([
 con.commit()
 con.close()
 
+# the session index, on this one machine: the history's five (ended), the live member, a phone's chat and a work one
+write(os.path.join(FH, "machines.json"), json.dumps({"self": "here", "screen": "macos"}))
+write(os.path.join(FH, "work.json"), json.dumps({"accounts": ["me"], "profile_paths": [os.path.join(HOME, "work")],
+                                                  "own_profiles": os.path.join(HOME, "profiles")}))
+sys.path.insert(0, FLEET)
+import fleet_index_store as store  # noqa: E402
+
+hub = store.connect(os.path.join(FH, "index", "hub.db"))
+SEQ = [0]
+
+
+def index(sid, fields, ago, event="start"):
+    SEQ[0] += 1
+    r = store.apply_batch(hub, {"machine": "here", "entries": [{
+        "v": 1, "machine": "here", "seq": SEQ[0], "as": "here", "sid": sid, "epoch_seen": 1, "event": event,
+        "at": now - ago, "fields": fields}]}, hub="here", machines={"here"}, now=now - ago)
+    assert r["results"][0]["outcome"] == "applied", r
+
+
+def chat(sid, name, cwd, prompt, ago, ended=True, description=None):
+    f = {"cwd": cwd, "first_prompt": prompt, "kind": "chat", "work": False}
+    if name:
+        f.update(name=name, name_source="custom")
+    index(sid, f, ago)
+    if description:
+        index(sid, {"description": description, "work": False}, ago, "describe")
+    if ended:
+        index(sid, {"end_reason": "exit", "work": False}, ago, "end")
+
+
+S = "aaaa1111-0000-0000-0000-00000000000%d"
+chat(S % 1, "Export plan", APP, "Plan the billing export", 1000, description="Planned the billing export job.")
+chat(S % 2, None, APP, "Fix the flaky test", 999)
+chat(S % 3, "Lib refactor", LIB, "Split the parser", 998)
+chat(S % 4, "Custom thing", CUSTOM, "Try the custom launcher", 997)
+chat(S % 5, "Throwaway", APP, "A session to delete", 996)
+chat("s-builder", "builder", APP, "Build the export", 30, ended=False)
+chat("bbbb2222-0000-0000-0000-000000000001", "Kitchen plans from the phone, with a long name that is cut", APP,
+     "Plan the kitchen", 500, ended=False)
+store.take(hub, "bbbb2222-0000-0000-0000-000000000001", "phone:prod", 1, "here", hub="here", machines={"here"})
+index("cccc3333-0000-0000-0000-000000000001", {"kind": "chat", "work": True, "name": "standup",
+                                                 "name_source": "custom"}, 700)
+hub.close()
+# the machine's journal goes on from the numbers the seeding used
+write(os.path.join(FH, "index", "journal.state.json"), json.dumps({"next_seq": SEQ[0] + 1, "acked_seq": SEQ[0]}))
+
+
+def indexed(sid):
+    c = store.connect(os.path.join(FH, "index", "hub.db"))
+    try:
+        return store.get_row(c, sid)
+    finally:
+        c.close()
+
+
+
 # Lungo, the job runner: a command that prints a brief with one item that waits on the user
 write(os.path.join(BASE, "brief.json"), json.dumps({"ok": True, "data": {
     "schema": "lungo.brief/1", "as_of": time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime(now - 300)),
@@ -200,8 +258,8 @@ os.makedirs(SHOTS, exist_ok=True)
 console_errors = []
 try:
     with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        ctx = browser.new_context(viewport={"width": 1400, "height": 1000})
+        browser = pw.chromium.launch()  # Playwright's own headless Chromium, never a Chrome app
+        ctx = browser.new_context(viewport={"width": 1440, "height": 1000})
         page = ctx.new_page()
         page.set_default_timeout(8000)
         page.on("console", lambda m: console_errors.append(m.text) if m.type == "error" else None)
@@ -377,62 +435,138 @@ try:
         check("For you: answering stores the reply, clears the item, and the badge counts only Lungo's item", foryou)
 
         # ---- History
-        view("history")
+        view("sessions")
 
-        def htree():
-            expect(page.locator(".hs-row")).to_have_count(5)
-            page.locator("#h-tree .t-row", has_text="app").first.click()
-            expect(page.locator(".hs-row")).to_have_count(3)
-            expect(page.locator("#h-crumb")).to_contain_text("projects/app")
-            page.locator("#h-tree .t-all").click()
-            expect(page.locator(".hs-row")).to_have_count(5)
-        check("History: the tree filters sessions by folder and All sessions resets", htree)
+        def shut():  # a check that failed with the card open must not block the ones after it
+            page.evaluate("() => { const d = document.getElementById('s-card'); if (d.open) d.close(); }")
+        srow = lambda text: page.locator("#s-rows .s-row:not(.s-head)", has_text=text)  # noqa: E731
+        every = page.locator("#s-rows .s-row:not(.s-head)")
+        LAYOUT = """() => [...document.querySelectorAll('#s-rows .s-row:not(.s-head)')].map(r =>
+          [...r.children].filter(c => getComputedStyle(c).display !== 'none').map(c => Math.round(c.getBoundingClientRect().x)).join(','))"""
+        BUTTONS = """() => [...document.querySelectorAll('#s-rows .s-row:not(.s-head)')].map(r =>
+          [...r.querySelectorAll('.s-btn')].filter(b => b.getBoundingClientRect().width > 0).map(b => Math.round(b.getBoundingClientRect().x)).join(','))"""
 
-        def hfilter():
-            page.fill("#h-q", "lib refactor")
-            expect(page.locator(".hs-row")).to_have_count(1)
-            page.fill("#h-q", "")
-            expect(page.locator(".hs-row")).to_have_count(5)
-        check("History: the filter box narrows the list as you type", hfilter)
+        def slist():
+            expect(every).to_have_count(8)
+            expect(page.locator('#tabs button[data-view="history"]')).to_have_count(0)
+            expect(page.locator('#tabs button[data-view="profiles"]')).to_have_text("Profiles on here")
+            for key, want in (("cells", LAYOUT), ("buttons", BUTTONS)):
+                got = page.evaluate(want)
+                print("      (1440 px %s, left edges per row: %s)" % (key, sorted(set(got))))
+                assert len(set(got)) == 1, got
+            words = page.evaluate("() => [...document.querySelectorAll('#s-rows .s-row:not(.s-head) .s-btn .w')].map(w => getComputedStyle(w).display)")
+            assert words and "none" not in words, "wide: icon and word"
+            over = page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
+            assert over <= 0, over
+            expect(srow("Kitchen plans").locator('[data-col="owner"]')).to_have_text("phone")
+            expect(srow("builder").locator('[data-col="held"]')).to_have_text("–")
+            page.screenshot(path=os.path.join(SHOTS, "sessions-1440.png"), full_page=True)
+        check("Sessions: one row per session at 1440 px, columns and buttons aligned, icon and word, no History tab", slist)
 
-        def hrename():
-            row = page.locator(".hs-row", has_text="Fix the flaky test")
-            row.get_by_role("button", name="Rename").click()
-            inp = page.get_by_label("New name")
+        def sfilter():
+            page.fill("#s-q", "lib refactor")
+            expect(every).to_have_count(1)
+            page.fill("#s-q", "")
+            expect(every).to_have_count(8)
+        check("Sessions: the filter box narrows the list as you type", sfilter)
+
+        def srename():
+            srow("Fix the flaky test").get_by_role("button", name="Rename").click()
+            inp = page.locator(".s-rename")
             expect(inp).to_be_focused()
             inp.fill("Flaky test hunt")
             inp.press("Enter")
-            expect(page.locator(".hs-row", has_text="Flaky test hunt")).to_have_count(1)
-            r = db().execute("SELECT manual_name FROM conversations WHERE session_id LIKE '%0002'").fetchone()
-            assert r["manual_name"] == "Flaky test hunt", r["manual_name"]
-        check("History: Rename edits in place, Enter saves it to the store", hrename)
+            expect(srow("Flaky test hunt")).to_have_count(1, timeout=20000)
+            r = indexed(S % 2)
+            assert (r["name"], r["name_source"]) == ("Flaky test hunt", "manual"), r
+        check("Sessions: Rename edits in place, Enter saves it to the index", srename)
 
-        def hask():
-            page.locator(".hs-row", has_text="Export plan").locator(".link").click()
-            expect(page.locator(".detail")).to_contain_text("Planned the billing export job.")
-            page.locator(".detail input").fill("What did it plan?")
-            page.locator(".detail").get_by_role("button", name="Ask").click()
-            expect(page.locator(".h-answer")).to_contain_text("STUB ANSWER", timeout=20000)
-        check("History: a row opens its details and Ask answers from the transcript", hask)
+        def sask():
+            srow("Export plan").get_by_role("button", name="Ask").click()
+            card = page.locator("#s-card")
+            expect(card).to_be_visible()
+            expect(card).to_contain_text("Planned the billing export job.")
+            expect(card.locator("#s-ask")).to_be_focused()
+            card.locator("#s-ask").fill("What did it plan?")
+            card.locator("#s-ask").press("Enter")
+            expect(card.locator(".h-answer")).to_contain_text("STUB ANSWER", timeout=30000)
+            page.screenshot(path=os.path.join(SHOTS, "sessions-card-1440.png"))
+            card.get_by_role("button", name="Close").click()
+        check("Sessions: Ask opens the card and answers from the transcript of the index row", sask)
 
-        def hsearch():
-            page.fill("#h-q", "the export")
-            page.click("#h-meaning")
-            expect(page.locator(".h-found")).to_contain_text("Matches by meaning", timeout=20000)
-            expect(page.locator(".hs-row")).to_have_count(1)
-            expect(page.locator("#h-clear")).to_be_visible()
-            page.click("#h-clear")
-            expect(page.locator(".hs-row")).to_have_count(5)
-        check("History: Search by meaning lists the hits with why, Clear returns to all", hsearch)
+        def sdescribe():
+            srow("Lib refactor").locator('[data-col="name"]').click()
+            card = page.locator("#s-card")
+            card.get_by_role("button", name="Describe").click()
+            expect(card).to_contain_text("A described session.", timeout=30000)
+            assert indexed(S % 3)["description"] == "A described session.", indexed(S % 3)["description"]
+            card.get_by_role("button", name="Close").click()
+        check("Sessions: Describe writes the description into the index row", sdescribe)
 
-        def hdelete():
-            row = page.locator(".hs-row", has_text="Throwaway")
+        def ssearch():
+            shut()
+            page.fill("#s-q", "the export")
+            page.click("#s-meaning")
+            expect(page.locator("#s-found")).to_contain_text("Matches by meaning", timeout=30000)
+            expect(every).to_have_count(1)
+            page.click("#s-clear")
+            expect(every).to_have_count(8)
+        check("Sessions: Search by meaning lists the hits, Clear returns to all", ssearch)
+
+        def sdelete():
+            shut()
+            expect(srow("builder").get_by_role("button", name="Delete")).to_be_disabled()
+            row = srow("Throwaway")
             row.get_by_role("button", name="Delete").click()
-            row.get_by_role("button", name="Confirm delete").click()
-            expect(page.locator(".hs-row")).to_have_count(4)
-            assert db().execute("SELECT COUNT(*) FROM conversations WHERE manual_name='Throwaway'").fetchone()[0] == 0
+            expect(row.locator(".s-btn.confirming")).to_have_text("Confirm")
+            row.locator(".s-btn.confirming").click()
+            expect(every).to_have_count(7, timeout=20000)
+            assert indexed(S % 5) is None
             assert os.path.exists(os.path.join(BASE, "t4.jsonl")), "the transcript must stay"
-        check("History: Delete needs a second press, removes the row, keeps the transcript", hdelete)
+        check("Sessions: Delete is for an ended session, needs a second press, keeps the transcript", sdelete)
+
+        def snarrow():
+            shut()
+            page.set_viewport_size({"width": 390, "height": 844})
+            page.wait_for_timeout(400)
+            got = page.evaluate(LAYOUT)
+            print("      (390 px cells, left edges per row: %s)" % sorted(set(got)))
+            assert len(set(got)) == 1, got
+            sizes = page.evaluate("() => [...document.querySelectorAll('#s-rows .s-row:not(.s-head) .s-btn')].filter(b => b.getBoundingClientRect().width > 0).map(b => [Math.round(b.getBoundingClientRect().width), Math.round(b.getBoundingClientRect().height), getComputedStyle(b.querySelector('.w') || b).display])")
+            print("      (390 px row buttons [width, height, word display]: %s)" % sorted({tuple(x) for x in sizes}))
+            assert all(w >= 40 and h >= 40 and d == "none" for w, h, d in sizes), sizes
+            over = page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
+            assert over <= 0, over
+            page.screenshot(path=os.path.join(SHOTS, "sessions-390.png"), full_page=True)
+            srow("Export plan").locator('[data-col="name"]').click()
+            card = page.locator("#s-card")
+            expect(card).to_be_visible()
+            for word in ("Open", "Wrap up", "Rename", "Describe", "Copy", "Delete", "Ask"):
+                expect(card.get_by_role("button", name=word, exact=True).locator(".w")).to_be_visible()
+            low = card.evaluate("e => [...e.querySelectorAll('.s-btn, input, select')].filter(b => b.getBoundingClientRect().height < 40).map(b => b.outerHTML.slice(0, 80))")
+            assert not low, low
+            wide = card.evaluate("e => e.scrollWidth - e.clientWidth")
+            assert wide <= 0, wide
+            page.screenshot(path=os.path.join(SHOTS, "sessions-card-390.png"))
+            card.get_by_role("button", name="Close").click()
+            page.set_viewport_size({"width": 1440, "height": 1000})
+        check("Sessions at 390 px: aligned icon rows, 40 px targets, a tapped row opens as a card with words", snarrow)
+
+        def smiddle():
+            shut()
+            clipped = """() => [...document.querySelectorAll('#s-rows .s-btn')].filter(b => b.getBoundingClientRect().width > 0 &&
+              b.getBoundingClientRect().right > document.querySelector('#s-rows').getBoundingClientRect().right - 4).length"""
+            for width in (1440, 1321, 1320, 1100, 1041, 1040, 960, 800, 721, 390):
+                page.set_viewport_size({"width": width, "height": 900})
+                page.wait_for_timeout(300)
+                got = page.evaluate(LAYOUT)
+                assert len(set(got)) == 1, (width, got)
+                over = page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
+                assert over <= 0, (width, over)
+                assert page.evaluate(clipped) == 0, "%d px: %d buttons cross the list's edge" % (width, page.evaluate(clipped))
+                page.screenshot(path=os.path.join(SHOTS, "sessions-%d.png" % width), full_page=True)
+            page.set_viewport_size({"width": 1440, "height": 1000})
+        check("Sessions at ten widths from 1440 to 390 px: columns aligned, no button clipped, nothing scrolls sideways", smiddle)
 
         # ---- Profiles
         view("profiles")
@@ -608,18 +742,18 @@ try:
         def phone():
             page.set_viewport_size({"width": 390, "height": 844})
             wide = []
-            for v in ("fleet", "foryou", "history", "profiles"):
+            for v in ("sessions", "fleet", "foryou", "profiles"):
                 view(v)
                 page.wait_for_timeout(300)
                 page.screenshot(path=os.path.join(SHOTS, "phone-%s.png" % v), full_page=True)
                 over = page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
                 if over > 0:
                     wide.append("%s +%dpx" % (v, over))
-            page.set_viewport_size({"width": 1400, "height": 1000})
+            page.set_viewport_size({"width": 1440, "height": 1000})
             assert not wide, "horizontal scroll at 390 px: " + ", ".join(wide)
         check("Phone width (390 px): no view scrolls sideways", phone)
 
-        for v in ("fleet", "foryou", "history", "profiles"):
+        for v in ("sessions", "fleet", "foryou", "profiles"):
             view(v)
             page.wait_for_timeout(300)
             page.screenshot(path=os.path.join(SHOTS, "desktop-%s.png" % v), full_page=True)

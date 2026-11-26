@@ -1,0 +1,205 @@
+{
+ "v": 1,
+ "index": "up",
+ "hub": "hub",
+ "as_of": 1795600600.0,
+ "machines": {
+  "hub": {
+   "reachable": true,
+   "as_of": 1795600600.0,
+   "stale": false,
+   "reason": ""
+  },
+  "laptop": {
+   "reachable": true,
+   "as_of": 1795600598.0,
+   "stale": false,
+   "reason": ""
+  },
+  "spare": {
+   "reachable": false,
+   "as_of": 1795592800.0,
+   "stale": true,
+   "reason": "ssh: connect to host spare port 22: Connection timed out"
+  }
+ },
+ "counts": {
+  "rows": 4,
+  "hidden_dev": 1,
+  "superseded": 1
+ },
+ "rows": [
+  {
+   "sid": "0a1b2c3d-0000-4000-8000-000000000005",
+   "conversation": "0a1b2c3d-0000-4000-8000-000000000004",
+   "name": "our conversation",
+   "name_source": "topic",
+   "kind": "voice",
+   "env": "prod",
+   "machine": "hub",
+   "cwd": "/home/me",
+   "account": "first",
+   "owner": "phone:prod",
+   "owner_since": 1795600900.0,
+   "epoch": 1,
+   "continues": "0a1b2c3d-0000-4000-8000-000000000004",
+   "superseded_by": null,
+   "first_prompt": "Summary of the earlier session: kitchen plans.",
+   "last_prompt": "run the tests again",
+   "last_answer": "All 212 tests pass.",
+   "topic": {
+    "host": "prod",
+    "id": "our-conversation"
+   },
+   "rc_name": null,
+   "started": 1795600900.0,
+   "updated": 1795600960.0,
+   "ended": null,
+   "end_reason": null,
+   "description": null,
+   "work": false,
+   "observed": {
+    "live": true,
+    "state": "running",
+    "where": "phone",
+    "tmux": null,
+    "pid": null,
+    "observed_at": 1795600590.0,
+    "stale": false,
+    "source": "journal"
+   },
+   "key": "hub:0a1b2c3d-0000-4000-8000-000000000005",
+   "head": true,
+   "chain": [
+    "0a1b2c3d-0000-4000-8000-000000000004",
+    "0a1b2c3d-0000-4000-8000-000000000005"
+   ]
+  },
+  {
+   "sid": "0a1b2c3d-0000-4000-8000-000000000001",
+   "conversation": "0a1b2c3d-0000-4000-8000-000000000001",
+   "name": "fix the build",
+   "name_source": "custom",
+   "kind": "chat",
+   "env": "prod",
+   "machine": "laptop",
+   "cwd": "/home/me/projects/app",
+   "account": "first",
+   "owner": "laptop",
+   "owner_since": 1795600000.0,
+   "epoch": 1,
+   "continues": null,
+   "superseded_by": null,
+   "first_prompt": "the build fails on the docs step, fix it",
+   "last_prompt": "run the tests again",
+   "last_answer": "All 212 tests pass.",
+   "topic": null,
+   "rc_name": "laptop-app",
+   "started": 1795600000.0,
+   "updated": 1795600600.0,
+   "ended": null,
+   "end_reason": null,
+   "description": "Fixed the docs build.",
+   "work": false,
+   "observed": {
+    "live": true,
+    "state": "idle",
+    "where": "tmux",
+    "tmux": "app",
+    "pid": 4242,
+    "observed_at": 1795600590.0,
+    "stale": false,
+    "source": "machine"
+   },
+   "key": "laptop:0a1b2c3d-0000-4000-8000-000000000001",
+   "head": true,
+   "chain": [
+    "0a1b2c3d-0000-4000-8000-000000000001"
+   ]
+  },
+  {
+   "sid": "0a1b2c3d-0000-4000-8000-000000000002",
+   "conversation": "0a1b2c3d-0000-4000-8000-000000000002",
+   "name": "",
+   "name_source": "",
+   "kind": "chat",
+   "env": "prod",
+   "machine": "laptop",
+   "cwd": null,
+   "account": null,
+   "owner": "laptop",
+   "owner_since": 1795600000.0,
+   "epoch": 1,
+   "continues": null,
+   "superseded_by": null,
+   "first_prompt": null,
+   "last_prompt": null,
+   "last_answer": null,
+   "topic": null,
+   "rc_name": null,
+   "started": 1795600000.0,
+   "updated": 1795600600.0,
+   "ended": null,
+   "end_reason": null,
+   "description": null,
+   "work": true,
+   "observed": {
+    "live": true,
+    "state": "busy",
+    "where": "window",
+    "tmux": null,
+    "pid": 4242,
+    "observed_at": 1795600590.0,
+    "stale": false,
+    "source": "machine"
+   },
+   "key": "laptop:0a1b2c3d-0000-4000-8000-000000000002",
+   "head": true,
+   "chain": [
+    "0a1b2c3d-0000-4000-8000-000000000002"
+   ]
+  },
+  {
+   "sid": "0a1b2c3d-0000-4000-8000-000000000014",
+   "conversation": "0a1b2c3d-0000-4000-8000-000000000014",
+   "name": "notes",
+   "name_source": "custom",
+   "kind": "chat",
+   "env": "prod",
+   "machine": "spare",
+   "cwd": "/home/me/notes",
+   "account": "first",
+   "owner": "spare",
+   "owner_since": 1795600000.0,
+   "epoch": 1,
+   "continues": null,
+   "superseded_by": null,
+   "first_prompt": "the build fails on the docs step, fix it",
+   "last_prompt": "run the tests again",
+   "last_answer": "All 212 tests pass.",
+   "topic": null,
+   "rc_name": null,
+   "started": 1795600000.0,
+   "updated": 1795600600.0,
+   "ended": null,
+   "end_reason": null,
+   "description": "Fixed the docs build.",
+   "work": false,
+   "observed": {
+    "live": true,
+    "state": "idle",
+    "where": "tmux",
+    "tmux": "notes",
+    "pid": 4242,
+    "observed_at": 1795592800.0,
+    "stale": true,
+    "source": "machine"
+   },
+   "key": "spare:0a1b2c3d-0000-4000-8000-000000000014",
+   "head": true,
+   "chain": [
+    "0a1b2c3d-0000-4000-8000-000000000014"
+   ]
+  }
+ ]
+}

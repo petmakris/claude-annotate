@@ -141,3 +141,27 @@ def test_todo_spawn_of_an_owned_to_do_starts_its_owner_and_waits_for_its_order(w
     code, out, err = user(world, "todo", "spawn", "2", "--cwd", work)
     assert code == 0, err
     assert "started builder" in out and rows(world)[2]["reserved_for"] == "builder"
+
+
+def test_a_session_that_continues_another_still_holds_its_to_do(world):
+    """To-dos and members are keyed by conversation (fleet/docs/session-index.md, section 8): after a handover the
+    new session has another id and the same conversation, so what the old one claimed is still held."""
+    old, new, other = world.session("alpha"), world.session("alpha-next"), world.session("beta")
+
+    def cached(session, conversation):
+        fleet.idxcache.write(world.here.home, {"sid": session.sid, "conversation": conversation, "owner": "here",
+                                               "epoch": 1, "owner_since": 1.0, "machine": "here", "name": "",
+                                               "kind": "chat", "env": "prod", "work": False}, source="hub")
+    cached(old, "conversation-1")
+    cached(new, "conversation-1")
+    world.member(old)
+    user(world, "todo", "add", "schema")
+    assert world.run(old, "todo", "claim", "1")[0] == 0
+    world.member(new)
+    world.member(other)
+    held = {m["name"]: (m["conversation"], [t["id"] for t in m["held"]]) for m in fleet.local_members()}
+    assert held == {"alpha": ("conversation-1", [1]), "alpha-next": ("conversation-1", [1]), "beta": (other.sid, [])}
+    code, out, _ = world.run(new, "statusline", new.sid)
+    assert json.loads(out)["todos"] == 1
+    assert world.run(other, "todo", "done", "1")[0] == 1
+    assert world.run(new, "todo", "done", "1")[:2] == (0, "todo 1 done\n")

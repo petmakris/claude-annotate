@@ -1,0 +1,15 @@
+{
+ "why": "a take is never journaled",
+ "expect": "event",
+ "doc": {
+  "v": 1,
+  "machine": "laptop",
+  "seq": 48,
+  "as": "laptop",
+  "sid": "0a1b2c3d-0000-4000-8000-000000000001",
+  "epoch_seen": 1,
+  "event": "take",
+  "at": 1795600048.0,
+  "fields": {}
+ }
+}

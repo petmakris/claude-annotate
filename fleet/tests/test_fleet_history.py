@@ -80,7 +80,7 @@ def hook_payload(event, sid, cwd, path, reason=None):
 
 
 def run_hook(world, payload, extra=None):
-    env = dict(os.environ, **(extra or {}))
+    env = dict(os.environ, FLEET_INDEX_FOREGROUND="1", **(extra or {}))  # no detached flush outlives the test
     return subprocess.run(["sh", os.path.join(ROOT, "hooks", "record.sh")], input=payload, capture_output=True,
                           text=True, env=env, timeout=30)
 

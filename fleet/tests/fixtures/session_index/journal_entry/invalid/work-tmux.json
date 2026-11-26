@@ -1,0 +1,22 @@
+{
+ "why": "a work entry carries its tmux name",
+ "expect": "fits a shape it must not",
+ "doc": {
+  "v": 1,
+  "machine": "laptop",
+  "seq": 49,
+  "as": "laptop",
+  "sid": "0a1b2c3d-0000-4000-8000-000000000002",
+  "epoch_seen": 1,
+  "event": "observe",
+  "at": 1795600049.0,
+  "fields": {
+   "work": true,
+   "observed": {
+    "live": true,
+    "tmux": "client",
+    "observed_at": 1795600000.0
+   }
+  }
+ }
+}

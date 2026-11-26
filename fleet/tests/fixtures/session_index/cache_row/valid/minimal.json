@@ -1,0 +1,17 @@
+{
+ "v": 1,
+ "sid": "0a1b2c3d-0000-4000-8000-000000000015",
+ "conversation": "0a1b2c3d-0000-4000-8000-000000000015",
+ "owner": "laptop",
+ "epoch": 3,
+ "owner_since": 1795600000.0,
+ "name": "",
+ "name_source": "",
+ "kind": "chat",
+ "env": "prod",
+ "machine": "laptop",
+ "work": false,
+ "superseded_by": null,
+ "cached_at": 1795600000.0,
+ "source": "hub"
+}

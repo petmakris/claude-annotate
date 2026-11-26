@@ -1,0 +1,30 @@
+{
+ "sid": "0a1b2c3d-0000-4000-8000-000000000003",
+ "conversation": "0a1b2c3d-0000-4000-8000-000000000003",
+ "name": "kitchen plans",
+ "name_source": "topic",
+ "kind": "voice",
+ "env": "dev:demo",
+ "machine": "hub",
+ "cwd": "/home/me",
+ "account": "second",
+ "owner": "phone:dev:demo",
+ "owner_since": 1795600000.0,
+ "epoch": 1,
+ "continues": null,
+ "superseded_by": null,
+ "first_prompt": "plan the kitchen",
+ "last_prompt": "run the tests again",
+ "last_answer": "All 212 tests pass.",
+ "topic": {
+  "host": "dev:demo",
+  "id": "kitchen-plans"
+ },
+ "rc_name": null,
+ "started": 1795600000.0,
+ "updated": 1795600600.0,
+ "ended": null,
+ "end_reason": null,
+ "description": null,
+ "work": false
+}

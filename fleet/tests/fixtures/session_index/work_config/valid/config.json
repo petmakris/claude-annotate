@@ -1,0 +1,10 @@
+{
+ "accounts": [
+  "first",
+  "second"
+ ],
+ "profile_paths": [
+  "/home/me/work-profile"
+ ],
+ "own_profiles": "/home/me/projects/env/claude/profiles"
+}

@@ -48,7 +48,7 @@ A session has one name: its Claude Code name is its fleet name. A hook on every 
 | `todo add "<title>" [--ref <path\|url>] [--notes "..."] [--owner NAME] [--after IDS]` | Park work in the shared backlog. `--owner` says which member it is meant for (`name`, `name@machine` or `petros`); `--after 3,4` says which to-dos must be done first. An unknown id, a to-do waiting on itself and a loop are refused. |
 | `todo set <id> [--owner NAME] [--after IDS]` | Change who a to-do is for or what it waits on (an empty value clears it). |
 | `todo ls [--all] [--json]` | Open and claimed to-dos (`--all` adds done ones), with `{for X; waits on #3}` or `{...; ready}`, and `(gone)` after an owner with no live member. |
-| `todo claim <id>` | Take a to-do. Atomic: one holder. Needs `join` first. Prints its ref and notes. Refused while it waits on a to-do not done, or when it is meant for another member. |
+| `todo claim <id>` | Take a to-do. Atomic: one holder, kept by conversation, so a session that continues another one still holds it. Needs `join` first. Prints its ref and notes. Refused while it waits on a to-do not done, or when it is meant for another member. |
 | `todo done <id>` / `todo release <id>` | The holder finishes it, or hands it back to open. |
 | `todo spawn <id> [--name N] [--cwd D] [--on <machine>]` | Start a new session (default name `todo-<id>`) told to claim and do that to-do. The to-do is reserved for that name, so no one else claims it first. |
 | `stop <name>` | Stop a background member (`claude stop`). An interactive member is never killed: it is told to wrap up and leave. Works across machines (`name@machine`). |
@@ -63,10 +63,12 @@ A session has one name: its Claude Code name is its fleet name. A hook on every 
 | `history describe [--limit N] [--folder F]` | Write a short description for sessions that have none (one headless call each, paced; on request only). |
 | `history search "<words>"` | Find a session by meaning over the descriptions. |
 | `history import <db> [--descriptions <db>]` | Copy the conversations (and descriptions) of an older store, once; a second run adds nothing. |
-| `sessions [--kind chat\|job\|worker\|all] [--named] [--since 14d] [--limit N] [--machine M] [--json]` | Every session on every machine, joined or not, with its live state and where it runs (tmux, window, bg, none). Off the hub it asks the hub (`hub` in machines.json); `--direct` asks every machine from here, `--local` this machine only. A machine that does not answer shows its last rows, marked stale, with this run's reason. |
-| `sessions open <machine:id> [--json]` | The plan for landing in a session, as data (attach, resume, wrap up then resume, or why not). `@claude pick` runs it; it never runs anything itself. |
+| `sessions [--kind chat\|job\|worker\|all] [--named] [--since 14d] [--limit N] [--machine M] [--json]` | Every session on every machine, one row per session, from the session index on the hub (`docs/session-index.md`), with what each is doing read now and where it runs (tmux, window, bg, none). Dev-sandbox rows and superseded sids are left out. When the hub does not answer it shows the last list and says so. `--local` shows this machine's own facts only. |
+| `sessions open <machine:id> [--to <machine\|phone:prod>] [--json]` | The plan for landing in a session, as data: attach, resume, take then resume (it is owned elsewhere, such as by the phone), wrap up then resume, or why not. A superseded id resolves to the newest one of its chain. `@claude pick` runs the plan; this never runs anything itself. |
+| `sessions observe --json` | What this machine's sessions are doing now, for the hub's list. |
+| `session <verb>` | The session index itself (take, list, show, rename, delete, describe, ask, rebuild): see `docs/session-index.md`, section 13. |
 | `profile ls [--json]` / `show [folder]` / `set <folder> <name\|inherit>` | Launch profiles: which tools new sessions get in each folder (the nearest `.claude-launch` above it names a profile). `set` writes or removes that folder's standard file; a hand-written one is refused. Editing a profile's switches is on the page's Profiles view. Needs `profiles.json` in the fleet's folder. |
-| `ui [url]` | `ui` serves the page (a token is required). `ui url` prints the link that signs a browser in: `/login?t=...` sets a cookie and redirects to `/`. |
+| `ui [url\|token]` | `ui` serves the page (a token is required). `ui token` prints the local address and token as JSON, for a server on this machine. `ui url` prints the link that signs a browser in: `/login?t=...` sets a cookie and redirects to `/`. |
 | `canary [--json]` | End-to-end proof of delivery: starts a scratch background session, posts it a message and confirms it in the session's transcript, then removes the session. Exit 0, or 1 with one line (also put in the user's inbox). Meant for a daily schedule. |
 
 ## Backlog and spawn: when to use which
