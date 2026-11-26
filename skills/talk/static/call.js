@@ -108,6 +108,7 @@ function paintPill() {
 }
 function paintAll() {
   if (view.ended && live) { stopLive(); return; }  // stopLive paints again
+  applyLang();   // the page's words follow the language choice before anything is painted (call-i18n.js)
   paintInfo(); paintPill(); paintSettings();
   $("app").dataset.state = appState(); $("app").toggleAttribute("data-ended", !!view.ended);
   $("app").toggleAttribute("data-live", listening());

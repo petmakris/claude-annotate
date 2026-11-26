@@ -80,8 +80,8 @@ def test_the_calls_button_counts_the_calls_that_need_you_and_names_them(tmp_path
     page.check("[$('callsbtn').hidden, $('callsdot').hidden, $('callsdot').textContent, $('callsbtn').dataset.need, $('callsbtn').dataset.tip, $('callsbtn').getAttribute('aria-label')]")
     assert page.run() == [
         [True, True],
-        [False, False, "2", "stalled", "2 calls need you",
-         "Calls: 2 need you. Stalled in “Sourdough”; 2 new answers in “Weekend reading”"]]
+        [False, False, "2", "stalled", "2 other calls need you",
+         "Calls: 2 other calls need you. Stalled in “Sourdough”; 2 new answers in “Weekend reading”"]]
 
 
 def test_the_tab_title_and_icon_say_what_the_call_is_doing(tmp_path):
@@ -181,8 +181,8 @@ def test_the_servers_summary_of_a_call_says_when_it_stalled_and_when_it_last_mov
 def test_the_all_calls_page_says_the_words_of_the_popover():
     from pathlib import Path
     home = (Path(__file__).resolve().parents[1] / "static" / "home.html").read_text()
-    js = (Path(__file__).resolve().parents[1] / "static" / "call-calls.js").read_text()
+    js = (Path(__file__).resolve().parents[1] / "static" / "call-i18n.js").read_text()   # the words are in the page's table
     for word in ("New answer", "Ended", "Stalled", "Answering", "Talking now", "Waiting for you"):
         assert f'"{word}"' in home and f'"{word}"' in js, word
-    assert '" new answers"' in home and '" new answers"' in js
+    assert '" new answers"' in home and '"{n} new answers"' in js
     assert '"Open"' not in home.split("function stateOf")[1].split("let sig")[0]

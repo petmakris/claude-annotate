@@ -230,6 +230,103 @@ def test_the_two_live_options_are_pills_of_the_switch_that_step_to_the_next_valu
                           ["keyword", 2000, "Interrupt: “wait”", "Send after 2 s", '"keyword"', "2000"], ["talk", 1200]]
 
 
+def test_each_live_pill_says_what_it_does_and_what_the_next_press_makes_it(tmp_path):
+    # r1-tinkerer-4: the pill shows the value in force, and the title tells what it is and what a press gives
+    page = page_with(tmp_path)
+    page.js("setInputMode('live');")
+    titles = "[$('bargepill').title, $('pausepill').title]"
+    page.check(titles)
+    page.js("$('bargepill').click(); $('pausepill').click();").check(titles)
+    page.js("$('pausepill').click();").check("$('pausepill').title")
+    page.js("$('pausepill').click();").check("$('pausepill').title")
+    assert page.run() == [
+        ["Interrupt: starting to talk stops Claude's answer. Press to stop it only when you say \u201cwait\u201d.",
+         "Send after: how long you stay quiet before your turn is sent, now 1.2 s. Press for 2 s."],
+        ["Interrupt: Claude's answer stops only when you say \u201cwait\u201d. Press to stop it as soon as you start talking.",
+         "Send after: how long you stay quiet before your turn is sent, now 2 s. Press for 0.8 s."],
+        "Send after: how long you stay quiet before your turn is sent, now 0.8 s. Press for 1.2 s.",
+        "Send after: how long you stay quiet before your turn is sent, now 1.2 s. Press for 2 s."]
+
+
+# ---- a typed turn that is only a command to the player (S-tv-7) -------------------------------------------------------------
+
+SAYS = "sentTo.filter((x) => x[0] === '/api/say').map((x) => x[1].text)"
+
+
+def test_a_typed_turn_that_is_only_a_speed_command_moves_the_voice_and_is_not_sent(tmp_path):
+    page = page_with(tmp_path)
+    page.js("const t = $('text'); t.value = 'slower'; fitText(); $('sendtext').click(); await settle();")
+    page.check(f"[speed, audio.playbackRate, t.value, {SAYS}, liveFlash.text, $('announcer').textContent]")
+    page.js("t.value = 'Faster, please!'; fitText(); t.dispatchEvent(new ShimEvent('keydown', {key: 'Enter', bubbles: true})); await settle();")
+    page.check(f"[speed, t.value, {SAYS}]")
+    # words after the command make it a question for Claude: it is sent, and the speed stays
+    page.js("t.value = 'slower please, and explain tides'; fitText(); $('sendtext').click(); await settle();").check(f"[speed, {SAYS}]")
+    assert page.run() == [[0.85, 0.85, "", [], "Slower: 0.85×", ""], [1, "", []], [1, ["slower please, and explain tides"]]]
+
+
+def test_the_commands_the_page_applies_to_a_typed_turn_are_the_ones_the_server_hears_for_the_player():
+    import talk
+    wanted = {p: c for p, c in talk.COMMANDS.items() if c in ("slower", "faster", "repeat_slower", "repeat")}
+    assert len(wanted) == 22
+    other = {p: c for p, c in talk.COMMANDS.items() if c not in wanted.values()}
+    page_cmds = json.loads(re.search(r"const LOCAL_COMMANDS = (\{.*?\});", (STATIC / "call-input.js").read_text(), re.S).group(1))
+    assert page_cmds == wanted
+    assert not set(page_cmds) & set(other)
+
+
+def test_the_page_reads_a_command_with_courtesy_words_round_it_and_nothing_else(tmp_path):
+    page = page_with(tmp_path)
+    page.check("['Slower', 'please go slower.', 'Claude, speed up!', 'ξαναπές το πιο αργά', 'Repeat that', ''].map(localCommand)")
+    page.check("['slower please, I am lost', 'make it slower', 'go on', 'stop', 'explain tides'].map(localCommand)")
+    assert page.run() == [["slower", "slower", "faster", "repeat_slower", "repeat", None], [None] * 5]
+
+
+# ---- the offer of TV size (S-tv-1) ------------------------------------------------------------------------------------------
+
+def test_tv_size_is_offered_on_a_big_window_with_no_size_chosen_and_never_taken_by_itself(tmp_path):
+    html, states = served(tmp_path, [])
+    state = "[$('tvoffer').hidden, screenMode, localStorage.getItem('talk.screen'), localStorage.getItem('talk.tvoffer')]"
+    page = CallPage(html, states).check(state)                                            # 1300 wide: below TV_WIDTH
+    page.js("innerWidth = 1920; paintAll();").check(state)                                 # a big window: offered, desk size kept
+    page.js("$('tvofferx').click();").check(state)                                         # dismissed: gone and remembered
+    page.js("innerWidth = 1280; paintAll(); innerWidth = 2560; paintAll();").check(state)
+    assert page.run() == [[True, "desk", None, None], [False, "desk", None, None], [True, "desk", None, "true"], [True, "desk", None, "true"]]
+    # the button is the gear's TV: stored, and the offer is gone
+    page = CallPage(html, states).js("innerWidth = 1920; paintAll(); $('tvoffergo').click();").check("[$('tvoffer').hidden, screenMode, localStorage.getItem('talk.screen'), $('app').hasAttribute('data-tv')]")
+    assert page.run() == [[True, "tv", '"tv"', True]]
+
+
+def test_no_offer_when_a_size_was_chosen_or_named_in_the_address_or_the_call_has_ended(tmp_path):
+    html, states = served(tmp_path, [])
+    state = "$('tvoffer').hidden"
+    for kw in ({"stored": {"screen": "desk"}}, {"stored": {"screen": "tv"}}, {"stored": {"tvoffer": True}}, {"query": "?screen=desk"}, {"query": "?screen=tv"}):
+        assert CallPage(html, states, **kw).js("innerWidth = 1920; paintAll();").check(state).run() == [True], kw
+    ended = dict(states[0], v="end", ended="over")
+    assert CallPage(html, [ended], start=0).js("innerWidth = 1920; paintAll();").check(state).run() == [True]
+
+
+# ---- why a recording gave no words (r1-mic-2) -------------------------------------------------------------------------------
+
+def test_an_empty_recording_is_said_above_the_field_with_its_length_and_whether_the_microphone_gave_a_signal(tmp_path):
+    page = page_with(tmp_path)
+    page.check("[micNoteText({seconds: 2.46, peak: 0.0004}), micNoteText({seconds: 14.2, peak: 0.31}), micNoteText({seconds: 0.2, peak: 0}), micNoteText(undefined)]")
+    # a recording that comes back empty: the note, not the toast, and it stays until the next press
+    page.js("const f0 = globalThis.fetch; globalThis.fetch = async (p, o) => String(p).startsWith('/api/listen') ? {ok: true, status: 200, json: async () => ({text: ''})} : f0(p, o);")
+    page.js("const wav = new Blob([new Uint8Array(100)], {type: 'audio/wav'}); wav.heard = {seconds: 3, peak: 0.002}; await sendWav(wav); await advance(13000);")
+    page.check("[$('micnote').hidden, $('micnote').textContent, $('toast').hidden, $('toasttext').textContent, $('micnote').previousElementSibling.id, $('micnote').nextElementSibling.id]")
+    page.js("showMicNote(''); await sendWav(Object.assign(new Blob([new Uint8Array(100)]), {heard: {seconds: 1, peak: 0.4}}));").check("$('micnote').textContent")
+    page.js("await startRecording();").check("[$('micnote').hidden, $('micnote').textContent]")
+    assert page.run() == [
+        ["Nothing was heard in 2.5 s of recording: the microphone gave almost no signal. Check that it is switched on and not muted, then try again.",
+         "Nothing was heard in 14 s of recording, though the microphone picked up some sound. Try again a little closer to it.",
+         "Nothing was heard: the microphone gave almost no signal. Check that it is switched on and not muted, then try again.",
+         "Nothing was heard, though the microphone picked up some sound. Try again a little closer to it."],
+        [False, "Nothing was heard in 3.0 s of recording: the microphone gave almost no signal. Check that it is switched on and not muted, then try again.",
+         True, "", "sendnote", "modebar"],
+        "Nothing was heard in 1.0 s of recording, though the microphone picked up some sound. Try again a little closer to it.",
+        [True, ""]]
+
+
 # ---- TV, the theme, the engine's words -----------------------------------------------------------------------------------
 
 def test_the_address_names_the_screen_and_the_gear_still_wins(tmp_path):
@@ -282,6 +379,77 @@ def test_the_voice_is_described_in_plain_words_with_no_machine_or_profile(tmp_pa
     assert page.run() == ["A voice made on this computer: free, a little slower to start",
                           "Ava, a cloud voice: quick to start, billed per character",
                           "a cloud voice: quick to start, billed per character"]
+
+
+# ---- layout the page keeps, pinned by the stylesheets (no box measures under node; tools/talk_render shows them) ---------------
+
+CSS = {name: (STATIC / name).read_text() for name in ("call.css", "call-calls.css", "call-input.css")}
+HTML = (STATIC / "call.html").read_text()
+
+
+def block(css, header):
+    """The text inside the braces of the first `header { ... }` (an @media or @container), braces matched."""
+    start = css.index(header + "{") + len(header) + 1 if (header + "{") in css else css.index(header + " {") + len(header) + 2
+    depth, i = 1, start
+    while depth:
+        depth += {"{": 1, "}": -1}.get(css[i], 0); i += 1
+    return css[start:i - 1]
+
+
+def decls(css, selector):
+    """The declarations of the rule whose selector is exactly `selector`, as a dict (the first such rule)."""
+    m = re.search(r"(?:^|[}\n])\s*" + re.escape(selector) + r"\{([^}]*)\}", css)
+    assert m, f"no rule for {selector}"
+    return {k.strip(): v.strip() for k, v in (d.split(":", 1) for d in m.group(1).split(";") if ":" in d)}
+
+
+def test_end_call_is_a_footer_outside_the_scrolling_body_of_the_gear_dialog():
+    # QF-10: in TV size the rows grow (zoom 1.4) and the dialog is taller than the window: End call lay over the rows
+    pop = HTML[HTML.index('id="pGear"'):HTML.index('id="pCalls"')]
+    body, foot = pop.index('class="popbody"'), pop.index('class="popfoot"')
+    assert body < pop.index('id="follow"') < pop.index('id="keysrow"') < pop.index('id="demo"') < foot < pop.index('id="end"')
+    assert pop.count("</div>") == pop.count("<div")                         # the body is closed before the footer starts
+    assert decls(CSS["call.css"], ".gearpop")["overflow"] == "hidden"          # the dialog itself does not scroll
+    scroll = decls(CSS["call.css"], ".gearpop .popbody")
+    assert scroll["overflow-y"] == "auto" and scroll["flex"] == "1 1 auto" and scroll["min-height"] == "0"
+    assert "linear-gradient(to bottom,#000 calc(100% - 22px),transparent)" in scroll["mask-image"]   # the fade that says there is more
+    assert scroll["scrollbar-width"] == "thin"
+    assert decls(CSS["call.css"], ".gearpop .popfoot")["flex"] == "none"
+    assert "position" not in decls(CSS["call.css"], ".gearpop .endbtn")        # not sticky over the rows
+
+
+def test_the_players_tips_open_above_it_and_every_tip_goes_again_after_three_seconds():
+    # QF-2: the tip of a focused Play lay over the Following strip under the transport and never went
+    css = CSS["call.css"]
+    player = decls(css, ".player .ib[data-tip]::after")
+    assert player["bottom"] == "calc(100% + 8px)" and player["top"] == "auto"
+    assert "top" not in decls(css, ".player .ib.pp[data-tip]::after") and "bottom" not in decls(css, ".player .ib.pp[data-tip]::after")
+    assert decls(css, ".ib[data-tip]:focus-visible::after")["animation"] == "tip 3s both"
+    assert ".ib[data-tip]:focus-visible::after{animation:none;opacity:1}" in css or ",.ib[data-tip]:focus-visible::after{animation:none;opacity:1}" in css
+
+
+def test_on_a_phone_the_player_and_the_strip_have_targets_of_44_px():
+    # S-phone-7: call-shell.css sets 38 px arrows, a 30 px chip and 36 px strip buttons; these rules (a longer selector) win
+    phone = block(CSS["call.css"], "@media (max-width:760px)")
+    assert decls(phone, ".app .now-transport .ib,.app .now-transport .ib.pp") == {"width": "44px", "height": "44px"}
+    assert decls(phone, ".app .now-transport .speedchip") == {"height": "44px", "min-width": "44px"}
+    strip = block(CSS["call-calls.css"], "@media (max-width:760px)")
+    assert decls(strip, ".statestrip .ib") == {"width": "44px", "height": "44px"}
+    assert decls(strip, ".statestrip .ib.ssauto")["width"] == "44px"
+    assert decls(strip, ".ib.callsbtn")["min-width"] == "44px" and decls(strip, ".ib.callsbtn")["height"] == "44px"
+    assert decls(CSS["call-input.css"], ".tvoffer .ssbtn") .get("min-height") == "30px"
+    assert "min-height:44px" in block(CSS["call-input.css"], "@media (pointer:coarse),(max-width:760px)") and ".tvoffer .ib{width:44px;height:44px}" in CSS["call-input.css"]
+
+
+def test_the_header_title_takes_three_lines_on_a_narrow_panel_and_the_header_grows_with_it():
+    # S-tinkerer-7: a fixed 48 px header cut the title to two lines of 116 px; only the hover title had the rest
+    css = CSS["call.css"]
+    head = decls(css, ".phead")
+    assert "height" not in head and head["min-height"] == "48px" and head["flex-wrap"] == "wrap"
+    assert decls(css, ".topic")["flex"] == "1 1 110px" and decls(css, ".topic")["min-width"] == "110px"
+    assert decls(block(css, "@container (max-width:400px)"), ".topic") == {"-webkit-line-clamp": "3", "margin": "4px 0"}
+    assert decls(block(css, "@container (max-width:339px)"), ".topic") == {"flex-basis": "100%"}
+    assert "min-height:calc(48px * var(--tv))" in css and "{height:44px}" not in block(css, "@media (max-width:760px)")
 
 
 # ---- the markup ------------------------------------------------------------------------------------------------------------

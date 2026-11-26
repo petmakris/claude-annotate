@@ -45,14 +45,29 @@ a.callrow:hover{background:var(--shade)}
 /* the state strip: one line under the header, the call's state in words */
 .statestrip{flex:none;display:flex;align-items:center;gap:8px;min-height:38px;padding:2px 6px 2px 14px;border-bottom:1px solid var(--line);font:500 12.5px var(--sans);color:var(--muted)}
 .statestrip .ssico{display:grid;place-items:center;flex:none;color:var(--muted)}
-.statestrip .sstext{flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--ink);font-variant-numeric:tabular-nums}
+.statestrip .ssbody{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;padding:3px 0}
+.statestrip .sstext{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--ink);font-variant-numeric:tabular-nums}
+.statestrip .ssnote{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font:400 11.5px var(--sans);color:var(--muted)}
 .statestrip .ssmore{flex:none;white-space:nowrap;color:var(--acc)}
 .statestrip .ssbtn{flex:none;min-height:30px;padding:0 12px;border-radius:999px;background:var(--acc);color:var(--on-acc);font:500 12.5px var(--sans)}
 .statestrip .ib{width:30px;height:30px}
-.statestrip .ssauto .mute{display:none}
-.statestrip .ssauto[aria-pressed="false"] .wv{display:none}
-.statestrip .ssauto[aria-pressed="false"] .mute{display:block}
+/* Autoplay: a play arrow in a loop (never a speaker, which reads as Mute), struck through while it is off; the word goes with it
+   where the strip has room (ADR-003: icon and word when wide, the icon alone when narrow) */
+.statestrip .ib.ssauto{width:auto;gap:6px;padding:0 8px;display:flex;align-items:center;font:500 12px var(--sans)}
+.statestrip .ssauto .aulbl{display:none;white-space:nowrap}
+.statestrip .ssauto .off{display:none}
+.statestrip .ssauto[aria-pressed="false"] .off{display:block}
 .statestrip .ssauto[aria-pressed="true"]{color:var(--acc)}
+.statestrip{container:strip / inline-size}
+.panel>.open{container:panelbox / inline-size}
+/* the other calls that need you go on a row of their own under the state when the panel is narrow (a phone has no hover), whole words
+   and no ellipsis, so the state keeps its room; a wide panel keeps them on the state's row */
+@container panelbox (max-width:439px){
+  .statestrip{flex-wrap:wrap}
+  .statestrip .ssbody{flex:1 1 0}
+  .statestrip .ssmore{order:9;flex:1 0 100%;padding:0 0 6px 24px;white-space:normal}
+}
+@container strip (min-width:340px){.statestrip .ssauto .aulbl{display:inline}}
 .statestrip[data-key="answering"] .ssico svg{animation:spin .9s linear infinite;color:var(--acc)}
 .statestrip[data-key="playing"] .ssico{color:var(--good)}
 .statestrip[data-key="new"] .ssico{color:var(--acc)}
@@ -60,7 +75,7 @@ a.callrow:hover{background:var(--shade)}
 .statestrip.warn{background:var(--warn-soft)}
 /* a warning has room to say itself in two lines and its button; the calls count and the autoplay switch wait */
 .statestrip.warn .sstext{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-.statestrip.warn :is(.ssmore,.ssauto){display:none}
+.statestrip.warn :is(.ssmore,.ssauto,.ssnote){display:none}
 .statestrip.warn .ssico{color:var(--warn)}
 
 /* the welcome-back card: after a real absence, what came while you were away and one press to hear it */
@@ -86,9 +101,10 @@ a.callrow:hover{background:var(--shade)}
 .sinceleft .splay:hover{background:color-mix(in srgb,var(--acc) 14%,transparent)}
 
 @media (max-width:760px){
-  .ib.callsbtn{min-width:40px;height:40px;padding:0 8px}
-  .statestrip .ssmore{display:none}
-  .statestrip .ib{width:36px;height:36px}
+  .ib.callsbtn{min-width:44px;height:44px;padding:0 8px}
+  .statestrip .ssauto .aulbl{display:none!important}
+  .statestrip .ib{width:44px;height:44px}
+  .statestrip .ib.ssauto{width:44px;padding:0;justify-content:center}
   .callspop{padding:10px}
   .welcome{margin:6px 8px 0;padding:8px 10px;gap:6px}
   .welcome .wbx{width:36px;height:36px}
@@ -97,4 +113,11 @@ a.callrow:hover{background:var(--shade)}
 .app[data-tv] .callrow .ct{font-size:17px}
 @media (prefers-reduced-motion:reduce){
   .callrow[data-state="answering"] .cg svg,.statestrip[data-key="answering"] .ssico svg{animation:none}
+}
+.app[data-tv] .statestrip .ib.ssauto{font-size:14px}
+/* the header gives the title room: on a narrow panel the Calls count sits on the corner of its button and the live dot waits */
+@container (max-width:400px){
+  .phead .live{display:none}
+  .ib.callsbtn{padding:0;min-width:34px;justify-content:center}
+  .callsbtn .dot{position:absolute;top:1px;right:-3px}
 }

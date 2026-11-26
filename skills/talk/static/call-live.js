@@ -19,10 +19,10 @@ const later = ms => new Promise(ok => setTimeout(ok, ms));
 
 async function startLive() {
   if (live || view.ended) return;
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { showError("This page cannot reach a microphone. Open it over https or on localhost."); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { showError(t("mic.unavailable")); return; }
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}}); }
-  catch (err) { showError("No microphone: " + err.message); return; }
+  catch (err) { showError(t("mic.none", {why: err.message})); return; }
   if (live || talkMode !== "live" || view.ended) { stream.getTracks().forEach(t => t.stop()); return; }
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
   const source = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(LIVE.chunk, 1, 1);
@@ -33,7 +33,7 @@ async function startLive() {
   source.connect(node); node.connect(ctx.destination);
   const track = stream.getAudioTracks()[0];
   if (track) {
-    track.onended = () => { if (live && live.stream === stream) stopLive("The microphone was lost. Press the mic to listen again."); };
+    track.onended = () => { if (live && live.stream === stream) stopLive(t("mic.lost")); };
     // The browser or the system muted the input (a hardware switch, a privacy setting): said at once, not after the silence watch.
     track.onmute = () => { if (live && live.stream === stream && !live.muted) { live.noSignal = true; paintAll(); } };
     track.onunmute = () => { if (live && live.stream === stream) { live.noSignal = false; live.flatMs = 0; paintAll(); } };
@@ -134,7 +134,7 @@ function liveChunk(d) {
     l.pre.push(d); if (l.pre.length * ms > LIVE.preMs) l.pre.shift();
     if (lvl > thr) { l.loud += ms; if (l.loud >= (over ? LIVE.startOverMs : LIVE.startMs)) speechStarts(); }
     else l.loud = 0;
-    if (now - l.lastVoice > LIVE.sleepMs && !userBusy() && !busy) stopLive("Asleep after 10 minutes of quiet. Press the mic to listen.");
+    if (now - l.lastVoice > LIVE.sleepMs && !userBusy() && !busy) stopLive(t("mic.asleep"));
     return;
   }
   l.chunks.push(d); l.ms += ms;
@@ -217,10 +217,10 @@ async function sendLive(u) {
       if (resp.status === 503 && tries < 5) { await later(1000 * 2 ** tries); continue; }
       const got = await resp.json().catch(() => ({}));
       if (resp.ok) body = got;
-      else { showError(got.error || "Sending failed: HTTP " + resp.status); if (![410, 413].includes(resp.status) && !u.gate) unsent = wav; }
+      else { showError(got.error || t("send.http", {code: resp.status})); if (![410, 413].includes(resp.status) && !u.gate) unsent = wav; }
     } catch (err) {
       if (tries < 3) { await later(1000 * 2 ** tries); continue; }
-      showError("Sending failed: " + err.message); if (!u.gate) unsent = wav;
+      showError(t("send.failed", {why: err.message})); if (!u.gate) unsent = wav;
     }
     break;
   }
@@ -245,9 +245,9 @@ async function sendLive(u) {
     undoable = {entry: body.entry.id, until: Date.now() + 8000}; setTimeout(paintAll, 8100);
     turnSentAt = Date.now();
     turnSent({via: "live", text: "", entry: body.entry.id});
-    if (sayingBack && answering === sayingBack) { answering = null; $("text").placeholder = "Type, or press the mic"; clearStop(); }
+    if (sayingBack && answering === sayingBack) { answering = null; $("text").placeholder = t("ph.talk"); clearStop(); }
     view.v = -1; if (wake) wake();
-  } else if (body && !body.ignored && !u.over) flash("Didn't catch that.");
+  } else if (body && !body.ignored && !u.over) flash(t("live.nocatch"));
   paintAll();
 }
 // "slower", "faster" and "say that again slower" move the voice speed one step (the player's chip does the same by hand); a held
@@ -255,16 +255,16 @@ async function sendLive(u) {
 const SPEED_STEP = {slower: -1, faster: 1, repeat_slower: -1};
 function speedBySpeech(cmd, h) {
   const at = SPEEDS.indexOf(speed), to = Math.min(SPEEDS.length - 1, Math.max(0, (at < 0 ? SPEEDS.indexOf(1) : at) + SPEED_STEP[cmd]));
-  if (to === at) flash(SPEED_STEP[cmd] < 0 ? "Already as slow as it goes." : "Already as fast as it goes.");
-  else { setSpeed(SPEEDS[to]); flash((SPEED_STEP[cmd] < 0 ? "Slower: " : "Faster: ") + speed + "×"); }
+  if (to === at) flash(t(SPEED_STEP[cmd] < 0 ? "live.slowest" : "live.fastest"));
+  else { setSpeed(SPEEDS[to]); flash(t(SPEED_STEP[cmd] < 0 ? "live.slower" : "live.faster", {x: speed})); }
   if (cmd === "repeat_slower" && current) { readerPlays(current); audio.currentTime = h ? h.from : sentenceStart(); audio.play().catch(() => {}); }
   else if (h && h.paused && current) { audio.currentTime = h.from; audio.play().catch(() => {}); }
 }
 // A spoken command, acted on here: no turn, no wait for Claude.
 function runCommand(cmd, body) {
   chime(700);
-  if (cmd === "mute") { stopLive("Stopped listening. Press the mic to listen."); return; }
-  if (cmd === "withdraw") { undoable = null; flash("Taken back."); if (held) { held.armed = false; } return; }  // settle resumes a held answer
+  if (cmd === "mute") { stopLive(t("live.stopped")); return; }
+  if (cmd === "withdraw") { undoable = null; flash(t("live.taken")); if (held) { held.armed = false; } return; }  // settle resumes a held answer
   const h = held;
   release();
   if (cmd in SPEED_STEP) { speedBySpeech(cmd, h); return; }

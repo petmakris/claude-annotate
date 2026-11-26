@@ -74,3 +74,14 @@ kbd{font:500 11px var(--mono);padding:1px 6px;border-radius:5px;border:1px solid
 .app[data-tv] :is(.pillbtn,.keysbtn,.keyhint){font-size:calc(12px * var(--tv))}
 .app[data-tv] kbd{font-size:calc(11px * var(--tv))}
 .app[data-tv] .ib.speedchip{min-width:calc(34px * var(--tv));font-size:calc(12px * var(--tv))}
+
+/* the offer of TV size on a big window: one line under the strip, never taken by itself */
+.tvoffer{flex:none;display:flex;align-items:center;gap:8px;min-height:40px;padding:2px 6px 2px 14px;border-bottom:1px solid var(--line);background:var(--acc-soft);font:500 12.5px var(--sans);color:var(--ink)}
+.tvoffer>span{flex:1 1 auto;min-width:0}
+.tvoffer .ssbtn{flex:none;min-height:30px;padding:0 12px;border-radius:999px;background:var(--acc);color:var(--on-acc);font:500 12.5px var(--sans)}
+.tvoffer .ib{width:30px;height:30px}
+
+/* why the last recording gave no words: above the field, where the mic is, until the next press */
+.micnote{margin:0;padding:8px 12px;border-radius:12px;background:var(--warn-soft);color:var(--warn);font:500 12.5px/1.4 var(--sans)}
+@media (pointer:coarse),(max-width:760px){.tvoffer .ssbtn{min-height:44px}.tvoffer .ib{width:44px;height:44px}}
+.app[data-tv] :is(.tvoffer,.micnote){font-size:calc(12.5px * var(--tv))}

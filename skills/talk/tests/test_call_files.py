@@ -44,3 +44,29 @@ def test_the_hooks_each_file_owns_are_declared_where_the_core_calls_them():
               "popChanged": "call-input.js", "setSpeed": "call-input.js"}
     for fn, file in owners.items():
         assert re.search(rf"^function {fn}\(", (STATIC / file).read_text(), flags=re.M), f"{fn} is not in {file}"
+
+
+def test_the_markup_is_balanced_and_every_layer_is_inside_the_app():
+    from html.parser import HTMLParser
+
+    class Walk(HTMLParser):
+        def __init__(self):
+            super().__init__(); self.stack, self.inside, self.problems = [], {}, []
+
+        def handle_starttag(self, tag, attrs):
+            if tag in ("div", "aside", "section", "header", "nav"):
+                a = dict(attrs); self.stack.append((tag, a.get("id") or a.get("class") or ""))
+            for k, v in attrs:
+                if k == "id":
+                    self.inside[v] = any(c == "app" for _, c in self.stack)
+
+        def handle_endtag(self, tag):
+            if tag in ("div", "aside", "section", "header", "nav"):
+                if not self.stack or self.stack[-1][0] != tag:
+                    self.problems.append(f"</{tag}> closes {self.stack[-1] if self.stack else None}")
+                else:
+                    self.stack.pop()
+    w = Walk(); w.feed(HTML)
+    assert w.problems == [] and w.stack == []
+    for layer in ("pGear", "pCalls", "pKeys", "announcer", "audio", "toast", "tvoffer", "micnote", "gearbody"):
+        assert w.inside[layer], layer

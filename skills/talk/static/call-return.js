@@ -23,10 +23,27 @@ function returned(ms, upto) {
   welcomeOpen = ms >= AWAY_MS;
   return true;
 }
+let hadAwayNote = false;            // this origin held a note when the page opened (even one too short to count as an absence)
 { // a reload or a reopened tab: the last page left a note (nothing is painted while the files load)
   const rec = store.get("away." + CFG.call, null);
+  hadAwayNote = !!(rec && rec.at);
   if (rec && rec.at) returned(Date.now() - rec.at, typeof rec.upto === "number" ? rec.upto : -1);
   store.set("away." + CFG.call, null);
+}
+// A browser that never saw this call (a new profile, another device, cleared storage) has no note, yet the call may have been
+// waiting a long time: the newest answer not heard is old. Page only, from the first view: the answers before that one are not
+// counted, so the card offers the one that came while nobody listened.
+function absenceFromAge() {
+  if (absence || hadAwayNote || view.ended) return false;
+  const heard = view.heard_upto ?? -1;
+  let at = -1;
+  for (let i = view.entries.length - 1; i >= 0; i--) { const e = view.entries[i]; if (e.who === "claude" && e.id > heard) { at = i; break; } }
+  if (at < 0 || typeof view.entries[at].at !== "number") return false;
+  const ms = (serverNow() - view.entries[at].at) * 1000;
+  if (ms < AWAY_MS) return false;
+  let upto = -1;
+  for (let i = at - 1; i >= 0; i--) if (view.entries[i].who === "claude") { upto = view.entries[i].id; break; }
+  return returned(ms, upto);
 }
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") { if (!hiddenAt) leaving(); return; }
@@ -48,17 +65,16 @@ function dropAbsence() {
 }
 function awayText(ms) {
   const min = Math.max(1, Math.round(ms / 60000));
-  if (min < 60) return min + " min";
+  if (min < 60) return t("t.min", {n: min});
   const h = Math.floor(min / 60), m = min % 60;
-  if (h < 24) return h + " h" + (m ? " " + m + " min" : "");
+  if (h < 24) return t("t.h", {n: h}) + (m ? " " + t("t.min", {n: m}) : "");
   const d = Math.floor(h / 24), hh = h % 24;
-  return d + " d" + (hh ? " " + hh + " h" : "");
+  return t("t.d", {n: d}) + (hh ? " " + t("t.h", {n: hh}) : "");
 }
 function audioText(seconds) {
   const s = Math.round(seconds);
-  return s < 60 ? s + " s" : Math.floor(s / 60) + " min" + (s % 60 ? " " + (s % 60) + " s" : "");
+  return s < 60 ? t("t.s", {n: s}) : t("t.min", {n: Math.floor(s / 60)}) + (s % 60 ? " " + t("t.s", {n: s % 60}) : "");
 }
-const plural = (n, one, many) => n + " " + (n === 1 ? one : many);
 // What the card says: the answers not heard, their boards and spoken length, and whether Claude is still working.
 function welcomeFacts() {
   const fresh = newAnswers(), ns = new Set(fresh.map(e => e.n));
@@ -126,22 +142,22 @@ const answerNumber = e => e && e.n ? e.n : (e && view.entries.filter(x => x.who 
 // The first that applies. `clock`: the server time its clock counts from, or null.
 function stripInfo() {
   const shown = shownAnswer(), n = answerNumber(shown), board = !!(CFG.stageUrl && frontBoard);
-  if (floorNote) return {key: "paused", text: floorWords(floorNote), warn: true, act: "Resume here", clock: null};
-  if (view.ended) return {key: "ended", text: closed ? "Call closed" : "The call has ended", clock: null};
-  if (recorder || (live && live.speech)) return {key: "talking", text: "Listening to you", clock: null};
-  if (busy) return {key: "answering", text: "Turning your words into text", clock: null};
-  if (view.stalled) return {key: "stalled", text: "Claude has not picked this up yet", warn: true, clock: openTurnAt()};
+  if (floorNote) return {key: "paused", text: floorWords(floorNote), warn: true, act: t("strip.resume"), clock: null};
+  if (view.ended) return {key: "ended", text: t(closed ? "s.closed" : "s.ended"), clock: null};
+  if (recorder || (live && live.speech)) return {key: "talking", text: t("s.listening"), clock: null};
+  if (busy) return {key: "answering", text: t("s.transcribing"), clock: null};
+  if (view.stalled) return {key: "stalled", text: t("s.stalled"), warn: true, clock: openTurnAt()};
   if (view.working || waitActive()) {
     const w = waitModel();   // the wait card's step is the one word for where the question stands: the strip and the Now card say it too
-    return {key: "answering", text: w && w.step === "sent" ? "Sent, waiting for Claude to pick it up" : "Claude is answering", clock: openTurnAt()};
+    return {key: "answering", text: t(w && w.step === "sent" ? "s.sent" : "s.answering"), clock: openTurnAt()};
   }
-  if (queued) return {key: "new", text: "Answer " + answerNumber(queued) + " is next", clock: null};
-  if (elsewhere && audio.paused && current) return {key: "paused", text: "Playing on another screen", clock: null};
-  if (current && !audio.paused) return {key: "playing", text: "Playing answer " + n + (board ? (follow ? " · following the board" : " · board pinned") : ""), clock: null};
-  if (current && audio.paused && !audio.ended && audio.currentTime > 0) return {key: "paused", text: "Paused at answer " + n, clock: null};
+  if (queued) return {key: "new", text: t("s.next", {n: answerNumber(queued)}), clock: null};
+  if (elsewhere && audio.paused && current) return {key: "paused", text: t("s.elsewhere"), clock: null};
+  if (current && !audio.paused) return {key: "playing", text: t("s.playing", {n}) + (board ? t(follow ? "s.following" : "s.pinned") : ""), clock: null};
+  if (current && audio.paused && !audio.ended && audio.currentTime > 0) return {key: "paused", text: t("s.paused", {n}), clock: null};
   const missed = newAnswers().length || unheardHere().length;
-  if (missed) return {key: "new", text: plural(missed, "answer", "answers") + " not heard", clock: null};
-  return {key: "waiting", text: view.entries.some(e => e.who === "claude") ? "Waiting for you" : "Waiting for your first question", clock: null};
+  if (missed) return {key: "new", text: tn("answers.unheard", missed), clock: null};
+  return {key: "waiting", text: t(view.entries.some(e => e.who === "claude") ? "s.waiting" : "s.first"), clock: null};
 }
 let stripTimer = 0, stripSig = "";
 function paintStateStrip() {
@@ -150,17 +166,19 @@ function paintStateStrip() {
   if (strip.hidden) return;
   const info = stripInfo(), need = callsNeedingYou();
   const text = info.text + (info.clock != null ? " · " + elapsedOf(info.clock) : "");
-  const more = need.length ? need.length + " need you" : "";
+  const more = otherCallsText(need.length);
   const auto = !!autoplay;
-  const sig = [info.key, text, info.warn ? 1 : 0, info.act || "", more, auto ? 1 : 0].join("|");
+  const sig = [info.key, text, info.warn ? 1 : 0, info.act || "", more, auto ? 1 : 0, uiLang].join("|");
   if (sig !== stripSig) {
     stripSig = sig;
     strip.dataset.key = info.key; strip.classList.toggle("warn", !!info.warn);
     $("ssico").innerHTML = glyphOf(info.key);
     $("sstext").textContent = text; $("ssmore").textContent = more; $("ssmore").hidden = !more;
-    $("ssmore").title = need.length ? plural(need.length, "call needs", "calls need") + " you" : "";
+    $("ssmore").title = need.length ? t("others.list", {list: need.map(x => "“" + x.c.topic + "”").join(", ")}) : "";
     $("ssact").hidden = $("ssx").hidden = !info.act; if (info.act) $("ssact").textContent = info.act;
-    $("ssauto").setAttribute("aria-pressed", String(auto));
+    $("ssauto").setAttribute("aria-pressed", String(auto)); $("ssnote").hidden = auto;
+    $("ssauto").dataset.tip = t(auto ? "strip.autoplay.on.tip" : "strip.autoplay.off.tip");
+    $("ssautolbl").textContent = t(auto ? "strip.autoplay.on" : "strip.autoplay.off");
   }
   // A wait counts seconds; the strip repaints each second only while it shows a clock.
   if (info.clock != null && !stripTimer) stripTimer = setInterval(() => { paintStateStrip(); paintWelcome(); }, 1000);
@@ -179,18 +197,18 @@ function paintWelcome() {
   card.hidden = !facts || !facts.count;
   if (card.hidden) { welcomeSig = ""; return; }
   const working = !!view.working && !view.ended, q = openQuestion();
-  const work = working ? "Claude is still working" + (q ? " on “" + (q.length > 70 ? q.slice(0, 70) + "…" : q) + "”" : "") + (openTurnAt() != null ? " · " + elapsedOf(openTurnAt()) : "") : "";
-  const sig = JSON.stringify([absence.ms, facts, work]);
+  const work = working ? t("away.working") + (q ? t("away.on", {q: q.length > 70 ? q.slice(0, 70) + "…" : q}) : "") + (openTurnAt() != null ? " · " + elapsedOf(openTurnAt()) : "") : "";
+  const sig = JSON.stringify([absence.ms, facts, work, uiLang]);
   if (sig === welcomeSig) return;
   welcomeSig = sig;
-  $("wbaway").textContent = "away " + awayText(absence.ms);
-  const parts = [plural(facts.count, "answer", "answers") + " not heard"];
-  if (facts.boards) parts.push(plural(facts.boards, "board", "boards"));
-  if (facts.seconds >= 1) parts.push(audioText(facts.seconds) + " of audio");
-  $("wbfacts").replaceChildren(...parts.map(t => { const s = document.createElement("span"); s.textContent = t; return s; }));
+  $("wbaway").textContent = t("away.text", {t: awayText(absence.ms)});
+  const parts = [tn("answers.unheard", facts.count)];
+  if (facts.boards) parts.push(tn("boards", facts.boards));
+  if (facts.seconds >= 1) parts.push(t("away.audio", {t: audioText(facts.seconds)}));
+  $("wbfacts").replaceChildren(...parts.map(text => { const s = document.createElement("span"); s.textContent = text; return s; }));
   $("wbwork").hidden = !work; $("wbwork").textContent = work;
   $("wbplay").disabled = !facts.ready;
-  $("wbplaytext").textContent = !facts.ready ? "Voice being made" : facts.ready === 1 ? "Play the new answer" : "Play the " + facts.ready + " new";
+  $("wbplaytext").textContent = !facts.ready ? t("away.making") : tn("away.play", facts.ready);
 }
 
 // ---- the since-you-left divider -----------------------------------------------------------------
@@ -207,11 +225,12 @@ function returnMarkEarlier(list) {
     const label = document.createElement("span"); label.className = "slabel";
     const n = document.createElement("span"); n.className = "scount";
     const b = document.createElement("button"); b.type = "button"; b.className = "splay"; b.onclick = playTheNew;
-    b.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5v14l12-7z"/></svg><span>Play these</span>';
-    label.textContent = "Since you left";
+    b.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5v14l12-7z"/></svg><span></span>';
+    label.textContent = "";
     div.append(label, n, b);
   }
-  div.querySelector(".scount").textContent = count + " not heard";
+  div.querySelector(".slabel").textContent = t("since.left"); div.querySelector(".splay span").textContent = t("since.play");
+  div.querySelector(".scount").textContent = t("since.count", {n: count});
   if (div.nextElementSibling !== first) first.before(div);
 }
 
@@ -249,31 +268,48 @@ function flushAnnounce() {
 }
 // A new view arrived: what a screen reader would otherwise miss (the wait card says its own steps, call-wait.js). The first view only learns what is there.
 let announced = new Set();
+const ARRIVAL_HOLD_MS = 15000;
+const arrivalHeld = [];   // {id, line, at}: "Answer N arrived" lines waiting for the voice to be heard or to be known not to come
+// Said once the voice is silent and the answer did not play, said no more once it did (the listener heard it): the live region
+// never talks over an answer. Called from the paint hook and from a timer at the end of the hold.
+function releaseArrivals() {
+  for (let i = arrivalHeld.length - 1; i >= 0; i--) {
+    const h = arrivalHeld[i], e = view.entries.find(x => x.id === h.id);
+    const heard = !!current && current.id === h.id && (!audio.paused || audio.currentTime > 0 || audio.ended);
+    const coming = autoplay && !!e && e.speech !== "failed" && !view.ended && Date.now() - h.at < ARRIVAL_HOLD_MS;
+    if (heard || (audio.paused && !coming)) { arrivalHeld.splice(i, 1); if (!heard) announce(h.line); }
+  }
+}
 function questionBefore(i) {
   for (let k = i - 1; k >= 0; k--) { const e = view.entries[k]; if (e.who === "claude") return ""; if (e.who === "you" && !e.withdrawn) return e.text; }
   return "";
 }
 function returnOnView(before) {
-  if (before.v === -1) { for (const e of view.entries) if (e.who === "claude") announced.add(e.id); return; }
+  if (before.v === -1) { absenceFromAge(); for (const e of view.entries) if (e.who === "claude") announced.add(e.id); return; }
   view.entries.forEach((e, i) => {
     if (e.who !== "claude" || announced.has(e.id)) return;
     announced.add(e.id);
     const q = questionBefore(i), short = q.length > 70 ? q.slice(0, 70) + "…" : q;
-    announce("Answer " + answerNumber(e) + " arrived" + (short ? ": " + short : "") + ".");
+    const line = t("ann.arrived", {n: answerNumber(e)}) + (short ? ": " + short : "") + ".";
+    // An answer that is about to autoplay is heard in a moment: the line waits (arrivalHeld), as a board's does, and is never
+    // said over the voice. A voice that does not come (autoplay off, no audio) lets it go.
+    if (autoplay) arrivalHeld.push({id: e.id, line, at: Date.now()}); else announce(line);
   });
-  if (view.ended && !before.ended) announce("The call has ended.");
+  if (arrivalHeld.length) { releaseArrivals(); setTimeout(releaseArrivals, ARRIVAL_HOLD_MS + 50); }
+  if (view.ended && !before.ended) announce(t("ann.ended"));
 }
 // Board changes come from the stage, not the poll. They are said only while the voice is silent: with an answer playing the
 // reader hears the answer, and a screen reader on top of it would talk over it.
 let boardSaid = null;
 function paintAnnounce() {
+  if (arrivalHeld.length) releaseArrivals();
   if (annQueue.length && !annTimer) flushAnnounce();
   if (boardSaid === null) { boardSaid = frontBoard; return; }
   if (frontBoard === boardSaid) return;
   boardSaid = frontBoard;
   if (!frontBoard || !audio.paused) return;
   const b = view.entries.find(e => e.who === "board" && e.view === frontBoard);
-  if (b && b.text) announce("Board: " + b.text + ".");
+  if (b && b.text) announce(t("ann.board", {text: b.text}));
 }
 
 // ---- a way to the newest answer -------------------------------------------------------------------

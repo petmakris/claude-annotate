@@ -20,7 +20,7 @@ function topicOf(id) { const c = (view.calls || []).find(x => x.id === id); retu
 // Another call took the voice: this page paused, and says so in the state strip with a way back (floorNote), never
 // in a toast over the board. The words name the call, not what it did: the page cannot tell playing from talking.
 let floorNote = null;       // {id, topic}: why this call is paused, until the voice is taken back here or the note is dismissed
-function floorWords(note) { return "Paused: " + (note.topic ? "“" + note.topic + "”" : "another call") + " took the voice."; }
+function floorWords(note) { return t("floor.words", {who: note.topic ? "“" + note.topic + "”" : t("floor.another")}); }
 function yieldFloor(id) {
   const busyHere = !audio.paused || !!recorder || listening();
   if (!audio.paused) audio.pause();
@@ -59,34 +59,36 @@ const NEEDS_YOU = ["stalled", "new"];
 const stateKind = key => ({key, rank: CALL_NEED.indexOf(key)});
 // An other call, from the server's summary of it: {unheard, ended, stalled, working, floor, last_at}.
 function callInfo(c) {
-  if (c.unheard) return {...stateKind("new"), word: c.unheard === 1 ? "New answer" : c.unheard + " new answers"};
-  if (c.ended) return {...stateKind("ended"), word: "Ended"};
-  if (c.stalled) return {...stateKind("stalled"), word: "Stalled"};
-  if (c.working) return {...stateKind("answering"), word: "Answering"};
-  if (c.floor) return {...stateKind("talking"), word: "Talking now"};
-  return {...stateKind("waiting"), word: "Waiting for you"};
+  if (c.unheard) return {...stateKind("new"), word: tn("c.new", c.unheard)};
+  if (c.ended) return {...stateKind("ended"), word: t("c.ended")};
+  if (c.stalled) return {...stateKind("stalled"), word: t("c.stalled")};
+  if (c.working) return {...stateKind("answering"), word: t("c.answering")};
+  if (c.floor) return {...stateKind("talking"), word: t("c.talking")};
+  return {...stateKind("waiting"), word: t("c.waiting")};
 }
 function callState(c) { return callInfo(c).word; }
 // This call, from the page's own state (the server's list leaves it out).
 function hereInfo() {
-  if (view.ended) return {...stateKind("ended"), word: "Ended"};
-  if (view.stalled) return {...stateKind("stalled"), word: "Stalled"};
-  if (recorder || (live && live.speech)) return {...stateKind("talking"), word: "Listening"};
-  if (busy || view.working || waitActive()) return {...stateKind("answering"), word: "Answering"};
-  if (current && !audio.paused) return {...stateKind("playing"), word: "Playing"};
-  return {...stateKind("waiting"), word: "Waiting for you"};
+  if (view.ended) return {...stateKind("ended"), word: t("c.ended")};
+  if (view.stalled) return {...stateKind("stalled"), word: t("c.stalled")};
+  if (recorder || (live && live.speech)) return {...stateKind("talking"), word: t("c.listening")};
+  if (busy || view.working || waitActive()) return {...stateKind("answering"), word: t("c.answering")};
+  if (current && !audio.paused) return {...stateKind("playing"), word: t("c.playing")};
+  return {...stateKind("waiting"), word: t("c.waiting")};
 }
 // The other calls that need the user, the one that needs them most first (then the one that has waited longest).
 function callsNeedingYou() {
   return (view.calls || []).map(c => ({c, info: callInfo(c)})).filter(x => NEEDS_YOU.includes(x.info.key))
     .sort((a, b) => a.info.rank - b.info.rank || (a.c.last_at || 0) - (b.c.last_at || 0) || (a.c.started || 0) - (b.c.started || 0));
 }
+// What the strip and the Calls button say about the other calls: "other", since none of these is the call on the screen.
+function otherCallsText(n) { return n ? tn("others", n) : ""; }
 function nextWaiting() { const list = callsNeedingYou(); return list.length ? list[0].c : null; }
 function openNextWaiting() { const c = nextWaiting(); if (c) location.href = "/c/" + encodeURIComponent(c.id); }
 // How long ago, in the fewest characters: now, 5m, 2h, 3d.
 function ageText(seconds) {
   const s = Math.max(0, seconds || 0);
-  return s < 45 ? "now" : s < 3600 ? Math.max(1, Math.round(s / 60)) + "m" : s < 86400 ? Math.floor(s / 3600) + "h" : Math.floor(s / 86400) + "d";
+  return s < 45 ? t("age.now") : s < 3600 ? t("age.m", {n: Math.max(1, Math.round(s / 60))}) : s < 86400 ? t("age.h", {n: Math.floor(s / 3600)}) : t("age.d", {n: Math.floor(s / 86400)});
 }
 // The answers of this call that arrived while the user was not looking and have not been played.
 function unheardHere() { return view.entries.filter(e => e.who === "claude" && e.id > Math.max(view.heard_upto ?? -1, shownUpto)); }
@@ -115,17 +117,17 @@ function callRow(c, info, here) {
   a.className = "callrow" + (here ? " here" : "") + (NEEDS_YOU.includes(info.key) ? " needs" : ""); a.dataset.state = info.key;
   const g = document.createElement("span"); g.className = "cg"; g.innerHTML = glyphOf(info.key);
   const m = document.createElement("span"); m.className = "cm";
-  const t = document.createElement("span"); t.className = "ct"; t.textContent = c.topic;
-  const s = document.createElement("span"); s.className = "cs"; s.textContent = (here ? "Here · " : "") + info.word;
-  m.append(t, s);
+  const topic = document.createElement("span"); topic.className = "ct"; topic.textContent = c.topic;
+  const s = document.createElement("span"); s.className = "cs"; s.textContent = here ? t("c.here", {word: info.word}) : info.word;
+  m.append(topic, s);
   const age = document.createElement("span"); age.className = "ca"; age.textContent = here ? "" : ageText(serverNow() - (c.last_at || c.started || 0));
-  a.title = c.topic + " · " + (here ? "this call · " : "") + info.word; a.append(g, m, age);
+  a.title = c.topic + " · " + (here ? t("c.thiscall") : "") + info.word; a.append(g, m, age);
   return a;
 }
 function paintCalls() {
   const list = view.calls || [], nav = $("calls"), here = hereInfo();
   const rows = list.map(c => ({c, info: callInfo(c)})).sort((a, b) => a.info.rank - b.info.rank || (a.c.last_at || 0) - (b.c.last_at || 0));
-  const sig = JSON.stringify([CFG.topic, here.key, here.word, rows.map(x => [x.c.id, x.c.topic, x.info.key, x.info.word, ageText(serverNow() - (x.c.last_at || x.c.started || 0))]), !!nextWaiting()]);
+  const sig = JSON.stringify([uiLang, CFG.topic, here.key, here.word, rows.map(x => [x.c.id, x.c.topic, x.info.key, x.info.word, ageText(serverNow() - (x.c.last_at || x.c.started || 0))]), !!nextWaiting()]);
   if (nav.dataset.sig === sig) return;
   nav.dataset.sig = sig;
   const out = [];
@@ -135,12 +137,12 @@ function paintCalls() {
   // The foot: the call that needs you most (hidden while none does), and the page of every call.
   const next = nextWaiting(), foot = $("nextwait");
   foot.replaceChildren();
-  const all = document.createElement("a"); all.href = "/"; all.className = "btn callsall"; all.textContent = "All calls";
+  const all = document.createElement("a"); all.href = "/"; all.className = "btn callsall"; all.textContent = t("c.all");
   if (next) {
     const b = document.createElement("button"); b.type = "button"; b.className = "btn callsnext"; b.id = "nextbtn"; b.onclick = openNextWaiting;
-    b.title = "Open “" + next.topic + "”";
+    b.title = t("c.open", {topic: next.topic});
     b.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg>';
-    const w = document.createElement("span"); w.textContent = "Next waiting"; b.append(w); foot.append(b);
+    const w = document.createElement("span"); w.textContent = t("c.next"); b.append(w); foot.append(b);
   }
   foot.append(all);
 }
@@ -158,9 +160,9 @@ function paintCallsClock() {
 function tabState() {
   const here = hereInfo(), missed = unheardHere().length;
   if (here.key === "ended" || here.key === "stalled" || here.key === "talking" || here.key === "answering" || here.key === "playing") {
-    return {key: here.key, word: here.key === "talking" ? "Listening" : here.key === "stalled" ? "Stalled" : here.word, count: 0};
+    return {key: here.key, word: here.word, count: 0};
   }
-  if (missed) return {key: "new", word: "New", count: missed};
+  if (missed) return {key: "new", word: t("tab.new"), count: missed};
   return {key: "idle", word: "", count: 0};
 }
 function tabTitle(t, topic) { return t.key === "idle" ? "Talk · " + topic : (t.count ? "(" + t.count + ") " : "") + t.word + " · " + topic; }
@@ -182,7 +184,7 @@ function tabIcon(t) {
 }
 let tabSig = "";
 function paintTab() {
-  const t = tabState(), sig = t.key + "|" + t.count;
+  const t = tabState(), sig = t.key + "|" + t.count + "|" + uiLang;
   if (sig === tabSig) return;
   tabSig = sig;
   document.title = tabTitle(t, CFG.topic);
@@ -200,9 +202,10 @@ function paintCallsButton() {
   $("callsdot").textContent = need.length ? String(need.length) : "";
   const top = need.length ? need[0].info.key : "";
   btn.dataset.need = top;
-  const words = need.map(x => x.info.word + " in “" + x.c.topic + "”").join("; ");
-  const label = need.length ? "Calls: " + need.length + (need.length === 1 ? " needs" : " need") + " you. " + words : "Calls";
-  if (btn.getAttribute("aria-label") !== label) { btn.setAttribute("aria-label", label); btn.dataset.tip = need.length ? need.length + (need.length === 1 ? " call needs" : " calls need") + " you" : "Calls"; }
+  const words = need.map(x => t("c.in", {word: x.info.word, topic: x.c.topic})).join("; ");
+  const label = need.length ? t("c.label", {text: otherCallsText(need.length), words}) : t("head.calls");
+  if (btn.getAttribute("aria-label") !== label) { btn.setAttribute("aria-label", label); btn.dataset.tip = need.length ? otherCallsText(need.length) : t("head.calls"); }
+  $("callsword").textContent = need.length ? otherCallsText(need.length) : t("head.calls");
   const glyph = $("callsglyph");
   if (glyph.dataset.key !== top) { glyph.dataset.key = top; glyph.innerHTML = top ? glyphOf(top) : STACK_ICON; }
   paintCallsClock();
@@ -220,7 +223,7 @@ function callsOnView(before) {
   noteShown(); paintTab();
   const was = new Map((before.calls || []).map(c => [c.id, c.unheard || 0]));
   for (const c of view.calls || []) {
-    if (was.has(c.id) && c.unheard > was.get(c.id)) announce("New answer in “" + c.topic + "”.");
+    if (was.has(c.id) && c.unheard > was.get(c.id)) announce(t("c.newin", {topic: c.topic}));
   }
 }
 audio.addEventListener("play", () => { if (floorNote) { floorNote = null; paintAll(); } });

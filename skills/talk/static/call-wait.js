@@ -69,6 +69,7 @@ function writeOut(text) {
 // replaced, and the answer to it is shown but never read aloud) instead of the draft being added to it.
 async function sendText(replace = false) {
   const text = $("text").value.trim(); if (!text) return;
+  if (!replace && typedCommand(text)) return;   // I: "slower" and the like move the voice, they are not a question
   $("sendtext").disabled = true;
   takeFloor(null);
   const target = replace === true ? inflight()[0] : null;

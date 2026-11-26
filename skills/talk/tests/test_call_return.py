@@ -45,13 +45,33 @@ def test_a_sentence_nobody_could_say_in_time_is_dropped(tmp_path):
     assert page.run() == [["", 0]]
 
 
-def test_a_screen_reader_hears_that_an_answer_arrived(tmp_path):
+ARRIVES = ("STATES[1].entries.unshift({id: 90, who: 'you', text: 'How do the fees compare?', at: 1});"
+           " await serve(1); await tick(1600);")
+
+
+def test_a_screen_reader_hears_that_an_answer_arrived_when_the_voice_does_not_read_it(tmp_path):
     # study screenreader-1: the arrival of an answer was silent (the wait card says its own steps, test_call_wait.py)
-    page = page_of(tmp_path, ["Answer."], start=0)
+    page = page_of(tmp_path, ["Answer."], start=0, autoplay=False)
     page.check("$('announcer').textContent")
-    page.js("STATES[1].entries.unshift({id: 90, who: 'you', text: 'How do the fees compare?', at: 1});"
-            " await serve(1); await tick(1600);").check("$('announcer').textContent")
+    page.js(ARRIVES).check("$('announcer').textContent")
     assert page.run() == ["", "Answer 1 arrived: How do the fees compare?."]
+
+
+def test_the_arrival_is_not_said_over_an_answer_that_autoplays_and_is_said_when_no_voice_comes(tmp_path):
+    # r1-screenreader-5: autoplay is on by default, so the voice starts at once and a screen reader on top of it talks over it
+    page = page_of(tmp_path, ["Answer."], start=0)
+    page.js(ARRIVES).check("[$('announcer').textContent, !audio.paused, arrivalHeld.length, annQueue.length]")
+    page.js("await end(); await tick(2000);").check("[$('announcer').textContent, arrivalHeld.length]")
+    # the voice failed: nothing is coming, so the line is said at once
+    page2 = page_of(tmp_path, ["Answer."], start=0)
+    page2.js("STATES[1].entries[0].speech = 'failed';" + ARRIVES).check("[$('announcer').textContent, arrivalHeld.length]")
+    # a voice that never comes (nothing plays in 15 s) lets the line go
+    page3 = page_of(tmp_path, ["Answer."], start=0)
+    page3.js("STATES[1].entries[0].speech = 'pending';" + ARRIVES).check("[$('announcer').textContent, arrivalHeld.length]")
+    page3.js("await tick(15500);").check("[$('announcer').textContent, arrivalHeld.length]")
+    assert page.run() == [["", True, 0, 0], ["", 0]]
+    assert page2.run() == [["Answer 1 arrived: How do the fees compare?.", 0]]
+    assert page3.run() == [["", 1], ["Answer 1 arrived: How do the fees compare?.", 0]]
 
 
 def test_what_is_there_when_the_page_opens_is_not_announced_and_an_end_is(tmp_path):
@@ -80,7 +100,7 @@ def test_the_reader_over_the_stage_is_not_read_twice(tmp_path):
 def test_the_panel_starts_with_a_way_to_the_newest_answer(tmp_path):
     # study screenreader-4: nothing to jump to with the keyboard; the newest answer was found by scanning
     html = (STATIC / "call.html").read_text()
-    assert re.search(r'<div class="open">\s*<a class="skip" id="skiplatest" href="#nowcard">Jump to the latest answer</a>', html)
+    assert re.search(r'<div class="open">\s*<a class="skip" id="skiplatest" href="#nowcard" data-t="skip.latest">Jump to the latest answer</a>', html)
     page = page_of(tmp_path)
     page.js("$('skiplatest').click();").check("[document.activeElement.id, $('nowtext').textContent.trim()]")
     assert page.run() == [["nowcard", "Second answer."]]
@@ -142,7 +162,10 @@ def test_other_calls_that_need_you_are_counted_at_the_end_of_the_strip(tmp_path)
     page = page_of(tmp_path)
     page.js("STATES[2] = {...STATES[2], v: 'c', calls: [{id: 'a', topic: 'A', unheard: 1, started: 1, last_at: 1}, {id: 'b', topic: 'B', stalled: true, started: 2, last_at: 1}]}; await serve(2);")
     page.check("[$('ssmore').textContent, $('ssmore').title, $('ssmore').hidden]")
-    assert page.run() == [["2 need you", "2 calls need you", False]]
+    page.js("STATES[2] = {...STATES[2], v: 'd', calls: [{id: 'a', topic: 'A', unheard: 1, started: 1, last_at: 1}]}; await serve(2);")
+    page.check("[$('ssmore').textContent, $('ssmore').hidden, $('callsword').textContent, $('callsbtn').dataset.tip, $('callsbtn').getAttribute('aria-label')]")
+    assert page.run() == [["2 other calls need you", "Calls that need you: “B”, “A”", False],
+                          ["1 other call needs you", False, "1 other call needs you", "1 other call needs you", "Calls: 1 other call needs you. New answer in “A”"]]
 
 
 # ---- the welcome-back card ------------------------------------------------------------------------
@@ -252,3 +275,51 @@ def test_the_dividers_play_starts_the_walk_through_the_new_ones(tmp_path):
     page.js(rows([0, 1, 2]) + " returnMarkEarlier($('tllist')); $('sinceleft').querySelector('.splay').click(); await settle();")
     page.check("[current.id, catchUp, readerAnswer]")
     assert page.run() == [[1, [2], 1]]
+
+
+# ---- the autoplay switch of the strip (r1-listener-1) ------------------------------------------------------------------
+
+def test_the_autoplay_switch_has_a_loop_glyph_a_word_and_a_line_in_the_strip_while_it_is_off(tmp_path):
+    html = (STATIC / "call.html").read_text()
+    glyph = re.search(r'<button class="ib ssauto".*?</button>', html, re.S).group(0)
+    assert 'class="mute"' not in glyph and 'class="wv"' not in glyph and 'class="off"' in glyph   # no speaker, no sound waves
+    page = page_of(tmp_path)
+    show = "[$('ssauto').getAttribute('aria-pressed'), $('ssautolbl').textContent, $('ssnote').hidden, $('ssnote').textContent, $('ssauto').dataset.tip]"
+    page.check(show)
+    page.js("$('ssauto').click();").check(show)
+    page.js("$('ssauto').click();").check(show)
+    assert page.run() == [
+        ["true", "Autoplay on", True, "New answers will not play by themselves", "Autoplay is on: new answers play by themselves"],
+        ["false", "Autoplay off", False, "New answers will not play by themselves", "Autoplay is off: new answers wait for Play"],
+        ["true", "Autoplay on", True, "New answers will not play by themselves", "Autoplay is on: new answers play by themselves"]]
+
+
+# ---- a first open of an old call (r1-returning-2) ---------------------------------------------------------------------------
+
+def aged_page(tmp_path, seconds, answers=("One.", "Two."), heard=None, away=None):
+    """A page whose first view already holds answers `seconds` old (a call left alone for a while), opened on a browser with no note."""
+    html, states = served(tmp_path, list(answers))
+    for st in states:
+        st["now"] = time.time()
+        for e in st["entries"]:
+            e["at"] = st["now"] - seconds
+        if heard is not None:
+            st["heard_upto"] = heard
+    stored = {KEY: {"at": int(time.time() * 1000) - away, "upto": -1}} if away else {}
+    return CallPage(html, states, start=len(answers), stored=stored, autoplay=False).js(CLOCK)
+
+
+def test_a_browser_with_no_note_that_opens_a_call_whose_newest_unheard_answer_is_old_gets_the_welcome_card(tmp_path):
+    page = aged_page(tmp_path, 7500, ("First answer.", "Second answer.", "Third answer."))
+    page.check("[absence && absence.upto, absence && Math.round(absence.ms / 60000), hadAwayNote]")
+    page.check("[$('welcome').hidden, $('wbaway').textContent, [...$('wbfacts').children].map((s) => s.textContent)]")
+    assert page.run() == [[1, 125, False], [False, "away 2 h 5 min", ["1 answer not heard", "4 s of audio"]]]
+
+
+def test_the_page_alone_offers_nothing_for_a_fresh_answer_a_heard_one_a_short_wait_or_a_note(tmp_path):
+    state = "[$('welcome').hidden, absence]"
+    assert aged_page(tmp_path, 5).check(state).run() == [[True, None]]                       # seconds old: nothing to welcome back to
+    assert aged_page(tmp_path, 7200, heard=1).check(state).run() == [[True, None]]           # old, but heard up to the newest
+    assert aged_page(tmp_path, 240).check(state).run() == [[True, None]]                     # four minutes: under AWAY_MS
+    # a note the last page left is the only source: a short note is no absence, however old the answers
+    assert aged_page(tmp_path, 7200, away=5000).check("[$('welcome').hidden, absence, hadAwayNote]").run() == [[True, None, True]]
