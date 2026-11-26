@@ -152,10 +152,10 @@ def test_a_chip_tap_pins_the_stage_and_the_strip_says_so_with_one_button_back(tm
     page.js("$('nowfollow').querySelector('button').click();").check(STRIP).check("[follow, toStage().filter((m) => m.type === 'stage:follow').map((m) => m.on)]")
     page.js("$('nowfollow').querySelector('button').click();").check("[follow, $('nowfollow').dataset.mode]")
     assert page.run() == [
-        [False, "following", "Following the voice", "This answer has no board, so the stage keeps Heat pump or gas boiler (answer 1).", "Keep this board"],
+        [False, "following", "Following the voice", "Stage still on: Heat pump or gas boiler", "Keep this board"],
         [False, "pinned", "You chose this", "Stage shows Heat pump or gas boiler from answer 1. The voice is on answer 2.", "Back to the voice"],
         [False, [False]],
-        [False, "following", "Following the voice", "This answer has no board, so the stage keeps Heat pump or gas boiler (answer 1).", "Keep this board"],
+        [False, "following", "Following the voice", "Stage still on: Heat pump or gas boiler", "Keep this board"],
         [True, [False, True]],
         [False, "pinned"]]
 

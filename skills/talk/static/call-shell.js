@@ -343,7 +343,7 @@ function paintFollow() {
   if (follow) {
     label = tr("s.fol.following");
     still = !!front && !!fa && !!n && fa !== n;   // the shown answer has no board of its own: the stage keeps an older one
-    text = still ? tr("s.fol.still", {front, fa}) : tr("s.fol.reading");
+    text = still ? tr("s.fol.still", {front, fa}) : tr("s.fol.reading");   // one short line: the answer the board belongs to is in the tooltip
   } else {
     label = tr("s.fol.chose");
     text = (front ? (fa ? tr("s.fol.from", {front, fa}) : tr("s.fol.shows", {front})) : tr("s.fol.chosen")) + "." + (n ? tr("s.fol.voice", {n}) : "");
@@ -356,7 +356,7 @@ function paintFollow() {
   const state = document.createElement("span"); state.className = "fl-state";
   state.innerHTML = follow ? ICON('<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>') : ICON('<path d="M12 17v5M9 3h6l-1 7 3 3H7l3-3z"/>');
   const word = document.createElement("b"); word.textContent = label; state.append(word);
-  if (follow && !still) state.title = text;   // the bare sentence is the tooltip: the label says it, and the strip stays one line
+  if (follow) state.title = still ? tr("s.fol.still.tip", {front, fa}) + " " + tr("s.fol.keep.hint") : text;   // the long words are the tooltip, so the strip stays one short line   // the bare sentence is the tooltip: the label says it, and the strip stays one line
   const msg = document.createElement("span"); msg.className = "fl-text"; msg.textContent = text;
   const btn = document.createElement("button"); btn.type = "button"; btn.className = "fl-btn";
   btn.textContent = btnText; btn.setAttribute("aria-label", btnText);
@@ -364,7 +364,6 @@ function paintFollow() {
   btn.onclick = () => { if (follow) pinBoard(); else { followAgain(); resync(); } };
   box.dataset.mode = follow ? "following" : "pinned"; box.dataset.text = still || !follow ? "board" : "plain";
   const parts = [state, btn, msg];
-  if (still) { const hint = document.createElement("span"); hint.className = "fl-hint"; hint.textContent = tr("s.fol.keep.hint"); hint.title = hint.textContent; hint.setAttribute("aria-label", hint.textContent); parts.push(hint); }   // a short screen with earlier answers folds it to one line (call-shell.css): the words stay in the title and the label   // what Keep this board does, in words (the tooltip is not seen on touch)
   if (note) {
     const nt = document.createElement("span"); nt.className = "fl-note"; nt.textContent = note; nt.title = note; nt.setAttribute("aria-label", note); parts.push(nt);
     // the card's own answer stays playable from the card while the transport's Play names the board's answer

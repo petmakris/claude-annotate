@@ -214,8 +214,9 @@ function paintReader() {
   const keeps = !!e && !!CFG.stageUrl && !!frontBoard && !(e.cues || []).some(c => c.kind === "front");
   const mode = !e ? "off" : onBoard || keeps ? (active ? "strip" : "off") : "text";
   // following off, the board in front is not one this answer put up (the reader picked it, or an older answer's): the strip's
-  // sentence is of another answer than the board over it, so it is named and dimmed until Back to the voice
-  const foreign = mode === "strip" && !follow && !!frontBoard && !!e && !(e.cues || []).some(c => c.view === frontBoard);
+  // sentence is of another answer than the board over it, so it is named and dimmed until Back to the voice (also while following,
+  // when this answer has no board and the stage stays on an earlier one: the Following strip says "Stage still on")
+  const foreign = mode === "strip" && (!follow || keeps) && !!frontBoard && !!e && !(e.cues || []).some(c => c.view === frontBoard);
   const j = k < 0 ? -1 : rSents.findIndex(s => k >= s.first && k <= s.last);
   const paint = `${mode}|${active}|${k}|${sig}|${foreign ? 1 : 0}`;
   if (paint === rPaint) return;

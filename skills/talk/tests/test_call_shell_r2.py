@@ -183,20 +183,21 @@ def test_the_strip_says_why_the_stage_keeps_an_older_board_and_what_keeping_it_d
     html, states = asked(tmp_path, answers=(TWO, SECOND), asks=ASKS[:2])
     page = CallPage(html, states, autoplay=False, seconds=3.0).js("await serve(2);")
     page.js("fromStage({type: 'stage:views', list: [{name: 'heat-pump-or-gas-boiler', answer: 1}]}); fromStage({type: 'stage:shown', view: 'heat-pump-or-gas-boiler'});")
-    page.check("[$('nowfollow').querySelector('.fl-text').textContent, $('nowfollow').querySelector('.fl-hint')?.textContent ?? null, $('nowfollow').dataset.text]")
+    page.check("[$('nowfollow').querySelector('.fl-text').textContent, $('nowfollow').querySelector('.fl-hint')?.textContent ?? null, $('nowfollow').dataset.text, $('nowfollow').querySelector('.fl-state').title, $('nowfollow').querySelector('.fl-btn').title]")
     page.js("await serve(2); fromStage({type: 'stage:views', list: [{name: 'heat-pump-or-gas-boiler', answer: 2}]});").check("[!!$('nowfollow').querySelector('.fl-hint'), $('nowfollow').dataset.text]")
-    assert page.run() == [["This answer has no board, so the stage keeps Heat pump or gas boiler (answer 1).",
-                           "Keep this board stops the stage from moving to the next answer's board.", "board"], [False, "plain"]]
+    assert page.run() == [["Stage still on: Heat pump or gas boiler", None, "board",
+                           "This answer has no board, so the stage keeps Heat pump or gas boiler (answer 1). Keep this board stops the stage from moving to the next answer's board.",
+                           "Keep the stage on this board"], [False, "plain"]]
     css = css_first("call-shell.css")
-    assert "font-size:13.5px" in css[".fl-text"] and "font-size:13px" in css[".fl-hint"] and "line-clamp" not in css[".fl-text"] + css[".fl-hint"]
+    assert "font-size:13.5px" in css[".fl-text"] and "line-clamp" not in css[".fl-text"]
 
 
 def test_the_greek_strip_says_why_and_what_keep_does(tmp_path):
     html, states = asked(tmp_path, answers=(TWO, SECOND), asks=ASKS[:2])
     page = CallPage(html, states, autoplay=False, seconds=3.0, stored={"language": "el"}).js("await serve(2);")
     page.js("fromStage({type: 'stage:views', list: [{name: 'heat-pump-or-gas-boiler', answer: 1}]}); fromStage({type: 'stage:shown', view: 'heat-pump-or-gas-boiler'});")
-    page.check("[$('nowfollow').querySelector('.fl-text').textContent, !!$('nowfollow').querySelector('.fl-hint')]")
-    assert page.run() == [["Αυτή η απάντηση δεν έχει πίνακα, γι' αυτό η σκηνή κρατά το Heat pump or gas boiler (απάντηση 1).", True]]
+    page.check("[$('nowfollow').querySelector('.fl-text').textContent, !!$('nowfollow').querySelector('.fl-hint'), $('nowfollow').querySelector('.fl-state').title]")
+    assert page.run() == [["Η σκηνή μένει στο: Heat pump or gas boiler", False, "Αυτή η απάντηση δεν έχει πίνακα, γι' αυτό η σκηνή κρατά το Heat pump or gas boiler (απάντηση 1). Το «Κράτημα αυτού του πίνακα» σταματά τη σκηνή από το να περάσει στον πίνακα της επόμενης απάντησης."]]
 
 
 # ---- r2-tinkerer-4: the badge on the Key points chip is a fact ---------------------------------------------------------------------
@@ -258,15 +259,6 @@ def test_a_repair_board_is_filed_under_the_answer_it_names_and_not_under_the_nex
 
 
 # ---- r2-returning-2 (finish): on a short screen the still strip's hint and note fold to one line, their words kept ---------------
-
-def test_the_still_strips_hint_keeps_its_words_in_title_and_aria_label_for_the_folded_line(tmp_path):
-    html, states = asked(tmp_path, answers=(TWO, SECOND), asks=ASKS[:2])
-    page = CallPage(html, states, autoplay=False, seconds=3.0).js("await serve(2);")
-    page.js("fromStage({type: 'stage:views', list: [{name: 'heat-pump-or-gas-boiler', answer: 1}]}); fromStage({type: 'stage:shown', view: 'heat-pump-or-gas-boiler'});")
-    page.check("(() => { const h = $('nowfollow').querySelector('.fl-hint'); return [h.title, h.getAttribute('aria-label'), !!$('nowfollow').querySelector('.fl-btn')]; })()")
-    hint = "Keep this board stops the stage from moving to the next answer's board."
-    assert page.run() == [[hint, hint, True]]
-
 
 def test_a_short_screen_with_earlier_answers_folds_the_strips_hint_and_note_to_one_line():
     css = open(STATIC / "call-shell.css", encoding="utf-8").read()

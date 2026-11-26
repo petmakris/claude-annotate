@@ -35,7 +35,7 @@ def test_the_strip_names_the_voice_the_board_and_its_answer_in_the_words_the_sta
     page.js("$('nowfollow').querySelector('button').click(); fromStage({type: 'stage:views', list: [{name: 'heat-pump-or-gas-boiler', answer: 2}]});").check(STRIP_TEXT)
     got = page.run()
     assert got == [
-        ["following", "Following the voice", "This answer has no board, so the stage keeps Heat pump or gas boiler (answer 1).", None, "Keep this board", "Keep the stage on this board"],
+        ["following", "Following the voice", "Stage still on: Heat pump or gas boiler", None, "Keep this board", "Keep the stage on this board"],
         ["pinned", "You chose this", "Stage shows Heat pump or gas boiler from answer 1. The voice is on answer 2.", "Play answer 1 (the board you chose)", "Back to the voice", "Back to the voice"],
         ["following", "Following the voice", "The stage shows what is being read.", None, "Keep this board", "Keep the stage on this board"]]
 
