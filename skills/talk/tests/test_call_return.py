@@ -112,7 +112,7 @@ def test_a_quick_switch_for_playing_new_answers_by_themselves_sits_in_the_strip(
     page.check("[$('ssauto').getAttribute('aria-pressed'), $('ssauto').getAttribute('aria-label'), autoplay]")
     page.js("$('ssauto').click();").check("[$('ssauto').getAttribute('aria-pressed'), autoplay, $('autoplay').getAttribute('aria-pressed'), localStorage.getItem('talk.autoplay')]")
     page.js("$('ssauto').click();").check("[$('ssauto').getAttribute('aria-pressed'), autoplay]")
-    assert page.run() == [["true", "Play new answers by themselves", True], ["false", False, "false", "false"], ["true", True]]
+    assert page.run() == [["true", "Autoplay: new answers play by themselves", True], ["false", False, "false", "false"], ["true", True]]
 
 
 def test_the_strip_says_in_words_what_the_call_is_doing(tmp_path):

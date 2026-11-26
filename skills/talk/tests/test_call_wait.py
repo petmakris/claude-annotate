@@ -222,15 +222,16 @@ def test_a_failed_send_keeps_the_draft_and_says_so(tmp_path):
     assert page.run() == [["will not go", "Not sent. Your draft is kept.", "sendnote warn"]]
 
 
-def test_a_correction_in_flight_says_claude_is_finishing_the_earlier_question(tmp_path):
+def test_a_correction_in_flight_says_claude_may_still_be_finishing_the_earlier_question(tmp_path):
     new = {**YOU, "id": 1, "text": "no, ten days", "replaces": 0, "at": NOW - 4}
     old = {**YOU, "superseded": True}
-    page = run_states(tmp_path, lambda b: [waiting(b, 1, entries=[old, new], turn={"entries": [{"id": 1, "state": "sent"}], "earlier": 1, "collected_at": None, "alive_at": None})])
+    running = [{"label": "Reading", "state": "running", "seconds": 3}]   # a sign the session is working: without one the line is not said
+    page = run_states(tmp_path, lambda b: [waiting(b, 1, entries=[old, new], working=True, activity=running, turn={"entries": [{"id": 1, "state": "sent"}], "earlier": 1, "collected_at": None, "alive_at": None})])
     page.js("await serve(1);")
     page.check(card("querySelector('.wt-sub').textContent"))
     page.check(card("querySelector('.wt-q').textContent"))
     page.check(card("querySelector('.wt-clock').textContent"))
-    assert page.run() == ["Claude is finishing the earlier question. This one comes next.", "no, ten days", "0:04"]
+    assert page.run() == ["Claude may still be finishing the earlier question. This one comes next.", "no, ten days", "0:04"]
 
 
 TWO = lambda b, **extra: waiting(b, 1, working=True, turn={"entries": [{"id": 0, "state": "picked"}, {"id": 1, "state": "sent"}], "earlier": 0, "collected_at": NOW - 60, "alive_at": NOW - 3},

@@ -146,11 +146,11 @@ function stripInfo() {
   if (view.ended) return {key: "ended", text: t(closed ? "s.closed" : "s.ended"), clock: null};
   if (recorder || (live && live.speech)) return {key: "talking", text: t("s.listening"), clock: null};
   if (busy) return {key: "answering", text: t("s.transcribing"), clock: null};
-  if (view.stalled) return {key: "stalled", text: t("s.stalled"), warn: true, clock: openTurnAt()};
-  if (view.working || waitActive()) {
-    const w = waitModel();   // the wait card's step is the one word for where the question stands: the strip and the Now card say it too
-    return {key: "answering", text: t(w && w.step === "sent" ? "s.sent" : "s.answering"), clock: openTurnAt()};
-  }
+  // The wait card's model is the one source for where a question stands: its step is the word and its first send the clock, so
+  // the strip, the Now card and the card itself never disagree (a question sent again keeps the time it has waited).
+  const w = waitModel(), clock = w ? w.sentAt : openTurnAt();
+  if (view.stalled) return {key: "stalled", text: t(w && w.step === "silent" ? "s.silent" : "s.stalled"), warn: true, clock};
+  if (view.working || waitActive()) return {key: "answering", text: t(w && w.step === "sent" ? "s.sent" : "s.answering"), clock};
   if (queued) return {key: "new", text: t("s.next", {n: answerNumber(queued)}), clock: null};
   if (elsewhere && audio.paused && current) return {key: "paused", text: t("s.elsewhere"), clock: null};
   if (current && !audio.paused) return {key: "playing", text: t("s.playing", {n}) + (board ? t(follow ? "s.following" : "s.pinned") : ""), clock: null};
@@ -176,7 +176,8 @@ function paintStateStrip() {
     $("sstext").textContent = text; $("ssmore").textContent = more; $("ssmore").hidden = !more;
     $("ssmore").title = need.length ? t("others.list", {list: need.map(x => "“" + x.c.topic + "”").join(", ")}) : "";
     $("ssact").hidden = $("ssx").hidden = !info.act; if (info.act) $("ssact").textContent = info.act;
-    $("ssauto").setAttribute("aria-pressed", String(auto)); $("ssnote").hidden = auto;
+    // the name is set here too: the page's own English is in the markup, which applyLang leaves alone while the language is English
+    $("ssauto").setAttribute("aria-pressed", String(auto)); $("ssauto").setAttribute("aria-label", t("strip.autoplay.aria")); $("ssnote").hidden = auto;
     $("ssauto").dataset.tip = t(auto ? "strip.autoplay.on.tip" : "strip.autoplay.off.tip");
     $("ssautolbl").textContent = t(auto ? "strip.autoplay.on" : "strip.autoplay.off");
   }
@@ -187,6 +188,18 @@ function paintStateStrip() {
 $("ssact").onclick = resumeHere;
 $("ssx").onclick = () => { floorNote = null; paintAll(); };
 $("ssauto").onclick = () => { $("autoplay").click(); paintStateStrip(); };
+// Either switch (the strip's drives the settings row's) says what it did once through the live region. The state is also on the
+// control as aria-pressed; its name stays the visible word (strip.autoplay.aria starts with it), so a voice command by name finds it.
+// The settings row's own handler (call-input.js) runs after this listener was added, so the new state is read a moment later.
+$("autoplay").addEventListener("click", () => setTimeout(() => announce(t(autoplay ? "strip.autoplay.on.tip" : "strip.autoplay.off.tip")), 0));
+// "1 other call needs you" is a button for the Calls menu (the header's Calls button opens the same one).
+{
+  const more = $("ssmore");
+  more.setAttribute("role", "button"); more.tabIndex = 0;
+  const open = ev => { ev.stopPropagation(); $("callsbtn").click(); };
+  more.addEventListener("click", open);
+  more.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(ev); } });
+}
 
 // ---- the welcome-back card ---------------------------------------------------------------------
 function welcomeWorking() { return welcomeOpen && !$("welcome").hidden && !!view.working && !view.ended; }
@@ -239,7 +252,10 @@ function returnMarkEarlier(list) {
 // ends, an answer arrives, a board changes. announce(text) queues one short sentence; the same sentence is not said twice within
 // ten seconds, a burst is said as one, a second apart at least, and nothing is said while the user is typing a message.
 const ANNOUNCE_GAP_MS = 1500, ANNOUNCE_SAME_MS = 10000, ANNOUNCE_LIFE_MS = 20000, ANNOUNCE_BATCH = 3;
-let annQueue = [], annTimer = 0, annSaid = 0;
+// A sentence said stays as text in the region, and a reader browsing the page would find it as if it were current: it is cleared
+// this long after it is set (a generous margin over the voice, so a long sentence is not cut), and at once when a new one comes.
+const ANNOUNCE_CLEAR_MS = ANNOUNCE_GAP_MS + 12000;
+let annQueue = [], annTimer = 0, annSaid = 0, annClear = 0;
 const annHeard = new Map();   // each sentence said, and when: the same one is not said again within ANNOUNCE_SAME_MS
 function typingNow() { const t = $("text"); return document.activeElement === t && t.value.trim() !== ""; }
 function announce(text) {
@@ -262,8 +278,11 @@ function flushAnnounce() {
   for (const q of batch) annHeard.set(q.text, now);
   annSaid = now;
   // Cleared first, so the same words said again are a change a screen reader notices.
-  $("announcer").textContent = "";
-  setTimeout(() => { $("announcer").textContent = text; }, 50);
+  $("announcer").textContent = ""; clearTimeout(annClear);
+  setTimeout(() => {
+    $("announcer").textContent = text;
+    clearTimeout(annClear); annClear = setTimeout(() => { $("announcer").textContent = ""; annClear = 0; }, ANNOUNCE_CLEAR_MS);
+  }, 50);
   if (annQueue.length) annTimer = setTimeout(flushAnnounce, ANNOUNCE_GAP_MS);
 }
 // A new view arrived: what a screen reader would otherwise miss (the wait card says its own steps, call-wait.js). The first view only learns what is there.

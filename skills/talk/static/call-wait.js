@@ -84,6 +84,7 @@ async function sendText(replace = false) {
     if (resp.ok) {
       turnSent({via: spoken ? "spoken" : "typed", text, entry: body.entry ? body.entry.id : null});
       if (target) noteSend(body.replaced === false ? tr("w.sent.old") : tr("w.replaced"), "", true);
+      showMicNote("");   // the note about the last recording is old news once a typed message went through
       $("text").value = ""; spoken = false; fitText(); release(); if (!audio.paused) audio.pause(); view.v = -1;
       if (answering) { answering = null; $("text").placeholder = tr("ph.talk"); clearStop(); }
       if (wake) wake();
@@ -100,6 +101,7 @@ function fitText() {
   paintWait();
 }
 $("text").addEventListener("input", fitText);
+$("text").addEventListener("input", () => showMicNote(""));   // typing is the answer to "Nothing was heard": the note goes
 $("text").placeholder = tr("ph.talk");
 $("undo").onclick = async () => {
   const u = undoable; undoable = null; paintAll();
@@ -171,6 +173,12 @@ function resendSet(e) {
   const set = view.entries.filter(x => x.who === "you" && x.superseded && x.id >= from.id && x.id < e.id);
   return set.length && set.map(x => x.text).join("\n") === e.text ? {from, set} : null;
 }
+// Whether the session is known to be working: a step it reports is running now, or it showed a sign of life after the question
+// was sent. The server cannot tell a busy session from a dead one until the stall timeout, so "still finishing the earlier
+// question" is said only with a sign, and as a possibility.
+function sessionActive(sentAt, t) {
+  return (view.activity || []).some(a => a.state === "running") || (typeof t.alive_at === "number" && t.alive_at > sentAt);
+}
 // What the card says now: null when nothing is in flight. The wait counts from the first send, so a question sent again
 // keeps the time it has already waited.
 function waitModel() {
@@ -186,7 +194,7 @@ function waitModel() {
   return {fl, picked, step, elapsed, quiet, run, acts, sentAt, text: fl.map(x => x.entry.text).join("\n"),
     again: again ? {...again, at: fl[0].entry.at} : null, rows: fl.flatMap(x => heldTexts(x.entry)),
     pickedAt: picked && t.collected_at ? Math.max(0, t.collected_at - sentAt) : null,
-    earlier: (t.earlier || 0) > 0};
+    earlier: (t.earlier || 0) > 0 && sessionActive(sentAt, t)};
 }
 const WAIT_TITLE = {sent: "w.title.sent", notpicked: "w.title.notpicked", working: "w.title.working", slow: "w.title.slow", silent: "w.title.silent"};
 const waitTitle = step => tr(WAIT_TITLE[step]);
@@ -327,7 +335,7 @@ function copyQuestion() {
 async function cancelTurn(ids) {
   const fl = inflight().filter(x => ids.includes(x.id)); if (!fl.length) return;
   const back = [], got = [];
-  let how = "withdrawn";
+  let how = "withdrawn", questions = 0;   // `questions`: how many put back (a sent-again entry holds several)
   try {
     for (const f of fl) {
       if (got.includes(f.id)) continue;   // a collected turn's cancel took this one with it
@@ -335,17 +343,22 @@ async function cancelTurn(ids) {
       const b = await r.json().catch(() => ({}));
       if (!b.cancelled) continue;
       if (b.how === "cancelled") how = "cancelled";
-      for (const id of (b.entries || [f.id])) { if (!got.includes(id)) { got.push(id); back.push((view.entries.find(e => e.id === id) || f.entry).text); } }
+      for (const id of (b.entries || [f.id])) {
+        if (got.includes(id)) continue;
+        const e = view.entries.find(x => x.id === id) || f.entry;
+        got.push(id); back.push(e.text); questions += heldTexts(e).length;
+      }
     }
     const words = back.filter(Boolean).join("\n");
     if (got.length) {
       const t = $("text");
       t.value = t.value.trim() ? words + "\n" + t.value : words; spoken = false; fitText();
       if (matchMedia("(hover: hover)").matches) t.focus();
+      t.scrollTop = 0;   // the caret is at the end of the words; the box shows them from the first line
     }
     if (!got.length) noteSend(tr("w.late"), "warn");
     else if (got.length < fl.length) noteSend(tr("w.back.some", {n: got.length, m: fl.length}), "warn");
-    else if (got.length > 1) noteSend(tr(how === "cancelled" ? "w.cancelled.many" : "w.tookback.many", {n: got.length}));
+    else if (questions > 1) noteSend(tr(how === "cancelled" ? "w.cancelled.many" : "w.tookback.many", {n: questions}));
     else noteSend(tr(how === "cancelled" ? "w.cancelled.one" : "w.tookback.one"));
     view.v = -1; if (wake) wake();
   } catch { showError(tr("w.back.fail")); }
