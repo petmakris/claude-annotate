@@ -8,24 +8,46 @@
 const staged = (e) => !!CFG.stageUrl && (e.cues || []).some((c) => c.kind === "front");
 
 // ---- what the conversation is made of ------------------------------------------
-// Each answer with the question it answers (the last thing the user said before it, unless taken back), the boards
-// it showed (the board entries before it) and the notes it saved.
+// Each answer with the question it answers, the boards it showed (the board entries before it) and the notes it
+// saved. The questions the user has put since the last answer are kept as a list: an answer takes the last one (and
+// shows the others it was merged with), but a reply kept as superseded answers the question it was written for. That
+// is the one the correction names (`replaces`), else the first one the server set aside, and for an addition the first
+// one asked; the later question stays open for the answer that follows.
 function turnsOf(entries) {
   const turns = [];
-  let q = null, boards = [], notes = [];
+  let open = [], boards = [], notes = [];
   for (const e of entries) {
-    if (e.who === "you") { if (!e.withdrawn) q = e; }
+    if (e.who === "you") { if (!e.withdrawn) open.push(e); }
     else if (e.who === "board") boards.push(e);
     else if (e.who === "note") notes.push(e);
-    else if (e.who === "claude") { turns.push({a: e, q, boards, notes}); q = null; boards = []; notes = []; }
+    else if (e.who === "claude") {
+      let q = null, also = [];
+      if (e.superseded) {
+        const fix = e.superseded_kind === "addition" ? null : open.find((x) => Number.isFinite(x.replaces) && open.some((y) => y.id === x.replaces));
+        q = (fix && open.find((y) => y.id === fix.replaces)) || (e.superseded_kind === "addition" ? null : open.find((x) => x.superseded)) || open[0] || null;
+        open = open.filter((x) => x !== q);
+      } else {
+        q = open.length ? open[open.length - 1] : null;
+        also = open.slice(0, -1).filter((x) => !x.superseded);
+        open = [];
+      }
+      turns.push({a: e, q, also, boards, notes}); boards = []; notes = [];
+    }
   }
   return turns;
 }
-// The server's time of day an entry was made at: "09:52".
+// The time an entry was made at, by the server's clock: "09:52" today, "Yesterday 09:52", else "24 Nov 09:52" (the year
+// too when it is not this one), so an answer from another day is never taken for this morning's.
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 function clockOf(at) {
   if (!at) return "";
-  const d = new Date(at * 1000);
-  return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  const d = new Date(at * 1000), now = new Date(serverNow() * 1000);
+  const hm = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const ago = Math.round((day(now) - day(d)) / 86400000);
+  if (ago <= 0) return hm;
+  if (ago === 1) return "Yesterday " + hm;
+  return d.getDate() + " " + MONTHS[d.getMonth()] + (d.getFullYear() !== now.getFullYear() ? " " + d.getFullYear() : "") + " " + hm;
 }
 // What an answer was about, in one line: its first sentence, cut at a word.
 function gistOf(e, max = 90) {
@@ -80,6 +102,16 @@ function buildChip(b) {
   else { el.title = "Show this board on the stage"; el.onclick = () => chipTap(b.view); }
   return el;
 }
+// A note the user asked to be kept: a row with a check and the word Saved, the note whole on as many lines as it takes.
+// It is a line of this call's transcript, not a board, so it is not a chip and links to nothing.
+function buildNote(n) {
+  const row = document.createElement("div"); row.className = "note-row"; row.title = "Saved in this call's transcript";
+  const mark = document.createElement("span"); mark.className = "note-mark"; mark.innerHTML = ICON('<path d="M5 12l5 5L20 7"/>', 14);
+  const word = document.createElement("b"); word.textContent = "Saved";
+  const text = document.createElement("span"); text.className = "note-text"; text.textContent = n.text;
+  row.append(mark, word, text);
+  return row;
+}
 // The chips of one answer, with the notes it saved, as one labelled group.
 function buildChips(t) {
   const frag = document.createDocumentFragment();
@@ -87,10 +119,10 @@ function buildChips(t) {
     const l = document.createElement("span"); l.className = "clbl"; l.textContent = "On the stage"; frag.append(l);
     for (const b of t.boards) frag.append(buildChip(b));
   }
-  for (const n of t.notes) { const c = document.createElement("div"); c.className = "chip note"; c.textContent = "Noted: " + n.text; frag.append(c); }
+  for (const n of t.notes) frag.append(buildNote(n));
   return frag;
 }
-const chipsSig = (t) => t.boards.map((b) => `${b.view}|${b.text}|${b.added || 0}`).join(";") + "#" + t.notes.map((n) => n.text).join(";");
+const chipsSig = (t) => t.boards.map((b) => `${b.view}|${b.text}|${b.added || 0}|${boardWords(b).length}`).join(";") + "#" + t.notes.map((n) => n.text).join(";");
 
 // ---- the answer being read: the one in the player, else the last one -------------
 function lastAnswer() {
@@ -151,7 +183,45 @@ function buildNowText(e) {
   readSpans = [...box.querySelectorAll(".w")];
   lastWord = null; lastK = -2;
   nowShown = e.id;
+  paintTextFades();
 }
+// The card's text window says when more of the text is above or below it: a fade at that edge (CSS reads the two
+// attributes), so a window that begins mid-line or ends mid-line never looks like all there is.
+function paintTextFades() {
+  const tx = $("nowtext");
+  tx.toggleAttribute("data-above", tx.scrollTop > 2);
+  tx.toggleAttribute("data-below", tx.scrollHeight - tx.scrollTop - tx.clientHeight > 2);
+}
+$("nowtext").addEventListener("scroll", paintTextFades, {passive: true});
+// An answer played to its end shows from its first line again; a paused one keeps its place, and a tap on a word scrolls to it.
+audio.addEventListener("ended", () => {
+  const tx = $("nowtext");
+  if (current && nowShown === current.id && tx.scrollTop > 0) tx.scrollTop = 0;
+  paintTextFades();
+});
+// A question the user typed, as typed: its breaks kept, at the weight of the text, held to three lines with Show all
+// when it is longer (the whole text stays in the node, so copying and the screen reader get all of it).
+const qOpen = new Set();      // the questions whose full text the reader opened
+const longQuestion = (text) => text.length > 140 || (text.match(/\n/g) || []).length >= 3;
+function buildQuestion(q) {
+  const box = document.createElement("div"); box.className = "nq";
+  const open = qOpen.has(q.id);
+  const text = document.createElement("span"); text.className = "nq-text" + (open ? "" : " clamped"); text.textContent = q.text;
+  const more = document.createElement("button"); more.type = "button"; more.className = "nq-more";
+  more.textContent = open ? "Show less" : "Show all"; more.setAttribute("aria-expanded", String(open));
+  more.hidden = !open && !longQuestion(q.text);
+  more.onclick = () => { if (qOpen.has(q.id)) qOpen.delete(q.id); else qOpen.add(q.id); $("nowq").dataset.sig = ""; paintNowCard(); };
+  box.append(text, more);
+  return box;
+}
+// A question the browser lays out in fewer than three lines needs no Show all: only the long ones keep it (where layout is measured).
+function measureQuestions() {
+  for (const box of document.querySelectorAll("#nowq .nq")) {
+    const text = box.querySelector(".nq-text"), more = box.querySelector(".nq-more");
+    if (text.classList.contains("clamped") && text.scrollHeight > text.clientHeight + 1) more.hidden = false;
+  }
+}
+window.addEventListener("resize", measureQuestions);
 // The card of the current turn, from paintAll(). While a turn is in flight the card shows the wait card (W) instead of the answer.
 function paintNowCard() {
   const e = shownAnswer(), wait = waitActive(), card = $("nowcard");
@@ -174,16 +244,17 @@ function paintNowCard() {
     else if (tagEl) tagEl.remove();
   }
   card.dataset.state = st ? st.key : "";
+  $("nowcopy").hidden = !e || wait;
   if (!e) return;
-  // the question asked, the full text, the boards
-  const asked = t && t.q ? t.q : null;
+  // the question asked (or the questions this answer was merged from), the full text, the boards
+  const asked = t && t.q ? t.q : null, qs = asked ? [...(t.also || []), asked] : [];
   $("nowq").hidden = !asked;
-  const qsig = asked ? asked.id + "|" + asked.text : "";
+  const qsig = qs.map((q) => q.id + "|" + q.text + "|" + (qOpen.has(q.id) ? 1 : 0) + "|" + clockOf(q.at)).join("§");
   if ($("nowq").dataset.sig !== qsig) {
     $("nowq").dataset.sig = qsig;
-    const small = document.createElement("small"); small.textContent = "You asked, " + clockOf(asked && asked.at);
-    const b = document.createElement("strong"); b.textContent = asked ? asked.text : "";
-    $("nowq").replaceChildren(small, b);
+    const small = document.createElement("small"); small.textContent = "You asked, " + clockOf(qs[0] && qs[0].at);
+    $("nowq").replaceChildren(small, ...qs.map(buildQuestion));
+    measureQuestions();
   }
   const sig = `${e.id}|${e.text.length}|${e.words?.length || 0}`;
   if (sig !== nowSig) {
@@ -208,36 +279,48 @@ function paintNowCard() {
 }
 
 // ---- the Following strip ---------------------------------------------------------------
-// Whether the stage follows the voice, always on the card: Following (the stage goes where the voice goes) or Pinned (a
-// board picked by hand stays in front), with the board named and one button to switch. A pinned stage also says which
-// answer the voice is on and which Play would start, so the stage, the card and the keys name one thing.
+// Whether the stage follows the voice, always on the card. Following: "Following the voice", the stage goes where the voice
+// goes. Pinned: "You chose this", a board picked by hand stays in front, with its board and answer named, which answer the
+// voice is on and, when Play would start another one, which. One button switches: Keep this board, or Back to the voice. The
+// stage's own button says Back to the voice too, so the card, the stage and the keys name one thing. Nothing is clamped: the
+// answer numbers are the point of the words.
 let followSig = "";
 function paintFollow() {
+  paintTransport();   // Play's word depends on whether the stage follows: every change of it lands here
   const box = $("nowfollow");
   const has = !!CFG.stageUrl && (!!frontBoard || (!!stageViews && stageViews.size > 0));
   box.hidden = !has;
   if (!has) { followSig = ""; return; }
   const front = boardTitle(frontBoard), fa = boardAnswer.get(frontBoard);
-  const shown = shownAnswer(), b = shown ? boardStart() : null;
-  const voiceOn = current && sent && sent.id === current.id && sent.front && sent.front !== frontBoard ? boardTitle(sent.front) : "";
-  const plays = b && shown && b.e.id !== shown.id ? "Play starts answer " + b.e.n : "";
-  let text;
-  if (follow) text = front ? "Stage shows " + front : "Stage follows the voice";
-  else text = (front ? "Stage is on " + front + (fa ? ", answer " + fa : "") : "Stage is held on a board") + (voiceOn ? ". The voice is on " + voiceOn : "") + (plays ? ". " + plays : "") + ".";
-  if (follow && plays) text += ". " + plays;
-  const sig = [follow, text].join("|");
+  const shown = shownAnswer(), n = shown ? shown.n : null;
+  let label, text, note = "", still = false;
+  if (follow) {
+    label = "Following the voice";
+    still = !!front && !!fa && !!n && fa !== n;   // the shown answer has no board of its own: the stage keeps an older one
+    text = still ? `Stage still shows ${front} from answer ${fa}.` : "The stage shows what is being read.";
+  } else {
+    label = "You chose this";
+    text = (front ? "Stage shows " + front + (fa ? " from answer " + fa : "") : "Stage shows the board you chose") + "." + (n ? " The voice is on answer " + n + "." : "");
+    const b = shown ? boardStart() : null;
+    note = b && b.e.id !== shown.id ? "Play starts answer " + b.e.n + "." : "";
+  }
+  const btnText = follow ? "Keep this board" : "Back to the voice";
+  const sig = [follow, label, text, note, btnText].join("|");
   if (sig === followSig) return;
   followSig = sig;
   const state = document.createElement("span"); state.className = "fl-state";
   state.innerHTML = follow ? ICON('<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>') : ICON('<path d="M12 17v5M9 3h6l-1 7 3 3H7l3-3z"/>');
-  const word = document.createElement("b"); word.textContent = follow ? "Following" : "Pinned"; state.append(word);
-  const msg = document.createElement("span"); msg.className = "fl-text"; msg.textContent = text; msg.title = text;
+  const word = document.createElement("b"); word.textContent = label; state.append(word);
+  if (follow && !still) state.title = text;   // the bare sentence is the tooltip: the label says it, and the strip stays one line
+  const msg = document.createElement("span"); msg.className = "fl-text"; msg.textContent = text;
   const btn = document.createElement("button"); btn.type = "button"; btn.className = "fl-btn";
-  btn.textContent = follow ? "Pin board" : "Follow";
-  btn.title = follow ? "Keep the stage on this board" : "Put the stage back on the voice";
+  btn.textContent = btnText; btn.setAttribute("aria-label", btnText);
+  btn.title = follow ? "Keep the stage on this board" : "Back to the voice";
   btn.onclick = () => { if (follow) pinBoard(); else { followAgain(); resync(); } };
-  box.dataset.mode = follow ? "following" : "pinned";
-  box.replaceChildren(state, msg, btn);
+  box.dataset.mode = follow ? "following" : "pinned"; box.dataset.text = still || !follow ? "board" : "plain";
+  const parts = [state, btn, msg];
+  if (note) { const nt = document.createElement("span"); nt.className = "fl-note"; nt.textContent = note; parts.push(nt); }
+  box.replaceChildren(...parts);
 }
 
 // ---- the list of earlier answers ---------------------------------------------------
@@ -256,9 +339,12 @@ function folded(s) {
 const FOLD_CACHE = new Map();
 function foldCached(s) { let f = FOLD_CACHE.get(s); if (!f) { f = folded(s); if (FOLD_CACHE.size > 800) FOLD_CACHE.clear(); FOLD_CACHE.set(s, f); } return f; }
 function matchAt(text, q) { const f = foldCached(text), i = f.out.indexOf(q); return i < 0 ? null : {from: f.map[i], to: f.map[Math.min(f.map.length - 1, i + q.length - 1)] + 1}; }
-// The turn's searchable words: its question, its text and its boards' names.
+// The turn's searchable words: its question (and the ones it was merged from), its text, its boards' names and what its boards
+// show (their cells, labels and values, as the server flattened them into the board entry's `search`).
+const boardWords = (b) => (typeof b.search === "string" ? b.search : "");
 function turnMatches(t, q) {
-  return !!(t.q && matchAt(t.q.text, q)) || !!matchAt(t.a.text, q) || t.boards.some((b) => matchAt(boardName(b), q));
+  return !!(t.q && matchAt(t.q.text, q)) || (t.also || []).some((x) => matchAt(x.text, q)) || !!matchAt(t.a.text, q)
+    || t.boards.some((b) => matchAt(boardName(b), q) || matchAt(boardWords(b), q));
 }
 // Text with the search's match marked (nodes, never markup).
 function marked(text, q) {
@@ -267,23 +353,52 @@ function marked(text, q) {
   const mk = document.createElement("mark"); mk.textContent = text.slice(m.from, m.to);
   return [document.createTextNode(text.slice(0, m.from)), mk, document.createTextNode(text.slice(m.to))];
 }
-// The gist line; when the search matches only the answer's words, the words around the match.
+// The words round a match, cut at both ends with an ellipsis and never in the middle of a word at the start.
+function around(text, m, lead = 14) {
+  let a = Math.max(0, m.from - lead);
+  while (a > 0 && a < m.from && /\S/.test(text[a - 1])) a++;
+  const b = Math.min(text.length, m.to + 70);
+  return (a > 0 ? "…" : "") + text.slice(a, b).replace(/\s+/g, " ") + (b < text.length ? "…" : "");
+}
+// The gist line; when the search matches only the answer's words, the words around the match; when only a board's words,
+// "in <board>:" with the board's icon and the words round the match.
 function gistLine(t, q) {
   const e = t.a;
-  if (q && !(t.q && matchAt(t.q.text, q)) && matchAt(e.text, q)) {
-    const m = matchAt(e.text, q), a = Math.max(0, m.from - 14), b = Math.min(e.text.length, m.to + 70);
-    const snip = (a > 0 ? "…" : "") + e.text.slice(a, b).replace(/\s+/g, " ") + (b < e.text.length ? "…" : "");
-    return marked(snip, q);
+  if (q && !(t.q && matchAt(t.q.text, q))) {
+    const other = (t.also || []).find((x) => matchAt(x.text, q));
+    if (other) return marked(around(other.text, matchAt(other.text, q)), q);
+    if (matchAt(e.text, q)) return marked(around(e.text, matchAt(e.text, q)), q);
+    const b = t.boards.find((x) => matchAt(boardName(x), q) || matchAt(boardWords(x), q));
+    if (b) {
+      const ic = document.createElement("span"); ic.className = "in-board"; ic.innerHTML = kindIcon(b.kind, 13);
+      const name = document.createElement("span"); name.className = "in-name"; name.textContent = "in " + boardName(b) + ": ";
+      const m = matchAt(boardWords(b), q);
+      return [ic, name, ...(m ? marked(around(boardWords(b), m, 6), q) : [])];
+    }
   }
   return marked(gistOf(e), q);
 }
+// Copy text to the clipboard, said on the button and to a screen reader.
+function copyText(text, done) {
+  (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(() => { done(); announce("Copied"); }, () => showError("Copying failed."));
+}
+// An answer was picked to play: the card takes it. A press made on a row of the list loses that row (the card shows the answer
+// now), so focus goes where the reader's hands are next: the player's button, or the same row's button when the row stayed.
 function playAnswer(e, own) {
   e = view.entries.find((x) => x.id === e.id) || e;
   if (current && current.id === e.id && !audio.paused) { audio.pause(); return; }
+  const from = document.activeElement, inList = !!from && $("tllist").contains(from);
+  let rowEl = from; while (rowEl && !(rowEl.classList && rowEl.classList.contains("tlrow"))) rowEl = rowEl.parentNode;
+  const rowId = inList && rowEl ? rowEl.dataset.id : null;
   readerPlays(e);
   if (!own) followAgain();   // another answer was picked: its boards are what the reader wants to see
   takeVoice(); load(e, true);
   convoFollow = true; scrollConvo(0);
+  if (inList && !(document.activeElement && $("tllist").contains(document.activeElement))) {
+    const row = rowId === null ? null : [...$("tllist").children].find((r) => r.dataset && r.dataset.id === rowId);
+    const again = row && row.querySelector("button.play");
+    (again || $(rail ? "railpp" : "playpause")).focus();
+  }
 }
 function buildRow(t, q, isNow) {
   const e = t.a, row = document.createElement("div");
@@ -297,7 +412,7 @@ function buildRow(t, q, isNow) {
   const title = document.createElement("span"); title.className = "tl-title";
   if (t.q) title.append(...marked(t.q.text, q)); else title.append(...marked(gistOf(e), q));
   qq.append(title);
-  if (t.q) { const g = document.createElement("span"); g.className = "tl-gist"; g.append(...gistLine(t, q)); qq.append(g); }
+  if (t.q || (q && !matchAt(gistOf(e), q))) { const g = document.createElement("span"); g.className = "tl-gist"; g.append(...gistLine(t, q)); qq.append(g); }
   main.append(n, qq);
   main.onclick = () => { if (opened.has(e.id)) opened.delete(e.id); else opened.add(e.id); paintEarlier(); };
   const bd = document.createElement("button"); bd.type = "button"; bd.className = "tl-b";
@@ -311,7 +426,7 @@ function buildRow(t, q, isNow) {
     bd.onclick = () => { if (boards.length === 1 && CFG.stageUrl && first.view) chipTap(first.view); else main.click(); };
     if (!CFG.stageUrl && boards.length === 1) bd.disabled = true;
   } else { bd.disabled = true; bd.tabIndex = -1; bd.setAttribute("aria-hidden", "true"); }
-  const tm = document.createElement("span"); tm.className = "tl-t"; tm.textContent = clockOf(e.at);
+  const tm = document.createElement("span"); tm.className = "tl-t"; tm.textContent = clockOf(e.at); tm.title = "Answered at " + tm.textContent;
   const play = document.createElement("button"); play.type = "button"; play.className = "play";
   const playing = !!current && current.id === e.id && !audio.paused;
   play.disabled = e.speech !== "ready";
@@ -332,14 +447,14 @@ function buildRow(t, q, isNow) {
     const again = document.createElement("button"); again.type = "button"; again.className = "btn"; again.textContent = "Play from the start"; again.disabled = e.speech !== "ready";
     again.onclick = () => { playAnswer(e, false); };
     const copy = document.createElement("button"); copy.type = "button"; copy.className = "btn"; copy.textContent = "Copy";
-    copy.onclick = () => { (navigator.clipboard ? navigator.clipboard.writeText(e.text) : Promise.reject()).then(() => { copy.textContent = "Copied"; setTimeout(() => { copy.textContent = "Copy"; }, 1500); }, () => showError("Copying failed.")); };
+    copy.onclick = () => copyText(e.text, () => { copy.textContent = "Copied"; setTimeout(() => { copy.textContent = "Copy"; }, 1500); });
     acts.append(again, copy);
     body.append(chips, acts);
     row.append(body);
   }
   return row;
 }
-const rowSig = (t, q, isNow) => [t.a.id, t.a.n, t.a.text.length, t.a.speech, t.a.speech_error || "", t.a.words?.length || 0, t.q ? t.q.id + t.q.text : "", t.a.superseded ? 1 : 0,
+const rowSig = (t, q, isNow) => [t.a.id, t.a.n, t.a.text.length, t.a.speech, t.a.speech_error || "", t.a.words?.length || 0, t.q ? t.q.id + t.q.text : "", (t.also || []).map((x) => x.id + x.text).join("§"), t.a.superseded ? 1 : 0,
   t.a.id > (view.heard_upto ?? -1) ? 1 : 0, opened.has(t.a.id) && !isNow ? 1 : 0, chipsSig(t), q, isNow ? 1 : 0, !!current && current.id === t.a.id && !audio.paused ? 1 : 0, CFG.stageUrl ? 1 : 0].join("|");
 // The list of earlier answers (#earlier, rows .tlrow in #tllist), its search and Expand all, from paintAll(). After it has
 // placed its rows it calls returnMarkEarlier(#tllist) so call-return.js can put the since-you-left divider in.
@@ -353,7 +468,10 @@ function paintEarlier() {
   $("earlier").hidden = !rest.length && !q && !searchOpen;
   $("searchbtn").hidden = !turns.length; $("searchbtn").setAttribute("aria-expanded", String(showSearch && searchOpen));
   $("tlsearch").hidden = !showSearch;
-  $("tlcount").textContent = q ? `${items.length} of ${turns.length} answers` : `Earlier, ${rest.length} answer${rest.length === 1 ? "" : "s"}`;
+  // while a search filters the list the count line says so in words, with the way back to every answer
+  $("tlcount").textContent = q ? `Filtered: ${items.length} of ${turns.length} answers` : `Earlier, ${rest.length} answer${rest.length === 1 ? "" : "s"}`;
+  $("tlcount").classList.toggle("filtered", !!q); $("tlclear").hidden = !q;
+  $("convo").classList.toggle("has-earlier", rest.length > 0);   // the card's text window is shorter while earlier answers wait under it
   const allOpen = rest.length > 0 && rest.every((t) => opened.has(t.a.id));
   $("tlexpand").hidden = !rest.length;
   const label = allOpen ? "Collapse all" : "Expand all";
@@ -387,12 +505,20 @@ function paintEarlier() {
   else if (sys) sys.remove();
   paintFront(); paintMissing();
   returnMarkEarlier(list);
+  paintMore();
 }
 // The search field at the top of the view, so its results (on a phone, a short window) are all in sight.
 const searchToTop = () => $("convo").scrollTo({top: $("earlier").offsetTop - $("convo").offsetTop, behavior: "auto"});
+// The search is a way to find one answer, not a state of the call: it is cleared when a question is sent or a new answer comes,
+// so the list never stays filtered unnoticed. Opening a row from a result keeps it.
+function clearSearch() { tlQuery = ""; $("tlsearch").value = ""; searchOpen = false; }
+const clearBtn = document.createElement("button"); clearBtn.type = "button"; clearBtn.id = "tlclear"; clearBtn.className = "tl-clear"; clearBtn.hidden = true;
+clearBtn.textContent = "Show all"; clearBtn.setAttribute("aria-label", "Show all answers");
+$("tlhead").insertBefore(clearBtn, $("tlcount").nextSibling);
+clearBtn.onclick = () => { tlQuery = ""; $("tlsearch").value = ""; paintEarlier(); $("tlsearch").focus(); };
 $("tlsearch").addEventListener("input", () => { tlQuery = $("tlsearch").value; paintEarlier(); if (tlQuery.trim()) searchToTop(); });
 $("tlsearch").addEventListener("keydown", (ev) => {
-  if (ev.key === "Escape" && (tlQuery || searchOpen)) { ev.stopPropagation(); tlQuery = ""; $("tlsearch").value = ""; searchOpen = false; paintEarlier(); $("searchbtn").focus(); }
+  if (ev.key === "Escape" && (tlQuery || searchOpen)) { ev.stopPropagation(); clearSearch(); paintEarlier(); $("searchbtn").focus(); }
 });
 $("searchbtn").onclick = () => {
   searchOpen = !searchOpen;
@@ -400,10 +526,13 @@ $("searchbtn").onclick = () => {
   paintEarlier();
   if (searchOpen) { searchToTop(); $("tlsearch").focus(); }
 };
+// Expand all opens every row and brings the list's head to the top of the panel: the rows are the point, not the card above.
 $("tlexpand").onclick = () => {
   const shown = shownAnswer(), rest = turnsOf(view.entries).filter((t) => !shown || t.a.id !== shown.id);
-  if (rest.every((t) => opened.has(t.a.id))) opened.clear(); else for (const t of rest) opened.add(t.a.id);
+  const closing = rest.every((t) => opened.has(t.a.id));
+  if (closing) opened.clear(); else for (const t of rest) opened.add(t.a.id);
   paintEarlier();
+  if (!closing) searchToTop();
 };
 
 // ---- the conversation as a whole ---------------------------------------------------
@@ -423,7 +552,10 @@ function render() {
 // A new view arrived: `before` is the one it replaces. A new answer, or a question just sent, brings the card into view.
 function shellOnView(before) {
   const count = (v) => (v.entries || []).filter((e) => e.who === "claude").length, asked = (v) => (v.entries || []).filter((e) => e.who === "you").length;
-  if (count(view) > count(before) || asked(view) > asked(before)) { convoFollow = true; scrollConvo(0); }
+  const sent = asked(view) > asked(before), answered = count(view) > count(before);
+  if (answered || sent) { convoFollow = true; scrollConvo(0); }
+  // a question sent, or an answer that came while the reader was not typing in the search, ends the search
+  if ((tlQuery || searchOpen) && (sent || (answered && document.activeElement !== $("tlsearch")))) clearSearch();
 }
 
 // The conversation follows the voice: the word being said stays in view, until the reader scrolls
@@ -449,7 +581,17 @@ function followVoice(force) {
     if (force || r.top < b.top + 12 || r.bottom > b.bottom - 12) tx.scrollTo({top: Math.max(0, tx.scrollTop + r.top - b.top - b.height * 0.4), behavior: reduced.matches ? "auto" : "smooth"});
   }
 }
+// The conversation says when more lies below its edge: a fade over the bottom of the panel (the sticky #convofade), so a list
+// that goes on under the foot is never mistaken for the whole of it.
+const fade = document.createElement("div"); fade.id = "convofade"; fade.className = "convo-fade"; fade.setAttribute("aria-hidden", "true");
+$("convo").append(fade);
+function paintMore() {
+  const box = $("convo");
+  box.toggleAttribute("data-more", box.scrollHeight - box.scrollTop - box.clientHeight > 6);
+}
+window.addEventListener("resize", paintMore);
 $("convo").addEventListener("scroll", () => {
+  paintMore();
   if (performance.now() - ownScroll < 900) return;   // a scroll this page made
   const reading = !!current && !audio.paused && !!lastWord;
   convoFollow = !reading || inView(lastWord);
@@ -507,6 +649,23 @@ function paintNowLine() {
 
 // ---- the player's controls, on the card --------------------------------------------
 $("playpause").onclick = $("railpp").onclick = togglePlay;
+// Play's visible word, for the one time it names another answer than the card's (see paintTransport).
+const ppWord = document.createElement("span"); ppWord.className = "pp-word"; $("playpause").append(ppWord);
+// Copy answer: the text of the answer the card shows, on the card. The word Copied shows on the button and goes to the live region.
+const copyBtn = document.createElement("button"); copyBtn.type = "button"; copyBtn.id = "nowcopy"; copyBtn.className = "ib nowcopy"; copyBtn.hidden = true;
+const COPY_ICON = ICON('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/>', 18), COPIED_ICON = ICON('<path d="M5 12l5 5L20 7"/>', 16);
+copyBtn.setAttribute("aria-label", "Copy answer"); copyBtn.dataset.tip = "Copy answer"; copyBtn.innerHTML = COPY_ICON;
+let copyTimer = null;
+copyBtn.onclick = () => {
+  const e = shownAnswer();
+  if (!e) return;
+  copyText(e.text, () => {
+    copyBtn.classList.add("done"); copyBtn.innerHTML = COPIED_ICON + "<span>Copied</span>"; copyBtn.setAttribute("aria-label", "Copied");
+    clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => { copyBtn.classList.remove("done"); copyBtn.innerHTML = COPY_ICON; copyBtn.setAttribute("aria-label", "Copy answer"); }, 1500);
+  });
+};
+$("nowhead").append(copyBtn);   // in the card's head, by the time: the transport row has no room for another button on a phone
 $("back").onclick = () => jump(-1);
 $("next").onclick = () => jump(1);
 $("railback").onclick = () => skip(-10);
@@ -522,15 +681,19 @@ audio.addEventListener("seeked", () => { if (audio.paused) highlight(); });
 
 // ---- the hooks this file owns (C) -----------------------------------------------
 // The player's controls, painted from paintPill(): the card's transport and the rail's ring and buttons. Every control
-// acts on the answer the card names; when Play would start another one (the board in front belongs to it), the button says so.
+// acts on the answer the card names. Only a stage the reader pinned by hand sends Play to the answer that owns the board in
+// front; then the button says so in a word beside its icon, not only in its name and tooltip.
 function paintTransport() {
   const rec = !!recorder, shown = shownAnswer();
   const playable = !rec && !!shown && shown.speech === "ready";
   $("player").hidden = !playable; $("ring").hidden = !playable;
   $("back").disabled = !current; $("next").disabled = !current; $("railback").hidden = !playable || !current;
-  const target = shown ? boardStart() : null, other = target && target.e.id !== shown.id ? target.e : null;
+  const target = shown && !follow ? boardStart() : null, other = target && target.e.id !== shown.id ? target.e : null;
   const base = !audio.paused ? "Pause" : (current && (audio.ended || audio.currentTime >= (audio.duration || 1)) ? "Play again" : "Play");
   const label = other && audio.paused ? "Play answer " + other.n : base;
+  const word = other && audio.paused ? label : "";
+  if (ppWord.textContent !== word) ppWord.textContent = word;
+  $("playpause").classList.toggle("has-word", !!word); $("player").classList.toggle("names-answer", !!word);
   for (const id of ["playpause", "railpp"]) {
     $(id).setAttribute("aria-label", label); $(id).dataset.tip = label + " · Space"; $(id).classList.toggle("playing", !audio.paused);
   }
