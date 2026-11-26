@@ -27,6 +27,13 @@ def test_the_unit_follows_the_value_but_never_loses_an_s_that_is_not_a_plural(va
     assert bars_svg._chip_text(value, unit) == said
 
 
+@pytest.mark.parametrize("value, unit, said", [
+    (1, "hours a week", "1 hour a week"), (2, "hours a week", "2 hours a week"), (1, "days per user", "1 day per user"),
+    (1, "users a day", "1 user a day"), (1, "kbps", "1 kbps"), (1, "ms per request", "1 ms per request")])
+def test_a_phrase_unit_singularises_the_noun_that_heads_it(value, unit, said):
+    assert bars_svg._chip_text(value, unit) == said
+
+
 GREEK = {"title": "Βάθος και πίεση", "unit": "εκ.", "bars": [{"id": "a", "label": "Πάνω", "value": 2.5}, {"id": "b", "label": "Κάτω", "value": 1234.5}]}
 
 

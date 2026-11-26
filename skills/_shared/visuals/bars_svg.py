@@ -16,7 +16,7 @@ the same tones, the same vz.css tokens, measured here in text_metrics.
   "log scale" badge, and refuses a value of zero or less (the log of it is not a length). A linear board
   refuses a negative value; zero draws an empty bar.
 - ``decimal`` (optional, ``.`` or ``,``) is the decimal separator of every chip and tick; left out, a board whose words
-  are Greek gets a comma and any other a point. A chip says one day, not "1 days" (``_unit_for``).
+  are Greek gets a comma and any other a point. A chip says one day, not "1 days", and "1 hour a week" for a phrase (``_unit_for``).
 - ``threshold`` is at most one dashed line with a ``label``; there are no series and no markers.
 - Each bar's ``id`` is its key (``bar:<id>``): the stage lights it, reveals it and points at it. Its ``label``
   is the words you say. ``note`` is a second line under it for a number you speak.
@@ -179,13 +179,28 @@ def _tick_label(v: float, dec: str = ".") -> str:
 _NOT_PLURAL = re.compile(r"(?:ss|us|is|bps|rps|qps|fps|tps|ips|ops|flops)$", re.I)
 
 
+_RATE_TAIL = {"a", "an", "per", "each", "every"}
+
+
+def _is_plural(word: str) -> bool:
+    return len(word) >= 4 and bool(re.fullmatch(r"[A-Za-z-]+s", word)) and not _NOT_PLURAL.search(word)
+
+
 def _unit_for(v: float, unit: str) -> str:
-    """The unit as the value says it: one day, two days. Only an English plural in s whose last word is plain letters
-    (days, hours, users), never a rate (kbps) or an abbreviation."""
-    last = unit.rsplit(" ", 1)[-1]
-    if abs(v) != 1 or len(last) < 4 or not re.fullmatch(r"[A-Za-z-]+s", last) or _NOT_PLURAL.search(last):
+    """The unit as the value says it: one day, two days. Only an English plural in s made of plain letters (days,
+    hours, users), never a rate (kbps) or an abbreviation. It is the last word, or the first plural of a phrase whose
+    rest is a rate tail: "1 hour a week", "1 day per user"."""
+    if abs(v) != 1:
         return unit
-    return unit[:-1]
+    words = unit.split(" ")
+    if _is_plural(words[-1]):
+        return unit[:-1]
+    for i, w in enumerate(words[:-1]):
+        rest = words[i + 1:]
+        if _is_plural(w) and (rest[0] in _RATE_TAIL or rest[0].startswith("/")):
+            words[i] = w[:-1]
+            return " ".join(words)
+    return unit
 
 
 def _chip_text(v: float, unit: str, dec: str = ".") -> str:
