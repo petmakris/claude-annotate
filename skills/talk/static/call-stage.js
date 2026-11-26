@@ -36,7 +36,7 @@ if (CFG.stageUrl) {
 //   {type:'stage:caption', text, answer}  the sentence being said, of an answer that has boards ('' clears it)
 // Stage to talk: {type:'stage:ready'}, {type:'stage:views', list:[{name, title, kind, answer}]} on every
 // change, {type:'stage:changed', name, title, isNew}, and {type:'stage:follow', on} when following
-// changes inside the stage (a tab tap, a chip or a step by hand turns it off, Follow the voice or a new answer
+// changes inside the stage (a tab tap, a chip or a step by hand turns it off, Back to the voice or a new answer
 // on; a play of the board in front turns it on from here), {type:'stage:key', key} for Space, ← or →
 // pressed on the stage with nothing there taking them, and {type:'stage:missing', view} when a chip
 // asked for a view it does not hold: such chips are struck through. Only messages from the embedded stage's own
@@ -65,13 +65,14 @@ window.addEventListener("message", ev => {
   }
   else if (m.type === "stage:follow") { follow = !!m.on; paintSettings(); paintFollow(); if (follow) resync(); }
   else if (m.type === "stage:views") {
+    stageList = m.list || [];
     stageViews = new Set((m.list || []).map(v => String(v.name)));
     boardAnswer = new Map((m.list || []).map(v => [String(v.name), v.answer]));
-    paintMissing(); paintFollow(); paintTransport();
+    paintMissing(); paintFollow(); paintTransport(); paintStageTitle();
   }
   else if (m.type === "stage:shown") {
     const was = frontBoard;
-    frontBoard = String(m.view || ""); paintFront(); paintFollow(); paintTransport();
+    frontBoard = String(m.view || ""); paintFront(); paintFollow(); paintTransport(); paintStageTitle();
     // the stage moves in a frame the page cannot read: say which board it is on, for a screen reader
     const title = frontBoard && frontBoard !== was ? boardTitle(frontBoard) : "";
     if (title) announce("The stage shows " + title + ".");
@@ -110,6 +111,12 @@ function pinBoard() {
   announce(title ? "Pinned the stage to " + title + "." : "Pinned the stage.");
 }
 let stageViews = null;
+let stageList = [];            // the boards the stage holds, in the order it counts them: {name, title, kind, answer}
+// The frame's name is the board in front, so a screen reader that lands on it hears which one it is and where it is in the list.
+function paintStageTitle() {
+  const i = stageList.findIndex(v => String(v.name) === frontBoard), b = stageList[i];
+  $("stage").title = b ? `Stage: ${b.title}, ${b.kind || "board"}, board ${i + 1} of ${stageList.length}` : "Stage";
+}
 let boardAnswer = new Map();   // board -> the number of the answer that showed it
 let frontBoard = "";           // the board in front of the stage
 const chipSeen = new Map();
@@ -194,7 +201,7 @@ function paintReader() {
   const j = k < 0 ? -1 : rSents.findIndex(s => k >= s.first && k <= s.last);
   const paint = `${mode}|${active}|${k}|${sig}`;
   if (paint === rPaint) return;
-  const was = rPaint.split("|")[0], movedSentence = !rPaint.startsWith(`${mode}|${active}|`) || rSents[j]?.el.className.indexOf("cur") < 0;
+  const [was, wasOn] = rPaint.split("|"), movedSentence = !rPaint.startsWith(`${mode}|${active}|`) || rSents[j]?.el.className.indexOf("cur") < 0;
   rPaint = paint;
   readerEl.className = "reader " + mode;
   rSents.forEach((s, i) => { s.el.className = "rs" + (!active ? "" : i < j ? " past" : i === j ? " cur" : " future"); });
@@ -206,7 +213,8 @@ function paintReader() {
       readerEl.scrollTo({top: readerEl.scrollTop + r.top - box.top - box.height * 0.3, behavior: was === "text" && !matchMedia("(prefers-reduced-motion: reduce)").matches ? "smooth" : "auto"});
     }
   }
-  if (mode === "text" && !active && was !== "text") readerEl.scrollTop = 0;
+  // an answer read in full goes back to its first sentence when it ends (a pause keeps its place: it stays active)
+  if (mode === "text" && !active && (was !== "text" || (wasOn === "true" && audio.ended))) readerEl.scrollTop = 0;
   if (mode === "strip" && active && k >= 0) keepWordInStrip(readerEl, rWords[k]);
 }
 // The strip shows one sentence in a box of three lines: a longer one scrolls so the word being said stays in it.
@@ -398,7 +406,7 @@ function syncStage(e, pos) {
 }
 function resync() { cueSync = true; highlight(); }
 // A play the reader starts sends the whole picture with its next frame, and leaves following as it is: a board
-// the reader picked (a tab, a chip, a step by hand) stays in front until they press Follow the voice on the
+// the reader picked (a tab, a chip, a step by hand) stays in front until they press Back to the voice on the
 // stage or the gear's switch, play the board in front, or the next answer starts by itself.
 let readerAnswer = null;  // the answer the reader last started: its start never turns following on
 function readerPlays(e) {
@@ -443,6 +451,19 @@ audio.addEventListener("ended", () => {
   clearTimeout(restTimer);
   restTimer = setTimeout(() => { if (current && current.id === e.id && audio.ended) { restBoards(e); caption(null, 0); } }, REST_HOLD_MS);
 });
+// A pause left for a long time shows each board whole, as the end of an answer does; Play sends the whole picture again.
+// Not at a stop: what comes after its question must not be shown before it is answered.
+const REST_PAUSE_MS = 30000;
+let pauseRestTimer = 0;
+audio.addEventListener("pause", () => {
+  clearTimeout(pauseRestTimer);
+  if (!current || audio.ended) return;
+  const e = current;
+  pauseRestTimer = setTimeout(() => {
+    if (current && current.id === e.id && audio.paused && !audio.ended && !stopped) { restBoards(e); cueSync = true; }
+  }, REST_PAUSE_MS);
+});
+audio.addEventListener("play", () => clearTimeout(pauseRestTimer));
 audio.addEventListener("seeking", () => { cueSync = true; if (current) markPassed(current, audio.currentTime); });
 audio.addEventListener("play", () => {
   if (stopped) clearStop();

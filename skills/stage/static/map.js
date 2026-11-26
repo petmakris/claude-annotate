@@ -25,6 +25,15 @@ const AIR_X = 26, AIR_Y = 30;  // the least room between two cards: an arrow and
 const SIDE = 12;               // the board's margin, which no card crosses
 const LOOP = 58;               // above a part with an arrow to itself: the loop and its label
 
+// The arrows are drawn in an svg a screen reader skips, so what they say is a list it reads: one line per arrow, in
+// the spec's order, with the names of its two ends and its label ("Did it double, yes, goes to Ready to bake").
+function readingList(nodes, edges) {
+  if (!edges.length) return "";
+  const name = (id) => String((nodes.find((n) => n.id === id) || {}).label || id).replace(/\s+/g, " ").trim();
+  return `<ul class="m-reading" aria-label="Arrows">${edges.map((e) =>
+    `<li>${esc(name(e.from))}${e.label ? `, ${esc(String(e.label).replace(/\s+/g, " ").trim())},` : ""} goes to ${esc(name(e.to))}</li>`).join("")}</ul>`;
+}
+
 export function renderMap(box, spec, embedded) {
   box.dataset.room = 16;   // the foot of the board the map keeps clear: the call's panel sits beside the stage, not over it
   box._map = { spec, embedded, cur: null };
@@ -48,7 +57,7 @@ export function renderMap(box, spec, embedded) {
       const detail = n.method || n.ref;
       return `<div class="m-node t-${TONE[n.role] || "plain"} m-${esc(n.role || "code")}" data-key="node:${esc(n.id)}" data-node="${esc(n.id)}">
         <b style="overflow-wrap:normal">${breakable(n.label || n.id)}</b>${detail ? `<code>${breakable(detail)}</code>` : ""}${n.sub ? `<span class="m-sub">${breakable(n.sub)}</span>` : ""}</div>`;
-    }).join("")}`;
+    }).join("")}${readingList(nodes, edges)}`;
   place(box);
   if (!box._mapObserved) {
     box._mapObserved = true;

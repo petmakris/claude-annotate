@@ -553,10 +553,11 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
    columns or more. What is not said yet is dim, what was said plain, and what is being said (a row, rows, a column,
    a pair of cells) is lit by colour, weight and a band: never by size, padding or margin, which would move the rest. */
 .pbody>.md.grid{align-self:stretch;width:100%;margin-inline:0;align-items:center}
-.md.grid>.tablewrap{font-size:calc(16px * var(--tf,1));width:min(100%,max(var(--tw,60ch),34rem));max-width:100%;border-radius:16px;flex:0 1 auto;margin-inline:auto}
+.md.grid>.tablewrap{font-size:calc(16px * var(--tf,1) * var(--up,1));width:min(100%,max(var(--tw,60ch),calc(34rem * var(--up,1))));max-width:100%;border-radius:16px;flex:0 1 auto;margin-inline:auto}
 .md.grid>.tablewrap.span{width:100%;font-size:calc(14px * var(--tf,1))}   /* six columns or more: denser, so the words stay whole */
 .md.grid>.tablewrap.span th,.md.grid>.tablewrap.span td{padding:10px 10px}
-.md.grid>.tablewrap:not(.span){max-width:72rem}
+.md.grid>.tablewrap:not(.span){max-width:calc(72rem * var(--up,1))}   /* --up: a table at rest on a wide screen is drawn larger (stage.js restFit) */
+.md.grid tbody tr{cursor:pointer}   /* a tap on a row opens its popup */
 .md.grid table{width:100%;min-width:0;table-layout:fixed;font:inherit;line-height:1.4}
 .md.grid col{width:var(--w)}   /* only until wordFloors sets each col's width in px, floors held (fit.js) */
 .md.grid th,.md.grid td{padding:12px 18px;vertical-align:middle;overflow-wrap:normal;word-break:keep-all;text-align:left;transition:background-color .25s,color .25s}
@@ -932,3 +933,25 @@ svg.sb-link circle{fill:var(--acc);stroke:var(--panel);stroke-width:2}
    a note or a call's sub is set in the sans, which carries Greek better than the mono */
 :lang(el) :is(.boards h4,.kcap,.ln-sph,.ln-stitle,.ln-popph,.ln-tag,.md.grid thead th,.scene .cap,.scene th,.scene .slide .kicker,.sb-chip){letter-spacing:.02em}
 :lang(el) :is(.ln-note,.ln-lbl code,.ln-call code){font-family:var(--sans)}
+
+/* A tapped part's popup has a close button of its own, and a narrow stage gives every button of the stage a thumb's size (44 px) */
+.spop{padding-right:44px}
+.spop-x{position:absolute;top:4px;right:4px;width:32px;height:32px;display:grid;place-items:center;padding:0;border:0;border-radius:8px;background:none;color:var(--muted);cursor:pointer}
+.spop-x:hover{background:var(--row-alt);color:var(--ink)}
+.spop-x:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+@media (max-width:760px){
+  .tabbar{height:48px}
+  .nb{width:44px;height:44px}
+  .pos{height:44px;min-width:44px}
+  .follow{height:44px;border-radius:22px}
+  .boards{top:46px}
+  .prow{min-height:48px}
+  .vhead{min-height:48px}
+  .stepbar .btn{min-height:44px;width:44px}
+  .vstep{height:44px;min-width:5.5em}
+  .pbtns .btn.sm{min-height:44px;min-width:44px;padding:3px 12px}
+  .ln-x,.spop-x{width:44px;height:44px}
+  .spop-x{top:0;right:0}
+  .spop{padding-right:52px;min-height:44px}
+}
+@media (max-width:600px){.follow{width:44px;min-width:44px;margin-left:2px}}

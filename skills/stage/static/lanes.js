@@ -158,10 +158,18 @@ function model(spec) {
 export function layoutLanes(box, scene, n = null) {
   try { layoutOf(box, scene, n); } catch (e) { failed(box, e); }
 }
+// The step popups of a board are taken down: on a board change, a new answer, and (layoutOf) a frame for another step.
+export function closeLanesPop(box) {
+  for (const b of box._cmp ? Object.values(box._cmp.panes) : [box]) {
+    const st = b._lanes;
+    if (st && st.pop != null) { st.pop = null; paint(b); }
+  }
+}
 function layoutOf(box, scene, n) {
   if (box._cmp) return layoutCompare(box, scene, n);
   const st = box._lanes;
   if (!st) return;
+  if (st.n !== n) st.pop = null;   // the voice moved to another frame: the popup of the step before goes
   st.scene = scene; st.n = n;
   paint(box);
 }

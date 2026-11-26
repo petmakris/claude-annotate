@@ -731,7 +731,7 @@ def test_a_stop_asks_on_a_card_in_place_of_the_caption_and_a_press_goes_to_the_c
 TERM_HTML = ('<section class="box" data-part="data" data-name="the data"><p>The <dfn title="the bank\'s check of what a client knows">K&amp;E</dfn> '
              'sticker</p></section><section class="box" data-part="pdf" data-name="the pdf">printed</section>')
 SPOP = ("(() => { const p = document.querySelector('.spop'); return [p.hidden, p.querySelector('h3')?.textContent ?? '',"
-       " p.querySelector('p')?.textContent ?? '', [...p.querySelectorAll('button')].map((b) => b.textContent)]; })()")
+       " p.querySelector('p')?.textContent ?? '', [...p.querySelectorAll('.sacts button')].map((b) => b.textContent)]; })()")
 
 
 def test_a_tap_on_a_scene_part_asks_about_it_or_plays_from_it(tmp_path):

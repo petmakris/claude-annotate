@@ -18,7 +18,7 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"system"');
 <div class="app" id="app" data-state="idle">
   <nav class="skip" id="skip" aria-label="Skip links" data-t-aria="skip.links"><a href="#text" id="skipmsg" data-t="skip.message">Skip to the message</a><a href="#playpause" id="skipplay" data-t="skip.player">Skip to the player</a></nav><!-- I: the way past the stage and the answers -->
   <div class="frame"><div class="stage">
-    <div class="stagewrap" id="stagewrap"><iframe id="stage" title="Stage" data-t-title="stage.title" allow="clipboard-read; clipboard-write"></iframe>
+    <div class="stagewrap" id="stagewrap" role="region" aria-label="Stage" data-t-aria="stage.title"><iframe id="stage" title="Stage" data-t-title="stage.title" allow="clipboard-read; clipboard-write"></iframe>
       <div class="veil" id="veil"><div class="loading" id="veilwait"><span class="spin"></span><span data-t="stage.loading">Loading the stage…</span></div>
         <div class="failed" id="veilfail" hidden><p data-t="stage.failed">The stage did not load.</p><div><button class="btn" id="reloadstage" type="button" data-t="stage.reload">Reload stage</button><a class="btn" id="openstage" target="_blank" rel="noopener" data-t="stage.open">Open in a new tab</a></div></div></div></div>
     <p class="nostage" id="nostage" hidden data-t="stage.none">The stage is not available for this call.</p>

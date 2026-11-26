@@ -44,3 +44,15 @@ export function centreTarget({ top, bottom, box, view, scroll, lead = 0 }) {
   if (lead > 0 && to > 0 && to < lead) to = bottom - box.top + scroll <= view ? 0 : lead;
   return to;
 }
+
+// How much a board at rest is scaled up on a wide screen. `natural`: its width at its own size, `pane`: the room across
+// it (both in the page's own px), `height` and `paneHeight` the same down the pane, `zoom` the page's zoom (the TV
+// layout's). A small table fills about `share` of the pane's width, never more than `max` times its size on the
+// screen (the zoom counts: it is not stacked on top), never so tall that it overflows the pane, never below its own
+// size: a board that is already wide, or a pane that is narrow, is left as it is.
+export function restScale({ natural, pane, height = 0, paneHeight = 0, zoom = 1, share = 0.7, max = 1.6 }) {
+  if (!(natural > 0) || !(pane > 0)) return 1;
+  let up = Math.min(share * pane / natural, max / (zoom > 0 ? zoom : 1));
+  if (height > 0 && paneHeight > 0) up = Math.min(up, 0.92 * paneHeight / height);
+  return Math.max(1, Math.floor(up * 100) / 100);
+}

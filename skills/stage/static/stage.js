@@ -42,7 +42,7 @@
 //     {type:'stage:views', list:[{name, title, kind, answer}]}   after every change to the tabs
 //     {type:'stage:changed', name, title, isNew}                 a view was created or its source changed
 //     {type:'stage:follow', on}                                  following changed here (a tab tap, a chip, a step
-//                                                                by hand, Follow the voice, a new answer)
+//                                                                by hand, Back to the voice, a new answer)
 //     {type:'stage:shown', view}                                 this board is in front now, by the voice or by hand
 //     {type:'stage:key', key}                                    Space, ArrowLeft or ArrowRight pressed here, on nothing
 //                                                                that takes keys: the call page pauses or moves the answer
@@ -55,9 +55,9 @@
 //                                         session board) also gets data-theme on its <html> straight away.
 // Unknown types are ignored.
 import { applyFrame, beingSaid, settled, stepLabel } from "./scene.js";
-import { layoutLanes, renderLanes } from "./lanes.js";
+import { closeLanesPop, layoutLanes, renderLanes } from "./lanes.js";
 import { layoutMap, renderMap } from "./map.js";
-import { centreTarget, columnWidths } from "./fit.js";
+import { centreTarget, columnWidths, restScale } from "./fit.js";
 import { paintScreen, renderScreen } from "./screenboard.js";
 
 const VENDOR = ["highlight.min.js", "marked.min.js", "purify.min.js"]
@@ -107,7 +107,7 @@ root.innerHTML = `<div class="stage">
       <button type="button" class="nb navbtn next" aria-label="Next board"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
       <button type="button" class="pos" aria-haspopup="true" aria-expanded="false" aria-label="All boards"><span class="tabpos"></span><span class="posdot" hidden></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
     </div>
-    <button type="button" class="follow" hidden>Follow the voice</button>
+    <button type="button" class="follow" title="Back to the voice" aria-label="Back to the voice" hidden>Back to the voice</button>
     <div class="boards" hidden><h4>Boards</h4><nav class="tabs" role="tablist" aria-label="Stage" aria-orientation="vertical"></nav></div></div>
   <div class="panes"><div class="empty"><div class="emptycard">
     <h2>The stage is empty</h2><p class="msg">${EMPTY_LINE}</p>
@@ -614,11 +614,34 @@ function shapeBoard(box) {
     wrap.addEventListener("scroll", () => scrollCue(wrap), { passive: true });
     wordFloors(table, wrap);
     if (typeof ResizeObserver === "function") {
-      let was = 0;
-      new ResizeObserver(() => { const w = wrap.clientWidth; if (w && Math.abs(w - was) > 1) { was = w; wordFloors(table, wrap); } }).observe(wrap);
+      let was = [0, 0];
+      const ro = new ResizeObserver(() => {
+        const now = [wrap.clientWidth, box.clientWidth];
+        if (now[0] && (Math.abs(now[0] - was[0]) > 1 || Math.abs(now[1] - was[1]) > 1)) { was = now; refit(box); }
+      });
+      ro.observe(wrap); ro.observe(box);
     }
   });
 }
+// A table at rest on a wide desk screen is drawn larger, to about 70 % of the pane's width and at most 1.6 times its size
+// on the screen (the TV layout's zoom counts towards that): `--up` on the board's box, which the stylesheet turns into
+// the text's size and the table's width. Never while a row is said (nothing moves between the steps), never on a phone,
+// never for a board of several tables. The column floors are measured again at the size it is drawn at (wordFloors).
+function restFit(box) {
+  const wrap = box.querySelector(":scope > .tablewrap");
+  if (!wrap) return;
+  wrap.style.removeProperty("--up");
+  const phone = typeof matchMedia === "function" && matchMedia("(max-width:600px)").matches;
+  if (!box.classList.contains("g-rest") || phone || box.querySelectorAll(".tablewrap").length !== 1) return;
+  const body = box.closest(".pbody"), zoom = +document.documentElement.style.getPropertyValue("--z") || 1;
+  const up = restScale({ natural: wrap.offsetWidth, height: wrap.offsetHeight, pane: box.clientWidth, paneHeight: body ? body.clientHeight : 0, zoom });
+  if (up > 1) wrap.style.setProperty("--up", String(up));
+}
+function refit(box) {
+  restFit(box);
+  for (const wrap of box.querySelectorAll(".tablewrap")) { const table = wrap.querySelector("table"); if (table) wordFloors(table, wrap); }
+}
+
 // A column is never narrower than its longest word, so a word never breaks across lines (no `Latenc/y`): each column's
 // floor is that word measured in the cell's own font (bold, as a lit row is; a header in capitals and its letter-spacing)
 // plus the cell's padding, shared out by the column's text as before for the rest. When the floors do not fit the board's
@@ -629,12 +652,13 @@ function wordFloors(table, wrap) {
   const cols = [...table.querySelectorAll(":scope > colgroup > col")];
   if (!measureCtx || !cols.length) return;
   const word = cols.map(() => 0), pad = cols.map(() => 0);
+  const up = +wrap.style.getPropertyValue("--up") || 1;   // a table at rest on a wide screen is drawn larger (restFit)
   const lang = GREEK.test(table.textContent) ? "el" : undefined;   // as the pane is marked, so a Greek head is measured without its tonos
   for (const td of table.querySelectorAll("th, td")) {
     const i = (+td.dataset.c || 0) - 1;
     if (i < 0 || i >= cols.length) continue;
     const cs = getComputedStyle(td), size = parseFloat(cs.fontSize) || 14;
-    const sc = +wrap.style.getPropertyValue("--tf") || 1;
+    const sc = (+wrap.style.getPropertyValue("--tf") || 1) * up;   // the measure is of the text at its own size, whatever it is drawn at
     pad[i] = Math.max(pad[i], (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + 2);
     const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
@@ -650,9 +674,9 @@ function wordFloors(table, wrap) {
   }
   const avail = wrap.clientWidth - 2, padSum = pad.reduce((a, b) => a + b, 0), wordSum = word.reduce((a, b) => a + b, 0);
   if (!avail || !wordSum) return;
-  const tf = padSum + wordSum <= avail ? 1 : Math.max(0.72, Math.min(1, (avail - padSum) / wordSum));
+  const tf = padSum + wordSum * up <= avail ? 1 : Math.max(0.72, Math.min(1, (avail - padSum) / (wordSum * up)));
   wrap.style.setProperty("--tf", tf.toFixed(3));
-  const floors = word.map((w, i) => w * tf + pad[i]);
+  const floors = word.map((w, i) => w * tf * up + pad[i]);
   cols.forEach((c, i) => c.style.setProperty("--min", floors[i].toFixed(1) + "px"));
   const total = floors.reduce((a, f) => a + f, 0);
   table.style.minWidth = total > avail ? Math.ceil(total) + "px" : "";   // the floors do not fit: the table scrolls, unbroken
@@ -672,9 +696,26 @@ function paintTable(v, box, src) {
   if (!hasMarkdown()) { box.innerHTML = `<pre>${esc(src.body)}</pre>`; return; }
   markdownInto(box, src.body, null, true);
   shapeBoard(box);
-  box.classList.add("grid");  // a table board: the grid, its row, rows, column or cells being said lit
+  box.classList.add("grid", "g-rest");  // a table board: the grid, its row, rows, column or cells being said lit; whole until a frame steps it
+  box.addEventListener("click", (e) => tapRow(v, box, e));
   pulseDiff(v, box, "rows", [...box.querySelectorAll("tbody tr")].map((tr) => [...tr.querySelectorAll("td, th")].map((c) => c.textContent).join("\u001f")));  // a unit separator: "a|12" is not "a1|2"
   paintFrame(v, box);
+  refit(box);
+}
+
+// A row of a table board tapped: its first cell names it, Ask about this starts the question about it in the call's
+// text field, and Play from here goes to the sentence that says the row when an answer does. A row no answer says
+// offers only the question, and says so.
+function tapRow(v, box, e) {
+  if (e.target.closest?.("a[href]")) return;
+  const tr = e.target.closest?.("tbody tr");
+  if (!tr || !box.contains(tr)) { closePop(); return; }
+  const n = [...box.querySelectorAll("tbody tr")].indexOf(tr) + 1, key = "row#" + n;
+  const name = (tr.children[0]?.textContent || "").trim().replace(/\s+/g, " ") || `row ${n}`;
+  const acts = [button("Ask about this", () => { closePop(); post({ type: "stage:ask", text: `About "${name}": ` }); }, "pri")];
+  const said = playKey(v, key, true);
+  if (said) acts.push(button("Play from here", () => { closePop(); playKey(v, key); }));
+  openPop(name.charAt(0).toUpperCase() + name.slice(1), said ? null : "Not said in the voice.", acts, tr);
 }
 
 // ---- Motion --------------------------------------------------------------------------------
@@ -1035,8 +1076,11 @@ function showTerm(term, means, anchor) { openPop(term.trim(), means, [], anchor)
 // The popup sits under what was tapped, or over it near the stage's foot, inside a 16px gutter.
 function openPop(title, text, acts, anchor) {
   spopEl.replaceChildren();
+  const x = document.createElement("button"); x.type = "button"; x.className = "spop-x"; x.title = "Close"; x.setAttribute("aria-label", "Close");
+  x.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+  x.onclick = () => closePop();
   const h = document.createElement("h3"); h.textContent = title;
-  spopEl.append(h);
+  spopEl.append(x, h);
   if (text) { const p = document.createElement("p"); p.textContent = text; spopEl.append(p); }
   if (acts.length) { const row = document.createElement("div"); row.className = "sacts"; row.append(...acts); spopEl.append(row); }
   spopEl.setAttribute("aria-label", title);
@@ -1047,7 +1091,13 @@ function openPop(title, text, acts, anchor) {
   spopEl.style.left = Math.max(16, Math.min(r.left - stage.left, stage.width - w - 16)) + "px";
 }
 function closePop() { spopEl.hidden = true; }
-document.addEventListener("pointerdown", (e) => { if (!spopEl.hidden && !spopEl.contains(e.target) && !e.target.closest?.(".scene, .vzmap, .caption")) closePop(); }, true);
+// Every popup the stage holds: this one, and the step popup of each lanes board. They belong to what was on the board
+// when they opened, so a board change, a new answer or a frame for another step takes them down.
+function closePops() {
+  closePop();
+  for (const v of views.values()) for (const box of v.pane.querySelectorAll(".visual.lanes")) closeLanesPop(box);
+}
+document.addEventListener("pointerdown", (e) => { if (!spopEl.hidden && !spopEl.contains(e.target) && !e.target.closest?.(".scene, .vzmap, .caption, .md.grid")) closePop(); }, true);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !spopEl.hidden) closePop(); });
 
 function sourceFrame(text) {
@@ -1200,7 +1250,7 @@ function updateNav() {
   // The name starts with the visible words, so a voice command or a screen reader finds the control by what it shows.
   posEl.setAttribute("aria-label", navEl.querySelector(".tabpos").textContent + ", all boards" + (changed ? ", one changed" : ""));
 }
-// The pane headers start after the history buttons and Follow the voice, which sit over their left end.
+// The pane headers start after the history buttons and Back to the voice, which sit over their left end.
 const barRoom = () => root.querySelector(".stage").style.setProperty("--navw",
   (navEl.hidden ? 0 : navEl.offsetWidth) + (followEl.hidden ? 0 : followEl.offsetWidth + 14) + "px");  // its 6px margin, and 8px before the title
 const barObserver = new ResizeObserver(barRoom);
@@ -1256,6 +1306,7 @@ function select(name, arrive = false) {
     }
   }
   updateNav();  // once every tab is marked: mid-loop, the board left behind still counts as selected
+  if (was !== name) closePops();
   if (was !== name) post({ type: "stage:shown", view: name });  // the call's Play plays the board in front
   if (captionText) placeCaption();
 }
@@ -1373,7 +1424,7 @@ async function onItem(anchor, version) {
 
 // Following lives on the call page's gear; the stage keeps the state and tells the page when it
 // changes here.
-// While it is off, Follow the voice shows beside the history: the board the reader picked stays in front,
+// While it is off, Back to the voice shows beside the history: the board the reader picked stays in front,
 // whatever they play, until they press it or the next answer starts.
 function setFollow(on) {
   if (follow === on) return;
@@ -1383,6 +1434,11 @@ function setFollow(on) {
   post({ type: "stage:follow", on });
 }
 followEl.onclick = () => setFollow(true);
+// After a click with the pointer (not Enter or Space on the button, which have no click position: detail 0), a step,
+// board or follow button hands focus back to the page, so Space plays or pauses the answer instead of pressing it again.
+document.addEventListener("click", (e) => {
+  if (e.detail > 0) e.target.closest?.(".stepbar .btn, .vstep, .navbtn, button[role=tab], .follow")?.blur();
+});
 
 // Centre `el` (an element, or several taken together, such as the lines of a range) in each box around it
 // that scrolls, inside the pane only: never the page around the stage. What is taller than the box starts at
@@ -1506,6 +1562,8 @@ function paintGrid(box, scene, n) {
     }
   }
   box.classList.toggle("g-on", rowsLit.size + colsLit.size + cells.size > 0);
+  const rest = n >= scene.rest;   // only the whole board is drawn larger on a wide screen: a step moves nothing
+  if (box.classList.contains("g-rest") !== rest) { box.classList.toggle("g-rest", rest); refit(box); }
   const keep = [...box.querySelectorAll("tbody tr.g-cur"), ...box.querySelectorAll("td.k-focus:not(.g-col)"), ...litCols];
   return keep;
 }
@@ -1557,6 +1615,7 @@ function paintFrame(v, box, animate = false) {
   }
   if (!on || !box) return;
   const { scene, n } = on;
+  if (v.applied !== n && selectedName() === v.body.name) closePop();   // a frame for another step: its popup is of the one before
   if (box.classList.contains("sandboxed")) {
     const last = scene.frames.length - 1, frame = scene.frames[Math.max(0, Math.min(n, last))];
     postSandbox(v, { show: frame.show, focus: frame.focus, cur: beingSaid(scene, n), animate });
@@ -1653,6 +1712,16 @@ function restAfter(names, answer) {
   }
 }
 
+// An answer with no board of its own leaves the board in front where it is, and that board is shown whole: never
+// stopped half way through the steps of an earlier answer (faint rows under "Following", a voice that is not on it).
+// The board the reader took in hand stays as it is.
+function restUnstepped() {
+  for (const v of views.values()) {
+    if (!follow && selectedName() === v.body.name) continue;
+    toRest(v);
+  }
+}
+
 function onMessage(m) {
   if (m.type === "stage:front") front(String(m.view), !!m.manual, m.answer);
   else if (m.type === "stage:key") {
@@ -1663,6 +1732,7 @@ function onMessage(m) {
     if (v && selectedName() !== v.body.name) markUpdated(v, true);
   }
   else if (m.type === "stage:answer") {
+    closePops();
     if (m.follow !== false) setFollow(true);
     for (const [name, late] of lateFrames) if (late.answer !== answerKey(m.n)) lateFrames.delete(name);
     if (lateFront && lateFront.answer !== answerKey(m.n)) lateFront = null;
@@ -1673,6 +1743,7 @@ function onMessage(m) {
     if (z >= 0.5 && z <= 3) {
       document.documentElement.style.zoom = z === 1 ? "" : String(z);
       document.documentElement.style.setProperty("--z", String(z));   // the stylesheet's vh and vw units are of the window, not of the zoomed page
+      for (const box of document.querySelectorAll(".md.grid")) refit(box);   // a table at rest is drawn larger by the room it has, less the zoom
     }
   }
   else if (m.type === "stage:theme") {
@@ -1692,6 +1763,7 @@ function onMessage(m) {
       try { setFrame(name, Number(n), false, m.answer); } catch (e) { console.error("stage:", e); }  // one board never stops the rest
     }
     if (m.front) front(String(m.front), false, m.answer);
+    else if (!Object.keys(m.frames || {}).length) restUnstepped();   // an answer with no board of its own
     lightKey(Number(m.keys) || 0, false);
   }
 }
