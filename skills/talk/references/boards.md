@@ -137,6 +137,11 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 - An answer a correction replaced was never shown on the stage: a repair for it is refused.
 - A reply with no `--board-for` and no sentence is still refused (`a board needs a sentence`).
 
+## After a correction
+
+- A turn that corrects an earlier answer (`replaces`, a `while_working` addition, "no, I meant...", "change X to Y") redoes the board that answer showed: the corrected values, the same columns and rows, the same kind of board, unless the user asked for a different view.
+- Never replace it with a narrower board of one column (a bar chart of one figure for a table). Say the changed cells in the speech.
+
 ## Nudges
 
 - `reply` prints a `board:` line when an answer holds more than 3 key points, a board's title is over 5 words, or the first board comes after more than one sentence. Cut it in the next answer.

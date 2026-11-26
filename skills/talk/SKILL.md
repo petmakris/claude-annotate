@@ -71,6 +71,7 @@ A background task that exits with a line starting `TALK_TURN` is the user speaki
   - "never mind" or the Undo button take back a turn you have not collected yet.
   - If you see a plain "never mind", you already had the turn: drop what you were doing with it and say so in a few words.
 - A sentence that stops mid-thought ("so what about the... um") is held a few seconds for its end, so a turn can arrive a moment after the user stopped talking.
+- **A correction redoes the board it corrects.** When a turn corrects an earlier answer (`replaces`, a `while_working` addition, or the user saying "no, I meant..." or "change X to Y"), the new answer puts up the board the earlier one showed again, with the corrected values, the same columns and rows and the same kind of board, unless the user asked for a different view. Never swap in a narrower chart of one column. Say the changed cells in the speech.
 - A `you` line that starts `About "<part>": ` was asked from that part of a board on the stage: answer about that part.
 
 - A long typed message (paragraphs or numbered points): answer every numbered point in order, and answer any question it asks about the page itself (the copy icon at the top right of the answer card copies the whole answer, never a part of it). State no fact the user did not give; ask for it in one short question.

@@ -213,3 +213,12 @@ def test_the_guide_teaches_the_answer_shape_phases_the_outcome_and_the_map_point
     assert "A tree that does not change (a B-tree index" in boards and "a bare path" in boards and "More than 3 key points" not in boards
     assert "outcome" in (talk.SKILL_DIR.parent / "annotate" / "references" / "block-kinds" / "sequence.md").read_text().split("## Before and after")[1]
     assert "`phases`, `groups`, `outcome` and `captions` are refused" not in (talk.SKILL_DIR.parent / "annotate" / "references" / "block-kinds" / "sequence.md").read_text()
+
+
+def test_the_guide_says_a_correction_redoes_the_board_it_corrects():
+    text = GUIDE.read_text()
+    assert "**A correction redoes the board it corrects.**" in text
+    assert "the same columns and rows and the same kind of board, unless the user asked for a different view" in text
+    assert "Never swap in a narrower chart of one column. Say the changed cells in the speech." in text
+    boards = (GUIDE.parent / "references" / "boards.md").read_text()
+    assert "## After a correction" in boards and "Never replace it with a narrower board of one column" in boards
