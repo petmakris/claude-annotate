@@ -243,3 +243,15 @@ def test_the_copy_button_shows_the_word_copy_beside_its_icon_on_a_wide_card_and_
     css = (STATIC / "call-shell.css").read_text()
     assert css_first("call-shell.css")[".nowcopy .cp-word"].startswith("display:none")
     assert re.search(r"@media \(min-width:761px\)\{\.nowcopy:not\(\.done\)\{width:auto;padding:0 8px\}\.nowcopy:not\(\.done\) \.cp-word\{display:inline\}\}", css)
+
+
+# ---- r2-first-1 (shell half): a mended board is filed under the answer it names ----------------------------------------------------------------
+
+def test_a_repair_board_is_filed_under_the_answer_it_names_and_not_under_the_next_one(tmp_path):
+    html, states = asked(tmp_path, answers=(FIRST,), asks=ASKS[:1])
+    page = CallPage(html, states, autoplay=False, seconds=3.0).js(
+        "const E = (id, who, extra = {}) => ({id, who, text: who + id, at: 1, ...extra});"
+        "const boards = (list) => turnsOf(list).map((t) => [t.a.id, t.boards.map((b) => b.id)]);")
+    page.check("boards([E(0, 'you'), E(1, 'claude'), E(2, 'you'), E(3, 'claude'), E(4, 'board', {answer: 1, repair: true}), E(5, 'you'), E(6, 'claude')])")
+    page.check("boards([E(0, 'you'), E(1, 'board', {answer: 2}), E(2, 'claude'), E(3, 'board', {answer: 9, repair: true})])")
+    assert page.run() == [[[1, [4]], [3, []], [6, []]], [[2, [1]]]]

@@ -18,7 +18,11 @@ function turnsOf(entries) {
   let open = [], boards = [], notes = [];
   for (const e of entries) {
     if (e.who === "you") { if (!e.withdrawn) open.push(e); }
-    else if (e.who === "board") boards.push(e);
+    else if (e.who === "board") {
+      // a repair board (a refused board mended later) belongs to the answer it names, not to the next one
+      const home = e.repair && Number.isFinite(e.answer) ? turns[e.answer - 1] : null;
+      (home ? home.boards : boards).push(e);
+    }
     else if (e.who === "note") notes.push(e);
     else if (e.who === "claude") {
       let q = null, also = [];
