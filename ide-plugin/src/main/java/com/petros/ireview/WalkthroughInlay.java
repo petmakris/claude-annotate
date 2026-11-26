@@ -188,7 +188,7 @@ public final class WalkthroughInlay {
         String body = step.markdown();
         var thread = client.threadFor(step.anchor());
         if (thread.isPresent()) {
-            body = body + "\n\nYou · " + thread.get().question() + "\n" + thread.get().synthesis();
+            body = withThread(body, thread.get().question(), thread.get().synthesis());
         } else if (client.isPending(step.anchor())) {
             body = body + "\n\n● waiting for Claude…";
         }
@@ -237,6 +237,14 @@ public final class WalkthroughInlay {
         }, inlayForListener);
 
         hud.show(editor, step, c.index(), c.size());
+    }
+
+    /** The step's text with its thread under it. The daemon's thread keeps only the
+     *  replies, so the question is often empty: then the answer stands alone, as in
+     *  WalkthroughPanel, never after a bare "You ·" that reads as the user's words. */
+    static String withThread(String body, String question, String answer) {
+        String q = question == null ? "" : question;
+        return body + "\n\n" + (q.isEmpty() ? "" : "You · " + q + "\n") + answer;
     }
 
     private static String roleLabel(WalkthroughStep.Role role) {
