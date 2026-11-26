@@ -23,7 +23,8 @@
 .nq-text.clamped{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .nq-more{min-height:28px;padding:0 4px;margin-left:-4px;border-radius:8px;font:500 12.5px var(--sans);color:var(--acc)}
 .nq-more:hover{background:var(--shade)}
-#ntmore{align-self:flex-start}
+#ntmore{align-self:flex-start;min-height:34px;padding:0 14px;margin-left:0;border:1px solid var(--acc);border-radius:999px;background:var(--acc-soft);font-weight:600}   /* Show all / Show less is a button, not a link: easy to find under a cut text */
+#ntmore:hover{background:var(--acc);color:var(--on-acc)}
 .now-text{--lh:1.65;--nt-lines:6;max-height:calc(var(--nt-lines) * var(--lh) * 1em);overflow:auto;font-size:15px;line-height:var(--lh);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink);scrollbar-width:thin;
   --fade-top:0px;--fade-bottom:0px;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 var(--fade-top),#000 calc(100% - var(--fade-bottom)),transparent 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 var(--fade-top),#000 calc(100% - var(--fade-bottom)),transparent 100%)}
 /* The window is a whole number of lines (--nt-lines, set by fitNowText from the height the panel has free: the card's other parts
@@ -149,6 +150,7 @@
   .tl-expand,.tl-clear{min-width:44px;min-height:44px}
   .tl-b,.tlrow .play{min-height:44px}
   .nq-more{min-height:44px;display:inline-flex;align-items:center;margin-block:-8px}
+  #ntmore{min-height:44px;margin-block:-6px 0}
   .tlrow{grid-template-columns:minmax(0,1fr) 44px 44px}
   .tl-t,.tl-gist{display:none}
   .tlrow .play{grid-column:3;margin-left:0;padding:0}
@@ -172,6 +174,6 @@
 .tl-gist .in-name{font-weight:600;color:var(--ink)}
 /* a fade over the foot of the panel while more of the conversation lies below it */
 .convo-fade{position:sticky;bottom:0;flex:none;height:0;margin-top:-12px;pointer-events:none}
-.convo-fade::after{content:"";position:absolute;left:0;right:0;bottom:-10px;height:22px;background:linear-gradient(to bottom,transparent,var(--panel));opacity:0;transition:opacity .15s}
+.convo-fade::after{content:"";position:absolute;left:0;right:0;bottom:-10px;height:40px;background:linear-gradient(to bottom,transparent,var(--panel));opacity:0;transition:opacity .15s}
 .convo[data-more] .convo-fade::after{opacity:1}
 @media (prefers-reduced-motion:reduce){.convo-fade::after{transition:none}}

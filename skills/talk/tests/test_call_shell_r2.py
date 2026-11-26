@@ -264,3 +264,24 @@ def test_a_short_screen_with_earlier_answers_folds_the_strips_hint_and_note_to_o
     css = open(STATIC / "call-shell.css", encoding="utf-8").read()
     m = re.search(r"@media \(max-height:760px\)\{\.convo\.has-earlier \.fl-hint,\.convo\.has-earlier \.fl-note\{([^}]*)\}\}", css)
     assert m and m.group(1) == "white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+
+
+# ---- bd1125b-vote-4: on a phone the card sits whole and the text window gives way first ---------------------------------------
+
+PHONE = "globalThis.matchMedia = (q) => ({matches: /max-width:\\s*760px/.test(q), media: q, addEventListener() {}, removeEventListener() {}});"
+
+
+def test_ntlines_on_a_phone_may_go_down_to_one_line(tmp_path):
+    html, states = asked(tmp_path, answers=(FIRST,), asks=ASKS[:1])
+    page = CallPage(html, states, autoplay=False, seconds=3.0).js("await serve(1);")
+    page.check("[ntLines(10, 25, false, true), ntLines(129, 25, false, true), ntLines(10, 25, false, false)]")
+    assert page.run() == [[1, 5, 3]]
+
+
+def test_on_a_phone_the_text_window_takes_what_the_card_leaves_and_the_list_keeps_no_room_under_it(tmp_path):
+    html, states = asked(tmp_path)
+    page = CallPage(html, states, autoplay=False, seconds=3.0).js("await serve(3);" + SIZES + PHONE)
+    page.js("size($('convo'), {clientHeight: 400}); size($('nowcard'), {offsetHeight: 303}); size($('nowtext'), {offsetHeight: 68}); size($('tlhead'), {offsetHeight: 48}); fitNowText();")
+    page.check("[$('nowtext').style.getPropertyValue('--nt-lines'), $('convo').classList.contains('has-earlier')]")   # 400 - (303 - 68 + 46) = 119 px: 4 lines of 25, no list reserve
+    page.js("size($('convo'), {clientHeight: 300}); fitNowText();").check("$('nowtext').style.getPropertyValue('--nt-lines')")   # 19 px: one line, not the old three
+    assert page.run() == [["4", True], "1"]

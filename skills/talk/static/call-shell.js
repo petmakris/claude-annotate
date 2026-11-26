@@ -203,22 +203,28 @@ $("nowtext").addEventListener("scroll", paintTextFades, {passive: true});
 // chips, transport, Following strip) and, while earlier answers wait, the head of their list and two rows come off the panel's
 // height, so a laptop screen shows the list under the card and the window never ends mid-line. Show all lifts the cap (the
 // word being said stays in view); the control is there only when the text is longer than the window.
-const NT_MIN = 3, NT_TIGHT = 2, NT_SHORT = 560, NT_MAX = 16, NT_BUTTON = 36, ROW_H = 68, LIST_GAP = 12;
+const NT_MIN = 3, NT_TIGHT = 2, NT_PHONE = 1, NT_SHORT = 560, NT_MAX = 16, NT_BUTTON = 36, NT_BUTTON_PHONE = 46, ROW_H = 68, LIST_GAP = 12;
 let ntAll = false;                       // the reader lifted the cap for the answer on the card
 const ntMore = document.createElement("button"); ntMore.type = "button"; ntMore.id = "ntmore"; ntMore.className = "nq-more"; ntMore.hidden = true;
 $("nowbody").insertBefore(ntMore, $("nowchips"));
 ntMore.onclick = () => { ntAll = !ntAll; fitNowText(); followVoice(true); };
 // whole lines that fit in `free` pixels at `lh` pixels a line
-const ntLines = (free, lh, tight) => Math.max(tight ? NT_TIGHT : NT_MIN, Math.min(NT_MAX, Math.floor(free / lh)));
+// (the floor is three lines; two on a short laptop; one on a phone, which keeps no room for the list under the card (it scrolls), where the card's player and Following strip must sit whole and the window gives way first)
+const ntLines = (free, lh, tight, phone) => Math.max(phone ? NT_PHONE : tight ? NT_TIGHT : NT_MIN, Math.min(NT_MAX, Math.floor(free / lh)));
 function fitNowText() {
   const tx = $("nowtext"), card = $("nowcard"), box = $("convo");
   if (card.hidden) return;
   const lh = parseFloat(getComputedStyle(tx).lineHeight) || 25, cs = getComputedStyle(box);
   const earlier = box.classList.contains("has-earlier") && !$("earlier").hidden;
-  const reserve = earlier ? LIST_GAP + Math.max(40, $("tlhead").offsetHeight) + 2 * ROW_H : 0;
-  const others = card.offsetHeight - tx.offsetHeight - (ntMore.hidden ? 0 : ntMore.offsetHeight + 8) + NT_BUTTON;
+  const phone = matchMedia("(max-width: 760px)").matches;
+  const reserve = earlier && !phone ? LIST_GAP + Math.max(40, $("tlhead").offsetHeight) + 2 * ROW_H : 0;
+  // what the Show all button takes in the card's column: its box, its margins (a phone's are negative) and the gap before it; it counts
+  // whether it is on the card now or not, so the window does not change size when the button appears
+  const bs = getComputedStyle(ntMore), gap = parseFloat(getComputedStyle($("nowbody")).rowGap);
+  const button = ntMore.offsetHeight + (parseFloat(bs.marginTop) || 0) + (parseFloat(bs.marginBottom) || 0) + (Number.isFinite(gap) ? gap : 8);
+  const others = card.offsetHeight - tx.offsetHeight - (ntMore.hidden ? 0 : button) + (phone ? NT_BUTTON_PHONE : NT_BUTTON);
   const free = box.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0) - others - reserve;
-  const lines = ntLines(free, lh, box.clientHeight < NT_SHORT && matchMedia("(min-width: 761px)").matches);   // a short laptop panel gives the list its head before it gives the text a third line; a phone keeps three
+  const lines = ntLines(free, lh, box.clientHeight < NT_SHORT && matchMedia("(min-width: 761px)").matches, phone);   // a short laptop panel gives the list its head before it gives the text a third line; a phone shrinks the window to one line before the player and strip are cut
   if (tx.style.getPropertyValue("--nt-lines") !== String(lines)) tx.style.setProperty("--nt-lines", lines);
   tx.toggleAttribute("data-all", ntAll);
   ntMore.hidden = !ntAll && !(tx.scrollHeight > lines * lh + 2);
