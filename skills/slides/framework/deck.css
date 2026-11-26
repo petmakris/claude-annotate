@@ -135,6 +135,7 @@
   body.present [data-dim]{transition:opacity .3s ease,filter .3s ease}
   body.present .frag{transition:opacity .3s ease,visibility .3s ease,filter .3s ease}
   body.present .focus .frag.frag-on.frag-past,body.present .frag-dim{opacity:.12;filter:grayscale(1)}
+  body.present .frag.frag-on.frag-out,body.present .frag-out{opacity:0;visibility:hidden}
   @media print{.present-btn{display:none}}
 
   /* persistent floating nav — hover the left-edge tab to reveal jump links */
