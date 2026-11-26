@@ -60,12 +60,13 @@ Read this to explain the page to the user or to debug it. Nothing here is needed
 
 ### Keys and input mode
 
+- On a phone the panel's chrome is kept small so the conversation has the height: a title of two lines at most, no state row while the state is only "Waiting for you" (the Your turn pill says it; any other state, an autoplay note or other calls waiting keep the row), and the answer's text window shows four lines.
 - The switch under the player says how the next words get in: **Type** (the mic is put away and the cursor is in the field), **Talk** (press the mic, check the words, send) and **Live** (the microphone stays open). It is locked while a recording runs.
 - The pill beside it says whose turn it is: Your turn, Typing, Recording, Claude is working, Claude is speaking, and in Live Listening, Hearing you, Muted or No sound heard.
 - The voice speed is a chip in the player (and in the gear). Back is one sentence.
-- Space plays and pauses; the left and right arrows go a sentence back or forward; **?** opens the list of every key (also the Keys button under the field and the row in the gear). The other shortcuts are Alt chords by physical key: S next speed, M the message field, P the player, V follow the voice again, T Talk or Done.
-- Two skip links, the first stops of the page, go to the message field and to the player. A settings or keys layer takes the focus when it opens, keeps Tab inside it and gives the focus back to its button on Escape.
-- The page's own words are English whatever language the user speaks: **Speech language** is only what the page listens for and what is read aloud.
+- Space plays and pauses; the left and right arrows go a sentence back or forward; **?** opens the list of every key (also the Keys button under the field and the row in the gear). The other shortcuts are Alt chords by physical key: S next speed, M the message field, P the player, B the board in front, V follow the voice again, T Talk or Done.
+- Three skip links, the first stops of the page, go to the message field, the player and the board in front (Alt+B does the same: it focuses the chip of the board in front, else the first chip). A settings or keys layer takes the focus when it opens, keeps Tab inside it and gives the focus back to its button on Escape.
+- The page's own words follow **Speech language**; with Detect, the latest answer's language, else Greek when the user's latest typed turn or the call's topic is Greek, else the browser's. The three mode buttons say what they do in a tooltip.
 - Full screen on a display 1700 px wide or more that has not chosen a size is TV size until full screen ends. `?screen=tv` or `?screen=desk` in the address chooses it and is kept. The gear's **Screen** row does the same.
 
 ## Live mode

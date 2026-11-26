@@ -8,7 +8,7 @@
 const I18N = {
   en: {
     // the page
-    "skip.links": "Skip links", "skip.message": "Skip to the message", "skip.player": "Skip to the player", "skip.latest": "Jump to the latest answer",
+    "skip.links": "Skip links", "skip.message": "Skip to the message", "skip.player": "Skip to the player", "skip.board": "Skip to the board", "skip.latest": "Jump to the latest answer",
     "stage.title": "Stage", "stage.loading": "Loading the stage…", "stage.failed": "The stage did not load.", "stage.reload": "Reload stage",
     "stage.open": "Open in a new tab", "stage.none": "The stage is not available for this call.",
     "panel.name": "The call", "panel.resize": "Resize the panel", "panel.drag": "Drag to resize", "panel.collapse": "Collapse the panel",
@@ -26,7 +26,7 @@ const I18N = {
     "foot.jump": "Back to the voice", "foot.undo": "Undo", "foot.stop": "The answer asks", "foot.mode": "How you talk", "foot.compose": "Talk or type",
     "foot.cancel": "Cancel", "foot.cancel.tip": "Cancel", "foot.type": "Type a message", "foot.send": "Send text", "foot.send.tip": "Send",
     "foot.done": "Done", "foot.talk": "Talk",
-    "hint.play": "play or pause", "hint.sentence": "sentence", "hint.keys": "All keys", "hint.keys.aria": "Keyboard shortcuts",
+    "hint.play": "play or pause", "hint.sentence": "sentence", "hint.board": "board", "hint.keys": "All keys", "hint.keys.aria": "Keyboard shortcuts",
     "rail.back": "Back one sentence",
     // settings
     "set.screen": "Screen", "set.desk": "Desk", "set.tv": "TV", "set.panel": "Panel", "set.panel.where": "Where the panel sits", "set.left": "Left",
@@ -43,9 +43,12 @@ const I18N = {
     "keys.note": "Every key has a button. Letters go to the message field, so the shortcuts use Alt.",
     "g.listen": "Listening", "g.move": "Moving around", "g.talk": "Talking",
     "k.play": "Play or pause the answer", "k.sentence": "Back or forward one sentence", "k.speed": "Next voice speed",
-    "k.message": "Go to the message field", "k.player": "Go to the player", "k.voice": "Follow the voice again", "k.keys": "Show this list",
+    "k.message": "Go to the message field", "k.player": "Go to the player", "k.board": "Go to the board in front", "k.voice": "Follow the voice again", "k.keys": "Show this list",
     "k.close": "Close the open window", "k.send": "Send the message", "k.newline": "New line in the message", "k.talk": "Talk, or Done while recording",
     // talking
+    "tip.type": "Type your message in the field. The microphone stays off.",
+    "tip.talk": "Press the mic, speak, then press Done to send what you said.",
+    "tip.live": "The microphone stays open: just speak and your turn is sent after a pause. Speaking over an answer interrupts it. The mic button mutes.",
     "mode.type": "Type", "mode.talk": "Talk", "mode.live": "Live", "mode.locked": "Finish the recording first",
     "mic.listen": "Listen", "mic.start": "Start listening", "mic.here": "Listen here", "mic.unmute": "Unmute", "mic.mute": "Mute",
     "mic.unavailable": "This page cannot reach a microphone. Open it over https or on localhost.", "mic.none": "No microphone: {why}",
@@ -249,7 +252,7 @@ const I18N = {
     "pl.load": "Cannot load the audio file.",
   },
   el: {
-    "skip.links": "Σύνδεσμοι παράλειψης", "skip.message": "Μετάβαση στο μήνυμα", "skip.player": "Μετάβαση στη συσκευή αναπαραγωγής",
+    "skip.links": "Σύνδεσμοι παράλειψης", "skip.message": "Μετάβαση στο μήνυμα", "skip.player": "Μετάβαση στη συσκευή αναπαραγωγής", "skip.board": "Μετάβαση στον πίνακα",
     "skip.latest": "Μετάβαση στην τελευταία απάντηση",
     "stage.title": "Σκηνή", "stage.loading": "Φόρτωση της σκηνής…", "stage.failed": "Η σκηνή δεν φορτώθηκε.", "stage.reload": "Επαναφόρτωση σκηνής",
     "stage.open": "Άνοιγμα σε νέα καρτέλα", "stage.none": "Η σκηνή δεν είναι διαθέσιμη για αυτή την κλήση.",
@@ -270,7 +273,7 @@ const I18N = {
     "foot.jump": "Πίσω στη φωνή", "foot.undo": "Αναίρεση", "foot.stop": "Η απάντηση ρωτά", "foot.mode": "Πώς μιλάτε", "foot.compose": "Μιλήστε ή πληκτρολογήστε",
     "foot.cancel": "Ακύρωση", "foot.cancel.tip": "Ακύρωση", "foot.type": "Πληκτρολογήστε ένα μήνυμα", "foot.send": "Αποστολή κειμένου", "foot.send.tip": "Αποστολή",
     "foot.done": "Τέλος", "foot.talk": "Μιλήστε",
-    "hint.play": "αναπαραγωγή ή παύση", "hint.sentence": "πρόταση", "hint.keys": "Όλα τα πλήκτρα", "hint.keys.aria": "Συντομεύσεις πληκτρολογίου",
+    "hint.play": "αναπαραγωγή ή παύση", "hint.sentence": "πρόταση", "hint.board": "πίνακας", "hint.keys": "Όλα τα πλήκτρα", "hint.keys.aria": "Συντομεύσεις πληκτρολογίου",
     "rail.back": "Πίσω μία πρόταση",
     "set.screen": "Οθόνη", "set.desk": "Γραφείο", "set.tv": "Τηλεόραση", "set.panel": "Πάνελ", "set.panel.where": "Πού βρίσκεται το πάνελ", "set.left": "Αριστερά",
     "set.right": "Δεξιά", "set.theme": "Θέμα", "set.light": "Φωτεινό", "set.dark": "Σκούρο", "set.system": "Σύστημα", "set.voice": "Φωνή",
@@ -285,8 +288,11 @@ const I18N = {
     "keys.note": "Κάθε πλήκτρο έχει κουμπί. Τα γράμματα πηγαίνουν στο πεδίο μηνύματος, γι' αυτό οι συντομεύσεις χρησιμοποιούν το Alt.",
     "g.listen": "Ακρόαση", "g.move": "Μετακίνηση", "g.talk": "Ομιλία",
     "k.play": "Αναπαραγωγή ή παύση της απάντησης", "k.sentence": "Μία πρόταση πίσω ή μπροστά", "k.speed": "Επόμενη ταχύτητα φωνής",
-    "k.message": "Μετάβαση στο πεδίο μηνύματος", "k.player": "Μετάβαση στη συσκευή αναπαραγωγής", "k.voice": "Ακολούθηση της φωνής ξανά", "k.keys": "Εμφάνιση αυτής της λίστας",
+    "k.message": "Μετάβαση στο πεδίο μηνύματος", "k.player": "Μετάβαση στη συσκευή αναπαραγωγής", "k.board": "Μετάβαση στον πίνακα που προβάλλεται", "k.voice": "Ακολούθηση της φωνής ξανά", "k.keys": "Εμφάνιση αυτής της λίστας",
     "k.close": "Κλείσιμο του ανοιχτού παραθύρου", "k.send": "Αποστολή του μηνύματος", "k.newline": "Νέα γραμμή στο μήνυμα", "k.talk": "Ομιλία ή Τέλος κατά την εγγραφή",
+    "tip.type": "Πληκτρολογήστε το μήνυμά σας στο πεδίο. Το μικρόφωνο μένει κλειστό.",
+    "tip.talk": "Πατήστε το μικρόφωνο, μιλήστε και πατήστε Τέλος για να σταλεί ό,τι είπατε.",
+    "tip.live": "Το μικρόφωνο μένει ανοιχτό: απλώς μιλήστε και η σειρά σας στέλνεται μετά από μια παύση. Αν μιλήσετε πάνω από μια απάντηση, τη διακόπτει. Το κουμπί του μικροφώνου το σιγάζει.",
     "mode.type": "Πληκτρολόγηση", "mode.talk": "Ομιλία", "mode.live": "Ζωντανά", "mode.locked": "Ολοκληρώστε πρώτα την εγγραφή",
     "mic.listen": "Ακρόαση", "mic.start": "Έναρξη ακρόασης", "mic.here": "Ακρόαση εδώ", "mic.unmute": "Άρση σίγασης", "mic.mute": "Σίγαση",
     "mic.unavailable": "Αυτή η σελίδα δεν έχει πρόσβαση σε μικρόφωνο. Ανοίξτε την μέσω https ή στο localhost.", "mic.none": "Κανένα μικρόφωνο: {why}",
@@ -501,10 +507,15 @@ function languageOf(text) {
   const el = (text.match(/[Ͱ-Ͽἀ-῿]/g) || []).length, la = (text.match(/[A-Za-z]/g) || []).length;
   return el > la ? "el" : "en";
 }
-// The page's language: the choice in the settings; with Detect, the latest answer's language, else the browser's.
+// Whether a text is Greek: its letters are mostly Greek. A text with no letters (digits, marks) is not, so it never overrides the browser.
+const isGreek = text => !!text && languageOf(text) === "el";
+// The page's language: the choice in the settings; with Detect, the latest answer's language, then Greek evidence from what the
+// user said (their latest turn, the call's topic: an English one changes nothing), else the browser's.
 function pageLanguage() {
   if (language === "el" || language === "en") return language;
   for (let i = view.entries.length - 1; i >= 0; i--) { const e = view.entries[i]; if (e.who === "claude" && e.text) return languageOf(e.text); }
+  for (let i = view.entries.length - 1; i >= 0; i--) { const e = view.entries[i]; if (e.who === "you" && !e.withdrawn && e.text && /[A-Za-zͰ-Ͽἀ-῿]/.test(e.text)) { if (isGreek(e.text)) return "el"; break; } }
+  if (isGreek(CFG.topic)) return "el";
   return /^el\b/i.test(navigator.language || "") ? "el" : "en";
 }
 const T_ATTRS = {"data-t-aria": "aria-label", "data-t-tip": "data-tip", "data-t-title": "title", "data-t-ph": "placeholder"};

@@ -28,7 +28,7 @@ def test_the_keys_sheet_lists_every_shortcut_in_the_order_of_the_key_table(tmp_p
     page.check("[KEYS.length, document.querySelector('#pKeys .knote').textContent]")
     assert page.run() == [
         ["play = Space / Play or pause the answer", "sentence = ← → / Back or forward one sentence", "speed = Alt S / Next voice speed",
-         "message = Alt M / Go to the message field", "player = Alt P / Go to the player", "voice = Alt V / Follow the voice again",
+         "message = Alt M / Go to the message field", "player = Alt P / Go to the player", "board = Alt B / Go to the board in front", "voice = Alt V / Follow the voice again",
          "keys = ? / Show this list", "close = Esc / Close the open window", "send = Enter / Send the message",
          "newline = Shift Enter / New line in the message", "talk = Alt T / Talk, or Done while recording"],
         ["Listening", "Moving around", "Talking"],
@@ -98,7 +98,7 @@ def test_the_skip_links_go_past_the_stage_and_the_answers(tmp_path):
     page.js("$('skipmsg').click();").check("document.activeElement.id")
     page.js("$('skipplay').click();").check("document.activeElement.id")
     page.check("[...document.querySelectorAll('#skip a')].map((a) => a.textContent)")
-    assert page.run() == ["text", "playpause", ["Skip to the message", "Skip to the player"]]
+    assert page.run() == ["text", "playpause", ["Skip to the message", "Skip to the player", "Skip to the board"]]
 
 
 # ---- Back is a sentence, the speed is on the player -----------------------------------------------------------------

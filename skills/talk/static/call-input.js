@@ -149,8 +149,8 @@ for (const s of SPEEDS) {
 }
 $("autoplay").onclick = () => { autoplay = !autoplay; store.set("autoplay", autoplay); paintSettings(); };
 // ---- the keys ----------------------------------------------------------------------
-// Every shortcut of the page is in this list, once: the Keys sheet (#pKeys) and the hint under the field are built from it,
-// and test_call_input.py presses each row. Letters belong to the message field (a key typed anywhere lands in it), so the
+// Every shortcut of the page is in this list, once: the Keys sheet (#pKeys) is built from it, and test_call_input.py presses
+// each row. The hint under the field (#keyhint) is static markup in call.html, a few of these by hand with a data-t key. Letters belong to the message field (a key typed anywhere lands in it), so the
 // shortcuts that are not Space, the arrows or ? are Alt chords, read from the physical key (ev.code: Option types a
 // character on a Mac). Every key does what a visible button does.
 const KEYS = [
@@ -161,6 +161,7 @@ const KEYS = [
   {group: "g.move", rows: [
     {id: "message", keys: ["Alt", "M"], what: "k.message"},
     {id: "player", keys: ["Alt", "P"], what: "k.player"},
+    {id: "board", keys: ["Alt", "B"], what: "k.board"},
     {id: "voice", keys: ["Alt", "V"], what: "k.voice"},
     {id: "keys", keys: ["?"], what: "k.keys"},
     {id: "close", keys: ["Esc"], what: "k.close"}]},
@@ -169,7 +170,7 @@ const KEYS = [
     {id: "newline", keys: ["Shift", "Enter"], what: "k.newline"},
     {id: "talk", keys: ["Alt", "T"], what: "k.talk"}]},
 ];
-const ALT_KEYS = {KeyS: "speed", KeyM: "message", KeyP: "player", KeyV: "voice", KeyT: "talk"};
+const ALT_KEYS = {KeyS: "speed", KeyM: "message", KeyP: "player", KeyB: "board", KeyV: "voice", KeyT: "talk"};
 function buildKeys() {
   // `key` names the words in the table (call-i18n.js): the element keeps it in data-t, so a change of language puts the new words in
   const pop = $("pKeys"), make = (tag, cls, text, key) => { const e = document.createElement(tag); if (cls) e.className = cls; if (key) { e.dataset.t = key; e.textContent = t(key); } else if (text) e.textContent = text; return e; };
@@ -226,12 +227,21 @@ function runShortcut(id) {
   if (id === "speed") { cycleSpeed(); return true; }
   if (id === "message") { if (rail) setRail(false); $("text").focus(); return true; }
   if (id === "player") { const b = $(rail ? "railpp" : "playpause"); if (!b || b.closest("[hidden]")) return false; b.focus(); return true; }
+  // The board in front, else the first board of the answer on the card: its chip takes the focus. The stage has no message that
+  // moves the focus into its own board list, so the chip (a press brings its board to the front) is the way in.
+  if (id === "board") {
+    const chips = [...document.querySelectorAll("#panel .chip.board")].filter(c => !c.disabled && !c.closest("[hidden]"));
+    const chip = chips.find(c => c.classList.contains("front")) || chips[0];
+    if (!chip) return false;
+    if (rail) setRail(false);
+    chip.focus(); return true;
+  }
   if (id === "voice") { if (!CFG.stageUrl) return false; followAgain(); return true; }
   if (id === "talk") { talkPress(); return true; }
   return false;
 }
-// The skip links, the first stops of the page: past the stage and every answer, to the message or to the player.
-for (const [id, to] of [["skipmsg", "message"], ["skipplay", "player"]]) {
+// The skip links, the first stops of the page: past the stage and every answer, to the message, to the player or to the board in front.
+for (const [id, to] of [["skipmsg", "message"], ["skipplay", "player"], ["skipboard", "board"]]) {
   $(id).onclick = ev => { ev.preventDefault(); runShortcut(to); };
 }
 // Back is one sentence, as the left arrow is, never a fixed ten seconds that restarts a short answer; the position slider's
@@ -415,6 +425,7 @@ function buildModes() {
     const b = document.createElement("button"); b.type = "button"; b.dataset.mode = m.id; b.setAttribute("aria-pressed", "false");
     b.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + m.icon + "</svg>";
     const w = document.createElement("span"); w.dataset.t = m.label; w.textContent = t(m.label); b.append(w);
+    b.dataset.tip = "tip." + m.id;   // what the mode does: its title and description, said again by paintInputMode on a change of language
     b.onclick = () => setInputMode(m.id);
     sw.append(b);
   }
@@ -536,7 +547,8 @@ function paintInputMode() {
   $("modebar").hidden = ended; $("keyhint").hidden = ended;
   for (const b of $("modesw").children) {
     b.setAttribute("aria-pressed", String(b.dataset.mode === inputMode)); b.disabled = locked;
-    b.title = locked ? t("mode.locked") : "";
+    const tip = t(b.dataset.tip);
+    b.title = locked ? t("mode.locked") : tip; b.setAttribute("aria-description", tip);
   }
   const yt = yourTurnState();
   $("yourturn").hidden = !yt;
