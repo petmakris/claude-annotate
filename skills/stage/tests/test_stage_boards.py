@@ -58,3 +58,33 @@ def test_a_tap_on_a_bar_or_a_node_asks_about_it_by_its_label(tmp_path):
     page.send({"type": "stage:state", "front": "rebase", "frames": {"rebase": 4}, "keys": 0})
     page.js("pane('rebase').querySelector('text[data-key=\"node:d2\"]').click();").check(SPOP)
     assert page.run() == [[False, "Copied work", "", ["Ask about this", "Play from here"]]]
+
+
+# -- vote-10: a board is readable to a screen reader ---------------------------------------------------------------
+
+OUTLINE_TABLE = {"type": "inline", "format": "table", "body": "| Hours | Mood |\n|---|---|\n| 1 | Calm |\n| 3 | Hungry |"}
+
+
+def test_a_table_board_is_a_named_figure_with_a_caption_and_answers_the_call_page_with_its_rows(tmp_path):
+    page = StagePage(tmp_path).show("hours", OUTLINE_TABLE, title="Hours after feeding").open()
+    page.check("(() => { const b = pane('hours').querySelector('.md'); return [b.getAttribute('role'), b.getAttribute('aria-label'),"
+               " b.querySelector('table caption').textContent, b.querySelector('table caption').className, b.querySelectorAll('th').length, b.querySelectorAll('td').length]; })()")
+    page.send({"type": "stage:outline", "view": "hours"})
+    out = page.run()
+    assert out == [["figure", "Hours after feeding", "Hours after feeding", "sr-cap", 2, 4]]
+    outline = [m for m in page.posted if m["type"] == "stage:outline"]
+    assert outline == [{"type": "stage:outline", "view": "hours", "title": "Hours after feeding", "kind": "table",
+                        "head": ["Hours", "Mood"], "lines": ["Hours: 1; Mood: Calm", "Hours: 3; Mood: Hungry"]}]
+
+
+def test_the_part_being_said_carries_aria_current_and_the_outline_of_a_bars_board_lists_its_parts(tmp_path):
+    built = _scene(scene.bars_model(BARS), [["next"], ["next"], ["focus bar ram"]], "Costs")
+    page = StagePage(tmp_path).show("costs", visual("bars", BARS), title="Costs", extra={"scene": built}).open()
+    cur = "(n => [...pane(n).querySelectorAll('[aria-current]')].map((e) => e.dataset.key).filter((k, i, a) => a.indexOf(k) === i))('costs')"
+    for n in (1, 2, 3, 4):
+        page.send({"type": "stage:frame", "view": "costs", "n": n, "animate": False}).check(cur)
+    page.send({"type": "stage:outline", "view": "costs"})
+    out = page.run()
+    assert out == [["bar:l1"], ["bar:l2"], ["bar:ram"], []]
+    outline = [m for m in page.posted if m["type"] == "stage:outline"][0]
+    assert outline["kind"] == "board" and outline["title"] == "Costs" and outline["lines"] == ["L1 cache: 1 ns", "L2 cache: 4 ns", "Main memory: 100 ns"]

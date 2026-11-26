@@ -8,7 +8,7 @@
 const I18N = {
   en: {
     // the page
-    "skip.links": "Skip links", "skip.message": "Skip to the message", "skip.player": "Skip to the player", "skip.board": "Skip to the board", "skip.latest": "Jump to the latest answer",
+    "skip.links": "Skip links", "skip.message": "Skip to the message", "skip.player": "Skip to the player", "skip.board": "Skip to the board", "skip.boardtext": "Read the board as text", "boardtext.name": "The board as text", "boardtext.none": "No board is on the stage.", "boardtext.empty": "This board has no text.", "skip.latest": "Jump to the latest answer",
     "stage.title": "Stage", "stage.loading": "Loading the stage…", "stage.failed": "The stage did not load.", "stage.reload": "Reload stage",
     "stage.open": "Open in a new tab", "stage.none": "The stage is not available for this call.",
     "panel.name": "The call", "panel.resize": "Resize the panel", "panel.drag": "Drag to resize", "panel.collapse": "Collapse the panel",
@@ -254,7 +254,7 @@ const I18N = {
     "pl.load": "Cannot load the audio file.",
   },
   el: {
-    "skip.links": "Σύνδεσμοι παράλειψης", "skip.message": "Μετάβαση στο μήνυμα", "skip.player": "Μετάβαση στη συσκευή αναπαραγωγής", "skip.board": "Μετάβαση στον πίνακα",
+    "skip.links": "Σύνδεσμοι παράλειψης", "skip.message": "Μετάβαση στο μήνυμα", "skip.player": "Μετάβαση στη συσκευή αναπαραγωγής", "skip.board": "Μετάβαση στον πίνακα", "skip.boardtext": "Ανάγνωση του πίνακα ως κείμενο", "boardtext.name": "Ο πίνακας ως κείμενο", "boardtext.none": "Δεν υπάρχει πίνακας στη σκηνή.", "boardtext.empty": "Αυτός ο πίνακας δεν έχει κείμενο.",
     "skip.latest": "Μετάβαση στην τελευταία απάντηση",
     "stage.title": "Σκηνή", "stage.loading": "Φόρτωση της σκηνής…", "stage.failed": "Η σκηνή δεν φορτώθηκε.", "stage.reload": "Επαναφόρτωση σκηνής",
     "stage.open": "Άνοιγμα σε νέα καρτέλα", "stage.none": "Η σκηνή δεν είναι διαθέσιμη για αυτή την κλήση.",

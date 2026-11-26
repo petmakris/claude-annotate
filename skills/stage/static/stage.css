@@ -962,6 +962,7 @@ svg.sb-link circle{fill:var(--acc);stroke:var(--panel);stroke-width:2}
 /* What a screen reader says of a drawing (the arrows of a flowchart, of a map or a graph, the rows of a bars board): a list
    that stays in the accessibility tree and is never seen (display:none would take it out of the tree). */
 .m-reading,.vz-reading{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;list-style:none}
+.sr-cap{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;list-style:none}
 
 /* "N more rows": a table taller than its pane counts what is below the fold, over the faded foot */
 .md.grid{position:relative}

@@ -99,7 +99,7 @@ def test_the_skip_links_go_past_the_stage_and_the_answers(tmp_path):
     page.js("$('skipmsg').click();").check("document.activeElement.id")
     page.js("$('skipplay').click();").check("document.activeElement.id")
     page.check("[...document.querySelectorAll('#skip a')].map((a) => a.textContent)")
-    assert page.run() == ["text", "playpause", ["Skip to the message", "Skip to the player", "Skip to the board"]]
+    assert page.run() == ["text", "playpause", ["Skip to the message", "Skip to the player", "Skip to the board", "Read the board as text"]]
 
 
 # ---- Back is a sentence, the speed is on the player -----------------------------------------------------------------

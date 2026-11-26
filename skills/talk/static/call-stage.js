@@ -95,6 +95,7 @@ window.addEventListener("message", ev => {
   else if (m.type === "stage:missing") paintMissing(String(m.view));
   else if (m.type === "stage:key" && MEDIA_KEYS.has(m.key)) mediaKey(m.key);
   else if (m.type === "stage:play") playFrame(String(m.view || ""), Number(m.answer), Number(m.n));
+  else if (m.type === "stage:outline") paintBoardText(m);
   else if (m.type === "stage:ask") askAbout(String(m.text || ""));
   else if (m.type === "stage:pick" && stopped && stopped.n === Number(m.answer) && stopped.i === Number(m.i)) pickStop(Number(m.choice));
 });
@@ -132,6 +133,24 @@ function paintStageTitle() {
   const i = stageList.findIndex(v => String(v.name) === frontBoard), b = stageList[i];
   $("stage").title = b ? tr("st.frame", {title: b.title, kind: b.kind || tr("st.board"), i: i + 1, n: stageList.length}) : tr("stage.title");
 }
+// "Read the board as text": the stage's outline of the board in front (a table row by row, a drawing part by part and arrow by
+// arrow), put in a region only a screen reader sees, and the focus moved to it. The skip link asks; the stage answers.
+function askBoardText(ev) {
+  if (ev) ev.preventDefault();
+  if (!frontBoard) return paintBoardText(null);
+  toStage({type: "stage:outline", view: frontBoard});
+}
+function paintBoardText(m) {
+  const box = $("boardtext"), list = $("boardtextlist");
+  if (!box || !list) return;
+  if (m && String(m.view) !== frontBoard) return;
+  $("boardtexttitle").textContent = m ? m.title || boardTitle(frontBoard) : tr("boardtext.name");
+  const lines = m && Array.isArray(m.lines) ? m.lines : [];
+  const items = (lines.length ? lines : [m ? tr("boardtext.empty") : tr("boardtext.none")]).map(t => { const li = document.createElement("li"); li.textContent = String(t); return li; });
+  list.replaceChildren(...items);
+  box.focus();
+}
+if ($("skipboardtext")) $("skipboardtext").addEventListener("click", askBoardText);
 let boardAnswer = new Map();   // board -> the number of the answer that showed it
 let frontBoard = "";           // the board in front of the stage
 const chipSeen = new Map();

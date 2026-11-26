@@ -45,3 +45,21 @@ def test_a_pause_left_for_thirty_seconds_shows_the_boards_whole_and_playing_agai
     page.js("$('playpause').click(); await playTo(1.6); $('playpause').click(); await advance(29000);").check(RESTS)   # played again: the wait starts over
     page.js("await advance(2000);").check(RESTS)
     assert page.run() == [[], [], [{"type": "stage:rest", "views": ["flow"], "answer": 1}]]
+
+
+# -- vote-10: the board as text, for a screen reader ---------------------------------------------------------------
+
+def test_read_the_board_as_text_asks_the_stage_for_the_front_boards_outline_and_puts_it_in_a_region_it_focuses(tmp_path):
+    html, states = served(tmp_path, ["Nothing yet."])
+    assert '<a href="#boardtext" id="skipboardtext" data-t="skip.boardtext">Read the board as text</a>' in html
+    page = CallPage(html, states)
+    page.js("$('skipboardtext').click();").check("[$('boardtextlist').children.map((li) => li.textContent), toStage().filter((m) => m.type === 'stage:outline').length]")
+    views = {"type": "stage:views", "list": [{"name": "a", "title": "Hours after feeding", "kind": "table", "answer": 1}]}
+    page.js("fromStage(%s); fromStage({ type: 'stage:shown', view: 'a' }); $('skipboardtext').click();" % json.dumps(views))
+    page.check("toStage().filter((m) => m.type === 'stage:outline')")
+    reply = {"type": "stage:outline", "view": "a", "title": "Hours after feeding", "kind": "table", "head": ["Hours", "Mood"],
+             "lines": ["Hours: 1; Mood: Calm", "Hours: 3; Mood: Hungry"]}
+    page.js("fromStage(%s);" % json.dumps(reply)).check("[$('boardtexttitle').textContent, $('boardtextlist').children.map((li) => li.textContent)]")
+    assert page.run() == [[["No board is on the stage."], 0],
+                          [{"type": "stage:outline", "view": "a"}],
+                          ["Hours after feeding", ["Hours: 1; Mood: Calm", "Hours: 3; Mood: Hungry"]]]

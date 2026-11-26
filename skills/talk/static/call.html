@@ -16,11 +16,12 @@ try { const t = JSON.parse(localStorage.getItem("talk.theme") || '"system"');
 </head>
 <body>
 <div class="app" id="app" data-state="idle">
-  <nav class="skip" id="skip" aria-label="Skip links" data-t-aria="skip.links"><a href="#text" id="skipmsg" data-t="skip.message">Skip to the message</a><a href="#playpause" id="skipplay" data-t="skip.player">Skip to the player</a><a href="#stagewrap" id="skipboard" data-t="skip.board">Skip to the board</a></nav><!-- I: the way past the stage and the answers -->
+  <nav class="skip" id="skip" aria-label="Skip links" data-t-aria="skip.links"><a href="#text" id="skipmsg" data-t="skip.message">Skip to the message</a><a href="#playpause" id="skipplay" data-t="skip.player">Skip to the player</a><a href="#stagewrap" id="skipboard" data-t="skip.board">Skip to the board</a><a href="#boardtext" id="skipboardtext" data-t="skip.boardtext">Read the board as text</a></nav><!-- I: the way past the stage and the answers -->
   <div class="frame"><div class="stage">
     <div class="stagewrap" id="stagewrap" role="region" aria-label="Stage" data-t-aria="stage.title"><iframe id="stage" title="Stage" data-t-title="stage.title" allow="clipboard-read; clipboard-write"></iframe>
       <div class="veil" id="veil"><div class="loading" id="veilwait"><span class="spin"></span><span data-t="stage.loading">Loading the stage…</span></div>
         <div class="failed" id="veilfail" hidden><p data-t="stage.failed">The stage did not load.</p><div><button class="btn" id="reloadstage" type="button" data-t="stage.reload">Reload stage</button><a class="btn" id="openstage" target="_blank" rel="noopener" data-t="stage.open">Open in a new tab</a></div></div></div></div>
+    <section class="sr-only" id="boardtext" tabindex="-1" aria-label="The board as text" data-t-aria="boardtext.name"><h2 id="boardtexttitle"></h2><ul id="boardtextlist"></ul></section><!-- the front board's text outline, asked of the stage by the skip link above -->
     <p class="nostage" id="nostage" hidden data-t="stage.none">The stage is not available for this call.</p>
     <div class="reader" id="reader" aria-hidden="true"><div class="rtext" id="rtext"></div></div>
   </div></div>

@@ -62,6 +62,7 @@ import { applyFrame, beingSaid, settled, stepLabel } from "./scene.js";
 import { closeLanesPop, layoutLanes, renderLanes } from "./lanes.js";
 import { layoutMap, renderMap } from "./map.js";
 import { centreTarget, columnWidths, keepTarget, restScale } from "./fit.js";
+import { outlineOf } from "./outline.js";
 import { paintScreen, renderScreen } from "./screenboard.js";
 import { getLang, setLang, w as wd, wn as wdn } from "./words.js";
 
@@ -721,6 +722,9 @@ function paintTable(v, box, src) {
   if (!hasMarkdown()) { box.innerHTML = `<pre>${esc(src.body)}</pre>`; return; }
   markdownInto(box, src.body, null, true);
   shapeBoard(box);
+  for (const t of box.querySelectorAll("table")) if (!t.querySelector("caption")) {  // the title names the table for a screen reader; never drawn
+    const c = document.createElement("caption"); c.className = "sr-cap"; c.textContent = shownTitle(v); t.insertBefore(c, t.firstChild);
+  }
   box.classList.add("grid", "g-rest");  // a table board: the grid, its row, rows, column or cells being said lit; whole until a frame steps it
   box.addEventListener("click", (e) => tapRow(v, box, e));
   pulseDiff(v, box, "rows", [...box.querySelectorAll("tbody tr")].map((tr) => [...tr.querySelectorAll("td, th")].map((c) => c.textContent).join("\u001f")));  // a unit separator: "a|12" is not "a1|2"
@@ -848,6 +852,8 @@ function renderInline(v, seq) {
       if (hasMarkdown()) paintTable(v, box, src); else note(box, wd("note.table"), retryLibs);
     });
   }
+  // The board is one figure named by its title; its text is the table's cells, the parts and the arrows list inside it.
+  box.setAttribute("role", "figure"); box.setAttribute("aria-label", shownTitle(v));
   return box;
 }
 
@@ -1704,6 +1710,7 @@ function paintFrame(v, box, animate = false) {
   }
   if (box.classList.contains("grid")) done.focused = paintGrid(box, scene, n);
   v.applied = n;
+  markCurrent(box, new Set(beingSaid(scene, n)));
   // Checked a frame later: a pane filled as it is fronted is still hidden while it paints.
   const room = box.classList.contains("map") ? +box.dataset.room || 0 : 0;
   const keep = [done.focused].flat().filter(Boolean);
@@ -1716,6 +1723,18 @@ function paintFrame(v, box, animate = false) {
   const back = v.pane.querySelector(".stepback"), next = v.pane.querySelector(".stepnext");
   if (back) back.disabled = n <= 0;
   if (next) next.disabled = n >= scene.rest;
+}
+
+// The part being said is exposed as the current one (aria-current), so a screen reader can find it; nothing is drawn for it.
+function markCurrent(box, said) {
+  for (const el of box.querySelectorAll("[data-key]")) {
+    if (said.has(el.dataset.key)) el.setAttribute("aria-current", "true"); else el.removeAttribute("aria-current");
+  }
+}
+// "Read the board as text" on the call page: the board's outline, said back to the page.
+function postOutline(name) {
+  const v = views.get(name), box = v?.pane?.querySelector(".code, .md, .visual");
+  post({ type: "stage:outline", view: name, title: v ? shownTitle(v) : "", ...outlineOf(box) });
 }
 
 // The step button's words, and what pressing it does: step on, or from the rest frame start again.
@@ -1852,6 +1871,7 @@ function onMessage(m) {
   }
   else if (m.type === "stage:lang") { if (setLang(m.lang)) relabel(); }
   else if (m.type === "stage:follow") { setFollow(!!m.on); if (m.on && m.front) frontVoice(); }
+  else if (m.type === "stage:outline") postOutline(String(m.view || ""));
   else if (m.type === "stage:caption") { captionText = String(m.text || ""); placeCaption(); }
   else if (m.type === "stage:stop") paintStop(m.stop && typeof m.stop === "object" ? m : null);
   else if (m.type === "stage:frame") setFrame(String(m.view), Number(m.n), !!m.animate, m.answer);
