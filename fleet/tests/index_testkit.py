@@ -47,8 +47,6 @@ def index_env(tmp_path, monkeypatch):
     monkeypatch.setenv("FLEET_INDEX_FOREGROUND", "1")
     for k in ("CLAUDE_DETACH_NAME", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CONFIG_DIR", "FLEET_RC_NAME", "FLEET_NO_RECORD"):
         monkeypatch.delenv(k, raising=False)
-    store._ON_CHANGE.clear()
-    store._BEFORE_READ.clear()
     import fleet_index_cli
     fleet_index_cli._HUBS.clear()
     yield tmp_path

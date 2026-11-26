@@ -32,7 +32,6 @@ COLS = ("sid", "conversation", "name", "name_source", "kind", "env", "machine", 
         "owner_since", "epoch", "continues", "superseded_by", "first_prompt", "last_prompt", "last_answer", "topic",
         "rc_name", "started", "updated", "ended", "end_reason", "description", "work")
 FILLABLE = ("name", "cwd", "account", "first_prompt", "last_prompt", "last_answer", "topic", "description")
-_on_change, _before_read = [], []
 
 def hub_db_path(fleet_home):
     return os.path.join(fleet_home, "index", "hub.db")
@@ -45,12 +44,6 @@ def connect(path):
         c + (" PRIMARY KEY" if c == "sid" else "") for c in COLS))
     con.execute("CREATE TABLE IF NOT EXISTS journal_high (machine PRIMARY KEY, seq)")
     return con
-
-def on_change(fn):
-    _on_change.append(fn)
-
-def before_read(fn):
-    _before_read.append(fn)
 
 def get_row(con, sid):
     r = con.execute("SELECT * FROM sessions WHERE sid=?", (sid,)).fetchone()
@@ -65,13 +58,7 @@ def _put(con, row):
     vals = [json.dumps(row.get(c)) if c == "topic" and row.get(c) is not None else row.get(c) for c in COLS]
     con.execute("INSERT OR REPLACE INTO sessions VALUES (%s)" % ",".join("?" * len(COLS)), vals)
 
-def _changed(con, sids):
-    for fn in list(_on_change):
-        fn(con, sids)
-
 def list_rows(con, **kw):
-    for fn in list(_before_read):
-        fn(con)
     return [get_row(con, r[0]) for r in con.execute("SELECT sid FROM sessions ORDER BY updated DESC")]
 
 def import_row(con, row, *, origin):
@@ -103,7 +90,7 @@ def apply_batch(con, batch, *, hub, machines, now=None):
     m = batch["machine"]
     r = con.execute("SELECT seq FROM journal_high WHERE machine=?", (m,)).fetchone()
     high = r[0] if r else 0
-    results, changed, rows = [], [], {}
+    results, rows = [], {}
     for e in sorted(batch["entries"], key=lambda e: e["seq"]):
         if e["seq"] <= high:
             results.append({"seq": e["seq"], "outcome": "duplicate"})
@@ -124,7 +111,6 @@ def apply_batch(con, batch, *, hub, machines, now=None):
             if e["event"] in ("start", "prompt", "stop"):
                 row["ended"], row["end_reason"] = None, None
             _put(con, row)
-            changed.append(e["sid"])
             outcome = "applied"
         results.append({"seq": e["seq"], "outcome": outcome})
         row = get_row(con, e["sid"])
@@ -132,15 +118,12 @@ def apply_batch(con, batch, *, hub, machines, now=None):
             rows[e["sid"]] = {"owner": row["owner"], "epoch": row["epoch"], "conversation": row["conversation"],
                               "head": row["sid"], "work": row["work"]}
     con.execute("INSERT OR REPLACE INTO journal_high VALUES (?, ?)", (m, high))
-    if changed:
-        _changed(con, changed)
     return {"high_seq": high, "results": results, "rows": rows}
 
 def rename(con, sid, name, *, now=None):
     row = get_row(con, sid)
     row["name"], row["name_source"], row["updated"] = name, "manual" if name else "", time.time()
     _put(con, row)
-    _changed(con, [sid])
     return row
 
 def take(con, sid, to, expect_epoch, by, *, hub, machines, cwd=None, release=None, now=None):
@@ -150,7 +133,6 @@ def take(con, sid, to, expect_epoch, by, *, hub, machines, cwd=None, release=Non
     row["owner"], row["epoch"], row["owner_since"] = to, row["epoch"] + 1, time.time() if now is None else now
     row["machine"] = hub if to.startswith("phone:") else to
     _put(con, row)
-    _changed(con, [sid])
     return {"ok": True, "sid": sid, "owner": to, "epoch": row["epoch"], "previous_owner": prev}
 
 def backup(con, *, label, keep=20, directory=None):
@@ -440,7 +422,6 @@ def test_importing_twice_changes_nothing(iw, capsys, monkeypatch):
     assert first["totals"]["new"] == 4
     rows = iw.rows()
     files = {p: open(p, "rb").read() for p in glob.glob(os.path.join(iw.hub.registry, "*.json"))}
-    state = open(os.path.join(iw.hub.home, "index", "shim-state.json")).read()
 
     import fleet_index_store
     calls = []
@@ -453,7 +434,6 @@ def test_importing_twice_changes_nothing(iw, capsys, monkeypatch):
                                 "conflicts": 1, "invalid": 0}
     assert iw.rows() == rows
     assert {p: open(p, "rb").read() for p in glob.glob(os.path.join(iw.hub.registry, "*.json"))} == files
-    assert open(os.path.join(iw.hub.home, "index", "shim-state.json")).read() == state
 
 
 def test_a_higher_epoch_wins_and_is_logged(iw, capsys):
@@ -520,21 +500,15 @@ def test_the_backups_exist_before_the_first_write(iw, capsys, monkeypatch):
         seen.append((what, os.path.isfile(tar), all(os.path.isfile(p) for p in dbs)))
 
     real_connect = fleet_index_store.connect
-    real_seed = fleet_index_import.shim.seed
 
     def connect(path):
         expect_backups("connect")
         return real_connect(path)
 
-    def seed(records, home=None):
-        expect_backups("seed")
-        return real_seed(records, home)
-
     monkeypatch.setattr(fleet_index_store, "connect", connect)
-    monkeypatch.setattr(fleet_index_import.shim, "seed", seed)
     assert run(["import", "--backup-dir", bdir]) == 0
     out = capsys.readouterr().out
-    assert seen == [("connect", True, True), ("seed", True, True)]
+    assert seen == [("connect", True, True)]
     assert "backup: registry tarball %s/claude-sessions-main.tar.gz\n" % bdir in out
     assert "backup: fleet.db of lat %s/fleet-lat.db\n" % bdir in out
     assert "backup: fleet.db of mac %s/fleet-mac.db\n" % bdir in out

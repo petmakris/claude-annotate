@@ -31,6 +31,23 @@ def test_a_take_from_another_machine_runs_on_the_hub_and_writes_both_caches(clus
     assert json.loads(r.stdout) == {"sid": s, "owner": "lat", "epoch": 2, "head": s, "source": "hub", "stale": False}
 
 
+def test_a_take_on_the_hub_changes_the_index_and_writes_no_registry_file(cluster, tmp_path):
+    main = cluster["main"]
+    registry = tmp_path / "claude-sessions"
+    registry.mkdir()
+    s = sid(9)
+    start(main, s)
+    r = main.cli("take", s, "--to", "mac", "--expect-epoch", "1", "--json", CLAUDE_SESSIONS_DIR=str(registry))
+    assert r.returncode == 0, r.stderr
+    assert (main.hub_row(s)["owner"], main.hub_row(s)["epoch"]) == ("mac", 2)
+    assert sorted(os.listdir(str(registry))) == []
+    r = main.cli("rename", s, "a new name", CLAUDE_SESSIONS_DIR=str(registry))
+    assert r.returncode == 0, r.stderr
+    assert main.hub_row(s)["name"] == "a new name"
+    assert sorted(os.listdir(str(registry))) == []
+    assert not os.path.exists(main.file("index", "shim-state.json"))
+
+
 def test_a_list_off_the_hub_asks_the_hub_and_serves_its_last_copy_with_its_own_rows_when_the_hub_is_down(cluster):
     mac, lat = cluster["mac"], cluster["lat"]
     start(mac, sid(2), "first session")

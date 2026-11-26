@@ -31,6 +31,7 @@ import json
 import os
 import re
 import shlex
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -41,8 +42,6 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
-
-import fleet_registry_shim as shim  # noqa: E402
 
 SID_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z_-]{0,127}$")
 OWNER_RE = re.compile(r"^(phone:prod|phone:dev:[a-z0-9]+|[a-z0-9][a-z0-9-]{0,62})$")
@@ -58,6 +57,71 @@ class ImportError_(Exception):
     """An import that must not go on: one line, exit 1."""
 
 
+# ---------------------------------------------------------------- where things are, as the registry wrote them
+
+def fleet_home_dir():
+    return os.environ.get("FLEET_HOME") or os.path.join(os.path.expanduser("~"), ".claude", "fleet")
+
+
+def registry_dir():
+    """The old registry folder this import reads: $CLAUDE_SESSIONS_DIR, else ~/.local/state/claude-sessions."""
+    return os.environ.get("CLAUDE_SESSIONS_DIR") or os.path.join(os.path.expanduser("~"), ".local", "state",
+                                                                 "claude-sessions")
+
+
+def machines_config(home=None):
+    try:
+        with open(os.path.join(home or fleet_home_dir(), "machines.json")) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def self_name(home=None):
+    name = machines_config(home).get("self")
+    return name if isinstance(name, str) and name else socket.gethostname().split(".")[0]
+
+
+def hub_name(home=None):
+    """The `hub` of machines.json, else this machine (contract section 1)."""
+    hub = machines_config(home).get("hub")
+    return hub if isinstance(hub, str) and hub else self_name(home)
+
+
+def machine_names(home=None):
+    data = machines_config(home)
+    names = {k for k, v in data.items() if k not in ("self", "hub") and isinstance(v, dict)}
+    names.add(self_name(home))
+    return names
+
+
+def parse_iso(s):
+    try:
+        return datetime.datetime.fromisoformat(str(s).replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def read_file(path):
+    try:
+        with open(path) as f:
+            rec = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return rec if isinstance(rec, dict) else None
+
+
+def log(home, line):
+    try:
+        os.makedirs(home, exist_ok=True)
+        fd = os.open(os.path.join(home, "hooks.log"), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a") as f:
+            f.write("%s %s\n" % (time.strftime("%Y-%m-%dT%H:%M:%S"), line))
+    except OSError:
+        pass
+
+
 # ---------------------------------------------------------------- the contract's modules
 
 def _store():
@@ -71,7 +135,10 @@ def _work():
 
 
 def cut(text, n):
-    return shim.cut(text, n) if text else text
+    if not text:
+        return text
+    text = " ".join(str(text).split())
+    return text if len(text) <= n else text[: n - 1] + "…"
 
 
 def _num(v):
@@ -119,19 +186,19 @@ def _best_name(c):
 def dump_local(fleet_home=None):
     """This machine's registry files and `conversations` rows, work rows masked here (contract section 7.2).
     -> {"v", "machine", "as_of", "registry": [records], "conversations": [rows], "masked", "skipped"}."""
-    home = fleet_home or shim.fleet_home()
+    home = fleet_home or fleet_home_dir()
     work = _work()
     rules = work.load_rules(home)
     masked = skipped = 0
     registry = []
     try:
-        names = sorted(os.listdir(shim.registry_dir()))
+        names = sorted(os.listdir(registry_dir()))
     except OSError:
         names = []
     for n in names:
         if not n.endswith(".json"):
             continue
-        rec = shim.read_file(os.path.join(shim.registry_dir(), n))
+        rec = read_file(os.path.join(registry_dir(), n))
         if rec is None or not SID_RE.match(str(rec.get("sid") or "")) or rec.get("sid") != n[:-5]:
             skipped += 1
             continue
@@ -178,13 +245,13 @@ def dump_local(fleet_home=None):
                "work": bool(is_work)}
         row.update(fields)
         conversations.append(row)
-    return {"v": 1, "machine": shim.self_name(home), "as_of": time.time(), "registry": registry,
+    return {"v": 1, "machine": self_name(home), "as_of": time.time(), "registry": registry,
             "conversations": conversations, "masked": masked, "skipped": skipped}
 
 
 def db_copy(fleet_home, dest):
     """A copy of this machine's fleet.db at `dest`, made with SQLite's backup call. False when there is none."""
-    path = os.path.join(fleet_home or shim.fleet_home(), "fleet.db")
+    path = os.path.join(fleet_home or fleet_home_dir(), "fleet.db")
     if not os.path.isfile(path):
         return False
     src = sqlite3.connect("file:%s?mode=ro" % path, uri=True, timeout=30)
@@ -202,8 +269,8 @@ def db_copy(fleet_home, dest):
 
 def other_machines(home=None):
     """name -> {ssh, fleet, python, env} for every machine of machines.json but this one."""
-    data = shim.machines_config(home)
-    me = shim.self_name(home)
+    data = machines_config(home)
+    me = self_name(home)
     out = {}
     for name, m in data.items():
         if name in ("self", "hub") or name == me or not isinstance(m, dict) or not m.get("ssh") or not m.get("fleet"):
@@ -264,7 +331,7 @@ def _parse_json_tail(text):
 
 def fetch_dumps(machines, home=None):
     """{machine: dump} and {machine: reason} for each machine name; the hub's own is read in process."""
-    me = shim.self_name(home)
+    me = self_name(home)
     dumps, errors = {}, {}
     for m in machines:
         try:
@@ -298,9 +365,9 @@ def backup_sources(machines, out_dir, home=None):
     -> {"registry_tar": path, "fleet_dbs": {machine: path or None when it has none}, "errors": {machine: reason}}.
     The tarball failing raises ImportError_: nothing may be written without it."""
     os.makedirs(out_dir, mode=0o700, exist_ok=True)
-    me = shim.self_name(home)
+    me = self_name(home)
     tar_path = os.path.join(out_dir, "claude-sessions-%s.tar.gz" % me)
-    reg = shim.registry_dir()
+    reg = registry_dir()
     try:
         with tarfile.open(tar_path, "w:gz") as tar:
             if os.path.isdir(reg):
@@ -374,7 +441,7 @@ def build_rows(dumps, *, hub, machines, rules=None):
             continue
         reg = origin = None
         if good:
-            good.sort(key=lambda mr: (-mr[1]["epoch"], mr[0] != hub, -(shim.parse_iso(mr[1].get("updated")) or 0)))
+            good.sort(key=lambda mr: (-mr[1]["epoch"], mr[0] != hub, -(parse_iso(mr[1].get("updated")) or 0)))
             origin, reg = good[0]
             for m, r in good[1:]:
                 if r["epoch"] != reg["epoch"] or r.get("owner") != reg.get("owner"):
@@ -406,12 +473,12 @@ def build_rows(dumps, *, hub, machines, rules=None):
         names.sort(key=lambda ns: NAME_RANK.index(ns[1]))
         name, name_source = names[0] if names else ("", "")
         starts = [c.get("started") for m, c in convs if c.get("started")]
-        reg_updated = shim.parse_iso((reg or {}).get("updated"))
+        reg_updated = parse_iso((reg or {}).get("updated"))
         ups = [u for u in [reg_updated] + [c.get("updated") for m, c in convs] if u]
-        started = min(starts) if starts else (shim.parse_iso((reg or {}).get("owner_since")) or reg_updated
+        started = min(starts) if starts else (parse_iso((reg or {}).get("owner_since")) or reg_updated
                                               or time.time())
         updated = max(ups) if ups else started
-        owner_since = shim.parse_iso((reg or {}).get("owner_since")) or started
+        owner_since = parse_iso((reg or {}).get("owner_since")) or started
         cwd = (reg or {}).get("cwd") or conv.get("cwd") or None
         if reg is not None:
             kind = reg.get("kind") if reg.get("kind") in ("chat", "job") else "chat"
@@ -493,12 +560,12 @@ def _report(dumps, errors, rows, conflicts, invalid, outcomes):
 
 
 def _context(home=None):
-    return shim.hub_name(home), shim.machine_names(home), _sessions_rules(home)
+    return hub_name(home), machine_names(home), _sessions_rules(home)
 
 
 def _sessions_rules(home=None):
     try:
-        with open(os.path.join(home or shim.fleet_home(), "sessions.json")) as f:
+        with open(os.path.join(home or fleet_home_dir(), "sessions.json")) as f:
             data = json.load(f)
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
@@ -526,12 +593,12 @@ def plan(con, dumps, errors=None, home=None):
 
 def apply(con, dumps, errors=None, home=None):
     """Imports the merged rows through the store's `import_row`; logs each conflict to hooks.log. -> the report."""
-    home = home or shim.fleet_home()
+    home = home or fleet_home_dir()
     store = _store()
     rows, conflicts, invalid = _merge(dumps, home)
     outcomes = {}
     for c in conflicts:
-        shim.log(home, "import: %s: registry copies disagree: kept %s, lost %s (%s)"
+        log(home, "import: %s: registry copies disagree: kept %s, lost %s (%s)"
                  % (c["sid"], json.dumps(c["kept"]), json.dumps(c["lost"]), c["why"]))
     for sid, (row, origin) in rows.items():
         planned, why = classify(store.get_row(con, sid), row, origin)
@@ -541,9 +608,9 @@ def apply(con, dumps, errors=None, home=None):
         outcomes[sid] = outcome
         if why:
             conflicts.append({"sid": sid, "where": "index", "origin": origin, "outcome": outcome, "why": why})
-            shim.log(home, "import: %s from %s: %s (%s)" % (sid, origin, outcome, why))
+            log(home, "import: %s from %s: %s (%s)" % (sid, origin, outcome, why))
     for i in invalid:
-        shim.log(home, "import: %s from %s: skipped, %s" % (i["sid"], i["machine"], i["why"]))
+        log(home, "import: %s from %s: skipped, %s" % (i["sid"], i["machine"], i["why"]))
     return _report(dumps, errors or {}, rows, conflicts, invalid, outcomes)
 
 
@@ -589,9 +656,9 @@ def _print_report(rep, backups, dry, out):
 
 def run_import(machines=None, dry_run=False, backup_dir=None, home=None):
     """The whole import on the hub. -> (report, backups or None). Raises ImportError_ when it must stop."""
-    home = home or shim.fleet_home()
-    me = shim.self_name(home)
-    hub = shim.hub_name(home)
+    home = home or fleet_home_dir()
+    me = self_name(home)
+    hub = hub_name(home)
     if me != hub:
         raise ImportError_("the import runs on the hub (%s); this is %s" % (hub, me))
     names = list(dict.fromkeys(machines or ([me] + sorted(other_machines(home)))))
@@ -613,7 +680,6 @@ def run_import(machines=None, dry_run=False, backup_dir=None, home=None):
     con = store.connect(store.hub_db_path(home))
     try:
         backups["hub_db"] = store.backup(con, label="import")
-        shim.seed(dumps.get(me, {}).get("registry") or (), home)
         return apply(con, dumps, errors, home), backups
     finally:
         con.close()

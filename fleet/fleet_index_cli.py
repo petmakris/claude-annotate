@@ -9,6 +9,7 @@ Stdlib only, Python 3.9+. This module and `fleet_sessions_api` are the only ones
 inside functions.
 """
 import argparse
+import datetime
 import json
 import os
 import posixpath
@@ -80,18 +81,12 @@ _HUBS = {}
 
 
 def open_hub(fleet_home=None):
-    """The hub's store, with the registry shim's callbacks registered when the shim can be imported."""
+    """The hub's store, one connection per path in this process."""
     path = store.hub_db_path(_home(fleet_home))
     con = _HUBS.get(path)
     if con is None:
         con = store.connect(path)
         _HUBS[path] = con
-        try:
-            import fleet_registry_shim as shim
-            store.on_change(shim.after_change)
-            store.before_read(shim.ingest_phone_rows)
-        except ImportError:
-            pass
     return con
 
 
@@ -152,16 +147,14 @@ def _query(payload):
 
 
 def hub_rows(query, fleet_home=None):
-    """On the hub: the before_read callbacks (Claude Voice's patches read in), then the rows."""
+    """On the hub: the rows."""
     con = open_hub(fleet_home)
-    store.run_before_read(con)
     return store.list_rows(con, **_query(query))
 
 
 def basic_envelope(query, fleet_home=None):
     """A sessions_reply from the hub's rows alone, with observed facts as the journal carried them."""
     con = open_hub(fleet_home)
-    store.run_before_read(con)
     q = _query(query)
     rows = store.list_rows(con, **q)
     hidden = con.execute("SELECT COUNT(*) FROM sessions WHERE env != 'prod'").fetchone()[0] if q["env"] == "prod" else 0
@@ -239,7 +232,6 @@ def hub_op(op, payload, fleet_home=None):
         if op == "list":
             return envelope(p, fleet_home)
         if op == "show":
-            store.run_before_read(con)
             row = store.get_row(con, p.get("sid") or "")
             if row is None:
                 raise store.Refused("no-session", "session %s is not in the index" % p.get("sid"))
@@ -254,9 +246,6 @@ def hub_op(op, payload, fleet_home=None):
             return {"ok": True, "ended": store.end_host(con, p.get("owner"))}
         if op == "high-seq":
             return {"ok": True, "high_seq": store.high_seq(con, p.get("machine") or "")}
-        if op == "legacy-note":
-            row = store.apply_legacy_note(con, p, machines=machines)
-            return {"ok": True, "row": row}
     except store.Refused as r:
         return r.reply()
     return {"ok": False, "code": "bad-request", "error": "unknown hub operation %r" % op}
@@ -375,22 +364,33 @@ def cmd_owner(a):
     return 0
 
 
+REGISTRY_LINE_MAX = 200
+REGISTRY_NAME_MAX = 60
+
+
 def _registry_record(row):
-    try:
-        import fleet_registry_shim as shim
-        return shim.registry_record(row)
-    except ImportError:
-        pass
+    """A row in the old registry file's shape, for env's `@claude session list` (`list --registry`). No file is
+    written: the index is the one store."""
+    def cut(text, n):
+        text = " ".join(str(text or "").split())
+        return text if len(text) <= n else text[: n - 1] + "…"
 
     def iso(t):
-        return time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(t)) + time.strftime("%z", time.localtime(t))[:3] + \
-            ":" + time.strftime("%z", time.localtime(t))[3:] if t else None
-    return {"version": 1, "sid": row["sid"], "name": row.get("name") or "", "machine": row.get("machine"),
-            "account": row.get("account"), "cwd": row.get("cwd"), "last_prompt": row.get("last_prompt") or "",
-            "last_answer": row.get("last_answer") or "", "updated": iso(row.get("updated")),
-            "live": bool((row.get("observed") or {}).get("live")) if row.get("ended") is None else False,
-            "owner": row["owner"], "owner_since": iso(row.get("owner_since")), "epoch": row["epoch"],
-            "kind": row["kind"] if row["kind"] in ("chat", "job") else "chat", "topic": row.get("topic")}
+        return "" if t is None else datetime.datetime.fromtimestamp(float(t)).astimezone().isoformat(
+            timespec="seconds")
+
+    src = row.get("name_source")
+    name = row.get("name") if src in ("manual", "custom", "registry", "prompt") else None
+    name = cut(name, REGISTRY_NAME_MAX) if name and src == "prompt" else name
+    topic = row.get("topic")
+    return {"version": 1, "sid": row["sid"],
+            "name": name if name is not None else cut(row.get("first_prompt") or row.get("name"), REGISTRY_NAME_MAX),
+            "machine": row.get("machine") or "", "account": row.get("account") or "", "cwd": row.get("cwd") or "",
+            "last_prompt": cut(row.get("last_prompt"), REGISTRY_LINE_MAX),
+            "last_answer": cut(row.get("last_answer"), REGISTRY_LINE_MAX), "updated": iso(row.get("updated")),
+            "live": row.get("ended") is None, "owner": row.get("owner"), "owner_since": iso(row.get("owner_since")),
+            "epoch": row.get("epoch"), "kind": row.get("kind") if row.get("kind") in ("chat", "job") else "chat",
+            "topic": dict(topic) if isinstance(topic, dict) else None}
 
 
 def list_reply(query, fleet_home=None):
@@ -675,19 +675,6 @@ def cmd_backup(a):
     return 0
 
 
-def cmd_legacy_note(a):
-    try:
-        note = _read_stdin_json()
-        reply = hub_call("legacy-note", note)
-    except ValueError:
-        sys.stderr.write("legacy-note reads a registry note on stdin\n")
-        return 2
-    except HubDown:
-        return _hub_down(False)
-    _out(reply)
-    return 0
-
-
 def cmd_hub(a):
     if not is_hub():
         _out({"ok": False, "code": "not-hub", "error": "%s is not the hub (%s is)" % (self_name(), hub_name())})
@@ -756,7 +743,6 @@ def parser():
     s = sub.add_parser("end-host"); s.add_argument("owner")
     s = sub.add_parser("rebuild"); s.add_argument("--dry-run", action="store_true")
     sub.add_parser("backup")
-    sub.add_parser("legacy-note")
     s = sub.add_parser("_hub"); s.add_argument("op")
     sub.add_parser("_cache-put")
     sub.add_parser("_cache-dump")
@@ -766,7 +752,7 @@ def parser():
 VERBS = {"take": cmd_take, "chain": cmd_chain, "list": cmd_list, "show": cmd_show, "owner": cmd_owner,
          "tail": cmd_tail, "note": cmd_note, "flush": cmd_flush, "rename": cmd_rename, "delete": cmd_delete,
          "describe": cmd_describe, "ask": cmd_ask, "end-host": cmd_end_host, "rebuild": cmd_rebuild,
-         "backup": cmd_backup, "legacy-note": cmd_legacy_note, "_hub": cmd_hub, "_cache-put": cmd_cache_put,
+         "backup": cmd_backup, "_hub": cmd_hub, "_cache-put": cmd_cache_put,
          "_cache-dump": cmd_cache_dump}
 
 

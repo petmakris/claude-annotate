@@ -95,13 +95,11 @@ class Three:
                 json.dump({"accounts": ["me", "other"], "profile_paths": [self.work],
                            "own_profiles": os.path.join(b, "profiles")}, f)
         for k, v in {"FLEET_ENV_DIR": self.env, "FLEET_BACKUP_DIR": os.path.join(b, "backups"),
-                     "CLAUDE_SESSIONS_DIR": os.path.join(b, "registry"),  # the registry shim writes here only
+                     "CLAUDE_SESSIONS_DIR": os.path.join(b, "registry"),  # no test may write the real registry folder
                      "FLEET_TMUX": script(os.path.join(b, "tools", "tmux"), FAKE_TMUX),
                      "FLEET_PS": script(os.path.join(b, "tools", "ps"), FAKE_PS),
                      "FAKE_WINDOW_LOG": self.window_log}.items():
             world.mp.setenv(k, v)
-        store._ON_CHANGE.clear()
-        store._BEFORE_READ.clear()
         cli._HUBS.clear()
         sapi._ATTEMPTS.clear()
         self.T = float(int(time.time()))
@@ -209,8 +207,6 @@ def three(world):
     for con in cli._HUBS.values():
         con.close()
     cli._HUBS.clear()
-    store._ON_CHANGE.clear()
-    store._BEFORE_READ.clear()
 
 
 def listing(t):

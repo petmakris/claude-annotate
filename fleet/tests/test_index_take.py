@@ -79,11 +79,3 @@ def test_every_take_backs_the_store_up_and_keeps_the_20_newest(hub, index_env):
     assert len(files) == 20
     assert any(f.endswith("-0a1b2c3d-e23.db") for f in files)
     assert not any(f.endswith("-0a1b2c3d-e2.db") for f in files)
-
-
-def test_change_callbacks_run_after_a_take(hub):
-    seen = []
-    store.on_change(lambda con, sids: seen.append(list(sids)))
-    hub.start("mac", sid(8))
-    hub.take(sid(8), "lat", 1)
-    assert seen == [[sid(8)], [sid(8)]]

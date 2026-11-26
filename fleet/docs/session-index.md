@@ -37,8 +37,8 @@ session's machine when a list is read, and carry the time they were read.
 
 ### 2.1 Durable fields
 
-All times are Unix epoch seconds, as numbers. Registry files (section 12) hold ISO 8601 text instead; only the
-registry shim converts.
+All times are Unix epoch seconds, as numbers. Only the registry-shaped list (`list --registry`, section 12.2) prints
+ISO 8601 text.
 
 | Field | Type | Written by | Meaning |
 |---|---|---|---|
@@ -57,9 +57,9 @@ registry shim converts.
 | `continues` | sid or null | chain | The sid this one continues. |
 | `superseded_by` | sid or null | chain | The sid that continues this one. Not null means the row is not a head. |
 | `first_prompt` | text or null, at most 300 | journal | The first prompt. Null on a work row. |
-| `last_prompt` | text or null, at most 200 | journal, registry shim | The newest prompt. Null on a work row. |
-| `last_answer` | text or null, at most 200 | journal, registry shim | The newest answer. Empty text right after a prompt. Null on a work row. |
-| `topic` | `{host, id}` or null | journal, registry shim | The Claude Voice topic that holds it. `host` is `prod` or `dev:<sandbox>`. |
+| `last_prompt` | text or null, at most 200 | journal | The newest prompt. Null on a work row. |
+| `last_answer` | text or null, at most 200 | journal | The newest answer. Empty text right after a prompt. Null on a work row. |
+| `topic` | `{host, id}` or null | journal | The Claude Voice topic that holds it. `host` is `prod` or `dev:<sandbox>`. |
 | `rc_name` | text or null | journal | The Remote Control name the session runs under. Null on a work row. |
 | `started` | time | first entry | When the row was made. |
 | `updated` | time | every applied change | When the hub last changed the row. For display only, never for order. |
@@ -176,7 +176,6 @@ In one SQLite `BEGIN IMMEDIATE` transaction, the hub:
 After the commit, the hub:
 
 - backs up `hub.db` (section 11);
-- runs the change callbacks (the registry shim, section 12);
 - writes the new row into the caches of the old owner's machine and the new owner's machine (`_cache-put` over
   ssh, 5 s to connect, best effort). A cache that missed it learns the truth from its next journal reply.
 
@@ -306,8 +305,6 @@ One hook records every session: fleet's `hooks/record.sh`, on SessionStart, User
 - It never fails a session: it always exits 0 and logs a problem to `hooks.log`.
 - `FLEET_NO_RECORD` turns it off. Every headless call of the plugin sets it.
 - Detached jobs come in through it as `kind=job` with `name_source = job`.
-- env's `note --hook` stays as it is until phase 3 and writes only the registry. Section 12.3 says why it writes
-  no index entry.
 
 ## 7. Work sessions
 
@@ -350,7 +347,7 @@ never holds the words.
 ### 7.3 The hub's second check
 
 `fleet_work.work_refusal(fields)` gives a reason when a work entry carries any field section 7.2 removes. The hub
-refuses such an entry whole (`work-refused`) and stores none of it. The registry shim never writes a work row. The
+refuses such an entry whole (`work-refused`) and stores none of it. The
 cache file on the writing machine may hold the full row, since it never leaves; `_cache-dump` masks it before it
 leaves.
 
@@ -471,83 +468,40 @@ it as `Authorization: Bearer`. The phone holds only the Claude Voice server's ow
   reports. It prints a report per machine: rows, conflicts, unreachable.
 - There is no nightly job. A backup happens on an event.
 
-## 12. Phase 1: the frozen contract with Claude Voice, and the dual write
+## 12. Claude Voice and the old registry files
 
-Phase 1 changes nothing for the Claude Voice server in Production. Until it ships on the index (phase 2) and phase
-3 removes the old paths, these stay exactly as they are.
+The index is the one store of sessions. No machine writes a registry file (`~/.local/state/claude-sessions/<sid>.json`),
+and Claude Voice reads none: it reads the index and moves a session with take. The hub has no registry writer, the
+store runs no callback after a change or before a read, and there is no legacy note route (`legacy-note`). The files
+already on disk stay where they are, and only the importer reads them. The hub's folder was packed into
+`~/.local/state/fleet/index-backups/claude-sessions-<date>.tar.gz` before its writer was removed (plan os3reg, 26
+November 2026).
 
-### 12.1 What Claude Voice calls today
+### 12.1 What Claude Voice calls
 
 | What | Shape | Read by |
 |---|---|---|
 | `@claude session take SID --to phone:<host>` | Exit 0: the last stdout line is `{"ok": true, "sid", "owner", "cwd", "epoch"}`. Exit 2: the first stderr line is the refusal. Up to 120 s. | `parseTake` in `apps/claudevoice/host/src/session-cmd.ts` |
 | `@claude session tail SID --json --turns N` | `{"sid", "name", "machine", "turns": [{"role": "user" or "assistant", "text", "at"}]}`, oldest first. | `tailOf` in `apps/claudevoice/host/src/sessions.ts` |
-| Registry files | `$VOICE_SESSIONS_DIR` or `~/.local/state/claude-sessions/<sid>.json`, one JSON object with `version, sid, name, machine, account, cwd, last_prompt, last_answer, updated, live, owner, owner_since, epoch, kind, topic` (`registry_record` in the schema). Written by rename, so a half file never shows. | `readRecord`, `Registry.all`, `sessionRows` in `sessions.ts` |
-| Claude Voice patches | `Registry.patch` writes `topic`, `live`, `last_prompt`, `last_answer`, `updated` into a file that exists. | itself |
 | `POST /sessions/<sid>/release` `{"to"}` | Called by env's take with `X-Voice-Token`, up to 70 s. | the server |
 
-The files `sessions.ts` and `session-cmd.ts` are read only for this build.
+### 12.2 Where the registry's shape is still used
 
-### 12.2 One writer per field of a registry file
+- `fleet session list --json --registry` prints each row in the old file's shape (`registry_record` in the schema),
+  newest first, for env's `@claude session list`. It writes no file. The `name` is the index's name when its source
+  is `manual`, `custom`, `registry` or `prompt`, else the first prompt cut to 60. Times are ISO 8601 with the local
+  offset, to the second. `last_prompt` and `last_answer` are cut to 200. `kind` is `chat` or `job`. `version` is 1.
+- The importer (section 18.3) reads the files still on each machine's disk, as a source of old rows. It writes none.
 
-On the hub, registry files are a view of the index, written by the registry shim (`fleet_registry_shim`):
+### 12.3 Checks
 
-| Field | Writer on a `phone:*` row | Writer on any other row |
-|---|---|---|
-| `topic`, `last_prompt`, `last_answer`, `updated` | Claude Voice's patch; the shim reads it into the index | the shim |
-| `live` | Claude Voice's patch | the shim: `ended` is null |
-| everything else | the shim | the shim |
-
-Rules of the shim:
-
-- It runs after every change on the hub (take, journal, chain, rename), for the changed sids, in the same call.
-- It writes a file only for a row the registry would hold: `kind` `chat` or `job`, `env` `prod`, not work, a
-  non-empty name, not superseded.
-- It merges into the file: it starts from the file's content and writes only fields whose index value differs
-  from what it last wrote (`$FLEET_HOME/index/shim-state.json`). It never touches a field Claude Voice writes on a
-  `phone:*` row.
-- Registry `name`: the index `name` when its source is `manual`, `custom`, `registry` or `prompt`, else the file's
-  name stays. A new file takes the first prompt, cut to 60. Times are ISO 8601 with the local offset, to the second.
-  `last_prompt` and `last_answer` are cut to 200. `kind` is `chat` or `job`. `version` is 1.
-- It reads a `phone:*` row's file when the file's size or change time differs from what it last wrote: before it
-  writes that file, and before every list on the hub. No timer. It takes `topic`, `last_prompt`, `last_answer` and
-  `updated` into the index. It never takes `owner`, `owner_since`, `epoch`, `machine` or `cwd` from a file: the
-  index wins, and a file that disagrees is written again at once.
-- The importer seeds `shim-state.json` with each imported file's own values, so an import writes no file.
-
-Registry copies on the other machines keep being written by env as today, for old machines.
-
-### 12.3 The dual write
-
-Until phase 3, every registry write path also writes the index in the same call:
-
-| Path | Index write |
-|---|---|
-| env's `take` | the hub's take (section 4); the shim writes the hub's file |
-| env's `_local put` | `fleet session _cache-put` on that machine |
-| env's `note --apply` on the hub (old machines) | the legacy rule below |
-| env's `note --hook` | none of its own: fleet's recorder hook, which Claude Code runs on the same event |
-| Claude Voice's patch | the shim reads it in (section 12.2) |
-
-`note --hook` writes no index entry because its parser names sessions differently from fleet's, and two writers of
-`name` would make the name flip. A panel ruled on this (2 to 1); `PROGRESS.md` of osidx-1-contract holds the votes.
-
-The legacy rule (`fleet_index_store.apply_legacy_note`) for a note that reaches the hub through `note --apply`:
-
-- No row: make one as a first entry would (section 5.2, step 4), with `owner` = the note's `machine`.
-- A row whose owner is not the note's `machine`: change nothing.
-- Otherwise set `last_prompt`, `last_answer` and `updated`, journal-style `observed.live`, and `name` (source
-  `prompt` or `custom`) only when the row has no name.
-- A legacy note has no epoch and is never replayed: env drops it when the hub is down, as today.
-
-### 12.4 Checks of phase 1
-
-- A contract test (osidx-4-importer) runs Claude Voice's real parsers (`readRecord`, `sessionRows`, `tailOf`,
-  `parseTake`) under node on the files the shim writes and on `fleet session tail` output. It skips when node or a
-  lomem checkout is missing (the pre-push hook runs with an empty `HOME`). A fixture comparison in Python runs
-  always.
-- Production's `GET /sessions` is captured before the import and compared after it, byte for byte
-  (osenv-3-acceptance).
+- `test_a_take_on_the_hub_changes_the_index_and_writes_no_registry_file` (`test_index_cli.py`): a take and a rename
+  on the hub change the index and leave an empty registry folder empty, with no `shim-state.json`.
+- `test_an_import_rewrites_no_registry_file` (`test_voice_parsers_contract.py`): an import leaves every file's bytes
+  and change time as they were.
+- `test_voices_tail_and_take_parsers_read_the_contracts_shapes` runs Claude Voice's real `tailOf` and `parseTake`
+  under node on the contract's fixtures. It skips when node or a lomem checkout is missing (the pre-push hook runs
+  with an empty `HOME`).
 
 ## 13. The CLI
 
@@ -573,8 +527,7 @@ exit 3.
 | `rebuild [--dry-run]` | Section 11. | by hand |
 | `backup` | Section 11, by hand. | by hand |
 | `import [--dry-run] [--machine M]... [--backup-dir D]` | The importer (osidx-4-importer). | osenv-3-acceptance |
-| `legacy-note` (a registry note on stdin) | `apply_legacy_note` on the hub. | env `note --apply` |
-| `_hub OP` (JSON on stdin) | Internal: runs a hub operation (`apply`, `take`, `chain`, `owner`, `list`, `show`, `rename`, `delete`, `end-host`, `high-seq`, `legacy-note`). | other machines over ssh |
+| `_hub OP` (JSON on stdin) | Internal: runs a hub operation (`apply`, `take`, `chain`, `owner`, `list`, `show`, `rename`, `delete`, `end-host`, `high-seq`). | other machines over ssh |
 | `_cache-put` (rows on stdin) | Internal: writes rows into this machine's cache. | take, env `_local put` |
 | `_cache-dump` | Internal: this machine's cache rows, work rows masked, and `acked_seq`. | rebuild |
 | `_import-dump` | Internal: this machine's registry files and `conversations`, work rows masked. | import |
@@ -593,7 +546,6 @@ All under `$FLEET_HOME/index/` (default `~/.claude/fleet/index/`), the folder 07
 | `cache/<sid>.json` | every | One `cache_row` per session (below). |
 | `observed/<machine>.json` | hub | Section 10.3. |
 | `last-list.json` | not the hub | Section 10.4. |
-| `shim-state.json` | hub | Section 12.2. |
 | `unreadable.json` | every | `{sid: reason}`: this machine's transcripts the parser could not read (section 6). |
 | `$FLEET_HOME/work.json` | every | Section 7.1. Written by env. |
 
@@ -631,8 +583,6 @@ class Refused(Exception):            # .code (a code of section 4.2 or 8), .line
 def hub_db_path(fleet_home) -> str
 def backup_dir() -> str              # $FLEET_BACKUP_DIR, else ~/.local/state/fleet/index-backups
 def connect(path) -> sqlite3.Connection
-def on_change(fn) -> None            # fn(con, sids) after each committed change
-def before_read(fn) -> None          # fn(con) before a list or show reads rows
 def get_row(con, sid) -> dict | None
 def head_of(con, sid) -> str
 def chain_of(con, sid) -> list[str]
@@ -640,7 +590,6 @@ def list_rows(con, *, env="prod", chains="heads", kinds=None, machine=None, owne
               limit=300) -> list[dict]
 def take(con, sid, to, expect_epoch, by, *, hub, machines, cwd=None, release=None, now=None) -> dict
 def apply_batch(con, batch, *, hub, machines, now=None) -> dict          # journal_reply
-def apply_legacy_note(con, note, *, machines, now=None) -> dict | None
 def chain(con, old_sid, new_sid, by, expect_epoch, fields, *, hub, now=None) -> dict
 def rename(con, sid, name, *, now=None) -> dict
 def delete_conversation(con, sid) -> list[str]
@@ -720,9 +669,9 @@ def note_readable(fleet_home, sid, transcript) -> str | None               # che
 def main(argv=None) -> int
 def hub_name() -> str
 def machine_names() -> set
-def open_hub() -> sqlite3.Connection    # connect, and register the shim's callbacks when it can be imported
+def open_hub() -> sqlite3.Connection    # one connection to hub.db per path in this process
 def hub_call(op, payload, *, timeout=8) -> dict    # in process on the hub, else ssh `_hub OP`; raises HubDown
-def hub_rows(query) -> list[dict]       # on the hub: before_read callbacks, then list_rows
+def hub_rows(query) -> list[dict]       # on the hub: list_rows
 ```
 
 `main` hands `import` and `_import-dump` to `fleet_index_import`, and `list` to `fleet_sessions_api.envelope`.
@@ -753,7 +702,7 @@ def observe_local() -> dict                          # observe_reply of this mac
 def post(path, body, feed) -> tuple                  # (status, dict)
 ```
 
-### `fleet_index_import.py` and `fleet_registry_shim.py` (osidx-4-importer)
+### `fleet_index_import.py` (osidx-4-importer)
 
 ```python
 # fleet_index_import.py
@@ -763,12 +712,6 @@ def plan(con, dumps) -> dict                         # the dry-run report: per m
 def apply(con, dumps) -> dict
 def main(argv) -> int                                # `fleet session import ...`
 
-# fleet_registry_shim.py
-def registry_dir() -> str                            # $CLAUDE_SESSIONS_DIR, else ~/.local/state/claude-sessions
-def registry_record(row, existing=None) -> dict
-def after_change(con, sids) -> None                  # store.on_change
-def ingest_phone_rows(con) -> int                    # store.before_read
-def seed(records) -> None                            # shim-state from imported files
 ```
 
 ### Wiring in existing files
@@ -811,8 +754,8 @@ file. osenv-3-acceptance fixes env files only after osenv-1-routes and osenv-2-d
 | `fleet/ui/index.html`, `app.js`, `app.css`, `fleet/ui/fixtures/sessions.json`, `open-plans.json` | osidx-3-surfaces |
 | `fleet/skills/fleet/SKILL.md`, `tools/fleet_ui_e2e.py` | osidx-3-surfaces |
 | `fleet/tests/test_fleet_sessions.py`, `test_fleet_ui.py`, `test_fleet_ui_sessions.py`, `test_fleet_todo_order.py`, `test_fleet_spawn_backlog.py`, `test_fleet_statusline.py`, `test_sessions_api.py` | osidx-3-surfaces |
-| `fleet/fleet_index_import.py`, `fleet/fleet_registry_shim.py` | osidx-4-importer |
-| `fleet/tests/test_index_import.py`, `test_registry_shim.py`, `test_voice_parsers_contract.py` | osidx-4-importer |
+| `fleet/fleet_index_import.py` | osidx-4-importer |
+| `fleet/tests/test_index_import.py`, `test_voice_parsers_contract.py` | osidx-4-importer |
 | `CLAUDE.md` (the repo's: osidx-1-contract added one line pointing here), `fleet/tests/test_index_integration.py` | osidx-5-final |
 
 Every other fleet test file stays as it is. A job that finds it must change a file it does not own writes a
@@ -904,7 +847,7 @@ runs only when `fleet_sessions_api` cannot be imported.
 The importer runs its own module on the other machines: `<python> <folder of the fleet path>/fleet_index_import.py
 _import-dump` (the registry files and `conversations`, work rows masked) and `_db-copy` (a copy of that machine's
 `fleet.db`, as bytes, for the backup). `fleet session import` also takes `--json` for the report as JSON. Before it
-writes, it backs up `hub.db` with the label `import` and seeds the registry shim's state from the files it read.
+writes, it backs up `hub.db` with the label `import`. It reads the registry files and writes none.
 
 At the index's own epoch an import only fills empty fields (`fleet_index_store.merge_same_epoch`). It never fills a
 work row's words (section 7.2). One exception: an import from the row's own machine, whose rule now says the session

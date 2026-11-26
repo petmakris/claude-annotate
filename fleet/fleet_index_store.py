@@ -128,43 +128,6 @@ def _log(con, text):
         pass
 
 
-# ---------------------------------------------------------------- callbacks
-
-_ON_CHANGE = []
-_BEFORE_READ = []
-
-
-def on_change(fn):
-    """fn(con, sids) after each committed change (the registry shim)."""
-    if fn not in _ON_CHANGE:
-        _ON_CHANGE.append(fn)
-
-
-def before_read(fn):
-    """fn(con) before a list or show reads rows (the shim reads Claude Voice's patches in)."""
-    if fn not in _BEFORE_READ:
-        _BEFORE_READ.append(fn)
-
-
-def run_before_read(con):
-    for fn in list(_BEFORE_READ):
-        try:
-            fn(con)
-        except Exception as e:  # noqa: B902 - a callback may cost a refresh, never a read
-            _log(con, "before_read %s: %s: %s" % (getattr(fn, "__name__", fn), type(e).__name__, e))
-
-
-def _changed(con, sids):
-    sids = [s for s in dict.fromkeys(sids) if s]
-    if not sids:
-        return
-    for fn in list(_ON_CHANGE):
-        try:
-            fn(con, sids)
-        except Exception as e:  # noqa: B902 - the index is written; a callback failure is logged
-            _log(con, "on_change %s: %s: %s" % (getattr(fn, "__name__", fn), type(e).__name__, e))
-
-
 class _Tx:
     """`with _Tx(con):` one BEGIN IMMEDIATE transaction, rolled back on any exception."""
 
@@ -429,7 +392,6 @@ def take(con, sid, to, expect_epoch, by, *, hub, machines, cwd=None, release=Non
         _write_row(con, new)
     _log(con, "take %s %s -> %s epoch %d by %s release %s" % (sid, row["owner"], to, new["epoch"], by, release or "-"))
     _backup_quiet(con, "%s-e%d" % (sid[:8], new["epoch"]))
-    _changed(con, [sid])
     return {"ok": True, "sid": sid, "owner": to, "epoch": new["epoch"], "owner_since": now,
             "previous_owner": row["owner"], "conversation": row["conversation"]}
 
@@ -620,7 +582,7 @@ def apply_batch(con, batch, *, hub, machines, now=None):
     good = [e for e in entries if isinstance(e, dict) and isinstance(e.get("seq"), int)
             and not isinstance(e.get("seq"), bool) and e["seq"] >= 1]
     good.sort(key=lambda e: e["seq"])
-    results, changed, sids, dropped = [], [], [], []
+    results, sids, dropped = [], [], []
     with _Tx(con):
         high = high_seq(con, m)
         for e in good:
@@ -640,9 +602,7 @@ def apply_batch(con, batch, *, hub, machines, now=None):
             if why:
                 res["reason"] = why
             results.append(res)
-            if ok:
-                changed.append(e["sid"])
-            elif outcome != "duplicate":
+            if not ok and outcome != "duplicate":
                 dropped.append("%s seq %d sid %s: %s (%s)" % (m, seq, e.get("sid"), outcome, why))
         if m in machines and high > high_seq(con, m):
             _set_high(con, m, high)
@@ -654,42 +614,7 @@ def apply_batch(con, batch, *, hub, machines, now=None):
                     rows[sid] = t
     for line in dropped:
         _log(con, "dropped " + line)
-    _changed(con, changed)
     return {"high_seq": high_seq(con, m), "results": results, "rows": rows}
-
-
-# ---------------------------------------------------------------- the legacy note (section 12.3)
-
-def apply_legacy_note(con, note, *, machines, now=None):
-    """A registry note that reached the hub through env's `note --apply`. No epoch, never replayed."""
-    now = time.time() if now is None else now
-    if not isinstance(note, dict):
-        return None
-    sid, m = note.get("sid"), note.get("machine")
-    if not isinstance(sid, str) or not SID_RE.match(sid) or m not in set(machines or ()):
-        return None
-    with _Tx(con):
-        row = get_row(con, sid)
-        if row is None:
-            kind = note.get("kind") if note.get("kind") in ("chat", "job") else "chat"
-            row = _new_row({"sid": sid, "as": m, "machine": m, "fields": {"kind": kind}}, now)
-        elif row["owner"] != m:
-            return None
-        for k in ("last_prompt", "last_answer"):
-            if note.get(k) is not None:
-                row[k] = cut(note[k], LIMITS[k])
-        for k in ("cwd", "account"):
-            if note.get(k) and not row.get(k):
-                row[k] = cut(note[k], LIMITS[k])
-        if note.get("name") and not row["name"]:
-            src = note.get("name_source") if note.get("name_source") in ("custom", "prompt") else "prompt"
-            row["name"], row["name_source"] = cut(note["name"], LIMITS["name"]), src
-        row["updated"] = now
-        _write_row(con, row)
-        if "live" in note:
-            _keep_observed(con, sid, m, {"live": bool(note["live"]), "observed_at": now})
-    _changed(con, [sid])
-    return get_row(con, sid)
 
 
 # ---------------------------------------------------------------- chains (section 8)
@@ -741,7 +666,6 @@ def chain(con, old_sid, new_sid, by, expect_epoch, fields, *, hub, now=None):
                 new[k] = cut(fields[k], LIMITS[k]) if k in LIMITS and fields[k] is not None else fields[k]
         _write_row(con, new)
     _backup_quiet(con, "%s-e1" % new_sid[:8])
-    _changed(con, [old_sid, new_sid])
     return {"ok": True, "old": get_row(con, old_sid), "new": get_row(con, new_sid)}
 
 
@@ -758,7 +682,6 @@ def rename(con, sid, name, *, now=None):
         row["name"], row["name_source"] = (name, "manual") if name else ("", "")
         row["updated"] = now
         _write_row(con, row)
-    _changed(con, [sid])
     return get_row(con, sid)
 
 
@@ -776,7 +699,6 @@ def delete_conversation(con, sid):
         sids = [r["sid"] for r in rows]
         con.executemany("DELETE FROM sessions WHERE sid=?", [(s,) for s in sids])
         con.executemany("DELETE FROM journal_observed WHERE sid=?", [(s,) for s in sids])
-    _changed(con, sids)
     return sids
 
 
@@ -789,7 +711,6 @@ def end_host(con, owner, *, now=None):
         sids = [r[0] for r in con.execute("SELECT sid FROM sessions WHERE owner=? AND ended IS NULL", (owner,))]
         con.executemany("UPDATE sessions SET ended=?, end_reason='sandbox-down', updated=? WHERE sid=?",
                         [(now, now, s) for s in sids])
-    _changed(con, sids)
     return sids
 
 
@@ -865,7 +786,7 @@ def import_row(con, row, *, origin):
                 outcome = "same"
     if outcome == "conflict-kept":
         _log(con, "import from %s: %s kept the hub's row (epoch %d)" % (origin, new["sid"], cur["epoch"]))
-    return outcome  # no change callbacks: an import writes no registry file (the importer seeds the shim's state)
+    return outcome
 
 
 def rebuild(con, dumps, *, now=None, dry_run=False):
@@ -910,5 +831,4 @@ def rebuild(con, dumps, *, now=None, dry_run=False):
             if acked > high_seq(con, m):
                 _set_high(con, m, acked)
     report["written"] = len(written)
-    _changed(con, written)
     return report

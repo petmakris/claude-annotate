@@ -38,16 +38,6 @@ def test_a_phone_writers_observed_values_never_turn_stale(hub):
     assert store.list_rows(hub.con)[0]["observed"]["stale"] is False
 
 
-def test_the_legacy_note_makes_a_row_writes_only_as_the_owner_and_keeps_a_name(hub):
-    note = {"sid": sid(5), "machine": "mac", "name": "from the note", "last_prompt": "p", "last_answer": "a",
-            "live": True, "kind": "chat"}
-    row = store.apply_legacy_note(hub.con, note, machines=hub.machines)
-    assert (row["owner"], row["epoch"], row["name"], row["name_source"]) == ("mac", 1, "from the note", "prompt")
-    assert store.apply_legacy_note(hub.con, dict(note, machine="lat", last_prompt="no"), machines=hub.machines) is None
-    store.apply_legacy_note(hub.con, dict(note, name="other", last_prompt="q"), machines=hub.machines)
-    assert (hub.row(sid(5))["name"], hub.row(sid(5))["last_prompt"]) == ("from the note", "q")
-
-
 def test_import_keeps_the_higher_epoch(hub):
     hub.start("mac", sid(6))
     hub.take(sid(6), "lat", 1)

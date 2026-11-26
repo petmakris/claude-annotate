@@ -1583,7 +1583,7 @@
    }
   },
   "registry_record": {
-   "description": "A registry file `~/.local/state/claude-sessions/<sid>.json` as Claude Voice reads it today (phase 1, frozen).",
+   "description": "A session in the old registry file's shape, as `fleet session list --json --registry` prints it and as the importer reads `~/.local/state/claude-sessions/<sid>.json`. No file is written.",
    "type": "object",
    "required": [
     "version",
