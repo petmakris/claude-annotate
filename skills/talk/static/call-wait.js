@@ -67,9 +67,11 @@ function writeOut(text) {
 
 // `replace`: the draft is a correction, so the question in flight is set aside (the server takes it back or marks it
 // replaced, and the answer to it is shown but never read aloud) instead of the draft being added to it.
+let sendingText = false;   // a send is on its way: Enter pressed twice must not send the words twice
 async function sendText(replace = false) {
-  const text = $("text").value.trim(); if (!text) return;
+  const text = $("text").value.trim(); if (!text || sendingText) return;
   if (!replace && typedCommand(text)) return;   // I: "slower" and the like move the voice, they are not a question
+  sendingText = true;
   $("sendtext").disabled = true;
   takeFloor(null);
   const target = replace === true ? inflight()[0] : null;
@@ -91,6 +93,7 @@ async function sendText(replace = false) {
     }
     else { showError(body.error || tr("w.fail.http", {code: resp.status})); noteSend(tr("w.notsent"), "warn"); }
   } catch (err) { showError(tr("w.fail", {why: err.message})); noteSend(tr("w.notsent"), "warn"); }
+  sendingText = false;
   $("sendtext").disabled = !$("text").value.trim();
 }
 // The text field grows with what is typed, up to a few lines, and Send waits for something to send.
@@ -98,7 +101,21 @@ function fitText() {
   const t = $("text"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 120) + "px";
   if (!t.value.trim()) spoken = false;
   $("sendtext").disabled = !t.value.trim();
+  saveDraft();
   paintWait();
+}
+// The words typed and not sent are kept for this call in the tab's session storage, so a reload brings them back; a send, the
+// end of the call and an empty field clear them. Never put back over a say-back question's placeholder.
+const DRAFT_KEY = "talk.draft." + CFG.call;
+function saveDraft() {
+  try { const v = $("text").value; if (v.trim() && !view.ended) sessionStorage.setItem(DRAFT_KEY, v); else sessionStorage.removeItem(DRAFT_KEY); } catch {}
+}
+function clearDraft() { try { sessionStorage.removeItem(DRAFT_KEY); } catch {} }
+function restoreDraft() {
+  let kept = null; try { kept = sessionStorage.getItem(DRAFT_KEY); } catch {}
+  const t = $("text");
+  if (!kept || t.value || answering || view.ended) return;
+  t.value = kept; fitText();
 }
 $("text").addEventListener("input", fitText);
 $("text").addEventListener("input", () => showMicNote(""));   // typing is the answer to "Nothing was heard": the note goes
@@ -122,7 +139,7 @@ setInterval(() => {
   fillerAudio.src = audioUrl(view.filler); fillerAudio.volume = 0.8; fillerAudio.play().catch(() => {});
 }, 500);
 $("sendtext").onclick = () => sendText();
-$("text").addEventListener("keydown", ev => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); sendText(); } });
+$("text").addEventListener("keydown", ev => { if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); sendText(); } });
 
 
 // ---- the wait card ----------------------------------------------------------------

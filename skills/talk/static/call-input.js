@@ -193,6 +193,8 @@ function buildKeys() {
 buildKeys();
 popButton("keysbtn", "pKeys"); popButton("keysrow", "pKeys");
 // Nothing is being typed: the body, an empty message field or a button of the panel has the focus.
+// Focus is on one of the Type / Talk / Live buttons: a printable key there is typing, so it goes to the message field.
+function onModeSwitch() { const at = document.activeElement; return !!at && !!$("modesw") && $("modesw").contains(at) && at !== $("modesw"); }
 function keysFree() {
   const at = document.activeElement;
   return !at || at === document.body || (at === $("text") && !$("text").value) || (at.tagName === "BUTTON" && !!at.closest("#panel"))
@@ -213,7 +215,7 @@ function mediaKey(key) {
 const MEDIA_KEYS = new Set([" ", "ArrowLeft", "ArrowRight"]);
 document.addEventListener("keydown", ev => {
   if (!MEDIA_KEYS.has(ev.key) || ev.ctrlKey || ev.metaKey || ev.altKey || ev.shiftKey) return;
-  if (!keysFree()) return;
+  if (!keysFree() || (ev.key === " " && onModeSwitch())) return;   // a space on the mode switch is a typed space, not a press
   if (ev.key === " " && ev.repeat) { ev.preventDefault(); return; }
   if (mediaKey(ev.key)) ev.preventDefault();
 });
@@ -221,7 +223,7 @@ document.addEventListener("keydown", ev => {
 document.addEventListener("keydown", ev => {
   if (ev.ctrlKey || ev.metaKey) return;
   if (ev.altKey && !ev.shiftKey && ALT_KEYS[ev.code]) { if (runShortcut(ALT_KEYS[ev.code])) ev.preventDefault(); return; }
-  if (ev.key === "?" && !ev.altKey && keysFree()) { ev.preventDefault(); showPop("pKeys"); }
+  if (ev.key === "?" && !ev.altKey && keysFree() && !onModeSwitch()) { ev.preventDefault(); showPop("pKeys"); }
 });
 function runShortcut(id) {
   if (id === "speed") { cycleSpeed(); return true; }
@@ -380,7 +382,7 @@ async function sendWav(wav) {
 // Typing is as direct as talking: a key pressed anywhere on the page goes to the text field.
 document.addEventListener("keydown", ev => {
   if (ev.defaultPrevented || ev.ctrlKey || ev.metaKey || ev.altKey || ev.key.length !== 1 || openPop || recorder || view.ended) return;
-  if (document.activeElement && document.activeElement !== document.body) return;
+  if (document.activeElement && document.activeElement !== document.body && !onModeSwitch()) return;
   $("text").focus();
 });
 
@@ -480,7 +482,10 @@ function typedCommand(text) {
   const cmd = localCommand(text);
   if (!cmd || view.ended) return false;
   $("text").value = ""; spoken = false; fitText();
+  const before = liveFlash;
   runCommand(cmd, {});
+  // Every command says it was taken: a repeat with nothing to repeat would otherwise clear the field and show nothing.
+  if (liveFlash === before) flash(t(cmd.startsWith("repeat") ? (current || (lastAnswer() || {}).speech === "ready" ? "cmd.repeat" : "cmd.nothing") : "cmd.done"));
   if (liveFlash && Date.now() < liveFlash.until) announce(liveFlash.text);
   paintAll();   // the flash in the foot, the Your turn pill with the field empty
   return true;
@@ -544,6 +549,7 @@ function paintMic() {
 // The Type / Talk / Live switch (#modesw), the Your turn pill (#yourturn), Live's two options and the key hint (#keyhint), from paintAll().
 function paintInputMode() {
   const ended = !!view.ended, locked = !!recorder || (busy && talkMode !== "live");
+  if (ended) clearDraft();
   $("modebar").hidden = ended; $("keyhint").hidden = ended;
   for (const b of $("modesw").children) {
     b.setAttribute("aria-pressed", String(b.dataset.mode === inputMode)); b.disabled = locked;

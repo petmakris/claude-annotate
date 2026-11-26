@@ -5,6 +5,7 @@ import json
 import re
 
 from call_page import STATIC, CallPage, needs_node, served
+from helpers import CALL
 
 pytestmark = needs_node
 
@@ -148,7 +149,7 @@ def test_the_switch_maps_type_talk_and_live_to_the_talk_mode_and_is_remembered(t
     page.js("document.querySelector('#modesw [data-mode=live]').click();").check(state)
     page.js("document.querySelector('#modesw [data-mode=talk]').click();").check(state)
     assert page.run() == [
-        ["talk", "manual", None, "type:false talk:true live:false", False, False, "Type, or press the mic", ""],
+        ["talk", "manual", None, "type:false talk:true live:false", False, False, "Type, or press the mic", "text"],   # a wide page starts in the field (bd1125b-vote-8)
         ["type", "manual", '"type"', "type:true talk:false live:false", True, True, "Type a message", "text"],
         ["live", "live", '"live"', "type:false talk:false live:true", False, False, "Just speak, or type here", "text"],
         ["talk", "manual", '"talk"', "type:false talk:true live:false", False, False, "Type, or press the mic", "text"]]
@@ -461,3 +462,67 @@ def test_the_gear_no_longer_holds_what_the_switch_does_and_the_header_has_no_mod
     for there in ("keysbtn", "keysrow", "speedchip", "skipmsg", "skipplay", 'id="pKeys"', 'id="modesw"', 'id="yourturn"'):
         assert there in html, there
     assert "paintModeChip" not in (STATIC / "call.js").read_text() + (STATIC / "call-input.js").read_text()
+
+
+# ---- typed input: a first send, a draft over a reload, a keyboard start (bd1125b-vote-6, -7, -8) --------------------------
+
+def test_a_typed_command_with_nothing_to_act_on_still_says_it_was_taken_and_not_sent(tmp_path):
+    page = page_with(tmp_path)
+    page.js("const t = $('text'); t.value = 'repeat that'; fitText(); $('sendtext').click(); await settle();")
+    page.check(f"[t.value, {SAYS}, liveFlash.text]")
+    page.js("t.value = 'slower'; fitText(); $('sendtext').click(); await settle();").check("liveFlash.text")
+    assert page.run() == [["", [], "Nothing to repeat yet. Not sent to Claude."], "Slower: 0.85×"]
+
+
+def test_pressing_send_twice_before_the_server_answers_sends_the_words_once(tmp_path):
+    page = page_with(tmp_path)
+    page.js("const t = $('text'); t.value = 'explain tides'; fitText(); sendText(); sendText(); t.dispatchEvent(new ShimEvent('keydown', {key: 'Enter', bubbles: true})); await settle();")
+    page.check(f"[{SAYS}, $('text').value]")
+    # a composing Enter (an input method confirming its word) is not a send
+    page.js("t.value = 'ni'; fitText(); t.dispatchEvent(new ShimEvent('keydown', {key: 'Enter', isComposing: true, bubbles: true})); await settle();")
+    page.check(f"[{SAYS}.length, t.value]")
+    assert page.run() == [[["explain tides"], ""], [1, "ni"]]
+
+
+def test_the_draft_is_kept_per_call_over_a_reload_and_cleared_by_a_send_and_by_the_end(tmp_path):
+    page = page_with(tmp_path)
+    page.js("const t = $('text'); t.value = 'half a thought'; t.dispatchEvent(new ShimEvent('input')); await settle();")
+    page.check("Object.fromEntries(Object.entries(sessionStorage.dump()).filter(([k]) => k.startsWith('talk.draft.')))")
+    page.js("$('sendtext').click(); await settle();").check("[Object.fromEntries(Object.entries(sessionStorage.dump()).filter(([k]) => k.startsWith('talk.draft.'))), t.value]")
+    assert page.run() == [{f"talk.draft.{CALL}": "half a thought"}, [{}, ""]]
+    # a reload: the tab's session storage still holds it, and the page puts it back with Send and the Your turn pill matching
+    again = page_with(tmp_path, session={f"talk.draft.{CALL}": "half a thought"})
+    again.check("[$('text').value, $('sendtext').disabled, $('yourturn').textContent, document.activeElement === $('text')]")
+    # another call's draft is not this call's
+    other = page_with(tmp_path, session={"talk.draft.someone-else": "not mine"})
+    other.check("[$('text').value, $('sendtext').disabled]")
+    assert again.run() == [["half a thought", False, "Typing", True]]
+    assert other.run() == [["", True]]
+
+
+def test_a_kept_draft_is_not_put_over_a_say_back_question_and_goes_when_the_call_ends(tmp_path):
+    page = page_with(tmp_path, session={f"talk.draft.{CALL}": "old words"})
+    page.js("$('text').value = ''; answering = 'q1'; restoreDraft();").check("[$('text').value, Object.fromEntries(Object.entries(sessionStorage.dump()).filter(([k]) => k.startsWith('talk.draft.')))]")
+    page.js("answering = null; view.ended = true; paintAll();").check("Object.fromEntries(Object.entries(sessionStorage.dump()).filter(([k]) => k.startsWith('talk.draft.')))")
+    assert page.run() == [["", {f"talk.draft.{CALL}": "old words"}], {}]
+
+
+def test_the_message_field_takes_the_focus_on_load_on_a_wide_screen_and_not_on_a_phone(tmp_path):
+    wide = page_with(tmp_path).check("document.activeElement === $('text')")
+    assert wide.run() == [True]
+    phone = page_with(tmp_path)
+    phone.js("""globalThis.matchMedia = () => ({matches: false, addEventListener() {}, removeEventListener() {}});
+      document.body.focus(); vm.runInThisContext(readFileSync(%r, 'utf8'));""" % str(STATIC / "call-boot.js"))
+    phone.check("document.activeElement === $('text')")
+    assert phone.run() == [False]
+
+
+def test_typing_a_character_or_a_space_on_the_mode_switch_goes_to_the_message_field_and_changes_no_mode(tmp_path):
+    page = page_with(tmp_path, ("One two three. Four five six.",), start=1)
+    page.js("document.body.focus(); press(' '); await settle();").check("[audio.paused, !!current]")
+    page.js("const live = document.querySelector('#modesw [data-mode=live]'); live.focus(); press('x', {}, live); await settle();")
+    page.check("[document.activeElement === $('text'), inputMode]")
+    page.js("const talkB = document.querySelector('#modesw [data-mode=talk]'); talkB.focus(); const before = audio.paused; press(' ', {}, talkB); await settle();")
+    page.check("[document.activeElement === $('text'), inputMode, audio.paused === before, openPop]")
+    page.js("const typeB = document.querySelector('#modesw [data-mode=type]'); typeB.focus(); press('?', {}, typeB); await settle();").check("[openPop, document.activeElement === $('text')]")
+    assert page.run() == [[False, True], [True, "talk"], [True, "talk", True, None], [None, True]]

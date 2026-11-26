@@ -4,6 +4,9 @@
 applyTheme();
 setMode("idle");
 if (talkMode === "live") startLive();
-if (matchMedia("(hover: hover) and (pointer: fine)").matches) $("text").focus();
+restoreDraft();
+// The field takes the focus on load on a laptop or desktop, touch screen or not, so a keyboard user starts in it; a phone does not,
+// since that would open its keyboard over the page.
+if (matchMedia("(hover: hover) and (pointer: fine)").matches || matchMedia("(min-width: 701px)").matches) $("text").focus();
 claimPlayer(false);
 poll();

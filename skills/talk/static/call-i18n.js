@@ -70,6 +70,7 @@ const I18N = {
     "turn.yours": "Your turn",
     "ph.wait": "Add to your question", "ph.type": "Type a message", "ph.live": "Just speak, or type here", "ph.talk": "Type, or press the mic",
     "live.nocatch": "Didn't catch that.", "live.slowest": "Already as slow as it goes.", "live.fastest": "Already as fast as it goes.",
+    "cmd.done": "Done. That was a command, so it was not sent to Claude.", "cmd.repeat": "Playing it again. Not sent to Claude.", "cmd.nothing": "Nothing to repeat yet. Not sent to Claude.",
     "live.slower": "Slower: {x}×", "live.faster": "Faster: {x}×", "live.stopped": "Stopped listening. Press the mic to listen.", "live.taken": "Taken back.",
     // the call's state
     "s.listening": "Listening to you", "s.transcribing": "Turning your words into text", "s.stalled": "Claude has not picked this up yet", "s.silent": "Claude has gone quiet",
@@ -315,6 +316,7 @@ const I18N = {
     "turn.yours": "Η σειρά σας",
     "ph.wait": "Προσθέστε στην ερώτησή σας", "ph.type": "Πληκτρολογήστε ένα μήνυμα", "ph.live": "Απλώς μιλήστε ή πληκτρολογήστε εδώ", "ph.talk": "Γράψτε ή πατήστε το μικρόφωνο",
     "live.nocatch": "Δεν κατάλαβα.", "live.slowest": "Δεν γίνεται πιο αργά.", "live.fastest": "Δεν γίνεται πιο γρήγορα.",
+    "cmd.done": "Έγινε. Ήταν εντολή, γι' αυτό δεν στάλθηκε στον Claude.", "cmd.repeat": "Παίζει ξανά. Δεν στάλθηκε στον Claude.", "cmd.nothing": "Δεν υπάρχει ακόμα κάτι να επαναληφθεί. Δεν στάλθηκε στον Claude.",
     "live.slower": "Πιο αργά: {x}×", "live.faster": "Πιο γρήγορα: {x}×", "live.stopped": "Η ακρόαση σταμάτησε. Πατήστε το μικρόφωνο για ακρόαση.", "live.taken": "Ανακλήθηκε.",
     "s.listening": "Σας ακούω", "s.transcribing": "Μετατροπή των λόγων σας σε κείμενο", "s.stalled": "Ο Claude δεν το έχει παραλάβει ακόμα", "s.silent": "Ο Claude έχει σιωπήσει",
     "s.sent": "Στάλθηκε, αναμένεται να το παραλάβει ο Claude", "s.answering": "Ο Claude απαντά", "s.next": "Η απάντηση {n} είναι η επόμενη",
