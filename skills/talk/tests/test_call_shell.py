@@ -253,3 +253,18 @@ def test_typing_in_the_search_brings_the_field_to_the_top_so_a_phone_shows_the_r
     page.js("$('tlsearch').value = 'subsid'; $('tlsearch').dispatchEvent(new ShimEvent('input'));").check("jumps")
     page.js("$('tlsearch').value = ''; $('tlsearch').dispatchEvent(new ShimEvent('input'));").check("jumps")
     assert page.run() == [1, 1]
+
+
+def test_a_typed_message_keeps_its_paragraphs_as_blocks_and_only_a_long_one_is_folded(tmp_path):
+    html, states = asked(tmp_path)
+    page = CallPage(html, states, autoplay=False, seconds=3.0).js("await serve(3);")
+    six = "\n\n".join(f"Paragraph {i}" for i in range(1, 7))
+    page.check(f"paragraphsOf({json.dumps(six)})")
+    page.check('paragraphsOf("a\\nb\\n \\n\\n\\nc  \\n")')
+    page.check('paragraphsOf("one line")')
+    page.check('[longQuestion("Which is cheaper to run?"), longQuestion("a\\nb\\nc\\nd"), longQuestion("a\\n\\nb\\n\\nc\\n\\nd\\n\\ne\\n\\nf\\n\\ng"), longQuestion("x".repeat(281))]')
+    got = page.run()
+    assert got[0] == [f"Paragraph {i}" for i in range(1, 7)]
+    assert got[1] == ["a\nb", "c"]
+    assert got[2] == ["one line"]
+    assert got[3] == [False, False, True, True]

@@ -130,11 +130,11 @@ def test_a_question_sent_or_an_answer_that_comes_ends_the_search_but_opening_a_r
 
 # ---- r1-typist-1: a long typed question keeps its breaks, at the weight of the text, held to three lines ------------------------------
 
-LONG_Q = "Please compare these:\n1. the running cost\n2. the noise\n3. the install time\nand tell me which one wins."
+LONG_Q = "Please compare these:\n1. the running cost\n2. the noise\n3. the install time\n4. the subsidy\n5. the warranty\n6. the space needed\nand tell me which one wins."
 
 
 @needs_node
-def test_a_long_question_keeps_its_breaks_is_held_to_three_lines_and_opens_with_show_all(tmp_path):
+def test_a_long_question_keeps_its_breaks_is_held_to_six_lines_and_opens_with_show_all(tmp_path):
     html, states = asked(tmp_path, answers=(FIRST, SECOND), asks=(LONG_Q, ASKS[1]))
     page = CallPage(html, states, autoplay=False, seconds=3.0).js("await serve(1);")
     q = "[...document.querySelectorAll('#nowq .nq')].map((b) => [b.querySelector('.nq-text').textContent, b.querySelector('.nq-text').className, b.querySelector('.nq-more').hidden, b.querySelector('.nq-more').textContent])"
@@ -153,7 +153,7 @@ def test_the_question_is_set_as_typed_at_normal_weight_in_the_card_the_tv_and_th
     css = css_first("call-shell.css")
     text = css[".nq-text"].replace(" ", "")
     assert "white-space:pre-wrap" in text and text.startswith("font:400") and "overflow-wrap:anywhere" in text
-    assert css[".nq-text.clamped"] == "display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden"
+    assert css[".nq-text.clamped"] == "display:-webkit-box;-webkit-line-clamp:var(--nq-lines,6);-webkit-box-orient:vertical;overflow:hidden"
     assert css[".app[data-tv] .nq-text"] == "font-size:20px"
     phone = (STATIC / "call-shell.css").read_text()
     assert ".nq-text{font-size:14.5px}" in phone[phone.index("@media (max-width:760px)"):]

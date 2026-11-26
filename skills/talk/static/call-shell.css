@@ -20,7 +20,10 @@
 .nq{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
 .nq+.nq{margin-top:4px}
 .nq-text{font:400 15.5px/1.4 var(--sans);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
-.nq-text.clamped{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.nq-text.clamped{display:-webkit-box;-webkit-line-clamp:var(--nq-lines,6);-webkit-box-orient:vertical;overflow:hidden}
+.nq-p{display:block;white-space:pre-line}
+.nq-p+.nq-p{margin-top:.5em}   /* a blank line in the message shows as a small gap */
+@media (min-width:761px) and (max-height:760px){.nq-text.clamped{--nq-lines:3}}
 .nq-more{min-height:28px;padding:0 4px;margin-left:-4px;border-radius:8px;font:500 12.5px var(--sans);color:var(--acc)}
 .nq-more:hover{background:var(--shade)}
 #ntmore{align-self:flex-start;min-height:34px;padding:0 14px;margin-left:0;border:1px solid var(--acc);border-radius:999px;background:var(--acc-soft);font-weight:600}   /* Show all / Show less is a button, not a link: easy to find under a cut text */
@@ -112,6 +115,8 @@
 .tlrow .play:hover:not(:disabled){background:var(--claude-soft)}
 .tlrow.is-now{background:var(--acc-soft);border-radius:10px}
 .tlrow.open{background:var(--row-alt);border-radius:12px;border-top-color:transparent;margin:2px 0}
+/* a short laptop panel: compact rows (a one-line title, a 48px row) so three and a half earlier answers show under the card, not two */
+@media (min-width:761px) and (max-height:800px){.tl-main{min-height:48px;padding-block:3px}.tl-title{-webkit-line-clamp:1}.tl-b,.tlrow .play{min-height:36px}}
 .tl-body{grid-column:1/-1;display:flex;flex-direction:column;gap:10px;padding:2px 10px 12px 40px}
 .tl-text{font-size:14.5px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink)}
 .tl-text .w{border-radius:4px;cursor:pointer}

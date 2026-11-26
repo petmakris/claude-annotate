@@ -203,7 +203,7 @@ $("nowtext").addEventListener("scroll", paintTextFades, {passive: true});
 // chips, transport, Following strip) and, while earlier answers wait, the head of their list and two rows come off the panel's
 // height, so a laptop screen shows the list under the card and the window never ends mid-line. Show all lifts the cap (the
 // word being said stays in view); the control is there only when the text is longer than the window.
-const NT_MIN = 3, NT_TIGHT = 2, NT_PHONE = 1, NT_SHORT = 560, NT_MAX = 16, NT_BUTTON = 36, NT_BUTTON_PHONE = 46, ROW_H = 68, LIST_GAP = 12;
+const NT_MIN = 3, NT_TIGHT = 2, NT_PHONE = 1, NT_SHORT = 560, NT_MAX = 16, NT_BUTTON = 36, NT_BUTTON_PHONE = 46, ROW_H = 68, ROW_H_COMPACT = 48, LIST_GAP = 12;
 let ntAll = false;                       // the reader lifted the cap for the answer on the card
 const ntMore = document.createElement("button"); ntMore.type = "button"; ntMore.id = "ntmore"; ntMore.className = "nq-more"; ntMore.hidden = true;
 $("nowbody").insertBefore(ntMore, $("nowchips"));
@@ -217,7 +217,7 @@ function fitNowText() {
   const lh = parseFloat(getComputedStyle(tx).lineHeight) || 25, cs = getComputedStyle(box);
   const earlier = box.classList.contains("has-earlier") && !$("earlier").hidden;
   const phone = matchMedia("(max-width: 760px)").matches;
-  const reserve = earlier && !phone ? LIST_GAP + Math.max(40, $("tlhead").offsetHeight) + 2 * ROW_H : 0;
+  const reserve = earlier && !phone ? LIST_GAP + Math.max(40, $("tlhead").offsetHeight) + 2 * (matchMedia("(max-height: 800px)").matches ? ROW_H_COMPACT : ROW_H) : 0;
   // what the Show all button takes in the card's column: its box, its margins (a phone's are negative) and the gap before it; it counts
   // whether it is on the card now or not, so the window does not change size when the button appears
   const bs = getComputedStyle(ntMore), gap = parseFloat(getComputedStyle($("nowbody")).rowGap);
@@ -244,15 +244,18 @@ audio.addEventListener("ended", () => {
   if (current && nowShown === current.id && tx.scrollTop > 0) tx.scrollTop = 0;
   paintTextFades();
 });
-// A question the user typed, as typed: its breaks kept, at the weight of the text, held to three lines with Show all
-// when it is longer (the clamped form squeezes runs of blank lines so paragraphs do not use up the three lines; Show all gives the text whole).
+// A question the user typed, as typed: its breaks kept, at the weight of the text, held to a window of lines (six on a laptop, four on a
+// short panel, two on a phone: --nq-lines) with Show all when it is longer. Each paragraph is its own block, so a blank line shows as a
+// small gap instead of using up a line of the window or being deleted; Show all gives the text whole.
 const qOpen = new Set();      // the questions whose full text the reader opened
-const squeezed = (text) => text.replace(/\n[ \t]*(?:\n[ \t]*)+/g, "\n");   // the clamped form: blank lines do not use up its lines
-const longQuestion = (text) => text.length > 140 || (text.match(/\n/g) || []).length >= 3;
+const paragraphsOf = (text) => text.split(/\n[ \t]*(?:\n[ \t]*)+/).map((p) => p.replace(/^\s*\n|\s+$/g, "")).filter((p) => p.trim());   // blocks of text between blank lines, each keeping its own line breaks
+const QUESTION_LINES = 6;
+// whether a question may need Show all: a short one is never folded (measureQuestions confirms with the real layout)
+const longQuestion = (text) => text.length > 280 || paragraphsOf(text).reduce((n, p) => n + p.split("\n").length, 0) > QUESTION_LINES;
 function buildQuestion(q) {
   const box = document.createElement("div"); box.className = "nq";
   const open = qOpen.has(q.id);
-  const text = document.createElement("span"); text.className = "nq-text" + (open ? "" : " clamped"); text.textContent = open ? q.text : squeezed(q.text);
+  const text = document.createElement("span"); text.className = "nq-text" + (open ? "" : " clamped"); if (open) text.textContent = q.text; else for (const p of paragraphsOf(q.text)) { const b = document.createElement("span"); b.className = "nq-p"; b.textContent = p; text.append(b); }
   const more = document.createElement("button"); more.type = "button"; more.className = "nq-more";
   more.textContent = tr(open ? "s.less" : "s.more"); more.setAttribute("aria-expanded", String(open));
   more.hidden = !open && !longQuestion(q.text);

@@ -215,13 +215,13 @@ def test_the_key_points_badge_says_how_many_points_the_answer_added_in_both_lang
 
 # ---- r2-typist-4: blank lines do not use up the clamp -------------------------------------------------------------------------------
 
-def test_the_clamped_question_squeezes_blank_lines_and_show_all_gives_the_text_whole(tmp_path):
+def test_the_clamped_question_keeps_each_paragraph_as_a_block_and_show_all_gives_the_text_whole(tmp_path):
     q = "Great. Here is my draft:\n\nHi Anna,\n\n\nI want a heat pump.\n\nThanks"
     html, states = asked(tmp_path, answers=(FIRST,), asks=(q,))
     page = CallPage(html, states, autoplay=False, seconds=3.0).js("await serve(1);")
-    text = "[$('nowq').querySelector('.nq-text').textContent, $('nowq').querySelector('.nq-more').hidden]"
+    text = "[[...$('nowq').querySelectorAll('.nq-text .nq-p')].map((b) => b.textContent), $('nowq').querySelector('.nq-text').textContent, $('nowq').querySelector('.nq-more').hidden]"
     page.check(text).js("$('nowq').querySelector('.nq-more').click();").check(text)
-    assert page.run() == [["Great. Here is my draft:\nHi Anna,\nI want a heat pump.\nThanks", False], [q, False]]
+    assert page.run() == [[["Great. Here is my draft:", "Hi Anna,", "I want a heat pump.", "Thanks"], "Great. Here is my draft:Hi Anna,I want a heat pump.Thanks", True], [[], q, False]]
 
 
 # ---- r2-screenreader-4: the answers are headings -------------------------------------------------------------------------------------
