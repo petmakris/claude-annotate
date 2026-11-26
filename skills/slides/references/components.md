@@ -301,7 +301,8 @@ While presenting, `→` / `Space` / `PageDown` reveals the next step before movi
 - **Fade a base part:** `data-dim="n"` on any element (a screenshot, an earlier panel) fades it the
   same way once step `n` shows.
 - **Show for a while:** `data-out="n"` on any element hides it again once step `n` shows; on a
-  `.frag data-frag="2" data-out="3"` it is on screen for step 2 only (a screenshot beside a box).
+  `.frag data-frag="2" data-out="3"` it is on screen for step 2 only (a screenshot beside a box). The scrolling view and the PDF show the
+  finished slide, so a `data-out` part is left out there.
 - **Only in present mode.** The scrolling view, the `/deck` editor and the PDF export show every
   fragment, so a reader of the file or the PDF never misses one.
 
