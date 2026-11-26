@@ -26,7 +26,7 @@ def test_the_reader_goes_back_to_its_first_sentence_when_an_answer_ends_but_keep
 
 def test_the_stage_frame_is_titled_with_the_board_in_front_its_kind_and_place_and_the_stage_is_a_region(tmp_path):
     html, states = served(tmp_path, ["Nothing yet."])
-    assert '<div class="stagewrap" id="stagewrap" role="region" aria-label="Stage">' in html
+    assert '<div class="stagewrap" id="stagewrap" role="region" aria-label="Stage" data-t-aria="stage.title">' in html
     page = CallPage(html, states).check("$('stage').title")
     views = {"type": "stage:views", "list": [{"name": "a", "title": "Hours after feeding", "kind": "table", "answer": 1},
                                             {"name": "b", "title": "Is it ready", "kind": "diagram", "answer": 2}]}
