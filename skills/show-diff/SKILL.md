@@ -113,8 +113,8 @@ The two tools this skill exists to drive:
      revs. Both revs must exist in *that* clone; `origin/<branch>` usually does, and where
      it does not the script fetches it and says so. Never fetch by hand first — the script
      already did, and a ref it could not fetch is one the server does not have.
-   - **"Florian's CPT-475 branch"**, "review this PR's branch", "what is on
-     origin/PICON-556" → a branch that belongs to somebody else and is in nobody's
+   - **"Sam's DEMO-475 branch"**, "review this PR's branch", "what is on
+     origin/DEMO-556" → a branch that belongs to somebody else and is in nobody's
      checkout. `diffable` has nothing to say about it: it reports the branches *you*
      have out. Resolve it with git instead, and read the two rules below before you do.
 
@@ -161,7 +161,7 @@ The two tools this skill exists to drive:
 - **Two plausible bases.** When `bases` holds more than one `ancestor`, or the nearest
   ancestor and the trunk tell different stories, name both with their file counts and ask
   which. The ABC-281 freeze branch is the live example: stacked on
-  `origin/ABC-210-CLIENT-INTERACTION-CHANNELS` it is 22 files, against `origin/master` it
+  `origin/ABC-210-CHECKOUT-FLOW` it is 22 files, against `origin/master` it
   is 54, and the 32 extra files belong to the branch below it. Guessing here shows the
   user someone else's work as if it were theirs.
 
@@ -198,8 +198,8 @@ This governs the turn the diff opens, before anyone has asked anything. Mode D i
 this rule does not reach it.
 
 The reason is not tone, it is truth. Everything available at this point is filenames and
-counts, and a filename is not evidence: `InteractionChannelNames` reads like a second new
-type beside `InteractionChannelName`, and it is a utility class holding two static
+counts, and a filename is not evidence: `CheckoutFlowNames` reads like a second new
+type beside `CheckoutFlowName`, and it is a utility class holding two static
 functions that nothing ever instantiates. A summary written from names is confidently wrong
 in exactly the places the user cannot check without reading the code — which is what he
 opened the diff to do. Handing him a wrong frame first means he reads the change looking

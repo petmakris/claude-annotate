@@ -1,0 +1,1 @@
+Why catch PaymentDeclined just to raise it again?

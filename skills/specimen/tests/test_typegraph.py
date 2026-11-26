@@ -41,7 +41,7 @@ def test_classify_plain_service_is_behaviour():
 
 
 def test_a_service_entry_reaches_data_through_a_nested_class_field(tmp_path):
-    """The shape of the real AnalyticsQueryService.
+    """The shape of the real ReportQueryService.
 
     The outer class holds only collaborators. The single data field lives on an
     inner class. An extractor that stops at the entry's own fields renders an

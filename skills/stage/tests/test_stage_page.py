@@ -733,7 +733,7 @@ def test_a_stop_asks_on_a_card_in_place_of_the_caption_and_a_press_goes_to_the_c
     assert [m for m in page.posted if m["type"] == "stage:pick"] == [{"type": "stage:pick", "answer": 1, "i": 0, "choice": 0}]
 
 
-TERM_HTML = ('<section class="box" data-part="data" data-name="the data"><p>The <dfn title="the bank\'s check of what a client knows">K&amp;E</dfn> '
+TERM_HTML = ('<section class="box" data-part="data" data-name="the data"><p>The <dfn title="the bank\'s check of what a client knows">M&amp;P</dfn> '
              'sticker</p></section><section class="box" data-part="pdf" data-name="the pdf">printed</section>')
 SPOP = ("(() => { const p = document.querySelector('.spop'); return [p.hidden, p.querySelector('h3')?.textContent ?? '',"
        " p.querySelector('p')?.textContent ?? '', [...p.querySelectorAll('.sacts button')].map((b) => b.textContent)]; })()")
@@ -756,7 +756,7 @@ def test_a_tap_on_a_scene_part_asks_about_it_or_plays_from_it(tmp_path):
     assert page.run() == [
         [False, "The pdf", "", ["Ask about this", "Play from here"]],
         [True, "The pdf", "", ["Ask about this", "Play from here"]],
-        [False, "K&E", "the bank's check of what a client knows", []]]
+        [False, "M&P", "the bank's check of what a client knows", []]]
     asks = [m for m in page.posted if m["type"] in ("stage:ask", "stage:play")]
     assert asks == [{"type": "stage:ask", "text": 'About "the pdf": '}, {"type": "stage:play", "view": "ben", "answer": 1, "n": 2}]
 
@@ -767,11 +767,11 @@ def test_a_term_the_scene_defines_is_tappable_in_the_caption(tmp_path):
     built = _scene(scene.parts_model(src["parts"]), [["+ data"], ["+ pdf"]], "Ben")
     page = StagePage(tmp_path, embedded=True).show("ben", src, title="Ben", extra={"scene": built, "kind": "scene"}).open()
     page.send({"type": "stage:state", "front": "ben", "frames": {"ben": 1}, "keys": 0})
-    page.send({"type": "stage:caption", "text": "The k&e sticker is old, said K&E twice.", "answer": 1})
+    page.send({"type": "stage:caption", "text": "The m&p sticker is old, said M&P twice.", "answer": 1})
     page.check("[document.querySelector('.caption').textContent, [...document.querySelectorAll('.caption button.term')].map((b) => b.textContent)]")
     page.js("document.querySelector('.caption button.term').click();").check(SPOP)
-    assert page.run() == [["The k&e sticker is old, said K&E twice.", ["k&e", "K&E"]],
-                          [False, "k&e", "the bank's check of what a client knows", []]]
+    assert page.run() == [["The m&p sticker is old, said M&P twice.", ["m&p", "M&P"]],
+                          [False, "m&p", "the bank's check of what a client knows", []]]
 
 
 SANDBOX_HTML = ('<section class="box" data-part="ctl" data-name="the controls"><button onclick="flip()">V2</button></section>'
@@ -970,8 +970,8 @@ SIDE = ("(() => { const b = pane('cmp').querySelector('.visual.lanes');"
 def _compared(tmp_path, tags, width=1400):
     from skills.stage.tests.test_compare import SPEC
     flat = visual("sequence", SPEC)
-    built = _scene(scene.sequence_model(flat["spec"]), tags, "Backtesting request")
-    return StagePage(tmp_path, width=width).show("cmp", flat, title="Backtesting request", extra={"scene": built})
+    built = _scene(scene.sequence_model(flat["spec"]), tags, "Forecast request")
+    return StagePage(tmp_path, width=width).show("cmp", flat, title="Forecast request", extra={"scene": built})
 
 
 def test_a_before_after_board_draws_two_flows_side_by_side_with_a_gap_where_a_side_has_no_step(tmp_path):
@@ -1015,9 +1015,9 @@ def test_the_voice_points_at_a_side_and_the_other_dims_until_it_points_at_both(t
 def test_a_frame_saved_pointing_at_the_merged_view_shows_both_sides(tmp_path):
     from skills.stage.tests.test_compare import SPEC
     flat = visual("sequence", SPEC)
-    built = _scene(scene.sequence_model(flat["spec"]), [["focus after"], ["focus both"]], "Backtesting request")
+    built = _scene(scene.sequence_model(flat["spec"]), [["focus after"], ["focus both"]], "Forecast request")
     built["frames"][2]["focus"] = ["mode:merged"]
-    page = StagePage(tmp_path, width=1400).show("cmp", flat, title="Backtesting request", extra={"scene": built}).open()
+    page = StagePage(tmp_path, width=1400).show("cmp", flat, title="Forecast request", extra={"scene": built}).open()
     for n in (1, 2):
         page.send({"type": "stage:frame", "view": "cmp", "n": n}).check(SIDE)
     assert [g["mode"] for g in page.run()] == [["after"], ["both"]]

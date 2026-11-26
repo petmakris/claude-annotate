@@ -1,0 +1,26 @@
+{
+ "response_id": "resp-1772445600",
+ "title": "Move invoice amounts to integer cents",
+ "blocks": [
+  {
+   "id": "section-1",
+   "title": "What changes",
+   "markdown": "`invoices.amount` is a `NUMERIC(12,2)` in euros today. Rounding happens in four places, and two of them disagree on half cents.\n\nThe plan stores every amount as **integer cents** in a new `amount_cents` column and makes `Invoice.amount_cents()` the only conversion."
+  },
+  {
+   "id": "section-2",
+   "title": "Order of work",
+   "markdown": "1. Add `amount_cents` as a nullable column.\n2. Write both columns from the app for one release.\n3. Backfill the old rows.\n4. Switch reads to `amount_cents`, then drop `amount`."
+  },
+  {
+   "id": "section-3",
+   "title": "The backfill",
+   "markdown": "There are **40 million rows**, not 2 million, so one `UPDATE` would lock `invoices` for too long.\n\nThe backfill runs as an **online job** instead: batches of 10,000 rows by id, a short pause between batches, and a resume point saved after each one.\n\n```sql\nUPDATE invoices SET amount_cents = ROUND(amount * 100)\n WHERE id > :last_id AND id <= :last_id + 10000;\n```\n\nMigration `0042` only adds the column. The job starts after the release and takes about 3 hours."
+  },
+  {
+   "id": "section-4",
+   "title": "How we know it worked",
+   "markdown": "- A check query finds no row where `amount_cents <> ROUND(amount * 100)`.\n- Statement totals for March match before and after, to the cent.\n- The half-cent test in `test_invoice.py` passes on both paths."
+  }
+ ]
+}

@@ -1,0 +1,2 @@
+# the stage's address: the host by name, port and session id as printed
+http://127.0.0.1 => http://localhost

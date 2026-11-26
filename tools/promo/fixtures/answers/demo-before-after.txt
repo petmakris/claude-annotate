@@ -1,0 +1,26 @@
+[[show sequence | Pricing before and after]] {"title": "A shared pricing module takes the price client's place",
+ "compare": {
+  "before": {"label": "main", "actors": [
+    {"id": "ui", "label": "Checkout page"}, {"id": "svc", "label": "Order service", "sub": "OrderPricingService"},
+    {"id": "cl", "label": "Price client", "role": "the cart team's module"}, {"id": "rc", "label": "Tax service"}],
+   "steps": [
+    {"id": "b1", "from": "ui", "to": "svc", "arrow": "request", "label": "asks for the order total"},
+    {"id": "b2", "from": "svc", "to": "cl", "arrow": "request", "label": "asks for the line prices", "sub": "price(cart)"},
+    {"id": "b3", "from": "cl", "to": "cl", "arrow": "self", "label": "builds the requests with fixed rules, always in euros"},
+    {"id": "b4", "from": "cl", "to": "rc", "arrow": "request", "label": "asks for the tax rates"},
+    {"id": "b5", "from": "cl", "to": "rc", "arrow": "request", "label": "requests the tax per line"},
+    {"id": "b6", "from": "cl", "to": "svc", "arrow": "event", "label": "returns the order total", "reply_to": "b2"},
+    {"id": "b7", "from": "svc", "to": "ui", "arrow": "event", "label": "returns the total", "reply_to": "b1"}]},
+  "after": {"label": "with the PR", "actors": [
+    {"id": "ui", "label": "Checkout page"}, {"id": "svc", "label": "Order service", "sub": "OrderPricingService"},
+    {"id": "sm", "label": "Shared pricing module", "role": "cart and checkout"}, {"id": "rc", "label": "Tax service"}],
+   "steps": [
+    {"id": "b1", "from": "ui", "to": "svc", "arrow": "request", "label": "asks for the order total"},
+    {"id": "b2", "from": "svc", "to": "sm", "arrow": "request", "label": "asks for the line prices", "sub": "price(cart, EUR, rules)"},
+    {"id": "b3", "from": "sm", "to": "sm", "arrow": "self", "label": "builds the requests with the rules it is given"},
+    {"id": "b4", "from": "sm", "to": "rc", "arrow": "request", "label": "asks for the tax rates"},
+    {"id": "b5", "from": "sm", "to": "rc", "arrow": "request", "label": "requests the tax per line"},
+    {"id": "b6", "from": "sm", "to": "svc", "arrow": "event", "label": "returns raw line prices", "reply_to": "b2"},
+    {"id": "c1", "from": "svc", "to": "svc", "arrow": "self", "label": "adds up the order total", "sub": "OrderTotal"},
+    {"id": "b7", "from": "svc", "to": "ui", "arrow": "event", "label": "returns the total", "reply_to": "b1"}]}}} [[/show]]
+A before and after sequence puts the two flows side by side, row for row, so you compare their shape instead of working it out yourself. [[point: before]] On main, the checkout page asks for the order total. The order service asks the price client in the cart team's module for the line prices. The client builds the requests with fixed rules, always in euros. It asks the tax service for the tax rates. Then it requests the tax per line. And it returns the order total. [[point: after]] With the PR, a shared pricing module takes the client's place. The service passes the currency and its own rules down. The module builds the requests with the rules it is given, and returns raw line prices. The order service adds up the order total itself, the one row the old flow has no step for. [[point: both]] The tax service requests are the same on both sides. [[key: a before and after board sets the two flows side by side, with a gap where one has no step]] Next is a map.

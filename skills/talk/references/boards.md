@@ -66,7 +66,7 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 - `[[point: step b2]]` lights that row on both sides. The before row of a moved step is `step was~b2`.
 - Tell the before story first and the after story second: a sentence that names the words a step had before brings its row too.
 - A malformed `compare` (a side missing, a side with fewer than two actors, a step naming an unknown actor) is not shown, and a `board:` line quotes why. `[[point: before]]` on a board with no `compare` is a `board:` line too.
-- The demo's "Backtesting before and after" has a whole answer.
+- The demo's "Forecast before and after" has a whole answer.
 
 ## Flowchart
 

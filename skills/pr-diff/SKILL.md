@@ -9,7 +9,7 @@ Run the script with whatever the user named, from the session's checkout:
 
     "$(claude-annotate root)/skills/pr-diff/pr-diff.sh" <PR>
 
-`<PR>` is a number, `owner/repo#number`, a pull-request URL, a Jira key (`PMP-291`, matched
+`<PR>` is a number, `owner/repo#number`, a pull-request URL, a Jira key (`DEMO-291`, matched
 in the PR title, an open PR first), or nothing for the current branch's PR. Add
 `--repo owner/name` when the user names a number of another repository.
 

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Checkout retry</title>
+<style>
+  :root{--ink:#16181d;--paper:#faf9f6;--accent:#c2622f;--faint:#8a8a84;--mono:ui-monospace,Menlo,monospace}
+  *{box-sizing:border-box}
+  body{margin:0;padding:40px;background:#e6e6e2;font-family:Georgia,'Times New Roman',serif;color:var(--ink)}
+  .deck{display:flex;flex-direction:column;align-items:center;gap:28px}
+  .slide{
+    position:relative;width:1280px;height:720px;background:var(--paper);
+    padding:64px 80px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.18);
+  }
+  .num{position:absolute;left:-46px;top:6px;color:#cfcec6;font-family:var(--mono);font-size:13px}
+  .pg{position:absolute;right:40px;bottom:18px;color:var(--faint);font-size:12px;font-family:var(--mono)}
+  .kick{font-family:var(--mono);font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--accent)}
+  .title{font-size:52px;line-height:1.12;margin-top:18px;max-width:1000px}
+  .pro{position:absolute;left:80px;right:80px;font-size:22px;line-height:1.55}
+  .pro p{margin:0 0 18px}
+  .conseq{position:absolute;left:80px;right:80px;font-size:20px;line-height:1.5;
+    border-left:4px solid var(--accent);padding-left:18px;color:#3a3a34}
+  .bullets{position:absolute;left:80px;right:80px;font-size:22px;line-height:1.6}
+  .bullets li{margin-bottom:14px}
+  .tbl{position:absolute;left:80px;right:80px;font-size:19px}
+  .tbl table{border-collapse:collapse;width:100%}
+  .tbl td,.tbl th{border-bottom:1px solid #dedcd4;padding:10px 8px;text-align:left}
+  .tslide{background:var(--ink);color:var(--paper)}
+  .tslide .kick{color:var(--accent)}
+  .tslide .title{font-size:60px}
+  .lede{position:absolute;left:80px;right:200px;top:420px;font-size:22px;line-height:1.5;color:#cfcec6}
+  .divider{background:var(--ink);color:var(--paper)}
+  .ghost{position:absolute;right:60px;top:120px;font-size:340px;color:rgba(250,249,246,.05);line-height:1}
+  .dkick{font-family:var(--mono);font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-top:200px}
+  .dname{font-size:64px;margin-top:16px}
+  .dtag{font-size:22px;color:#cfcec6;margin-top:24px;max-width:760px}
+  .present-btn{position:fixed;right:18px;bottom:18px;padding:8px 14px;font-family:var(--mono);font-size:12px}
+  body.present{overflow:hidden;background:#000;padding:0}
+  body.present .slide{display:none}
+  body.present .slide.current{display:block}
+</style>
+</head>
+<body>
+<div class="deck">
+
+<section class="slide tslide"><span class="num">1</span>
+  <div class="kick">SHOP-APP &middot; CHECKOUT</div>
+  <div class="title">Retry a failed payment once</div>
+  <div class="lede">Why checkout should try the card a second time before it shows an error.</div>
+</section>
+
+<section class="slide divider" id="sec-why"><span class="num">d</span>
+  <div class="ghost">01</div>
+  <div class="dkick">SECTION 01</div>
+  <div class="dname">Why retry</div>
+  <div class="dtag">What a failed payment costs a shop today.</div>
+</section>
+
+<section class="slide"><span class="num">2</span>
+  <div class="kick">01 &middot; THE PROBLEM</div>
+  <div class="title">Most failures are not real declines</div>
+  <div class="pro" style="top:230px">
+    <p>One payment in forty fails on the first try because the gateway times out.</p>
+    <p>The card is fine; a second try a few seconds later goes through.</p>
+    <p>Today the buyer sees an error and has to type the card again.</p>
+  </div>
+  <div class="conseq" style="top:520px">A timeout is not a decline. Treating it as one sends buyers away at the last step.</div>
+</section>
+
+<section class="slide"><span class="num">3</span>
+  <div class="kick">01 &middot; THE CHANGE</div>
+  <div class="title">One quiet retry, then a clear answer</div>
+  <div class="bullets" style="top:250px"><ul>
+    <li>When the gateway times out, checkout waits two seconds and sends the same payment again, with the same idempotency key so the card is never charged twice.</li>
+    <li>A real decline is shown at once, with no retry.</li>
+    <li>Every retry is logged with the order number.</li>
+  </ul></div>
+</section>
+
+<section class="slide divider" id="sec-plan"><span class="num">d</span>
+  <div class="ghost">02</div>
+  <div class="dkick">SECTION 02</div>
+  <div class="dname">The plan</div>
+  <div class="dtag">What ships first and what waits.</div>
+</section>
+
+<section class="slide"><span class="num">4</span>
+  <div class="kick">02 &middot; SCOPE</div>
+  <div class="title">First release, and after it</div>
+  <div class="tbl" style="top:250px">
+    <table>
+      <tr><th>Now</th><th>Later</th></tr>
+      <tr><td>Retry once on timeout</td><td>Retry on other gateway errors</td></tr>
+      <tr><td>Same idempotency key</td><td>A second gateway as fallback</td></tr>
+      <tr><td>Log each retry</td><td>A dashboard of retry rates</td></tr>
+    </table>
+  </div>
+  <div class="conseq" style="top:560px">The right-hand column is the order the work is queued in, not a set of dates.</div>
+</section>
+
+</div>
+
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const deck = document.querySelector('.deck');
+  let i = 0, on = false;
+
+  slides.forEach((sl, k) => {
+    const pg = document.createElement('div');
+    pg.className = 'pg';
+    pg.textContent = (k + 1) + ' / ' + slides.length;
+    sl.appendChild(pg);
+    const num = sl.querySelector('.num');
+    if (num) num.textContent = (k + 1);
+  });
+
+  function applyZoom() {
+    if (on) { deck.style.zoom = '1'; return; }
+    const byW = (window.innerWidth - 80) / 1280;
+    const byH = (window.innerHeight - 80) / 720;
+    deck.style.zoom = Math.max(0.5, Math.min(byW, byH, 1.5));
+  }
+  function show(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((sl, k) => sl.classList.toggle('current', k === i));
+  }
+  function enter() { on = true; document.body.classList.add('present'); deck.style.zoom = '1'; show(i); }
+  function exit()  { on = false; document.body.classList.remove('present'); applyZoom(); }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'f' || e.key === 'F') { e.preventDefault(); on ? exit() : enter(); }
+    if (!on) return;
+    if (e.key === 'ArrowRight') { e.preventDefault(); show(i + 1); }
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); show(i - 1); }
+    if (e.key === 'Escape')     { exit(); }
+  });
+  window.addEventListener('resize', applyZoom);
+  applyZoom();
+
+  const btn = document.createElement('button');
+  btn.className = 'present-btn';
+  btn.textContent = '▶ Present';
+  btn.onclick = enter;
+  document.body.appendChild(btn);
+})();
+</script>
+</body>
+</html>

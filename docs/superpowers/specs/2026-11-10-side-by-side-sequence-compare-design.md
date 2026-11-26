@@ -12,9 +12,9 @@ The reader wants what a split code diff gives: two whole diagrams side by side, 
 after on the right. A step that is in both flows sits on the same row on both sides. Where one side has a step
 the other lacks, the other side shows a gap at that height, so the two diagrams stay in line row by row.
 
-The test case is an internal PR, the proposal report's backtesting request. Before, the report
-service calls a Service client in PMP's module, which builds the requests with fixed lists and returns ready-made
-report timeseries. After, a new shared backtesting module (owned by PMP and PSIM) sits in the middle. The report
+The test case is an internal PR, the proposal report's forecast request. Before, the report
+service calls a Service client in Cart's module, which builds the requests with fixed lists and returns ready-made
+report timeseries. After, a new shared forecast module (owned by Cart and Pricer) sits in the middle. The report
 service passes quarterly and its own measure lists down, gets raw values back, and builds the timeseries itself.
 The Service requests are the same on both sides.
 
@@ -72,7 +72,7 @@ after step with the same `label` and `arrow` but other actors.
 
 **A step whose actors differ only because an actor was replaced keeps one row.** This is my call, and it
 is needed for the example. With the same words it is **same** (the Service requests, which the user called identical);
-with other words it is **changed**. In that PR, "Report service asks for backtest data" goes to the Service client before and to
+with other words it is **changed**. In that PR, "Report service asks for forecast data" goes to the Service client before and to
 the shared module after. These are different actor ids, so by today's rule it is moved. It should be one shared
 row. The rule: two steps with the same id share one row when each of their ends is the same actor id or the
 end's actor exists on one side only. They are **moved** when an end is an actor that exists on both sides

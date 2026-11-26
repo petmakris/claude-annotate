@@ -2,7 +2,7 @@
 # pr-diff.sh <PR> — open a GitHub pull request's diff in IntelliJ, in the window of the
 # checkout that has the PR's branch checked out.
 #
-# <PR> is a number, owner/repo#number, a pull-request URL, a Jira key (PMP-291) found in
+# <PR> is a number, owner/repo#number, a pull-request URL, a Jira key (DEMO-291) found in
 # the PR title, or nothing for the PR of the current branch. Number and key forms use the
 # repository of the current directory unless --repo owner/name is given.
 #

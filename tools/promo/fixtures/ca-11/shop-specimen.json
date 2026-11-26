@@ -1,0 +1,36 @@
+{
+  "root": "com.acme.shop.Order",
+  "instance": {
+    "kind": "object",
+    "type": "com.acme.shop.Order",
+    "fields": {
+      "id": {"kind": "scalar", "value": "ord-1042", "provenance": "chosen"},
+      "customer": {
+        "kind": "object",
+        "type": "com.acme.shop.Customer",
+        "fields": {
+          "accountId": {"kind": "null"},
+          "email": {"kind": "scalar", "value": "dana@example.com", "provenance": "chosen"},
+          "guest": {"kind": "scalar", "value": "true", "provenance": "chosen"}
+        }
+      },
+      "lines": {
+        "kind": "list",
+        "element": "com.acme.shop.OrderLine",
+        "items": [
+          {"kind": "object", "type": "com.acme.shop.OrderLine", "fields": {
+            "sku": {"kind": "scalar", "value": "MUG-BLUE", "provenance": "chosen"},
+            "quantity": {"kind": "scalar", "value": "2", "provenance": "chosen"},
+            "priceCents": {"kind": "scalar", "value": "1200", "provenance": "chosen"}}},
+          {"kind": "object", "type": "com.acme.shop.OrderLine", "fields": {
+            "sku": {"kind": "scalar", "value": "TEE-M", "provenance": "chosen"},
+            "quantity": {"kind": "scalar", "value": "1", "provenance": "chosen"},
+            "priceCents": {"kind": "scalar", "value": "2190", "provenance": "chosen"}}}
+        ]
+      },
+      "totalCents": {"kind": "scalar", "value": "4590", "provenance": "chosen"},
+      "payment": {"kind": "scalar", "value": "card-visa", "provenance": "captured"},
+      "discountCode": {"kind": "null"}
+    }
+  }
+}

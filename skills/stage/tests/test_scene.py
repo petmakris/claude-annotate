@@ -542,9 +542,9 @@ from skills.stage import model as stage_model  # noqa: E402
 
 BEN = """<div class="cols">
   <section class="box" data-part="data" data-name="the data the server sends"><p class="cap">Data</p>
-    <div data-part="old">K&amp;EProductType: Investment Grade Bonds</div>
-    <div data-part="v2">K&amp;EProductTypeV2: Fixed Income</div></section>
-  <section class="box" data-part="rule"><h4>The template rule</h4><pre>find('K&amp;EProductType')</pre></section>
+    <div data-part="old">M&amp;PProductType: Investment Grade Bonds</div>
+    <div data-part="v2">M&amp;PProductTypeV2: Fixed Income</div></section>
+  <section class="box" data-part="rule"><h4>The template rule</h4><pre>find('M&amp;PProductType')</pre></section>
   <section class="box" data-part="pdf"><br><img src="x.png">What the PDF prints in the Product cell for Ben</section>
 </div>"""
 
@@ -556,7 +556,7 @@ def test_a_scene_is_read_as_its_parts_in_page_order_with_their_names_and_nesting
         ("data", None), ("old", "data"), ("v2", "data"), ("rule", None), ("pdf", None)]
     # data-name first, else the part's first heading, else its first eight words
     assert [p["name"] for p in src["parts"]] == [
-        "the data the server sends", "K&EProductType: Investment Grade Bonds", "K&EProductTypeV2: Fixed Income",
+        "the data the server sends", "M&PProductType: Investment Grade Bonds", "M&PProductTypeV2: Fixed Income",
         "The template rule", "What the PDF prints in the Product cell"]
 
 

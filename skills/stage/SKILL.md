@@ -47,7 +47,7 @@ Rules:
   to update; a new name is a new board.
 - **One board in front, the rest in a history.** The stage shows one board at a time under a 40px header:
   ‹ and › walk through the boards (so do the ← and → keys on a stage opened on its own; in a call they move the voice), “Board 2 of 5” opens the list of every board (in the order “Board 2 of 5” counts them, Key points first),
-  and an orange dot there means a board changed while another was in front. Kind, size and update time
+  and a blue dot there means a board changed while another was in front. Kind, size and update time
   show in a tooltip on the title.
 - **Show early.** Call `show` in the same message as your first work call, not after the
   answer is written.

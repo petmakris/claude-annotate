@@ -1,0 +1,63 @@
+# deny.txt: what scan.py refuses in a clip's sources, frames and captions.
+#
+#   re: <regex>     a generic pattern, matched without case
+#   allow: <regex>  text cut out before matching (invented addresses and ids)
+#   h: <hash>       a private word (a person, a company, a host, a ticket prefix),
+#                   kept only as a salted hash so this public file never spells it.
+#                   Add one with: uv run tools/promo/scan.py hash <word>
+#
+# Words only one machine should know go in a file outside the repo named by
+# $PROMO_DENY_EXTRA, one per line.
+
+allow: [a-z0-9._%+-]+@example\.(com|org|net)
+allow: \b127\.0\.0\.1\b|\b0\.0\.0\.0\b
+
+# Addresses, keys and tokens
+re: [a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}
+re: \b(?:\d{1,3}\.){3}\d{1,3}\b
+re: \bghp_[A-Za-z0-9]{20,}
+re: \bgh[ousr]_[A-Za-z0-9]{20,}
+re: \bsk-[A-Za-z0-9_-]{16,}
+re: \bxox[abposr]-[A-Za-z0-9-]{8,}
+re: \bAKIA[0-9A-Z]{16}\b
+re: \beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}
+re: -----BEGIN [A-Z ]*PRIVATE KEY-----
+
+# Session links, attribution, real home folders
+re: claude\.ai/code/session
+re: co-authored-by:\s*claude
+re: /Users/[A-Za-z]
+re: ~/projects/
+re: \b[a-z0-9-]+\.mac\b
+re: \.ts\.net\b
+
+# Ports of services a person runs every day (a clip never shows them)
+re: (?<![\d.]):(3080|3081|8766|8770|5433)\b
+
+# Private words
+h: b36903bb1e37897061d3
+h: 9f2cf5a0706b9f7b4741
+h: 0bb28f009dbeee30f0de
+h: ea7548a06bf68d6c4291
+h: 91fdc2041401a06f4ed8
+h: e9e6714a50aaa755d3c4
+h: 3872676d39c913acc849
+h: a3b3b9f823f9a475ce90
+h: 2610adcd8b6d334a567d
+h: 5a07e4927e4df2ff88d1
+h: c2157aafa2b132ed451e
+h: 780a8250fbab51932dd5
+h: 714d835830142329a0f1
+h: 831b361cd5a74d440102
+h: 2a9f0e4820c23e85f953
+h: ece64b0e30c374c88ded
+h: 58c5ee4734355c9e37f8
+h: f00b5d1eae92ef72d62f
+h: 0c512b51a1621c85395c
+h: a5fd97302bc880608b97
+h: 6a23b300d2a5b1469094
+h: d36f5f432ac82b8ae5a2
+h: e85f7d61a11ae21c72d3
+h: 380bf788a70bc119bdbf
+h: afe7e75065a7a8f16f54
+h: 2903adfd4a36e6ec0aab

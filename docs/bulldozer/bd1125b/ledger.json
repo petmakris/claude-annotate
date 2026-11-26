@@ -5017,7 +5017,7 @@
    },
    "note": "The header title takes up to three lines at 400 px and narrower and the header grows with it; the title keeps a 110 px minimum and the Calls button no longer squeezes it at 300 px.",
    "fixed_in": "round 1 fix",
-   "reopen_note": "Round 1 (re-check reproduces, minor). At 300x800 the title is cut to 'Why Mealy sourdough...' in two lines (116 px wide); only the hover title shows it in full, a touch user has no way to read it. FIX: let the header title take up to three lines at <= 400 px, or open the full title on a tap. GUARD: CSS test pins the clamp.",
+   "reopen_note": "Round 1 (re-check reproduces, minor). At 300x800 the title is cut to 'Why shop sourdough...' in two lines (116 px wide); only the hover title shows it in full, a touch user has no way to read it. FIX: let the header title take up to three lines at <= 400 px, or open the full title on a tap. GUARD: CSS test pins the clamp.",
    "reopened_in_round": 1,
    "round1_where": [
     "skills/talk/static/call.css (header title)",

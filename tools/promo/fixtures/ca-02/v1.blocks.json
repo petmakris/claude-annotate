@@ -1,0 +1,49 @@
+{
+  "response_id": "resp-1772446100",
+  "title": "Before the backfill",
+  "blocks": [
+    {
+      "id": "section-1",
+      "kind": "decisions",
+      "title": "One question before the backfill",
+      "spec": {
+        "decisions": [
+          {
+            "id": "D1",
+            "question": "Where should the 40M-row backfill run?",
+            "change": "easy",
+            "options": [
+              {
+                "id": "a",
+                "label": "Online job after the release",
+                "gain": "No lock on invoices; it can pause and resume.",
+                "cost": "About 3 hours before every row has cents."
+              },
+              {
+                "id": "b",
+                "label": "Inline in the release pipeline",
+                "gain": "Done when the release is done.",
+                "cost": "Locks invoices for minutes on 40M rows."
+              },
+              {
+                "id": "c",
+                "label": "Nightly window",
+                "gain": "Runs when nobody pays invoices.",
+                "cost": "The release waits a day."
+              }
+            ],
+            "recommended": "a",
+            "why": "40M rows is too many for one locking update during the release.",
+            "next": "The backfill part is rewritten for the way you pick.",
+            "status": "open"
+          }
+        ]
+      }
+    },
+    {
+      "id": "section-2",
+      "title": "The backfill",
+      "markdown": "Migration `0042` only adds the `amount_cents` column. How the **40 million** old rows get filled in waits on the question above."
+    }
+  ]
+}

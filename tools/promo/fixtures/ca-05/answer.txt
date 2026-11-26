@@ -1,0 +1,27 @@
+[[show sequence | One timed-out charge]] {"actors": [{"id": "pg", "label": "Checkout page", "tone": "edge"}, {"id": "co", "label": "Checkout", "sub": "api/checkout.py"}, {"id": "rt", "label": "Retry helper", "sub": "api/retry.py", "tone": "green"}, {"id": "pay", "label": "Payment provider", "tone": "service"}],
+ "steps": [
+  {"id": "s1", "from": "pg", "to": "co", "arrow": "request", "label": "sends the cart and the card", "sub": "checkout(cart, token, key)"},
+  {"id": "s2", "from": "co", "to": "rt", "arrow": "request", "label": "wraps the charge in a retry", "sub": "with_retry(charge)"},
+  {"id": "s3", "from": "rt", "to": "pay", "arrow": "request", "label": "charges the card once", "sub": "charge(token, amount, key)"},
+  {"id": "s4", "from": "pay", "to": "rt", "arrow": "event", "label": "times out with no answer"},
+  {"id": "s5", "from": "rt", "to": "rt", "arrow": "self", "label": "waits a little, then tries again"},
+  {"id": "s6", "from": "rt", "to": "pay", "arrow": "request", "label": "charges again with the same key"},
+  {"id": "s7", "from": "pay", "to": "rt", "arrow": "event", "label": "returns the one receipt"},
+  {"id": "s8", "from": "co", "to": "pg", "arrow": "event", "label": "shows the order as paid", "reply_to": "s1"}]} [[/show]]
+This sequence follows one charge that times out. [[point: step s1]] The checkout page sends the cart and the card. [[point: step s2]] Checkout wraps the charge in a retry. [[point: step s3]] The helper charges the card once. [[point: step s4]] The provider times out with no answer. [[point: step s5]] So the helper waits a little, then tries again. [[point: step s6]] It charges again with the same key, and the provider returns the one receipt. [[point: step s8]] Checkout shows the order as paid. [[key: a timed-out charge is tried again with the same key]]
+[[show sequence | Before and after the retry]] {"title": "The retry turns a timeout into a paid order",
+ "compare": {
+  "before": {"label": "main", "actors": [{"id": "co", "label": "Checkout"}, {"id": "pay", "label": "Payment provider"}],
+   "steps": [
+    {"id": "c1", "from": "co", "to": "pay", "arrow": "request", "label": "charges the card"},
+    {"id": "c2", "from": "pay", "to": "co", "arrow": "event", "label": "times out", "reply_to": "c1"},
+    {"id": "c4", "from": "co", "to": "co", "arrow": "self", "label": "fails the whole order"}]},
+  "after": {"label": "checkout-retry", "actors": [{"id": "co", "label": "Checkout"}, {"id": "pay", "label": "Payment provider"}],
+   "steps": [
+    {"id": "c1", "from": "co", "to": "pay", "arrow": "request", "label": "charges the card", "sub": "with a key"},
+    {"id": "c2", "from": "pay", "to": "co", "arrow": "event", "label": "times out", "reply_to": "c1"},
+    {"id": "c3", "from": "co", "to": "pay", "arrow": "request", "label": "charges again with the same key"},
+    {"id": "c4", "from": "co", "to": "co", "arrow": "self", "label": "marks the order as paid"}]}},
+ "outcome": {"tone": "green", "title": "One timeout no longer loses the order", "lines": ["the same key never charges the card twice"]}} [[/show]]
+Side by side, the two branches differ by one row. [[point: before]] On main, checkout charges the card, it times out, and that fails the whole order. [[point: after]] On the branch, checkout charges again with the same key and marks the order as paid. [[point: outcome]] One timeout no longer loses the order. [[key: the same key never charges the card twice]]
+[[show code: api/retry.py | The retry helper]] Here is the helper itself. [[point: lines 8-10]] It runs the charge up to three times. [[point: lines 11-12]] A declined card is never tried again. [[point: lines 13-16]] Only a timeout is, after a pause that grows each time. [[key: only a timeout is retried, never a declined card]]

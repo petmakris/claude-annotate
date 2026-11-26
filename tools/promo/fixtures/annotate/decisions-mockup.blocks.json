@@ -1,0 +1,53 @@
+{
+    "response_id": "resp-1772446000",
+    "title": "Two questions before the backfill",
+    "blocks": [
+        {
+            "id": "section-1",
+            "kind": "decisions",
+            "title": "Where should the 40M-row backfill run?",
+            "spec": {
+                "decisions": [
+                    {
+                        "id": "D1",
+                        "question": "Where should the 40M-row backfill run?",
+                        "change": "easy",
+                        "options": [
+                            {
+                                "id": "a",
+                                "label": "Online job after the release",
+                                "gain": "No lock on invoices; it can pause and resume.",
+                                "cost": "About 3 hours before every row has cents."
+                            },
+                            {
+                                "id": "b",
+                                "label": "Inline in the release pipeline",
+                                "gain": "Done when the release is done.",
+                                "cost": "Locks invoices for minutes on 40M rows."
+                            },
+                            {
+                                "id": "c",
+                                "label": "Nightly window",
+                                "gain": "Runs when nobody pays invoices.",
+                                "cost": "The release waits a day."
+                            }
+                        ],
+                        "recommended": "a",
+                        "why": "40M rows is too many for one locking update during the release.",
+                        "next": "The backfill part is rewritten for the way you pick.",
+                        "status": "open"
+                    }
+                ]
+            }
+        },
+        {
+            "id": "section-2",
+            "kind": "mockup",
+            "title": "Notification preferences",
+            "spec": {
+                "title": "Notification preferences",
+                "html": "<style>body{font:15px system-ui;margin:0;padding:18px;color:#1f2328}.row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #eee}.t{width:44px;height:24px;border-radius:12px;background:#ccc;position:relative;cursor:pointer}.t.on{background:#1a7f37}.t::after{content:\"\";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .15s}.t.on::after{left:23px}.seg button{border:1px solid #ccc;background:#fff;padding:4px 10px}.seg button.on{background:#0969da;color:#fff;border-color:#0969da}</style><h3 style=\"margin:0 0 8px\">Notification preferences</h3><div class=\"row\" data-annotate-id=\"email-digest\"><span>Email digest</span><div class=\"t on\" id=\"email\" onclick=\"this.classList.toggle('on')\"></div></div><div class=\"row\" data-annotate-id=\"push\"><span>Push on new order</span><div class=\"t\" id=\"push\" onclick=\"this.classList.toggle('on')\"></div></div><div class=\"row\"><span>Frequency</span><div class=\"seg\"><button class=\"on\" onclick=\"sel(this)\">Daily</button><button onclick=\"sel(this)\">Hourly</button><button onclick=\"sel(this)\">Live</button></div></div><script>function sel(b){[...b.parentNode.children].forEach(x=>x.classList.remove(\"on\"));b.classList.add(\"on\")}</script>"
+            }
+        }
+    ]
+}

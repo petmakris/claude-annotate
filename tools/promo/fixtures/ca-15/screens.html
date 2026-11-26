@@ -1,0 +1,37 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Corner Shop</title><style>
+*{box-sizing:border-box}body{margin:0;font:18px system-ui,-apple-system,Segoe UI,sans-serif;background:#f6f5f2;color:#1d2433}
+header{height:64px;background:#1f3b2d;color:#fff;display:flex;align-items:center;padding:0 36px;gap:28px}
+header b{font-size:22px;letter-spacing:.3px}header span{opacity:.75;font-size:16px}header .cart{margin-left:auto;opacity:1}
+main{max-width:980px;margin:48px auto;padding:0 24px}h1{font-size:34px;margin:0 0 24px}
+.card{background:#fff;border:1px solid #e3e0d8;border-radius:14px;padding:28px 32px;margin-bottom:20px}
+label{display:block;font-size:15px;color:#5b6475;margin:14px 0 6px}.in{height:46px;border:1px solid #cfd3da;border-radius:8px;padding:12px 14px;color:#8a92a0}
+.btn{display:inline-block;margin-top:22px;background:#2f7d4f;color:#fff;border-radius:9px;padding:13px 30px;font-weight:600}
+.ghost{background:#fff;color:#2f7d4f;border:1px solid #2f7d4f}
+.row{display:flex;align-items:center;gap:20px;padding:14px 0;border-bottom:1px solid #eee}.row:last-child{border:0}
+.pic{width:64px;height:64px;border-radius:10px;background:#dfe9e1}.pic.b{background:#ece2d3}.pic.c{background:#dde3ee}
+.grow{flex:1}.muted{color:#6b7280;font-size:15px}.price{font-weight:600}.total{display:flex;justify-content:space-between;font-size:22px;font-weight:700;margin-top:10px}
+.steps{display:flex;gap:10px;margin-bottom:22px}.steps i{font-style:normal;padding:6px 14px;border-radius:20px;background:#e8e6df;font-size:14px}.steps i.on{background:#1f3b2d;color:#fff}
+.ok{width:84px;height:84px;border-radius:50%;background:#2f7d4f;color:#fff;font-size:48px;display:grid;place-items:center;margin:0 auto 18px}
+.center{text-align:center}.two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+</style></head><body>
+<header><b>Corner Shop</b><span>Bakery</span><span>Pantry</span><span>Fresh</span><span class="cart">Cart (3)</span></header>
+<main id="m"></main>
+<script>
+const S = {
+signin: `<h1>Sign in</h1><div class="card" style="max-width:520px"><label>Email</label><div class="in">you@example.com</div>
+<label>Password</label><div class="in">••••••••</div><div class="btn">Sign in</div><p class="muted" style="margin-top:18px">New here? Check out as a guest</p></div>`,
+cart: `<h1>Your cart</h1><div class="card">
+<div class="row"><div class="pic"></div><div class="grow">Sourdough loaf<div class="muted">800 g</div></div><div>1</div><div class="price">€6.50</div></div>
+<div class="row"><div class="pic b"></div><div class="grow">Olive oil<div class="muted">500 ml</div></div><div>2</div><div class="price">€17.80</div></div>
+<div class="row"><div class="pic c"></div><div class="grow">Sea salt flakes<div class="muted">250 g</div></div><div>1</div><div class="price">€4.20</div></div>
+<div class="total"><span>Total</span><span>€28.50</span></div></div><div class="btn">Go to checkout</div>`,
+checkout: `<div class="steps"><i>Cart</i><i class="on">Delivery</i><i>Payment</i></div><h1>Delivery</h1><div class="card"><div class="two">
+<div><label>Name</label><div class="in">Dana Example</div></div><div><label>Phone</label><div class="in">+00 000 000</div></div></div>
+<label>Street</label><div class="in">1 Example Lane</div><div class="two"><div><label>City</label><div class="in">Sampletown</div></div><div><label>Delivery slot</label><div class="in">Tomorrow, 8–10</div></div></div></div><div class="btn">Continue to payment</div>`,
+payment: `<div class="steps"><i>Cart</i><i>Delivery</i><i class="on">Payment</i></div><h1>Payment</h1><div class="card"><label>Card number</label><div class="in">4242 4242 4242 4242</div>
+<div class="two"><div><label>Expiry</label><div class="in">12 / 29</div></div><div><label>CVC</label><div class="in">•••</div></div></div>
+<div class="total"><span>Pay</span><span>€28.50</span></div></div><div class="btn">Pay €28.50</div> <div class="btn ghost">Back</div>`,
+done: `<div class="card center" style="padding:56px"><div class="ok">✓</div><h1>Order placed</h1><p class="muted">Order 1042 arrives tomorrow between 8 and 10.</p><div class="btn">Track my order</div></div>`,
+};
+document.getElementById('m').innerHTML = S[location.hash.slice(1)] || S.signin;
+</script></body></html>

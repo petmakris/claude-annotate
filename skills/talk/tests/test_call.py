@@ -652,7 +652,7 @@ def test_a_page_that_cannot_be_shown_or_pointed_at_is_a_problem(tmp_path):
 
 
 SCENE = ("[[show scene | Ben's product name]] <div class=\"slide\"><div class=\"flow\">"
-         "<section data-part=\"data\" data-name=\"the data the server sends\"><div data-part=\"old\">K&amp;EProductType: Investment Grade Bonds</div></section>"
+         "<section data-part=\"data\" data-name=\"the data the server sends\"><div data-part=\"old\">M&amp;PProductType: Investment Grade Bonds</div></section>"
          "<section data-part=\"rule\" data-name=\"the template rule\">find</section>"
          "<section data-part=\"pdf\" data-name=\"what the PDF prints\">Investment Grade Bonds</section></div></div> [[/show]] ")
 

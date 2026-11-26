@@ -1,0 +1,77 @@
+{
+ "response_id": "resp-1772446400",
+ "title": "How a comment becomes a rewrite",
+ "blocks": [
+  {
+   "id": "section-1",
+   "kind": "sequence",
+   "spec": {
+    "title": "What happens when you comment",
+    "actors": [
+     {
+      "id": "page",
+      "label": "Browser page"
+     },
+     {
+      "id": "daemon",
+      "label": "webcompanion daemon"
+     },
+     {
+      "id": "watch",
+      "label": "Watcher"
+     },
+     {
+      "id": "claude",
+      "label": "Claude Code"
+     }
+    ],
+    "steps": [
+     {
+      "id": "s1",
+      "from": "page",
+      "to": "daemon",
+      "arrow": "request",
+      "label": "submit the round",
+      "sub": "your comments, batched"
+     },
+     {
+      "id": "s2",
+      "from": "daemon",
+      "to": "daemon",
+      "arrow": "self",
+      "label": "save the round as one event"
+     },
+     {
+      "id": "s3",
+      "from": "daemon",
+      "to": "watch",
+      "arrow": "event",
+      "label": "the event arrives"
+     },
+     {
+      "id": "s4",
+      "from": "watch",
+      "to": "claude",
+      "arrow": "event",
+      "label": "wake the session"
+     },
+     {
+      "id": "s5",
+      "from": "claude",
+      "to": "daemon",
+      "arrow": "request",
+      "label": "push the rewritten part",
+      "sub": "claude-annotate push"
+     },
+     {
+      "id": "s6",
+      "from": "daemon",
+      "to": "page",
+      "arrow": "event",
+      "label": "that part changes in place"
+     }
+    ]
+   }
+  }
+ ]
+}

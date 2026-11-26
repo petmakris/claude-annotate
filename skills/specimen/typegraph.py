@@ -4,7 +4,7 @@ The entry may be any class. A data class is populated directly. A behaviour clas
 has its own fields, its NESTED classes' fields, and its method signatures read, and
 the data types those mention become the roots instead.
 
-Walking nested classes is required, not a nicety. AnalyticsQueryService
+Walking nested classes is required, not a nicety. ReportQueryService
 holds three fields and all three are collaborators; the only data field in the file
 is AnalyticsResult on its inner class.
 

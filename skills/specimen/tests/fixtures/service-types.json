@@ -1,6 +1,6 @@
 {
   "commit": "2abc1234",
-  "root": "com.example.reporting.AnalyticsQueryService",
+  "root": "com.example.reporting.ReportQueryService",
   "types": {
     "AggregationDescription": {
       "kind": "unhandled",
@@ -34,7 +34,7 @@
       "kind": "unhandled",
       "reason": "'WeightAndMarketValue' could not be resolved through the file's imports, its compilation unit, its package, or a wildcard"
     },
-    "com.example.reporting.AnalyticsQueryService": {
+    "com.example.reporting.ReportQueryService": {
       "fields": [
         {
           "args": [],
@@ -63,9 +63,9 @@
       ],
       "kind": "behaviour",
       "line": 38,
-      "source": "/w/src/main/java/com/example/reporting/AnalyticsQueryService.java"
+      "source": "/w/src/main/java/com/example/reporting/ReportQueryService.java"
     },
-    "com.example.reporting.AnalyticsQueryService$AnalyticsData$CategoryValue": {
+    "com.example.reporting.ReportQueryService$AnalyticsData$CategoryValue": {
       "fields": [
         {
           "args": [],
@@ -86,7 +86,7 @@
       ],
       "kind": "data",
       "line": 107,
-      "source": "/w/src/main/java/com/example/reporting/AnalyticsQueryService.java"
+      "source": "/w/src/main/java/com/example/reporting/ReportQueryService.java"
     },
     "com.example.analytics.model.AnalyticQuery$Aggregation": {
       "fields": [
@@ -563,7 +563,7 @@
       "line": 21,
       "source": "/w/src/main/java/com/example/analytics/service/RiskContribution.java"
     },
-    "com.example.compliance.Solicitation": {
+    "com.example.compliance.Quote": {
       "fields": [
         {
           "args": [],
@@ -576,7 +576,7 @@
       ],
       "kind": "data",
       "line": 3,
-      "source": "/w/src/main/java/com/example/compliance/Solicitation.java"
+      "source": "/w/src/main/java/com/example/compliance/Quote.java"
     },
     "com.example.simulation.BuySell": {
       "fields": [
@@ -590,10 +590,10 @@
         },
         {
           "args": [],
-          "base": "Solicitation",
-          "declared": "Solicitation",
+          "base": "Quote",
+          "declared": "Quote",
           "line": 12,
-          "name": "solicitation",
+          "name": "quote",
           "nullability": "non-null"
         },
         {
@@ -658,10 +658,10 @@
         },
         {
           "args": [],
-          "base": "Solicitation",
-          "declared": "Solicitation",
+          "base": "Quote",
+          "declared": "Quote",
           "line": 11,
-          "name": "solicitation",
+          "name": "quote",
           "nullability": "non-null"
         },
         {
@@ -697,10 +697,10 @@
         },
         {
           "args": [],
-          "base": "Solicitation",
-          "declared": "Solicitation",
+          "base": "Quote",
+          "declared": "Quote",
           "line": 12,
-          "name": "solicitation",
+          "name": "quote",
           "nullability": "non-null"
         },
         {
@@ -755,7 +755,7 @@
       "line": 7,
       "source": "/w/src/main/java/com/example/simulation/RequestHash.java"
     },
-    "com.example.simulation.MultiLegSwitch": {
+    "com.example.simulation.BundleOrder": {
       "fields": [
         {
           "args": [],
@@ -767,10 +767,10 @@
         },
         {
           "args": [],
-          "base": "Solicitation",
-          "declared": "Solicitation",
+          "base": "Quote",
+          "declared": "Quote",
           "line": 13,
-          "name": "solicitation",
+          "name": "quote",
           "nullability": "non-null"
         },
         {
@@ -804,7 +804,7 @@
       ],
       "kind": "data",
       "line": 12,
-      "source": "/w/src/main/java/com/example/simulation/MultiLegSwitch.java"
+      "source": "/w/src/main/java/com/example/simulation/BundleOrder.java"
     },
     "com.example.simulation.SimulationScenario": {
       "fields": [
@@ -840,10 +840,10 @@
         },
         {
           "args": [
-            "MultiLegSwitch"
+            "BundleOrder"
           ],
           "base": "List",
-          "declared": "List<MultiLegSwitch>",
+          "declared": "List<BundleOrder>",
           "line": 16,
           "name": "switches",
           "nullability": "unmarked"
@@ -914,10 +914,10 @@
         },
         {
           "args": [],
-          "base": "Solicitation",
-          "declared": "Solicitation",
+          "base": "Quote",
+          "declared": "Quote",
           "line": 12,
-          "name": "solicitation",
+          "name": "quote",
           "nullability": "non-null"
         },
         {

@@ -22,7 +22,7 @@ DECISIONS = {"decisions": [
     {"id": "D1", "question": "Where should each person's test data live?",
      "change": "hard", "change_note": "Jobs 1 to 4 build on this. Changing it later means redoing them.",
      "options": [{"id": "a", "label": "One file for each person", "gain": "You never edit the same file.",
-                  "cost": "Each app gets four files.", "detail": "like apps/mealy/dataset/natmakri.yml"},
+                  "cost": "Each app gets four files.", "detail": "like apps/shop-app/dataset/alex01.yml"},
                  {"id": "b", "label": "One big file for each app", "gain": "All data in one place.",
                   "cost": "Edits can clash in git."}],
      "recommended": "a", "why": "Separate files stop your edits from clashing.",

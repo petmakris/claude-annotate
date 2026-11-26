@@ -1,0 +1,378 @@
+{
+ "name": "shop",
+ "match": {
+  "remotes": [
+   "github.com/acme/shop"
+  ],
+  "folders": [
+   "/work/shop"
+  ]
+ },
+ "teams": {
+  "@acme/web": "WEB",
+  "@acme/catalog": "CAT",
+  "@acme/checkout": "PAY",
+  "@acme/platform": "PLAT"
+ },
+ "map": {
+  "title": "Shop: 13 modules in three layers, every order passes Checkout",
+  "columns": [
+   "Entry points",
+   "Features",
+   "",
+   "Shared services"
+  ],
+  "boxes": [
+   {
+    "id": "storefront",
+    "col": 0,
+    "row": 0,
+    "name": "Storefront",
+    "lines": [
+     "`storefront`"
+    ]
+   },
+   {
+    "id": "mobile-api",
+    "col": 0,
+    "row": 2,
+    "name": "Mobile API",
+    "lines": [
+     "`mobile-api`"
+    ]
+   },
+   {
+    "id": "admin",
+    "col": 0,
+    "row": 3,
+    "name": "Admin console",
+    "lines": [
+     "`admin`"
+    ]
+   },
+   {
+    "id": "catalog",
+    "col": 1,
+    "row": 0,
+    "name": "Catalog",
+    "lines": [
+     "`catalog`"
+    ]
+   },
+   {
+    "id": "cart",
+    "col": 1,
+    "row": 1,
+    "name": "Cart",
+    "lines": [
+     "`cart`"
+    ]
+   },
+   {
+    "id": "accounts",
+    "col": 1,
+    "row": 2,
+    "name": "Accounts",
+    "lines": [
+     "`accounts`"
+    ]
+   },
+   {
+    "id": "pricing",
+    "col": 2,
+    "row": 0,
+    "name": "Pricing",
+    "lines": [
+     "`pricing`"
+    ]
+   },
+   {
+    "id": "checkout",
+    "col": 2,
+    "row": 1,
+    "rows": 2,
+    "name": "Checkout",
+    "lines": [
+     "`checkout`"
+    ],
+    "children": [
+     {
+      "id": "checkout-payment",
+      "name": "Payment"
+     },
+     {
+      "id": "checkout-retry",
+      "name": "Retry"
+     }
+    ]
+   },
+   {
+    "id": "orders",
+    "col": 2,
+    "row": 3,
+    "name": "Orders",
+    "lines": [
+     "`orders`"
+    ],
+    "rows": 2
+   },
+   {
+    "id": "pay-gateway",
+    "col": 3,
+    "row": 1,
+    "name": "Payment gateway",
+    "lines": [
+     "`pay-gateway`"
+    ]
+   },
+   {
+    "id": "inventory",
+    "col": 3,
+    "row": 2,
+    "name": "Inventory",
+    "lines": [
+     "`inventory`"
+    ]
+   },
+   {
+    "id": "shipping",
+    "col": 3,
+    "row": 3,
+    "name": "Shipping",
+    "lines": [
+     "`shipping`"
+    ]
+   },
+   {
+    "id": "notify",
+    "col": 3,
+    "row": 4,
+    "name": "Notifications",
+    "lines": [
+     "`notify`"
+    ]
+   }
+  ],
+  "arrows": [
+   {
+    "from": "catalog",
+    "to": "storefront"
+   },
+   {
+    "from": "cart",
+    "to": "storefront"
+   },
+   {
+    "from": "accounts",
+    "to": "mobile-api"
+   },
+   {
+    "from": "orders",
+    "to": "admin"
+   },
+   {
+    "from": "pricing",
+    "to": "catalog"
+   },
+   {
+    "from": "pricing",
+    "to": "cart"
+   },
+   {
+    "from": "checkout",
+    "to": "cart"
+   },
+   {
+    "from": "pay-gateway",
+    "to": "checkout"
+   },
+   {
+    "from": "inventory",
+    "to": "checkout"
+   },
+   {
+    "from": "shipping",
+    "to": "orders"
+   },
+   {
+    "from": "notify",
+    "to": "orders"
+   }
+  ],
+  "legend": [
+   {
+    "label": "an arrow points from the part that provides code to the part that uses it"
+   }
+  ]
+ },
+ "parts": [
+  {
+   "id": "storefront",
+   "paths": [
+    "/storefront/"
+   ]
+  },
+  {
+   "id": "mobile-api",
+   "paths": [
+    "/mobile-api/"
+   ]
+  },
+  {
+   "id": "admin",
+   "paths": [
+    "/admin/"
+   ]
+  },
+  {
+   "id": "catalog",
+   "paths": [
+    "/catalog/"
+   ]
+  },
+  {
+   "id": "cart",
+   "paths": [
+    "/cart/"
+   ]
+  },
+  {
+   "id": "accounts",
+   "paths": [
+    "/accounts/"
+   ]
+  },
+  {
+   "id": "pricing",
+   "paths": [
+    "/pricing/"
+   ]
+  },
+  {
+   "id": "checkout",
+   "paths": [
+    "/checkout/"
+   ]
+  },
+  {
+   "id": "checkout-payment",
+   "paths": [
+    "/checkout/src/**/java/com/acme/shop/checkout/payment/**"
+   ]
+  },
+  {
+   "id": "checkout-retry",
+   "paths": [
+    "/checkout/src/**/java/com/acme/shop/checkout/retry/**"
+   ]
+  },
+  {
+   "id": "orders",
+   "paths": [
+    "/orders/"
+   ]
+  },
+  {
+   "id": "pay-gateway",
+   "paths": [
+    "/pay-gateway/"
+   ]
+  },
+  {
+   "id": "inventory",
+   "paths": [
+    "/inventory/"
+   ]
+  },
+  {
+   "id": "shipping",
+   "paths": [
+    "/shipping/"
+   ]
+  },
+  {
+   "id": "notify",
+   "paths": [
+    "/notify/"
+   ]
+  }
+ ],
+ "details": {
+  "orders": {
+   "map": {
+    "title": "Orders: four slices, a refund always starts from a return",
+    "columns": [
+     "Taking orders",
+     "After the sale"
+    ],
+    "boxes": [
+     {
+      "id": "orders-place",
+      "col": 0,
+      "row": 0,
+      "name": "Place an order"
+     },
+     {
+      "id": "orders-track",
+      "col": 0,
+      "row": 1,
+      "name": "Track delivery"
+     },
+     {
+      "id": "orders-returns",
+      "col": 1,
+      "row": 0,
+      "name": "Returns"
+     },
+     {
+      "id": "orders-refunds",
+      "col": 1,
+      "row": 1,
+      "name": "Refunds"
+     }
+    ],
+    "arrows": [
+     {
+      "from": "orders-place",
+      "to": "orders-track"
+     },
+     {
+      "from": "orders-place",
+      "to": "orders-returns"
+     },
+     {
+      "from": "orders-returns",
+      "to": "orders-refunds"
+     }
+    ]
+   },
+   "parts": [
+    {
+     "id": "orders-place",
+     "paths": [
+      "/orders/build.gradle",
+      "/orders/src/**/java/com/acme/shop/orders/place/**"
+     ]
+    },
+    {
+     "id": "orders-track",
+     "paths": [
+      "/orders/src/**/java/com/acme/shop/orders/track/**"
+     ]
+    },
+    {
+     "id": "orders-returns",
+     "paths": [
+      "/orders/src/**/java/com/acme/shop/orders/returns/**"
+     ]
+    },
+    {
+     "id": "orders-refunds",
+     "paths": [
+      "/orders/src/**/java/com/acme/shop/orders/refunds/**"
+     ]
+    }
+   ]
+  }
+ }
+}

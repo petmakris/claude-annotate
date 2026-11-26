@@ -1,0 +1,26 @@
+{
+ "response_id": "resp-1772445600",
+ "title": "Move invoice amounts to integer cents",
+ "blocks": [
+  {
+   "id": "section-1",
+   "title": "What changes",
+   "markdown": "`invoices.amount` is a `NUMERIC(12,2)` in euros today. Rounding happens in four places, and two of them disagree on half cents.\n\nThe plan stores every amount as **integer cents** in a new `amount_cents` column and makes `Invoice.amount_cents()` the only conversion."
+  },
+  {
+   "id": "section-2",
+   "title": "Order of work",
+   "markdown": "1. Add `amount_cents` as a nullable column.\n2. Write both columns from the app for one release.\n3. Backfill the old rows.\n4. Switch reads to `amount_cents`, then drop `amount`."
+  },
+  {
+   "id": "section-3",
+   "title": "The backfill",
+   "markdown": "About **2 million rows** need `amount_cents` filled in. That fits in one `UPDATE` inside migration `0042`, run during the release window:\n\n```sql\nUPDATE invoices SET amount_cents = ROUND(amount * 100);\n```\n\nIt locks `invoices` for under a minute."
+  },
+  {
+   "id": "section-4",
+   "title": "How we know it worked",
+   "markdown": "- A check query finds no row where `amount_cents <> ROUND(amount * 100)`.\n- Statement totals for March match before and after, to the cent.\n- The half-cent test in `test_invoice.py` passes on both paths."
+  }
+ ]
+}

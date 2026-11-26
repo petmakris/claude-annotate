@@ -1,26 +1,26 @@
-[[show sequence | Backtesting before and after]] {"title": "A shared module takes the Service client's place",
+[[show sequence | Forecast before and after]] {"title": "A shared module takes the Service client's place",
  "compare": {
   "before": {"label": "master", "actors": [
-    {"id": "ui", "label": "Proposal report"}, {"id": "svc", "label": "Report service", "sub": "ServiceBacktestingService"},
-    {"id": "cl", "label": "Service client", "role": "PMP's module"}, {"id": "rc", "label": "Service"}],
+    {"id": "ui", "label": "Proposal report"}, {"id": "svc", "label": "Report service", "sub": "ForecastService"},
+    {"id": "cl", "label": "Service client", "role": "Cart's module"}, {"id": "rc", "label": "Service"}],
    "steps": [
-    {"id": "b1", "from": "ui", "to": "svc", "arrow": "request", "label": "asks for the backtest"},
-    {"id": "b2", "from": "svc", "to": "cl", "arrow": "request", "label": "asks for the backtest data", "sub": "fetch(proposal)"},
+    {"id": "b1", "from": "ui", "to": "svc", "arrow": "request", "label": "asks for the forecast"},
+    {"id": "b2", "from": "svc", "to": "cl", "arrow": "request", "label": "asks for the forecast data", "sub": "fetch(proposal)"},
     {"id": "b3", "from": "cl", "to": "cl", "arrow": "self", "label": "builds the requests with fixed lists, always quarterly"},
     {"id": "b4", "from": "cl", "to": "rc", "arrow": "request", "label": "asks for the ex-post measures"},
-    {"id": "b5", "from": "cl", "to": "rc", "arrow": "request", "label": "requests the backtest series"},
+    {"id": "b5", "from": "cl", "to": "rc", "arrow": "request", "label": "requests the forecast series"},
     {"id": "b6", "from": "cl", "to": "svc", "arrow": "event", "label": "returns report timeseries", "reply_to": "b2"},
     {"id": "b7", "from": "svc", "to": "ui", "arrow": "event", "label": "returns the timeseries", "reply_to": "b1"}]},
   "after": {"label": "with the PR", "actors": [
-    {"id": "ui", "label": "Proposal report"}, {"id": "svc", "label": "Report service", "sub": "ServiceBacktestingService"},
-    {"id": "sm", "label": "Shared backtesting module", "role": "PMP and PSIM"}, {"id": "rc", "label": "Service"}],
+    {"id": "ui", "label": "Proposal report"}, {"id": "svc", "label": "Report service", "sub": "ForecastService"},
+    {"id": "sm", "label": "Shared forecast module", "role": "Cart and Pricer"}, {"id": "rc", "label": "Service"}],
    "steps": [
-    {"id": "b1", "from": "ui", "to": "svc", "arrow": "request", "label": "asks for the backtest"},
-    {"id": "b2", "from": "svc", "to": "sm", "arrow": "request", "label": "asks for the backtest data", "sub": "fetch(proposal, QUARTERLY, measures)"},
+    {"id": "b1", "from": "ui", "to": "svc", "arrow": "request", "label": "asks for the forecast"},
+    {"id": "b2", "from": "svc", "to": "sm", "arrow": "request", "label": "asks for the forecast data", "sub": "fetch(proposal, QUARTERLY, measures)"},
     {"id": "b3", "from": "sm", "to": "sm", "arrow": "self", "label": "builds the requests with the lists it is given"},
     {"id": "b4", "from": "sm", "to": "rc", "arrow": "request", "label": "asks for the ex-post measures"},
-    {"id": "b5", "from": "sm", "to": "rc", "arrow": "request", "label": "requests the backtest series"},
+    {"id": "b5", "from": "sm", "to": "rc", "arrow": "request", "label": "requests the forecast series"},
     {"id": "b6", "from": "sm", "to": "svc", "arrow": "event", "label": "returns raw values", "reply_to": "b2"},
-    {"id": "c1", "from": "svc", "to": "svc", "arrow": "self", "label": "builds the report timeseries", "sub": "ReportBacktestTimeseries"},
+    {"id": "c1", "from": "svc", "to": "svc", "arrow": "self", "label": "builds the report timeseries", "sub": "ReportForecastSeries"},
     {"id": "b7", "from": "svc", "to": "ui", "arrow": "event", "label": "returns the timeseries", "reply_to": "b1"}]}}} [[/show]]
-A before and after sequence puts the two flows side by side, row for row, so you compare their shape instead of working it out yourself. [[point: before]] On master, the proposal report asks for the backtest. The report service asks the Service client in PMP's module for the backtest data. The client builds the requests with fixed lists, always quarterly. It asks Service for the ex-post measures. Then it requests the backtest series. And it returns report timeseries. [[point: after]] With the PR, a shared backtesting module takes the client's place. The service passes quarterly and its own measures down. The module builds the requests with the lists it is given, and returns raw values. The report service builds the report timeseries itself, the one row the old flow has no step for. [[point: both]] The Service requests are the same on both sides. [[key: a before and after board sets the two flows side by side, with a gap where one has no step]] Next is a map.
+A before and after sequence puts the two flows side by side, row for row, so you compare their shape instead of working it out yourself. [[point: before]] On master, the proposal report asks for the forecast. The report service asks the Service client in Cart's module for the forecast data. The client builds the requests with fixed lists, always quarterly. It asks Service for the ex-post measures. Then it requests the forecast series. And it returns report timeseries. [[point: after]] With the PR, a shared forecast module takes the client's place. The service passes quarterly and its own measures down. The module builds the requests with the lists it is given, and returns raw values. The report service builds the report timeseries itself, the one row the old flow has no step for. [[point: both]] The Service requests are the same on both sides. [[key: a before and after board sets the two flows side by side, with a gap where one has no step]] Next is a map.

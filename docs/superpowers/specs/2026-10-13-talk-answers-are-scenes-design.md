@@ -31,12 +31,12 @@ stage is lazy work".
 [[show scene | Ben's product name]]
 <div class="cols">
   <section class="box" data-part="data" data-name="the data the server sends">…
-    <div data-part="old">"K&EProductType" … "Investment Grade Bonds"</div></section>
+    <div data-part="old">"M&PProductType" … "Investment Grade Bonds"</div></section>
   <section class="box" data-part="rule" data-name="the template rule">…</section>
   <section class="box" data-part="pdf" data-name="what the PDF prints">…</section>
 </div>
 [[/show]]
-Follow one value. [[+ data]] The server sends the fund's stickers. [[point: part old]] One is the old K&E sticker. …
+Follow one value. [[+ data]] The server sends the fund's stickers. [[point: part old]] One is the old M&P sticker. …
 ```
 
 - A part is any element with `data-part="<id>"`; its key is `part:<id>`. `data-name` gives the words a sentence

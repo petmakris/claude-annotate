@@ -31,8 +31,8 @@ in is the order they are read in — see "The notes are a sequence" below.
 ## Block shape
 
     {"id": "section-N", "kind": "explain", "spec": {
-      "project": "portfolios",                  // optional, tints the header pill
-      "file": "ValuedPosition.java",            // optional
+      "project": "billing",                  // optional, tints the header pill
+      "file": "InvoiceLine.java",            // optional
       "line": 261,                              // optional, the snippet's first line
       "lang": "java",                           // optional, for syntax highlighting
       "code": "private Amount adjust(...) {\n    return ofNullable(this.price)\n}",

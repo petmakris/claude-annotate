@@ -1,0 +1,27 @@
+{
+  "tag": "shop-app · Admin",
+  "title": "Reading the Orders page in four parts",
+  "out": "orders-spotlight.html",
+  "footer": "An invented shop-app admin screen, drawn for this demo",
+  "screens": [
+    {
+      "id": "orders",
+      "label": "Orders",
+      "phase": "today",
+      "image": "orders.png",
+      "crop": [504, 232, 2320, 1528],
+      "source": "Orders page, 26 Nov",
+      "steps": [
+        {"title": "The Orders page shows what needs you today",
+         "text": ["Four counters, one alert and the latest orders.", "Start with anything in red."],
+         "facts": [{"big": "1,284", "small": "orders today"}, {"big": "37", "small": "payments failed"}]},
+        {"box": [1676, 244, 544, 276], "title": "Failed payments are counted for the last hour",
+         "text": ["A red number means card payments are failing right now.", "Anything above zero is worth a look."]},
+        {"box": [2320, 584, 452, 104], "title": "Retry every failed payment with one button",
+         "text": ["The customers were not charged, so a retry is safe.", "Orders that go through turn Paid."]},
+        {"box": [2316, 776, 476, 948], "title": "Status says where each order stands",
+         "text": ["<b>Paid</b>, <b>Shipped</b> or <b>Payment failed</b>.", "A failed one stays in the list until it is paid or cancelled."]}
+      ]
+    }
+  ]
+}

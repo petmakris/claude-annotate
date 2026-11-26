@@ -1,0 +1,351 @@
+{
+ "response_id": "resp-1772446300",
+ "title": "Integer cents for acme-billing",
+ "blocks": [
+  {
+   "id": "section-1",
+   "kind": "facts",
+   "title": "At a glance",
+   "spec": {
+    "facts": [
+     {
+      "value": "40M rows",
+      "label": "to backfill"
+     },
+     {
+      "value": "4 steps",
+      "label": "in order"
+     },
+     {
+      "value": "0042",
+      "label": "adds one column"
+     }
+    ]
+   }
+  },
+  {
+   "id": "section-2",
+   "kind": "explain",
+   "title": "Where a cent goes missing",
+   "spec": {
+    "file": "billing/invoice.py",
+    "line": 12,
+    "lang": "python",
+    "code": "def amount_cents(self) -> int:\n    return int(self.amount * 100)",
+    "notes": [
+     {
+      "line": 2,
+      "span": "self.amount * 100",
+      "label": "**still exact** \u2014 `amount` is a `Decimal`, so nothing is lost yet"
+     },
+     {
+      "line": 2,
+      "span": "int(",
+      "label": "**cuts, never rounds** \u2014 `int` drops whatever is left after the point"
+     }
+    ]
+   }
+  },
+  {
+   "id": "section-3",
+   "kind": "compare",
+   "title": "Round once, in one place",
+   "spec": {
+    "before": {
+     "label": "Today",
+     "path": "billing/invoice.py",
+     "lang": "python",
+     "code": "def amount_cents(self) -> int:\n    return int(self.amount * 100)"
+    },
+    "after": {
+     "label": "Proposed",
+     "path": "billing/invoice.py",
+     "lang": "python",
+     "code": "def amount_cents(self) -> int:\n    return round_half_up(self.amount * 100)"
+    }
+   }
+  },
+  {
+   "id": "section-4",
+   "kind": "map",
+   "spec": {
+    "title": "Every amount goes through one conversion",
+    "columns": [
+     "Who asks",
+     "The app",
+     "The data"
+    ],
+    "boxes": [
+     {
+      "id": "web",
+      "col": 0,
+      "row": 0,
+      "tone": "blue",
+      "name": "Payment form",
+      "lines": [
+       "takes euros"
+      ],
+      "r": 1
+     },
+     {
+      "id": "job",
+      "col": 0,
+      "row": 1,
+      "name": "Statement run",
+      "lines": [
+       "each month"
+      ]
+     },
+     {
+      "id": "conv",
+      "col": 1,
+      "row": 0,
+      "rows": 2,
+      "tone": "green",
+      "name": "Invoice.amount_cents()",
+      "lines": [
+       "the only rounding"
+      ],
+      "r": 2
+     },
+     {
+      "id": "db",
+      "col": 2,
+      "row": 0,
+      "rows": 2,
+      "name": "invoices",
+      "lines": [
+       "`amount_cents`"
+      ],
+      "r": 3
+     }
+    ],
+    "arrows": [
+     {
+      "from": "web",
+      "to": "conv"
+     },
+     {
+      "from": "job",
+      "to": "conv"
+     },
+     {
+      "from": "conv",
+      "to": "db"
+     },
+     {
+      "layer": "route",
+      "from": "web",
+      "to": "conv",
+      "tone": "blue",
+      "n": 1,
+      "r": 2,
+      "label": "12.50"
+     },
+     {
+      "layer": "route",
+      "from": "conv",
+      "to": "db",
+      "tone": "blue",
+      "n": 2,
+      "r": 3,
+      "label": "1250"
+     }
+    ],
+    "captions": {
+     "route": [
+      {
+       "title": "A payment comes in",
+       "text": "The form sends euros."
+      },
+      {
+       "title": "One conversion",
+       "text": "Euros become cents here."
+      },
+      {
+       "title": "Stored",
+       "text": "Only cents reach the table."
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "section-5",
+   "kind": "sequence",
+   "spec": {
+    "title": "A payment is stored in both columns for one release",
+    "actors": [
+     {
+      "id": "api",
+      "label": "Payments API"
+     },
+     {
+      "id": "inv",
+      "label": "Invoice"
+     },
+     {
+      "id": "db",
+      "label": "invoices"
+     }
+    ],
+    "steps": [
+     {
+      "id": "s1",
+      "from": "api",
+      "to": "inv",
+      "arrow": "request",
+      "label": "pay 12.50"
+     },
+     {
+      "id": "s2",
+      "from": "inv",
+      "to": "inv",
+      "arrow": "self",
+      "label": "round once"
+     },
+     {
+      "id": "s3",
+      "from": "inv",
+      "to": "db",
+      "arrow": "request",
+      "label": "write both columns",
+      "sub": "amount, amount_cents"
+     },
+     {
+      "id": "s4",
+      "from": "db",
+      "to": "api",
+      "arrow": "event",
+      "label": "saved"
+     }
+    ]
+   }
+  },
+  {
+   "id": "section-6",
+   "kind": "flowchart",
+   "spec": {
+    "title": "The backfill can stop and resume",
+    "nodes": [
+     {
+      "id": "a",
+      "role": "entry",
+      "label": "Job starts or resumes"
+     },
+     {
+      "id": "c",
+      "role": "decision",
+      "label": "rows left?"
+     },
+     {
+      "id": "b",
+      "role": "code",
+      "label": "Fill 10,000 rows, save the point"
+     },
+     {
+      "id": "d",
+      "role": "success",
+      "label": "Done"
+     }
+    ],
+    "edges": [
+     {
+      "from": "a",
+      "to": "c"
+     },
+     {
+      "from": "c",
+      "to": "b",
+      "label": "yes"
+     },
+     {
+      "from": "c",
+      "to": "d",
+      "label": "no"
+     }
+    ]
+   }
+  },
+  {
+   "id": "section-7",
+   "kind": "decisions",
+   "title": "One question is left",
+   "spec": {
+    "decisions": [
+     {
+      "id": "D1",
+      "question": "When should the old column be dropped?",
+      "change": "hard",
+      "change_note": "A dropped column comes back only from a backup.",
+      "options": [
+       {
+        "id": "a",
+        "label": "One release after reads switch",
+        "gain": "A rollback still finds the old amounts.",
+        "cost": "Two columns live for one more release."
+       },
+       {
+        "id": "b",
+        "label": "In the same release",
+        "gain": "One column from day one.",
+        "cost": "A rollback loses new payments."
+       }
+      ],
+      "recommended": "a",
+      "why": "Money data should survive one rollback.",
+      "status": "open"
+     }
+    ]
+   }
+  },
+  {
+   "id": "section-8",
+   "kind": "jobs",
+   "title": "The work, in order",
+   "spec": {
+    "jobs": [
+     {
+      "id": "J1",
+      "title": "Add the column",
+      "does": "Migration 0042 adds amount_cents.",
+      "after": [],
+      "status": "done"
+     },
+     {
+      "id": "J2",
+      "title": "Write both",
+      "does": "The app fills both columns.",
+      "after": [
+       "J1"
+      ],
+      "status": "running"
+     },
+     {
+      "id": "J3",
+      "title": "Backfill",
+      "does": "The online job fills old rows.",
+      "after": [
+       "J2"
+      ],
+      "status": "todo"
+     },
+     {
+      "id": "J4",
+      "title": "Switch reads",
+      "does": "Reads use cents only.",
+      "after": [
+       "J3"
+      ],
+      "status": "blocked"
+     }
+    ]
+   }
+  },
+  {
+   "id": "section-9",
+   "title": "What each file changes",
+   "markdown": "| File | Change | Risk |\n|---|---|---|\n| `invoice.py` | round half up, in one place | low |\n| `0042_amount_cents.sql` | add the column only | low |\n| `backfill.py` | new online job | medium |"
+  }
+ ]
+}

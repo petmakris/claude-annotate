@@ -16,7 +16,7 @@ CODE = (
 
 def spec(**over):
     base = {
-        "project": "portfolios", "file": "ValuedPosition.java", "line": 261,
+        "project": "billing", "file": "InvoiceLine.java", "line": 261,
         "lang": "java", "code": CODE,
         "notes": [{"line": 2, "span": "priceInReferenceCurrency", "label": "ref ccy"}],
     }
@@ -170,8 +170,8 @@ def test_missing_code_is_refused():
 
 
 def test_header_joins_file_and_line():
-    assert compile_spec(spec())["loc"] == "ValuedPosition.java:261"
-    assert compile_spec(spec(line=None))["loc"] == "ValuedPosition.java"
+    assert compile_spec(spec())["loc"] == "InvoiceLine.java:261"
+    assert compile_spec(spec(line=None))["loc"] == "InvoiceLine.java"
 
 
 def test_blank_rows_are_marked_so_the_renderer_can_shrink_them():

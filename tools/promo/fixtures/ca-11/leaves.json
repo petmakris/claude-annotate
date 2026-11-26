@@ -1,0 +1,12 @@
+{
+  "captured": "2026-01-05T10:00:00Z",
+  "deployment": "shop-app demo (invented)",
+  "types": {
+    "com.acme.payments.PaymentMethod": {
+      "instances": [
+        {"id": "card-visa", "name": "Card"},
+        {"id": "wallet", "name": "Wallet"}
+      ]
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+ "_doc": ["ca-15: a journey apps file for the invented Corner Shop. Nothing here runs: the clip never presses Re-run."],
+ "shop": {
+  "name": "Corner Shop",
+  "features": {"gherkin": "journey.feature"},
+  "run": ["true"],
+  "after": null,
+  "env": {},
+  "results": ".out"
+ }
+}

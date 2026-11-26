@@ -1,5 +1,5 @@
 {
-  "root": "com.example.reporting.AnalyticsQueryService",
+  "root": "com.example.reporting.ReportQueryService",
   "instance": {
     "kind": "object",
     "type": "com.example.analytics.model.AnalyticsResult",

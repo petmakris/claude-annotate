@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>shop-api — checkout retries that do not charge twice</title>
+<!-- Shared harness and theme. Empty in the skeleton on purpose: `python3 <slides skill>/framework/inline.py THIS_FILE`
+     fills the framework, theme and logo blocks, and the deck owns those copies from then on. -->
+<!-- framework:css -->
+<!-- /framework:css -->
+<!-- theme:css -->
+<!-- /theme:css -->
+
+<!-- Per-deck components go in their own <style> block here, never inside deck.css. -->
+
+<style>
+/* pdf-export print rules */
+@media print{
+  @page{size:1280px 720px;margin:0}
+  html,body{background:#fff!important;margin:0!important;padding:0!important;
+            -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  /* The body stack ends in system-ui, which on macOS resolves to San Francisco.
+     Chrome cannot embed SF as a real font — it writes each glyph as an unhinted
+     Type 3 procedure, which most PDF viewers render badly. Helvetica embeds
+     properly as TrueType. Georgia (--head) and Menlo (--mono) already do. */
+  :root{--body:Helvetica,Arial,sans-serif!important}
+  body,.deck,.slide{font-family:Helvetica,Arial,sans-serif}
+  /* every on-screen control is appended to <body>; only .deck is content */
+  body>*:not(.deck){display:none!important}
+  /* the deck JS sets an inline zoom to fit the browser window; undo it for print */
+  .deck{display:block!important;gap:0!important;zoom:1!important}
+  .slide{box-shadow:none!important;margin:0!important;border-radius:0!important;
+         break-inside:avoid;page-break-inside:avoid;
+         break-after:page;page-break-after:always}
+  .slide:last-child{break-after:auto;page-break-after:auto}
+}
+</style>
+</head>
+<body>
+<div class="deck">
+
+<!-- ============ 1 · COVER ============ -->
+<section class="slide tslide"><span class="num">1</span>
+  <div class="bar"></div>
+  <div class="wmk"><!-- theme:logo --><!-- /theme:logo --></div>
+  <div style="position:absolute;left:86px;top:150px;color:var(--accent);font-weight:bold;font-size:14px;letter-spacing:5px">SHOP TEAM · 2026-12-03</div>
+  <div style="position:absolute;left:82px;top:200px;font-family:var(--head);font-weight:bold;font-size:54px;line-height:1.15;color:#fff;max-width:1080px">Checkout retries<br>that never charge twice</div>
+  <div style="position:absolute;left:86px;top:330px;font-size:20px;color:var(--on-dark-mute);max-width:900px">Why shop-api drops 1 in 200 payments today, and the three changes that fix it.</div>
+</section>
+
+<!-- ============ 2 · CONTENT ============ -->
+<section class="slide" id="sec-why"><span class="num">2</span>
+  <div class="kick">01 · THE PROBLEM</div>
+  <div class="title">Why checkout calls fail today</div>
+  <ul class="introb" style="top:180px">
+    <li><b>A timeout is not a failure.</b><span class="sub">The card network answers in 9 s at peak, but shop-api gives up after 5 s and shows the customer an error page, even when the payment went through a moment later.</span></li>
+    <li><b>A blind retry can charge twice.</b><span class="sub">The second call carries no idempotency key, so the bank cannot tell it apart from a brand new order and takes the money again for the same basket.</span></li>
+    <li><b>Nobody sees it happen.</b><span class="sub">Failed checkouts are logged at debug level only. They never reach the dashboard, so the on-call engineer has no way to notice the rate going up after a release.</span></li>
+    <li><b>Support finds out first.</b><span class="sub">Customers write in about a double charge two days later, when the statement arrives, and the ticket rarely names the order the charge belongs to.</span></li>
+    <li><b>Refunds cost more than the sale.</b><span class="sub">Each double charge takes a manual refund, a card fee that is not returned, and an apology voucher that the finance team books by hand.</span></li>
+    <li><b>It gets worse every Friday.</b><span class="sub">Peak traffic doubles the network delay, so the share of checkouts that time out climbs from 1 in 200 to about 1 in 80 between six and nine in the evening. That is also when the shop takes a third of its weekly orders, so the losses land on the busiest hours.</span></li>
+  </ul>
+</section>
+
+<!-- ============ 3 · CO3TE3T ============ -->
+<section class="slide" id="sec-change"><span class="num">3</span>
+  <div class="kick">02 · THE CHANGE</div>
+  <div class="title">Three changes, one release</div>
+  <ul class="introb" style="top:180px">
+    <li><b>Wait 12 s, not 5 s.</b><span class="sub">Matches the slowest answer the card network gave in November.</span></li>
+    <li><b>Send one idempotency key per order.</b><span class="sub">A retry reuses it, so the bank charges once.</span></li>
+    <li><b>Count every failed checkout.</b><span class="sub">A dashboard tile, and an alert above 1 in 1,000.</span></li>
+  </ul>
+</section>
+
+</div>
+<!-- framework:js -->
+<!-- /framework:js -->
+</body>
+</html>

@@ -1,0 +1,6 @@
+{"title": "Paying for an order", "actors": [{"id": "pg", "label": "Checkout page"}, {"id": "co", "label": "Checkout", "sub": "api/checkout.py"}, {"id": "pay", "label": "Payment provider"}],
+ "steps": [
+  {"id": "s1", "from": "pg", "to": "co", "arrow": "request", "label": "sends the cart and the card"},
+  {"id": "s2", "from": "co", "to": "pay", "arrow": "request", "label": "charges the card", "sub": "charge(token, amount)"},
+  {"id": "s3", "from": "pay", "to": "co", "arrow": "event", "label": "returns the receipt", "reply_to": "s2"},
+  {"id": "s4", "from": "co", "to": "pg", "arrow": "event", "label": "shows the order as paid", "reply_to": "s1"}]}

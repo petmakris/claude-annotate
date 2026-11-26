@@ -30,14 +30,14 @@ that reader. The page does the layout; your job is the words.
         "change_note": "Jobs 1 to 4 build on this. Changing it later means redoing them in all three apps.",
         "options": [
           {"id": "a", "label": "One file for each person",
-           "gain": "You and Natassa never edit the same file.",
+           "gain": "You and Alex never edit the same file.",
            "cost": "Each app gets four files, not one.",
-           "detail": "One file per person per app, like apps/mealy/dataset/natmakri.yml."},
+           "detail": "One file per person per app, like apps/shop-app/dataset/alex01.yml."},
           {"id": "b", "label": "One big file for each app",
            "gain": "All the data is in one place to read.",
            "cost": "Two people's edits can clash in git."}],
         "recommended": "a",
-        "why": "You said one big file by voice. Separate files stop your edits and Natassa's from clashing.",
+        "why": "You said one big file by voice. Separate files stop your edits and Alex's from clashing.",
         "switch_if": "You want to read all four people's data in one place.",
         "next": "Jobs 1 to 4 build the data files the way you pick.",
         "status": "open"},
@@ -106,7 +106,7 @@ abbreviation outside `detail`. Every label, gain, cost and why must be understoo
 
 - **Part title** (a sentence with a verb that states the claim and counts): "Claude suggests an answer to each of seven questions, and two are hard to undo". Not "Decisions for you".
 - **Question**: one plain question, at most 10 words, about what he gets or sees. "Where should each person's test data live?" Not "Dataset layout?"
-- **Option label**: at most 8 words, says what he gets. "One file for each person". Not "One file per person per app, like apps/mealy/dataset/natmakri.yml".
+- **Option label**: at most 8 words, says what he gets. "One file for each person". Not "One file per person per app, like apps/shop-app/dataset/alex01.yml".
 - **gain and cost**: one short sentence each, at most 14 words, one fact each. Every option has a real cost, the suggested one too. If no cost can be named, the options are not real alternatives: merge them. Costs are in time, risk or work; a number only when the source has one. "Each app gets four files, not one." Not "Atomic per-user YAML avoids merge conflicts." and not "None."
 - **why**: one sentence, at most 20 words, about the reader's situation. If you are not sure, say what would change the answer. If the suggestion goes against something they said, the first words say so.
 - **switch_if**: one fact the reader can judge. "You want to read all four people's data in one place." Not "If you prefer it."

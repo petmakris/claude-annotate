@@ -9,37 +9,37 @@ import pytest
 
 from skills.stage import model, scene
 
-UI, SVC, RC = ({"id": "ui", "label": "Proposal report"}, {"id": "svc", "label": "Report service", "sub": "ServiceBacktestingService"},
+UI, SVC, RC = ({"id": "ui", "label": "Proposal report"}, {"id": "svc", "label": "Report service", "sub": "ForecastService"},
                {"id": "rc", "label": "Service"})
-CLIENT = {"id": "cl", "label": "Service client", "role": "PMP's module", "sub": "RealizedMeasuresFacadeClient"}
-SHARED = {"id": "sm", "label": "Shared backtesting module", "role": "PMP and PSIM"}
+CLIENT = {"id": "cl", "label": "Service client", "role": "Cart's module", "sub": "RealizedMeasuresFacadeClient"}
+SHARED = {"id": "sm", "label": "Shared forecast module", "role": "Cart and Pricer"}
 
 
 def step(sid, a, b, label, arrow=None, **kw):
     return {"id": sid, "from": a, "to": b, "arrow": arrow or ("self" if a == b else "request"), "label": label, **kw}
 
 
-# the example, the proposal report's backtesting request: on master the report service calls the Service client in
-# PMP's module, which builds the requests with fixed lists and returns ready-made timeseries; with the PR a shared
+# the example, the proposal report's forecast request: on master the report service calls the Service client in
+# Cart's module, which builds the requests with fixed lists and returns ready-made timeseries; with the PR a shared
 # module takes its place, is given quarterly and the measure lists, returns raw values, and the report service
 # builds the timeseries itself. The Service requests are the same on both sides.
-SPEC = {"title": "Backtesting request", "compare": {
+SPEC = {"title": "Forecast request", "compare": {
     "before": {"label": "master", "actors": [UI, SVC, CLIENT, RC], "steps": [
-        step("b1", "ui", "svc", "asks for the backtest"),
-        step("b2", "svc", "cl", "asks for the backtest data", sub="fetch(proposal)"),
+        step("b1", "ui", "svc", "asks for the forecast"),
+        step("b2", "svc", "cl", "asks for the forecast data", sub="fetch(proposal)"),
         step("b3", "cl", "cl", "builds the requests with fixed lists, always quarterly"),
         step("b4", "cl", "rc", "asks for the ex-post measures"),
-        step("b5", "cl", "rc", "asks for the backtest series"),
+        step("b5", "cl", "rc", "asks for the forecast series"),
         step("b6", "cl", "svc", "returns report timeseries", "event", reply_to="b2"),
         step("b7", "svc", "ui", "returns the timeseries", "event", reply_to="b1")]},
     "after": {"label": "with the PR", "actors": [UI, SVC, SHARED, RC], "steps": [
-        step("b1", "ui", "svc", "asks for the backtest"),
-        step("b2", "svc", "sm", "asks for the backtest data", sub="fetch(proposal, QUARTERLY, measures)"),
+        step("b1", "ui", "svc", "asks for the forecast"),
+        step("b2", "svc", "sm", "asks for the forecast data", sub="fetch(proposal, QUARTERLY, measures)"),
         step("b3", "sm", "sm", "builds the requests with the lists it is given"),
         step("b4", "sm", "rc", "asks for the ex-post measures"),
-        step("b5", "sm", "rc", "asks for the backtest series"),
+        step("b5", "sm", "rc", "asks for the forecast series"),
         step("b6", "sm", "svc", "returns raw values", "event", reply_to="b2"),
-        step("c1", "svc", "svc", "builds the report timeseries", sub="ReportBacktestTimeseries"),
+        step("c1", "svc", "svc", "builds the report timeseries", sub="ReportForecastSeries"),
         step("b7", "svc", "ui", "returns the timeseries", "event", reply_to="b1")]}}}
 
 
@@ -98,7 +98,7 @@ def test_a_step_between_other_actors_that_are_on_both_sides_is_moved_and_stands_
 def test_a_step_that_changed_place_in_the_order_is_moved_and_each_side_keeps_its_own_order():
     spec = json.loads(json.dumps(SPEC))
     after = spec["compare"]["after"]["steps"]
-    after[3], after[4] = after[4], after[3]   # the PR sends the backtest request before the ex-post one
+    after[3], after[4] = after[4], after[3]   # the PR sends the forecast request before the ex-post one
     got = rows(spec)
     assert [r[2] for r in got if r[2]] == ["b1", "b2", "b3", "b4", "b5", "b6", "b7"]
     assert [r[3] for r in got if r[3]] == ["b1", "b2", "b3", "b5", "b4", "b6", "c1", "b7"]

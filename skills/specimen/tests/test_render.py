@@ -77,7 +77,7 @@ def opened():
 
 def test_the_fixture_is_a_service_entry_with_all_four_kinds():
     kinds = {e['kind'] for e in TYPES['types'].values()}
-    assert TYPES['root'] == 'com.example.reporting.AnalyticsQueryService'
+    assert TYPES['root'] == 'com.example.reporting.ReportQueryService'
     assert TYPES['types'][TYPES['root']]['kind'] == 'behaviour'
     assert {'data', 'behaviour', 'leaf', 'unhandled'} <= kinds
 

@@ -95,13 +95,13 @@ def test_constructors_and_methods_are_not_mistaken_for_fields():
 
 def test_private_final_fields_of_a_service_are_found():
     src = (
-        'public class AnalyticsQueryService {\n'
+        'public class ReportQueryService {\n'
         '    private final ClassificationRepository classificationRepository;\n'
         '    private final ClassificationsProperties classificationsProperties;\n'
         '}\n'
     )
     decls, stripped = parse(src)
-    assert [f.name for f in fields_of(decls['AnalyticsQueryService'], stripped)] == [
+    assert [f.name for f in fields_of(decls['ReportQueryService'], stripped)] == [
         'classificationRepository', 'classificationsProperties',
     ]
 

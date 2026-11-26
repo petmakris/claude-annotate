@@ -1,0 +1,321 @@
+{
+ "title": "Northwind Goods checkout",
+ "subtitle": "Every screen, desktop and phone",
+ "id": "northwind-checkout",
+ "meta": [
+  "Captured 26 Nov 2026, 09:40",
+  "10 screens, 20 shots"
+ ],
+ "changes": {
+  "since": "25 Nov 2026, 18:00",
+  "removed": []
+ },
+ "groups": [
+  {
+   "name": "Sign in",
+   "id": "sign-in",
+   "boards": [
+    {
+     "number": 1,
+     "title": "Sign in",
+     "caption": "Email and password, with a reset link",
+     "shots": [
+      {
+       "label": "Desktop",
+       "file": "01-sign-in.png",
+       "width": 1600,
+       "height": 1000,
+       "viewport": {
+        "width": 1600,
+        "height": 1000
+       }
+      },
+      {
+       "label": "Phone",
+       "file": "01-sign-in.phone.png",
+       "width": 390,
+       "height": 844,
+       "viewport": {
+        "width": 390,
+        "height": 844
+       }
+      }
+     ],
+     "change": "unchanged"
+    },
+    {
+     "number": 2,
+     "title": "Reset password",
+     "caption": "The link goes to the address on the account",
+     "shots": [
+      {
+       "label": "Desktop",
+       "file": "02-reset.png",
+       "width": 1600,
+       "height": 1000,
+       "viewport": {
+        "width": 1600,
+        "height": 1000
+       }
+      },
+      {
+       "label": "Phone",
+       "file": "02-reset.phone.png",
+       "width": 390,
+       "height": 844,
+       "viewport": {
+        "width": 390,
+        "height": 844
+       }
+      }
+     ],
+     "change": "unchanged"
+    }
+   ]
+  },
+  {
+   "name": "Browse",
+   "id": "browse",
+   "boards": [
+    {
+     "number": 3,
+     "title": "Home",
+     "caption": "The winter edit and this week's best sellers",
+     "shots": [
+      {
+       "label": "Desktop",
+       "file": "03-home.png",
+       "width": 1600,
+       "height": 1000,
+       "viewport": {
+        "width": 1600,
+        "height": 1000
+       }
+      },
+      {
+       "label": "Phone",
+       "file": "03-home.phone.png",
+       "width": 390,
+       "height": 844,
+       "viewport": {
+        "width": 390,
+        "height": 844
+       }
+      }
+     ],
+     "change": "unchanged"
+    },
+    {
+     "number": 4,
+     "title": "Shoes",
+     "caption": "A category with filters",
+     "shots": [
+      {
+       "label": "Desktop",
+       "file": "04-shoes.png",
+       "width": 1600,
+       "height": 1000,
+       "viewport": {
+        "width": 1600,
+        "height": 1000
+       }
+      },
+      {
+       "label": "Phone",
+       "file": "04-shoes.phone.png",
+       "width": 390,
+       "height": 844,
+       "viewport": {
+        "width": 390,
+        "height": 844
+       }
+      }
+     ],
+     "change": "unchanged"
+    },
+    {
+     "number": 5,
+     "title": "Product",
+     "caption": "Size picker and Add to cart",
+     "shots": [
+      {
+       "label": "Desktop",
+       "file": "05-product.png",
+       "width": 1600,
+       "height": 1000,
+       "viewport": {
+        "width": 1600,
+        "height": 1000
+       }
+      },
+      {
+       "label": "Phone",
+       "file": "05-product.phone.png",
+       "width": 390,
+       "height": 844,
+       "viewport": {
+        "width": 390,
+        "height": 844
+       }
+      }
+     ],
+     "change": "unchanged"
+    }
+   ]
+  },
+  {
+   "name": "Cart",
+   "id": "cart",
+   "boards": [
+    {
+     "number": 6,
+     "title": "Cart",
+     "caption": "Two items and the order total",
+     "shots": [
+      {
+       "label": "Desktop",
+       "file": "06-cart.png",
+       "width": 1600,
+       "height": 1000,
+       "viewport": {
+        "width": 1600,
+        "height": 1000
+       }
+      },
+      {
+       "label": "Phone",
+       "file": "06-cart.phone.png",
+       "width": 390,
+       "height": 844,
+       "viewport": {
+        "width": 390,
+        "height": 844
+       }
+      }
+     ],
+     "change": "changed",
+     "change_note": "Promo code field added under the subtotal"
+    },
+    {
+     "number": 7,
+     "title": "Saved for later",
+     "caption": "Items moved out of the cart",
+     "shots": [
+      {
+       "label": "Desktop",
+       "file": "07-saved.png",
+       "width": 1600,
+       "height": 1000,
+       "viewport": {
+        "width": 1600,
+        "height": 1000
+       }
+      },
+      {
+       "label": "Phone",
+       "file": "07-saved.phone.png",
+       "width": 390,
+       "height": 844,
+       "viewport": {
+        "width": 390,
+        "height": 844
+       }
+      }
+     ],
+     "change": "unchanged"
+    }
+   ]
+  },
+  {
+   "name": "Checkout",
+   "id": "checkout",
+   "boards": [
+    {
+     "number": 8,
+     "title": "Address",
+     "caption": "Step 1 of 3",
+     "shots": [
+      {
+       "label": "Desktop",
+       "file": "08-address.png",
+       "width": 1600,
+       "height": 1000,
+       "viewport": {
+        "width": 1600,
+        "height": 1000
+       }
+      },
+      {
+       "label": "Phone",
+       "file": "08-address.phone.png",
+       "width": 390,
+       "height": 844,
+       "viewport": {
+        "width": 390,
+        "height": 844
+       }
+      }
+     ],
+     "change": "unchanged"
+    },
+    {
+     "number": 9,
+     "title": "Payment",
+     "caption": "Step 2 of 3",
+     "shots": [
+      {
+       "label": "Desktop",
+       "file": "09-payment.png",
+       "width": 1600,
+       "height": 1000,
+       "viewport": {
+        "width": 1600,
+        "height": 1000
+       }
+      },
+      {
+       "label": "Phone",
+       "file": "09-payment.phone.png",
+       "width": 390,
+       "height": 844,
+       "viewport": {
+        "width": 390,
+        "height": 844
+       }
+      }
+     ],
+     "change": "changed",
+     "change_note": "A notice when the bank did not answer"
+    },
+    {
+     "number": 10,
+     "title": "Order placed",
+     "caption": "The confirmation page",
+     "shots": [
+      {
+       "label": "Desktop",
+       "file": "10-placed.png",
+       "width": 1600,
+       "height": 1000,
+       "viewport": {
+        "width": 1600,
+        "height": 1000
+       }
+      },
+      {
+       "label": "Phone",
+       "file": "10-placed.phone.png",
+       "width": 390,
+       "height": 844,
+       "viewport": {
+        "width": 390,
+        "height": 844
+       }
+      }
+     ],
+     "change": "new"
+    }
+   ]
+  }
+ ]
+}
