@@ -364,9 +364,9 @@ function paintFollow() {
   btn.onclick = () => { if (follow) pinBoard(); else { followAgain(); resync(); } };
   box.dataset.mode = follow ? "following" : "pinned"; box.dataset.text = still || !follow ? "board" : "plain";
   const parts = [state, btn, msg];
-  if (still) { const hint = document.createElement("span"); hint.className = "fl-hint"; hint.textContent = tr("s.fol.keep.hint"); parts.push(hint); }   // what Keep this board does, in words (the tooltip is not seen on touch)
+  if (still) { const hint = document.createElement("span"); hint.className = "fl-hint"; hint.textContent = tr("s.fol.keep.hint"); hint.title = hint.textContent; hint.setAttribute("aria-label", hint.textContent); parts.push(hint); }   // a short screen with earlier answers folds it to one line (call-shell.css): the words stay in the title and the label   // what Keep this board does, in words (the tooltip is not seen on touch)
   if (note) {
-    const nt = document.createElement("span"); nt.className = "fl-note"; nt.textContent = note; parts.push(nt);
+    const nt = document.createElement("span"); nt.className = "fl-note"; nt.textContent = note; nt.title = note; nt.setAttribute("aria-label", note); parts.push(nt);
     // the card's own answer stays playable from the card while the transport's Play names the board's answer
     const own = document.createElement("button"); own.type = "button"; own.className = "fl-btn"; own.classList.add("fl-own");
     own.textContent = tr("s.fol.playown", {n}); own.onclick = () => playAnswer(shown, true);

@@ -69,6 +69,7 @@
 .fl-hint{order:4;flex:1 1 100%;min-width:0;font-size:13px;line-height:1.4;overflow-wrap:anywhere}
 .fl-note{order:5;flex:1 1 55%;min-width:0;color:var(--ink);font-weight:500;line-height:1.4;overflow-wrap:anywhere}
 .fl-own{order:5}
+@media (max-height:760px){.convo.has-earlier .fl-hint,.convo.has-earlier .fl-note{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}   /* a short screen: the list keeps its head and two rows under the card; the words stay in the title and aria-label */
 .now-follow[data-mode="pinned"] .fl-btn.fl-own{background:var(--panel);border-color:var(--line);color:var(--ink)}
 .now-follow[data-mode="pinned"] .fl-btn.fl-own:hover{background:var(--shade)}
 .fl-btn{flex:none;min-height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel);font:500 12.5px var(--sans);color:var(--ink)}

@@ -255,3 +255,20 @@ def test_a_repair_board_is_filed_under_the_answer_it_names_and_not_under_the_nex
     page.check("boards([E(0, 'you'), E(1, 'claude'), E(2, 'you'), E(3, 'claude'), E(4, 'board', {answer: 1, repair: true}), E(5, 'you'), E(6, 'claude')])")
     page.check("boards([E(0, 'you'), E(1, 'board', {answer: 2}), E(2, 'claude'), E(3, 'board', {answer: 9, repair: true})])")
     assert page.run() == [[[1, [4]], [3, []], [6, []]], [[2, [1]]]]
+
+
+# ---- r2-returning-2 (finish): on a short screen the still strip's hint and note fold to one line, their words kept ---------------
+
+def test_the_still_strips_hint_keeps_its_words_in_title_and_aria_label_for_the_folded_line(tmp_path):
+    html, states = asked(tmp_path, answers=(TWO, SECOND), asks=ASKS[:2])
+    page = CallPage(html, states, autoplay=False, seconds=3.0).js("await serve(2);")
+    page.js("fromStage({type: 'stage:views', list: [{name: 'heat-pump-or-gas-boiler', answer: 1}]}); fromStage({type: 'stage:shown', view: 'heat-pump-or-gas-boiler'});")
+    page.check("(() => { const h = $('nowfollow').querySelector('.fl-hint'); return [h.title, h.getAttribute('aria-label'), !!$('nowfollow').querySelector('.fl-btn')]; })()")
+    hint = "Keep this board stops the stage from moving to the next answer's board."
+    assert page.run() == [[hint, hint, True]]
+
+
+def test_a_short_screen_with_earlier_answers_folds_the_strips_hint_and_note_to_one_line():
+    css = open(STATIC / "call-shell.css", encoding="utf-8").read()
+    m = re.search(r"@media \(max-height:760px\)\{\.convo\.has-earlier \.fl-hint,\.convo\.has-earlier \.fl-note\{([^}]*)\}\}", css)
+    assert m and m.group(1) == "white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
