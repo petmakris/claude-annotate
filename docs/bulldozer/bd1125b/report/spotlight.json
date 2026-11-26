@@ -1,0 +1,237 @@
+{
+ "tag": "Side panel run",
+ "title": "What Claude changed in the /talk side panel, one topic per slide",
+ "out": "index.html",
+ "css": "stage.css",
+ "footer": "Pictures: the call page before the run and after it, same calls and same words.",
+ "screens": [
+  {
+   "id": "intro",
+   "label": "What this is",
+   "html": "<div class=\"ba one\"><div class=\"side today\"><h4>What this report is about</h4><p><b>/talk</b> is a call with Claude: you type or speak, Claude answers aloud, and a <b>stage</b> beside the panel shows boards (a table, a diagram, a map, some code) while the voice reads. The <b>side panel</b> is the narrow column on the right of the call page: the conversation, the player and the box you type in.</p><p>An earlier study, with 14 AI test users, found 99 problems with that panel and proposed 14 quick fixes and 5 larger steps (99 + 14 + 5 = 118 entries, each one thing to fix). This run built all of it. Then it ran two <b>rounds</b>: in each, 14 new test users (a teacher, a carpenter on a phone, a blind accountant, and so on) used the rebuilt panel, and what they hit was fixed.</p><p>The test users are AI agents who did not know they were being tested. Each drove a real call in a browser and then rated the page from 0 to 10 (10 is perfect).</p><div class=\"facts3\"><div><b>186</b>entries, each one problem to fix, all fixed (118 from the study and its fixes + 30 from round 1 + 33 from round 2)</div><div><b>14</b>of the study's entries were fixed, found broken again by test users, and fixed a second time</div><div><b>165</b>of the 186 are something a person sees or feels; the other 21 are a hidden fault, a test or a rule for Claude</div></div><table class=\"ratings\"><tr><th>Average rating of the page, 0 to 10, 14 test users each time</th><th>Average</th><th>Lowest</th><th>Highest</th></tr><tr><td>Before the run (the study)</td><td>6.3</td><td>5.5</td><td>7.5</td></tr><tr><td>After round 1</td><td>6.9</td><td>6.5</td><td>8</td></tr><tr><td>After round 2</td><td>6.8</td><td>5</td><td>8</td></tr></table></div></div>",
+   "steps": [
+    {
+     "title": "Claude fixed all 181 problems in the call page's side panel; test users rate it 6.8, up from 6.3",
+     "text": [
+      "Every slide after this one is one change you can see or feel, with the page before and after. The rating rose after round 1 and stayed level after round 2 (6.9, then 6.8): each new group of test users found new problems (6 serious ones in round 1, 3 in round 2), so it did not climb further. The ratings are an AI's impression, a rough sign and not a measurement."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s1",
+   "label": "Step 1 Calls",
+   "image": "img/step1.jpg",
+   "source": "Before: the call page as it was. After: the same page, same calls.",
+   "steps": [
+    {
+     "title": "The Calls button counts the calls that need you and lists them by need",
+     "text": [
+      "A call is one conversation with Claude; you can have several open, and the stacked-layers button at the top of the panel lists them (a call needs you when it waits for you, has new answers or has stalled). Before, every call had the same blue dot. Now each has an icon and a word (Stalled means nobody picked the question up; also 2 new answers, Answering, Waiting for you), the ones that need you come first, and Next waiting jumps to the first of them. Before, a browser tab's title never changed; now its title and icon show the same state."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s2",
+   "label": "Step 2 Wait card",
+   "image": "img/step2.jpg",
+   "source": "Before: a question just sent. After: the same question.",
+   "steps": [
+    {
+     "title": "Every question you send gets a card that says where it stands and lets you take it back",
+     "text": [
+      "Before, a sent question showed one grey line and nothing else. Now a card shows Sent, Picked up (Claude has started on it), Working and Answer, a clock counting from the moment you sent until the answer comes, and buttons to take the question back, copy it or send it again. Text you are still typing stays in the box. On the server, a question Claude has not picked up can be cancelled and stays saved in the call, and an answer you replaced with a correction never speaks over you."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s3",
+   "label": "Step 3 Conversation",
+   "image": "img/step3.jpg",
+   "source": "Before and after: a call with three answers.",
+   "steps": [
+    {
+     "title": "The panel is one card for the answer now playing over a short list of earlier answers",
+     "text": [
+      "Before, every answer was folded to one cut-off line with a Show text link, and progress notes such as \"thinking it through\" piled up between them as faint dotted lines. Now the newest answer is just there to read, the word being said is lit, and earlier answers sit in a list you can search (it finds words in answers and boards) and open one at a time or all at once. The progress notes are now one line at the foot."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s4",
+   "label": "Step 4 Return",
+   "image": "img/step4.jpg",
+   "source": "Before and after: a call that got three answers while the user was away.",
+   "steps": [
+    {
+     "title": "Coming back after hours away, a card says how long you were gone and plays what you missed",
+     "text": [
+      "Before, you came back to a list that did not say anything had arrived. Now a line under the header says what the call is doing, and after you have been away a while (2 hours 10 minutes in the picture) a Welcome back card says how long you were away, how many answers you did not hear, and offers Play the 3 new. A divider marks where you left off."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s5",
+   "label": "Step 5 Type, Talk, Live",
+   "image": "img/step5.jpg",
+   "source": "Before and after: the foot of the panel.",
+   "steps": [
+    {
+     "title": "A Type, Talk, Live switch under the player says how you are talking and whose turn it is",
+     "text": [
+      "Type is keyboard only, Talk is press the mic and speak, and Live keeps the microphone open so you and Claude talk hands-free. Before, Live was only in settings. Now one tap on the switch changes how you talk, a small badge says Your turn or Typing, and a hint line under the box shows Space, the arrow keys and ? for all keys."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s6",
+   "label": "Keys sheet and phone",
+   "image": "img/keys.jpg",
+   "source": "Before and after: the shortcut sheet at desktop width; the phone conversation.",
+   "steps": [
+    {
+     "title": "Pressing ? lists every keyboard shortcut, and on a phone the conversation is a third taller",
+     "text": [
+      "Before, the shortcuts existed but no screen told you. Now ? opens a sheet grouped as Listening, Moving around and Talking. On a phone with a board showing, the conversation was about three lines tall; it is now about a third taller and the buttons are thumb-sized."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "stage-table",
+   "label": "Stage defects",
+   "image": "img/stage-table.jpg",
+   "source": "Before and after: a table board at 1440 px, same data.",
+   "steps": [
+    {
+     "title": "Tables on the stage no longer print their words on top of each other",
+     "text": [
+      "The stage is the big area left of the panel, and 1440 px is the width of the browser window. The picture is a table about vaccine boosters. A table's first column was drawn narrower than its words, so Shot and Booster ran together. Now every column is as wide as its longest word."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "stage-list",
+   "label": "Stage defects",
+   "html": "<div class=\"rowsbox\"><div class=\"hd\"><h4 class=\"b\">Before</h4><h4 class=\"a\">After</h4></div><div class=\"rw\"><div class=\"b\">A slide's title was cut off at the top of the stage</div><div class=\"a\">A slide at rest shows from its title</div></div><div class=\"rw\"><div class=\"b\">Greek capital letters kept their accent marks and were spaced out</div><div class=\"a\">Greek capitals lose the accents and sit tight; Greek numbers use a decimal comma</div></div><div class=\"rw\"><div class=\"b\">A long line of code was cut at the stage's edge</div><div class=\"a\">Long lines wrap by default; with the existing Wrap lines switch off, a line that goes on fades at the edge</div></div><div class=\"rw\"><div class=\"b\">The menu listing an answer's boards opened with its header and first rows hidden</div><div class=\"a\">The menu opens whole, newest first</div></div><div class=\"rw\"><div class=\"b\">A bars board said \"1 days\"</div><div class=\"a\">It says \"1 day\"</div></div><div class=\"rw\"><div class=\"b\">On a TV a small table sat tiny in the middle of a big stage</div><div class=\"a\">A small table fills most of the stage</div></div><div class=\"rw\"><div class=\"b\">A step popup stayed open over the board after the voice moved on</div><div class=\"a\">It closes when the voice moves on, with a close button big enough to tap</div></div></div>",
+   "steps": [
+    {
+     "title": "Seven more stage faults are fixed: titles, Greek, code, lists, wording and popups",
+     "text": [
+      "A board is one thing the stage shows (a table, a diagram, code). These changes are small, each in a different place, so they share a slide."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "keys-sr",
+   "label": "Keyboard and screen reader",
+   "html": "<div class=\"rowsbox\"><div class=\"hd\"><h4 class=\"b\">Before</h4><h4 class=\"a\">After</h4></div><div class=\"rw\"><div class=\"b\">Settings opened without taking focus and sat last in the Tab order</div><div class=\"a\">Opening Settings puts you inside it, and Escape puts you back on the gear</div></div><div class=\"rw\"><div class=\"b\">The keyboard shortcuts were undocumented</div><div class=\"a\">A hint under the box shows Space and the arrows, and ? lists every key</div></div><div class=\"rw\"><div class=\"b\">A long Tab path through the whole panel</div><div class=\"a\">Tab offers skip links (a link that jumps past a block) to the message box and the player, and Alt then B jumps to the board</div></div><div class=\"rw\"><div class=\"b\">A screen reader said nothing when Claude started or finished</div><div class=\"a\">It says Claude is working, what it is working on, and Answer 3 arrived</div></div><div class=\"rw\"><div class=\"b\">Board changes on the stage were silent; a flowchart was one picture</div><div class=\"a\">Board changes are announced, and each arrow of a flowchart is read with its ends and its yes or no</div></div><div class=\"rw\"><div class=\"b\">The conversation had no headings</div><div class=\"a\">Each answer is a heading a screen reader can jump between, and the first stop in the panel is the newest answer</div></div><div class=\"rw\"><div class=\"b\">Enter on an earlier answer's Play dropped the keyboard to the page</div><div class=\"a\">The keyboard stays on the player's button</div></div></div>",
+   "steps": [
+    {
+     "title": "People who use a keyboard or a screen reader can now reach, hear and replay every answer",
+     "text": [
+      "A screen reader is software that reads the page aloud for people who cannot see it. These seven are the main changes; the second page lists all 181 entries."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tv-phone",
+   "label": "TV and phone",
+   "html": "<div class=\"rowsbox\"><div class=\"hd\"><h4 class=\"b\">Before</h4><h4 class=\"a\">After</h4></div><div class=\"rw\"><div class=\"b\">TV size was a buried setting; a big screen opened in desk size</div><div class=\"a\">A big screen offers TV size once, in a line above the box, and never changes size by itself; the Full screen button enlarges the panel too</div></div><div class=\"rw\"><div class=\"b\">In TV size the chips, labels and time stayed small</div><div class=\"a\">They are as big as the answer text</div></div><div class=\"rw\"><div class=\"b\">On a phone the step arrows and chips were too small to tap</div><div class=\"a\">The player, the strip's switch and the card buttons are thumb-sized</div></div><div class=\"rw\"><div class=\"b\">On a phone the Follow button squeezed the stage title to \"F...\"</div><div class=\"a\">Follow is a small eye icon and the title is readable</div></div><div class=\"rw\"><div class=\"b\">A phone's table lost its last row under a fade, with no sign</div><div class=\"a\">A small badge says how many rows are out of sight</div></div><div class=\"rw\"><div class=\"b\">The settings popup hid End call below the screen on a TV or phone</div><div class=\"a\">Settings scroll and End call is always at the bottom</div></div><div class=\"rw\"><div class=\"b\">Sequence boards had small faint notes on a TV</div><div class=\"a\">Replies, notes and compare titles read from across the room</div></div></div>",
+   "steps": [
+    {
+     "title": "The panel is now usable on a TV across the room and on a phone with one thumb",
+     "text": [
+      "The TV view is a 1280 pixel wide screen read from a sofa; the phone view is 390 pixels wide. A sequence board is a diagram of who sends what to whom, step by step; a compare board shows two of them, before and after."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "settings",
+   "label": "Settings and wording",
+   "html": "<div class=\"rowsbox\"><div class=\"hd\"><h4 class=\"b\">Before</h4><h4 class=\"a\">After</h4></div><div class=\"rw\"><div class=\"b\">Choosing Greek changed only what was spoken; the page stayed English</div><div class=\"a\">The whole panel, the wait card and the stage toolbar are Greek</div></div><div class=\"rw\"><div class=\"b\">The page opened in Light whatever the computer used; two buttons were both called Auto</div><div class=\"a\">A computer set to dark opens dark; only one button is called Auto</div></div><div class=\"rw\"><div class=\"b\">Voice speed was buried in settings; asking to go slower sent Claude a question</div><div class=\"a\">Speed is one tap in the player; typing slower or faster moves it</div></div><div class=\"rw\"><div class=\"b\">Hover tips covered the player time and the line under it</div><div class=\"a\">Tips open away from what you are reading</div></div><div class=\"rw\"><div class=\"b\">Only earlier answers could be copied; times were a bare 14:05</div><div class=\"a\">The newest answer has Copy; times say Yesterday or the date</div></div><div class=\"rw\"><div class=\"b\">The Key points chip said \"+1\" with no meaning</div><div class=\"a\">It says Key points and how many points that answer added</div></div></div>",
+   "steps": [
+    {
+     "title": "Language, theme, speed and labels now say what they do and remember what you chose",
+     "text": [
+      "Key points is a board Claude keeps of each answer's main lines; the chip is the small button under an answer that puts it on the stage. Your choices are remembered in this browser."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "corrections",
+   "label": "Corrections and queued answers",
+   "html": "<div class=\"rowsbox\"><div class=\"hd\"><h4 class=\"b\">Before</h4><h4 class=\"a\">After</h4></div><div class=\"rw\"><div class=\"b\">A correction did not stop the earlier answer, which then spoke over you</div><div class=\"a\">The earlier answer is tagged Replaced and never plays over the new one</div></div><div class=\"rw\"><div class=\"b\">A queued answer said \"Next answer ready\" with no way to skip</div><div class=\"a\">A row says Next: answer 4, plays when this one ends, with Skip</div></div><div class=\"rw\"><div class=\"b\">Take back withdrew only the newest of several waiting questions</div><div class=\"a\">It takes back every question Claude has not picked up, puts them in the box in order, and says how many came back</div></div><div class=\"rw\"><div class=\"b\">Send again left a note for 7 seconds, then no trace</div><div class=\"a\">The card keeps a line saying when it was sent again</div></div><div class=\"rw\"><div class=\"b\">The top strip and the wait card showed different clocks</div><div class=\"a\">Both show the same clock and the same word</div></div><div class=\"rw\"><div class=\"b\">\"Claude is finishing the earlier question\" showed even when that question's session had ended</div><div class=\"a\">It shows only when that is true</div></div><div class=\"rw\"><div class=\"b\">A stalled question said \"Check the terminal\" (the window Claude runs in)</div><div class=\"a\">It says Not picked up and that your question is saved in the call, with Send again, Copy question and Take back</div></div></div>",
+   "steps": [
+    {
+     "title": "Interrupting Claude, queueing and taking back questions now behave the way the card says",
+     "text": [
+      "A correction is a second question sent while Claude is still answering the first. A stalled question is one nobody picked up."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "guide",
+   "label": "What Claude is told",
+   "html": "<div class=\"rowsbox\"><div class=\"hd\"><h4 class=\"b\">Before</h4><h4 class=\"a\">After</h4></div><div class=\"rw\"><div class=\"b\">A user who insisted on a table got a sequence diagram; rows were cut to four</div><div class=\"a\">A user who asks for a table gets it, up to 8 rows by 6 columns</div></div><div class=\"rw\"><div class=\"b\">A request for a picture of a physical thing got boxes and arrows</div><div class=\"a\">Claude says no board draws that, instead of faking it</div></div><div class=\"rw\"><div class=\"b\">A day-by-day plan with costs was drawn as actors and arrows</div><div class=\"a\">Claude is guided to bars or a short table</div></div><div class=\"rw\"><div class=\"b\">A long typed message was answered in part</div><div class=\"a\">It is answered point by point</div></div><div class=\"rw\"><div class=\"b\">When a table overlapped, Claude apologised at length</div><div class=\"a\">Claude says the page is at fault and gives the facts another way</div></div><div class=\"rw\"><div class=\"b\">A draft email shown on the stage kept its long lines running off a phone</div><div class=\"a\">The draft wraps on a phone</div></div></div>",
+   "steps": [
+    {
+     "title": "Claude's own instructions for the call now cover tables, pictures, long messages and drafts",
+     "text": [
+      "The guide is the short text every Claude session reads before it answers on a call. Most of these change what Claude puts on the stage rather than the page itself."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "still",
+   "label": "Still hit",
+   "html": "<div class=\"rowsbox\"><div class=\"hd\"><h4 class=\"b\">What round 2 test users still hit</h4><h4 class=\"a\">What was done about it</h4></div><div class=\"rw\"><div class=\"b\">The marathon-call tester rated 5: 14 minutes with no answer, and a status line that said Claude was finishing an earlier question</div><div class=\"a\">The status line is fixed. The cause of the silence is unknown: no answer reached that call in the test.</div></div><div class=\"rw\"><div class=\"b\">The voice-first tester rated 5: the microphone heard nothing in three tries</div><div class=\"a\">The test browser had no real microphone, so voice input was not tested for a person. Not fixed.</div></div><div class=\"rw\"><div class=\"b\">The email writer rated 6: no clean Copy for an email</div><div class=\"a\">Copy is labelled and drafts wrap; nobody has re-tested getting an email out.</div></div><div class=\"rw\"><div class=\"b\">A phone user could not reach the last row of a long table</div><div class=\"a\">A pill now says rows are out of sight. Not re-tested.</div></div><div class=\"rw\"><div class=\"b\">Wanted and not built: a text size slider, three calls side by side, a preview of a call's board</div><div class=\"a\">Not built.</div></div><div class=\"rw\"><div class=\"b\">A screen reader still met a map drawn as one picture</div><div class=\"a\">Map, graph and bars now have a reading list; not re-tested.</div></div></div>",
+   "steps": [
+    {
+     "title": "After round 2 two test users still rated the page 5, and the fixes made after round 2 were never re-tested by a test user",
+     "text": [
+      "The run stopped after round 2 because the run's rule (another round only while the last one found 5 or more new serious problems, meaning ones that stop someone doing the task; at most 3 rounds) was met by round 1 (6 found, so round 2 ran) and not by round 2 (3 found, so the run stopped). Round 2's fixes rest on the automatic tests alone. Still open: voice input and the three wishes. Fixed but never re-tested: the rest."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "vote",
+   "label": "The vote",
+   "html": "<div class=\"ba three\"><div class=\"side after\"><h4>Prefer the new panel</h4><p><b>8</b> votes</p></div><div class=\"side no\"><h4>Prefer the old panel</h4><p><b>2</b> votes</p></div><div class=\"side today\"><h4>About the same</h4><p><b>0</b> votes</p></div></div>",
+   "steps": [
+    {
+     "title": "In the final vote, 8 of 10 ballots preferred the new panel, 2 the old one and 0 saw no difference",
+     "text": [
+      "**Tally**\n\n- New wins 8 of 10. Old wins 2 of 10.\n- Strength points: new 27, old 6.\n- The two old wins were v-long-typer (3) and v-listener (3).\n\n**Reasons that came up more than once for the new version**\n\n- **Status wording:** &quot;Your turn&quot;, &quot;Waiting for you&quot; and &quot;Playing answer N&quot; were praised by the first timer, the returning catcher, the interrupter and the screen reader. The long typer also liked the status wording, but still chose old.\n- **Earlier answers kept compact:** a folded list with Hear again, search, a board list and chips. The power user, returning catcher, searcher, interrupter and screen reader all said so.\n- **Keyboard and screen-reader support:** shortcuts, a hint line, a visible focus ring, skip links, headings per answer and labelled board chips. The power user, keyboard-only user and screen-reader user said so.\n- **Boards that fit the request:** real tables that fit 390 px, and readable tables. The phone user, first timer and returning catcher said so.\n\n**Reasons that came up for the old version**\n\n- The page was calmer and less crowded, with a big board and a big caption (listener, phone user).\n- Long messages were shown whole in a bubble, in one scrolling conversation (long typer).\n\n**Worst things still found in the new version**\n\nAll paths below start with `<checkout>/.scratch/run/trials/vote/`.\n\n1. **Crowded, busy side panel.** Small text, key hints and many buttons. The first timer, returning catcher, listener, screen reader and phone user said so.\n   - `v-first-timer/shots/06-b6expand.png`\n   - `v-returning-catcher/shots/23-B-q5-end.png`\n   - `v-listener/shots/20-b6.png`\n   - `v-screen-reader/shots/16-b4.png`\n2. **Stale or wrong board, and a wordy &quot;no board&quot; notice.**\n   - The stage stayed on an old diagram for answers 3 to 5 (`v-power-user/shots/09-a-altb.png`).\n   - It kept the old bar chart and said no board could draw a diagram (`v-listener/shots/20-b6.png`).\n   - The notice for an answer with no board is long (`v-searcher/shots/06-a5.png`).\n   - A wrong label read &quot;1 hours a week&quot; (`v-power-user/shots/03-a-q1-40s.png`).\n3. **Content cut or hidden.**\n   - Answer text is cut at the bottom of the expanded card, and &quot;Show all&quot; is easy to miss (`v-first-timer/shots/06-b6expand.png`).\n   - On a phone the chart&#x27;s title and first rows are scrolled off (`v-phone-user/shots/21-b6.png`, `23-b8.png`).\n   - On a phone the player and the Following bar are clipped (`v-phone-user/shots/19-b4.png`).\n4. **The earlier-answers list is cramped.** It shows about 2.5 rows (`v-searcher/shots/06-a5.png`, `v-returning-catcher/shots/23-B-q5-end.png`, `v-interrupter/shots/08-a_worth.png`).\n5. **Long messages are folded.** They are cut to three lines with Show all, and paragraph breaks are lost (`v-long-typer/shots/04-a-sent1.png`, `11-a-showall.png`). This is why the long typer chose old.\n6. **Keyboard start.** The text box has no focus on load, so it took 14 Tabs to reach it. Typing on the mode buttons switched to Live by accident. The first sends did nothing (`v-keyboard-only/shots/05-a5-sent.png`).\n7. **Wrong board for a correction.** After a rent correction it gave a rent-only bar chart, not the redone table (`v-interrupter/shots/07-a_rent2.png`).\n8. **First send did nothing on a phone** (`v-phone-user/shots/14-b2.png`).\n9. **Typed text is lost on reload.** The long typer saw this in both versions (`v-long-typer/shots/03-a-after-reload.png`).\n10. **The stage iframe is empty in the accessibility tree.** The screen-reader user could not read the table or diagram, and this was true of both versions (`v-screen-reader/shots/16-b4.png`).\n\n**Fixed in new, broken in old**\n\nOverprinted table text was the most-reported defect. The first timer, returning catcher and keyboard-only user all saw it in the old version, not the new one. The old version&#x27;s &quot;Playing on another screen&quot; message also appeared with one tab open (returning catcher, long typer)."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "decisions",
+   "label": "Decisions without you",
+   "html": "<div class=\"ba three\"><div class=\"side today\"><h4>Today</h4><p>One AI designer split the call page's one big script into ten files, each owned by one of five AI builders, before they started. It is on the run's own branch; nothing is merged to main or live yet. After the vote, the session that ran this merges the whole run to main.</p></div><div class=\"side after\"><h4>If you agree</h4><p>Nothing to do. The page behaves the same and each builder worked without clashing with the others.</p></div><div class=\"side no\"><h4>If you do not</h4><p>The ten files can be joined back into one before the merge. It only moves code between files, so it can be undone and loses no behaviour.</p></div></div>",
+   "steps": [
+    {
+     "title": "One decision was made without you: the page's script was split so five builders could work at once",
+     "text": [
+      "Your rule is that a shared file gets one owner instead of builders waiting for each other; the split is how that was done. The tests passed after every landing (3368 at the end of the build), and undoing it costs one rework of the file layout plus one test run. Nothing in this run needs your password, a payment or a device. Write \"no to the split\" in the chat to have it undone, or \"wait\" to stop the merge. <a href=\"details.html\" target=\"_blank\">The second page</a> lists all 181 entries."
+     ]
+    }
+   ]
+  }
+ ]
+}
