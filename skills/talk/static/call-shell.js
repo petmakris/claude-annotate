@@ -38,7 +38,7 @@ function turnsOf(entries) {
 }
 // The time an entry was made at, by the server's clock: "09:52" today, "Yesterday 09:52", else "24 Nov 09:52" (the year
 // too when it is not this one), so an answer from another day is never taken for this morning's.
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const monthName = (i) => tr("s.months").split(",")[i];
 function clockOf(at) {
   if (!at) return "";
   const d = new Date(at * 1000), now = new Date(serverNow() * 1000);
@@ -46,8 +46,8 @@ function clockOf(at) {
   const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const ago = Math.round((day(now) - day(d)) / 86400000);
   if (ago <= 0) return hm;
-  if (ago === 1) return "Yesterday " + hm;
-  return d.getDate() + " " + MONTHS[d.getMonth()] + (d.getFullYear() !== now.getFullYear() ? " " + d.getFullYear() : "") + " " + hm;
+  if (ago === 1) return tr("s.yesterday", {hm});
+  return d.getDate() + " " + monthName(d.getMonth()) + (d.getFullYear() !== now.getFullYear() ? " " + d.getFullYear() : "") + " " + hm;
 }
 // What an answer was about, in one line: its first sentence, cut at a word.
 function gistOf(e, max = 90) {
@@ -61,7 +61,7 @@ function gistOf(e, max = 90) {
   return (sp > max / 2 ? s.slice(0, sp) : s).replace(/[,;:\s]+$/, "") + "…";
 }
 // The name a board chip shows: the Key points board is named, whatever number the server's label carries.
-const boardName = (b) => b.kind === "points" ? "Key points" : b.text;
+const boardName = (b) => b.kind === "points" ? tr("s.keypoints") : b.text;
 function boardTitle(view) {
   const b = view ? view_entries().find((x) => x.who === "board" && x.view === view) : null;
   return b ? boardName(b) : "";
@@ -94,20 +94,20 @@ function buildChip(b) {
   const t = document.createElement("span"); t.className = "cl"; t.textContent = boardName(b); el.append(t);
   let said = boardName(b);
   if (b.kind === "points" && b.added) {
-    const s = document.createElement("small"); s.textContent = b.added + " new"; el.append(s); said += ", " + s.textContent;
+    const s = document.createElement("small"); s.textContent = tr("s.chip.new", {n: b.added}); el.append(s); said += ", " + s.textContent;
   }
-  el.setAttribute("aria-label", "Show on the stage: " + said);
+  el.setAttribute("aria-label", tr("s.chip.show", {name: said}));
   el.setAttribute("aria-pressed", "false");
-  if (!CFG.stageUrl || !b.view) { el.disabled = true; el.title = "The stage is not available"; }
-  else { el.title = "Show this board on the stage"; el.onclick = () => chipTap(b.view); }
+  if (!CFG.stageUrl || !b.view) { el.disabled = true; el.title = tr("s.chip.na"); }
+  else { el.title = tr("s.chip.tip"); el.onclick = () => chipTap(b.view); }
   return el;
 }
 // A note the user asked to be kept: a row with a check and the word Saved, the note whole on as many lines as it takes.
 // It is a line of this call's transcript, not a board, so it is not a chip and links to nothing.
 function buildNote(n) {
-  const row = document.createElement("div"); row.className = "note-row"; row.title = "Saved in this call's transcript";
+  const row = document.createElement("div"); row.className = "note-row"; row.title = tr("s.note.tip");
   const mark = document.createElement("span"); mark.className = "note-mark"; mark.innerHTML = ICON('<path d="M5 12l5 5L20 7"/>', 14);
-  const word = document.createElement("b"); word.textContent = "Saved";
+  const word = document.createElement("b"); word.textContent = tr("s.saved");
   const text = document.createElement("span"); text.className = "note-text"; text.textContent = n.text;
   row.append(mark, word, text);
   return row;
@@ -116,13 +116,13 @@ function buildNote(n) {
 function buildChips(t) {
   const frag = document.createDocumentFragment();
   if (t.boards.length) {
-    const l = document.createElement("span"); l.className = "clbl"; l.textContent = "On the stage"; frag.append(l);
+    const l = document.createElement("span"); l.className = "clbl"; l.textContent = tr("s.onstage"); frag.append(l);
     for (const b of t.boards) frag.append(buildChip(b));
   }
   for (const n of t.notes) frag.append(buildNote(n));
   return frag;
 }
-const chipsSig = (t) => t.boards.map((b) => `${b.view}|${b.text}|${b.added || 0}|${boardWords(b).length}`).join(";") + "#" + t.notes.map((n) => n.text).join(";");
+const chipsSig = (t) => uiLang + "|" + t.boards.map((b) => `${b.view}|${b.text}|${b.added || 0}|${boardWords(b).length}`).join(";") + "#" + t.notes.map((n) => n.text).join(";");
 
 // ---- the answer being read: the one in the player, else the last one -------------
 function lastAnswer() {
@@ -160,20 +160,20 @@ const STATE_ICONS = {
 function nowState(e, wait) {
   if (wait) {   // the wait card's own step, so the eyebrow never says Working over a card that says Sent
     const w = waitModel(), step = w ? w.step : "";
-    if (step === "sent") return {key: "working", word: "Sent"};
-    if (step === "notpicked") return {key: "slow", word: "Not picked up"};
-    if (step === "silent") return {key: "slow", word: "Quiet"};
-    return step === "slow" || view.stalled ? {key: "slow", word: "Slow"} : {key: "working", word: "Working"};
+    if (step === "sent") return {key: "working", word: tr("s.st.sent")};
+    if (step === "notpicked") return {key: "slow", word: tr("s.st.notpicked")};
+    if (step === "silent") return {key: "slow", word: tr("s.st.quiet")};
+    return step === "slow" || view.stalled ? {key: "slow", word: tr("s.st.slow")} : {key: "working", word: tr("s.st.working")};
   }
   if (!e) return null;
-  if (e.speech === "pending" || e.speech === "making") return {key: "voice", word: "Preparing the voice"};
-  if (e.speech === "failed") return {key: "silent", word: "Not read aloud"};
+  if (e.speech === "pending" || e.speech === "making") return {key: "voice", word: tr("s.st.voice")};
+  if (e.speech === "failed") return {key: "silent", word: tr("s.st.failed")};
   const mine = !!current && current.id === e.id;
-  if (mine && !audio.paused) return {key: "playing", word: "Playing"};
-  if (mine && audio.paused && elsewhere) return {key: "elsewhere", word: "Playing on another screen"};
-  if (mine && (audio.ended || (audio.duration && audio.currentTime >= audio.duration))) return {key: "played", word: "Played"};
-  if (mine && audio.currentTime > 0) return {key: "paused", word: "Paused"};
-  return {key: "ready", word: e.id > (view.heard_upto ?? -1) ? "New" : "Ready"};
+  if (mine && !audio.paused) return {key: "playing", word: tr("s.st.playing")};
+  if (mine && audio.paused && elsewhere) return {key: "elsewhere", word: tr("s.st.elsewhere")};
+  if (mine && (audio.ended || (audio.duration && audio.currentTime >= audio.duration))) return {key: "played", word: tr("s.st.played")};
+  if (mine && audio.currentTime > 0) return {key: "paused", word: tr("s.st.paused")};
+  return {key: "ready", word: tr(e.id > (view.heard_upto ?? -1) ? "s.st.new" : "s.st.ready")};
 }
 let nowSig = "", nowChipsSig = "", nowHeadSig = "", nowShown = null;   // the answer whose text the card holds
 let readSpans = [];
@@ -208,7 +208,7 @@ function buildQuestion(q) {
   const open = qOpen.has(q.id);
   const text = document.createElement("span"); text.className = "nq-text" + (open ? "" : " clamped"); text.textContent = q.text;
   const more = document.createElement("button"); more.type = "button"; more.className = "nq-more";
-  more.textContent = open ? "Show less" : "Show all"; more.setAttribute("aria-expanded", String(open));
+  more.textContent = tr(open ? "s.less" : "s.more"); more.setAttribute("aria-expanded", String(open));
   more.hidden = !open && !longQuestion(q.text);
   more.onclick = () => { if (qOpen.has(q.id)) qOpen.delete(q.id); else qOpen.add(q.id); $("nowq").dataset.sig = ""; paintNowCard(); };
   box.append(text, more);
@@ -229,15 +229,15 @@ function paintNowCard() {
   if (card.hidden) { nowShown = null; return; }
   const turns = turnsOf(view.entries), total = turns.length, t = e ? turns.find((x) => x.a.id === e.id) : null;
   // the head: state, which answer, when it was made
-  const st = nowState(e, wait), num = wait ? "Answer " + (total + 1) : "Answer " + e.n + (total > 1 ? " of " + total : "");
-  const tag = e && e.superseded ? "Replaced by your correction" : "";
-  const headSig = [st && st.key, st && st.word, num, tag, e && e.at].join("|");
+  const st = nowState(e, wait), num = wait ? tr("s.answer", {n: total + 1}) : total > 1 ? tr("s.answer.of", {n: e.n, total}) : tr("s.answer", {n: e.n});
+  const tag = e && e.superseded ? tr("s.corrected") : "";
+  const headSig = [uiLang, st && st.key, st && st.word, num, tag, e && e.at].join("|");
   if (headSig !== nowHeadSig) {
     nowHeadSig = headSig;
     $("nowstate").innerHTML = st ? STATE_ICONS[st.key] + "<b></b>" : ""; if (st) $("nowstate").lastChild.textContent = st.word;
     $("nowstate").dataset.state = st ? st.key : "";
     $("nownum").textContent = num; $("nownum").dataset.tag = tag;
-    $("nowclock").textContent = !wait && e ? clockOf(e.at) : ""; $("nowclock").title = $("nowclock").textContent ? "Answered at " + $("nowclock").textContent : "";
+    $("nowclock").textContent = !wait && e ? clockOf(e.at) : ""; $("nowclock").title = $("nowclock").textContent ? tr("s.answered", {t: $("nowclock").textContent}) : "";
     $("nowhead").classList.toggle("replaced", !!tag);
     let tagEl = $("nowhead").querySelector(".now-tag");
     if (tag) { if (!tagEl) { tagEl = document.createElement("span"); tagEl.className = "now-tag"; $("nowclock").before(tagEl); } tagEl.textContent = tag; }
@@ -249,21 +249,21 @@ function paintNowCard() {
   // the question asked (or the questions this answer was merged from), the full text, the boards
   const asked = t && t.q ? t.q : null, qs = asked ? [...(t.also || []), asked] : [];
   $("nowq").hidden = !asked;
-  const qsig = qs.map((q) => q.id + "|" + q.text + "|" + (qOpen.has(q.id) ? 1 : 0) + "|" + clockOf(q.at)).join("§");
+  const qsig = uiLang + qs.map((q) => q.id + "|" + q.text + "|" + (qOpen.has(q.id) ? 1 : 0) + "|" + clockOf(q.at)).join("§");
   if ($("nowq").dataset.sig !== qsig) {
     $("nowq").dataset.sig = qsig;
-    const small = document.createElement("small"); small.textContent = "You asked, " + clockOf(qs[0] && qs[0].at);
+    const small = document.createElement("small"); small.textContent = tr("s.asked", {t: clockOf(qs[0] && qs[0].at)});
     $("nowq").replaceChildren(small, ...qs.map(buildQuestion));
     measureQuestions();
   }
-  const sig = `${e.id}|${e.text.length}|${e.words?.length || 0}`;
+  const sig = `${uiLang}|${e.id}|${e.text.length}|${e.words?.length || 0}`;
   if (sig !== nowSig) {
     nowSig = sig;
     const wasShown = nowShown;
     buildNowText(e);
     if (wasShown !== e.id) { card.classList.remove("reading"); $("nowtext").scrollTop = 0; lastTurn = null; }
   }
-  const csig = e.id + "#" + (t ? chipsSig(t) : "");
+  const csig = uiLang + e.id + "#" + (t ? chipsSig(t) : "");
   if (csig !== nowChipsSig) {
     nowChipsSig = csig;
     $("nowchips").replaceChildren(t ? buildChips(t) : document.createDocumentFragment());
@@ -273,7 +273,7 @@ function paintNowCard() {
   let bad = card.querySelector(".now-bad");
   if (e.speech === "failed") {
     if (!bad) { bad = document.createElement("div"); bad.className = "now-bad"; $("nowbody").append(bad); }
-    bad.textContent = "Not read aloud: " + (e.speech_error || "speech failed");
+    bad.textContent = tr("s.notread", {why: e.speech_error || tr("s.speechfailed")});
   } else if (bad) bad.remove();
   paintFollow();
 }
@@ -295,17 +295,17 @@ function paintFollow() {
   const shown = shownAnswer(), n = shown ? shown.n : null;
   let label, text, note = "", still = false;
   if (follow) {
-    label = "Following the voice";
+    label = tr("s.fol.following");
     still = !!front && !!fa && !!n && fa !== n;   // the shown answer has no board of its own: the stage keeps an older one
-    text = still ? `Stage still shows ${front} from answer ${fa}.` : "The stage shows what is being read.";
+    text = still ? tr("s.fol.still", {front, fa}) : tr("s.fol.reading");
   } else {
-    label = "You chose this";
-    text = (front ? "Stage shows " + front + (fa ? " from answer " + fa : "") : "Stage shows the board you chose") + "." + (n ? " The voice is on answer " + n + "." : "");
+    label = tr("s.fol.chose");
+    text = (front ? (fa ? tr("s.fol.from", {front, fa}) : tr("s.fol.shows", {front})) : tr("s.fol.chosen")) + "." + (n ? tr("s.fol.voice", {n}) : "");
     const b = shown ? boardStart() : null;
-    note = b && b.e.id !== shown.id ? "Play starts answer " + b.e.n + "." : "";
+    note = b && b.e.id !== shown.id ? tr("s.fol.starts", {n: b.e.n}) : "";
   }
-  const btnText = follow ? "Keep this board" : "Back to the voice";
-  const sig = [follow, label, text, note, btnText].join("|");
+  const btnText = tr(follow ? "s.fol.keep" : "s.fol.back");
+  const sig = [uiLang, follow, label, text, note, btnText].join("|");
   if (sig === followSig) return;
   followSig = sig;
   const state = document.createElement("span"); state.className = "fl-state";
@@ -315,7 +315,7 @@ function paintFollow() {
   const msg = document.createElement("span"); msg.className = "fl-text"; msg.textContent = text;
   const btn = document.createElement("button"); btn.type = "button"; btn.className = "fl-btn";
   btn.textContent = btnText; btn.setAttribute("aria-label", btnText);
-  btn.title = follow ? "Keep the stage on this board" : "Back to the voice";
+  btn.title = tr(follow ? "s.fol.keep.tip" : "s.fol.back");
   btn.onclick = () => { if (follow) pinBoard(); else { followAgain(); resync(); } };
   box.dataset.mode = follow ? "following" : "pinned"; box.dataset.text = still || !follow ? "board" : "plain";
   const parts = [state, btn, msg];
@@ -371,7 +371,7 @@ function gistLine(t, q) {
     const b = t.boards.find((x) => matchAt(boardName(x), q) || matchAt(boardWords(x), q));
     if (b) {
       const ic = document.createElement("span"); ic.className = "in-board"; ic.innerHTML = kindIcon(b.kind, 13);
-      const name = document.createElement("span"); name.className = "in-name"; name.textContent = "in " + boardName(b) + ": ";
+      const name = document.createElement("span"); name.className = "in-name"; name.textContent = tr("s.in", {name: boardName(b)});
       const m = matchAt(boardWords(b), q);
       return [ic, name, ...(m ? marked(around(boardWords(b), m, 6), q) : [])];
     }
@@ -380,7 +380,7 @@ function gistLine(t, q) {
 }
 // Copy text to the clipboard, said on the button and to a screen reader.
 function copyText(text, done) {
-  (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(() => { done(); announce("Copied"); }, () => showError("Copying failed."));
+  (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(() => { done(); announce(tr("s.copied")); }, () => showError(tr("s.copy.fail")));
 }
 // An answer was picked to play: the card takes it. A press made on a row of the list loses that row (the card shows the answer
 // now), so focus goes where the reader's hands are next: the player's button, or the same row's button when the row stayed.
@@ -421,40 +421,40 @@ function buildRow(t, q, isNow) {
     const first = boards.find((b) => b.kind !== "points") || boards[0];
     bd.innerHTML = kindIcon(first.kind, 16);
     if (boards.length > 1) { const c = document.createElement("span"); c.textContent = boards.length; bd.append(c); }
-    bd.setAttribute("aria-label", boards.length === 1 ? "Show " + boardName(first) + " on the stage" : boards.length + " boards, open the answer");
+    bd.setAttribute("aria-label", boards.length === 1 ? tr("s.show.board", {name: boardName(first)}) : tr("s.boards.open", {n: boards.length}));
     bd.title = boards.map(boardName).join(", ");
     bd.onclick = () => { if (boards.length === 1 && CFG.stageUrl && first.view) chipTap(first.view); else main.click(); };
     if (!CFG.stageUrl && boards.length === 1) bd.disabled = true;
   } else { bd.disabled = true; bd.tabIndex = -1; bd.setAttribute("aria-hidden", "true"); }
-  const tm = document.createElement("span"); tm.className = "tl-t"; tm.textContent = clockOf(e.at); tm.title = "Answered at " + tm.textContent;
+  const tm = document.createElement("span"); tm.className = "tl-t"; tm.textContent = clockOf(e.at); tm.title = tr("s.answered", {t: tm.textContent});
   const play = document.createElement("button"); play.type = "button"; play.className = "play";
   const playing = !!current && current.id === e.id && !audio.paused;
   play.disabled = e.speech !== "ready";
   play.innerHTML = ICON(playing ? '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>' : '<path d="M7 5v14l12-7z"/>', 14) + "<span></span>";
-  play.lastChild.textContent = playing ? "Pause" : "Play";
-  play.setAttribute("aria-label", (playing ? "Pause answer " : "Play answer ") + e.n);
+  play.lastChild.textContent = tr(playing ? "s.pause" : "s.play");
+  play.setAttribute("aria-label", tr(playing ? "s.pause.n" : "s.play.n", {n: e.n}));
   play.onclick = () => playAnswer(e, !!isNow);
   row.append(main, bd, tm, play);
-  if (e.superseded) { const tg = document.createElement("span"); tg.className = "tl-tag"; tg.textContent = "Replaced"; qq.append(tg); }
+  if (e.superseded) { const tg = document.createElement("span"); tg.className = "tl-tag"; tg.textContent = tr("s.replaced"); qq.append(tg); }
   if (open) {
     const body = document.createElement("div"); body.className = "tl-body";
     const text = document.createElement("div"); text.className = "tl-text"; text.replaceChildren(...wordSpans(e));
     body.append(text);
-    const chips = document.createElement("div"); chips.className = "chips"; chips.setAttribute("role", "group"); chips.setAttribute("aria-label", "On the stage");
+    const chips = document.createElement("div"); chips.className = "chips"; chips.setAttribute("role", "group"); chips.setAttribute("aria-label", tr("s.onstage"));
     chips.append(buildChips(t)); chips.hidden = !chips.childNodes.length;
-    if (e.speech === "failed") { const bad = document.createElement("div"); bad.className = "now-bad"; bad.textContent = "Not read aloud: " + (e.speech_error || "speech failed"); body.append(bad); }
+    if (e.speech === "failed") { const bad = document.createElement("div"); bad.className = "now-bad"; bad.textContent = tr("s.notread", {why: e.speech_error || tr("s.speechfailed")}); body.append(bad); }
     const acts = document.createElement("div"); acts.className = "tl-acts";
-    const again = document.createElement("button"); again.type = "button"; again.className = "btn"; again.textContent = "Play from the start"; again.disabled = e.speech !== "ready";
+    const again = document.createElement("button"); again.type = "button"; again.className = "btn"; again.textContent = tr("s.play.start"); again.disabled = e.speech !== "ready";
     again.onclick = () => { playAnswer(e, false); };
-    const copy = document.createElement("button"); copy.type = "button"; copy.className = "btn"; copy.textContent = "Copy";
-    copy.onclick = () => copyText(e.text, () => { copy.textContent = "Copied"; setTimeout(() => { copy.textContent = "Copy"; }, 1500); });
+    const copy = document.createElement("button"); copy.type = "button"; copy.className = "btn"; copy.textContent = tr("s.copy");
+    copy.onclick = () => copyText(e.text, () => { copy.textContent = tr("s.copied"); setTimeout(() => { copy.textContent = tr("s.copy"); }, 1500); });
     acts.append(again, copy);
     body.append(chips, acts);
     row.append(body);
   }
   return row;
 }
-const rowSig = (t, q, isNow) => [t.a.id, t.a.n, t.a.text.length, t.a.speech, t.a.speech_error || "", t.a.words?.length || 0, t.q ? t.q.id + t.q.text : "", (t.also || []).map((x) => x.id + x.text).join("§"), t.a.superseded ? 1 : 0,
+const rowSig = (t, q, isNow) => [uiLang, t.a.id, t.a.n, t.a.text.length, t.a.speech, t.a.speech_error || "", t.a.words?.length || 0, t.q ? t.q.id + t.q.text : "", (t.also || []).map((x) => x.id + x.text).join("§"), t.a.superseded ? 1 : 0,
   t.a.id > (view.heard_upto ?? -1) ? 1 : 0, opened.has(t.a.id) && !isNow ? 1 : 0, chipsSig(t), q, isNow ? 1 : 0, !!current && current.id === t.a.id && !audio.paused ? 1 : 0, CFG.stageUrl ? 1 : 0].join("|");
 // The list of earlier answers (#earlier, rows .tlrow in #tllist), its search and Expand all, from paintAll(). After it has
 // placed its rows it calls returnMarkEarlier(#tllist) so call-return.js can put the since-you-left divider in.
@@ -469,12 +469,12 @@ function paintEarlier() {
   $("searchbtn").hidden = !turns.length; $("searchbtn").setAttribute("aria-expanded", String(showSearch && searchOpen));
   $("tlsearch").hidden = !showSearch;
   // while a search filters the list the count line says so in words, with the way back to every answer
-  $("tlcount").textContent = q ? `Filtered: ${items.length} of ${turns.length} answers` : `Earlier, ${rest.length} answer${rest.length === 1 ? "" : "s"}`;
+  $("tlcount").textContent = q ? tr("s.filtered", {n: items.length, total: turns.length}) : trn("s.earlier", rest.length);
   $("tlcount").classList.toggle("filtered", !!q); $("tlclear").hidden = !q;
   $("convo").classList.toggle("has-earlier", rest.length > 0);   // the card's text window is shorter while earlier answers wait under it
   const allOpen = rest.length > 0 && rest.every((t) => opened.has(t.a.id));
   $("tlexpand").hidden = !rest.length;
-  const label = allOpen ? "Collapse all" : "Expand all";
+  const label = tr(allOpen ? "s.collapse" : "s.expand");
   if ($("tlexpand").dataset.label !== label) {
     $("tlexpand").dataset.label = label;
     $("tlexpand").innerHTML = ICON(allOpen ? '<path d="M7 10l5-5 5 5M7 14l5 5 5-5"/>' : '<path d="M7 5l5 5 5-5M7 19l5-5 5 5"/>', 16) + "<span></span>";
@@ -496,7 +496,7 @@ function paintEarlier() {
   }
   for (const [id, rec] of rowNodes) if (!live.has(id)) { rec.el.remove(); rowNodes.delete(id); }
   let none = list.querySelector(".tl-none");
-  if (q && !items.length) { if (!none) { none = document.createElement("p"); none.className = "tl-none"; list.append(none); } none.textContent = `No answer mentions “${tlQuery.trim()}”.`; }
+  if (q && !items.length) { if (!none) { none = document.createElement("p"); none.className = "tl-none"; list.append(none); } none.textContent = tr("s.none", {q: tlQuery.trim()}); }
   else if (none) none.remove();
   // the call's own lines (it ended) close the list
   let sys = list.querySelector(".tl-sys");
@@ -513,7 +513,7 @@ const searchToTop = () => $("convo").scrollTo({top: $("earlier").offsetTop - $("
 // so the list never stays filtered unnoticed. Opening a row from a result keeps it.
 function clearSearch() { tlQuery = ""; $("tlsearch").value = ""; searchOpen = false; }
 const clearBtn = document.createElement("button"); clearBtn.type = "button"; clearBtn.id = "tlclear"; clearBtn.className = "tl-clear"; clearBtn.hidden = true;
-clearBtn.textContent = "Show all"; clearBtn.setAttribute("aria-label", "Show all answers");
+clearBtn.textContent = tr("s.more"); clearBtn.setAttribute("aria-label", tr("s.showall.aria"));
 $("tlhead").insertBefore(clearBtn, $("tlcount").nextSibling);
 clearBtn.onclick = () => { tlQuery = ""; $("tlsearch").value = ""; paintEarlier(); $("tlsearch").focus(); };
 $("tlsearch").addEventListener("input", () => { tlQuery = $("tlsearch").value; paintEarlier(); if (tlQuery.trim()) searchToTop(); });
@@ -537,10 +537,16 @@ $("tlexpand").onclick = () => {
 
 // ---- the conversation as a whole ---------------------------------------------------
 $("empty").replaceChildren(...(() => {
-  const a = document.createElement("span"); a.className = "e1"; a.textContent = "Nothing has been said yet.";
-  const b = document.createElement("span"); b.className = "e2"; b.textContent = "Type below or press the mic. For example: “Give me the short version.”";
+  const a = document.createElement("span"); a.className = "e1"; a.textContent = tr("list.empty");
+  const b = document.createElement("span"); b.className = "e2"; b.textContent = tr("s.empty2");
   return [a, b];
 })());
+// The words this file built once at load, in the page's language again (called from relabelPage()).
+function relabelShell() {
+  copyBtn.setAttribute("aria-label", tr("s.copyans")); copyBtn.dataset.tip = tr("s.copyans");
+  clearBtn.textContent = tr("s.more"); clearBtn.setAttribute("aria-label", tr("s.showall.aria"));
+  $("empty").querySelector(".e1").textContent = tr("list.empty"); $("empty").querySelector(".e2").textContent = tr("s.empty2");
+}
 function render() {
   $("empty").hidden = !!view.entries.length;
   paintFront();
@@ -654,15 +660,15 @@ const ppWord = document.createElement("span"); ppWord.className = "pp-word"; $("
 // Copy answer: the text of the answer the card shows, on the card. The word Copied shows on the button and goes to the live region.
 const copyBtn = document.createElement("button"); copyBtn.type = "button"; copyBtn.id = "nowcopy"; copyBtn.className = "ib nowcopy"; copyBtn.hidden = true;
 const COPY_ICON = ICON('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/>', 18), COPIED_ICON = ICON('<path d="M5 12l5 5L20 7"/>', 16);
-copyBtn.setAttribute("aria-label", "Copy answer"); copyBtn.dataset.tip = "Copy answer"; copyBtn.innerHTML = COPY_ICON;
+copyBtn.setAttribute("aria-label", tr("s.copyans")); copyBtn.dataset.tip = tr("s.copyans"); copyBtn.innerHTML = COPY_ICON;
 let copyTimer = null;
 copyBtn.onclick = () => {
   const e = shownAnswer();
   if (!e) return;
   copyText(e.text, () => {
-    copyBtn.classList.add("done"); copyBtn.innerHTML = COPIED_ICON + "<span>Copied</span>"; copyBtn.setAttribute("aria-label", "Copied");
+    copyBtn.classList.add("done"); copyBtn.innerHTML = COPIED_ICON + "<span>" + tr("s.copied") + "</span>"; copyBtn.setAttribute("aria-label", tr("s.copied"));
     clearTimeout(copyTimer);
-    copyTimer = setTimeout(() => { copyBtn.classList.remove("done"); copyBtn.innerHTML = COPY_ICON; copyBtn.setAttribute("aria-label", "Copy answer"); }, 1500);
+    copyTimer = setTimeout(() => { copyBtn.classList.remove("done"); copyBtn.innerHTML = COPY_ICON; copyBtn.setAttribute("aria-label", tr("s.copyans")); }, 1500);
   });
 };
 $("nowhead").append(copyBtn);   // in the card's head, by the time: the transport row has no room for another button on a phone
@@ -689,8 +695,8 @@ function paintTransport() {
   $("player").hidden = !playable; $("ring").hidden = !playable;
   $("back").disabled = !current; $("next").disabled = !current; $("railback").hidden = !playable || !current;
   const target = shown && !follow ? boardStart() : null, other = target && target.e.id !== shown.id ? target.e : null;
-  const base = !audio.paused ? "Pause" : (current && (audio.ended || audio.currentTime >= (audio.duration || 1)) ? "Play again" : "Play");
-  const label = other && audio.paused ? "Play answer " + other.n : base;
+  const base = tr(!audio.paused ? "s.pp.pause" : (current && (audio.ended || audio.currentTime >= (audio.duration || 1)) ? "s.pp.again" : "s.pp.play"));
+  const label = other && audio.paused ? tr("s.play.n", {n: other.n}) : base;
   const word = other && audio.paused ? label : "";
   if (ppWord.textContent !== word) ppWord.textContent = word;
   $("playpause").classList.toggle("has-word", !!word); $("player").classList.toggle("names-answer", !!word);
@@ -700,7 +706,7 @@ function paintTransport() {
   const d = audio.duration || 0, p = d ? 100 * audio.currentTime / d : 0;
   $("seek").max = d; $("seek").value = audio.currentTime || 0;
   $("seek").style.setProperty("--p", p + "%"); $("ring").style.setProperty("--p", p + "%");
-  $("seek").setAttribute("aria-label", shown ? "Position in answer " + shown.n : "Position in the answer");
+  $("seek").setAttribute("aria-label", shown ? tr("s.seek.n", {n: shown.n}) : tr("player.seek"));
   $("seek").setAttribute("aria-valuetext", current ? fmt(audio.currentTime) + " of " + fmt(d) : "");
   $("time").textContent = current ? fmt(audio.currentTime) + " / " + fmt(d) : "";
   $("speedchip").textContent = speed + "×";

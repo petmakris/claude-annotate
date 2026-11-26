@@ -23,7 +23,7 @@ async function startLive() {
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}}); }
   catch (err) { showError(t("mic.none", {why: err.message})); return; }
-  if (live || talkMode !== "live" || view.ended) { stream.getTracks().forEach(t => t.stop()); return; }
+  if (live || talkMode !== "live" || view.ended) { stream.getTracks().forEach(track => track.stop()); return; }
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
   const source = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(LIVE.chunk, 1, 1);
   live = {stream, ctx, source, node, rate: ctx.sampleRate, recent: [], pre: [], loud: 0, quiet: 0, voiced: 0, ms: 0,
@@ -53,7 +53,7 @@ function setMuted(on) {
 function stopLive(note = "") {
   const l = live; live = null;
   if (!l) return;
-  l.node.disconnect(); l.source.disconnect(); l.stream.getTracks().forEach(t => t.stop()); l.ctx.close();
+  l.node.disconnect(); l.source.disconnect(); l.stream.getTracks().forEach(track => track.stop()); l.ctx.close();
   levels.fill(0); $("app").style.removeProperty("--lvl");
   liveQueue.length = 0;           // said but not yet sent: dropped with the microphone
   liveNote = note;

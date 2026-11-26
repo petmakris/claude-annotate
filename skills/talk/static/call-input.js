@@ -280,7 +280,7 @@ async function startRecording() {
   try { stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}}); }
   catch (err) { showError(t("mic.none", {why: err.message})); return; }
   finally { starting = false; }
-  if (recorder) { stream.getTracks().forEach(t => t.stop()); return; }
+  if (recorder) { stream.getTracks().forEach(track => track.stop()); return; }
   takeFloor(null);
   audio.pause();
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -304,7 +304,7 @@ async function startRecording() {
 function stopRecording() {
   const r = recorder; recorder = null;
   clearInterval(r.timer); r.node.disconnect(); r.source.disconnect();
-  r.stream.getTracks().forEach(t => t.stop()); r.ctx.close();
+  r.stream.getTracks().forEach(track => track.stop()); r.ctx.close();
   return r;
 }
 
@@ -547,9 +547,8 @@ function paintInputMode() {
   pp.textContent = t("pause.pill", {s: endPause / 1000}); pp.setAttribute("aria-label", t("pause.aria", {s: endPause / 1000}));
   bp.title = bargeTitle(barge); pp.title = pauseTitle(endPause);
   // A say-back question has its own placeholder (call-stage.js); otherwise the field says how it is used in this mode.
-  if (!answering && ![WAIT_PLACEHOLDER, t("ph.wait")].includes($("text").placeholder)) $("text").placeholder = modePlaceholder();
+  if (!answering && $("text").placeholder !== t("ph.wait")) $("text").placeholder = modePlaceholder();
 }
-const WAIT_PLACEHOLDER = "Add to your question";   // call-wait.js compares with it (the wait batch's line; t("ph.wait") is its Greek)
 function modePlaceholder() { return t(inputMode === "type" ? "ph.type" : inputMode === "live" ? "ph.live" : "ph.talk"); }
 // The page's own layers, registered with the core: the gear (the header's and the rail's), and the Keys sheet from its two buttons.
 // A layer opened or closed (the core's showPop) moves the focus into it and, when it closes, back to the button that opened it,
@@ -593,6 +592,7 @@ function relabelPage() {
   if (CFG.engine) $("engine").textContent = engineText();
   for (const b of $("voices").querySelectorAll(".ib")) relabelHear(b);
   paintFullscreen();
+  relabelShell();
 }
 // The voice speed, from the gear's buttons, the player's chip and the Alt+S key: one setter.
 function setSpeed(s) { speed = s; store.set("speed", s); audio.playbackRate = s; paintSettings(); }

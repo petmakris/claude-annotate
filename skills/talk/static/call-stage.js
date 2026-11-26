@@ -75,7 +75,7 @@ window.addEventListener("message", ev => {
     frontBoard = String(m.view || ""); paintFront(); paintFollow(); paintTransport(); paintStageTitle();
     // the stage moves in a frame the page cannot read: say which board it is on, for a screen reader
     const title = frontBoard && frontBoard !== was ? boardTitle(frontBoard) : "";
-    if (title) announce("The stage shows " + title + ".");
+    if (title) announce(tr("st.shows", {title}));
   }
   else if (m.type === "stage:missing") paintMissing(String(m.view));
   else if (m.type === "stage:key" && MEDIA_KEYS.has(m.key)) mediaKey(m.key);
@@ -100,7 +100,7 @@ function chipTap(view) {
   toStage({type: "stage:front", view, manual: true});
   if (follow) { follow = false; toStage({type: "stage:follow", on: false}); paintSettings(); }
   const title = boardTitle(view);
-  if (title) announce("Pinned the stage to " + title + ".");
+  if (title) announce(tr("st.pinned", {title}));
   paintReader(); paintFollow();
 }
 // Keep the stage on the board in front: following the voice off, said on the card's strip.
@@ -108,14 +108,14 @@ function pinBoard() {
   if (!follow) return;
   follow = false; toStage({type: "stage:follow", on: false}); paintSettings(); paintReader(); paintFollow();
   const title = boardTitle(frontBoard);
-  announce(title ? "Pinned the stage to " + title + "." : "Pinned the stage.");
+  announce(title ? tr("st.pinned", {title}) : tr("st.pinned.bare"));
 }
 let stageViews = null;
 let stageList = [];            // the boards the stage holds, in the order it counts them: {name, title, kind, answer}
 // The frame's name is the board in front, so a screen reader that lands on it hears which one it is and where it is in the list.
 function paintStageTitle() {
   const i = stageList.findIndex(v => String(v.name) === frontBoard), b = stageList[i];
-  $("stage").title = b ? `Stage: ${b.title}, ${b.kind || "board"}, board ${i + 1} of ${stageList.length}` : "Stage";
+  $("stage").title = b ? tr("st.frame", {title: b.title, kind: b.kind || tr("st.board"), i: i + 1, n: stageList.length}) : tr("stage.title");
 }
 let boardAnswer = new Map();   // board -> the number of the answer that showed it
 let frontBoard = "";           // the board in front of the stage
@@ -129,8 +129,8 @@ function paintMissing(gone) {
     if (!chipSeen.has(v)) chipSeen.set(v, now);
     const missing = v === gone || (!!stageViews && !stageViews.has(v) && now - chipSeen.get(v) > MISSING_AFTER_MS);
     el.classList.toggle("missing", missing);
-    if (missing) el.title = "Not on the stage: this board never reached it";
-    else if (el.title.startsWith("Not on the stage")) el.removeAttribute("title");
+    if (missing) { el.title = tr("st.missing"); el.dataset.noStage = "1"; }
+    else if (el.dataset.noStage) { el.removeAttribute("title"); delete el.dataset.noStage; }
   }
 }
 setInterval(() => { if (stageViews) paintMissing(); }, MISSING_AFTER_MS / 2);
@@ -159,7 +159,7 @@ function buildReader(e) {
   rtextEl.replaceChildren(); rSents = []; rWords = [];
   if (!e) return;
   // which answer this is (the panel's card names the same one)
-  const head = document.createElement("div"); head.className = "rhead"; head.textContent = "Answer " + (e.n || ""); rtextEl.append(head);
+  const head = document.createElement("div"); head.className = "rhead"; head.textContent = tr("s.answer", {n: e.n || ""}); rtextEl.append(head);
   const ss = sentenceSpans(e);
   if (!ss.length) { const s = document.createElement("span"); s.className = "rs"; s.textContent = e.text; rtextEl.append(s); rSents.push({el: s, first: 0, last: -1}); return; }
   if (ss[0].a > 0) rtextEl.append(e.text.slice(0, ss[0].a));
@@ -310,7 +310,7 @@ function stopAt(e, i) {
   if (!audio.paused) audio.pause();
   if (c.stop.type === "sayback") {
     answering = c.stop.question;
-    const t = $("text"); t.placeholder = "Say it in your own words, then Send"; t.focus();
+    const t = $("text"); t.placeholder = tr("st.sayback"); t.focus();
   }
   showStop();
 }
@@ -332,7 +332,7 @@ function paintStopCard(e) {
   if (!e) { card.replaceChildren(); return; }
   const {stop, picked} = stopped;
   card.dataset.type = stop.type;
-  const q = document.createElement("p"); q.className = "sq"; q.textContent = stop.question || "Want more?";
+  const q = document.createElement("p"); q.className = "sq"; q.textContent = stop.question || tr("st.more");
   const row = document.createElement("div"); row.className = "sbtns";
   stop.choices.forEach((label, k) => {
     const b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.textContent = label;
@@ -344,7 +344,7 @@ function paintStopCard(e) {
     b.onclick = () => pickStop(k);
     row.append(b);
   });
-  if (stop.type === "sayback") { const h = document.createElement("p"); h.className = "shint"; h.textContent = "Answer in the text field, or press Talk."; row.append(h); }
+  if (stop.type === "sayback") { const h = document.createElement("p"); h.className = "shint"; h.textContent = tr("st.hint"); row.append(h); }
   card.replaceChildren(q, row);
 }
 function goOn() {
@@ -368,7 +368,7 @@ function pickStop(k) {
     playFrom(e, before === undefined ? 0 : before + 0.01);
     audio.playbackRate = speed * 0.8;
   }
-  else if (stop.type === "check" && k === 2) { clearStop(); $("text").value = "Another example, please."; sendText(); }
+  else if (stop.type === "check" && k === 2) { clearStop(); $("text").value = tr("st.another"); sendText(); }
   else if (stop.type === "deeper" && k === 1) {  // That's enough: the answer ends here
     clearStop(); audio.currentTime = audio.duration || audio.currentTime;
     syncStage(e, Infinity); restBoards(e); caption(null, 0);
@@ -467,5 +467,5 @@ audio.addEventListener("play", () => clearTimeout(pauseRestTimer));
 audio.addEventListener("seeking", () => { cueSync = true; if (current) markPassed(current, audio.currentTime); });
 audio.addEventListener("play", () => {
   if (stopped) clearStop();
-  if (answering) { answering = null; $("text").placeholder = "Type, or press the mic"; }  // the say back was left
+  if (answering) { answering = null; $("text").placeholder = tr("ph.talk"); }  // the say back was left
 });

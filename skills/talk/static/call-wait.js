@@ -10,15 +10,15 @@ function paintInfo() {
 // card (paintWait) and the answer waiting to play its own row (paintQueue), so neither is a line here.
 function statusText() {
   if (recorder) return null;
-  if (live && live.speech) return {text: "Hearing you…"};
-  if (live && live.suspended) return {text: "Click anywhere to start listening.", warn: true};
-  if (live && live.parked) return {text: live.parked === "floor" ? "Listening in another call. Press the mic to listen here."
-    : "Listening on another screen. Press the mic to listen here."};
-  if (held && held.armed && !busy) return {text: "Listening. Go ahead."};
-  if (elsewhere && audio.paused && current) return {text: "Playing on another screen."};
+  if (live && live.speech) return {text: tr("w.hearing")};
+  if (live && live.suspended) return {text: tr("w.suspended"), warn: true};
+  if (live && live.parked) return {text: live.parked === "floor" ? tr("w.parked.floor")
+    : tr("w.parked.screen")};
+  if (held && held.armed && !busy) return {text: tr("w.listening")};
+  if (elsewhere && audio.paused && current) return {text: tr("w.elsewhere")};
   if (liveFlash && Date.now() < liveFlash.until && !busy) return {text: liveFlash.text};
-  if (busy) return {text: "Turning your words into text…", shimmer: true};
-  if (view.ended) return {text: closed ? "Closed. You can close this tab." : "The call has ended: " + view.ended + ". Answers can still be replayed."};
+  if (busy) return {text: tr("w.busy"), shimmer: true};
+  if (view.ended) return {text: closed ? tr("w.closed") : tr("w.ended", {why: view.ended})};
   // A question in flight (sent, picked up, working, slow or not picked up) is the wait card's: see paintWait().
   // Whether live mode listens shows on the corner chip, the mic and the frame's edge; the card only says
   // why it stopped when it stopped by itself (asleep, the microphone lost).
@@ -42,8 +42,8 @@ function paintPrep(e) {
     const share = prepShare(e), left = e.speech === "making" ? e.speech_estimate * (1 - share / 0.98) : 0;
     $("prepfill").style.width = (100 * share).toFixed(1) + "%";
     $("prepfill").parentElement.classList.toggle("queued", e.speech === "pending");
-    $("preplbl").textContent = e.speech === "pending" ? "Waiting for the voice…"
-      : share < 0.9 && left >= 1.5 ? "Preparing the voice · about " + Math.ceil(left) + " s" : "Preparing the voice · almost ready";
+    $("preplbl").textContent = e.speech === "pending" ? tr("w.prep.pending")
+      : share < 0.9 && left >= 1.5 ? tr("w.prep.about", {s: Math.ceil(left)}) : tr("w.prep.almost");
   }
   if (on && !prepTimer) prepTimer = setInterval(() => paintPrep(shownAnswer()), 200);
   else if (!on && prepTimer) { clearInterval(prepTimer); prepTimer = 0; }
@@ -83,13 +83,13 @@ async function sendText(replace = false) {
     // as it does when you press Talk.
     if (resp.ok) {
       turnSent({via: spoken ? "spoken" : "typed", text, entry: body.entry ? body.entry.id : null});
-      if (target) noteSend(body.replaced === false ? "Sent. The earlier question was answered already." : "Replaced. Claude will answer this one.");
+      if (target) noteSend(body.replaced === false ? tr("w.sent.old") : tr("w.replaced"), "", true);
       $("text").value = ""; spoken = false; fitText(); release(); if (!audio.paused) audio.pause(); view.v = -1;
-      if (answering) { answering = null; $("text").placeholder = "Type, or press the mic"; clearStop(); }
+      if (answering) { answering = null; $("text").placeholder = tr("ph.talk"); clearStop(); }
       if (wake) wake();
     }
-    else { showError(body.error || "Sending failed: HTTP " + resp.status); noteSend("Not sent. Your draft is kept.", "warn"); }
-  } catch (err) { showError("Sending failed: " + err.message); noteSend("Not sent. Your draft is kept.", "warn"); }
+    else { showError(body.error || tr("w.fail.http", {code: resp.status})); noteSend(tr("w.notsent"), "warn"); }
+  } catch (err) { showError(tr("w.fail", {why: err.message})); noteSend(tr("w.notsent"), "warn"); }
   $("sendtext").disabled = !$("text").value.trim();
 }
 // The text field grows with what is typed, up to a few lines, and Send waits for something to send.
@@ -100,16 +100,16 @@ function fitText() {
   paintWait();
 }
 $("text").addEventListener("input", fitText);
-$("text").placeholder = "Type, or press the mic";
+$("text").placeholder = tr("ph.talk");
 $("undo").onclick = async () => {
   const u = undoable; undoable = null; paintAll();
   if (!u) return;
   try {
     const r = await api("/api/withdraw", {method: "POST", body: JSON.stringify({entry: u.entry}), headers: {"Content-Type": "application/json"}});
     const b = await r.json().catch(() => ({}));
-    flash(b.withdrawn ? "Taken back." : "Too late: Claude already has it.");
+    flash(b.withdrawn ? tr("live.taken") : tr("w.undo.late"));
     view.v = -1; if (wake) wake();
-  } catch { showError("Undo failed: the call server did not answer."); }
+  } catch { showError(tr("w.undo.fail")); }
 };
 // "One moment.": once per live turn, when Claude has worked a few seconds and nothing is playing.
 const fillerAudio = new Audio();
@@ -188,22 +188,22 @@ function waitModel() {
     pickedAt: picked && t.collected_at ? Math.max(0, t.collected_at - sentAt) : null,
     earlier: (t.earlier || 0) > 0};
 }
-const WAIT_TITLE = {sent: "Sent", notpicked: "Not picked up", working: "Claude is working", slow: "Taking longer than usual",
-  silent: "Claude has gone quiet"};
+const WAIT_TITLE = {sent: "w.title.sent", notpicked: "w.title.notpicked", working: "w.title.working", slow: "w.title.slow", silent: "w.title.silent"};
+const waitTitle = step => tr(WAIT_TITLE[step]);
 function waitSub(m) {
-  if (m.step === "sent") return m.earlier ? "Claude is finishing the earlier question. This one comes next." : "Waiting for Claude to pick it up.";
-  if (m.step === "notpicked") return "Claude has not picked this up yet.";
-  if (m.step === "silent") return "No sign of life for " + fmt(m.quiet === null ? m.elapsed : m.quiet) + ".";
-  if (m.step === "slow") return m.run ? "Still on the step below." : m.quiet === null ? "Still working on it." : "Last sign of life " + stepClock(m.quiet) + " ago.";
-  return m.run ? "" : "Claude has your question.";  // a step running is a row of its own
+  if (m.step === "sent") return m.earlier ? tr("w.sub.sent.earlier") : tr("w.sub.sent");
+  if (m.step === "notpicked") return tr("w.sub.notpicked");
+  if (m.step === "silent") return tr("w.sub.silent", {t: fmt(m.quiet === null ? m.elapsed : m.quiet)});
+  if (m.step === "slow") return m.run ? tr("w.sub.slow.run") : m.quiet === null ? tr("w.sub.slow.work") : tr("w.sub.slow.last", {t: stepClock(m.quiet)});
+  return m.run ? "" : tr("w.sub.working");  // a step running is a row of its own
 }
 // The line that stays on a card whose question was sent again: how long ago, and that several questions went as one.
 function againText(m) {
   const a = m.again, ago = fmt(Math.max(0, serverNow() - a.at));
-  return (a.tries > 1 ? "Sent again " + a.tries + " times, the last " + ago + " ago" : "Sent again " + ago + " ago")
-    + (a.count > 1 ? ", " + a.count + " questions as one." : ".");
+  return (a.tries > 1 ? tr("w.again.many", {n: a.tries, ago}) : tr("w.again.one", {ago}))
+    + (a.count > 1 ? tr("w.again.as1", {n: a.count}) : ".");
 }
-const WAIT_STEPS = ["Sent", "Picked up", "Working", "Answer"];
+const WAIT_STEPS = ["w.step.sent", "w.step.picked", "w.step.working", "w.step.answer"];
 // Where the stepper stands: 0 Sent, 1 Picked up, 2 Working (the session has reported a step).
 const waitReach = m => !m.picked ? 0 : (view.activity || []).length ? 2 : 1;
 const WAIT_ICON = {
@@ -228,11 +228,11 @@ function waitButton(icon, label, onclick, primary) {
 // The card's actions for its step, as [icon, label, handler, primary].
 function waitActions(m) {
   const newest = m.fl[m.fl.length - 1], collected = m.fl.find(x => x.state === "picked");
-  const copy = ["copy", "Copy question", copyQuestion], again = ["again", "Send again", sendAgain, true];
+  const copy = ["copy", tr("w.copy"), copyQuestion], again = ["again", tr("w.again"), sendAgain, true];
   // Before pickup Take back withdraws every question the card shows, all that nobody has collected, and puts them in the box in order.
   const unpicked = m.fl.filter(x => x.state === "sent").map(x => x.id), many = unpicked.length > 1;
-  const takeBack = ["back", many ? "Take back all" : "Take back", () => cancelTurn(unpicked.length ? unpicked : [newest.id])];
-  const cancel = ["x", "Cancel", () => cancelTurn([collected ? collected.id : newest.id])];
+  const takeBack = ["back", many ? tr("w.back.all") : tr("w.back"), () => cancelTurn(unpicked.length ? unpicked : [newest.id])];
+  const cancel = ["x", tr("w.cancel"), () => cancelTurn([collected ? collected.id : newest.id])];
   return {sent: [takeBack, copy], notpicked: [again, copy, takeBack], working: [cancel], slow: [cancel, copy], silent: [again, copy, cancel]}[m.step];
 }
 // Build the card for a model: the title and clock, the sub line, the question, the stepper, the steps the session reports, the actions.
@@ -243,7 +243,7 @@ function buildWait(m) {
   const icon = document.createElement("span"); icon.className = "wt-icon";
   icon.innerHTML = svgIcon(m.step === "sent" ? "sent" : m.step === "working" ? "working" : "warn", 20);
   const title = document.createElement("span"); title.className = "wt-title";
-  title.textContent = WAIT_TITLE[m.step];
+  title.textContent = waitTitle(m.step);
   const clock = document.createElement("span"); clock.className = "wt-clock"; clock.setAttribute("aria-hidden", "true");
   head.append(icon, title, clock);
   const sub = document.createElement("p"); sub.className = "wt-sub";
@@ -253,18 +253,18 @@ function buildWait(m) {
     const q = document.createElement("p"); q.className = "wt-q";
     if (m.rows.length > 1) {
       q.classList.add("multi");
-      const n = document.createElement("small"); n.className = "wt-qn"; n.textContent = "Question " + (i + 1) + " of " + m.rows.length;
+      const n = document.createElement("small"); n.className = "wt-qn"; n.textContent = tr("w.qn", {i: i + 1, n: m.rows.length});
       const t = document.createElement("span"); t.className = "wt-qt"; t.textContent = text; q.append(n, t);
     } else q.textContent = text;
     qs.append(q);
   });
   const again = document.createElement("p"); again.className = "wt-again"; again.hidden = !m.again;
-  const stepper = document.createElement("ol"); stepper.className = "wt-steps"; stepper.setAttribute("aria-label", "Where your question stands");
+  const stepper = document.createElement("ol"); stepper.className = "wt-steps"; stepper.setAttribute("aria-label", tr("w.stepper"));
   const reach = waitReach(m);
   WAIT_STEPS.forEach((label, i) => {
     const li = document.createElement("li"); li.className = i < reach ? "done" : i === reach ? "now" : "todo";
     const bar = document.createElement("i"), name = document.createElement("b"), at = document.createElement("small");
-    name.textContent = label; at.className = "wt-at";
+    name.textContent = tr(label); at.className = "wt-at";
     li.append(bar, name, at); stepper.append(li);
   });
   card.replaceChildren(head, sub, again, qs, stepper);
@@ -283,14 +283,14 @@ function buildWait(m) {
   for (const [ic, label, fn, primary] of waitActions(m)) acts.append(waitButton(ic, label, fn, primary));
   card.append(acts);
   if (m.step !== "working") {
-    const lost = document.createElement("p"); lost.className = "wt-lost"; lost.textContent = "Nothing is lost: your question is saved in the call.";
+    const lost = document.createElement("p"); lost.className = "wt-lost"; lost.textContent = tr("w.lost");
     card.append(lost);
   }
   card.hidden = false;
 }
 // What the card was built from: change any of it and the card is rebuilt; the seconds and the clock are not in it.
 function waitSigOf(m) {
-  return [m.step, m.fl.map(x => x.id + x.state).join(","), m.text, m.again ? m.again.tries + "/" + m.again.count : "", m.acts.map(a => a.label + a.state).join("|"), m.earlier, waitReach(m)].join("§");
+  return [uiLang, m.step, m.fl.map(x => x.id + x.state).join(","), m.text, m.again ? m.again.tries + "/" + m.again.count : "", m.acts.map(a => a.label + a.state).join("|"), m.earlier, waitReach(m)].join("§");
 }
 // The numbers on the card: the clock, each step's time, the seconds of each reported step, the sub line. They change each second.
 function tickWait(m) {
@@ -311,11 +311,11 @@ function waitClock(on) {
 // ---- the card's actions -----------------------------------------------------------
 function copyQuestion() {
   const m = waitModel(); if (!m) return;
-  const done = () => noteSend("Copied.");
+  const done = () => noteSend(tr("w.copied"), "", true);
   const old = () => {
     const t = document.createElement("textarea"); t.value = m.text; t.style.position = "fixed"; t.style.opacity = "0";
     document.body.append(t); t.select();
-    try { document.execCommand("copy"); done(); } catch { showError("Could not copy. Select the question and copy it."); }
+    try { document.execCommand("copy"); done(); } catch { showError(tr("w.copy.fail")); }
     t.remove();
   };
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(m.text).then(done, old); else old();
@@ -343,12 +343,12 @@ async function cancelTurn(ids) {
       t.value = t.value.trim() ? words + "\n" + t.value : words; spoken = false; fitText();
       if (matchMedia("(hover: hover)").matches) t.focus();
     }
-    if (!got.length) noteSend("Too late: Claude already answered it.", "warn");
-    else if (got.length < fl.length) noteSend("Took back " + got.length + " of " + fl.length + " questions. Claude has picked up the rest. Your words are back in the box.", "warn");
-    else if (got.length > 1) noteSend((how === "cancelled" ? "Cancelled " : "Took back ") + got.length + " questions. Your words are back in the box, in order.");
-    else noteSend(how === "cancelled" ? "Cancelled. Your words are back in the box." : "Taken back. Your words are back in the box.");
+    if (!got.length) noteSend(tr("w.late"), "warn");
+    else if (got.length < fl.length) noteSend(tr("w.back.some", {n: got.length, m: fl.length}), "warn");
+    else if (got.length > 1) noteSend(tr(how === "cancelled" ? "w.cancelled.many" : "w.tookback.many", {n: got.length}));
+    else noteSend(tr(how === "cancelled" ? "w.cancelled.one" : "w.tookback.one"));
     view.v = -1; if (wake) wake();
-  } catch { showError("Could not take it back: the call server did not answer."); }
+  } catch { showError(tr("w.back.fail")); }
 }
 // Send the question again as a new one that replaces the first: the server takes the first back, or marks it replaced if
 // the session has it, so only one is answered. The draft in the box is left alone.
@@ -357,14 +357,14 @@ async function sendAgain() {
   try {
     const r = await api("/api/say", {method: "POST", body: JSON.stringify({text: m.text, replaces: m.fl[0].id}), headers: {"Content-Type": "application/json"}});
     const b = await r.json().catch(() => ({}));
-    if (!r.ok) { showError(b.error || "Sending failed: HTTP " + r.status); return; }
+    if (!r.ok) { showError(b.error || tr("w.fail.http", {code: r.status})); return; }
     turnSent({via: "typed", text: m.text, entry: b.entry ? b.entry.id : null});
-    noteSend(b.replaced === false ? "Sent. The first one was answered already." : "Sent again.");
+    noteSend(b.replaced === false ? tr("w.sent.first") : tr("w.sent.again"), "", true);
     view.v = -1; if (wake) wake();
-  } catch (err) { showError("Sending failed: " + err.message); }
+  } catch (err) { showError(tr("w.fail", {why: err.message})); }
 }
 // What happened, for a few seconds, in the line above the box.
-function noteSend(text, tone) { sendNoteNow = {text, tone: tone || "", until: Date.now() + 7000}; paintWait(); setTimeout(paintWait, 7100); }
+function noteSend(text, tone, fades) { sendNoteNow = {text, tone: tone || "", fades: !!fades, until: Date.now() + 7000}; paintWait(); setTimeout(paintWait, 7100); }
 
 // ---- the queued answer ------------------------------------------------------------
 // An answer that came while another plays waits for it to end. It is a row with Skip: Skip drops it from the queue (the
@@ -374,13 +374,13 @@ function paintQueue() {
   const row = $("queuerow"), e = queued && !stopped ? (view.entries.find(x => x.id === queued.id) || queued) : null;
   row.hidden = !e;
   if (!e) { row.dataset.sig = ""; return; }
-  const sig = e.id + ":" + (e.n || "");
+  const sig = uiLang + e.id + ":" + (e.n || "");
   if (row.dataset.sig === sig) return;
   row.dataset.sig = sig;
   const icon = document.createElement("span"); icon.className = "qr-icon"; icon.innerHTML = svgIcon("queue", 16);
   const text = document.createElement("span"); text.className = "qr-text";
-  text.textContent = "Next: answer " + (e.n || "") + ". It plays when this one ends.";
-  const skip = waitButton("skip", "Skip", skipQueued); skip.classList.add("qr-skip");
+  text.textContent = tr("w.next", {n: e.n || ""});
+  const skip = waitButton("skip", tr("w.skip"), skipQueued); skip.classList.add("qr-skip");
   row.replaceChildren(icon, text, skip);
 }
 // "Play anyway": a replaced answer is kept unspoken. The reader asks for it: its voice is made (the server's /api/speak) and
@@ -391,9 +391,9 @@ async function playAnyway(entry) {
   playAnywayId = e.id;
   try {
     const r = await api("/api/speak", {method: "POST", body: JSON.stringify({entry: e.id}), headers: {"Content-Type": "application/json"}});
-    if (!r.ok) { playAnywayId = null; const b = await r.json().catch(() => ({})); showError(b.error || "Could not read the answer aloud."); }
+    if (!r.ok) { playAnywayId = null; const b = await r.json().catch(() => ({})); showError(b.error || tr("w.speak.fail")); }
     else { view.v = -1; if (wake) wake(); }
-  } catch { playAnywayId = null; showError("Could not read the answer aloud: the call server did not answer."); }
+  } catch { playAnywayId = null; showError(tr("w.speak.fail.srv")); }
 }
 
 // ---- the hooks this file owns (W) -----------------------------------------------
@@ -417,12 +417,12 @@ function paintWait() {
     // The live region is the page's one (announce), since this card is rebuilt: a change of step is said once. "Sent" is
     // said by turnSent.
     if (waitSaid !== m.step) {
-      if (waitSaid !== null || m.step !== "sent") { const sub = waitSub(m); announce(WAIT_TITLE[m.step] + "." + (sub ? " " + sub : "")); }
+      if (waitSaid !== null || m.step !== "sent") { const sub = waitSub(m); announce(waitTitle(m.step) + "." + (sub ? " " + sub : "")); }
       waitSaid = m.step;
     }
   } else if (!card.hidden) { card.hidden = true; card.replaceChildren(); waitSig = ""; waitFor = null; waitSaid = null; }
   // The placeholder says what the field does while a question is in flight.
-  if (!answering && !recorder) $("text").placeholder = m ? WAIT_PLACEHOLDER : modePlaceholder();
+  if (!answering && !recorder) $("text").placeholder = m ? tr("ph.wait") : modePlaceholder();
   paintSendNote(m);
   paintQueue();
 }
@@ -432,22 +432,22 @@ function paintSendNote(m) {
   const keep = !now && !!m && !!draft;
   note.hidden = !now && !keep;
   if (note.hidden) { note.dataset.sig = ""; return; }
-  const sig = now ? "n:" + now.text : "draft";
+  const sig = uiLang + (now ? "n:" + now.text : "draft");
   if (note.dataset.sig === sig) return;
   note.dataset.sig = sig; note.className = "sendnote" + (now && now.tone === "warn" ? " warn" : "");
   const text = document.createElement("span"); text.className = "sn-text";
   if (now) text.textContent = now.text;
-  else { text.append("Draft kept."); const more = document.createElement("span"); more.className = "sn-more"; more.textContent = " Send adds it to your question."; text.append(more); }
+  else { text.append(tr("w.draft")); const more = document.createElement("span"); more.className = "sn-more"; more.textContent = tr("w.draft.more"); text.append(more); }
   note.replaceChildren(text);
-  if (keep) note.append(waitButton("swap", "Replace question", () => sendText(true)));
+  if (keep) note.append(waitButton("swap", tr("w.replace"), () => sendText(true)));
 }
 function waitActive() { return inflight().length > 0; }
 // A new view arrived: `before` is the one it replaces. An answer is here: what was said about the last send is old news.
 function waitOnView(before) {
-  if (!inflight().length && sendNoteNow && /^(Sent|Replaced|Copied)/.test(sendNoteNow.text)) sendNoteNow = null;
+  if (!inflight().length && sendNoteNow && sendNoteNow.fades) sendNoteNow = null;
 }
 // A turn was sent from this page: info is {via: "typed" | "spoken" | "live", text, entry: the new entry's id or null}. Called
 // by sendText() here and by sendLive() in call-live.js, at the moment the server took the turn.
 function turnSent(info) {
-  announce("Your question was sent.");
+  announce(tr("w.announce.sent"));
 }

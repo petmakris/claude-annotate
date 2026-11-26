@@ -6,17 +6,17 @@ function setSrc(path) { const url = audioUrl(path); if (audio.dataset.src !== ur
 function playFailed(err) {
   const name = err && err.name;
   if (name === "AbortError") return;
-  if (name === "NotAllowedError") showError("The browser blocked playback. Press Play.");
-  else if (name === "NotSupportedError") { audioFailed = current ? current.id : null; showError("Cannot play this audio file."); }
-  else showError("Playback failed" + (err && err.message ? ": " + err.message : "") + ". Press Play.");
+  if (name === "NotAllowedError") showError(tr("pl.blocked"));
+  else if (name === "NotSupportedError") { audioFailed = current ? current.id : null; showError(tr("pl.unsupported")); }
+  else showError(err && err.message ? tr("pl.failed.why", {why: err.message}) : tr("pl.failed"));
 }
 // The audio element could not load its file (gone, damaged, the connection dropped): said so, with Retry.
 audio.addEventListener("error", () => {
   if (!current || !audio.dataset.src) return;
   const code = audio.error && audio.error.code;
   audioFailed = current.id;
-  showError(code === 2 ? "Cannot load the audio file: the connection dropped." : code === 3 ? "Cannot load the audio file: it is damaged."
-    : code === 4 ? "Cannot load the audio file: it is missing or not supported." : "Cannot load the audio file.");
+  showError(code === 2 ? tr("pl.load.net") : code === 3 ? tr("pl.load.bad")
+    : code === 4 ? tr("pl.load.missing") : tr("pl.load"));
 });
 audio.addEventListener("loadeddata", () => { if (audioFailed !== null) { audioFailed = null; showError(""); } });
 function retryAudio() {
@@ -36,7 +36,7 @@ function load(e, play) {
   audio.playbackRate = speed; audio.preservesPitch = true;
   // A pause before playback starts (another call took the floor) rejects with AbortError: not a block.
   if (play) audio.play().catch(playFailed);
-  if ("mediaSession" in navigator) navigator.mediaSession.metadata = new MediaMetadata({title: "Answer " + (e.n || ""), artist: "Claude", album: CFG.topic});
+  if ("mediaSession" in navigator) navigator.mediaSession.metadata = new MediaMetadata({title: tr("s.answer", {n: e.n || ""}), artist: "Claude", album: CFG.topic});
   paintAll();
 }
 // One page of a call speaks. Two pages of one call (a laptop and the TV) would otherwise both start each

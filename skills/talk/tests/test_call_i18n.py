@@ -8,8 +8,8 @@ from call_page import CallPage, needs_node, served
 STATIC = Path(__file__).resolve().parents[1] / "static"
 I18N = (STATIC / "call-i18n.js").read_text()
 HTML = (STATIC / "call.html").read_text()
-# The files whose words go through t(): the routed list grows as the batches that own the others land.
-ROUTED = ["call-input.js", "call-return.js", "call-calls.js", "call-live.js"]
+# The files whose words go through t() (tr() where a function keeps a local named t).
+ROUTED = ["call-input.js", "call-return.js", "call-calls.js", "call-live.js", "call-wait.js", "call-shell.js", "call-stage.js", "call-player.js"]
 
 
 def table(lang):
@@ -21,10 +21,10 @@ def used_keys():
     keys = set()
     for name in ROUTED:
         text = (STATIC / name).read_text()
-        keys |= set(re.findall(r'\bt\("([\w.]+)"', text))
-        for m in re.finditer(r'\bt\(([^(),]*?\?[^(),]*?)[,)]', text):          # t(cond ? "a" : "b")
+        keys |= set(re.findall(r'\btr?\("([\w.]+)"', text))
+        for m in re.finditer(r'\btr?\(([^(),]*?\?[^(),]*?)[,)]', text):          # t(cond ? "a" : "b")
             keys |= set(re.findall(r'"([a-z][\w.]*\.[\w.]+)"', m.group(1)))
-        keys |= {k + suffix for k in re.findall(r'\btn\("([\w.]+)"', text) for suffix in (".one", ".other")}
+        keys |= {k + suffix for k in re.findall(r'\b(?:tn|trn)\("([\w.]+)"', text) for suffix in (".one", ".other")}
     keys |= set(re.findall(r'data-t(?:-\w+)?="([\w.]+)"', HTML))
     return keys
 
@@ -53,7 +53,7 @@ def test_the_keys_the_table_builds_from_data_exist():
 
 ALLOWED = {  # literals in the routed files that are not words of the page: keys on the keyboard, protocol, class names, a name
     "Azure", "Content-Type", "Space", "Alt", "Esc", "Enter", "Shift", "Tab", "ArrowLeft", "ArrowRight", "PageUp", "PageDown", "English",
-    "ib kclose", "BroadcastChannel", "btn callsall", "btn callsnext", "Talk · ", "Add to your question",
+    "ib kclose", "BroadcastChannel", "btn callsall", "btn callsnext", "Claude", "AbortError", "NotAllowedError", "NotSupportedError", "chip board", "ib nowcopy", "Escape", "Talk · ", "Add to your question",
 }
 
 
@@ -114,3 +114,15 @@ def test_a_stored_greek_choice_opens_the_page_in_greek_and_a_launch_language_win
     state = "[document.documentElement.lang, $('keyhint').textContent.includes('πρόταση'), document.querySelector('#pKeys .khead h3').textContent, document.querySelector('#lang [data-lang=auto]').textContent]"
     assert CallPage(html, states, stored={"language": "el"}).check(state).run() == [["el", True, "Συντομεύσεις πληκτρολογίου", "Ανίχνευση"]]
     assert CallPage(html, states).check(state).run() == [["en", False, "Keyboard shortcuts", "Detect"]]
+
+
+def test_a_routed_file_never_shadows_the_function_it_asks_for_its_words():
+    """A local named t made t("c.here") throw inside a function. Per top-level statement: one that asks t() declares no local t, and no file declares its own tr or trn (call-wait.js, call-shell.js, call-stage.js and call-player.js ask tr())."""
+    local = re.compile(r"\b(?:const|let|var)\s+t\b|[^\w.]t\s*=>|\(t\s*[,)][^=;{]*?\)\s*=>|function\s*\w*\s*\([^)]*\bt\b[^)]*\)|\{\s*t\s*[,}]|,\s*t\s*\]")
+    for name in ROUTED:
+        text = re.sub(r"//.*$", "", (STATIC / name).read_text(), flags=re.M)
+        assert not re.search(r"\b(?:const|let|var)\s+(?:tr|trn)\b|\b(?:tr|trn)\s*=>", text), name
+        chunks = re.split(r"\n(?=[^\s}/])", text)
+        for chunk in chunks:
+            if re.search(r'(?<![\w.])t\("', chunk):
+                assert [m.group(0) for m in local.finditer(chunk)] == [], f"{name}: {chunk[:60]!r} asks t() and declares a local t"
