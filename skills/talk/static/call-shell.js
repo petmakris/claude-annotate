@@ -94,7 +94,7 @@ function buildChip(b) {
   const t = document.createElement("span"); t.className = "cl"; t.textContent = boardName(b); el.append(t);
   let said = boardName(b);
   if (b.kind === "points" && b.added) {
-    const s = document.createElement("small"); s.textContent = tr("s.chip.new", {n: b.added}); el.append(s); said += ", " + s.textContent;
+    const s = document.createElement("small"); s.textContent = trn("s.chip.added", b.added); el.append(s); said += ", " + s.textContent;
   }
   el.setAttribute("aria-label", tr("s.chip.show", {name: said}));
   el.setAttribute("aria-pressed", "false");
@@ -175,6 +175,8 @@ function nowState(e, wait) {
   if (mine && audio.currentTime > 0) return {key: "paused", word: tr("s.st.paused")};
   return {key: "ready", word: tr(e.id > (view.heard_upto ?? -1) ? "s.st.new" : "s.st.ready")};
 }
+// the card's eyebrow is the heading of its answer (the earlier rows are headings too), so heading navigation lists the answers
+$("nownum").setAttribute("role", "heading"); $("nownum").setAttribute("aria-level", "3");
 let nowSig = "", nowChipsSig = "", nowHeadSig = "", nowShown = null;   // the answer whose text the card holds
 let readSpans = [];
 function buildNowText(e) {
@@ -193,6 +195,39 @@ function paintTextFades() {
   tx.toggleAttribute("data-below", tx.scrollHeight - tx.scrollTop - tx.clientHeight > 2);
 }
 $("nowtext").addEventListener("scroll", paintTextFades, {passive: true});
+// The window is sized in whole lines by the height the panel has free: what is on the card besides the text (head, question,
+// chips, transport, Following strip) and, while earlier answers wait, the head of their list and two rows come off the panel's
+// height, so a laptop screen shows the list under the card and the window never ends mid-line. Show all lifts the cap (the
+// word being said stays in view); the control is there only when the text is longer than the window.
+const NT_MIN = 3, NT_TIGHT = 2, NT_SHORT = 560, NT_MAX = 16, NT_BUTTON = 36, ROW_H = 68, LIST_GAP = 12;
+let ntAll = false;                       // the reader lifted the cap for the answer on the card
+const ntMore = document.createElement("button"); ntMore.type = "button"; ntMore.id = "ntmore"; ntMore.className = "nq-more"; ntMore.hidden = true;
+$("nowbody").insertBefore(ntMore, $("nowchips"));
+ntMore.onclick = () => { ntAll = !ntAll; fitNowText(); followVoice(true); };
+// whole lines that fit in `free` pixels at `lh` pixels a line
+const ntLines = (free, lh, tight) => Math.max(tight ? NT_TIGHT : NT_MIN, Math.min(NT_MAX, Math.floor(free / lh)));
+function fitNowText() {
+  const tx = $("nowtext"), card = $("nowcard"), box = $("convo");
+  if (card.hidden) return;
+  const lh = parseFloat(getComputedStyle(tx).lineHeight) || 25, cs = getComputedStyle(box);
+  const earlier = box.classList.contains("has-earlier") && !$("earlier").hidden;
+  const reserve = earlier ? LIST_GAP + Math.max(40, $("tlhead").offsetHeight) + 2 * ROW_H : 0;
+  const others = card.offsetHeight - tx.offsetHeight - (ntMore.hidden ? 0 : ntMore.offsetHeight + 8) + NT_BUTTON;
+  const free = box.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0) - others - reserve;
+  const lines = ntLines(free, lh, box.clientHeight < NT_SHORT && matchMedia("(min-width: 761px)").matches);   // a short laptop panel gives the list its head before it gives the text a third line; a phone keeps three
+  if (tx.style.getPropertyValue("--nt-lines") !== String(lines)) tx.style.setProperty("--nt-lines", lines);
+  tx.toggleAttribute("data-all", ntAll);
+  ntMore.hidden = !ntAll && !(tx.scrollHeight > lines * lh + 2);
+  const label = tr(ntAll ? "s.less" : "s.more");
+  if (ntMore.textContent !== label) ntMore.textContent = label;
+  ntMore.setAttribute("aria-expanded", String(ntAll));
+  paintTextFades();
+}
+window.addEventListener("resize", fitNowText);
+if (typeof ResizeObserver === "function") {   // what is free changes with the panel, the card's other parts (chips, the strip when the stage reports) and the list's head
+  const watch = new ResizeObserver(fitNowText);
+  for (const id of ["convo", "nowcard", "tlhead"]) watch.observe($(id));
+}
 // An answer played to its end shows from its first line again; a paused one keeps its place, and a tap on a word scrolls to it.
 audio.addEventListener("ended", () => {
   const tx = $("nowtext");
@@ -200,13 +235,14 @@ audio.addEventListener("ended", () => {
   paintTextFades();
 });
 // A question the user typed, as typed: its breaks kept, at the weight of the text, held to three lines with Show all
-// when it is longer (the whole text stays in the node, so copying and the screen reader get all of it).
+// when it is longer (the clamped form squeezes runs of blank lines so paragraphs do not use up the three lines; Show all gives the text whole).
 const qOpen = new Set();      // the questions whose full text the reader opened
+const squeezed = (text) => text.replace(/\n[ \t]*(?:\n[ \t]*)+/g, "\n");   // the clamped form: blank lines do not use up its lines
 const longQuestion = (text) => text.length > 140 || (text.match(/\n/g) || []).length >= 3;
 function buildQuestion(q) {
   const box = document.createElement("div"); box.className = "nq";
   const open = qOpen.has(q.id);
-  const text = document.createElement("span"); text.className = "nq-text" + (open ? "" : " clamped"); text.textContent = q.text;
+  const text = document.createElement("span"); text.className = "nq-text" + (open ? "" : " clamped"); text.textContent = open ? q.text : squeezed(q.text);
   const more = document.createElement("button"); more.type = "button"; more.className = "nq-more";
   more.textContent = tr(open ? "s.less" : "s.more"); more.setAttribute("aria-expanded", String(open));
   more.hidden = !open && !longQuestion(q.text);
@@ -261,7 +297,7 @@ function paintNowCard() {
     nowSig = sig;
     const wasShown = nowShown;
     buildNowText(e);
-    if (wasShown !== e.id) { card.classList.remove("reading"); $("nowtext").scrollTop = 0; lastTurn = null; }
+    if (wasShown !== e.id) { card.classList.remove("reading"); $("nowtext").scrollTop = 0; lastTurn = null; ntAll = false; }
   }
   const csig = uiLang + e.id + "#" + (t ? chipsSig(t) : "");
   if (csig !== nowChipsSig) {
@@ -276,6 +312,7 @@ function paintNowCard() {
     bad.textContent = tr("s.notread", {why: e.speech_error || tr("s.speechfailed")});
   } else if (bad) bad.remove();
   paintFollow();
+  fitNowText();
 }
 
 // ---- the Following strip ---------------------------------------------------------------
@@ -285,6 +322,11 @@ function paintNowCard() {
 // stage's own button says Back to the voice too, so the card, the stage and the keys name one thing. Nothing is clamped: the
 // answer numbers are the point of the words.
 let followSig = "";
+// With the stage pinned by hand and the voice paused, Play starts the answer that owns the board in front: that answer when it is not the card's own.
+function pinnedOther() {
+  const shown = shownAnswer(), b = shown && !follow && audio.paused ? boardStart() : null;
+  return b && b.e.id !== shown.id ? b.e : null;
+}
 function paintFollow() {
   paintTransport();   // Play's word depends on whether the stage follows: every change of it lands here
   const box = $("nowfollow");
@@ -292,7 +334,7 @@ function paintFollow() {
   box.hidden = !has;
   if (!has) { followSig = ""; return; }
   const front = boardTitle(frontBoard), fa = boardAnswer.get(frontBoard);
-  const shown = shownAnswer(), n = shown ? shown.n : null;
+  const shown = shownAnswer(), n = shown ? shown.n : null, other = pinnedOther();
   let label, text, note = "", still = false;
   if (follow) {
     label = tr("s.fol.following");
@@ -301,11 +343,10 @@ function paintFollow() {
   } else {
     label = tr("s.fol.chose");
     text = (front ? (fa ? tr("s.fol.from", {front, fa}) : tr("s.fol.shows", {front})) : tr("s.fol.chosen")) + "." + (n ? tr("s.fol.voice", {n}) : "");
-    const b = shown ? boardStart() : null;
-    note = b && b.e.id !== shown.id ? tr("s.fol.starts", {n: b.e.n}) : "";
+    note = other ? tr("s.play.n.board", {n: other.n}) : "";   // the words of the transport's button
   }
   const btnText = tr(follow ? "s.fol.keep" : "s.fol.back");
-  const sig = [uiLang, follow, label, text, note, btnText].join("|");
+  const sig = [uiLang, follow, label, text, note, btnText, still ? 1 : 0, other && n].join("|");
   if (sig === followSig) return;
   followSig = sig;
   const state = document.createElement("span"); state.className = "fl-state";
@@ -319,13 +360,21 @@ function paintFollow() {
   btn.onclick = () => { if (follow) pinBoard(); else { followAgain(); resync(); } };
   box.dataset.mode = follow ? "following" : "pinned"; box.dataset.text = still || !follow ? "board" : "plain";
   const parts = [state, btn, msg];
-  if (note) { const nt = document.createElement("span"); nt.className = "fl-note"; nt.textContent = note; parts.push(nt); }
+  if (still) { const hint = document.createElement("span"); hint.className = "fl-hint"; hint.textContent = tr("s.fol.keep.hint"); parts.push(hint); }   // what Keep this board does, in words (the tooltip is not seen on touch)
+  if (note) {
+    const nt = document.createElement("span"); nt.className = "fl-note"; nt.textContent = note; parts.push(nt);
+    // the card's own answer stays playable from the card while the transport's Play names the board's answer
+    const own = document.createElement("button"); own.type = "button"; own.className = "fl-btn"; own.classList.add("fl-own");
+    own.textContent = tr("s.fol.playown", {n}); own.onclick = () => playAnswer(shown, true);
+    parts.push(own);
+  }
   box.replaceChildren(...parts);
 }
 
 // ---- the list of earlier answers ---------------------------------------------------
 const opened = new Set();     // the answers whose row the reader opened
 let tlQuery = "", searchOpen = false;
+const SEARCH_AFTER = 12;      // more rows than this show the search field without being asked
 const rowNodes = new Map();   // answer id -> {el, sig}
 // Letters compared without accents or case, so a search finds "Ελλάδα" typed as "ελλαδα".
 function folded(s) {
@@ -412,18 +461,25 @@ function buildRow(t, q, isNow) {
   const title = document.createElement("span"); title.className = "tl-title";
   if (t.q) title.append(...marked(t.q.text, q)); else title.append(...marked(gistOf(e), q));
   qq.append(title);
-  if (t.q || (q && !matchAt(gistOf(e), q))) { const g = document.createElement("span"); g.className = "tl-gist"; g.append(...gistLine(t, q)); qq.append(g); }
+  if ((t.q && !(open && !q)) || (q && !matchAt(gistOf(e), q))) { const g = document.createElement("span"); g.className = "tl-gist"; g.append(...gistLine(t, q)); qq.append(g); }
   main.append(n, qq);
-  main.onclick = () => { if (opened.has(e.id)) opened.delete(e.id); else opened.add(e.id); paintEarlier(); };
+  main.onclick = () => { if (opened.has(e.id)) { opened.delete(e.id); paintEarlier(); } else { opened.add(e.id); paintEarlier(); rowToTop(e.id); } };
   const bd = document.createElement("button"); bd.type = "button"; bd.className = "tl-b";
   const boards = t.boards;
   if (boards.length) {
     const first = boards.find((b) => b.kind !== "points") || boards[0];
     bd.innerHTML = kindIcon(first.kind, 16);
     if (boards.length > 1) { const c = document.createElement("span"); c.textContent = boards.length; bd.append(c); }
-    bd.setAttribute("aria-label", boards.length === 1 ? tr("s.show.board", {name: boardName(first)}) : tr("s.boards.open", {n: boards.length}));
-    bd.title = boards.map(boardName).join(", ");
-    bd.onclick = () => { if (boards.length === 1 && CFG.stageUrl && first.view) chipTap(first.view); else main.click(); };
+    const shows = !!CFG.stageUrl && !!first.view;   // the click puts the first board on the stage; with several, it opens the row too
+    const name = boardName(first), names = boards.map(boardName).join(", ");
+    bd.setAttribute("aria-label", boards.length === 1 ? tr("s.show.board", {name}) : tr(shows ? "s.boards.show" : "s.boards.open", {n: boards.length, name}));
+    bd.title = boards.length > 1 && shows ? tr("s.boards.tip", {name, names}) : names;
+    bd.onclick = () => {
+      if (boards.length === 1 && shows) { chipTap(first.view); return; }
+      if (boards.length === 1) { main.click(); return; }
+      opened.add(e.id); paintEarlier(); rowToTop(e.id);   // opens the row if it is closed, never closes it
+      if (shows) chipTap(first.view);
+    };
     if (!CFG.stageUrl && boards.length === 1) bd.disabled = true;
   } else { bd.disabled = true; bd.tabIndex = -1; bd.setAttribute("aria-hidden", "true"); }
   const tm = document.createElement("span"); tm.className = "tl-t"; tm.textContent = clockOf(e.at); tm.title = tr("s.answered", {t: tm.textContent});
@@ -431,10 +487,12 @@ function buildRow(t, q, isNow) {
   const playing = !!current && current.id === e.id && !audio.paused;
   play.disabled = e.speech !== "ready";
   play.innerHTML = ICON(playing ? '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>' : '<path d="M7 5v14l12-7z"/>', 14) + "<span></span>";
-  play.lastChild.textContent = tr(playing ? "s.pause" : "s.play");
-  play.setAttribute("aria-label", tr(playing ? "s.pause.n" : "s.play.n", {n: e.n}));
+  play.lastChild.textContent = tr(playing ? "s.pause" : "s.hear");
+  play.setAttribute("aria-label", tr(playing ? "s.pause.n" : "s.hear.n", {n: e.n}));
   play.onclick = () => playAnswer(e, !!isNow);
-  row.append(main, bd, tm, play);
+  const head = document.createElement("div"); head.className = "tl-h"; head.setAttribute("role", "heading"); head.setAttribute("aria-level", "3");
+  head.append(main);   // heading navigation lists the answers; the button inside keeps its own role
+  row.append(head, bd, tm, play);
   if (e.superseded) { const tg = document.createElement("span"); tg.className = "tl-tag"; tg.textContent = tr("s.replaced"); qq.append(tg); }
   if (open) {
     const body = document.createElement("div"); body.className = "tl-body";
@@ -444,7 +502,7 @@ function buildRow(t, q, isNow) {
     chips.append(buildChips(t)); chips.hidden = !chips.childNodes.length;
     if (e.speech === "failed") { const bad = document.createElement("div"); bad.className = "now-bad"; bad.textContent = tr("s.notread", {why: e.speech_error || tr("s.speechfailed")}); body.append(bad); }
     const acts = document.createElement("div"); acts.className = "tl-acts";
-    const again = document.createElement("button"); again.type = "button"; again.className = "btn"; again.textContent = tr("s.play.start"); again.disabled = e.speech !== "ready";
+    const again = document.createElement("button"); again.type = "button"; again.className = "btn"; again.textContent = tr("s.hear"); again.disabled = e.speech !== "ready";
     again.onclick = () => { playAnswer(e, false); };
     const copy = document.createElement("button"); copy.type = "button"; copy.className = "btn"; copy.textContent = tr("s.copy");
     copy.onclick = () => copyText(e.text, () => { copy.textContent = tr("s.copied"); setTimeout(() => { copy.textContent = tr("s.copy"); }, 1500); });
@@ -464,7 +522,7 @@ function paintEarlier() {
   const rest = turns.filter((t) => !shown || t.a.id !== shown.id);
   // A search looks through every answer, the one on the card too.
   const items = q ? turns.filter((t) => turnMatches(t, q)) : rest;
-  const showSearch = searchOpen || !!q || rest.length >= 3;
+  const showSearch = searchOpen || !!q || rest.length > SEARCH_AFTER;   // a few rows are seen at a glance: the search icon opens the field
   $("earlier").hidden = !rest.length && !q && !searchOpen;
   $("searchbtn").hidden = !turns.length; $("searchbtn").setAttribute("aria-expanded", String(showSearch && searchOpen));
   $("tlsearch").hidden = !showSearch;
@@ -506,6 +564,15 @@ function paintEarlier() {
   paintFront(); paintMissing();
   returnMarkEarlier(list);
   paintMore();
+  fitNowText();   // has-earlier and the search field changed what is free for the card's text window
+}
+// A row that opens comes to the top of the panel: its text starts in view, not under the card or below the fold.
+function rowToTop(id) {
+  const row = [...$("tllist").children].find((r) => r.dataset && r.dataset.id === String(id));
+  if (!row) return;
+  const box = $("convo");
+  convoFollow = false;   // the reader is reading this row, not following the voice
+  scrollConvo(Math.max(0, box.scrollTop + row.getBoundingClientRect().top - box.getBoundingClientRect().top - 4));
 }
 // The search field at the top of the view, so its results (on a phone, a short window) are all in sight.
 const searchToTop = () => $("convo").scrollTo({top: $("earlier").offsetTop - $("convo").offsetTop, behavior: "auto"});
@@ -544,6 +611,8 @@ $("empty").replaceChildren(...(() => {
 // The words this file built once at load, in the page's language again (called from relabelPage()).
 function relabelShell() {
   copyBtn.setAttribute("aria-label", tr("s.copyans")); copyBtn.dataset.tip = tr("s.copyans");
+  if (!copyBtn.classList.contains("done")) copyBtn.innerHTML = copyHtml();
+  fitNowText();
   clearBtn.textContent = tr("s.more"); clearBtn.setAttribute("aria-label", tr("s.showall.aria"));
   $("empty").querySelector(".e1").textContent = tr("list.empty"); $("empty").querySelector(".e2").textContent = tr("s.empty2");
 }
@@ -585,6 +654,9 @@ function followVoice(force) {
   if (word && tx.scrollHeight > tx.clientHeight + 2) {
     const r = word.getBoundingClientRect(), b = tx.getBoundingClientRect();
     if (force || r.top < b.top + 12 || r.bottom > b.bottom - 12) tx.scrollTo({top: Math.max(0, tx.scrollTop + r.top - b.top - b.height * 0.4), behavior: reduced.matches ? "auto" : "smooth"});
+  } else if (word && ntAll) {   // the cap is lifted: the panel scrolls to keep the word in view
+    const r = word.getBoundingClientRect(), b = box.getBoundingClientRect();
+    if (force || r.top < b.top + 12 || r.bottom > b.bottom - 12) scrollConvo(Math.max(0, box.scrollTop + r.top - b.top - b.height * 0.4));
   }
 }
 // The conversation says when more lies below its edge: a fade over the bottom of the panel (the sticky #convofade), so a list
@@ -660,7 +732,9 @@ const ppWord = document.createElement("span"); ppWord.className = "pp-word"; $("
 // Copy answer: the text of the answer the card shows, on the card. The word Copied shows on the button and goes to the live region.
 const copyBtn = document.createElement("button"); copyBtn.type = "button"; copyBtn.id = "nowcopy"; copyBtn.className = "ib nowcopy"; copyBtn.hidden = true;
 const COPY_ICON = ICON('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/>', 18), COPIED_ICON = ICON('<path d="M5 12l5 5L20 7"/>', 16);
-copyBtn.setAttribute("aria-label", tr("s.copyans")); copyBtn.dataset.tip = tr("s.copyans"); copyBtn.innerHTML = COPY_ICON;
+// the word Copy sits beside the icon when the card is wide (CSS shows .cp-word); the icon alone when it is narrow
+const copyHtml = () => COPY_ICON + '<span class="cp-word">' + tr("s.copy") + "</span>";
+copyBtn.setAttribute("aria-label", tr("s.copyans")); copyBtn.dataset.tip = tr("s.copyans"); copyBtn.innerHTML = copyHtml();
 let copyTimer = null;
 copyBtn.onclick = () => {
   const e = shownAnswer();
@@ -668,7 +742,7 @@ copyBtn.onclick = () => {
   copyText(e.text, () => {
     copyBtn.classList.add("done"); copyBtn.innerHTML = COPIED_ICON + "<span>" + tr("s.copied") + "</span>"; copyBtn.setAttribute("aria-label", tr("s.copied"));
     clearTimeout(copyTimer);
-    copyTimer = setTimeout(() => { copyBtn.classList.remove("done"); copyBtn.innerHTML = COPY_ICON; copyBtn.setAttribute("aria-label", tr("s.copyans")); }, 1500);
+    copyTimer = setTimeout(() => { copyBtn.classList.remove("done"); copyBtn.innerHTML = copyHtml(); copyBtn.setAttribute("aria-label", tr("s.copyans")); }, 1500);
   });
 };
 $("nowhead").append(copyBtn);   // in the card's head, by the time: the transport row has no room for another button on a phone
@@ -694,10 +768,10 @@ function paintTransport() {
   const playable = !rec && !!shown && shown.speech === "ready";
   $("player").hidden = !playable; $("ring").hidden = !playable;
   $("back").disabled = !current; $("next").disabled = !current; $("railback").hidden = !playable || !current;
-  const target = shown && !follow ? boardStart() : null, other = target && target.e.id !== shown.id ? target.e : null;
+  const other = pinnedOther();
   const base = tr(!audio.paused ? "s.pp.pause" : (current && (audio.ended || audio.currentTime >= (audio.duration || 1)) ? "s.pp.again" : "s.pp.play"));
-  const label = other && audio.paused ? tr("s.play.n", {n: other.n}) : base;
-  const word = other && audio.paused ? label : "";
+  const label = other ? tr("s.play.n.board", {n: other.n}) : base;   // the reason is in the words: the board the reader chose is another answer's
+  const word = other ? label : "";
   if (ppWord.textContent !== word) ppWord.textContent = word;
   $("playpause").classList.toggle("has-word", !!word); $("player").classList.toggle("names-answer", !!word);
   for (const id of ["playpause", "railpp"]) {

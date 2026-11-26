@@ -23,13 +23,15 @@
 .nq-text.clamped{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .nq-more{min-height:28px;padding:0 4px;margin-left:-4px;border-radius:8px;font:500 12.5px var(--sans);color:var(--acc)}
 .nq-more:hover{background:var(--shade)}
-.now-text{max-height:clamp(150px,34vh,360px);overflow:auto;font-size:15px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink);scrollbar-width:thin;
+#ntmore{align-self:flex-start}
+.now-text{--lh:1.65;--nt-lines:6;max-height:calc(var(--nt-lines) * var(--lh) * 1em);overflow:auto;font-size:15px;line-height:var(--lh);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink);scrollbar-width:thin;
   --fade-top:0px;--fade-bottom:0px;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 var(--fade-top),#000 calc(100% - var(--fade-bottom)),transparent 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 var(--fade-top),#000 calc(100% - var(--fade-bottom)),transparent 100%)}
-/* the window says when text lies above or below it: a fade at that edge, never a half line cut clean */
-.now-text[data-above]{--fade-top:26px}
-.now-text[data-below]{--fade-bottom:26px}
-/* while earlier answers wait under the card, its window is shorter so the head of the list and two rows are in view on a laptop */
-@media (min-width:761px){.convo.has-earlier .now-text{max-height:clamp(150px,28vh,300px)}}
+/* The window is a whole number of lines (--nt-lines, set by fitNowText from the height the panel has free: the card's other parts
+   and, while earlier answers wait, the head of their list and two rows come off it). It says when text lies above or below it:
+   a fade of a line and a half at that edge and a scrollbar that shows. Show all lifts the cap. */
+.now-text[data-above]{--fade-top:calc(1.5 * var(--lh) * 1em);scrollbar-width:auto}
+.now-text[data-below]{--fade-bottom:calc(1.5 * var(--lh) * 1em);scrollbar-width:auto}
+.now-text[data-all]{max-height:none}
 .now.reading .now-text .w{color:var(--faint)}
 .now.reading .now-text .w.said{color:var(--ink)}
 .now-text .w{border-radius:4px;cursor:pointer;transition:color .25s}
@@ -42,13 +44,15 @@
 .now-transport{padding:0 8px 4px}
 .nowcopy{flex:none;width:30px;height:30px;margin:-6px -4px -6px 0;display:inline-flex;align-items:center;justify-content:center;gap:5px;border-radius:9px;text-transform:none;letter-spacing:0}
 .nowcopy[hidden]{display:none}
+.nowcopy .cp-word{display:none;font:500 12.5px var(--sans)}
+@media (min-width:761px){.nowcopy:not(.done){width:auto;padding:0 8px}.nowcopy:not(.done) .cp-word{display:inline}}
 .nowcopy.done{width:auto;padding:0 10px;color:var(--good);font:600 12.5px var(--sans)}
 .now-head .nowcopy[data-tip]::after{bottom:auto;top:calc(100% + 8px);left:auto;right:0;transform:none}
 /* Play names another answer: the word sits beside the icon, so the button says what it will start */
-.ib.pp.has-word{width:auto;min-width:44px;padding:0 14px 0 12px;border-radius:999px;display:inline-flex;align-items:center;gap:7px;font:600 12.5px var(--sans)}
-.now-transport .ib.pp.has-word,.app[data-tv] .now-transport .ib.pp.has-word{width:auto}
+.ib.pp.has-word{width:auto;min-width:44px;padding:4px 14px 4px 12px;border-radius:22px;display:inline-flex;align-items:center;gap:7px;font:600 12.5px/1.25 var(--sans);text-align:left}
+.now-transport .ib.pp.has-word,.app[data-tv] .now-transport .ib.pp.has-word{width:auto;height:auto;min-height:44px;flex:0 1 auto;min-width:0}   /* the words give way to a second line before the next button or the speed leave the row */
 .player.names-answer #seek,.player.names-answer .time{display:none}   /* Play names another answer: the bar and clock are of the card's answer, and the word needs the room */
-.pp-word{display:none;white-space:nowrap}
+.pp-word{display:none;min-width:0}
 .has-word .pp-word{display:inline}
 .player{display:flex;align-items:center;gap:2px}
 .now-transport .ib{width:40px;height:40px}
@@ -60,8 +64,13 @@
 .fl-state{flex:1 1 auto;min-width:0;display:inline-flex;align-items:center;gap:6px;font-weight:600;color:var(--good)}
 .now-follow[data-mode="pinned"] .fl-state{color:var(--warn)}
 .now-follow[data-mode="following"][data-text="plain"] .fl-text{display:none}   /* the label says it; the sentence is its tooltip */
-.fl-text{order:3;flex:1 1 100%;min-width:0;line-height:1.4;overflow-wrap:anywhere}
-.fl-note{order:4;flex:1 1 100%;color:var(--ink);font-weight:500;line-height:1.4}
+.fl-text{order:3;flex:1 1 100%;min-width:0;font-size:13.5px;line-height:1.45;overflow-wrap:anywhere}
+.now-follow[data-text="board"] .fl-text{color:var(--ink)}   /* why the stage keeps a board: read at full size and ink, never clamped */
+.fl-hint{order:4;flex:1 1 100%;min-width:0;font-size:13px;line-height:1.4;overflow-wrap:anywhere}
+.fl-note{order:5;flex:1 1 55%;min-width:0;color:var(--ink);font-weight:500;line-height:1.4;overflow-wrap:anywhere}
+.fl-own{order:5}
+.now-follow[data-mode="pinned"] .fl-btn.fl-own{background:var(--panel);border-color:var(--line);color:var(--ink)}
+.now-follow[data-mode="pinned"] .fl-btn.fl-own:hover{background:var(--shade)}
 .fl-btn{flex:none;min-height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel);font:500 12.5px var(--sans);color:var(--ink)}
 .fl-btn:hover{background:var(--shade)}
 .now-follow[data-mode="pinned"] .fl-btn{background:var(--acc);border-color:var(--acc);color:var(--on-acc)}
@@ -81,7 +90,8 @@
 .tl-list{display:flex;flex-direction:column}
 .tlrow{display:grid;grid-template-columns:minmax(0,1fr) 48px 62px 76px;align-items:center;border-top:1px solid var(--line);min-width:0}
 .tlrow:first-child{border-top:0}
-.tl-main{grid-column:1;display:grid;grid-template-columns:28px minmax(0,1fr);align-items:center;gap:10px;min-height:60px;padding:6px 4px 6px 2px;text-align:left;border-radius:10px}
+.tl-h{grid-column:1;min-width:0;margin:0;font:inherit}
+.tl-main{width:100%;display:grid;grid-template-columns:28px minmax(0,1fr);align-items:center;gap:10px;min-height:60px;padding:6px 4px 6px 2px;text-align:left;border-radius:10px}
 .tl-main:hover{background:var(--shade)}
 .tl-n{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--faint);font:600 11.5px var(--sans);color:var(--muted)}
 .tlrow.unheard .tl-n{background:var(--acc);border-color:var(--acc);color:var(--on-acc)}
@@ -96,6 +106,7 @@
 .tl-b:disabled{opacity:1;cursor:default}
 .tl-t{grid-column:3;font:500 11px/1.25 var(--mono);color:var(--muted);text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .tlrow .play{grid-column:4;display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:40px;margin-left:4px;padding:0 10px;border-radius:10px;font:500 12.5px var(--sans);color:var(--claude)}
+.tlrow .play span{line-height:1.15;text-align:left}
 .tlrow .play:hover:not(:disabled){background:var(--claude-soft)}
 .tlrow.is-now{background:var(--acc-soft);border-radius:10px}
 .tlrow.open{background:var(--row-alt);border-radius:12px;border-top-color:transparent;margin:2px 0}
@@ -109,9 +120,8 @@
 #sinceleft{list-style:none}
 
 /* TV: one step up for the answer, rows, chips and buttons */
-.app[data-tv] .now-text{font-size:22px;line-height:1.6;max-height:clamp(220px,42vh,560px)}
+.app[data-tv] .now-text{--lh:1.6;font-size:22px}
 .app[data-tv] .nq-text{font-size:20px}
-.app[data-tv] .convo.has-earlier .now-text{max-height:clamp(200px,36vh,460px)}
 .app[data-tv] .now-q small,.app[data-tv] .now-head{font-size:13px}
 .app[data-tv] .now-follow,.app[data-tv] .fl-btn,.app[data-tv] .tl-expand{font-size:15px}
 .app[data-tv] .fl-btn,.app[data-tv] .tl-b,.app[data-tv] .tlrow .play{min-height:48px}
@@ -126,7 +136,7 @@
 /* a phone: the card's text scrolls in a short window; rows drop the gist and time, and a tapped row opens as a full card */
 @media (max-width:760px){
   .convo{padding:8px 8px 8px;gap:8px}
-  .now-text{max-height:calc(3 * 1.55 * 14.5px);font-size:14.5px;line-height:1.55}
+  .now-text{--lh:1.55;--nt-lines:3;font-size:14.5px}
   .now-head{padding:6px 12px 0}
   .now-body{gap:4px;padding:4px 12px 6px}
   .now-q small{display:none}

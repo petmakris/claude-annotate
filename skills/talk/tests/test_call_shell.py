@@ -52,13 +52,13 @@ def test_the_now_card_holds_the_question_the_whole_text_and_the_state_in_words(t
     assert got[1:] == ["Playing", "Paused"]
 
 
-def test_the_card_names_the_boards_of_its_answer_and_the_key_points_chip_says_how_many_are_new(tmp_path):
+def test_the_card_names_the_boards_of_its_answer_and_the_key_points_chip_says_how_many_points_it_added(tmp_path):
     html, states = asked(tmp_path, answers=(FIRST,), asks=ASKS[:1])
     page = CallPage(html, states, autoplay=False, seconds=3.0).js("await serve(1);")
     page.check("[...$('nowchips').querySelectorAll('button.chip.board')].map((b) => [b.textContent, b.getAttribute('aria-label'), b.dataset.view, b.getAttribute('aria-pressed')])")
     page.check("$('nowchips').querySelector('.clbl').textContent")
     assert page.run() == [[["Heat pump or gas boiler", "Show on the stage: Heat pump or gas boiler", "heat-pump-or-gas-boiler", "false"],
-                           ["Key points1 new", "Show on the stage: Key points, 1 new", "key-points", "false"]], "On the stage"]
+                           ["Key points+1 point", "Show on the stage: Key points, +1 point", "key-points", "false"]], "On the stage"]
 
 
 def test_earlier_answers_are_rows_in_columns_with_their_question_gist_boards_time_and_play(tmp_path):
@@ -70,7 +70,7 @@ def test_earlier_answers_are_rows_in_columns_with_their_question_gist_boards_tim
     got = page.run()
     assert got[0] == [ASKS[0], ASKS[1]]
     assert [r[1:4] for r in got[1]] == [["1", "A heat pump moves heat.", "2"], ["2", "Yes, though less so at minus ten.", ""]]
-    assert [r[4:] for r in got[1]] == [[True, "Play answer 1"], [True, "Play answer 2"]]
+    assert [r[4:] for r in got[1]] == [[True, "Hear answer 1 again"], [True, "Hear answer 2 again"]]
     assert got[2] == ["Earlier, 2 answers", False, True]
 
 
@@ -152,10 +152,10 @@ def test_a_chip_tap_pins_the_stage_and_the_strip_says_so_with_one_button_back(tm
     page.js("$('nowfollow').querySelector('button').click();").check(STRIP).check("[follow, toStage().filter((m) => m.type === 'stage:follow').map((m) => m.on)]")
     page.js("$('nowfollow').querySelector('button').click();").check("[follow, $('nowfollow').dataset.mode]")
     assert page.run() == [
-        [False, "following", "Following the voice", "Stage still shows Heat pump or gas boiler from answer 1.", "Keep this board"],
+        [False, "following", "Following the voice", "This answer has no board, so the stage keeps Heat pump or gas boiler (answer 1).", "Keep this board"],
         [False, "pinned", "You chose this", "Stage shows Heat pump or gas boiler from answer 1. The voice is on answer 2.", "Back to the voice"],
         [False, [False]],
-        [False, "following", "Following the voice", "Stage still shows Heat pump or gas boiler from answer 1.", "Keep this board"],
+        [False, "following", "Following the voice", "This answer has no board, so the stage keeps Heat pump or gas boiler (answer 1).", "Keep this board"],
         [True, [False, True]],
         [False, "pinned"]]
 
@@ -190,7 +190,7 @@ def test_play_plays_the_answer_the_card_shows_and_only_a_board_the_reader_picked
     page.js("audio.pause(); audio.currentTime = 0; fromStage({type: 'stage:follow', on: false});").check(word)   # the reader pinned the board: Play says which answer
     page.js("$('playpause').click();").check("[current.n, follow]")
     assert page.run() == [["Play", "Play · Space", "", False], [2, True],
-                          ["Play answer 1", "Play answer 1 · Space", "Play answer 1", True], [1, True]]
+                          ["Play answer 1 (the board you chose)", "Play answer 1 (the board you chose) · Space", "Play answer 1 (the board you chose)", True], [1, True]]
 
 
 def test_an_answer_replaced_by_a_correction_is_tagged_on_the_card_and_its_row(tmp_path):

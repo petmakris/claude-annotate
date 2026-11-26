@@ -35,8 +35,8 @@ def test_the_strip_names_the_voice_the_board_and_its_answer_in_the_words_the_sta
     page.js("$('nowfollow').querySelector('button').click(); fromStage({type: 'stage:views', list: [{name: 'heat-pump-or-gas-boiler', answer: 2}]});").check(STRIP_TEXT)
     got = page.run()
     assert got == [
-        ["following", "Following the voice", "Stage still shows Heat pump or gas boiler from answer 1.", None, "Keep this board", "Keep the stage on this board"],
-        ["pinned", "You chose this", "Stage shows Heat pump or gas boiler from answer 1. The voice is on answer 2.", "Play starts answer 1.", "Back to the voice", "Back to the voice"],
+        ["following", "Following the voice", "This answer has no board, so the stage keeps Heat pump or gas boiler (answer 1).", None, "Keep this board", "Keep the stage on this board"],
+        ["pinned", "You chose this", "Stage shows Heat pump or gas boiler from answer 1. The voice is on answer 2.", "Play answer 1 (the board you chose)", "Back to the voice", "Back to the voice"],
         ["following", "Following the voice", "The stage shows what is being read.", None, "Keep this board", "Keep the stage on this board"]]
 
 
@@ -80,7 +80,7 @@ def test_the_card_window_is_shorter_while_earlier_answers_exist_and_the_conversa
     page.js("$('convo').scrollTop = 500; $('convo').dispatchEvent(new ShimEvent('scroll'));").check("$('convo').hasAttribute('data-more')")
     assert page.run() == [[False, True], [True, False, "convofade"], True, False]
     css = css_first("call-shell.css")
-    assert css[".convo.has-earlier .now-text"] == "max-height:clamp(150px,28vh,300px)"
+    assert ".convo.has-earlier .now-text" not in css   # no viewport guess: fitNowText sizes the window by the free height
     assert ".convo[data-more] .convo-fade::after" in css and css[".convo[data-more] .convo-fade::after"] == "opacity:1"
 
 
@@ -97,7 +97,7 @@ def test_an_answer_played_to_its_end_shows_its_first_line_again_and_a_pause_keep
     page.js("await end();").check(above).check("$('nowstate').textContent")
     assert page.run() == [[40, True], [40, True], [40, True], [0, False], "Played"]
     css = css_first("call-shell.css")
-    assert css[".now-text[data-above]"] == "--fade-top:26px" and css[".now-text[data-below]"] == "--fade-bottom:26px"
+    assert css[".now-text[data-above]"].startswith("--fade-top:calc(1.5 * var(--lh) * 1em)") and css[".now-text[data-below]"].startswith("--fade-bottom:calc(1.5 * var(--lh) * 1em)")
     assert "mask-image:linear-gradient(to bottom,transparent 0,#000 var(--fade-top)" in css[".now-text"]
 
 
@@ -173,10 +173,10 @@ def test_the_card_has_a_copy_answer_button_that_says_copied_on_itself_and_to_a_s
     page.js("$('nowcopy').click();").check(btn).check("[copied, said]")
     page.js("await advance(1700);").check(btn)
     assert page.run() == [
-        [False, "Copy answer", "", False, "nowhead"],
+        [False, "Copy answer", "Copy", False, "nowhead"],
         [False, "Copied", "Copied", True, "nowhead"],
         [[THIRD], ["Copied"]],
-        [False, "Copy answer", "", False, "nowhead"]]
+        [False, "Copy answer", "Copy", False, "nowhead"]]
 
 
 # ---- r1-keyboard-1: Enter on a row's Play keeps the keyboard in the panel ------------------------------------------------------------------
@@ -188,7 +188,7 @@ def test_playing_from_a_row_leaves_focus_on_the_players_button_or_on_the_row_tha
     where = "[document.activeElement.id, document.activeElement.className, $('tllist').contains(document.activeElement)]"
     page.js("document.querySelector('#tllist button.play').focus(); document.querySelector('#tllist button.play').click();").check(where)
     page.js("audio.pause(); document.querySelector('#tllist .tl-main').click();"
-            "const again = [...document.querySelectorAll('#tllist .tl-acts .btn')].find((b) => b.textContent === 'Play from the start'); again.focus(); again.click();").check(where)
+            "const again = [...document.querySelectorAll('#tllist .tl-acts .btn')].find((b) => b.textContent === 'Hear again'); again.focus(); again.click();").check(where)
     page.js("audio.pause(); rail = true; document.querySelector('#tllist button.play').focus(); document.querySelector('#tllist button.play').click(); rail = false;").check("document.activeElement.id")
     got = page.run()
     assert [got[0][0], got[0][2], got[1][0], got[1][2], got[2]] == ["playpause", False, "playpause", False, "railpp"]
