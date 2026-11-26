@@ -23,6 +23,15 @@
 .wt-q{margin:0;padding-left:10px;border-left:3px solid var(--acc-mid);font-size:13.5px;white-space:pre-line;overflow-wrap:anywhere;
   display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .wait-card.warn .wt-q{border-left-color:var(--warn)}
+/* One row for each question in flight, each clamped on its own, with its place among them over its words. */
+.wt-qs{display:flex;flex-direction:column;gap:8px}
+.wt-q.multi{display:block;overflow:visible}
+.wt-qn{display:block;margin-bottom:1px;font-size:11.5px;font-weight:600;letter-spacing:.02em;color:var(--muted)}
+.wt-qt{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* What stays after Send again: how long ago, and that several questions went as one. */
+.wt-again{margin:0;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.wait-card.warn .wt-again{color:var(--ink)}
+.wt-again[hidden]{display:none}
 .wt-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
 .wt-steps li{display:grid;grid-template-rows:4px auto auto;gap:3px;min-width:0;font-size:12px;color:var(--faint)}
 .wt-steps li.now{flex:none;border:0;border-radius:0;background:none;box-shadow:none;overflow:visible}   /* the step's class is also the Now card's: it takes none of the card's box */
@@ -66,6 +75,7 @@
      without its times, the step now running (not while amber), and the actions in one row, the word only on the main one when there are three */
   .wait-card{gap:8px;padding:12px;max-height:30vh;overflow-y:auto}
   .wt-q{-webkit-line-clamp:2}
+  .wt-qt{-webkit-line-clamp:1}
   .wt-at,.wt-acts .done,.wait-card.warn .wt-acts{display:none}
   .wt-steps li{grid-template-rows:4px auto}
   .wt-btn{min-height:44px;min-width:44px;justify-content:center}
@@ -79,7 +89,7 @@
 }
 .app[data-tv] .wait-card{font-size:17px;gap:14px;padding:20px}
 .app[data-tv] .wt-title,.app[data-tv] .wt-clock{font-size:21px}
-.app[data-tv] :is(.wt-sub,.wt-q,.wt-acts li,.wt-btn,.wt-steps li,.wt-lost,.sendnote,.queuerow){font-size:16px}
+.app[data-tv] :is(.wt-sub,.wt-q,.wt-again,.wt-acts li,.wt-btn,.wt-steps li,.wt-lost,.sendnote,.queuerow){font-size:16px}
 @media (prefers-reduced-motion:reduce){.step-working .wt-icon svg,.wt-acts .run .wt-mark svg,.wt-steps .now i{animation:none!important}}
 
 /* The wait card sits inside the Now card, which already has the border and the eyebrow: one box, not a box in a box. */

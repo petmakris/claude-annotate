@@ -391,7 +391,7 @@ SUPERSEDED_STATUS_TEXT = ("superseded: the user replaced this question with a co
 SUPERSEDED_TEXT = ("superseded: the user replaced this question with a correction, so your reply is kept in the "
                    "conversation tagged as replaced and was not read aloud. Answer the newer turn, which the doorbell brings.")
 AMENDED_TEXT = ("superseded: the user added to this question after you collected it, so your reply is kept in the "
-                "conversation tagged as replaced and was not read aloud. The turn they added is waiting: answer it "
+                "conversation tagged as replaced and was not read aloud. The turn they added is waiting or already yours: answer it "
                 "with the whole question in mind.")
 
 
@@ -2324,6 +2324,24 @@ class Call:
                 self.mark([e], superseded=True)
         return {"turn": collected[-1] if collected else None}
 
+    def added_to_since(self, turn_id: str) -> bool:
+        """True when what the user said while this turn was being worked on was collected as a later turn of its own
+        (a plain Send while Claude worked: its line has `while_working`, and no `replaces`, which only a Replace
+        carries): the reply to this turn is to the question as it was. An addition the user took back does not count."""
+        try:
+            mine = int(turn_id[1:])
+        except ValueError:
+            return False
+        for entry in self.entries:
+            if entry["who"] != "you" or entry.get("withdrawn") or entry.get("cancelled") or entry.get("superseded"):
+                continue
+            if not (self.said_lines.get(entry["id"]) or {}).get("while_working"):
+                continue
+            later = self.turns.resolve(self.turn_of.get(entry["id"], ""))
+            if later[1:].isdigit() and int(later[1:]) > mine:
+                return True
+        return False
+
     def cancel(self, entry_id) -> dict:
         """Take back a question in flight. Not collected: as `withdraw`. Collected: the turn stops counting as working,
         what was added to it while Claude worked is taken back with it, and the session learns of it from its reply
@@ -3632,9 +3650,9 @@ def build_app(server: Server):
             if end:
                 call.end("wrapped up by Claude")
             return web.json_response({"ok": True, "superseded": True, "note": SUPERSEDED_TEXT})
-        # A turn the user has added to since (said while Claude worked, not collected yet) is answered, but the
+        # A turn the user has added to since (said while Claude worked, collected or not yet) is answered, but the
         # answer is to the question as it was: it is kept and never spoken, and the next answer covers the addition.
-        amended = "addition" if call.turns.pending_id and call.turns.pending_id != turn_id else None
+        amended = "addition" if (call.turns.pending_id and call.turns.pending_id != turn_id) or call.added_to_since(turn_id) else None
         if not await call.answer(text, superseded=amended):
             return refused_reply(problems_from)  # no answer number is consumed, the turn is still open
         call.turns.accept_reply(turn_id, final=True)
