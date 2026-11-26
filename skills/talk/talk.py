@@ -53,7 +53,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
-from html import escape as html_escape
+from html import escape as html_escape, unescape as html_unescape
 from pathlib import Path
 
 # `uv run --script talk.py` runs this file by path, never through bin/claude-annotate, so neither
@@ -270,6 +270,55 @@ def stage_view(item: dict) -> tuple[str, dict, str]:
     else:
         source = {"type": "inline", "format": item["kind"], "body": item["body"]}
     return name, source, title
+
+
+BOARD_TEXT_MAX = 1500   # a board's words kept for the page's search: enough for a table or a chart, never a whole file
+_SPEC_STRUCTURE = {"id", "tone", "role", "kind", "type", "from", "to", "reply_to", "arrow", "scale", "decimal", "phase",
+                   "shape", "x", "y", "col", "row", "lang", "same", "mode", "activate", "check"}
+
+
+def _spec_words(node, out: list[str], key: str = "") -> None:
+    """Every string and number a board spec shows, in the order it holds them: labels, notes, values and titles. Keys
+    that only name a part or a style (ids, tones, arrows) are not words."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            _spec_words(v, out, str(k))
+    elif isinstance(node, list):
+        for v in node:
+            _spec_words(v, out, key)
+    elif isinstance(node, str):
+        if key not in _SPEC_STRUCTURE and node.strip():
+            out.append(node.strip())
+    elif isinstance(node, (int, float)) and not isinstance(node, bool) and key not in _SPEC_STRUCTURE:
+        out.append(f"{node:g}")
+
+
+def board_text(item: dict) -> str:
+    """The words a board shows, flattened for the call page's search ("in <board>: ..."): a table's cells, a chart's
+    labels and values, a diagram's step names, a code board's lines, a scene's text. Cut at BOARD_TEXT_MAX."""
+    kind, body = item.get("kind"), item.get("body") or ""
+    words: list[str] = []
+    try:
+        if kind == "table":
+            words = [cell_text(c) for row in (table_header(body), *table_body_rows(body)) for c in row]
+        elif kind == "code":
+            words = [str(item.get("path") or ""), *(str(x) for x in item.get("lines") or [])]
+        elif kind in ("change", "page"):
+            source = item.get("source") if isinstance(item.get("source"), dict) else {}
+            words = [str(item.get("path") or source.get("url") or source.get("path") or source.get("slug") or "")]
+        elif kind == "scene":
+            words = [html_unescape(re.sub(r"<[^>]*>", " ", re.sub(r"<(script|style)\b.*?</\1>", " ", body, flags=re.S | re.I)))]
+        elif kind == "diagram":
+            words = [body]
+        elif isinstance(item.get("visual"), dict):
+            _spec_words(item["visual"].get("spec", item["visual"]), words)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        words = []
+    text = re.sub(r"\s+", " ", " ".join(w for w in words if w)).strip()
+    if len(text) <= BOARD_TEXT_MAX:
+        return text
+    cut = text[:BOARD_TEXT_MAX]
+    return cut[: cut.rfind(" ")] if " " in cut[BOARD_TEXT_MAX // 2:] else cut
 
 
 def rebase(url: str, base: str | None) -> str:
@@ -2186,7 +2235,7 @@ class Call:
         """Board's hook: every item it adds is listed in the conversation, with its view and answer."""
         item["answer"] = self.answer_no
         self.add("board", item.get("title") or item["kind"], view=item["view"], kind=item["kind"],
-                 answer=item["answer"])
+                 answer=item["answer"], search=board_text(item))
 
     def view_name(self, title: str, kind: str, ident: str = "") -> str:
         """The stage view for a board: the same title (compared as fold() compares it, the way a point
@@ -2791,7 +2840,7 @@ class Call:
         """After a reply that added key points: one chip for the reply, and the Key points board, updated
         in the background so the board in front stays on the explanation."""
         self.add("board", f"Key points: +{added}", view=KEY_VIEW, kind="points", answer=self.answer_no,
-                 added=added)
+                 added=added, search=" ".join(k["text"] for k in self.keys[-added:])[:BOARD_TEXT_MAX])
         if not self.stage_cwd:
             return
         source = {"type": "inline", "format": "points",

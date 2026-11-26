@@ -141,10 +141,11 @@ function wordAt(e, t) {
   return k;
 }
 function skip(by) { audio.currentTime = Math.min(Math.max(0, audio.currentTime + by), audio.duration || 0); paintPill(); }
-// Play plays the board in front. When the voice is not on it (it came from an earlier answer, or this
-// answer has moved past it), Play plays that board's explanation, from the sentence it came in with,
-// and the board unfolds again; otherwise Play pauses and resumes. A board no answer explains (a page,
-// the key points) leaves Play as it is.
+// Play plays the answer the card shows. Only when the reader pinned the stage by hand (following off) does Play
+// play the board in front instead: when the voice is not on that board (it came from an earlier answer, or this
+// answer has moved past it), Play plays the board's explanation, from the sentence it came in with, and the board
+// unfolds again, and the Play button says "Play answer N" in a word. A board no answer explains (a page, the key
+// points) leaves Play as it is.
 function boardStart() {
   if (!frontBoard || (!audio.paused && !audio.ended)) return null;
   const n = boardAnswer.get(frontBoard);
@@ -161,7 +162,7 @@ function wordCharAt(e, t) { const k = wordAt(e, t); return k < 0 ? -1 : e.words[
 function togglePlay() {
   release();
   if (stopped && audio.paused) { if (stopped.stop.type === "deeper" || stopped.stop.type === "check") pickStop(0); else goOn(); return; }
-  const b = boardStart();
+  const b = follow ? null : boardStart();
   if (b) { playFrom(b.e, b.t, true); return; }
   if (!current) { const e = lastAnswer(); if (e) { readerPlays(e); takeVoice(); load(e, true); } return; }
   if (audio.paused) { readerPlays(current); takeVoice(); audio.play().catch(playFailed); } else audio.pause();

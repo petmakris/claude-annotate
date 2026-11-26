@@ -37,7 +37,7 @@ def asked(tmp_path, answers=(FIRST, SECOND, THIRD), asks=ASKS, seconds=3.0, code
 
 
 ROWS = "[...document.querySelectorAll('#tllist .tlrow')]"
-CARD = ("{hidden: $('nowcard').hidden, num: $('nownum').textContent, state: $('nowstate').textContent, q: $('nowq').querySelector('strong')?.textContent,"
+CARD = ("{hidden: $('nowcard').hidden, num: $('nownum').textContent, state: $('nowstate').textContent, q: $('nowq').querySelector('.nq-text')?.textContent,"
         " text: $('nowtext').textContent, chips: [...$('nowchips').querySelectorAll('button.chip.board')].map((b) => b.querySelector('.cl').textContent)}")
 LIST = f"{ROWS}.map((r) => r.querySelector('.tl-title').textContent)"
 STRIP = "[$('nowfollow').hidden, $('nowfollow').dataset.mode, $('nowfollow').querySelector('.fl-state b')?.textContent, $('nowfollow').querySelector('.fl-text')?.textContent, $('nowfollow').querySelector('button')?.textContent]"
@@ -96,12 +96,12 @@ def test_a_search_finds_an_answer_by_its_question_its_words_or_its_boards_withou
     page.check("document.querySelector('#tllist .tl-none').textContent")
     page.js("$('tlsearch').value = ''; $('tlsearch').dispatchEvent(new ShimEvent('input'));").check(f"[{LIST}, $('tlcount').textContent]")
     assert page.run() == [
-        [[ASKS[1]], "1 of 3 answers", ["efficient"]],
-        [[ASKS[0]], "1 of 3 answers", []],
-        [[ASKS[1]], "1 of 3 answers", ["μάρμαρο"]],
-        [[ASKS[1]], "1 of 3 answers", ["Πεντέλη"]],
-        [[ASKS[2]], "1 of 3 answers", ["subsid", "Subsid"]],
-        [[], "0 of 3 answers", []],
+        [[ASKS[1]], "Filtered: 1 of 3 answers", ["efficient"]],
+        [[ASKS[0]], "Filtered: 1 of 3 answers", []],
+        [[ASKS[1]], "Filtered: 1 of 3 answers", ["μάρμαρο"]],
+        [[ASKS[1]], "Filtered: 1 of 3 answers", ["Πεντέλη"]],
+        [[ASKS[2]], "Filtered: 1 of 3 answers", ["subsid", "Subsid"]],
+        [[], "Filtered: 0 of 3 answers", []],
         "No answer mentions “zzz”.",
         [[ASKS[0], ASKS[1]], "Earlier, 2 answers"]]
 
@@ -152,10 +152,10 @@ def test_a_chip_tap_pins_the_stage_and_the_strip_says_so_with_one_button_back(tm
     page.js("$('nowfollow').querySelector('button').click();").check(STRIP).check("[follow, toStage().filter((m) => m.type === 'stage:follow').map((m) => m.on)]")
     page.js("$('nowfollow').querySelector('button').click();").check("[follow, $('nowfollow').dataset.mode]")
     assert page.run() == [
-        [False, "following", "Following", "Stage shows Heat pump or gas boiler. Play starts answer 1", "Pin board"],
-        [False, "pinned", "Pinned", "Stage is on Heat pump or gas boiler, answer 1. Play starts answer 1.", "Follow"],
+        [False, "following", "Following the voice", "Stage still shows Heat pump or gas boiler from answer 1.", "Keep this board"],
+        [False, "pinned", "You chose this", "Stage shows Heat pump or gas boiler from answer 1. The voice is on answer 2.", "Back to the voice"],
         [False, [False]],
-        [False, "following", "Following", "Stage shows Heat pump or gas boiler. Play starts answer 1", "Pin board"],
+        [False, "following", "Following the voice", "Stage still shows Heat pump or gas boiler from answer 1.", "Keep this board"],
         [True, [False, True]],
         [False, "pinned"]]
 
@@ -179,13 +179,18 @@ def test_play_on_another_answers_row_follows_the_voice_again_and_the_cards_own_p
     assert page.run() == [False, False, False, [True, 1, "Answer 1 of 2"]]
 
 
-def test_play_names_the_answer_it_will_start_when_the_board_in_front_belongs_to_another(tmp_path):
+def test_play_plays_the_answer_the_card_shows_and_only_a_board_the_reader_picked_sends_it_to_the_boards_answer(tmp_path):
     html, states = asked(tmp_path, answers=(FIRST + " [[show table | Two]]" + TABLE + "[[/show]] More.", SECOND), asks=ASKS[:2])
     page = CallPage(html, states, autoplay=False, seconds=3.0).js("await serve(2);")
     page.js("fromStage({type: 'stage:views', list: [{name: 'heat-pump-or-gas-boiler', answer: 1}]});"
             "fromStage({type: 'stage:shown', view: 'heat-pump-or-gas-boiler'});")
-    page.check("[$('playpause').getAttribute('aria-label'), $('playpause').dataset.tip]")
-    assert page.run() == [["Play answer 1", "Play answer 1 · Space"]]
+    word = "[$('playpause').getAttribute('aria-label'), $('playpause').dataset.tip, $('playpause').querySelector('.pp-word').textContent, $('playpause').classList.contains('has-word')]"
+    page.check(word)                       # following the voice, the newest answer is text only: Play is Play
+    page.js("$('playpause').click();").check("[current.n, follow]")
+    page.js("audio.pause(); audio.currentTime = 0; fromStage({type: 'stage:follow', on: false});").check(word)   # the reader pinned the board: Play says which answer
+    page.js("$('playpause').click();").check("[current.n, follow]")
+    assert page.run() == [["Play", "Play · Space", "", False], [2, True],
+                          ["Play answer 1", "Play answer 1 · Space", "Play answer 1", True], [1, True]]
 
 
 def test_an_answer_replaced_by_a_correction_is_tagged_on_the_card_and_its_row(tmp_path):
@@ -227,7 +232,7 @@ def test_a_search_that_matches_the_words_of_an_answer_shows_the_match_near_the_s
     page.js("$('tlsearch').value = 'frankfurt'; $('tlsearch').dispatchEvent(new ShimEvent('input'));")
     page.check("[$('tllist').classList.contains('searching'), document.querySelector('#tllist .tl-gist').textContent]")
     page.js("$('tlsearch').value = ''; $('tlsearch').dispatchEvent(new ShimEvent('input'));").check("$('tllist').classList.contains('searching')")
-    assert page.run() == [[True, "…o the reader. Frankfurt is the healthiest of the three."], False]
+    assert page.run() == [[True, "…the reader. Frankfurt is the healthiest of the three."], False]
     css = (STATIC / "call-shell.css").read_text()
     assert "#tllist.searching .tl-gist{display:-webkit-box;white-space:normal;-webkit-line-clamp:2" in css
 
