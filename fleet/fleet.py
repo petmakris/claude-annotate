@@ -33,6 +33,7 @@ import fleet_profiles as prof
 import fleet_index_cache as idxcache
 import fleet_sessions as fs
 import fleet_sessions_api as sapi
+import fleet_tools as tools
 import fleet_work
 
 PREVIEW = 300  # a message as one line of a list (`fleet inbox`)
@@ -3453,6 +3454,127 @@ def ui_inbox():
             "machine": self_machine(), "lungo": lungo}
 
 
+# ---------------------------------------------------------------- tools inventory (fleet_tools.py)
+
+TOOLS_TTL = 60  # seconds another machine's inventory is used before it is asked again, behind the answer
+TOOLS_TIMEOUT = 45
+
+
+def tools_ctx():
+    """What this machine's scan reads. tools.json `scan_home` moves the home it reads (the tests' fake machines)."""
+    conf = tools_conf()
+    kw = {"fleet_home": fleet_home(), "machine": self_machine(), "conf": conf}
+    if isinstance(conf.get("scan_home"), str) and conf["scan_home"]:
+        kw["home"] = conf["scan_home"]
+    elif env_dir():
+        kw["env_dir"] = env_dir()
+    return tools.Ctx(**kw)
+
+
+def tools_conf():
+    return tools.read_json(os.path.join(fleet_home(), "tools.json"))
+
+
+def satellites():
+    """Machines that machines.json marks `"satellite": true`: never asked, they have nothing of their own."""
+    return sorted(m for m, e in machines_config().items() if isinstance(e, dict) and e.get("satellite") is True)
+
+
+def tools_seen(machine, env=None):
+    """seen/tools-<machine>.json: another machine's last inventory, read (env None) or written."""
+    path = os.path.join(fleet_home(), "seen", "tools-%s.json" % re.sub(r"[^A-Za-z0-9_.-]", "_", machine))
+    if env is None:
+        doc = tools.read_json(path)
+        return doc if isinstance(doc.get("items"), list) else None
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(env, f)
+    os.replace(tmp, path)
+    return env
+
+
+def tools_ask(machine):
+    env = run_remote_json(machine, ["tools", "--json", "--local"], timeout=TOOLS_TIMEOUT, kind=dict, keys=("items",))
+    env["as_of"] = env.get("as_of") or time.time()
+    return tools_seen(machine, env)
+
+
+class ToolsFeed:
+    """Every machine's inventory, merged. This machine is scanned on each call (it takes milliseconds); another
+    machine's last answer comes from seen/ and is asked again behind the answer once older than TOOLS_TTL, or at
+    once when there is none or `fresh` is asked."""
+
+    def __init__(self, ttl=TOOLS_TTL):
+        self.ttl, self.lock, self.asking, self.failed = ttl, threading.Lock(), set(), {}
+
+    def refresh(self, machine):
+        try:
+            tools_ask(machine)
+            self.failed.pop(machine, None)
+        except RemoteError as e:
+            self.failed[machine] = str(e)
+        finally:
+            with self.lock:
+                self.asking.discard(machine)
+
+    def behind(self, machine):
+        with self.lock:
+            if machine in self.asking:
+                return
+            self.asking.add(machine)
+        threading.Thread(target=self.refresh, args=(machine,), daemon=True).start()
+
+    def get(self, fresh=False, local_only=False):
+        me = self_machine()
+        answers = {me: tools.scan(tools_ctx())}
+        status = {me: {"status": "read", "as_of": answers[me]["as_of"], "reason": ""}}
+        if local_only:
+            return tools.merge(answers, status, tools_conf())
+        sats = set(satellites())
+        others = [m for m in sorted(other_machines()) if m not in sats]
+        now = time.time()
+        seen = {m: tools_seen(m) for m in others}
+        ask_now = [m for m in others if fresh or seen[m] is None]
+        got = fan_out(ask_now, tools_ask)
+        for m in others:
+            res = got.get(m)
+            if isinstance(res, dict):
+                answers[m] = res
+                status[m] = {"status": "read", "as_of": res["as_of"], "reason": ""}
+                continue
+            if isinstance(res, RemoteError):
+                self.failed[m] = str(res)
+            env = seen[m]
+            if env is None:
+                status[m] = {"status": "unreachable", "as_of": None, "reason": self.failed.get(m) or "no answer"}
+                continue
+            answers[m] = env
+            old = now - (env.get("as_of") or 0) > self.ttl
+            if old and m not in ask_now:
+                self.behind(m)
+            why = self.failed.get(m) or ("being read again" if old else "")
+            status[m] = {"status": "stale" if (old or m in self.failed) else "read", "as_of": env.get("as_of"),
+                         "reason": why}
+        for m in sorted(sats):
+            status[m] = {"status": "satellite", "as_of": None, "reason": "a satellite with nothing of its own"}
+        return tools.merge(answers, status, tools_conf())
+
+
+TOOLS_FEED = ToolsFeed()
+
+
+def tools_cmd(as_json=False, local=False):
+    """`fleet tools`: the inventory of every machine (`--local`: this machine's scan, as another machine asks it)."""
+    if local:
+        env = tools.scan(tools_ctx())
+        emit(json.dumps(env) if as_json else "\n".join(tools.text_lines(
+            tools.merge({env["machine"]: env}, {env["machine"]: {"status": "read"}}, tools_conf()))))
+        return
+    env = TOOLS_FEED.get(fresh=True)
+    emit(json.dumps(env) if as_json else "\n".join(tools.text_lines(env)))
+
+
 # ---------------------------------------------------------------- launch profiles (fleet_profiles.py)
 
 PROFILE_TOOLS = prof.ToolCache(claude_bin)
@@ -3627,7 +3749,7 @@ def make_ui_handler(cache, token):
     api = {"/api/members": ui_members, "/api/todos": ui_todos, "/api/threads": ui_threads,
            "/api/machines": ui_machines}
     writes = HISTORY_WRITES + PAGE_WRITES + PROFILE_WRITES + sapi.PAGE_POSTS
-    guarded = ("/api/history", "/api/inbox", "/api/profiles", "/api/sessions")  # served only on loopback, like the writes
+    guarded = ("/api/history", "/api/inbox", "/api/profiles", "/api/sessions", "/api/tools")  # served only on loopback, like the writes
     feed = sapi.IndexFeed(cache.ttl)
 
     class Handler(BaseHTTPRequestHandler):
@@ -3764,6 +3886,9 @@ def make_ui_handler(cache, token):
                     if path == "/api/profiles":
                         refresh = (parse_qs(urlparse(self.path).query).get("refresh") or [""])[0] == "1"
                         return self.send_json(200, ui_profiles(refresh))
+                    if path == "/api/tools":
+                        fresh = (parse_qs(urlparse(self.path).query).get("fresh") or [""])[0] == "1"
+                        return self.send_json(200, TOOLS_FEED.get(fresh=fresh))
                     if path == "/api/sessions":
                         query = parse_qs(urlparse(self.path).query)
                         try:
@@ -3960,6 +4085,8 @@ def main(argv=None):
     s.add_argument("--id", help=argparse.SUPPRESS); s.add_argument("--mask-work", action="store_true", help=argparse.SUPPRESS)
     s.add_argument("--internal", action="store_true", help=argparse.SUPPRESS)
     sub.add_parser("_open-window").add_argument("key"); sub.add_parser("_force-stop").add_argument("key")
+    s = sub.add_parser("tools", help="every skill, command, agent, MCP server, hook and output style, on every machine")
+    s.add_argument("--json", action="store_true"); s.add_argument("--local", action="store_true", help="this machine only")
     pr = sub.add_parser("profile", help="which tools a folder's new sessions get").add_subparsers(dest="profile_cmd", required=True)
     pr.add_parser("ls", help="every folder sessions ran in, with its profile").add_argument("--json", action="store_true")
     s = pr.add_parser("show", help="a folder's profile and what it keeps"); s.add_argument("folder", nargs="?"); s.add_argument("--json", action="store_true")
@@ -4023,6 +4150,7 @@ def main(argv=None):
         elif a.cmd == "sessions": return sessions_cmd(a)
         elif a.cmd == "_open-window": open_window(a.key)
         elif a.cmd == "_force-stop": force_stop(a.key)
+        elif a.cmd == "tools": tools_cmd(a.json, a.local)
         elif a.cmd == "profile":
             profile_cmd(a.profile_cmd, getattr(a, "folder", None), getattr(a, "name", None), getattr(a, "json", False))
     except FleetError as e:

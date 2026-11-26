@@ -1,7 +1,7 @@
 ---
 name: fleet
-description: Join this Claude Code session to the user's fleet of sessions and message other members. Use when the user says "/fleet", "join the fleet", "tell session X", "ask the other sessions", or when a message arrives that starts "Fleet tell" or "Fleet ask". Verbs - join, name, leave, forget, ls, tell, ask, answer, ack, wait, thread, spawn, todo, stop, respawn, attach, notify, inbox, dismiss, history, sessions, profile, canary.
-argument-hint: "[join|name|leave|forget|ls|tell|ask|answer|ack|wait|thread|spawn|todo|stop|respawn|attach|notify|inbox|dismiss|history|sessions|profile|canary] ..."
+description: Join this Claude Code session to the user's fleet of sessions and message other members. Use when the user says "/fleet", "join the fleet", "tell session X", "ask the other sessions", or when a message arrives that starts "Fleet tell" or "Fleet ask". Verbs - join, name, leave, forget, ls, tell, ask, answer, ack, wait, thread, spawn, todo, stop, respawn, attach, notify, inbox, dismiss, history, sessions, profile, tools, canary.
+argument-hint: "[join|name|leave|forget|ls|tell|ask|answer|ack|wait|thread|spawn|todo|stop|respawn|attach|notify|inbox|dismiss|history|sessions|profile|tools|canary] ..."
 allowed-tools:
   - Bash
 ---
@@ -68,6 +68,7 @@ A session has one name: its Claude Code name is its fleet name. A hook on every 
 | `sessions observe --json` | What this machine's sessions are doing now, for the hub's list. |
 | `session <verb>` | The session index itself (take, list, show, rename, delete, describe, ask, rebuild): see `docs/session-index.md`, section 13. |
 | `profile ls [--json]` / `show [folder]` / `set <folder> <name\|inherit>` | Launch profiles: which tools new sessions get in each folder (the nearest `.claude-launch` above it names a profile). `set` writes or removes that folder's standard file; a hand-written one is refused. Editing a profile's switches is on the page's Profiles view. Needs `profiles.json` in the fleet's folder. |
+| `tools [--json] [--local]` | Every skill, command, agent, MCP server, hook and output style on every machine: who provides it, its path, how to invoke it, which launch profile and account have it, and what is flagged (same name from several providers, installed on no profile, a hook copy that drifted, a server denied everywhere). Read-only; an MCP server is only its name and transport. The page's Tools tab shows the same. |
 | `ui [url\|token]` | `ui` serves the page (a token is required). `ui token` prints the local address and token as JSON, for a server on this machine. `ui url` prints the link that signs a browser in: `/login?t=...` sets a cookie and redirects to `/`. |
 | `canary [--json]` | End-to-end proof of delivery: starts a scratch background session, posts it a message and confirms it in the session's transcript, then removes the session. Exit 0, or 1 with one line (also put in the user's inbox). Meant for a daily schedule. |
 

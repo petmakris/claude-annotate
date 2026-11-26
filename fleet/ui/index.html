@@ -8,6 +8,7 @@
 <!-- Favicon: Lucide "users" (0.460.0, ISC) in white on the status line's cyan fleet square. -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http%3A//www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Crect%20width='24'%20height='24'%20rx='6'%20fill='%2300d7d7'/%3E%3Cg%20transform='translate%283.6%203.6%29%20scale%28.7%29'%20fill='none'%20stroke='%23fff'%20stroke-width='2.6'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M16%2021v-2a4%204%200%200%200-4-4H6a4%204%200%200%200-4%204v2'/%3E%3Ccircle%20cx='9'%20cy='7'%20r='4'/%3E%3Cpath%20d='M22%2021v-2a4%204%200%200%200-3-3.87'/%3E%3Cpath%20d='M16%203.13a4%204%200%200%201%200%207.75'/%3E%3C/g%3E%3C/svg%3E">
 <link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/tools.css">
 </head>
 <body>
 <header class="top">
@@ -68,7 +69,34 @@
       <div id="p-main" class="p-main"></div>
     </div>
   </section>
+  <section class="view" id="view-tools" data-view="tools" hidden>
+    <div id="tt-msg" role="status" class="h-msg toast"></div>
+    <section class="card">
+      <div class="card-head"><span class="head-ic" data-icon="wrench"></span><h3>Tools</h3><span class="count" id="n-tools"></span>
+        <span class="grow"></span><button class="act ic-btn" type="button" id="tt-refresh">Read again</button></div>
+      <div class="card-body">
+        <div id="tt-stats" class="tt-stats"></div>
+        <div id="tt-machines" class="tt-machines" aria-label="Machines"></div>
+        <ul id="tt-notes" class="tt-notes dim"></ul>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head"><span class="head-ic" data-icon="triangle-alert"></span><h3>Findings</h3><span class="count" id="n-findings"></span></div>
+      <div id="tt-findings" class="card-body tt-findings"></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><span class="head-ic" data-icon="layers"></span><h3>Which provider each profile turns on</h3></div>
+      <div class="card-body"><div id="tt-map" class="tt-map"></div><div id="tt-folders" class="tt-folders dim"></div></div>
+    </section>
+    <section class="card">
+      <div id="tt-bar" class="tt-bar" role="search"></div>
+      <div id="tt-count" class="tt-count" aria-live="polite"></div>
+      <div id="tt-rows" class="tt-rows" role="table" aria-label="Tools"></div>
+    </section>
+    <dialog id="tt-card" class="tt-card" aria-label="Tool"></dialog>
+  </section>
 </main>
 <script src="/app.js"></script>
+<script src="/tools.js"></script>
 </body>
 </html>

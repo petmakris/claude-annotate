@@ -5,7 +5,7 @@
 // dismiss an item of the "For you" inbox.
 // Every value reaches the page through textContent, never as markup.
 const REFRESH = 5000;
-const VIEWS = [{ id: "sessions", label: "Sessions" }, { id: "fleet", label: "Fleet" }, { id: "foryou", label: "For you" }, { id: "profiles", label: "Profiles" }];
+const VIEWS = [{ id: "sessions", label: "Sessions" }, { id: "fleet", label: "Fleet" }, { id: "foryou", label: "For you" }, { id: "profiles", label: "Profiles" }, { id: "tools", label: "Tools" }];
 
 function el(tag, attrs, ...kids) {
   const n = document.createElement(tag);
@@ -89,7 +89,12 @@ Object.assign(ICONS, {
   "chevron-down": [["path", { d: "m6 9 6 6 6-6" }]],
   "moon": [["path", { d: "M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" }]],
 });
-const VIEW_ICONS = { sessions: "terminal", fleet: "users", foryou: "inbox", profiles: "settings-2" };
+// The Tools tab's icons (Lucide 1.47.0, ISC; the rest of its icons are in tools.js).
+Object.assign(ICONS, {
+  "wrench": [["path", { d: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.106-3.105c.32-.322.863-.22.983.218a6 6 0 0 1-8.259 7.057l-7.91 7.91a1 1 0 0 1-2.999-3l7.91-7.91a6 6 0 0 1 7.057-8.259c.438.12.54.662.219.984z" }]],
+  "triangle-alert": [["path", { d: "m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" }], ["path", { d: "M12 9v4" }], ["path", { d: "M12 17h.01" }]],
+});
+const VIEW_ICONS = { sessions: "terminal", fleet: "users", foryou: "inbox", profiles: "settings-2", tools: "wrench" };
 
 // A list's empty state: an icon and one line.
 const empty = (ic, text) => el("div", { class: "empty-box" }, sicon(ic, "empty-ic"), el("p", {}, text));
@@ -1075,6 +1080,7 @@ function showView(id) {
   if (!VIEWS.some((v) => v.id === id)) id = VIEWS[0].id;
   if (id === "sessions") loadSessions();
   if (id === "profiles" && !P.data) loadProfiles();
+  if (id === "tools" && typeof loadTools === "function") loadTools();  // tools.js loads after this file
   document.querySelectorAll(".view").forEach((s) => (s.hidden = s.dataset.view !== id));
   if (id !== "foryou") setBadge(Y.open || 0);
   document.querySelectorAll("#tabs button").forEach((b) => (b.dataset.view === id ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current")));
