@@ -307,15 +307,26 @@ button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:va
 @media (max-width:760px){
   .app{--ph:58%}
   .app[data-board]{--ph:52%}   /* a board is up: the stage takes more of the height than it does at rest, and the conversation still keeps room to read */
-  .phead{min-height:44px}
-  .foot{padding:6px 10px 6px;gap:4px}
+  .phead{min-height:40px}
+  .foot{padding:4px 10px 5px;gap:3px}
+  /* the mode row and the input give back a few pixels each: the switch and the box keep their buttons whole (the 40 px mic and the 44 px player keys) */
+  .app .modebar .segc{padding:2px}
+  .app .modebar .segc button{padding:4px 4px}
+  .app .compose{padding:3px}
+  .app .compose textarea{padding-block:6px}
   /* the conversation gets the height the chrome gave back: a title of two lines at most, no state row while the state is only
      "Waiting for you" (the Your turn pill on the mode row says the same; an autoplay note, other calls waiting and every other state keep it),
      and tighter padding round the card. (A two-line question was tried: its Show all row costs more than the line it saves.) */
   .topic{-webkit-line-clamp:2;margin:2px 0}
   .app .statestrip[data-key="waiting"]:not(.warn):not(:has(.ssmore:not([hidden]),.ssnote:not([hidden]))){display:none}
-  .app .now-text{max-height:calc(4 * 1.55 * 14.5px)}   /* four lines of the answer are in view with the question over them on a 390 x 844 phone with a board up */
-  .convo{padding:6px 10px 4px;gap:8px}
+  .app .now-text{max-height:calc(min(4, var(--nt-lines)) * 1.55 * 14.5px)}   /* up to four lines of the answer, fewer when fitNowText finds the card would not sit whole above the player (three at least) */
+  .app .convo{padding:3px 8px 2px;gap:6px}
+  /* the echoed question takes two lines, and its Show all sits over the end of the second, so the row it would add costs nothing
+     (a clamped question that kept its own Show all row cost more than the line it saved) */
+  .app .nq:has(>.nq-text.clamped){position:relative}
+  .app .nq-text.clamped{-webkit-line-clamp:2}
+  .app .nq:has(>.nq-text.clamped) .nq-more{position:absolute;right:0;bottom:-2px;margin:0;min-height:28px;padding:0 6px 0 28px;
+    background:linear-gradient(90deg,transparent,var(--panel) 24px)}
   .app,.app[data-side="left"]{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) var(--ph)}
   .app[data-rail]{grid-template-rows:minmax(0,1fr) 60px}
   .app[data-side="left"] .panel,.panel{order:0;border:0;border-top:1px solid var(--line)}
