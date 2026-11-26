@@ -130,6 +130,11 @@
   /* progressive reveal: hidden only while presenting; deck.js steps .frag-on */
   body.present .frag{opacity:0;visibility:hidden;transition:opacity .25s ease,visibility .25s ease}
   body.present .frag.frag-on{opacity:1;visibility:visible}
+  /* focus: under .focus (on .deck or one .slide) earlier steps fade right back once a later one
+     shows, unless the .frag has data-keep; [data-dim="n"] fades any part once step n shows */
+  body.present [data-dim]{transition:opacity .3s ease,filter .3s ease}
+  body.present .frag{transition:opacity .3s ease,visibility .3s ease,filter .3s ease}
+  body.present .focus .frag.frag-on.frag-past,body.present .frag-dim{opacity:.12;filter:grayscale(1)}
   @media print{.present-btn{display:none}}
 
   /* persistent floating nav — hover the left-edge tab to reveal jump links */

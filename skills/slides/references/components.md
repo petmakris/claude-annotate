@@ -291,8 +291,13 @@ While presenting, `→` / `Space` / `PageDown` reveals the next step before movi
 - **Order:** `data-frag="1"`, `"2"`, … Elements with the same number appear together — the
   callout on a screenshot and its line in the legend. Without `data-frag`, each `.frag` is its
   own step in document order.
-- **Current step:** the latest step also carries `.frag-current`, a hook for dimming earlier
-  steps deck-locally. The framework does not style it.
+- **Current step:** the latest step also carries `.frag-current`; the earlier ones carry `.frag-past`.
+- **Focus (framework 3.2.0):** put `focus` on `.deck` (or on one `.slide`) and each earlier step fades
+  back to 12% grey once the next one shows, so the room looks at the newest step only. `data-keep`
+  on a `.frag` keeps it bright (a spotlight that the next steps build on). Leave `focus` off for a
+  diagram that should build up.
+- **Fade a base part:** `data-dim="n"` on any element (a screenshot, an earlier panel) fades it the
+  same way once step `n` shows.
 - **Only in present mode.** The scrolling view, the `/deck` editor and the PDF export show every
   fragment, so a reader of the file or the PDF never misses one.
 

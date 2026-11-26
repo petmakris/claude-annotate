@@ -32,7 +32,7 @@
     frags.forEach((f, k) => { f._fragKey = f.dataset.frag !== undefined ? parseFloat(f.dataset.frag) : 1e6 + k; });
     const keys = Array.from(new Set(frags.map(f => f._fragKey))).sort((a, b) => a - b);
     frags.forEach(f => { f._fragStep = keys.indexOf(f._fragKey); });
-    return { frags, total: keys.length };
+    return { frags, keys, dims: Array.from(sl.querySelectorAll('[data-dim]')), total: keys.length };
   });
   let step = 0;
   function applyFrags() {
@@ -40,7 +40,11 @@
     fs.frags.forEach(f => {
       f.classList.toggle('frag-on', f._fragStep < step);
       f.classList.toggle('frag-current', f._fragStep === step - 1);
+      f.classList.toggle('frag-past', f._fragStep < step - 1 && f.dataset.keep === undefined);
     });
+    // data-dim="n": a part that fades back once step n (a data-frag value) is shown
+    const cur = step > 0 ? fs.keys[step - 1] : -Infinity;
+    fs.dims.forEach(d => d.classList.toggle('frag-dim', parseFloat(d.dataset.dim) <= cur));
   }
   function show(n, revealAll) {
     i = Math.max(0, Math.min(slides.length - 1, n));
