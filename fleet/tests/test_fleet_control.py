@@ -11,10 +11,9 @@ import urllib.request
 
 import pytest
 
-from fleet_testkit import ROOT, fleet, install_claude_stub, world  # noqa: F401
+from fleet_testkit import ROOT, fleet, install_claude_stub, record_hook, world  # noqa: F401
 from test_fleet_machines import duo
 from test_fleet_messaging import hook, msg_id, thread_id, two
-import fleet_history as hist
 
 @pytest.fixture
 def claude(world):
@@ -355,16 +354,20 @@ def test_stopping_an_interactive_member_on_another_machine_tells_it(world, claud
 def test_history_shows_the_fleet_name_when_a_session_has_no_other_name(world):
     a = world.session("alpha")
     world.member(a, "builder")
-    con = fleet.db()
-    hist.record(con, {"hook_event_name": "SessionStart", "session_id": a.sid, "cwd": "/work/x"})
-    hist.record(con, {"hook_event_name": "SessionStart", "session_id": "other-sid", "cwd": "/work/y"})
+    home = world.here.home
+    assert record_hook(home, "SessionStart", a.sid, "/work/x") == 0
+    assert record_hook(home, "SessionStart", "other-sid", "/work/y") == 0
     rows = {r["id"]: r for r in json.loads(world.run(a, "history", "ls", "--json")[1])}
     assert (rows[a.sid]["name"], rows[a.sid]["fleet_name"], rows[a.sid]["renamed"]) == ("builder", "builder", False)
     assert (rows["other-sid"]["name"], rows["other-sid"]["fleet_name"]) == ("", "")
-    con.execute("UPDATE conversations SET name_ai='Fix billing' WHERE session_id=?", (a.sid,))
+    path = os.path.join(world.base, "named.jsonl")
+    with open(path, "w") as f:
+        f.write(json.dumps({"type": "ai-title", "aiTitle": "Fix billing"}) + "\n")
+    assert record_hook(home, "Stop", a.sid, "/work/x", path) == 0
     assert json.loads(world.run(a, "history", "show", a.sid, "--json")[1])["name"] == "Fix billing"
     world.run(a, "history", "rename", a.sid[:12], "mine")
-    assert json.loads(world.run(a, "history", "show", a.sid, "--json")[1])["name"] == "mine"
+    v = json.loads(world.run(a, "history", "show", a.sid, "--json")[1])
+    assert (v["name"], v["renamed"]) == ("mine", True)
 
 
 # ---------------------------------------------------------------- the page's writes

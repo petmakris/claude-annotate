@@ -134,7 +134,7 @@ write(os.path.join(FH, "profiles.json"), json.dumps({
 write(os.path.join(FH, "ui.json"), json.dumps({"token": TOKEN, "port": PORT}))
 os.chmod(os.path.join(FH, "ui.json"), 0o600)
 
-# the store, made by the CLI, then seeded with a member, a thread, an ask for the user, to-dos and history
+# the store, made by the CLI, then seeded with a member, a thread, an ask for the user and to-dos
 subprocess.run([sys.executable, os.path.join(FLEET, "fleet.py"), "todo", "ls", "--json"], env=ENV, check=True, capture_output=True)
 con = sqlite3.connect(os.path.join(FH, "fleet.db"))
 now = time.time()
@@ -158,15 +158,20 @@ for i, (sid, cwd, name, prompt) in enumerate([
         ("aaaa1111-0000-0000-0000-000000000003", LIB, "Lib refactor", "Split the parser"),
         ("aaaa1111-0000-0000-0000-000000000004", CUSTOM, "Custom thing", "Try the custom launcher"),
         ("aaaa1111-0000-0000-0000-000000000005", APP, "Throwaway", "A session to delete")]):
-    tp = os.path.join(BASE, "t%d.jsonl" % i)
+    # where Claude Code keeps a transcript, which ask and describe read, and this machine's cache of the index,
+    # which Profiles counts folders from
+    tp = os.path.join(HOME, ".claude", "projects", cwd.replace("/", "-"), sid + ".jsonl")
     write(tp, json.dumps({"type": "user", "cwd": cwd, "message": {"role": "user", "content": prompt}}) + "\n")
-    con.execute("INSERT INTO conversations(session_id, cwd, transcript_path, started_at, last_seen_at, manual_name, first_prompt, description) "
-                "VALUES (?,?,?,?,?,?,?,?)", (sid, cwd, tp, now - 5000 + i, now - 1000 + i, name, prompt,
-                                              "Planned the billing export job." if i == 0 else None))
+    write(os.path.join(FH, "index", "cache", sid + ".json"), json.dumps({
+        "v": 1, "sid": sid, "conversation": sid, "owner": "here", "epoch": 1, "owner_since": now - 5000 + i,
+        "name": name or "", "name_source": "custom" if name else "", "kind": "chat", "env": "prod", "machine": "here",
+        "work": False, "superseded_by": None, "cwd": cwd, "first_prompt": prompt, "started": now - 5000 + i,
+        "updated": now - 1000 + i, "ended": now - 1000 + i, "end_reason": "exit", "cached_at": now,
+        "source": "local"}))
 con.commit()
 con.close()
 
-# the session index, on this one machine: the history's five (ended), the live member, a phone's chat and a work one
+# the session index, on this one machine: the five above (ended), the live member, a phone's chat and a work one
 write(os.path.join(FH, "machines.json"), json.dumps({"self": "here", "screen": "macos"}))
 write(os.path.join(FH, "work.json"), json.dumps({"accounts": ["me"], "profile_paths": [os.path.join(HOME, "work")],
                                                   "own_profiles": os.path.join(HOME, "profiles")}))
@@ -279,11 +284,11 @@ try:
 
         # ---- shell
         def shell():
-            expect(page.locator("#tabs button")).to_have_count(4)
+            expect(page.locator("#tabs button")).to_have_count(5)
             expect(page.locator("#stamp")).to_contain_text("Live")
             expect(page.locator('#tabs button[data-view="foryou"] .badge')).to_have_text("3")
             assert page.title() == "(3) Fleet", page.title()
-        check("App bar: four tabs, live status, the For you badge counts the open ask, the notice and Lungo's item", shell)
+        check("App bar: five tabs, live status, the For you badge counts the open ask, the notice and Lungo's item", shell)
 
         # ---- Fleet view
         view("fleet")
@@ -522,7 +527,7 @@ try:
             row.locator(".s-btn.confirming").click()
             expect(every).to_have_count(7, timeout=20000)
             assert indexed(S % 5) is None
-            assert os.path.exists(os.path.join(BASE, "t4.jsonl")), "the transcript must stay"
+            assert os.path.exists(os.path.join(HOME, ".claude", "projects", APP.replace("/", "-"), S % 5 + ".jsonl")), "the transcript must stay"
         check("Sessions: Delete is for an ended session, needs a second press, keeps the transcript", sdelete)
 
         def snarrow():

@@ -149,7 +149,7 @@ def build_rows(machine, history, agents, members, panes, parents, alive=None, ru
     """This machine's rows, unfiltered and in full.
 
     history: dicts {id, names: [(name, source)...] best first, folder, about, started, last_seen, ended,
-             end_reason, transcript}; agents: `claude agents --json`; members: local_members() entries;
+             end_reason, transcript, work} (this machine's rows of the session index); agents: `claude agents --json`; members: local_members() entries;
     alive(pid) says whether a pid runs here; is_work(folder, transcript) is the work rule (None = no rule)."""
     now = now or time.time()
     alive = alive or (lambda pid: True)
@@ -157,7 +157,7 @@ def build_rows(machine, history, agents, members, panes, parents, alive=None, ru
     mem = {m["session_id"]: m for m in members or ()}
     out, done = [], set()
 
-    def row(sid, names, folder, about, started, last_seen, ended, end_reason, transcript):
+    def row(sid, names, folder, about, started, last_seen, ended, end_reason, transcript, work=False):
         entry = idx.get(sid)
         live = bool(entry) and (entry.get("kind") == "background" or (entry.get("pid") and alive(entry["pid"])))
         where, tmux = where_of(entry, live, panes, parents) if live else ("none", None)
@@ -174,7 +174,7 @@ def build_rows(machine, history, agents, members, panes, parents, alive=None, ru
              "free": bool(m and m.get("free")), "started": started, "last_seen": last_seen, "ended": ended,
              "end_reason": end_reason or "", "live_on": [machine] if live else [], "copies": [], "stale": False,
              "as_of": now, "masked": False, "registry": None}
-        r["_work"] = bool(is_work and is_work(folder, transcript))
+        r["_work"] = bool(work) or bool(is_work and is_work(folder, transcript))
         r["_name_from_prompt"] = source in ("ai",)
         r["_fleet_name"] = fleet_name
         return r
@@ -184,8 +184,8 @@ def build_rows(machine, history, agents, members, panes, parents, alive=None, ru
             continue
         done.add(h["id"])
         out.append(row(h["id"], h.get("names") or [], h.get("folder"), h.get("about"), h.get("started"),
-                       h.get("last_seen"), h.get("ended"), h.get("end_reason"), h.get("transcript")))
-    for sid, entry in idx.items():  # live sessions the history has not recorded (yet)
+                       h.get("last_seen"), h.get("ended"), h.get("end_reason"), h.get("transcript"), h.get("work")))
+    for sid, entry in idx.items():  # live sessions the index has not recorded (yet)
         if sid in done or (only_id and not sid.startswith(only_id)):
             continue
         if entry.get("kind") != "background" and not (entry.get("pid") and alive(entry["pid"])):

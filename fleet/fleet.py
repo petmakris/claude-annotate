@@ -31,6 +31,8 @@ from urllib.parse import parse_qs, urlparse
 import fleet_history as hist
 import fleet_profiles as prof
 import fleet_index_cache as idxcache
+import fleet_index_hook as idxhook
+import fleet_index_parse as idxparse
 import fleet_sessions as fs
 import fleet_sessions_api as sapi
 import fleet_tools as tools
@@ -545,9 +547,8 @@ def join(name=None, transcript=None):
         name = free_name(con, name, info["sessionId"], agents)
     respawn = os.environ.get("FLEET_RESPAWN") or "cd %s && claude --resume %s -n %s" % (
         shlex.quote(cwd), info["sessionId"], shlex.quote(name))
-    if not transcript:  # the recording hook noted it at SessionStart (hook input `transcript_path`)
-        r = con.execute("SELECT transcript_path FROM conversations WHERE session_id=?", (info["sessionId"],)).fetchone()
-        transcript = r[0] if r else None
+    if not transcript:  # where Claude Code keeps this session's transcript (the join hook passes its own)
+        transcript = idxparse.find_transcript(info["sessionId"])
     branch = git_branch(cwd)
     conversation = conversation_of(info["sessionId"])
     con.execute("BEGIN IMMEDIATE")  # the name check and the insert are one step: two joins cannot both win a name
@@ -580,7 +581,7 @@ def join(name=None, transcript=None):
 # ---------------------------------------------------------------- one name: Claude's and the fleet's
 #
 # A session has one name. Claude Code holds it (its title: `/rename`, `claude -n`, or what a UserPromptSubmit hook
-# returns as `sessionTitle`); the fleet member and the history follow it. `fleet name`, `fleet join NAME` and
+# returns as `sessionTitle`); the fleet member and the session index follow it. `fleet name`, `fleet join NAME` and
 # `fleet history rename` store the new name as `chosen`, rename the member at once, and the naming hook hands it
 # to Claude Code at the session's next prompt. A `/rename` reaches the hook as a changed `session_title`, and the
 # member takes it. An old name stays an alias for ALIAS_DAYS, so a message sent to it still arrives.
@@ -663,7 +664,7 @@ def rename_member(con, sid, name, agents=_UNSET):
 
 
 def write_claude_title(transcript, sid, name):
-    """Claude Code's own record of a title, as `/rename` writes it: a record in the transcript (what the history
+    """Claude Code's own record of a title, as `/rename` writes it: a record in the transcript (what the index
     reads) and `custom-title.json` beside it (what `/resume` reads). Used for a session that is not running."""
     if not transcript or not os.path.exists(transcript):
         return False
@@ -958,11 +959,10 @@ def marker_for(mid, nonce):
 
 
 def transcript_of(con, member):
-    """The member's transcript file: recorded at join, else by the history table; None when unknown."""
+    """The member's transcript file: recorded at join, else where Claude Code keeps it; None when unknown."""
     if member["transcript_path"]:
         return member["transcript_path"]
-    r = con.execute("SELECT transcript_path FROM conversations WHERE session_id=?", (member["session_id"],)).fetchone()
-    return r[0] if r and r[0] else None
+    return idxparse.find_transcript(member["session_id"])
 
 
 def file_size(path):
@@ -2434,33 +2434,91 @@ def fleet_names(con):
     return out
 
 
-def hview(con, r, names=None):
-    return hist.view(r, (names if names is not None else fleet_names(con)).get(r["session_id"], ""))
+# `fleet history`: this machine's sessions as the session index holds them (fleet/docs/session-index.md). The
+# per-machine `conversations` table is no source any more (phase 3); it stays on disk, unread and unwritten.
+
+ROW_WORDS = ("name", "name_source", "cwd", "account", "first_prompt", "last_prompt", "last_answer", "description")
+
+
+def history_rows(folder=None):
+    """This machine's rows of the session index, newest first: the hub's answer, else this machine's cache. A work
+    row leaves its machine masked; here, on its own machine, its words come from the cache."""
+    me = self_machine()
+    rows, _ = sapi.index_rows()
+    own = {r["sid"]: r for r in idxcache.all_rows(fleet_home())}
+    out = []
+    for r in rows:
+        if r.get("machine") != me:
+            continue
+        if r.get("work") and r["sid"] in own:
+            r = dict(r, **{k: own[r["sid"]].get(k) for k in ROW_WORDS})
+        out.append(r)
+    if folder:
+        f = os.path.abspath(os.path.expanduser(folder)).rstrip("/")
+        out = [r for r in out if (r.get("cwd") or "") == f or (r.get("cwd") or "").startswith(f + "/")]
+    out.sort(key=lambda r: r.get("updated") or r.get("started") or 0, reverse=True)
+    return out
+
+
+def history_find(ident, rows=None):
+    """A row of this machine by session id or a unique prefix of it."""
+    ident = (ident or "").strip()
+    rows = history_rows() if rows is None else rows
+    exact = [r for r in rows if r["sid"] == ident]
+    if exact:
+        return exact[0]
+    hits = [r for r in rows if ident and r["sid"].startswith(ident)]
+    if not hits:
+        raise FleetError("fleet: no session %r of %s in the session index." % (ident, self_machine()))
+    if len(hits) > 1:
+        raise FleetError("fleet: %r matches %d sessions (%s); give more of the id."
+                         % (ident, len(hits), ", ".join(r["sid"][:12] for r in hits[:5])))
+    return hits[0]
+
+
+def resume_line(r):
+    return "cd %s && claude --resume %s" % (shlex.quote(r.get("cwd") or "."), r["sid"])
+
+
+def hview(r, names=None):
+    """One row as `fleet history --json` shows it. A session with no name of its own shows its fleet name."""
+    fleet_name = (names or {}).get(r["sid"], "")
+    return {"id": r["sid"], "name": r.get("name") or fleet_name or "", "fleet_name": fleet_name,
+            "renamed": r.get("name_source") == "manual", "folder": r.get("cwd") or "",
+            "about": r.get("first_prompt") or "", "description": r.get("description") or "",
+            "started": r.get("started"), "last_seen": r.get("updated"), "ended": r.get("ended"),
+            "end_reason": r.get("end_reason") or "", "kind": r.get("kind") or "", "owner": r.get("owner") or "",
+            "resume": resume_line(r)}
+
+
+def unreadable_warning():
+    bad = len(idxhook.unreadable(fleet_home()))
+    if bad:
+        return ("warning: %d transcript%s could not be read: has the transcript format changed? (the reason is in %s)"
+                % (bad, "" if bad == 1 else "s", os.path.join(fleet_home(), "hooks.log")))
+    return ""
 
 
 def history_ls(folder=None, as_json=False):
-    con = db()
-    rs = hist.rows(con, folder)
-    names = fleet_names(con)
-    bad = hist.unreadable_count(con)
-    if bad:
-        print("warning: %d transcript%s could not be read: has the transcript format changed? (the reason is in %s)"
-              % (bad, "" if bad == 1 else "s", os.path.join(fleet_home(), "hooks.log")), file=sys.stderr)
+    rs = history_rows(folder)
+    names = fleet_names(db())
+    if unreadable_warning():
+        print(unreadable_warning(), file=sys.stderr)
     if as_json:
-        emit(json.dumps([hview(con, r, names) for r in rs], indent=2))
+        emit(json.dumps([hview(r, names) for r in rs], indent=2))
         return
     if not rs:
-        print("no sessions in the history" + (" under %s." % folder if folder else "."))
+        print("no sessions of %s in the session index" % self_machine() + (" under %s." % folder if folder else "."))
         return
     for r in rs:
-        v = hview(con, r, names)
-        print("%s  %s  %-28s  %s" % (v["id"][:8], history_ago(v["last_seen"]), (v["name"] or "(unnamed) " + hist.clip(v["about"], 30))[:40], v["folder"]))
+        v = hview(r, names)
+        print("%s  %s  %-28s  %s" % (v["id"][:8], history_ago(v["last_seen"]),
+                                     (v["name"] or "(unnamed) " + hist.clip(v["about"], 30))[:40], v["folder"]))
 
 
 def history_show(ident, as_json=False):
-    con = db()
-    r = history_guard(hist.find, con, ident)
-    v = hview(con, r)
+    r = history_find(ident)
+    v = hview(r, fleet_names(db()))
     if as_json:
         print(json.dumps(v, indent=2))
         return
@@ -2468,93 +2526,99 @@ def history_show(ident, as_json=False):
           % (v["id"], v["name"] or "(unnamed)", v["folder"], history_ago(v["started"]), history_ago(v["last_seen"]),
              (history_ago(v["ended"]) + " (" + v["end_reason"] + ")") if v["ended"] else "not recorded"))
     print("transcript:  %s\nopened with: %s\ndescription: %s\nresume:      %s"
-          % (v["transcript"], v["about"] or "-", v["description"] or "none yet (fleet history describe)", v["resume"]))
+          % (idxparse.find_transcript(v["id"]) or "not on this machine", v["about"] or "-",
+             v["description"] or "none yet (fleet history describe)", v["resume"]))
 
 
 def history_rename(ident, name):
-    """One name: the session's Claude name and its fleet name change with the history's. A running session takes
-    it at its next prompt (the naming hook); a session that is not running gets Claude Code's own title records."""
-    con = db()
+    """`fleet session rename`: the index's name, then the fleet name and Claude Code's title on this machine
+    (`_rename-here`). An empty name clears the name the user gave."""
+    sid = history_find(ident)["sid"]
     name = " ".join((name or "").split())
-    if not name:
-        r = history_guard(hist.rename, con, ident, "")
-        print("%s is now %s" % (r["session_id"][:8], hist.display_name(r) or "(unnamed)"))
-        return
-    name = check_name(name)
-    r = history_guard(hist.find, con, ident)
-    sid = r["session_id"]
-    hist.update(con, sid, manual_name=None, name_custom=name)
+    if name:
+        name = check_name(name)
+    row = json.loads(sapi.index_verb("rename", sid, *name.split()))
+    print("%s is now %s" % (sid[:8], row.get("name") or "(unnamed)"))
+
+
+def rename_here(sid, name):
+    """The rename of a session on its own machine, after the index's: its fleet name and its Claude name. A running
+    session takes it at its next prompt (the naming hook); one that is not running gets Claude Code's own title
+    records."""
+    name = check_name(" ".join(name.split()))
+    con = db()
     set_chosen(con, sid, name)
     moved = rename_member(con, sid, name)
     running = agent_for(agents_list(), sid)
     if not running:
-        write_claude_title(r["transcript_path"], sid, name)
+        write_claude_title(idxparse.find_transcript(sid), sid, name)
     print("%s is now %s%s" % (sid[:8], name, " (Claude Code shows it from the next prompt)" if running else ""))
     if moved:
         print("renamed in the fleet: %s -> %s" % moved)
 
 
 def history_delete(ident):
-    r = history_guard(hist.delete, db(), ident)
-    print("removed %s from the history (the transcript is untouched)" % r["session_id"][:8])
+    sid = history_find(ident)["sid"]
+    out = json.loads(sapi.index_verb("delete", sid))
+    print("removed %s from the session index (the transcript is untouched)" % ", ".join(s[:8] for s in out["deleted"]))
 
 
 def history_resume(ident):
-    print(hist.resume_command(history_guard(hist.find, db(), ident)))
+    print(resume_line(history_find(ident)))
 
 
 def history_ask(ident, question):
-    print(history_guard(hist.ask, db(), ident, question))
+    print(sapi.index_verb("ask", history_find(ident)["sid"], question))
 
 
 def history_describe(limit, folder=None):
-    con = db()
-    n = len(hist.pending(con, folder=folder))
-    if not n:
+    """Describe this machine's sessions that have none: ended or quiet for SETTLED seconds, someone typed in them,
+    not work. One headless call each (`fleet session describe`), FLEET_DESCRIBE_PAUSE seconds apart."""
+    now = time.time()
+    todo = []
+    for r in history_rows(folder):
+        if r.get("description") or r.get("work") or not r.get("first_prompt"):
+            continue
+        if not r.get("ended") and now - (r.get("updated") or 0) < hist.SETTLED:
+            continue
+        todo.append(r)
+    if not todo:
         print("every session that can be described has a description.")
         return
-    res = history_guard(hist.describe, con, limit, None, lambda m: print("failed " + m, file=sys.stderr), folder)
-    print("described %d, failed %d, %d still waiting" % (res["described"], res["failed"], res["left"]))
+    pause = env_float("FLEET_DESCRIBE_PAUSE", 2.0)
+    ok = bad = 0
+    for i, r in enumerate(todo[:limit]):
+        if i and pause:
+            time.sleep(pause)
+        try:
+            sapi.index_verb("describe", r["sid"])
+            ok += 1
+        except FleetError as e:
+            bad += 1
+            print("failed %s: %s" % (r["sid"][:8], e), file=sys.stderr)
+    print("described %d, failed %d, %d still waiting" % (ok, bad, max(0, len(todo) - limit)))
 
 
 def history_search(query, as_json=False):
-    res = history_guard(hist.search, db(), query)
+    rows = history_rows()
+    res = history_guard(hist.search, query, rows)
+    names = fleet_names(db())
+    hits = [dict(hview(h["row"], names), why=h["why"]) for h in res["hits"]]
     if as_json:
-        print(json.dumps(res, indent=2))
+        print(json.dumps(dict(res, hits=hits), indent=2))
         return
     print("%d of %d sessions have a description" % (res["described"], res["total"]))
-    for h in res["hits"]:
+    for h in hits:
         print("%s  %s  %s\n    %s" % (h["id"][:8], history_ago(h["last_seen"]), h["name"] or h["folder"], h["why"]))
-    if not res["hits"]:
+    if not hits:
         print("no match")
-
-
-def history_import(path, descriptions=None):
-    con = db()
-    before = hist.counts(con)
-    res = history_guard(hist.import_store, con, os.path.expanduser(path), descriptions and os.path.expanduser(descriptions))
-    after = hist.counts(con)
-    print("read %(read)d, added %(added)d, kept %(kept)d, descriptions filled %(described)d" % res)
-    print("sessions %d -> %d, described %d -> %d" % (before["total"], after["total"], before["described"], after["described"]))
-
-
-def hook_record():
-    """SessionStart, Stop and SessionEnd: note the session in the history. It must never fail a session, so
-    whatever goes wrong is logged under FLEET_HOME and the exit code is 0."""
-    try:
-        if os.environ.get("FLEET_NO_RECORD"):
-            return 0
-        hist.record(db(), hook_input())
-    except BaseException as e:  # noqa: B902 - a recording problem may cost a row, never a session
-        log_line("hook-record: %s: %s" % (type(e).__name__, e))
-    return 0
 
 
 # ---------------------------------------------------------------- sessions (fleet_sessions.py, fleet_sessions_api.py)
 #
 # The list comes from the session index (fleet/docs/session-index.md): `GET /api/sessions`, `fleet sessions --json`
 # and the pick plan all read it through fleet_sessions_api, and no surface merges rows itself. What a session is doing
-# is read at that moment from its machine: this file reads this machine's history, `claude agents --json`, the claude
+# is read at that moment from its machine: this file reads this machine's cache of the index, `claude agents --json`, the claude
 # tmux server's panes and `ps`, and asks the other machines over ssh (5 s to connect, 8 s in all). Nothing polls.
 
 SESSIONS_TIMEOUT = 8
@@ -2660,14 +2724,19 @@ def process_parents():
     return fs.parse_parents(r.stdout)
 
 
-def history_dicts(con):
-    out = []
-    for r in hist.rows(con):
-        out.append({"id": r["session_id"], "folder": r["cwd"] or "", "about": r["first_prompt"] or "",
-                    "names": [(r["manual_name"], "manual"), (r["name_custom"], "custom"), (r["name_ai"], "ai"),
-                              (r["name_agent"], "agent")],
-                    "started": r["started_at"], "last_seen": r["last_seen_at"], "ended": r["ended_at"],
-                    "end_reason": r["end_reason"] or "", "transcript": r["transcript_path"] or ""})
+def own_index_rows():
+    """The rows of sessions that ran on this machine, from its cache of the session index (section 14 of the
+    contract), in the shape fleet_sessions.build_rows reads. A work row is whole here, on its own machine."""
+    me, out = self_machine(), []
+    for r in idxcache.all_rows(fleet_home()):
+        if r.get("machine") not in (me, "self"):
+            continue
+        src = r.get("name_source") or ""
+        out.append({"id": r["sid"], "folder": r.get("cwd") or "", "about": r.get("first_prompt") or "",
+                    "names": [(r.get("name") or "", "ai" if src == "prompt" else src or "agent")],
+                    "started": r.get("started") or r.get("owner_since"),
+                    "last_seen": r.get("updated") or r.get("cached_at"), "ended": r.get("ended"),
+                    "end_reason": r.get("end_reason") or "", "transcript": "", "work": bool(r.get("work"))})
     return out
 
 
@@ -2696,12 +2765,11 @@ def sessions_local(flt, mask_work=False, internal=False):
     """This machine's envelope. With `mask_work` (another machine asks) a work-rule row is masked; `internal` keeps
     the fields a plan needs (the fleet name, the folder check, who holds each tmux session)."""
     me, now = self_machine(), time.time()
-    con = db()
     agents = agents_list()
     members = local_members(False, agents)
     panes, tmux_ok = tmux_panes()
     parents = process_parents() if panes else {}
-    rows = fs.build_rows(me, history_dicts(con), agents, members, panes, parents, pid_running, sessions_conf(),
+    rows = fs.build_rows(me, own_index_rows(), agents, members, panes, parents, pid_running, sessions_conf(),
                          work_rule(), now, flt.only_id)
     if flt.only_id:
         for r in rows:
@@ -2711,7 +2779,7 @@ def sessions_local(flt, mask_work=False, internal=False):
     if mask_work:
         rows = [fs.mask(r) for r in rows]
     entry = {"reachable": True, "stale": False, "as_of": now, "reason": "", "fleet": True, "screen": screen_of(me),
-             "unreadable": hist.unreadable_count(con), "tmux_server": tmux_ok}
+             "unreadable": len(idxhook.unreadable(fleet_home())), "tmux_server": tmux_ok}
     if internal and flt.only_id:
         entry["_holders"] = fs.tmux_holders(panes, parents, agents, pid_running)
     if not internal:
@@ -3053,10 +3121,10 @@ def listed(name, session_id):
 
 
 def canary_cleanup(run):
-    """Stop and remove the scratch session, leave no trace of it: its members row, history row, transcript and
-    folder. Works when the run broke early: a session that was started but never reported its id is found by
-    name in `claude agents --json`. The history row goes last, once the session has ended, because the
-    SessionEnd hook of a stopping session writes it again."""
+    """Stop and remove the scratch session, leave no trace of it: its members row, its row of the session index,
+    transcript and folder. Works when the run broke early: a session that was started but never reported its id is
+    found by name in `claude agents --json`. The index row goes last, once the session has ended, because the hub
+    deletes only an ended session and the SessionEnd entry of a stopping session reaches it a moment later."""
     notes = []
     name, sid, agent_sid = run.get("name"), run.get("session_id"), None
     if not run.get("id") and name:
@@ -3088,8 +3156,7 @@ def canary_cleanup(run):
         con.execute("DELETE FROM members WHERE name=?", (name,))
     if sid:
         con.execute("DELETE FROM members WHERE session_id=?", (sid,))
-        r = con.execute("SELECT transcript_path FROM conversations WHERE session_id=?", (sid,)).fetchone()
-        path = r[0] if r else None
+        path = idxparse.find_transcript(sid)
         if path and os.path.basename(path) == sid + ".jsonl":  # its own transcript, by exact name
             for p in (path, path[:-len(".jsonl")]):
                 try:
@@ -3101,11 +3168,27 @@ def canary_cleanup(run):
                     os.rmdir(os.path.dirname(path))  # the project folder Claude Code made for the scratch folder
                 except OSError:
                     pass
-        con.execute("DELETE FROM conversations WHERE session_id=?", (sid,))
+        canary_forget(sid)
     folder = run.get("folder")
     if folder and os.path.dirname(os.path.abspath(folder)) == os.path.abspath(canary_root()):
         shutil.rmtree(folder, ignore_errors=True)
     return notes
+
+
+def canary_forget(sid):
+    """Delete the scratch session's row of the session index, waiting up to FLEET_CANARY_END_WAIT seconds for its
+    SessionEnd entry. Best effort: a row that stays is logged to hooks.log, never a failed canary."""
+    end = time.monotonic() + env_float("FLEET_CANARY_END_WAIT", 20.0)
+    while True:
+        try:
+            sapi.index_verb("delete", sid)
+            return
+        except FleetError as e:
+            if "has not ended" not in str(e) or time.monotonic() >= end:
+                if "is not in the index" not in str(e):
+                    log_line("canary: the index row of %s stays: %s" % (sid[:8], e))
+                return
+        time.sleep(0.5)
 
 
 def canary(as_json=False):
@@ -3416,34 +3499,6 @@ def history_refusal(bound, headers, post):
     return None
 
 
-# The page no longer calls these two (History is part of Sessions). They stay served until their tests, in
-# test_fleet_history.py, go with them.
-
-def ui_history():
-    con = db()
-    names = fleet_names(con)
-    counts = dict(hist.counts(con), unreadable=hist.unreadable_count(con))
-    return {"rows": [hview(con, r, names) for r in hist.rows(con)], "counts": counts,
-            "home": os.path.expanduser("~")}
-
-
-def ui_history_write(path, body):
-    """The page's writes. -> (status, json). A model call (ask, search) can take a while."""
-    con = db()
-    try:
-        if path == "/api/history/rename":
-            return 200, hview(con, hist.rename(con, body.get("id"), body.get("name")))
-        if path == "/api/history/delete":
-            return 200, {"deleted": hist.delete(con, body.get("id"))["session_id"]}
-        if path == "/api/history/ask":
-            return 200, {"answer": hist.ask(con, body.get("id"), body.get("question"))}
-        if path == "/api/history/search":
-            return 200, hist.search(con, body.get("query"))
-    except hist.HistoryError as e:
-        return (404 if "no session" in str(e) else 400), {"error": str(e)}
-    return 404, {"error": "not found"}
-
-
 def ui_inbox():
     items, bad, lz = inbox_all(True)
     lungo = None
@@ -3585,11 +3640,14 @@ def profile_config():
 
 
 def profile_usage():
-    """[(folder, sessions, last seen)]: the folders the profile view lists, from the history and from Claude
-    Code's transcript folders, since the history holds only what its hook has recorded."""
-    con = db()
-    recorded = [(r[0], r[1], r[2]) for r in con.execute(
-        "SELECT cwd, COUNT(*), MAX(COALESCE(last_seen_at, started_at)) FROM conversations GROUP BY cwd")]
+    """[(folder, sessions, last seen)]: the folders the profile view lists, from this machine's cache of the session
+    index and from Claude Code's transcript folders. Profiles are per machine, so no other machine is asked."""
+    by = {}
+    for r in own_index_rows():
+        if r["folder"]:
+            n, last = by.get(r["folder"], (0, 0))
+            by[r["folder"]] = (n + 1, max(last, r["last_seen"] or r["started"] or 0))
+    recorded = [(folder, n, last or None) for folder, (n, last) in by.items()]
     return prof.merge_usage(recorded, prof.transcript_usage())
 
 
@@ -3732,7 +3790,6 @@ def on_machine(machine, verb, key, quiet_fn):
         raise FleetError("fleet: %s: %s" % (machine, str(e).splitlines()[-1] if str(e) else "failed"))
 
 
-HISTORY_WRITES = ("/api/history/rename", "/api/history/delete", "/api/history/ask", "/api/history/search")
 PROFILE_WRITES = ("/api/profiles/folder", "/api/profiles/save")
 PAGE_WRITES = ("/api/todos/add", "/api/tell", "/api/inbox/answer", "/api/inbox/dismiss", "/api/members/stop",
                "/api/members/respawn", "/api/members/attach")
@@ -3748,8 +3805,8 @@ def ui_machines():
 def make_ui_handler(cache, token):
     api = {"/api/members": ui_members, "/api/todos": ui_todos, "/api/threads": ui_threads,
            "/api/machines": ui_machines}
-    writes = HISTORY_WRITES + PAGE_WRITES + PROFILE_WRITES + sapi.PAGE_POSTS
-    guarded = ("/api/history", "/api/inbox", "/api/profiles", "/api/sessions", "/api/tools")  # served only on loopback, like the writes
+    writes = PAGE_WRITES + PROFILE_WRITES + sapi.PAGE_POSTS
+    guarded = ("/api/inbox", "/api/profiles", "/api/sessions", "/api/tools")  # served only on loopback, like the writes
     feed = sapi.IndexFeed(cache.ttl)
 
     class Handler(BaseHTTPRequestHandler):
@@ -3862,10 +3919,8 @@ def make_ui_handler(cache, token):
                     cache.items.clear()
                 elif path in PROFILE_WRITES:
                     code, data = ui_profiles_write(path, body)
-                elif path in sapi.PAGE_POSTS:
-                    code, data = sapi.post(path, body, feed)
                 else:
-                    code, data = ui_history_write(path, body)
+                    code, data = sapi.post(path, body, feed)
             except Exception as e:
                 code, data = 500, {"error": str(e)}
             self.send_json(code, data)
@@ -3896,7 +3951,7 @@ def make_ui_handler(cache, token):
                         except ValueError as e:
                             return self.send_json(400, {"error": str(e)})
                         return self.send_json(200, feed.get(query, query.pop("fresh")))
-                    data = ui_history() if path == "/api/history" else cache.get(path, ui_inbox)
+                    data = cache.get(path, ui_inbox)
                     return self.send_json(200, data)
                 except Exception as e:
                     return self.send_json(500, {"error": str(e)})
@@ -4058,20 +4113,19 @@ def main(argv=None):
     sub.add_parser("_threads").add_argument("limit", type=int, nargs="?", default=30)
     sub.add_parser("_deliver"); sub.add_parser("_answer"); sub.add_parser("_thread").add_argument("thread")
     sub.add_parser("statusline", help="one JSON line for a status line").add_argument("session_id")
-    sub.add_parser("hook-join"); sub.add_parser("hook-leave"); sub.add_parser("hook-record"); sub.add_parser("hook-name")
-    h = sub.add_parser("history", help="every session this machine has run").add_subparsers(dest="history_cmd", required=True)
+    sub.add_parser("hook-join"); sub.add_parser("hook-leave"); sub.add_parser("hook-name")
+    s = sub.add_parser("_rename-here"); s.add_argument("sid"); s.add_argument("name", nargs="+")
+    h = sub.add_parser("history", help="this machine's sessions in the session index").add_subparsers(dest="history_cmd", required=True)
     s = h.add_parser("ls", help="list sessions, newest first")
     s.add_argument("--folder"); s.add_argument("--json", action="store_true")
     s = h.add_parser("show"); s.add_argument("id"); s.add_argument("--json", action="store_true")
     s = h.add_parser("rename"); s.add_argument("id"); s.add_argument("name", nargs="*")
-    h.add_parser("delete", help="remove the row (never the transcript)").add_argument("id")
+    h.add_parser("delete", help="remove an ended session from the session index (never the transcript)").add_argument("id")
     h.add_parser("resume", help="print the command that resumes it").add_argument("id")
     s = h.add_parser("ask", help="answer a question from one transcript"); s.add_argument("id"); s.add_argument("question", nargs="+")
     s = h.add_parser("describe", help="describe sessions that have no description (headless calls)")
     s.add_argument("--limit", type=int, default=hist.DESCRIBE_LIMIT); s.add_argument("--folder", help="only sessions under this folder")
     s = h.add_parser("search", help="find a session by meaning"); s.add_argument("query", nargs="+"); s.add_argument("--json", action="store_true")
-    s = h.add_parser("import", help="copy conversations from another store"); s.add_argument("path")
-    s.add_argument("--descriptions", help="a store with a digests table, when it is not the same file")
     s = sub.add_parser("sessions", help="every session on every machine with its live state; `open KEY` says how to land in one")
     s.add_argument("what", nargs="?", choices=["open", "observe"]); s.add_argument("key", nargs="?")
     s.add_argument("--to", help="open: where it should land, a machine or phone:<host> (default: the key's machine)")
@@ -4134,8 +4188,8 @@ def main(argv=None):
         elif a.cmd == "_thread": cmd_thread(a.thread)
         elif a.cmd == "hook-join": return hook_join()
         elif a.cmd == "hook-leave": return hook_leave()
-        elif a.cmd == "hook-record": return hook_record()
         elif a.cmd == "hook-name": return hook_name()
+        elif a.cmd == "_rename-here": rename_here(a.sid, " ".join(a.name))
         elif a.cmd == "history":
             c = a.history_cmd
             if c == "ls": history_ls(a.folder, a.json)
@@ -4146,7 +4200,6 @@ def main(argv=None):
             elif c == "ask": history_ask(a.id, " ".join(a.question))
             elif c == "describe": history_describe(a.limit, a.folder)
             elif c == "search": history_search(" ".join(a.query), a.json)
-            elif c == "import": history_import(a.path, a.descriptions)
         elif a.cmd == "sessions": return sessions_cmd(a)
         elif a.cmd == "_open-window": open_window(a.key)
         elif a.cmd == "_force-stop": force_stop(a.key)

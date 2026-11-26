@@ -118,7 +118,7 @@ def test_join_with_a_name_becomes_the_claude_name(world):
 
 def test_history_rename_of_a_session_not_running_writes_claude_s_title_records(world):
     a, b = world.session("alpha", transcript=True), world.session("beta", transcript=True)
-    b.record_start()
+    assert b.record("SessionStart").returncode == 0  # the recorder hook puts it in the session index
     b.die()
     code, out, err = world.run(a, "history", "rename", b.sid, "bike bag")
     assert code == 0 and out.strip() == "%s is now bike bag" % b.sid[:8], err

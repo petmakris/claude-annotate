@@ -13,7 +13,7 @@ import urllib.request
 
 import pytest
 
-from fleet_testkit import fleet, world  # noqa: F401
+from fleet_testkit import cache_row, fleet, world  # noqa: F401
 import fleet_profiles as prof
 
 MCP_STUB = """#!%s
@@ -92,12 +92,11 @@ class PW:
             os.makedirs(d, exist_ok=True)
         write(os.path.join(self.home, "projects", "group", ".claude-launch"),
               prof.format_launch("bare", "~/projects/env-repo/claude/profiles/bare.args"))
-        con = fleet.db()
         rows = [("s1", self.app, 100), ("s2", self.app, 300), ("s3", self.lib, 200),
                 ("s4", os.path.join(self.home, "gone"), 400), ("s5", "/tmp", 500)]
-        for sid, cwd, t in rows:
-            con.execute("INSERT INTO conversations(session_id, cwd, started_at, last_seen_at) VALUES (?,?,?,?)",
-                        (sid, cwd, t - 50, t))
+        for sid, cwd, t in rows:  # this machine's sessions, as its cache of the session index holds them
+            cache_row(os.environ["FLEET_HOME"], sid, cwd, t - 50, t)
+        cache_row(os.environ["FLEET_HOME"], "s6", self.lib, 900, 1000, machine="elsewhere")  # not this machine's
         # the stub claude
         self.stub = os.path.join(world.base, "mcpstub")
         os.makedirs(self.stub)

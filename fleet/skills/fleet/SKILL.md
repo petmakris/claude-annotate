@@ -57,12 +57,11 @@ A session has one name: its Claude Code name is its fleet name. A hook on every 
 | `notify "<text>"` | Tell the user something. Stored in his inbox. See "Telling the user". |
 | `inbox [--json] [--all]` | The user's inbox on every machine. An item on another machine is `12@machine`. With `lungo.json` in the fleet's folder it also lists what Lungo (the job runner) says waits on him, read live, as `lungo:<machine>/<job>#<item id>`: act on those in Lungo, never with `answer` or `dismiss`. When Lungo cannot be read it says so; it never shows that as nothing to do. |
 | `answer <id> "..." --as petros` / `dismiss <id> --as petros` | Answer or clear an inbox item, as the user. Only from a session outside the fleet. |
-| `history ls [--folder F] [--json]` / `show <id>` / `resume <id>` | Every session this machine has run (recorded by a hook, joined or not), newest first; one session's details; the command that resumes it. An id may be a prefix. |
-| `history rename <id> "<name>"` / `delete <id>` | Rename a session: its Claude name and fleet name too (a running one takes it at its next prompt); remove its row (never its transcript). |
+| `history ls [--folder F] [--json]` / `show <id>` / `resume <id>` | This machine's sessions in the session index (every session the recorder hook saw, joined or not), newest first; one session's details; the command that resumes it. An id may be a prefix. |
+| `history rename <id> "<name>"` / `delete <id>` | Rename a session in the index: its Claude name and fleet name too (a running one takes it at its next prompt); remove an ended session from the index (never its transcript). |
 | `history ask <id> "<question>"` | Answer a question from that session's transcript, with one headless call. |
-| `history describe [--limit N] [--folder F]` | Write a short description for sessions that have none (one headless call each, paced; on request only). |
-| `history search "<words>"` | Find a session by meaning over the descriptions. |
-| `history import <db> [--descriptions <db>]` | Copy the conversations (and descriptions) of an older store, once; a second run adds nothing. |
+| `history describe [--limit N] [--folder F]` | Write a short description into the index for this machine's ended or quiet sessions that have none (one headless call each, paced; on request only). |
+| `history search "<words>"` | Find one of this machine's sessions by meaning over the descriptions. |
 | `sessions [--kind chat\|job\|worker\|all] [--named] [--since 14d] [--limit N] [--machine M] [--json]` | Every session on every machine, one row per session, from the session index on the hub (`docs/session-index.md`), with what each is doing read now and where it runs (tmux, window, bg, none). Dev-sandbox rows and superseded sids are left out. When the hub does not answer it shows the last list and says so. `--local` shows this machine's own facts only. |
 | `sessions open <machine:id> [--to <machine\|phone:prod>] [--json]` | The plan for landing in a session, as data: attach, resume, take then resume (it is owned elsewhere, such as by the phone), wrap up then resume, or why not. A superseded id resolves to the newest one of its chain. `@claude pick` runs the plan; this never runs anything itself. |
 | `sessions observe --json` | What this machine's sessions are doing now, for the hub's list. |

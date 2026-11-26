@@ -14,6 +14,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
+import fleet_history as hist  # noqa: E402
 import fleet_index_cache as cache  # noqa: E402
 import fleet_index_journal as journal  # noqa: E402
 import fleet_index_parse as parse  # noqa: E402
@@ -47,6 +48,43 @@ def log(fleet_home, text):
             f.write("%s index-hook: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), text))
     except OSError:
         pass
+
+
+UNREADABLE = "unreadable.json"  # {sid: reason} under $FLEET_HOME/index: transcripts the parser could not read
+
+
+def unreadable(fleet_home):
+    """{sid: reason} of this machine's transcripts that hold data but nothing the parser can use."""
+    try:
+        with open(os.path.join(fleet_home, "index", UNREADABLE)) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def note_readable(fleet_home, sid, transcript):
+    """Check a transcript at stop and end. One that cannot be read is logged to hooks.log and kept in
+    unreadable.json, so the lists warn: a changed transcript format must never pass as sessions with no words."""
+    reason = hist.unreadable_reason(transcript)
+    if reason:
+        log(fleet_home, reason)
+    have = unreadable(fleet_home)
+    if have.get(sid) == reason:
+        return reason
+    if reason:
+        have[sid] = reason
+    else:
+        have.pop(sid, None)
+    d = os.path.join(fleet_home, "index")
+    os.makedirs(d, mode=0o700, exist_ok=True)
+    path = os.path.join(d, UNREADABLE)
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump(have, f)
+    os.replace(tmp, path)
+    return reason
 
 
 def entry_for(hook, *, environ, fleet_home, machine, rules, now=None):
@@ -128,6 +166,9 @@ def record(hook, *, environ=None, fleet_home=None, now=None):
             return 0
         journal.append(fleet_home, machine, e["sid"], e["event"], e["fields"], epoch_seen=e["epoch_seen"], at=now)
         flush_detached(fleet_home, environ)
+        transcript = hook.get("transcript_path") or parse.find_transcript(e["sid"])
+        if e["event"] in ("stop", "end") and transcript and os.path.isfile(transcript):
+            note_readable(fleet_home, e["sid"], transcript)
     except BaseException as ex:  # noqa: B902 - a recording problem may cost an entry, never a session
         log(fleet_home, "%s: %s" % (type(ex).__name__, ex))
     return 0

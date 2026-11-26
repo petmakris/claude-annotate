@@ -1,7 +1,6 @@
 """The transcript format is Claude Code's and undocumented. `fixtures/transcript_structure.jsonl` is the record
 structure of a real transcript with every value replaced by a placeholder; when an update changes the format,
 the parser must say so instead of quietly finding nothing."""
-import io
 import json
 import os
 import re
@@ -10,6 +9,7 @@ import pytest
 
 from fleet_testkit import ROOT, fleet, world  # noqa: F401
 import fleet_history as hist
+import fleet_index_hook as idxhook
 
 FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "transcript_structure.jsonl")
 SAFE = [re.compile(p) for p in (
@@ -83,17 +83,22 @@ def test_a_file_that_is_not_json_lines_is_reported_and_an_empty_or_tiny_one_is_n
 
 
 def hook(world, monkeypatch, event, sid, path):
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(
-        {"hook_event_name": event, "session_id": sid, "cwd": "/work/x", "transcript_path": path})))
-    world.capsys.readouterr()
-    return fleet.main(["hook-record"])
+    """The recorder hook (fleet_index_hook) on one event, its journal sent to the hub at once."""
+    env = dict(os.environ, FLEET_INDEX_FOREGROUND="1")
+    env.pop("CLAUDE_DETACH_NAME", None)
+    return idxhook.record({"hook_event_name": event, "session_id": sid, "cwd": "/work/x", "transcript_path": path},
+                          environ=env)
+
+
+def unreadable(world):
+    return idxhook.unreadable(world.here.home)
 
 
 def test_an_unreadable_transcript_is_logged_to_hooks_log_and_warned_about_in_history_ls(world, monkeypatch):
     path = write(world, rename_key(records(), "type", "kind"))
     assert hook(world, monkeypatch, "Stop", "sid-bad", path) == 0  # the hook never fails a session
     log = open(os.path.join(world.here.home, "hooks.log")).read()
-    assert "hook-record: HistoryError: cannot read %s" % path in log and "Has the transcript format changed?" in log
+    assert "index-hook: cannot read %s" % path in log and "Has the transcript format changed?" in log
     good = write(world, records(), "good.jsonl")
     assert hook(world, monkeypatch, "Stop", "sid-good", good) == 0
     world.capsys.readouterr()
@@ -101,9 +106,10 @@ def test_an_unreadable_transcript_is_logged_to_hooks_log_and_warned_about_in_his
     out = world.capsys.readouterr()
     assert len(json.loads(out.out)) == 2  # stdout stays clean JSON
     assert "warning: 1 transcript could not be read: has the transcript format changed?" in out.err
-    assert fleet.db().execute("SELECT unreadable FROM conversations WHERE session_id='sid-bad'").fetchone()[0] == 1
-    assert hist.unreadable_count(fleet.db()) == 1
-    assert fleet.ui_history()["counts"]["unreadable"] == 1
+    assert list(unreadable(world)) == ["sid-bad"]
+    world.capsys.readouterr()
+    assert fleet.main(["sessions", "--local", "--json"]) == 0
+    assert json.loads(world.capsys.readouterr().out)["machines"][fleet.self_machine()]["unreadable"] == 1
 
 
 def test_a_readable_transcript_raises_no_warning_and_a_later_good_read_clears_it(world, monkeypatch):
@@ -114,7 +120,7 @@ def test_a_readable_transcript_raises_no_warning_and_a_later_good_read_clears_it
     assert "could not be read" not in world.capsys.readouterr().err
     write(world, rename_key(records(), "type", "kind"))
     hook(world, monkeypatch, "Stop", "sid-ok", path)
-    assert hist.unreadable_count(fleet.db()) == 1
+    assert list(unreadable(world)) == ["sid-ok"]
     write(world, records())
     hook(world, monkeypatch, "Stop", "sid-ok", path)
-    assert hist.unreadable_count(fleet.db()) == 0
+    assert unreadable(world) == {}

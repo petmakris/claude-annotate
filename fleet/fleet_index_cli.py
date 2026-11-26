@@ -537,17 +537,18 @@ def cmd_flush(a):
     return 0
 
 
-def _fleet_history(machine, args, timeout=60):
-    """`fleet history <args>` on a machine; returns its stdout. Raises Unreachable."""
+def _rename_here(machine, sid, name, timeout=30):
+    """The rest of a rename, on the session's own machine: its fleet name and Claude Code's title (fleet.py
+    `_rename-here`). Raises Unreachable."""
     import fleet
     if _local(machine):
-        r = subprocess.run([sys.executable, os.path.join(HERE, "fleet.py"), "history"] + args, capture_output=True,
-                           text=True, timeout=timeout)
+        r = subprocess.run([sys.executable, os.path.join(HERE, "fleet.py"), "_rename-here", "--", sid] + name,
+                           capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
         if r.returncode != 0:
             raise Unreachable((r.stderr or r.stdout).strip()[:300] or "exit %d" % r.returncode)
         return r.stdout
     try:
-        return fleet.run_remote(machine, ["history"] + args, timeout=timeout)
+        return fleet.run_remote(machine, ["_rename-here", "--", sid] + name, timeout=timeout)
     except fleet.RemoteError as e:
         raise Unreachable(str(e))
 
@@ -561,10 +562,12 @@ def cmd_rename(a):
     if reply.get("ok") is False:
         return _refusal(reply)
     row = reply["row"]
-    try:
-        _fleet_history(row["machine"], ["rename", a.sid] + a.name, timeout=30)
-    except (Unreachable, subprocess.SubprocessError, OSError) as e:
-        journal_log(None, "rename %s: the history on %s was not renamed (%s)" % (a.sid, row["machine"], e))
+    if a.name and not str(row.get("owner") or "").startswith("phone:"):
+        try:
+            _rename_here(row["machine"], row["sid"], a.name)
+        except (Unreachable, subprocess.SubprocessError, OSError) as e:
+            journal_log(None, "rename %s: the fleet name and title on %s were not changed (%s)"
+                        % (a.sid, row["machine"], e))
     _out(row)
     return 0
 
@@ -576,13 +579,25 @@ def cmd_delete(a):
         return _hub_down(False)
     if reply.get("ok") is False:
         return _refusal(reply)
-    for sid in reply.get("deleted") or []:
-        try:
-            _fleet_history(reply.get("machine") or "self", ["delete", sid], timeout=30)
-        except (Unreachable, subprocess.SubprocessError, OSError):
-            pass
     _out(reply)
     return 0
+
+
+def _on_row_machine(a, verb, args, timeout=240):
+    """Run `verb` on the machine of the row of `a.sid` when that is not this one. -> (row, exit code or None when
+    the work is this machine's)."""
+    row = _row_anywhere(a.sid)
+    machine = (row or {}).get("machine") or "self"
+    if _local(machine):
+        return row, None
+    try:
+        code, out, err = run_on(machine, [verb, "--", a.sid] + args, timeout=timeout)
+    except Unreachable as e:
+        sys.stderr.write("%s does not answer (%s)\n" % (machine, e))
+        return row, 3
+    sys.stdout.write(out)
+    sys.stderr.write(err)
+    return row, code
 
 
 def cmd_describe(a):
@@ -590,22 +605,14 @@ def cmd_describe(a):
     if row and row.get("work"):
         sys.stderr.write("session %s is a work session: it is never described\n" % a.sid)
         return 2
-    machine = (row or {}).get("machine") or "self"
-    if not _local(machine):
-        try:
-            code, out, err = run_on(machine, ["describe", a.sid], timeout=240)
-        except Unreachable as e:
-            sys.stderr.write("%s does not answer (%s)\n" % (machine, e))
-            return 3
-        sys.stdout.write(out)
-        sys.stderr.write(err)
+    row, code = _on_row_machine(a, "describe", [])
+    if code is not None:
         return code
-    import fleet
     import fleet_history as hist
     try:
-        text = hist.describe_one(fleet.db(), a.sid)
+        text = hist.describe_transcript(parse.find_transcript(a.sid), (row or {}).get("cwd"))
     except hist.HistoryError as e:
-        sys.stderr.write("%s\n" % e)
+        sys.stderr.write("%s: %s\n" % (a.sid, e))
         return 2
     entry = journal.append(_home(), self_name(), a.sid, "describe", {"description": store.cut(text, 2000)})
     flush_now()
@@ -614,14 +621,16 @@ def cmd_describe(a):
 
 
 def cmd_ask(a):
-    row = _row_anywhere(a.sid)
-    machine = (row or {}).get("machine") or "self"
+    row, code = _on_row_machine(a, "ask", a.question)
+    if code is not None:
+        return code
+    import fleet_history as hist
     try:
-        out = _fleet_history(machine, ["ask", a.sid] + a.question, timeout=240)
-    except (Unreachable, subprocess.SubprocessError, OSError) as e:
-        sys.stderr.write("%s\n" % e)
+        text = hist.ask_transcript(parse.find_transcript(a.sid), (row or {}).get("cwd"), " ".join(a.question))
+    except hist.HistoryError as e:
+        sys.stderr.write("%s: %s\n" % (a.sid, e))
         return 2
-    sys.stdout.write(out)
+    sys.stdout.write(text + "\n")
     return 0
 
 

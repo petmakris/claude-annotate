@@ -50,6 +50,11 @@ def _cache():
     return fleet_index_cache
 
 
+def _parse():
+    import fleet_index_parse
+    return fleet_index_parse
+
+
 def index_dir():
     d = os.path.join(_fleet().private_home(), "index")
     os.makedirs(d, mode=0o700, exist_ok=True)
@@ -187,15 +192,13 @@ def observe_local():
         raise f.FleetError("fleet: `claude agents --json` does not answer on %s." % f.self_machine())
     panes, _ = f.tmux_panes()
     parents = f.process_parents() if panes else {}
-    transcripts = {r["session_id"]: r["transcript_path"] or ""
-                   for r in f.db().execute("SELECT session_id, transcript_path FROM conversations")}
     is_work, rows = _work_test(), {}
     for sid, entry in f.fs.agent_index(agents).items():
         pid = entry.get("pid")
         if entry.get("kind") != "background" and not (pid and f.pid_running(pid)):
             continue
         where, tmux = f.fs.where_of(entry, True, panes, parents)
-        if tmux and is_work(sid, entry.get("cwd"), transcripts.get(sid, "")):
+        if tmux and is_work(sid, entry.get("cwd"), _parse().find_transcript(sid) or ""):
             tmux = None
         state = str(entry.get("status") or entry.get("state") or "") or "unknown"
         rows[sid] = {"live": True, "state": state[:64], "where": where, "tmux": tmux,
@@ -547,25 +550,9 @@ def describe(row):
 
 
 def search(query_text, rows):
-    """Search by meaning over the descriptions the index holds: the history's one search, given the index's rows."""
-    mem = sqlite3.connect(":memory:")
-    mem.row_factory = sqlite3.Row
-    mem.executescript(hist.SCHEMA)
-    have = {r["name"] for r in mem.execute("PRAGMA table_info(conversations)")}
-    if "unreadable" not in have:
-        mem.execute("ALTER TABLE conversations ADD COLUMN unreadable INTEGER")
-    keys = {}
-    for r in rows:
-        keys[r["sid"]] = r["key"]
-        mem.execute("INSERT INTO conversations (session_id, cwd, manual_name, first_prompt, description, started_at,"
-                    " last_seen_at) VALUES (?,?,?,?,?,?,?)",
-                    (r["sid"], r.get("cwd"), r.get("name") or None, r.get("first_prompt"), r.get("description"),
-                     r.get("started"), r.get("updated")))
-    try:
-        res = hist.search(mem, query_text)
-    finally:
-        mem.close()
-    return {"hits": [{"key": keys[h["id"]], "why": h["why"]} for h in res["hits"]],
+    """Search by meaning over the descriptions the index holds."""
+    res = hist.search(query_text, rows)
+    return {"hits": [{"key": h["row"]["key"], "why": h["why"]} for h in res["hits"]],
             "described": res["described"], "total": res["total"]}
 
 

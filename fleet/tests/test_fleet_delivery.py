@@ -22,7 +22,6 @@ def pair(world, writes=True):
     a = world.session("alpha")
     b = world.session("beta", transcript=True)
     b.writes = writes
-    b.record_start()
     assert world.member(a)[0] == 0 and world.member(b)[0] == 0
     return a, b
 
@@ -76,7 +75,7 @@ def test_a_member_with_no_known_transcript_is_delivered_but_not_checked(world):
     assert row(world, mid)["delivery"] == "delivered"
 
 
-def test_join_takes_the_transcript_path_from_the_history_row_or_the_hook_input(world):
+def test_join_takes_the_transcript_path_from_claude_code_s_folder_or_the_hook_input(world):
     a, b = pair(world)
     world.here_env()
     assert fleet.db().execute("SELECT transcript_path FROM members WHERE name='beta'").fetchone()[0] == b.transcript
@@ -176,7 +175,6 @@ def test_the_follow_up_is_started_detached_so_the_sender_returns_at_once(world, 
 def test_across_machines_the_target_machine_confirms_and_says_so(world):
     a, b, bee = duo(world)
     c = bee.session("gamma", transcript=True)
-    c.record_start()
     assert world.member(c)[0] == 0
     world.here_env()
     code, out, err = world.run(a, "tell", "gamma@bee", "hello")
@@ -263,14 +261,16 @@ def test_spawn_says_so_when_the_started_session_is_never_listed(world):
 
 @pytest.fixture
 def canary_world(world, monkeypatch):
-    """`claude --bg` starts nothing real: the wrapper gives the scratch session a fake process, joins it as the
-    plugin's hook would, and records its transcript."""
+    """`claude --bg` starts nothing real: the wrapper gives the scratch session a fake process and a transcript,
+    records it in the session index and joins it as the plugin's hooks would. When it leaves `claude agents
+    --json`, its SessionEnd is recorded (`ends`: at once, or after that many seconds)."""
     monkeypatch.setenv("FLEET_CANARY_DIR", os.path.join(world.base, "canary"))
     monkeypatch.setenv("FLEET_CANARY_JOIN_WAIT", "2")
     monkeypatch.setenv("FLEET_CONFIRM_WINDOW", "0.3")
     monkeypatch.setenv("FLEET_FALLBACK_WINDOW", "0.3")
-    state = {"session": None, "joins": True, "writes": True}
+    state = {"session": None, "joins": True, "writes": True, "ends": 0, "ended": False}
     real = fleet.start_background
+    real_listed = fleet.listed
 
     def start(args, cwd, name, prompt=None):
         assert os.path.isdir(cwd) and os.path.dirname(cwd) == os.path.join(world.base, "canary")
@@ -279,11 +279,21 @@ def canary_world(world, monkeypatch):
         if state["joins"]:
             s = world.session(name, transcript=True)
             s.writes = state["writes"]
-            s.record_start()
+            assert s.record("SessionStart").returncode == 0 and s.index_row()["ended"] is None
             assert world.member(s, name)[0] == 0
             state["session"] = s
         return out
+
+    def listed(name, sid):
+        got = real_listed(name, sid)
+        s = state["session"]
+        if got is False and s and not state["ended"]:
+            state["ended"] = True
+            end = lambda: s.record("SessionEnd", reason="other")  # noqa: E731
+            threading.Timer(state["ends"], end).start() if state["ends"] else end()
+        return got
     monkeypatch.setattr(fleet, "start_background", start)
+    monkeypatch.setattr(fleet, "listed", listed)
     world.canary = state
     return world
 
@@ -314,7 +324,7 @@ def test_canary_passes_when_the_message_is_confirmed_and_leaves_nothing_behind(c
     w.here_env()
     con = fleet.db()
     assert con.execute("SELECT COUNT(*) FROM members WHERE session_id=?", (s.sid,)).fetchone()[0] == 0  # the row is gone
-    assert con.execute("SELECT COUNT(*) FROM conversations WHERE session_id=?", (s.sid,)).fetchone()[0] == 0
+    assert s.index_row() is None  # and its row of the session index
     assert inbox_notes(w) == []
     [spawn_call] = [c for c in calls(w) if "--bg" in c["argv"]]
     assert "--model" in spawn_call["argv"] and spawn_call["argv"][spawn_call["argv"].index("-n") + 1].startswith("fleet-canary-")
@@ -417,28 +427,28 @@ def test_canary_cleans_up_a_session_that_was_started_but_whose_id_was_never_repo
     w.here_env()
     con = fleet.db()
     assert con.execute("SELECT COUNT(*) FROM members").fetchone()[0] == 0
-    assert con.execute("SELECT COUNT(*) FROM conversations WHERE session_id=?", (s.sid,)).fetchone()[0] == 0
+    assert s.index_row() is None
     assert os.listdir(os.path.join(w.base, "canary")) == []
 
 
-def test_canary_deletes_the_history_row_only_after_the_session_has_ended(canary_world):
+def test_canary_deletes_its_index_row_once_the_session_end_reaches_the_hub(canary_world):
     w = canary_world
-    real = fleet.listed
-    state = {"calls": 0}
+    w.canary["ends"] = 0.8  # the SessionEnd entry arrives after the session has left the agents list
+    refused = []
+    real = fleet.sapi.index_verb
 
-    def listed_once_more(name, sid):
-        state["calls"] += 1
-        if state["calls"] == 1:  # the stopping session's SessionEnd hook writes its history row again
-            w.canary["session"].record_start()
-            return True
-        return real(name, sid)
-    w.mp.setattr(fleet, "listed", listed_once_more)
+    def index_verb(verb, sid, *text):
+        try:
+            return real(verb, sid, *text)
+        except fleet.FleetError as e:
+            refused.append(str(e))
+            raise
+    w.mp.setattr(fleet.sapi, "index_verb", index_verb)
     code, out, err = run_canary(w)
     assert code == 0, (out, err)
     s = w.canary["session"]
-    w.here_env()
-    assert state["calls"] >= 2
-    assert fleet.db().execute("SELECT COUNT(*) FROM conversations WHERE session_id=?", (s.sid,)).fetchone()[0] == 0
+    assert refused and all("has not ended" in r for r in refused)  # the hub deletes only an ended session
+    assert s.index_row() is None
 
 
 def test_canary_reports_a_session_that_never_leaves_the_agents_list(canary_world):

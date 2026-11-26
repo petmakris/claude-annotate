@@ -1,6 +1,7 @@
-"""Session history: the recording hook, names, import, the history verbs with a stub `claude`, and the page's
-write surface. Every session, transcript and old store here is made up."""
-import hashlib
+"""`fleet history`: this machine's sessions as the session index holds them, written by the one recorder hook, and
+the history verbs with a stub `claude`; and the page's write guards. Every session and transcript here is made up.
+The per-machine `conversations` table is no source any more (phase 3): no test writes or reads it but to prove
+that."""
 import json
 import os
 import sqlite3
@@ -13,9 +14,8 @@ import urllib.request
 
 import pytest
 
-from fleet_testkit import fleet, world, ROOT  # noqa: F401
+from fleet_testkit import fleet, index_row, world, ROOT  # noqa: F401
 import fleet_history as hist
-
 STUB = """#!%s
 import json, os, sys
 prompt = sys.stdin.read()
@@ -56,8 +56,11 @@ def stub(world):
 
 
 def transcript(world, name, prompts=("Plan the billing export", "Now write the job"), names=(), cwd=None):
-    """A made-up transcript file; `names` are (record type, key, value) in order."""
-    path = os.path.join(world.base, name + ".jsonl")
+    """A made-up transcript where Claude Code keeps them ($CLAUDE_CONFIG_DIR/projects/<folder>/<name>.jsonl), so
+    the verbs that read it on this machine find it by the session id; `names` are (record type, key, value)."""
+    folder = os.path.join(os.environ["CLAUDE_CONFIG_DIR"], "projects", "-work")
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, name + ".jsonl")
     recs = []
     for i, p in enumerate(prompts):
         recs.append({"type": "user", "message": {"role": "user", "content": p}, "cwd": cwd})
@@ -80,13 +83,30 @@ def hook_payload(event, sid, cwd, path, reason=None):
 
 
 def run_hook(world, payload, extra=None):
-    env = dict(os.environ, FLEET_INDEX_FOREGROUND="1", **(extra or {}))  # no detached flush outlives the test
+    env = dict(os.environ)
+    for k in ("FLEET_NO_RECORD", "CLAUDE_DETACH_NAME", "FLEET_RC_NAME"):  # a made-up chat, not this job's session
+        env.pop(k, None)
+    env.update(FLEET_INDEX_FOREGROUND="1", **(extra or {}))  # no detached flush outlives the test
     return subprocess.run(["sh", os.path.join(ROOT, "hooks", "record.sh")], input=payload, capture_output=True,
                           text=True, env=env, timeout=30)
 
 
-def rows(world):
-    return {r["session_id"]: r for r in world.here.db().execute("SELECT * FROM conversations")}
+def row(world, sid):
+    return index_row(world.here.home, sid)
+
+
+def history_rows(world):
+    """Rows of the old per-machine table, which nothing may write any more (read only: no store is made)."""
+    path = os.path.join(world.here.home, "fleet.db")
+    if not os.path.exists(path):
+        return []
+    con = sqlite3.connect("file:%s?mode=ro" % path, uri=True)
+    try:
+        return con.execute("SELECT * FROM conversations").fetchall()
+    except sqlite3.OperationalError:  # a store with no such table
+        return []
+    finally:
+        con.close()
 
 
 def cli(world, *argv):
@@ -98,18 +118,34 @@ def cli(world, *argv):
 
 # ---------------------------------------------------------------- the hook
 
-def test_hook_records_every_session_not_only_joined_ones(world):
-    path = transcript(world, "a", names=[("ai-title", "aiTitle", "Billing export plan")])
+def test_a_session_start_writes_an_index_entry_and_no_history_row(world):
+    path = transcript(world, "s-1", names=[("ai-title", "aiTitle", "Billing export plan")])
     r = run_hook(world, hook_payload("SessionStart", "s-1", "/work/shop", path))
     assert (r.returncode, r.stdout) == (0, "")
-    assert rows(world)["s-1"]["cwd"] == "/work/shop" and rows(world)["s-1"]["ended_at"] is None
+    got = row(world, "s-1")
+    assert (got["cwd"], got["machine"], got["ended"]) == ("/work/shop", fleet.self_machine(), None)
+    assert history_rows(world) == []
     run_hook(world, hook_payload("Stop", "s-1", "/work/shop", path))
-    row = rows(world)["s-1"]
-    assert (row["name_ai"], row["first_prompt"], row["transcript_path"]) == ("Billing export plan", "Plan the billing export", path)
+    got = row(world, "s-1")
+    assert (got["name"], got["name_source"], got["first_prompt"]) == ("Billing export plan", "ai", "Plan the billing export")
     run_hook(world, hook_payload("SessionEnd", "s-1", "/work/shop", path, "clear"))
-    row = rows(world)["s-1"]
-    assert row["ended_at"] >= row["started_at"] and row["end_reason"] == "clear"
-    assert world.here.db().execute("SELECT COUNT(*) FROM members").fetchone()[0] == 0  # recording is not joining
+    got = row(world, "s-1")
+    assert got["ended"] >= got["started"] and got["end_reason"] == "clear"
+    assert history_rows(world) == []  # the history table is never written again
+    assert not os.path.exists(os.path.join(world.here.home, "fleet.db"))  # recording opens no fleet store
+
+
+def test_sessions_lists_a_session_that_has_no_history_row(world):
+    sid = "cccc0000-0000-4000-8000-000000000000"
+    path = transcript(world, sid, names=[("custom-title", "customTitle", "export plan")])
+    run_hook(world, hook_payload("SessionStart", sid, "/work/shop", path))
+    run_hook(world, hook_payload("SessionEnd", sid, "/work/shop", path, "other"))
+    assert history_rows(world) == []
+    for argv in (["sessions", "--json", "--kind", "all"], ["sessions", "--local", "--json", "--kind", "all"]):
+        code, out, err = cli(world, *argv)
+        rows = {r["id"]: r for r in json.loads(out)["rows"]}
+        assert code == 0 and sid in rows, (argv, err)
+        assert (rows[sid]["name"], rows[sid]["folder"], rows[sid]["live_on"]) == ("export plan", "/work/shop", []), argv
 
 
 def test_hook_exits_zero_and_prints_nothing_whatever_goes_wrong(world):
@@ -117,7 +153,7 @@ def test_hook_exits_zero_and_prints_nothing_whatever_goes_wrong(world):
                   hook_payload("Stop", "s-2", "/w", "/no/such/transcript.jsonl")):
         r = run_hook(world, stdin)
         assert (r.returncode, r.stdout, r.stderr) == (0, "", "")
-    # a FLEET_HOME that is a file: the store cannot open, still exit 0, nothing printed
+    # a FLEET_HOME that is a file: nothing can be written, still exit 0, nothing printed
     bad = os.path.join(world.base, "afile")
     open(bad, "w").write("x")
     r = run_hook(world, hook_payload("Stop", "s-3", "/w", ""), {"FLEET_HOME": bad})
@@ -126,11 +162,11 @@ def test_hook_exits_zero_and_prints_nothing_whatever_goes_wrong(world):
 
 def test_hook_skips_a_headless_call_of_its_own(world):
     r = run_hook(world, hook_payload("SessionStart", "s-4", "/w", ""), {"FLEET_NO_RECORD": "1"})
-    assert r.returncode == 0 and not os.path.exists(os.path.join(world.here.home, "fleet.db"))
+    assert r.returncode == 0 and not os.path.exists(os.path.join(world.here.home, "index", "journal.jsonl"))
 
 
 def test_hook_is_fast_on_a_big_transcript(world):
-    path = os.path.join(world.base, "big.jsonl")
+    path = transcript(world, "s-5", prompts=())
     line = json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "x" * 2000}]}}) + "\n"
     with open(path, "w") as f:
         f.write(json.dumps({"type": "user", "message": {"content": "first ask"}}) + "\n")
@@ -139,16 +175,16 @@ def test_hook_is_fast_on_a_big_transcript(world):
     run_hook(world, hook_payload("SessionStart", "s-5", "/w", path))
     t = time.time()
     run_hook(world, hook_payload("SessionEnd", "s-5", "/w", path))
-    assert time.time() - t < 1.5  # process start included; the file is read at its two ends only
-    assert (rows(world)["s-5"]["name_custom"], rows(world)["s-5"]["first_prompt"]) == ("late name", "first ask")
+    assert time.time() - t < 2.5  # process start and the hub's write included; the file is read at its two ends only
+    assert (row(world, "s-5")["name"], row(world, "s-5")["first_prompt"]) == ("late name", "first ask")
 
 
 def test_a_resumed_session_is_open_again(world):
     run_hook(world, hook_payload("SessionStart", "s-6", "/w", ""))
     run_hook(world, hook_payload("SessionEnd", "s-6", "/w", "", "logout"))
-    assert rows(world)["s-6"]["ended_at"] is not None
+    assert row(world, "s-6")["ended"] is not None
     run_hook(world, hook_payload("SessionStart", "s-6", "/w", ""))
-    assert (rows(world)["s-6"]["ended_at"], rows(world)["s-6"]["end_reason"]) == (None, None)
+    assert (row(world, "s-6")["ended"], row(world, "s-6")["end_reason"]) == (None, None)
 
 
 # ---------------------------------------------------------------- names
@@ -160,38 +196,33 @@ def test_the_newest_name_wins_and_a_blank_one_is_no_name():
     assert hist.newest_names(recs) == {"name_ai": "ai newest", "name_custom": "newest", "name_agent": "worker"}
 
 
-def test_a_rename_in_the_transcript_beats_the_slug_and_a_history_rename_becomes_the_claude_name(world):
-    path = transcript(world, "n", names=[("ai-title", "aiTitle", "generated"), ("custom-title", "customTitle", "slug-one"),
-                                         ("custom-title", "customTitle", "typed-later")])
+def test_a_history_rename_is_the_index_s_name_and_becomes_the_claude_name(world):
+    path = transcript(world, "s-7", names=[("ai-title", "aiTitle", "generated"), ("custom-title", "customTitle", "slug-one"),
+                                           ("custom-title", "customTitle", "typed-later")])
+    run_hook(world, hook_payload("SessionStart", "s-7", "/w", path))
     run_hook(world, hook_payload("SessionEnd", "s-7", "/w", path, "other"))
-    r = rows(world)["s-7"]
-    assert hist.display_name(r) == "typed-later"
-    code, out, _ = cli(world, "history", "rename", "s-7", "My", "own name")
-    assert code == 0 and hist.display_name(rows(world)["s-7"]) == "My own name"
+    assert row(world, "s-7")["name"] == "typed-later"
+    code, out, err = cli(world, "history", "rename", "s-7", "My", "own name")
+    assert code == 0 and out.strip() == "s-7 is now My own name", err
+    assert (row(world, "s-7")["name"], row(world, "s-7")["name_source"]) == ("My own name", "manual")
     last = json.loads(open(path).read().splitlines()[-1])
     assert last == {"type": "custom-title", "customTitle": "My own name", "sessionId": "s-7"}  # one name: Claude's
     run_hook(world, hook_payload("Stop", "s-7", "/w", path))  # the next turn restates the transcript names
-    assert hist.display_name(rows(world)["s-7"]) == "My own name"
+    assert row(world, "s-7")["name"] == "My own name"
+    assert history_rows(world) == []
 
 
-def test_an_empty_history_rename_clears_only_an_old_manual_label(world):
-    path = transcript(world, "m", names=[("custom-title", "customTitle", "claude-name")])
-    run_hook(world, hook_payload("SessionEnd", "s-9", "/w", path, "other"))
-    con = world.here.db()
-    hist.update(con, "s-9", manual_name="old label")
-    con.commit()
-    assert hist.display_name(rows(world)["s-9"]) == "old label"
+def test_an_empty_history_rename_clears_the_name_the_user_gave(world):
+    path = transcript(world, "s-9", names=[("custom-title", "customTitle", "claude-name")])
+    run_hook(world, hook_payload("SessionStart", "s-9", "/w", path))
+    assert cli(world, "history", "rename", "s-9", "old label")[0] == 0
+    assert row(world, "s-9")["name_source"] == "manual"
+    with open(path, "w") as f:  # the transcript as it was, without the title the rename wrote
+        f.write(json.dumps({"type": "custom-title", "customTitle": "claude-name"}) + "\n")
     assert cli(world, "history", "rename", "s-9", "")[0] == 0
-    assert hist.display_name(rows(world)["s-9"]) == "claude-name"
-
-
-def test_a_name_found_in_the_tail_does_not_erase_an_older_kind(world):
-    path = transcript(world, "t", names=[("custom-title", "customTitle", "kept")])
-    run_hook(world, hook_payload("SessionEnd", "s-8", "/w", path))
-    with open(path, "a") as f:
-        f.write(json.dumps({"type": "ai-title", "aiTitle": "later ai"}) + "\n")
-    run_hook(world, hook_payload("Stop", "s-8", "/w", path))
-    assert hist.display_name(rows(world)["s-8"]) == "kept" and rows(world)["s-8"]["name_ai"] == "later ai"
+    assert (row(world, "s-9")["name"], row(world, "s-9")["name_source"]) == ("", "")
+    run_hook(world, hook_payload("Stop", "s-9", "/w", path))  # the next journal name fills it again
+    assert (row(world, "s-9")["name"], row(world, "s-9")["name_source"]) == ("claude-name", "custom")
 
 
 # ---------------------------------------------------------------- the verbs
@@ -199,9 +230,9 @@ def test_a_name_found_in_the_tail_does_not_erase_an_older_kind(world):
 def seed(world, n=3):
     ids = []
     for i in range(n):
-        path = transcript(world, "q%d" % i, prompts=("Plan the billing export %d" % i, "Now write the job"),
-                          names=[("custom-title", "customTitle", "name-%d" % i)] if i != 1 else [])
         sid = "aaaa000%d-0000-4000-8000-00000000000%d" % (i, i)
+        path = transcript(world, sid, prompts=("Plan the billing export %d" % i, "Now write the job"),
+                          names=[("custom-title", "customTitle", "name-%d" % i)] if i != 1 else [])
         cwd = ("/work/shop" if i < 2 else "/work/blog/posts")
         run_hook(world, hook_payload("SessionStart", sid, cwd, path))
         run_hook(world, hook_payload("SessionEnd", sid, cwd, path, "other"))
@@ -209,12 +240,12 @@ def seed(world, n=3):
     return ids
 
 
-def test_ls_show_folder_and_json(world):
+def test_ls_show_folder_and_json_read_the_index(world):
     seed(world)
     code, out, _ = cli(world, "history", "ls", "--json")
     data = json.loads(out)
     assert code == 0 and len(data) == 3
-    assert {d["name"] for d in data} == {"name-0", "", "name-2"}
+    assert {d["name"] for d in data} == {"name-0", "Plan the billing export 1", "name-2"}  # no title: the first prompt
     assert [d["id"] for d in data if d["folder"] == "/work/blog/posts"] == ["aaaa0002-0000-4000-8000-000000000002"]
     code, out, _ = cli(world, "history", "ls", "--folder", "/work/shop", "--json")
     assert len(json.loads(out)) == 2
@@ -228,21 +259,49 @@ def test_ls_show_folder_and_json(world):
     assert code == 1 and "no session" in err
     code, out, _ = cli(world, "history", "resume", "aaaa0002")
     assert out.strip() == "cd /work/blog/posts && claude --resume aaaa0002-0000-4000-8000-000000000002"
+    assert history_rows(world) == []
 
 
-def test_delete_removes_the_row_and_never_the_transcript(world):
+def test_ls_lists_only_this_machine_s_sessions(world):
+    seed(world, 1)
+    import fleet_index_store as store
+    con = store.connect(store.hub_db_path(world.here.home))
+    try:  # a session of another machine, as its journal would have put it
+        reply = store.apply_batch(con, {"machine": "elsewhere", "entries": [
+            {"v": 1, "machine": "elsewhere", "seq": 1, "as": "elsewhere", "sid": "bbbb0000-0000-4000-8000-000000000000",
+             "epoch_seen": 1, "event": "start", "at": time.time(),
+             "fields": {"name": "theirs", "name_source": "custom", "kind": "chat", "cwd": "/x", "work": False}}]},
+            hub=fleet.self_machine(), machines={fleet.self_machine(), "elsewhere"})
+        assert reply["results"][-1]["outcome"] == "applied", reply
+    finally:
+        con.close()
+    assert index_row(world.here.home, "bbbb0000-0000-4000-8000-000000000000")["machine"] == "elsewhere"
+    code, out, _ = cli(world, "history", "ls", "--json")
+    assert [d["id"] for d in json.loads(out)] == ["aaaa0000-0000-4000-8000-000000000000"]
+
+
+def test_delete_removes_the_index_row_and_never_the_transcript(world):
     (sid, path), *_ = seed(world)
-    code, out, _ = cli(world, "history", "delete", sid[:8])
-    assert code == 0 and sid not in rows(world) and len(rows(world)) == 2
+    code, out, err = cli(world, "history", "delete", sid[:8])
+    assert code == 0 and row(world, sid) is None, err
+    assert len(json.loads(cli(world, "history", "ls", "--json")[1])) == 2
     assert os.path.exists(path)
+
+
+def test_delete_refuses_a_session_that_has_not_ended(world):
+    path = transcript(world, "open-1")
+    run_hook(world, hook_payload("SessionStart", "open-1", "/w", path))
+    code, _, err = cli(world, "history", "delete", "open-1")
+    assert code == 1 and "has not ended" in err and row(world, "open-1") is not None
 
 
 def test_ask_answers_from_the_transcript_with_one_headless_call(world, stub):
     (sid, path), *_ = seed(world)
-    code, out, _ = cli(world, "history", "ask", sid[:8], "what", "was", "built?")
-    assert code == 0 and out.strip() == "ANSWER from transcript: what was built?"
+    code, out, err = cli(world, "history", "ask", sid[:8], "what", "was", "built?")
+    assert code == 0 and out.strip() == "ANSWER from transcript: what was built?", err
     (call,) = stub()
     assert "person: Plan the billing export 0" in call["prompt"] and "claude: Reply to: Now write the job" in call["prompt"]
+    assert "(folder: /work/shop)" in call["prompt"]
     assert "noise" not in call["prompt"] and "meta noise" not in call["prompt"]
     assert call["argv"][:7] == ["-p", "--model", "sonnet", "--no-session-persistence", "--tools", "", "--strict-mcp-config"]  # no tools
     assert (call["no_record"], call["join"]) == ("1", None)
@@ -252,54 +311,38 @@ def test_ask_says_so_when_the_transcript_is_gone_or_claude_fails(world, stub):
     (sid, path), (sid2, _), _ = seed(world)
     os.unlink(path)
     code, _, err = cli(world, "history", "ask", sid[:8], "anything")
-    assert code == 1 and "is gone" in err
+    assert code == 1 and "transcript is not on this machine" in err
     world.mp.setenv("STUB_FAIL", "1")
     code, _, err = cli(world, "history", "ask", sid2[:8], "anything")
     assert code == 1 and "stub failure" in err
 
 
 def test_describe_fills_missing_descriptions_in_a_limited_paced_batch(world, stub):
-    ids = seed(world, 3)
+    seed(world, 3)
     naps = []
     real_sleep = time.sleep
     # subprocess's own wait loop sleeps too, in steps of a few milliseconds: only the pause between calls counts.
     world.mp.setattr(time, "sleep", lambda s: naps.append(s) if s >= 1 else real_sleep(s))
     world.mp.setenv("FLEET_DESCRIBE_PAUSE", "2")
-    code, out, _ = cli(world, "history", "describe", "--limit", "2")
-    assert code == 0 and "described 2, failed 0, 1 still waiting" in out
+    code, out, err = cli(world, "history", "describe", "--limit", "2")
+    assert code == 0 and "described 2, failed 0, 1 still waiting" in out, err
     assert len(stub()) == 2 and naps == [2.0]  # paced between calls, not before the first
-    assert sum(1 for r in rows(world).values() if r["description"]) == 2
-    d = [r["description"] for r in rows(world).values() if r["description"]][0]
-    assert d.startswith("This session was about /work/")
+    rows = json.loads(cli(world, "history", "ls", "--json")[1])
+    assert sum(1 for r in rows if r["description"]) == 2
+    assert [r["description"] for r in rows if r["description"]][0].startswith("This session was about /work/")
     cli(world, "history", "describe")
     assert len(stub()) == 3  # only the missing one
     code, out, _ = cli(world, "history", "describe")
     assert "every session that can be described has a description" in out and len(stub()) == 3
-    # the transcript grew: the description is stale and made again
-    with open(ids[0][1], "a") as f:
-        f.write(json.dumps({"type": "user", "message": {"content": "one more thing"}}) + "\n")
-    cli(world, "history", "describe")
-    assert len(stub()) == 4
+    assert history_rows(world) == []
 
 
-def test_describe_skips_a_live_quiet_gate_and_backs_off_after_a_failure(world, stub):
-    path = transcript(world, "live")
+def test_describe_skips_a_session_that_is_live_and_busy_just_now(world, stub):
+    path = transcript(world, "live-1")
     run_hook(world, hook_payload("SessionStart", "live-1", "/w", path))
     run_hook(world, hook_payload("Stop", "live-1", "/w", path))  # not ended, written just now
-    assert hist.pending(world.here.db()) == []
-    os.utime(path, (time.time() - 3600, time.time() - 3600))
-    assert len(hist.pending(world.here.db())) == 1
-    world.mp.setenv("STUB_FAIL", "1")
-    code, out, err = cli(world, "history", "describe")
-    assert "failed 1" in out and rows(world)["live-1"]["describe_error"]
-    cli(world, "history", "describe")
-    assert len(stub()) == 1  # not retried within the hour
-    world.mp.delenv("STUB_FAIL")
-    update = world.here.db()
-    update.execute("UPDATE conversations SET describe_tried_at=?", (time.time() - 7200,))
-    update.commit()
-    cli(world, "history", "describe")
-    assert rows(world)["live-1"]["description"]
+    code, out, _ = cli(world, "history", "describe")
+    assert "every session that can be described has a description" in out and stub() == []
 
 
 def test_recording_never_calls_a_model(world, stub):
@@ -308,7 +351,7 @@ def test_recording_never_calls_a_model(world, stub):
 
 
 def test_search_reads_every_description_and_keeps_the_valid_matches(world, stub):
-    seed(world)
+    ids = seed(world)
     cli(world, "history", "describe")
     code, out, _ = cli(world, "history", "search", "the", "billing", "thing", "--json")
     res = json.loads(out)
@@ -316,7 +359,7 @@ def test_search_reads_every_description_and_keeps_the_valid_matches(world, stub)
     assert len(res["hits"]) == 1 and res["hits"][0]["why"] == "it is about the billing export"  # 9 unknown, 2 once
     last = stub()[-1]
     assert last["prompt"].count("\n[") == 3 and "They are looking for: the billing thing" in last["prompt"]
-    assert res["hits"][0]["id"] in rows(world)
+    assert res["hits"][0]["id"] in {sid for sid, _ in ids}
     code, _, err = cli(world, "history", "search", "  ")
     assert code == 1
 
@@ -327,71 +370,9 @@ def test_search_with_no_descriptions_makes_no_call(world, stub):
     assert "0 of 3 sessions have a description" in out and stub() == []
 
 
-# ---------------------------------------------------------------- import
-
-def old_store(world, with_digests=False):
-    p = os.path.join(world.base, "old.db")
-    con = sqlite3.connect(p)
-    con.execute("""CREATE TABLE conversations (conversation_id TEXT PRIMARY KEY, cwd TEXT NOT NULL, transcript_path TEXT NOT NULL,
-      title TEXT, started_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, ended_at TEXT, end_reason TEXT, auto_title TEXT,
-      auto_title_source TEXT, first_prompt TEXT, extra TEXT)""")
-    con.executemany("INSERT INTO conversations VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", [
-        ("c-1", "/work/shop", "/t/c-1.jsonl", "Renamed by hand", "2026-01-02T03:04:05Z", "2026-01-02T04:00:00Z", "2026-01-02T04:00:01Z", "other", "gen", "ai", "Start here", "x"),
-        ("c-2", "/work/blog", "/t/c-2.jsonl", None, "2026-02-02T03:04:05Z", "2026-02-02T04:00:00Z", None, None, "typed name", "custom", None, None),
-        ("c-3", "/work/blog", "/t/c-3.jsonl", None, "2026-03-02T03:04:05Z", "2026-03-02T04:00:00Z", None, None, "the opening ask", "prompt", "the opening ask", None),
-    ])
-    if with_digests:
-        con.execute("CREATE TABLE digests (id TEXT PRIMARY KEY, size INTEGER, mtime_ms REAL, digest TEXT, error TEXT, model TEXT, written_at INTEGER)")
-        con.executemany("INSERT INTO digests VALUES (?,?,?,?,?,?,?)", [
-            ("c-1", 100, 1.0, "Planned the shop checkout flow and decided on one page.", None, "m", 1767325200000),
-            ("c-2", 100, 1.0, None, "failed", "m", 1767325200000)])
-    con.commit()
-    con.close()
-    return p
-
-
-def digest(p):
-    return hashlib.sha256(open(p, "rb").read()).hexdigest()
-
-
-def test_import_maps_columns_is_idempotent_and_leaves_the_source_alone(world):
-    p = old_store(world, with_digests=True)
-    before = digest(p)
-    code, out, _ = cli(world, "history", "import", p)
-    assert code == 0 and "read 3, added 3, kept 0, descriptions filled 1" in out and "sessions 0 -> 3" in out
-    r = rows(world)
-    assert (r["c-1"]["manual_name"], r["c-1"]["name_ai"], r["c-1"]["name_custom"]) == ("Renamed by hand", "gen", None)
-    assert hist.display_name(r["c-1"]) == "Renamed by hand" and hist.display_name(r["c-2"]) == "typed name"
-    assert hist.display_name(r["c-3"]) == "" and r["c-3"]["first_prompt"] == "the opening ask"  # a prompt is not a name
-    assert r["c-1"]["started_at"] == 1767323045.0 and r["c-1"]["ended_at"] == 1767326401.0 and r["c-2"]["ended_at"] is None
-    assert (r["c-1"]["description"], r["c-1"]["described_size"], r["c-1"]["described_at"]) == \
-        ("Planned the shop checkout flow and decided on one page.", 100, 1767325200.0)
-    assert r["c-2"]["description"] is None and r["c-1"]["origin"] == "import"
-    code, out, _ = cli(world, "history", "import", p)
-    assert "read 3, added 0, kept 3, descriptions filled 0" in out and "sessions 3 -> 3" in out
-    assert digest(p) == before and not os.path.exists(p + "-wal")
-
-
-def test_import_keeps_what_this_store_already_has_and_takes_a_separate_digests_file(world):
-    p = old_store(world)
-    run_hook(world, hook_payload("SessionStart", "c-1", "/new/place", ""))
-    d = os.path.join(world.base, "digests.db")
-    con = sqlite3.connect(d)
-    con.execute("CREATE TABLE digests (id TEXT PRIMARY KEY, size INTEGER, mtime_ms REAL, digest TEXT, error TEXT, model TEXT, written_at INTEGER)")
-    con.execute("INSERT INTO digests VALUES ('c-2', 5, 1.0, 'Wrote the blog post about tides.', NULL, 'm', 1000)")
-    con.commit(); con.close()
-    code, out, _ = cli(world, "history", "import", p, "--descriptions", d)
-    assert "added 2, kept 1, descriptions filled 1" in out
-    assert rows(world)["c-1"]["cwd"] == "/new/place" and rows(world)["c-2"]["description"] == "Wrote the blog post about tides."
-
-
-def test_import_refuses_what_is_not_a_conversations_store(world):
-    code, _, err = cli(world, "history", "import", os.path.join(world.base, "missing.db"))
-    assert code == 1 and "not a file" in err
-    p = os.path.join(world.base, "other.db")
-    sqlite3.connect(p).execute("CREATE TABLE t(a)").connection.close()
-    code, _, err = cli(world, "history", "import", p)
-    assert code == 1 and "no conversations table" in err
+def test_history_import_is_gone(world):
+    with pytest.raises(SystemExit):
+        fleet.main(["history", "import", os.path.join(world.base, "old.db")])
 
 
 # ---------------------------------------------------------------- the page's write surface
@@ -422,60 +403,68 @@ def page(world, stub):
     srv.server_close()
 
 
-def test_page_lists_history_and_writes_through_the_same_functions(world, page):
+def key(sid):
+    return "%s:%s" % (fleet.self_machine(), sid)
+
+
+def test_the_history_routes_are_gone_and_the_sessions_tab_writes_on_index_rows(world, page):
     ids = seed(world)
-    code, data = page("GET", "/api/history")
-    assert code == 200 and data["counts"] == {"total": 3, "described": 0, "unreadable": 0} and len(data["rows"]) == 3
+    assert page("GET", "/api/history")[0] == 404
+    assert page("POST", "/api/history/rename", {"id": ids[0][0], "name": "x"})[0] == 404
+    code, data = page("GET", "/api/sessions?fresh=1")
+    assert code == 200 and {r["sid"] for r in data["rows"]} == {sid for sid, _ in ids}
     sid = ids[0][0]
-    code, d = page("POST", "/api/history/rename", {"id": sid, "name": "Shop work"})
-    assert code == 200 and d["name"] == "Shop work" and d["renamed"]
-    code, d = page("POST", "/api/history/ask", {"id": sid, "question": "what happened?"})
+    code, d = page("POST", "/api/sessions/rename", {"key": key(sid), "name": "Shop work"})
+    assert code == 200 and row(world, sid)["name"] == "Shop work", d
+    code, d = page("POST", "/api/sessions/ask", {"key": key(sid), "question": "what happened?"})
     assert code == 200 and d["answer"] == "ANSWER from transcript: what happened?"
-    code, d = page("POST", "/api/history/delete", {"id": sid})
-    assert code == 200 and sid not in rows(world) and os.path.exists(ids[0][1])
-    code, d = page("POST", "/api/history/delete", {"id": "nope"})
-    assert code == 404 and "no session" in d["error"]
-    code, d = page("POST", "/api/history/search", {"query": "  "})
+    code, d = page("POST", "/api/sessions/delete", {"key": key(sid)})
+    assert code == 200 and row(world, sid) is None and os.path.exists(ids[0][1])
+    code, d = page("POST", "/api/sessions/delete", {"key": key("aaaa9999-0000-4000-8000-000000000009")})
+    assert code == 400 and "no session" in d["error"]
+    code, d = page("POST", "/api/sessions/search", {"query": "  "})
     assert code == 400
+    assert history_rows(world) == []
 
 
 def test_a_write_must_come_from_the_page_itself(world, page, stub):
     sid = seed(world)[0][0]
-    body = {"id": sid, "name": "hijacked"}
+    body = {"key": key(sid), "name": "hijacked"}
+    w = "/api/sessions/rename"
     refused = [
-        page("POST", "/api/history/rename", body, {"Origin": None}),                          # no Origin: not a browser page
-        page("POST", "/api/history/rename", body, {"Origin": "http://evil.example"}),         # another site
-        page("POST", "/api/history/rename", body, {"Origin": "http://127.0.0.1:1"}),          # same host, another port
-        page("POST", "/api/history/rename", body, {"Sec-Fetch-Site": "cross-site"}),
-        page("POST", "/api/history/rename", body, {"Content-Type": "text/plain"}),            # what a plain cross-site form sends
-        page("POST", "/api/history/rename", body, {"Content-Type": "application/x-www-form-urlencoded"}),
-        page("POST", "/api/history/rename", body, {"Host": "evil.example:80", "Origin": "http://evil.example:80"}),  # DNS rebinding
+        page("POST", w, body, {"Origin": None}),                          # no Origin: not a browser page
+        page("POST", w, body, {"Origin": "http://evil.example"}),         # another site
+        page("POST", w, body, {"Origin": "http://127.0.0.1:1"}),          # same host, another port
+        page("POST", w, body, {"Sec-Fetch-Site": "cross-site"}),
+        page("POST", w, body, {"Content-Type": "text/plain"}),            # what a plain cross-site form sends
+        page("POST", w, body, {"Content-Type": "application/x-www-form-urlencoded"}),
+        page("POST", w, body, {"Host": "evil.example:80", "Origin": "http://evil.example:80"}),  # DNS rebinding
     ]
     assert [c for c, _ in refused] == [403] * 7
-    assert hist.display_name(rows(world)[sid]) == "name-0" and stub() == []
-    code, _ = page("GET", "/api/history", headers={"Host": "evil.example"})
+    assert row(world, sid)["name"] == "name-0" and stub() == []
+    code, _ = page("GET", "/api/sessions", headers={"Host": "evil.example"})
     assert code == 403  # rebinding cannot read it either
-    code, _ = page("POST", "/api/history/rename", body, {"Sec-Fetch-Site": "same-origin"})
-    assert code == 200
+    code, _ = page("POST", w, body, {"Sec-Fetch-Site": "same-origin"})
+    assert code == 200 and row(world, sid)["name"] == "hijacked"
 
 
 def test_a_proxy_name_works_only_when_ui_json_lists_it(world, page):
     seed(world)
     h = {"Host": "fleet.proxy.example"}
-    assert page("GET", "/api/history", headers=h)[0] == 403
+    assert page("GET", "/api/sessions", headers=h)[0] == 403
     with open(os.path.join(world.here.home, "ui.json"), "w") as f:
         json.dump({"hosts": ["fleet.proxy.example"]}, f)
-    assert page("GET", "/api/history", headers=h)[0] == 200
-    assert page("POST", "/api/history/search", {"query": "x"}, {"Host": "fleet.proxy.example", "Origin": "http://fleet.proxy.example"})[0] == 200
+    assert page("GET", "/api/sessions", headers=h)[0] == 200
+    assert page("POST", "/api/sessions/search", {"query": "x"}, {"Host": "fleet.proxy.example", "Origin": "http://fleet.proxy.example"})[0] == 200
 
 
-def test_history_is_not_served_when_the_page_listens_beyond_loopback(world):
+def test_sessions_are_not_served_when_the_page_listens_beyond_loopback(world):
     seed(world)
     srv = fleet.make_ui_server(port=0, host="0.0.0.0", ttl=0)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
         host = "127.0.0.1:%d" % srv.server_address[1]
-        req = urllib.request.Request("http://" + host + "/api/history", headers={"Host": host, "Authorization": "Bearer " + srv.fleet_token})
+        req = urllib.request.Request("http://" + host + "/api/sessions", headers={"Host": host, "Authorization": "Bearer " + srv.fleet_token})
         with pytest.raises(urllib.error.HTTPError) as e:
             urllib.request.urlopen(req, timeout=10)
         assert e.value.code == 403 and b"loopback" in e.value.read()
@@ -489,7 +478,7 @@ def test_a_post_body_over_the_limit_or_not_json_is_refused(world, page):
     seed(world)
     host = page.host
     for data in (b"{not json", b"[]", b"x" * 70000):
-        req = urllib.request.Request("http://%s/api/history/search" % host, data=data, method="POST",
+        req = urllib.request.Request("http://%s/api/sessions/search" % host, data=data, method="POST",
                                      headers={"Host": host, "Origin": "http://" + host, "Content-Type": "application/json",
                                               "Authorization": "Bearer " + page.srv.fleet_token})
         with pytest.raises(urllib.error.HTTPError) as e:

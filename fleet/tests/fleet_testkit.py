@@ -25,6 +25,41 @@ sys.path.insert(0, ROOT)
 import fleet  # noqa: E402
 
 
+def record_hook(fleet_home, event, sid, cwd, transcript=None, **extra):
+    """The recorder hook on one made-up event, in this process, its journal sent to the hub at once."""
+    import fleet_index_hook
+    env = dict(os.environ, FLEET_HOME=fleet_home, FLEET_INDEX_FOREGROUND="1")
+    for k in ("FLEET_NO_RECORD", "CLAUDE_DETACH_NAME", "FLEET_RC_NAME"):
+        env.pop(k, None)
+    hook = dict({"hook_event_name": event, "session_id": sid, "cwd": cwd}, **extra)
+    if transcript:
+        hook["transcript_path"] = transcript
+    return fleet_index_hook.record(hook, environ=env, fleet_home=fleet_home)
+
+
+def cache_row(fleet_home, sid, cwd, started, updated, machine=None, **fields):
+    """A row of this machine's cache of the session index, as its journal would have left it."""
+    import fleet_index_cache
+    row = dict({"sid": sid, "conversation": sid, "owner": machine or fleet.self_machine(), "epoch": 1,
+                "owner_since": started, "name": "", "name_source": "", "kind": "chat", "env": "prod",
+                "machine": machine or fleet.self_machine(), "work": False, "superseded_by": None, "cwd": cwd,
+                "started": started, "updated": updated}, **fields)
+    return fleet_index_cache.write(fleet_home, row, source="local")
+
+
+def index_row(fleet_home, sid):
+    """A row of the session index kept at `fleet_home` (the hub's store), or None."""
+    import fleet_index_store as store
+    path = store.hub_db_path(fleet_home)
+    if not os.path.exists(path):
+        return None
+    con = store.connect(path)
+    try:
+        return store.get_row(con, sid)
+    finally:
+        con.close()
+
+
 class FakeSession:
     def __init__(self, base, name, cwd="/work/x", pid=None, home=None, transcript=False):
         self.name = name
@@ -40,9 +75,11 @@ class FakeSession:
         self.writes = True
         self.reply = b""  # what the socket answers before it closes
         self.transcript = None
-        if transcript:
-            os.makedirs(os.path.join(base, "t"), exist_ok=True)
-            self.transcript = os.path.join(base, "t", "%s.jsonl" % self.sid)
+        if transcript:  # where Claude Code keeps it: $CLAUDE_CONFIG_DIR/projects/<folder>/<sid>.jsonl
+            folder = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(base, "claude"), "projects",
+                                  cwd.replace("/", "-"))
+            os.makedirs(folder, exist_ok=True)
+            self.transcript = os.path.join(folder, "%s.jsonl" % self.sid)
             open(self.transcript, "w").close()
         self.info = {"pid": pid, "sessionId": self.sid, "cwd": cwd, "procStart": "start-%s" % name,
                      "name": name, "messagingSocketPath": self.sock_path, "updatedAt": 1}
@@ -94,18 +131,22 @@ class FakeSession:
         with open(self.transcript, "a") as f:
             f.write(json.dumps({"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": text}]}}) + "\n")
 
-    def record_start(self):
-        """What the recording hook does at SessionStart: note the session and its transcript path."""
-        old = os.environ.get("FLEET_HOME")
-        os.environ["FLEET_HOME"] = self.home
-        try:
-            fleet.hist.record(fleet.db(), {"hook_event_name": "SessionStart", "session_id": self.sid,
-                                           "cwd": self.info["cwd"], "transcript_path": self.transcript})
-        finally:
-            if old is None:
-                os.environ.pop("FLEET_HOME", None)
-            else:
-                os.environ["FLEET_HOME"] = old
+    def record(self, event="SessionStart", **extra):
+        """What the recorder hook (hooks/record.sh) does on `event`: one entry in the journal of this session's
+        machine, sent to the hub at once. -> the hook's CompletedProcess."""
+        hook = {"hook_event_name": event, "session_id": self.sid, "cwd": self.info["cwd"]}
+        if self.transcript:
+            hook["transcript_path"] = self.transcript
+        hook.update(extra)
+        env = dict(os.environ, FLEET_HOME=self.home, FLEET_INDEX_FOREGROUND="1")
+        for k in ("FLEET_NO_RECORD", "CLAUDE_DETACH_NAME", "FLEET_RC_NAME"):
+            env.pop(k, None)
+        return subprocess.run([sys.executable, os.path.join(ROOT, "fleet_index_hook.py")], input=json.dumps(hook),
+                              capture_output=True, text=True, env=env, timeout=60)
+
+    def index_row(self):
+        """This session's row in the session index of its machine's hub (None when it has none)."""
+        return index_row(self.home, self.sid)
 
     def messages(self):
         return [ln for ln in self.lines if ln.get("type") == "user"]
@@ -309,6 +350,10 @@ class World:
         monkeypatch.setenv("FLEET_SHARED_TOKEN_FILE", os.path.join(base, "shared-token"))  # never the owner's
         monkeypatch.setenv("FLEET_SESSIONS_DIR", os.path.join(base, "sessions"))
         monkeypatch.setenv("FLEET_USER_SETTINGS", os.path.join(base, "settings.json"))
+        # a home of its own: Claude Code's folder holds the fake sessions' transcripts, and with no ~/projects/env
+        # the work rule calls nothing work (as under the pre-push hook's empty HOME)
+        monkeypatch.setenv("HOME", os.path.join(base, "userhome"))
+        monkeypatch.setenv("CLAUDE_CONFIG_DIR", os.path.join(base, "userhome", ".claude"))
         monkeypatch.delenv("FLEET_JOIN_NAME", raising=False)
         monkeypatch.delenv("FLEET_RESPAWN", raising=False)
         monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)

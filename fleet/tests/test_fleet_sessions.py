@@ -20,7 +20,7 @@ import uuid
 import pytest
 
 import schema_check
-from fleet_testkit import fleet, world  # noqa: F401
+from fleet_testkit import cache_row, fleet, world  # noqa: F401
 
 import fleet_index_cli as cli  # noqa: E402
 import fleet_index_store as store  # noqa: E402
@@ -136,14 +136,12 @@ class Three:
 
     def seed(self, host, s, cwd, ago, name=None, ai=None, prompt="", transcript="", ended=None, kind=None,
              index=True, hub=None):
-        self.w.mp.setenv("FLEET_HOME", host.home)
-        con = fleet.db()
-        con.execute("INSERT INTO conversations(session_id, cwd, transcript_path, started_at, last_seen_at, ended_at,"
-                    " end_reason, name_custom, name_ai, first_prompt, origin) VALUES (?,?,?,?,?,?,?,?,?,?,'hook')",
-                    (s, cwd, transcript, self.T - 3600 - ago, self.T - ago, ended, "exit" if ended else None,
-                     name, ai, prompt))
-        con.close()
-        self.w.here_env()
+        machine = "here" if host is self.w.here else host.name
+        # the machine's own cache of the index: what its journal left, its work rows whole
+        cache_row(host.home, s, cwd, self.T - 3600 - ago, self.T - ago, machine=machine, name=name or ai or "",
+                  name_source="custom" if name else "ai" if ai else "", first_prompt=prompt, ended=ended,
+                  end_reason="exit" if ended else None, kind=kind or fs.kind_of(name or ai, cwd),
+                  work=cwd.startswith(self.work) or "/.claude-work/" in transcript)
         if not index:
             return
         label = name or ai
@@ -153,7 +151,6 @@ class Three:
             fields.update(name=label, name_source="custom" if name else "ai")
         if fields["work"]:
             fields = fleet_work.mask_fields(fields)
-        machine = "here" if host is self.w.here else host.name
         self.index(machine, s, fields, ago, hub=hub)
         if ended:
             self.index(machine, s, {"work": fields["work"], "end_reason": "exit"}, ago, event="end", hub=hub)
@@ -406,9 +403,7 @@ def test_a_work_account_transcript_is_masked_on_its_own_machine_whatever_its_fol
     t.seed(t.bee, S, "/home/u/projects/plain", 300, name="standup", prompt="what did we ship", transcript=tr,
            index=False)
     t.w.mp.setenv("FLEET_HOME", t.bee.home)
-    con = fleet.db()
-    rows = fs.build_rows("bee", fleet.history_dicts(con), [], [], {}, {}, is_work=fleet.work_rule())
-    con.close()
+    rows = fs.build_rows("bee", fleet.own_index_rows(), [], [], {}, {}, is_work=fleet.work_rule())
     row = fs.mask(rows[0])
     assert (row["masked"], row["folder"], row["about"], row["name"]) == (True, "", "", "standup")
 
@@ -713,11 +708,18 @@ def test_history_and_sessions_into_a_closed_pipe_end_quietly(tmp_path):
     env.pop("FLEET_CLAUDE_BIN", None)
     old = os.environ.get("FLEET_HOME")
     os.environ["FLEET_HOME"] = home
-    try:
-        con = fleet.db()
-        con.executemany("INSERT INTO conversations(session_id, cwd, first_prompt, last_seen_at) VALUES (?,?,?,?)",
-                        [(sid(1000 + i), "/home/u/p", "prompt %d " % i + "x" * 200, i) for i in range(3000)])
+    try:  # 3000 sessions of this machine in the index and in its cache
+        me = fleet.self_machine()
+        con = store.connect(store.hub_db_path(home))
+        reply = store.apply_batch(con, {"machine": me, "entries": [
+            {"v": 1, "machine": me, "seq": i + 1, "as": me, "sid": sid(1000 + i), "epoch_seen": 1, "event": "start",
+             "at": 1000.0 + i, "fields": {"cwd": "/home/u/p", "first_prompt": "prompt %d " % i + "x" * 200,
+                                          "kind": "chat", "work": False}} for i in range(3000)]},
+            hub=me, machines={me})
         con.close()
+        assert {r["outcome"] for r in reply["results"]} == {"applied"}
+        for i in range(3000):
+            cache_row(home, sid(1000 + i), "/home/u/p", i, i, first_prompt="prompt %d " % i + "x" * 200)
     finally:
         if old is None:
             os.environ.pop("FLEET_HOME")
@@ -827,7 +829,8 @@ def test_history_actions_work_on_index_rows(three, page):
     t = three
     t.w.mp.setenv("FLEET_DESCRIBE_PAUSE", "0")
     t.w.mp.setenv("FLEET_NO_RECORD", "1")
-    tr = os.path.join(t.w.base, "bee-transcript.jsonl")
+    tr = os.path.join(os.environ["CLAUDE_CONFIG_DIR"], "projects", "-home-u-b", W + ".jsonl")  # Claude Code's place
+    os.makedirs(os.path.dirname(tr))
     with open(tr, "w") as f:
         f.write(json.dumps({"type": "user", "message": {"role": "user", "content": "Plan the export"}}) + "\n")
         f.write(json.dumps({"type": "assistant", "message": {"role": "assistant", "content": [
@@ -845,8 +848,8 @@ def test_history_actions_work_on_index_rows(three, page):
     assert code == 200, data
     row = t.row(W)
     assert (row["name"], row["name_source"]) == ("field notes", "manual")
-    con = t.bee.db()
-    assert con.execute("SELECT name_custom FROM conversations WHERE session_id=?", (W,)).fetchone()[0] == "field notes"
+    last = json.loads(open(tr).read().splitlines()[-1])  # bee wrote Claude Code's title: one name
+    assert last == {"type": "custom-title", "customTitle": "field notes", "sessionId": W}
     assert {r["sid"]: r["name"] for r in page("GET", "/api/sessions?fresh=1")[1]["rows"]}[W] == "field notes"
 
     code, data = page("POST", "/api/sessions/ask", {"key": key, "question": "when does it run?"})
@@ -863,8 +866,6 @@ def test_history_actions_work_on_index_rows(three, page):
     code, data = page("POST", "/api/sessions/delete", {"key": key})
     assert code == 200, data
     assert t.row(W) is None and os.path.exists(tr)
-    assert con.execute("SELECT COUNT(*) FROM conversations WHERE session_id=?", (W,)).fetchone()[0] == 0
-    con.close()
 
 
 def test_the_page_refuses_to_describe_a_session_its_machine_does_not_own(three, page):

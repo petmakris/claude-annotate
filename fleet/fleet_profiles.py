@@ -304,7 +304,7 @@ def _first_cwd(path):
 
 def transcript_usage(projects=None):
     """[(folder, sessions, last seen)] from Claude Code's transcript folders (~/.claude/projects), so a folder
-    is listed even when its sessions ran before the history hook recorded them. The folder comes from what the
+    is listed even when its sessions ran before the recorder hook saw them. The folder comes from what the
     first five transcripts (in name order) recorded, never from the encoded directory name."""
     root = projects or os.path.join(home(), ".claude", "projects")
     out = []

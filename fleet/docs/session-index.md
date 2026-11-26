@@ -293,14 +293,18 @@ Rules:
 
 One hook records every session: fleet's `hooks/record.sh`, on SessionStart, UserPromptSubmit, Stop and SessionEnd.
 
-- It reads the hook input once. It runs `fleet.py hook-record` (the per-machine history, kept until phase 3) on
-  SessionStart, Stop and SessionEnd, and `fleet_index_hook.py` on all four.
+- It runs `fleet_index_hook.py` on all four events, which reads the hook input once. It is the one record of a
+  session: the per-machine history it once also wrote (`fleet.py hook-record`, the `conversations` table of
+  `fleet.db`) is no longer written or read as a source (phase 3, section 18.5).
 - `fleet_index_hook.record` works out the entry: the event, the facts of the one parser (section 2.3), `kind`
   (section 2.4), `account` (section 7), `rc_name` from `FLEET_RC_NAME`, `work` (section 7) and `observed`
   (`start`: live, `idle`; `prompt`: live, `busy`; `stop`: live, `idle`; `end`: not live, `ended`).
 - It sets `work` in every entry, and masks a work session's entry before appending (section 7).
+- On `stop` and `end` it checks the transcript with `fleet_history.unreadable_reason`. A transcript that holds data
+  but nothing the parser can use is logged to `hooks.log` ("Has the transcript format changed?") and kept in
+  `unreadable.json` (section 14) until a later read succeeds; `fleet history ls` and `fleet sessions` warn.
 - It never fails a session: it always exits 0 and logs a problem to `hooks.log`.
-- `FLEET_NO_RECORD` turns it off, as for the history.
+- `FLEET_NO_RECORD` turns it off. Every headless call of the plugin sets it.
 - Detached jobs come in through it as `kind=job` with `name_source = job`.
 - env's `note --hook` stays as it is until phase 3 and writes only the registry. Section 12.3 says why it writes
   no index entry.
@@ -444,7 +448,7 @@ it as `Authorization: Bearer`. The phone holds only the Claude Voice server's ow
 - The hub reads each machine's observed facts with `fleet sessions observe --json` over ssh (on the hub, in
   process): `{"machine": "laptop", "as_of": t, "rows": {"<sid>": {"live", "state", "where", "tmux", "pid"}}}`
   (`observe_reply`), from `claude agents --json`, the claude tmux server and `ps`. A work row's `tmux` is null.
-- Stale while refresh, as fleet's `seen/` does: the last answer of each machine is kept in
+- Stale while refresh: the last answer of each machine is kept in
   `$FLEET_HOME/index/observed/<machine>.json`, answered at once, and fetched again in the background when older
   than 3 s. `fresh=1` waits. A machine that does not answer keeps its last values, and they turn stale after 60 s.
 - 5 s to connect and 8 s in all per machine, as today.
@@ -561,10 +565,10 @@ exit 3.
 | `tail SID --json [--turns N]` | env `tail`'s shape (section 12.1), read on the row's machine. A work row is read only on its own machine. | env `tail`, Claude Voice |
 | `note [--as O]` (`{"sid", "event", "fields"}` on stdin) | Appends a journal entry, masked when work, then flushes. | Claude Voice (phase 2), env |
 | `flush` | Sends the unsent entries. | the hook's child |
-| `rename SID NAME...` | `name_source = manual` on the hub, then `fleet history rename` on the row's machine. | the page, CLI |
-| `delete SID` | Removes every row of an ended session's conversation from the index; refuses a row that has not ended. Then `fleet history delete` on the row's machine. | the page |
-| `describe SID` | Writes a description on the row's machine and journals `describe`. A work row is refused. | the page |
-| `ask SID QUESTION...` | `fleet history ask` on the row's machine; prints the answer. | the page |
+| `rename SID NAME...` | `name_source = manual` on the hub (an empty name clears it), then `fleet _rename-here SID NAME...` on the row's machine: the fleet member's name and Claude Code's title records in the transcript. | the page, CLI, `fleet history rename` |
+| `delete SID` | Removes every row of an ended session's conversation from the index; refuses a row that has not ended. The transcript stays. | the page, `fleet history delete` |
+| `describe SID` | On the row's machine: one headless call over the transcript (`fleet_history.describe_transcript`, the transcript found by `fleet_index_parse.find_transcript`), then journals `describe`. A work row is refused. | the page, `fleet history describe` |
+| `ask SID QUESTION...` | On the row's machine: one headless call over the transcript (`fleet_history.ask_transcript`); prints the answer. | the page, `fleet history ask` |
 | `end-host OWNER` | Section 9. | Claude Voice, by hand |
 | `rebuild [--dry-run]` | Section 11. | by hand |
 | `backup` | Section 11, by hand. | by hand |
@@ -590,6 +594,7 @@ All under `$FLEET_HOME/index/` (default `~/.claude/fleet/index/`), the folder 07
 | `observed/<machine>.json` | hub | Section 10.3. |
 | `last-list.json` | not the hub | Section 10.4. |
 | `shim-state.json` | hub | Section 12.2. |
+| `unreadable.json` | every | `{sid: reason}`: this machine's transcripts the parser could not read (section 6). |
 | `$FLEET_HOME/work.json` | every | Section 7.1. Written by env. |
 
 A cache file (`cache_row`) is the durable row as this machine last knew it, plus `cached_at` and `source` (`hub`,
@@ -705,6 +710,8 @@ It uses `fleet_history`'s readers (`records`, `newest_names`, `human_prompt`).
 def entry_for(hook, *, environ, fleet_home, machine, rules, now=None) -> dict | None
 def record(hook, *, environ=None, fleet_home=None, now=None) -> int        # always 0
 def main() -> int                                                          # reads the hook JSON on stdin
+def unreadable(fleet_home) -> dict                                         # unreadable.json: {sid: reason}
+def note_readable(fleet_home, sid, transcript) -> str | None               # checks at stop and end (section 6)
 ```
 
 ### `fleet_index_cli.py` (osidx-2-hub): the CLI and the hub client
@@ -912,3 +919,25 @@ hook journaled while its rule failed closed, before env had written `work.json` 
 - `test_across_machines_a_journal_replayed_at_an_old_epoch_changes_nothing` (`test_index_journal.py`): real
   processes on three machines; a machine that lost its journal state resends its epoch-1 entries after two takes,
   and the hub row and the list stay exactly as they were.
+
+### 18.5 Phase 3: fleet's history is no source
+
+Phase 3 (plan os3fleet, 26 November 2026) ended fleet's per-machine history as a source of truth:
+
+- `hooks/record.sh` runs only the recorder (section 6). `fleet.py hook-record` is gone, and nothing writes the
+  `conversations` table of `fleet.db` any more. The table and its rows stay on disk; only the importer
+  (`_import-dump`) reads them.
+- Every list reads the index: `GET /api/sessions` and `fleet session list` (section 10), a machine's own facts for
+  the pick plan (`fleet sessions --local`, from the machine's cache, section 14), and `fleet history ls`, `show`,
+  `resume` and `search` (this machine's rows of the index: the hub's answer, else the cache). Profiles stays per
+  machine: it counts folders from this machine's cache rows and Claude Code's transcript folders, and asks no other
+  machine.
+- What the rows need from their machine works on the transcript or the index (section 13): `rename` writes the
+  fleet name and Claude Code's title on the row's machine, `delete` changes only the index, `ask` and `describe`
+  read the transcript where Claude Code keeps it (`find_transcript`) on the row's machine.
+- `fleet history describe` describes this machine's ended or quiet rows that have no description, one
+  `fleet session describe` each. `fleet history import` is gone: `fleet session import` fills the index.
+- The page's old `/api/history` routes are gone; the Sessions tab's writes (section 15) are the only ones.
+- The old `seen/<machine>.json` session fan-out had already gone before phase 3 started; the observed cache
+  (section 10.3) is the one stale-while-refresh store of sessions. `seen/tools-<machine>.json` is the Tools tab's
+  own cache and is no session store.
