@@ -52,7 +52,7 @@
 .tt-count { padding: 10px 16px 6px; color: var(--dim); font-size: 13px; }
 
 /* rows */
-.tt-rows { --cols: 120px minmax(150px, 230px) minmax(140px, 200px) calc(var(--np, 5) * 18px) calc(var(--nm, 2) * 18px + 4px) 80px minmax(0, 1fr); padding-bottom: 8px; }
+.tt-rows { --cols: 120px minmax(150px, 230px) minmax(140px, 200px) calc(var(--np, 5) * 18px) max(calc(var(--nm, 2) * 18px + 4px), 64px) 80px minmax(0, 1fr); padding-bottom: 8px; }
 .tt-row { display: grid; grid-template-columns: var(--cols); gap: 12px; align-items: center; width: 100%; min-height: 44px; padding: 0 16px; border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
 .tt-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-row:hover:not(.tt-head) { background: color-mix(in srgb, var(--chip) 60%, var(--card)); }
@@ -89,7 +89,7 @@
 .tt-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 
 @media (max-width: 1099px) {
-  .tt-rows { --cols: 28px minmax(150px, 220px) minmax(130px, 170px) calc(var(--np, 5) * 18px) calc(var(--nm, 2) * 18px + 4px) 70px minmax(0, 1fr); }
+  .tt-rows { --cols: 28px minmax(150px, 220px) minmax(130px, 170px) calc(var(--np, 5) * 18px) max(calc(var(--nm, 2) * 18px + 4px), 64px) 70px minmax(0, 1fr); }
   .c-kind .w { display: none; }
 }
 @media (max-width: 760px) {
