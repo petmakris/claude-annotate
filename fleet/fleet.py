@@ -345,11 +345,57 @@ def remote_command(m, args):
                     + [shlex.quote(a) for a in args])
 
 
+# A machine that did not answer, kept in the page server only (`ui` turns it on): for DOWN_TTL seconds a call to it
+# fails at once instead of waiting out ssh's ConnectTimeout again, so a sleeping laptop costs the page nothing.
+# The next call after that asks it again. Nothing of it is written anywhere.
+DOWN_TTL = 30.0
+_DOWN = {"on": False, "lock": threading.Lock(), "at": {}}
+
+
+def remember_down(on=True):
+    with _DOWN["lock"]:
+        _DOWN["on"] = on
+        _DOWN["at"].clear()
+
+
+def _down_since(machine):
+    with _DOWN["lock"]:
+        hit = _DOWN["at"].get(machine) if _DOWN["on"] else None
+        if hit and time.time() - hit[0] >= DOWN_TTL:
+            del _DOWN["at"][machine]
+            hit = None
+        return hit
+
+
+def _mark(machine, err):
+    with _DOWN["lock"]:
+        if not _DOWN["on"]:
+            return
+        if err is not None and err.unreachable:
+            _DOWN["at"][machine] = (time.time(), str(err))
+        else:
+            _DOWN["at"].pop(machine, None)
+
+
 def run_remote(machine, args, stdin=None, timeout=60):
     """Run `fleet <args>` on another machine over ssh; returns its stdout."""
     m = other_machines().get(machine)
     if not m:
         raise RemoteError("no machine named %r in machines.json" % machine)
+    down = _down_since(machine)
+    if down:
+        raise RemoteError("%s, %d s ago; asked again after %d s" % (down[1], time.time() - down[0], DOWN_TTL),
+                          unreachable=True)
+    try:
+        out = _run_remote(m, args, stdin, timeout)
+    except RemoteError as e:
+        _mark(machine, e)
+        raise
+    _mark(machine, None)
+    return out
+
+
+def _run_remote(m, args, stdin, timeout):
     cmd = [os.environ.get("FLEET_SSH") or "ssh"] + SSH_OPTS + ["--", m["ssh"], remote_command(m, args)]
     try:
         r = subprocess.run(cmd, input=stdin, capture_output=True, text=True, timeout=timeout)
@@ -3319,19 +3365,53 @@ def ui_todos():
 
 
 class Cache:
-    """One answer per endpoint for UI_TTL seconds, so open pages never stack ssh calls."""
+    """One answer per endpoint, stale while it refreshes: a call answers at once with the endpoint's last answer
+    and, when that is older than UI_TTL seconds, asks for a new one in the background, one at a time per endpoint.
+    Only an endpoint with no answer yet (a fresh server, or right after `clear`) waits, and it waits alone: each
+    endpoint has its own lock, so a slow one never holds a fast one."""
 
     def __init__(self, ttl=UI_TTL):
-        self.ttl, self.lock, self.items = ttl, threading.Lock(), {}
+        self.ttl, self.lock, self.items, self.busy, self.keys = ttl, threading.Lock(), {}, set(), {}
+
+    def _key_lock(self, key):
+        with self.lock:
+            return self.keys.setdefault(key, threading.Lock())
+
+    def _fetch(self, key, fn):
+        val = fn()
+        with self.lock:
+            self.items[key] = (time.time(), val)
+        return val
+
+    def _refresh(self, key, fn):
+        try:
+            self._fetch(key, fn)
+        except Exception as e:  # noqa: B902 - a failed background refresh keeps the last answer
+            log_line("ui: refreshing %s failed: %s" % (key, e))
+        finally:
+            with self.lock:
+                self.busy.discard(key)
 
     def get(self, key, fn):
+        if self.ttl <= 0:  # no cache: every call asks (the tests' servers)
+            return fn()
         with self.lock:
             hit = self.items.get(key)
-            if hit and time.time() - hit[0] < self.ttl:
-                return hit[1]
-            val = fn()
-            self.items[key] = (time.time(), val)
-            return val
+            start = bool(hit) and key not in self.busy and time.time() - hit[0] >= self.ttl
+            if start:
+                self.busy.add(key)
+        if start:
+            threading.Thread(target=self._refresh, args=(key, fn), daemon=True).start()
+        if hit:
+            return hit[1]
+        with self._key_lock(key):  # callers with no answer yet share one fetch
+            with self.lock:
+                hit = self.items.get(key)
+            return hit[1] if hit else self._fetch(key, fn)
+
+    def clear(self):
+        with self.lock:
+            self.items.clear()
 
 
 def ui_settings(port=None, host=None):
@@ -3916,7 +3996,7 @@ def make_ui_handler(cache, token):
             try:
                 if path in PAGE_WRITES:
                     code, data = ui_page_write(path, body)
-                    cache.items.clear()
+                    cache.clear()
                 elif path in PROFILE_WRITES:
                     code, data = ui_profiles_write(path, body)
                 else:
@@ -3986,6 +4066,7 @@ def make_ui_server(port=None, host=None, ttl=UI_TTL):
 
 
 def ui(port=None, host=None):
+    remember_down()
     try:
         srv = make_ui_server(port, host)
     except OSError as e:
