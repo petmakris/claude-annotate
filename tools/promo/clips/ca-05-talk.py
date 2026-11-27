@@ -9,7 +9,7 @@ a sequence board, a before-and-after board with its verdict, and a code board
 that points at three ranges of api/retry.py. tools/talk_render/render.py does
 the playing (its own talk server, the silent stand-in voice, no microphone,
 no Azure); this script only adds a shot at the start of each sentence, so the
-lit word and the caption move along, and taps the Key points chip at the end.
+lit word and the caption move along, and fronts the Key points board at the end.
 
     uv run tools/promo/clips/ca-05-talk.py [--daemon-port 19140] [--talk-port 19150]
 
@@ -76,8 +76,9 @@ def render_child(argv):
         orig_play(page, shooter, prefix, width, theme, *a, **kw)
         if prefix != "d":
             return
-        chip = page.locator("text=Key points").first
-        chip.click()
+        # the Key points board, fronted on the stage the way its board list does (the panel has no chips)
+        page.evaluate("""() => { const b = view.entries.find(e => e.who === 'board' && e.kind === 'points');
+          if (b) toStage({type: 'stage:front', view: b.view, manual: true}); }""")
         page.wait_for_timeout(1500)
         shooter.shot(page, prefix, "keys", 0.0, "(Key points)", {"title": "Key points", "kind": "keys"},
                      width, theme)

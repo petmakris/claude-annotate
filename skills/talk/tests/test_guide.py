@@ -62,8 +62,7 @@ def test_a_plan_with_a_value_per_item_has_its_own_row_and_days_no_longer_send_a_
 def test_key_points_is_first_in_the_list_never_in_front_and_a_saved_item_is_shown_with_a_front_cue():
     assert "which is first in the board list but never in front" in GUIDE
     assert "puts it up with a front cue for Key points" in GUIDE and "pinned first" not in GUIDE
-    page = (talk.SKILL_DIR / "references" / "call-page.md").read_text()
-    assert "a tap on it puts that board in front" in page
+    assert "the user opens it from the stage's board list" in GUIDE
 
 
 def test_a_picture_of_a_physical_thing_is_said_to_be_undrawable_and_boxes_with_arrows_do_not_stand_in():
@@ -77,10 +76,10 @@ def test_a_picture_of_a_physical_thing_is_said_to_be_undrawable_and_boxes_with_a
     assert "A flowchart or a map is not a picture: never let boxes with arrows stand in for a spatial layout." in BOARDS
 
 
-def test_a_long_typed_message_is_answered_point_by_point_and_the_copy_icon_is_named_by_where_it_is():
+def test_a_long_typed_message_is_answered_point_by_point_and_the_guide_promises_no_copy_button():
     loop = GUIDE.split("## 3. Answering a turn")[1].split("`reply` exit codes")[0]
     assert "answer every numbered point in order, and answer any question it asks about the page itself" in loop
-    assert "the copy icon at the top right of the answer card copies the whole answer" in loop
+    assert "there is no copy button" in loop and "copy icon" not in GUIDE
     assert "State no fact the user did not give" in loop
     page = (talk.SKILL_DIR / "references" / "call-page.md").read_text()
-    assert "a **Copy** button for the answer's text" in page
+    assert "Copy button" not in page and "copy icon" not in page

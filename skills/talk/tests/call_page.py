@@ -93,6 +93,7 @@ globalThis.fetch = async (path, opts = {}) => {
   globalThis.sessionStorage = { getItem: (k) => (session.has(k) ? session.get(k) : null), setItem: (k, v) => session.set(k, String(v)),
                                 removeItem: (k) => session.delete(k), clear: () => session.clear(), dump: () => Object.fromEntries(session) };
 }
+globalThis.getSelection ??= () => "";  // no text is selected under node: a tap on a word plays
 document.documentElement.dataset.theme = "light";
 setBody(HTML);
 window.CFG = JSON.parse(%(cfg)s);

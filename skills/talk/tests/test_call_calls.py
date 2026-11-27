@@ -126,34 +126,26 @@ def test_the_icon_is_a_disc_in_the_state_colour_with_the_count_in_it(tmp_path):
     assert stalled.startswith(head + '<circle cx="16" cy="16" r="15" fill="#F9AB00"/>')
 
 
-def test_when_another_call_takes_the_voice_the_page_says_so_in_the_strip_and_no_toast_covers_the_board(tmp_path):
+def test_when_another_call_takes_the_voice_the_page_says_so_in_the_note_and_no_toast_covers_the_board(tmp_path):
     # study power-6: the pause was a 12 s toast over the board's header, worded as if the user talked
     html, states = served(tmp_path, ["An answer."])
     page = with_calls(CallPage(html, states, start=1))
     page.js("$('playpause').click(); await settle(); floorN = 0;")  # the harness answers /api/floor with no floor_n
     page.js("STATES[1] = {...STATES[1], v: 'f', floor_call: 'a', floor_n: 5}; await serve(1);")
-    page.check("[audio.paused, $('toast').hidden, $('sstext').textContent, $('statestrip').classList.contains('warn'), $('ssact').textContent, $('ssact').hidden]")
-    page.js("$('ssact').click();")
-    page.check("[!audio.paused, floorNote, $('sstext').textContent]")
-    assert page.run() == [[True, True, "Paused: “Weekend reading” took the voice.", True, "Resume here", False],
-                          [True, None, "Playing answer 1"]]
+    page.check("[audio.paused, $('toast').hidden, $('note').hidden, $('note').textContent]")
+    page.js("resumeHere();")
+    page.check("[!audio.paused, floorNote, $('note').hidden]")
+    assert page.run() == [[True, True, False, "Paused: \u201cWeekend reading\u201d took the voice."],
+                          [True, None, True]]
 
 
 def test_resume_here_is_a_play_the_reader_starts_so_it_goes_through_readerplays(tmp_path):
     html, states = served(tmp_path, ["An answer."])
     page = with_calls(CallPage(html, states, start=1))
     page.js("$('playpause').click(); await settle(); floorN = 0; STATES[1] = {...STATES[1], v: 'f', floor_call: 'a', floor_n: 5}; await serve(1); toStage().length = 0;")
-    page.js("$('ssact').click();")
+    page.js("resumeHere();")
     page.check("readerAnswer")
     assert page.run() == [0]
-
-
-def test_a_collapsed_panel_has_no_strip_so_the_pause_is_said_by_the_toast(tmp_path):
-    html, states = served(tmp_path, ["An answer."])
-    page = with_calls(CallPage(html, states, start=1))
-    page.js("$('playpause').click(); await settle(); floorN = 0; rail = true; STATES[1] = {...STATES[1], v: 'f', floor_call: 'a', floor_n: 5}; await serve(1);")
-    page.check("[$('toast').hidden, $('toasttext').textContent]")
-    assert page.run() == [[False, "Paused: “Weekend reading” took the voice."]]
 
 
 def test_a_new_answer_in_another_call_is_announced(tmp_path):

@@ -59,61 +59,23 @@ function applyTheme() {
 for (const b of $("theme").children) b.onclick = () => { theme = b.dataset.choice; store.set("theme", theme); applyTheme(); };
 darkMq.addEventListener("change", () => { if (theme === "system") applyTheme(); });
 
-// ---- full screen: the whole page, stage and pill, for a TV or a call that needs the room ----
-function paintFullscreen() {
-  const on = !!document.fullscreenElement;
-  $("fullscreen").setAttribute("aria-pressed", String(on));
-  const label = t(on ? "head.fullscreen.leave" : "head.fullscreen");
-  $("fullscreen").setAttribute("aria-label", label); $("fullscreen").dataset.tip = label;
-}
-// A browser that cannot take the page full screen (an iPhone, a frame without the permission) shows no button.
-$("fullscreen").hidden = !document.fullscreenEnabled;
-// Full screen on a big display with no screen size chosen yet is the TV's size too, for as long as it lasts: nobody at a
-// TV goes looking for a setting. A size picked in the gear or named in the address (?screen=tv) always wins.
-const TV_WIDTH = 1700;
-let tvByFullscreen = false;
+// ---- the text size: Desk, or TV for reading across a room (the settings, or ?screen=tv in the address) ----
 function setScreen(mode, keep = true) {
-  screenMode = mode === "tv" ? "tv" : "desk"; if (keep) { store.set("screen", screenMode); tvByFullscreen = false; }
+  screenMode = mode === "tv" ? "tv" : "desk"; if (keep) store.set("screen", screenMode);
   toStage({type: "stage:zoom", zoom: screenMode === "tv" ? TV_ZOOM : 1}); paintAll();
 }
-$("fullscreen").onclick = () => {
-  if (!document.fullscreenElement && screenMode === "desk" && innerWidth >= TV_WIDTH && store.get("screen", null) === null) { tvByFullscreen = true; setScreen("tv", false); }
-  const go = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
-  go.catch(err => { showError(t("fs.failed", {why: err.message})); if (tvByFullscreen) { tvByFullscreen = false; setScreen("desk", false); } });
-};
-// A window this wide with no size ever chosen is as likely a desk monitor as a TV, so the page offers TV size and never takes it:
-// one line with a button, and a dismiss that is remembered. The gear and ?screen= always win (both store a choice).
-function tvOfferNow() {
-  return innerWidth >= TV_WIDTH && screenMode === "desk" && store.get("screen", null) === null && !store.get("tvoffer", false) && !view.ended;
-}
-function paintTvOffer() { $("tvoffer").hidden = !tvOfferNow(); }
-$("tvoffergo").onclick = () => setScreen("tv", true);
-$("tvofferx").onclick = () => { store.set("tvoffer", true); paintAll(); };
 const screenParam = new URLSearchParams(location.search).get("screen");
 if (screenParam === "tv" || screenParam === "desk") { screenMode = screenParam; store.set("screen", screenMode); }
-// Esc and the browser's own controls leave full screen too: the button follows whatever happened.
-document.addEventListener("fullscreenchange", () => {
-  paintFullscreen();
-  if (!document.fullscreenElement && tvByFullscreen) { tvByFullscreen = false; setScreen("desk", false); }
-});
 
-// ---- the panel: on the left or the right, as wide as dragged, or collapsed to a rail ----
+// ---- the panel: on the left or the right, as wide as dragged ----
 const PANEL_W = [300, 640];
 let side = store.get("side", "right") === "left" ? "left" : "right";
-let rail = store.get("panel", "open") === "rail";
 let panelW = Math.min(PANEL_W[1], Math.max(PANEL_W[0], Number(store.get("panelW", 380)) || 380));
 function paintPanel() {
   $("app").dataset.side = side;
-  $("app").toggleAttribute("data-rail", rail);
   document.documentElement.style.setProperty("--pw", panelW + "px");
   for (const b of $("side").children) b.setAttribute("aria-pressed", String(b.dataset.choice === side));
 }
-function setRail(on) {
-  rail = on; store.set("panel", on ? "rail" : "open"); showPop(null); paintPanel();
-  if (!on) { convoFollow = true; followVoice(true); }
-}
-$("collapse").onclick = () => setRail(true);
-$("expand").onclick = () => setRail(false);
 for (const b of $("side").children) b.onclick = () => { side = b.dataset.choice; store.set("side", side); paintPanel(); };
 $("grip").onpointerdown = ev => {
   const grip = $("grip"); grip.setPointerCapture(ev.pointerId); grip.classList.add("on");
@@ -131,16 +93,15 @@ window.addEventListener("blur", () => {
 });
 
 function paintSettings() {
+  const on = (box, v) => { for (const b of $(box).children) b.setAttribute("aria-pressed", String(b.dataset.choice === String(v))); };
   for (const b of $("speeds").children) b.setAttribute("aria-pressed", String(Number(b.dataset.speed) === speed));
-  for (const b of document.querySelectorAll("[data-speedchip]")) {
-    b.textContent = speed + "×"; b.setAttribute("aria-label", t("speed.aria", {x: speed}));
-  }
   for (const b of $("lang").children) b.setAttribute("aria-pressed", String(b.dataset.lang === language));
   $("autoplay").setAttribute("aria-pressed", String(autoplay));
   $("follow").setAttribute("aria-pressed", String(follow)); $("follow").disabled = !CFG.stageUrl;
-  for (const b of $("screen").children) b.setAttribute("aria-pressed", String(b.dataset.choice === screenMode));
+  $("livemode").setAttribute("aria-pressed", String(talkMode === "live")); $("livemode").disabled = !!recorder;
+  $("bargerow").hidden = $("pauserow").hidden = talkMode !== "live";
+  on("barge", barge); on("endpause", endPause); on("screen", screenMode);
   $("endlbl").textContent = t(view.ended ? "set.close" : "set.end"); $("end").disabled = closed;
-  paintTvOffer();
 }
 for (const s of SPEEDS) {
   const b = document.createElement("button"); b.type = "button"; b.dataset.speed = s; b.textContent = s + "×";
@@ -148,9 +109,13 @@ for (const s of SPEEDS) {
   $("speeds").append(b);
 }
 $("autoplay").onclick = () => { autoplay = !autoplay; store.set("autoplay", autoplay); paintSettings(); };
+$("livemode").onclick = () => setTalkMode(talkMode === "live" ? "manual" : "live");
+for (const b of $("barge").children) b.onclick = () => { barge = b.dataset.choice; store.set("barge", barge); paintSettings(); };
+for (const b of $("endpause").children) b.onclick = () => { endPause = Number(b.dataset.choice); store.set("endPause", endPause); paintSettings(); };
+$("geardone").onclick = ev => { ev.stopPropagation(); showPop(null); };
 // ---- the keys ----------------------------------------------------------------------
 // Every shortcut of the page is in this list, once: the Keys sheet (#pKeys) is built from it, and test_call_input.py presses
-// each row. The hint under the field (#keyhint) is static markup in call.html, a few of these by hand with a data-t key. Letters belong to the message field (a key typed anywhere lands in it), so the
+// each row. Letters belong to the message field (a key typed anywhere lands in it), so the
 // shortcuts that are not Space, the arrows or ? are Alt chords, read from the physical key (ev.code: Option types a
 // character on a Mac). Every key does what a visible button does.
 const KEYS = [
@@ -161,7 +126,6 @@ const KEYS = [
   {group: "g.move", rows: [
     {id: "message", keys: ["Alt", "M"], what: "k.message"},
     {id: "player", keys: ["Alt", "P"], what: "k.player"},
-    {id: "board", keys: ["Alt", "B"], what: "k.board"},
     {id: "voice", keys: ["Alt", "V"], what: "k.voice"},
     {id: "keys", keys: ["?"], what: "k.keys"},
     {id: "close", keys: ["Esc"], what: "k.close"}]},
@@ -170,31 +134,30 @@ const KEYS = [
     {id: "newline", keys: ["Shift", "Enter"], what: "k.newline"},
     {id: "talk", keys: ["Alt", "T"], what: "k.talk"}]},
 ];
-const ALT_KEYS = {KeyS: "speed", KeyM: "message", KeyP: "player", KeyB: "board", KeyV: "voice", KeyT: "talk"};
+const ALT_KEYS = {KeyS: "speed", KeyM: "message", KeyP: "player", KeyV: "voice", KeyT: "talk"};
 function buildKeys() {
   // `key` names the words in the table (call-i18n.js): the element keeps it in data-t, so a change of language puts the new words in
   const pop = $("pKeys"), make = (tag, cls, text, key) => { const e = document.createElement(tag); if (cls) e.className = cls; if (key) { e.dataset.t = key; e.textContent = t(key); } else if (text) e.textContent = text; return e; };
-  const head = make("div", "khead"), close = make("button", "ib kclose"); close.type = "button"; close.dataset.tAria = "keys.close"; close.setAttribute("aria-label", t("keys.close"));
-  close.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-  close.onclick = () => showPop(null);
-  head.append(make("h3", "", "", "keys.title"), close);
-  const body = make("div", "kbody");
+  const head = make("div", "sheethead"), close = make("button", "done", "", "set.done"); close.type = "button";
+  close.onclick = ev => { ev.stopPropagation(); showPop(null); };
+  head.append(make("h2", "", "", "keys.title"), close);
+  const body = make("div", "sheetbody");
   for (const g of KEYS) {
-    const sec = make("section", "kgroup"); sec.append(make("h4", "", "", g.group));
+    body.append(make("h3", "", "", g.group)); const sec = make("div", "group");
     for (const r of g.rows) {
-      const row = make("div", "krow"), keys = make("span", "kk");
+      const row = make("div", "row"), keys = make("span", "kk");
       r.keys.forEach((k, i) => { if (i) keys.append(" "); keys.append(make("kbd", "", k)); });
-      row.dataset.key = r.id; row.append(keys, make("span", "kw", "", r.what)); sec.append(row);
+      row.dataset.key = r.id; row.append(make("span", "kw", "", r.what), keys); sec.append(row);
     }
     body.append(sec);
   }
-  pop.replaceChildren(head, body, make("p", "knote", "", "keys.note"));
+  body.append(make("p", "knote", "", "keys.note"));
+  pop.replaceChildren(head, body);
 }
 buildKeys();
-popButton("keysbtn", "pKeys"); popButton("keysrow", "pKeys");
+popButton("keysrow", "pKeys");
 // Nothing is being typed: the body, an empty message field or a button of the panel has the focus.
-// Focus is on one of the Type / Talk / Live buttons: a printable key there is typing, so it goes to the message field.
-function onModeSwitch() { const at = document.activeElement; return !!at && !!$("modesw") && $("modesw").contains(at) && at !== $("modesw"); }
+const onModeSwitch = () => false;
 function keysFree() {
   const at = document.activeElement;
   return !at || at === document.body || (at === $("text") && !$("text").value) || (at.tagName === "BUTTON" && !!at.closest("#panel"))
@@ -227,28 +190,17 @@ document.addEventListener("keydown", ev => {
 });
 function runShortcut(id) {
   if (id === "speed") { cycleSpeed(); return true; }
-  if (id === "message") { if (rail) setRail(false); $("text").focus(); return true; }
-  if (id === "player") { const b = $(rail ? "railpp" : "playpause"); if (!b || b.closest("[hidden]")) return false; b.focus(); return true; }
-  // The board in front, else the first board of the answer on the card: its chip takes the focus. The stage has no message that
-  // moves the focus into its own board list, so the chip (a press brings its board to the front) is the way in.
-  if (id === "board") {
-    const chips = [...document.querySelectorAll("#panel .chip.board")].filter(c => !c.disabled && !c.closest("[hidden]"));
-    const chip = chips.find(c => c.classList.contains("front")) || chips[0];
-    if (!chip) return false;
-    if (rail) setRail(false);
-    chip.focus(); return true;
-  }
+  if (id === "message") { $("text").focus(); return true; }
+  if (id === "player") { const b = $("playpause"); if (!b || b.closest("[hidden]")) return false; b.focus(); return true; }
   if (id === "voice") { if (!CFG.stageUrl) return false; followAgain(); return true; }
   if (id === "talk") { talkPress(); return true; }
   return false;
 }
 // The skip links, the first stops of the page: past the stage and every answer, to the message, to the player or to the board in front.
-for (const [id, to] of [["skipmsg", "message"], ["skipplay", "player"], ["skipboard", "board"]]) {
+for (const [id, to] of [["skipmsg", "message"], ["skipplay", "player"]]) {
   $(id).onclick = ev => { ev.preventDefault(); runShortcut(to); };
 }
-// Back is one sentence, as the left arrow is, never a fixed ten seconds that restarts a short answer; the position slider's
-// arrows are the same sentence steps, Page Up and Page Down ten seconds. Guarded: the player's markup is another batch's.
-for (const id of ["back", "railback"]) { const b = $(id); if (b) b.onclick = () => { if (current) jump(-1); }; }
+// The position slider's arrows are sentence steps, as the left and right keys are; Page Up and Page Down ten seconds.
 if ($("seek")) $("seek").addEventListener("keydown", ev => {
   if (ev.key === "ArrowLeft" || ev.key === "ArrowRight") { ev.preventDefault(); if (current) jump(ev.key === "ArrowLeft" ? -1 : 1); }
   else if (ev.key === "PageUp" || ev.key === "PageDown") { ev.preventDefault(); skip(ev.key === "PageUp" ? 10 : -10); }
@@ -351,7 +303,6 @@ function micNoteText(heard) {
   const how = heard && heard.seconds >= 0.5 ? t("heard.how", {s: heard.seconds < 10 ? heard.seconds.toFixed(1) : Math.round(heard.seconds)}) : "";
   return t(heard && heard.peak < NEAR_ZERO_PEAK ? "heard.dead" : "heard.faint", {how});
 }
-function showMicNote(text) { $("micnote").textContent = text; $("micnote").hidden = !text; if (text) announce(text); }
 
 // A recording comes back as words in the text field, to be checked and changed before Send; nothing
 // reaches Claude until then. While the server restarts (503, or no answer at all) the recording is sent
@@ -394,73 +345,6 @@ function setTalkMode(mode) {
   paintAll();
 }
 
-// ---- how you talk: Type, Talk or Live, a switch on the foot --------------------------
-// inputMode is what the switch shows; talkMode (shared with the live code) is its two-way reduction: Live is "live", Type and
-// Talk are "manual" (nothing listens between turns). Type puts the mic away and the cursor in the field. A switch kept by an
-// earlier version is read from its talkMode.
-const MODES = [
-  {id: "type", label: "mode.type", icon: '<rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>'},
-  {id: "talk", label: "mode.talk", icon: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/>'},
-  {id: "live", label: "mode.live", icon: '<path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"/>'},
-];
-let inputMode = (m => MODES.some(x => x.id === m) ? m : talkMode === "live" ? "live" : "talk")(store.get("inputMode", null));
-talkMode = inputMode === "live" ? "live" : "manual";
-function setInputMode(mode) {
-  if (!MODES.some(x => x.id === mode) || recorder || (busy && talkMode !== "live")) return false;
-  inputMode = mode; store.set("inputMode", mode);
-  setTalkMode(mode === "live" ? "live" : "manual");
-  if (mode === "type") $("text").focus();
-  return true;
-}
-const BARGE_SAYS = {talk: "barge.talk", keyword: "barge.keyword"}, PAUSES = [800, 1200, 2000];
-// What each Live pill does and what a press makes it: the pill itself shows only the value now in force.
-function bargeTitle(b) {
-  return t(b === "talk" ? "barge.talk.title" : "barge.keyword.title");
-}
-function pauseTitle(ms) {
-  const next = PAUSES[(PAUSES.indexOf(ms) + 1) % PAUSES.length];
-  return t("pause.title", {now: ms / 1000, next: next / 1000});
-}
-function buildModes() {
-  const sw = $("modesw");
-  for (const m of MODES) {
-    const b = document.createElement("button"); b.type = "button"; b.dataset.mode = m.id; b.setAttribute("aria-pressed", "false");
-    b.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + m.icon + "</svg>";
-    const w = document.createElement("span"); w.dataset.t = m.label; w.textContent = t(m.label); b.append(w);
-    b.dataset.tip = "tip." + m.id;   // what the mode does: its title and description, said again by paintInputMode on a change of language
-    b.onclick = () => setInputMode(m.id);
-    sw.append(b);
-  }
-  // Live's two options, one tap each to the next value: they were two groups of the gear.
-  const opts = document.createElement("div"); opts.className = "livepills"; opts.id = "livepills"; opts.hidden = true;
-  const barge_ = document.createElement("button"), pause_ = document.createElement("button");
-  barge_.id = "bargepill"; pause_.id = "pausepill";
-  for (const b of [barge_, pause_]) { b.type = "button"; b.className = "pillbtn"; }
-  barge_.onclick = () => { barge = barge === "talk" ? "keyword" : "talk"; store.set("barge", barge); paintInputMode(); };
-  pause_.onclick = () => { endPause = PAUSES[(PAUSES.indexOf(endPause) + 1) % PAUSES.length]; store.set("endPause", endPause); paintInputMode(); };
-  opts.append(barge_, pause_); $("modebar").append(opts);
-}
-buildModes();
-// Whose turn it is, in words: the Your turn pill. `key` styles it, `text` is what it says; null (no pill) once the call ended.
-function yourTurnState() {
-  if (view.ended) return null;
-  if (recorder) return {key: "rec", text: t("turn.rec")};
-  if (busy && talkMode !== "live") return {key: "work", text: t("turn.work")};
-  if (talkMode === "live") {
-    if (!live) return {key: "off", text: t("turn.off")};
-    if (live.suspended) return {key: "warn", text: t("turn.suspended")};
-    if (live.parked) return {key: "off", text: t("turn.parked")};
-    if (live.muted) return {key: "off", text: t("turn.muted")};
-    if (live.noSignal) return {key: "warn", text: t("turn.nosound")};
-    if (live.speech) return {key: "live", text: t("turn.hearing")};
-  }
-  if ($("text").value.trim()) return {key: "typing", text: t("turn.typing")};
-  const st = appState();
-  if (st === "working") return {key: "work", text: t("turn.claude.working")};
-  if (st === "speaking") return {key: "speak", text: t("turn.claude.speaking")};
-  return talkMode === "live" ? {key: "live", text: t("turn.listening")} : {key: "turn", text: t("turn.yours")};
-}
-$("text").addEventListener("input", () => paintInputMode());
 // A turn that is only "slower", "faster" or "say that again slower" is a command to the player, not a question for Claude: typed (or
 // said with Talk and written out) it is acted on here by the same code as Live's spoken commands and never sent. The words are the
 // ones talk.py's COMMANDS holds for these commands (test_call_input.py keeps the two lists together); anything more than the command,
@@ -492,7 +376,6 @@ function typedCommand(text) {
 }
 // The voice speed, one press to the next: the player's chip and Alt+S.
 function cycleSpeed() { setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]); announce(t("speed.say", {x: speed})); }
-for (const b of document.querySelectorAll("[data-speedchip]")) b.onclick = cycleSpeed;
 
 // In live mode the mic button mutes and unmutes the open microphone (the stream, the floor and this page's claim stay); while
 // Chrome holds the audio back it starts it, and the same press must not then mute. Leaving Live is the switch.
@@ -501,13 +384,12 @@ function liveButton() {
   if (live && live.parked) { claimLive(); return; }
   if (live) setMuted(!live.muted); else startLive();
 }
-// What the mic button does: the page's one Talk press, for the button, the rail's and Alt+T.
+// What the mic button does: the page's one Talk press, for the button and Alt+T.
 function talkPress() {
-  if (inputMode === "type" && !recorder) setInputMode("talk");
   if (busy && talkMode !== "live") return;
   if (talkMode === "live") liveButton(); else if (recorder) sendRecording(); else startRecording();
 }
-$("talk").onclick = $("railtalk").onclick = talkPress;
+$("talk").onclick = talkPress;
 $("send").onclick = sendRecording;
 $("cancel").onclick = () => { stopRecording(); setMode("idle"); };
 // The stage demo, the call's tutorial: the tab opens at once (a tab opened after the server answers would
@@ -529,46 +411,24 @@ $("end").onclick = () => {
 };
 
 // ---- the hooks this file owns (I) -----------------------------------------------
-// The mic and the text field, painted from paintPill(): the talk buttons of the panel and the rail, Cancel and Done while
-// recording, the text field, the Send button. Type puts the mic away; in Live the button mutes.
+// The mic and the field, from paintPill(): the mic sits in the field until words are typed, then Send takes its place, as in
+// a phone's messages. While recording the field gives way to the level and the time, with Cancel and Done. In Live the mic
+// mutes and unmutes the open microphone, and stays beside Send.
 function paintMic() {
-  const rec = !!recorder, ended = !!view.ended;
-  const liveMode = talkMode === "live";
+  const rec = !!recorder, ended = !!view.ended, liveMode = talkMode === "live", typed = !!$("text").value.trim();
   const liveLabel = t(!live ? "mic.listen" : live.suspended ? "mic.start" : live.parked ? "mic.here" : live.muted ? "mic.unmute" : "mic.mute");
-  const talkLabel = rec ? t("foot.done") : liveMode ? liveLabel : t("foot.talk");
-  // The rail's mic is the panel's: the same label, the same look.
-  for (const id of ["talk", "railtalk"]) {
-    const b = $(id);
-    b.hidden = ended || (inputMode === "type" && !rec); b.disabled = busy && !liveMode; b.classList.toggle("busy", busy && !liveMode);
-    b.setAttribute("aria-label", talkLabel); b.dataset.tip = talkLabel + (id === "talk" ? " · Alt+T" : "");
-    b.classList.toggle("live", liveMode); b.classList.toggle("muted", liveMode && !listening());
-  }
+  const label = liveMode ? liveLabel : t("foot.talk");
+  const b = $("talk");
+  b.hidden = ended || rec || (typed && !liveMode); b.disabled = busy && !liveMode; b.classList.toggle("busy", busy && !liveMode);
+  if (b.getAttribute("aria-label") !== label) { b.setAttribute("aria-label", label); b.title = label + (liveMode ? "" : " · Alt+T"); }
+  b.classList.toggle("live", liveMode); b.classList.toggle("muted", liveMode && !listening());
   $("cancel").hidden = !rec; $("send").hidden = !rec;
-  $("text").hidden = rec || ended; $("sendtext").hidden = rec || ended; $("pill").hidden = ended && !rec;
-}
-// The Type / Talk / Live switch (#modesw), the Your turn pill (#yourturn), Live's two options and the key hint (#keyhint), from paintAll().
-function paintInputMode() {
-  const ended = !!view.ended, locked = !!recorder || (busy && talkMode !== "live");
+  $("text").hidden = rec || ended; $("sendtext").hidden = rec || ended || !typed; $("pill").hidden = ended && !rec;
+  $("wave").hidden = !rec;
+  if (!answering && !rec) { const ph = t(waitActive() ? "ph.wait" : liveMode ? "ph.live" : "ph.talk"); if ($("text").placeholder !== ph) $("text").placeholder = ph; }
   if (ended) clearDraft();
-  $("modebar").hidden = ended; $("keyhint").hidden = ended;
-  for (const b of $("modesw").children) {
-    b.setAttribute("aria-pressed", String(b.dataset.mode === inputMode)); b.disabled = locked;
-    const tip = t(b.dataset.tip);
-    b.title = locked ? t("mode.locked") : tip; b.setAttribute("aria-description", tip);
-  }
-  const yt = yourTurnState();
-  $("yourturn").hidden = !yt;
-  if (yt) { $("yourturn").textContent = yt.text; $("yourturn").dataset.state = yt.key; }
-  $("livepills").hidden = inputMode !== "live";
-  const bp = $("bargepill"), pp = $("pausepill");
-  bp.textContent = t("barge.pill", {how: t(BARGE_SAYS[barge])}); bp.setAttribute("aria-label", t("barge.aria", {how: t(BARGE_SAYS[barge])}));
-  pp.textContent = t("pause.pill", {s: endPause / 1000}); pp.setAttribute("aria-label", t("pause.aria", {s: endPause / 1000}));
-  bp.title = bargeTitle(barge); pp.title = pauseTitle(endPause);
-  // A say-back question has its own placeholder (call-stage.js); otherwise the field says how it is used in this mode.
-  if (!answering && $("text").placeholder !== t("ph.wait")) $("text").placeholder = modePlaceholder();
 }
-function modePlaceholder() { return t(inputMode === "type" ? "ph.type" : inputMode === "live" ? "ph.live" : "ph.talk"); }
-// The page's own layers, registered with the core: the gear (the header's and the rail's), and the Keys sheet from its two buttons.
+// The page's own layers, registered with the core: the gear, and the Keys sheet from its row in the gear and the ? key.
 // A layer opened or closed (the core's showPop) moves the focus into it and, when it closes, back to the button that opened it,
 // unless the user already went elsewhere. The button is remembered here (popButton wraps registerPop), per layer: a layer opened
 // from a row inside another (Keyboard shortcuts in the gear) hands back to the first one's button.
@@ -579,7 +439,7 @@ function popButton(btn, id) {
   const go = $(btn).onclick;
   $(btn).onclick = ev => { lastPress = $(btn); go(ev); };
 }
-popButton("gear", "pGear"); popButton("railgear", "pGear");
+popButton("gear", "pGear");
 const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 const focusables = root => [...root.querySelectorAll(FOCUSABLE)].filter(e => !e.closest("[hidden]"));
 function popChanged(now, was) {
@@ -609,7 +469,6 @@ document.addEventListener("keydown", ev => {
 function relabelPage() {
   if (CFG.engine) $("engine").textContent = engineText();
   for (const b of $("voices").querySelectorAll(".ib")) relabelHear(b);
-  paintFullscreen();
   relabelShell();
 }
 // The voice speed, from the gear's buttons, the player's chip and the Alt+S key: one setter.

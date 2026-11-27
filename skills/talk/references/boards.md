@@ -170,7 +170,7 @@ The core guide (`SKILL.md`) says which board to pick and shows one example each.
 - It goes in the answer with `[[show page: ... | title]]`, before the sentence about it. The voice brings it forward there and on every replay.
 - A page put up with `stage.py show` during a call opens behind the board in front and the voice can never bring it forward. The tag takes over a copy of the same page already put up by hand.
 - A page has nothing to point at.
-- An email or draft the user will copy is the one page you do build: write it to a .txt file in --code and show it as a page, and never leave an unrelated board in front during a draft turn. A .txt page keeps every line break (a .md page is rendered, so a single line break is lost) and does not wrap a long line. The copy icon at the top right of the answer card copies the whole answer, not the draft alone.
+- An email or draft the user will copy is the one page you do build: write it to a .txt file in --code and show it as a page, and never leave an unrelated board in front during a draft turn. A .txt page keeps every line break (a .md page is rendered, so a single line break is lost) and does not wrap a long line.
 
 ```
 [[show page: draft.txt | Email to Sam]] Here is the email, ready to copy.

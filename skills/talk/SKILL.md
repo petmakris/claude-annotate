@@ -67,14 +67,14 @@ A background task that exits with a line starting `TALK_TURN` is the user speaki
   - If something they did not hear still matters, say it briefly, never the whole rest again.
 - A `you` line with `while_working: true` was said while you were still working on their previous turn. Treat it as an addition to that question (a correction, an afterthought, "and also...") and fold it into the one answer. If you reply to the earlier turn after the addition came (whether or not you have collected it yet), that reply is kept in the conversation, tagged as replaced, and not read aloud (it prints `superseded:`): the answer that covers the addition is the one spoken.
 - A `you` line with `replaces: "<turn id>"` is a correction the user marked: they set that earlier turn aside, so answer this one alone and stop the earlier one (a status for it prints `superseded:` and is not shown). A `TALK_CANCELLED` line, or a `cancelled` list on a `TALK_TURN`, names turns the user took back after you collected them: drop them and send no reply (one prints `cancelled:` and shows nothing). Re-arm the doorbell after either.
-- In live mode some words never reach you: spoken commands ("go on", "pause", "repeat that", "go back", "slower", "faster", "say that again slower", "never mind", "stop listening") are acted on by the page. The voice speed is the player's chip or a spoken "slower" or "faster", never something an answer can change: do not promise to speak slower.
+- In live mode some words never reach you: spoken commands ("go on", "pause", "repeat that", "go back", "slower", "faster", "say that again slower", "never mind", "stop listening") are acted on by the page. The voice speed is in Settings, Alt+S, or a spoken "slower" or "faster", never something an answer can change: do not promise to speak slower.
   - "never mind" or the Undo button take back a turn you have not collected yet.
   - If you see a plain "never mind", you already had the turn: drop what you were doing with it and say so in a few words.
 - A sentence that stops mid-thought ("so what about the... um") is held a few seconds for its end, so a turn can arrive a moment after the user stopped talking.
 - **A correction redoes the board it corrects.** When a turn corrects an earlier answer (`replaces`, a `while_working` addition, or the user saying "no, I meant..." or "change X to Y"), the new answer puts up the board the earlier one showed again, with the corrected values, the same columns and rows and the same kind of board, unless the user asked for a different view. Never swap in a narrower chart of one column. Say the changed cells in the speech.
 - A `you` line that starts `About "<part>": ` was asked from that part of a board on the stage: answer about that part.
 
-- A long typed message (paragraphs or numbered points): answer every numbered point in order, and answer any question it asks about the page itself (the copy icon at the top right of the answer card copies the whole answer, never a part of it). State no fact the user did not give; ask for it in one short question.
+- A long typed message (paragraphs or numbered points): answer every numbered point in order, and answer any question it asks about the page itself (the answer's text can be selected and copied in the panel; there is no copy button). State no fact the user did not give; ask for it in one short question.
 
 For every turn:
 
@@ -98,7 +98,7 @@ For every turn:
 - 0: sent. A status for a turn already answered prints `ignored` and is not shown; an answer for a turn already answered prints `ignored`, except `--end`, which still says its wrap-up and ends the call. A cancelled or replaced turn prints `cancelled:` or `superseded:` (see above): the user has moved on from it.
 - 2: refused, unreachable or no such turn. A reply of only boards or key points, with no sentence, is refused (`a board needs a sentence`) and the turn stays open: send it again with the sentence that introduces each board.
 - 4: the call has ended, so nothing was shown and you do not re-arm. When it names a transcript, write the recap from it as for `TALK_END`.
-- `board:` lines after `sent` name a tag that was not shown as asked, or was shown only after a fix. Fix a point or a size in the next answer. When a whole board was refused, resend only that board for the answer already given: `python3 "$SKILL_DIR/talk_client.py" reply --call="<call id>" --board-for <answer number> <<'EOF'` with the `[[show ...]]` block alone. It shows the board with that answer (a chip, no cue, no point), says nothing and uses no answer number; never say the answer again.
+- `board:` lines after `sent` name a tag that was not shown as asked, or was shown only after a fix. Fix a point or a size in the next answer. When a whole board was refused, resend only that board for the answer already given: `python3 "$SKILL_DIR/talk_client.py" reply --call="<call id>" --board-for <answer number> <<'EOF'` with the `[[show ...]]` block alone. It shows the board with that answer (no cue, no point), says nothing and uses no answer number; never say the answer again.
 - A doorbell that prints `doorbell superseded` was replaced by a newer one: do not re-arm for it.
 
 **An answer with no turn.**
@@ -141,13 +141,13 @@ Before a table, ask: could the viewer say what each column measures, and would t
 
 **At most one plain claim sentence of 20 words or fewer before the board's tag.** A lead-in that names a list is still that one sentence, never a second.
 
-- **The stage reads your words aloud with you.** Each sentence appears as it is said and the word being said is lit, so the words on the stage are always the words being spoken. When the voice reaches a board's tag, the board takes the stage for the rest of the answer, and the sentence being said stays under it on one line. The panel beside it holds the same answer in full, with its question and its boards named as chips, and keeps every earlier answer as a row of a searchable list: write each answer to stand on its own, with a plain first sentence, since that sentence is the row's gist.
+- **The stage reads your words aloud with you.** Each sentence appears as it is said and the word being said is lit, so the words on the stage are always the words being spoken. When the voice reaches a board's tag, the board takes the stage for the rest of the answer, and the sentence being said stays under it on one line. The panel beside it holds the conversation as a chat, every question and every answer in full: write each answer to stand on its own, with a plain first sentence.
 - **A question about structure or flow is answered with the board.**
   - The board's tag follows the one lead-in sentence above, then walk through it with points.
   - Show the whole board first, then zoom into the part that matters.
   - Any other answer says its plain part first, then puts up what hearing cannot carry.
 - **A turn with nothing for the eye has no board.** A yes or no, one number, a repeat of what you said, a recap, a thanks and a go-ahead are answered in two or three plain sentences. Never put the number, the file or the test result on a code board or a table to look thorough.
-- **An email or draft the user will copy** goes in a file, never the panel: write it to a .txt file in --code and show it as a page (`[[show page: draft.txt | Email to Sam]]`, a .md file loses its single line breaks). Never leave an unrelated board in front during a draft turn. The copy icon at the top right of the answer card copies the whole answer, not the draft alone.
+- **An email or draft the user will copy** goes in a file, never the panel: write it to a .txt file in --code and show it as a page (`[[show page: draft.txt | Email to Sam]]`, a .md file loses its single line breaks). Never leave an unrelated board in front during a draft turn.
 - **Point at every place a sentence refers to**, one `[[point: lines A-B]]` for each range (a list of ranges such as `lines 3-5, 11-14` is refused). Keep an example complete: show a whole short file, and say what it prints.
 - **Short.** One idea per sentence, under 20 words. `reply` prints a `board:` line for a sentence over 30 words or an answer over 220. Plain sentences, with no markdown, lists or symbols. Never read identifiers or values aloud one by one: put them on the stage and say what they mean.
 - **Labels are words you will say.** A part lights when a sentence says its label, so write labels as spoken words (`the new server`), never symbols or primes (`X'`, `->`, `v2'`). Put the symbol in `sub`.
@@ -295,7 +295,7 @@ For a flowchart:
 - A lit step or node is drawn as the one being said.
 - It points at the last board shown. Name another one by its title: `[[point Turn path: node Q]]`.
 - Use two to four in an explanation, not one per sentence.
-- `[[key: one short line]]` after the sentence it sums up. It is not said. It goes on the **Key points** board, which is first in the board list but never in front: the user opens it from the Key points chip or the board list, and when the user asks to see what was saved, the reply puts it up with a front cue for Key points. It keeps every key point of the call and lights each one up as the voice reaches it.
+- `[[key: one short line]]` after the sentence it sums up. It is not said. It goes on the **Key points** board, which is first in the board list but never in front: the user opens it from the stage's board list, and when the user asks to see what was saved, the reply puts it up with a front cue for Key points. It keeps every key point of the call and lights each one up as the voice reaches it.
 
 **Building a board up while you talk.** A sequence, a flowchart, a map or a table can come in one thing at a time. With no verbs, each thing comes in with the first sentence that names it, so label each part with the words you will say.
 

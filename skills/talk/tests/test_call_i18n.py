@@ -9,7 +9,7 @@ STATIC = Path(__file__).resolve().parents[1] / "static"
 I18N = (STATIC / "call-i18n.js").read_text()
 HTML = (STATIC / "call.html").read_text()
 # The files whose words go through t() (tr() where a function keeps a local named t).
-ROUTED = ["call-input.js", "call-return.js", "call-calls.js", "call-live.js", "call-wait.js", "call-shell.js", "call-stage.js", "call-player.js"]
+ROUTED = ["call-input.js", "call-announce.js", "call-calls.js", "call-live.js", "call-wait.js", "call-shell.js", "call-stage.js", "call-player.js"]
 
 
 def table(lang):
@@ -93,16 +93,16 @@ def test_the_html_carries_a_key_for_every_word_it_shows():
 @needs_node
 def test_the_language_choice_sets_html_lang_and_the_words_and_detect_follows_the_latest_answer(tmp_path):
     html, states = served(tmp_path, ["An answer in English."])
-    words = "[document.documentElement.lang, uiLang, $('skipmsg').textContent, $('tlsearch').placeholder, $('statestrip').hidden ? '' : $('sstext').textContent]"
+    words = "[document.documentElement.lang, uiLang, $('skipmsg').textContent, $('text').placeholder]"
     page = CallPage(html, states, start=1).check(words)
     page.js("document.querySelector('#lang [data-lang=el]').click(); await settle();").check(words)
     page.js("document.querySelector('#lang [data-lang=en]').click(); await settle();").check(words)
     # Detect: the latest answer's language decides
     page.js("document.querySelector('#lang [data-lang=auto]').click(); await settle();").check("[document.documentElement.lang, uiLang]")
-    page.js("STATES[1].entries.find((e) => e.who === 'claude').text = 'Μια απάντηση στα ελληνικά.'; STATES[1].v = 'gr'; await serve(1);").check("[document.documentElement.lang, uiLang, $('sstext').textContent]")
+    page.js("STATES[1].entries.find((e) => e.who === 'claude').text = 'Μια απάντηση στα ελληνικά.'; STATES[1].v = 'gr'; await serve(1);").check("[document.documentElement.lang, uiLang]")
     out = page.run()
-    assert out[0] == ["en", "en", "Skip to the message", "Search answers", "Waiting for you"]
-    assert out[1] == ["el", "el", "Μετάβαση στο μήνυμα", "Αναζήτηση απαντήσεων", "Σας περιμένει"]
+    assert out[0] == ["en", "en", "Skip to the message", "Message"]
+    assert out[1] == ["el", "el", "Μετάβαση στο μήνυμα", "Μήνυμα"]
     assert out[2] == out[0]
     assert out[3] == ["en", "en"]
     assert out[4][:2] == ["el", "el"]
@@ -111,9 +111,9 @@ def test_the_language_choice_sets_html_lang_and_the_words_and_detect_follows_the
 @needs_node
 def test_a_stored_greek_choice_opens_the_page_in_greek_and_a_launch_language_wins(tmp_path):
     html, states = served(tmp_path, [])
-    state = "[document.documentElement.lang, $('keyhint').textContent.includes('πρόταση'), document.querySelector('#pKeys .khead h3').textContent, document.querySelector('#lang [data-lang=auto]').textContent]"
-    assert CallPage(html, states, stored={"language": "el"}).check(state).run() == [["el", True, "Συντομεύσεις πληκτρολογίου", "Ανίχνευση"]]
-    assert CallPage(html, states).check(state).run() == [["en", False, "Keyboard shortcuts", "Detect"]]
+    state = "[document.documentElement.lang, document.querySelector('#pKeys .sheethead h2').textContent, document.querySelector('#lang [data-lang=auto]').textContent]"
+    assert CallPage(html, states, stored={"language": "el"}).check(state).run() == [["el", "Συντομεύσεις πληκτρολογίου", "Ανίχνευση"]]
+    assert CallPage(html, states).check(state).run() == [["en", "Keyboard shortcuts", "Detect"]]
 
 
 def test_a_routed_file_never_shadows_the_function_it_asks_for_its_words():

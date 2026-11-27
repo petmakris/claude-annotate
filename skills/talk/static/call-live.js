@@ -242,7 +242,6 @@ async function sendLive(u) {
     if (held) { audio.pause(); clearTimeout(held.armTimer); held = null; }
     audio.volume = 1; deferred = null;
     chime(520);
-    undoable = {entry: body.entry.id, until: Date.now() + 8000}; setTimeout(paintAll, 8100);
     turnSentAt = Date.now();
     turnSent({via: "live", text: "", entry: body.entry.id});
     if (sayingBack && answering === sayingBack) { answering = null; $("text").placeholder = t("ph.talk"); clearStop(); }
@@ -264,7 +263,7 @@ function speedBySpeech(cmd, h) {
 function runCommand(cmd, body) {
   chime(700);
   if (cmd === "mute") { stopLive(t("live.stopped")); return; }
-  if (cmd === "withdraw") { undoable = null; flash(t("live.taken")); if (held) { held.armed = false; } return; }  // settle resumes a held answer
+  if (cmd === "withdraw") { flash(t("live.taken")); if (held) { held.armed = false; } return; }  // settle resumes a held answer
   const h = held;
   release();
   if (cmd in SPEED_STEP) { speedBySpeech(cmd, h); return; }

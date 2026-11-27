@@ -85,7 +85,5 @@ def test_following_an_answer_with_no_board_the_strip_over_the_earlier_board_name
     html, states = served(tmp_path, [FIRST, TEXT_ONLY], seconds=4.0)
     page = CallPage(html, states, seconds=4.0).js("await serve(2);fromStage({type: 'stage:views', list: [{name: 'one', answer: 1}]}); fromStage({type: 'stage:shown', view: 'one'}); await playTo(2.5);")
     page.check(STRIP)
-    page.check("$('nowfollow').querySelector('.fl-text').textContent")
     got = page.run()
     assert got[0] == {"cls": "reader strip", "foreign": True, "opacity": "0.62", "label": "Answer 2:", "shown": "inline"}
-    assert got[1] == "Stage still on: One"

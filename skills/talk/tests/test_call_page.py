@@ -38,7 +38,7 @@ def test_a_replay_from_the_first_word_fronts_the_board_the_answer_came_in_with(t
     html, states = served(tmp_path, [f"{six('intro')}. [[show table | Three paths changed]]{TABLE}[[/show]] "
                                      f"{six('paths')}. [[show table | Nightly batch guard]]{TABLE}[[/show]] {six('guard')}."])
     page = CallPage(html, states, autoplay=False).js("await serve(1); toStage().length = 0;")
-    page.js("document.querySelector(\"#nowtext .w[data-i='0']\").click();")
+    page.js("document.querySelector(\"#turns .w[data-i='0']\").click();")
     page.check("toStage().find((m) => m.type === 'stage:state')")
     assert page.run() == [{"type": "stage:state", "front": "three-paths-changed", "frames": {}, "keys": 0, "answer": 1}]
 
@@ -49,7 +49,7 @@ def test_a_play_the_reader_starts_keeps_the_board_they_picked(tmp_path):
     page = CallPage(html, states, seconds=3.0).js("await serve(1); await playTo(1.2);")
     page.check("toStage().some((m) => m.type === 'stage:frame' && m.n === 1)")
     starts = {"Play": "$('playpause').click();",
-              "word tap": "document.querySelector(\"#nowtext .w[data-i='3']\").click();",
+              "word tap": "document.querySelector(\"#turns .w[data-i='3']\").click();",
               "Space": "document.body.focus(); key(' ');",
               "← then Space": "document.body.focus(); key('ArrowLeft'); key(' ');",
               "← on the stage then Space": "fromStage({ type: 'stage:key', key: 'ArrowLeft' }); fromStage({ type: 'stage:key', key: ' ' });"}
@@ -93,11 +93,10 @@ def test_a_replay_of_the_sentence_about_a_page_fronts_the_page(tmp_path):
     html, states = served(tmp_path, [f"[[show page: walk.html | Report data walkthrough]] {six('page')}. "
                                      f"[[show table | One asset's groups]]{TABLE}[[/show]] {six('fund')}."], seconds=4.0, code=code)
     page = CallPage(html, states, seconds=4.0, autoplay=False).js("await serve(1);")
-    page.check("[...document.querySelectorAll('#convo button.chip.board')].map((b) => b.dataset.view)")
     for word in (0, 7):
-        page.js("toStage().length = 0;").js(f"document.querySelector(\"#nowtext .w[data-i='{word}']\").click();")
+        page.js("toStage().length = 0;").js(f"document.querySelector(\"#turns .w[data-i='{word}']\").click();")
         page.check("toStage().find((m) => m.type === 'stage:state').front")
-    assert page.run() == [["report-data-walkthrough", "one-asset-s-groups"], "report-data-walkthrough", "one-asset-s-groups"]
+    assert page.run() == ["report-data-walkthrough", "one-asset-s-groups"]
 
 
 def test_an_answer_played_to_its_end_holds_its_last_frame_then_shows_its_boards_whole(tmp_path):
@@ -123,22 +122,19 @@ def test_an_answer_held_for_a_hidden_tab_stays_put_once_the_reader_played_someth
     page = CallPage(html, states, start=1)
     page.js("document.visibilityState = 'hidden'; await serve(2);")
     # back in the tab, the reader plays the first answer from its Play, then pauses it
-    page.js("document.querySelector('#tllist .tlrow button.play').click(); audio.pause();")
+    page.js("document.querySelector('#turns .turn .w').click(); audio.pause();")
     page.js("document.visibilityState = 'visible'; document.dispatchEvent(new ShimEvent('visibilitychange'));")
     page.check("[audio.paused, audio.getAttribute('src')]")
     assert page.run() == [[True, "/c/test-call-id/audio/0000.wav"]]
 
 
-def test_the_panel_collapses_to_a_rail_and_moves_sides_and_both_are_remembered(tmp_path):
+def test_the_panel_moves_sides_and_the_side_is_remembered(tmp_path):
     html, states = served(tmp_path, [])
     page = CallPage(html, states)
-    state = "[$('app').hasAttribute('data-rail'), $('app').dataset.side, localStorage.getItem('talk.panel'), localStorage.getItem('talk.side')]"
+    state = "[$('app').dataset.side, localStorage.getItem('talk.side')]"
     page.check(state)
-    page.js("$('collapse').click();").check(state)
     page.js("document.querySelector('#side [data-choice=left]').click();").check(state)
-    page.js("$('expand').click();").check(state)
-    assert page.run() == [[False, "right", None, None], [True, "right", '"rail"', None],
-                          [True, "left", '"rail"', '"left"'], [False, "left", '"open"', '"left"']]
+    assert page.run() == [["right", None], ["left", '"left"']]
 
 
 VOICES = [{"id": "en-US-AvaMultilingualNeural", "name": "Ava", "note": "American, reads Greek too"},
@@ -304,7 +300,7 @@ def test_a_say_back_waits_for_the_answer_in_the_text_field_and_sends_its_questio
     page.check("[sentTo.filter(s => s[0] === '/api/say').map(s => s[1]), $('stopcard').hidden, $('text').placeholder]")
     assert page.run() == [[False, "Say it in your own words, then Send", True],
                           [[{"text": "it names the old sticker", "answering": "What does hard-coded mean here?"}], True,
-                           "Type, or press the mic"]]
+                           "Message"]]
 
 
 LIVE_HEARS = """
@@ -326,7 +322,7 @@ def test_a_say_back_spoken_in_live_mode_sends_its_question_and_clears_the_card(t
     page.check("[sentTo.filter(s => s[0].startsWith('/api/listen')).map(s => new URLSearchParams(s[0].split('?')[1]).get('answering')),"
                " $('stopcard').hidden, $('text').placeholder]")
     assert page.run() == [[False, "Say it in your own words, then Send"],
-                          [["What does hard-coded mean here?"], True, "Type, or press the mic"]]
+                          [["What does hard-coded mean here?"], True, "Message"]]
 
 
 def test_the_stage_never_runs_past_a_guess_the_reader_has_not_answered(tmp_path):
@@ -366,11 +362,10 @@ from pathlib import Path as _Path
 _CSS = (_Path(__file__).resolve().parents[1] / "static" / "call.css").read_text()
 
 
-def test_a_phone_gear_panel_is_a_sheet_capped_to_the_space_above_the_panel():
-    # callpage-1: the sheet sits one panel height + 10px up (58%, or 52% while a board is up) and was as tall as the page less 68px, so its top left the screen
-    assert ".pop,.app[data-side=\"left\"] .pop{top:auto;bottom:calc(var(--ph) + 10px);left:10px;right:10px;width:auto;max-height:calc(100% - var(--ph) - 24px)}" in _CSS
+def test_a_phone_panel_sits_under_the_stage_and_a_sheet_fills_the_panel():
+    # the settings and keys sheets cover the panel (inset:0 inside it); on a phone the panel is 58% of the page, 52% while a board is up
     assert ".app{--ph:58%}" in _CSS and ".app[data-board]{--ph:52%}" in _CSS
-    assert ".app[data-rail] .pop,.app[data-rail] .gearpop{top:auto;bottom:70px;max-height:calc(100% - 82px)}" in _CSS
+    assert ".sheet{inset:0;" in (_Path(__file__).resolve().parents[1] / "static" / "call-panel.css").read_text()
 
 
 def test_the_strip_is_sized_from_the_font_it_is_set_in_tv_mode_too():
@@ -392,16 +387,6 @@ def test_the_strip_scrolls_the_word_being_said_into_sight(tmp_path):
     assert page.run() == [["reader strip", 110]]  # the word's middle (160) is brought to the strip's middle (50)
 
 
-def test_a_chip_tap_on_the_board_in_front_turns_following_off_and_shows_the_board(tmp_path):
-    html, states = served(tmp_path, [f"First things first. [[show table | One]]{TABLE}[[/show]] Then the second thing."], seconds=4.0)
-    page = CallPage(html, states, seconds=4.0).js("await serve(1); await playTo(0.3);")
-    page.js("fromStage({ type: 'stage:shown', view: 'one' });")
-    page.check("[$('reader').className, follow]")  # the reader's text covers the stage; the board is in front behind it
-    page.js("document.querySelector('#convo button.chip.board').click();")
-    page.check("[$('reader').className, follow, toStage().filter((m) => m.type === 'stage:follow').pop().on]")
-    assert page.run() == [["reader text", True], ["reader strip", False, False]]
-
-
 def test_sentences_follow_the_servers_starts_and_fall_back_to_the_pages_own_splitter(tmp_path):
     html, states = served(tmp_path, [], seconds=4.0)
     page = CallPage(html, states, seconds=4.0)
@@ -417,7 +402,7 @@ def test_a_second_page_of_the_call_does_not_speak_and_says_so(tmp_path):
     html, states = served(tmp_path, ["Said to two screens."])
     held = {"playing.test-call-id": {"id": "other-page", "at": 0}}
     page = CallPage(html, states, stored=held).js("localStorage.setItem('talk.playing.test-call-id', JSON.stringify({id: 'other-page', at: Date.now()})); await serve(1);")
-    page.check("[audio.paused, audio.getAttribute('src'), $('status').textContent]")
+    page.check("[audio.paused, audio.getAttribute('src'), $('note').textContent]")
     assert page.run() == [[True, "/c/test-call-id/audio/0000.wav", "Playing on another screen."]]
 
 
@@ -432,11 +417,11 @@ def test_an_answer_that_comes_while_another_plays_waits_in_a_row_and_starts_when
     html, states = served(tmp_path, ["The first answer is here.", "The second answer is here."], seconds=3.0)
     page = CallPage(html, states, seconds=3.0).js("await serve(1); await playTo(1.0);")
     page.js("await serve(2);")
-    page.check("[audio.getAttribute('src'), $('queuerow').hidden, $('queuerow').querySelector('.qr-text').textContent, $('status').hidden]")
+    page.check("[audio.getAttribute('src'), queued ? queued.id : null, $('note').hidden]")
     page.js("await end(); await advance(50);")
-    page.check("[audio.getAttribute('src'), audio.paused, $('queuerow').hidden, $('status').hidden]")
-    assert page.run() == [["/c/test-call-id/audio/0000.wav", False, "Next: answer 2. It plays when this one ends.", True],
-                          ["/c/test-call-id/audio/0001.wav", False, True, True]]
+    page.check("[audio.getAttribute('src'), audio.paused, queued ? queued.id : null, $('note').hidden]")
+    assert page.run() == [["/c/test-call-id/audio/0000.wav", 1, True],
+                          ["/c/test-call-id/audio/0001.wav", False, None, True]]
 
 
 def test_the_poll_loop_goes_on_while_the_tab_is_hidden_and_at_once_when_it_is_seen(tmp_path):
@@ -458,9 +443,9 @@ def test_a_tab_out_of_sight_stops_at_a_check_on_the_audios_own_timeupdate(tmp_pa
 def test_a_page_that_holds_the_server_claim_plays_and_one_that_does_not_stays_silent(tmp_path):
     html, states = served(tmp_path, ["Said to two screens."])
     mine = CallPage(html, states).js("globalThis.playerReply = (b) => ({player: b.page}); claimPlayer(false); await serve(1);")
-    mine.check("[audio.paused, claims.map((c) => c.take), $('status').textContent]")
+    mine.check("[audio.paused, claims.map((c) => c.take), $('note').textContent]")
     other = CallPage(html, [dict(st, player="the-tv") for st in states]).js("globalThis.playerReply = () => ({player: 'the-tv'}); await claimPlayer(false); await serve(1);")
-    other.check("[audio.paused, $('status').textContent]")
+    other.check("[audio.paused, $('note').textContent]")
     # the storage lock is not consulted once the server answers: a lock another page holds there does not silence this page
     free = CallPage(html, states).js("localStorage.setItem('talk.playing.test-call-id', JSON.stringify({id: 'x', at: Date.now()})); globalThis.playerReply = (b) => ({player: b.page}); await claimPlayer(false); await serve(1);")
     free.check("audio.paused")
@@ -474,7 +459,7 @@ def test_pressing_play_takes_the_claim_and_a_page_that_loses_it_pauses(tmp_path)
     page = CallPage(html, states, seconds=3.0).js("globalThis.playerReply = (b) => ({player: b.page}); await claimPlayer(false); await serve(1); await playTo(0.5);")
     page.js("audio.pause(); claims.length = 0; $('playpause').click();").check("[audio.paused, claims.map((c) => c.take)]")
     # the next answer's state says another page holds the voice (it took it): this page stops
-    page.js("tookAt = 0; audio.play(); seeHolder('the-tv');").check("[audio.paused, $('status').textContent]")
+    page.js("tookAt = 0; audio.play(); seeHolder('the-tv');").check("[audio.paused, $('note').textContent]")
     assert page.run() == [[False, [True]], [True, "Playing on another screen."]]
 
 

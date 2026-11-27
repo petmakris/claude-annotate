@@ -171,11 +171,11 @@ Replaces block-mockup.png.
 1. 0-3 s: a sequence board, "One timed-out charge"; each sentence lights its step (sends the cart, wraps the charge in a retry, charges once, times out, waits and tries again, charges again with the same key, shows the order as paid). The caption bar under the stage shows the sentence with the word being said lit. A pill says the call reads it aloud and the loop is silent.
 2. 3-6 s: the next board, "Before and after the retry": main on the left, the branch on the right, rows lined up (`~ = +`), "No step here" where main has no retry, then the green outcome, "One timeout no longer loses the order".
 3. 6-9 s: a code board of `api/retry.py` lights lines 8-10, then 11-12, then 13-16.
-4. 9-11 s: the Key points board, opened from its chip, with the three key points of the answer.
+4. 9-11 s: the Key points board, fronted on the stage, with the three key points of the answer.
 
 ### Staging
 
-- `tools/talk_render/render.py` plays the answer on a real call page: the repo's own talk server with its silent stand-in voice (`fake_speech.py`), no microphone, no Azure, never port 8766. The clip imports it and adds three things in its own script: a shot at the first word and a middle word of each sentence (so the lit word moves), a tap on the Key points chip after the answer ends, and device scale 2 for crisp text.
+- `tools/talk_render/render.py` plays the answer on a real call page: the repo's own talk server with its silent stand-in voice (`fake_speech.py`), no microphone, no Azure, never port 8766. The clip imports it and adds three things in its own script: a shot at the first word and a middle word of each sentence (so the lit word moves), the Key points board fronted after the answer ends, and device scale 2 for crisp text.
 - The answer is `tools/promo/fixtures/ca-05/answer.txt`, invented for the invented shop-app (`tools/promo/fixtures/shop-app`, branch `checkout-retry`). talk accepted it with no `board:` line.
 - Each shot is cropped to the stage and its caption bar (the call panel beside it is too small to read at 800 px). Delays follow the voice's own timings, squeezed to about 10 s.
 

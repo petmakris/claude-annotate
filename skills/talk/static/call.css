@@ -1,6 +1,4 @@
-/* The call page: the stage on one side, the call's panel on the other. The panel holds the whole
-   conversation as a chat, the word being said lit in the answer being played, and under it the player,
-   the text field and the mic. It collapses to a rail that keeps the mic and the player. A side panel costs
+/* The call page: the stage on one side, the call's panel on the other (call-panel.css). A side panel costs
    width, which a board can spare; the stage keeps the window's full height, which code needs.
    The shared tokens are in tokens.css. These are the page's own, set for both themes; <html>
    always carries data-theme, so they need no media query. */
@@ -19,7 +17,6 @@ svg{display:block;flex:none}
 .app{position:relative;height:100dvh;display:grid;grid-template-rows:minmax(0,1fr);grid-template-columns:minmax(0,1fr) var(--pw)}
 .app[data-side="left"]{grid-template-columns:var(--pw) minmax(0,1fr)}
 .app[data-side="left"] .panel{order:-1;border-left:0;border-right:1px solid var(--line)}
-.app[data-rail]{--pw:60px}
 
 /* Owners (the feature batches of the panel's rebuild): each region below says whose it is. New rules go in the owner's own
    file (call-shell.css C, call-wait.css W, call-calls.css R, call-input.css I, loaded after this one); a rule that already
@@ -84,277 +81,35 @@ svg{display:block;flex:none}
 .nostage{margin:auto;color:var(--faint);font-size:14px}
 
 /* ---- the panel ---- */
-.panel{position:relative;min-width:0;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);background:var(--panel);border-left:1px solid var(--line)}
-.panel>.open{min-width:0;min-height:0;display:flex;flex-direction:column}
-.app[data-rail] .panel>.open,.app:not([data-rail]) .rail{display:none}
-.grip{position:absolute;z-index:4;top:0;bottom:0;left:-4px;width:8px;cursor:col-resize;touch-action:none}
-.app[data-side="left"] .grip{left:auto;right:-4px}
-.grip:hover,.grip.on{background:linear-gradient(90deg,transparent 3px,var(--acc-mid) 3px 5px,transparent 5px)}
-.app[data-rail] .grip{display:none}
-.app[data-side="left"] .flip{transform:scaleX(-1)}
-/* [shared] the header; [I] the voices list below it */
-.phead{flex:none;min-height:48px;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:0 6px;padding:0 6px 0 14px;border-bottom:1px solid var(--line)}
-.topic{flex:1 1 110px;min-width:110px;font-weight:600;font-size:13.5px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
-/* a panel at its narrowest (or a phone) gives the title three lines, so a long one is read without hovering it; the title keeps 110 px
-   at least, and when the buttons would take more than the rest of the row they go on a row of their own under it */
-@container (max-width:400px){.topic{-webkit-line-clamp:3;margin:4px 0}}
-@container (max-width:339px){.topic{flex-basis:100%}}
-.engine{margin:0;font-size:12.5px;color:var(--muted)}
-.voices{display:flex;flex-direction:column;gap:2px;margin-top:8px}
-.vrow{display:flex;align-items:center;gap:4px}
-.vpick{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;padding:6px 10px;border-radius:9px;text-align:left;font:500 13px var(--sans)}
-.vpick small{font:400 12px var(--sans);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.vpick:hover{background:var(--shade)}
-.vpick[aria-checked="true"]{background:var(--acc-soft);color:var(--acc)}
-.vrow .ib{width:30px;height:30px}
-.vrow .ib.on{color:var(--claude)}
-.live{width:8px;height:8px;border-radius:50%;background:var(--acc);box-shadow:0 0 8px var(--acc);flex:none}
-.live.off{background:var(--faint);box-shadow:none}
 
-/* [C] the conversation: the Now card and the list of earlier answers are in call-shell.css; only its box and the board chips are here */
-.convo{flex:1;min-height:0;overflow:auto;padding:12px 12px 10px;display:flex;flex-direction:column;gap:12px}
-.empty{margin:12px 0;color:var(--faint);text-align:center;display:flex;flex-direction:column;gap:4px}
-.empty .e2{font-size:13px}
-.chip{font-size:12px;padding:3px 10px;border-radius:8px;background:var(--acc-soft);color:var(--acc);overflow-wrap:anywhere}
-.chip.note{align-self:flex-start;background:var(--warn-soft);color:var(--warn)}
-button.chip.board{display:inline-flex;gap:6px;align-items:center;min-height:30px;font:500 13px/1.4 var(--sans);background:var(--panel);color:var(--ink);border:1px solid var(--line)}
-button.chip.board svg{color:var(--muted)}
-button.chip.board small{font:500 11px var(--sans);color:var(--acc);background:var(--acc-soft);border-radius:999px;padding:0 6px}
-button.chip.board.front{border-color:var(--acc);background:var(--acc-soft)}
-button.chip.board.front svg{color:var(--acc)}
-button.chip.board.missing{opacity:.6;text-decoration:line-through;border-style:dashed}
-button.chip.board:hover:not(:disabled){border-color:var(--acc-mid);background:var(--acc-soft)}
-
-/* [shared] the foot. [W] .info .status .undo .prep; [C] .player #seek .time; [I] .compose .wave .bars */
-/* the foot: what Claude is doing, the player, then typing and talking */
-.foot{position:relative;flex:none;border-top:1px solid var(--line);padding:8px 12px 12px;display:flex;flex-direction:column;gap:8px}
-.jump{position:absolute;z-index:2;left:50%;bottom:calc(100% + 10px);transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:6px 12px;
-  border-radius:999px;background:var(--ink);color:var(--panel);font:500 12.5px var(--sans);box-shadow:var(--lift);white-space:nowrap}
-.info{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
-.info:not(:has(>:not([hidden]))){display:none}
-.foot .status{flex:1;min-width:0;font-size:13px;color:var(--muted)}
-.status.warn{color:var(--warn)}
-.status.shimmer{background:linear-gradient(90deg,var(--muted) 0%,var(--ink) 50%,var(--muted) 100%);background-size:200% 100%;
-  -webkit-background-clip:text;background-clip:text;color:transparent;animation:shim 1.8s linear infinite}
-@keyframes shim{from{background-position:100% 0}to{background-position:-100% 0}}
-.undo{padding:1px 9px;border-radius:999px;border:1px solid var(--line);font:500 12px var(--sans)}
-.undo:hover{background:var(--shade)}
-.prep{flex-basis:100%;display:flex;flex-direction:column;gap:5px}
-.preplbl{font-size:12.5px;color:var(--muted)}
-.preptrack{display:block;height:3px;border-radius:2px;background:var(--line);overflow:hidden}
-.preptrack i{display:block;height:100%;width:0;border-radius:2px;background:var(--claude);transition:width .2s linear}
-.preptrack.queued i{width:30%!important;opacity:.5;animation:prepwait 1.4s ease-in-out infinite alternate}
-@keyframes prepwait{from{transform:translateX(-100%)}to{transform:translateX(330%)}}
-.player{display:flex;align-items:center;gap:4px}
-.ib.pp{background:var(--claude-soft);color:var(--claude);border-radius:50%}
-.ib.pp:hover:not(:disabled){background:var(--claude-soft);color:var(--claude);filter:brightness(.96)}
-#seek{-webkit-appearance:none;appearance:none;flex:1;min-width:40px;height:4px;margin:0 8px;border-radius:2px;cursor:pointer;
-  background:linear-gradient(var(--claude),var(--claude)) 0/var(--p,0%) 100% no-repeat,var(--line)}
-#seek::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--claude);opacity:0;transition:opacity .15s}
-#seek:hover::-webkit-slider-thumb{opacity:1}
-#seek::-moz-range-thumb{width:12px;height:12px;border:0;border-radius:50%;background:var(--claude)}
-.time{font:500 12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
-.compose{display:flex;align-items:flex-end;gap:4px;border:1px solid var(--line);border-radius:24px;padding:4px;background:var(--bg)}
-.compose:has(textarea:focus-visible){border-color:var(--acc)}
-.compose textarea{flex:1;min-width:0;resize:none;border:0;outline:0;background:transparent;color:var(--ink);font:400 14px/1.45 var(--sans);padding:9px 4px 9px 10px;max-height:120px;align-self:center}
-.compose textarea::placeholder{color:var(--faint)}
-.compose textarea:focus-visible{outline:0}
-.compose>.ib:not(.mic){margin-bottom:2px}
-.wave{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:10px;align-self:center;overflow:hidden;height:40px}
-.bars{display:flex;align-items:center;gap:3px;height:32px}
-.bars i{width:3px;height:4px;border-radius:2px;background:var(--rec);transition:height .08s}
-.rectime{font:500 13px var(--mono);color:var(--rec)}
-
-/* [shared] the rail: [C] the player ring, [I] the mic */
-/* ---- the rail: the panel collapsed, the mic and the player still in reach ---- */
-.rail{min-height:0;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0}
-.rail .sp{flex:1}
-.nowline{writing-mode:vertical-rl;transform:rotate(180deg);font-size:12px;color:var(--muted);max-height:40vh;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.app[data-side="left"] .nowline{transform:none}
-.ring{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--claude) var(--p,0%),var(--line) 0)}
-.ring .ib.pp{width:38px;height:38px;background:var(--panel)}
-.rail .ib.mic{width:44px;height:44px}
-
-/* [shared] .ib and the mic. [I] the tooltips (T7, below) */
-/* ---- buttons ---- */
-.ib{position:relative;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:var(--muted);flex:none;
-  transition:background-color .15s,color .15s,transform .15s}
-.ib:hover:not(:disabled){background:var(--shade);color:var(--ink)}
-.ib:active:not(:disabled){transform:scale(.94)}
-.ib[aria-expanded="true"]{color:var(--acc)}
-.ib .dot{position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--claude);box-shadow:0 0 0 2px var(--panel)}
-.ib.mic{width:40px;height:40px;border-radius:50%;color:var(--on-acc);background:var(--acc);box-shadow:0 6px 22px -8px color-mix(in srgb,var(--acc) 70%,transparent)}
-.ib.mic:hover:not(:disabled){color:var(--on-acc);background:color-mix(in srgb,var(--acc) 85%,white)}
-.app[data-state="listening"] .ib.mic{background:var(--rec);box-shadow:0 0 0 calc(4px + var(--lvl,0) * 10px) color-mix(in srgb,var(--rec) 25%,transparent)}
-.ib.mic .spin{display:none}
-.ib.mic.busy svg{display:none}
-.ib.mic.busy .spin{display:block}
-.ib.mic.live{background:var(--good);box-shadow:0 0 0 calc(3px + var(--lvl,0) * 9px) color-mix(in srgb,var(--good) 22%,transparent)}
-.ib.mic.live.muted{background:var(--faint);box-shadow:none}
-.ib.send{color:var(--acc)}
-.ib.go{border-radius:50%;background:var(--acc);color:var(--on-acc)}
-.ib.go:hover:not(:disabled){background:color-mix(in srgb,var(--acc) 85%,white);color:var(--on-acc)}
-.ib.go:disabled{background:var(--shade);color:var(--faint);opacity:1}
-.pp .i-pause,.pp.playing .i-play{display:none}
-.pp.playing .i-pause{display:block}
-#fullscreen .i-exit,#fullscreen[aria-pressed="true"] .i-enter{display:none}
-#fullscreen[aria-pressed="true"] .i-exit{display:block}
-/* Tooltips. A hover tip waits half a second and goes again after a few, so a pointer parked on a button (after a click, or where a
-   collapsing panel left it) never leaves one up over the line above; on a keyboard the tip shows at once and goes again after about
-   three seconds (the same fade), so a focused button never keeps one up. A disabled button has none. They open under the header's
-   buttons, to the left of the field's, above the player's (onto the answer's own room, never onto the strip of Following under the
-   transport), beside the rail's; the rail's Expand opens under itself, since the stage's Copy button sits beside it. */
-@keyframes tip{0%,10%{opacity:0}16%,82%{opacity:1}100%{opacity:0}}
-.ib[data-tip]::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);white-space:nowrap;
-  font:500 12px var(--sans);color:var(--ink);background:var(--panel);border:1px solid var(--line);padding:4px 8px;border-radius:7px;
-  pointer-events:none;z-index:20;box-shadow:var(--lift);opacity:0;visibility:hidden}
-.ib[data-tip]:focus-visible::after{visibility:visible;animation:tip 3s both}
-@media (hover:hover){
-  .ib[data-tip]:hover:not(:disabled)::after{visibility:visible;animation:tip 5s both}
-}
-.phead .ib[data-tip]::after{bottom:auto;top:calc(100% + 8px);left:auto;right:0;transform:none}
-.compose .ib[data-tip]::after{bottom:auto;top:50%;left:auto;right:calc(100% + 8px);transform:translateY(-50%)}
-.compose #cancel[data-tip]::after{top:auto;bottom:calc(100% + 8px);left:0;right:auto;transform:none}
-.player .ib[data-tip]::after{top:auto;bottom:calc(100% + 8px);left:0;transform:none}
-.player .ib.pp[data-tip]::after{left:50%;transform:translateX(-50%)}
-.player .ib.speedchip[data-tip]::after{left:auto;right:0}
-.rail .ib[data-tip]::after{bottom:auto;top:50%;left:auto;right:calc(100% + 8px);transform:translateY(-50%)}
-.app[data-side="left"] .rail .ib[data-tip]::after{right:auto;left:calc(100% + 8px)}
-.rail #expand[data-tip]::after{top:calc(100% + 8px);left:auto;right:0;transform:none}
-.app[data-side="left"] .rail #expand[data-tip]::after{right:auto;left:0}
-.ib[aria-expanded="true"]::after{display:none}
-@media (prefers-reduced-motion:reduce){.ib[data-tip]:hover:not(:disabled)::after,.ib[data-tip]:focus-visible::after{animation:none;opacity:1}}
 .spin{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-
-/* [shared] .pop and .toast; [I] .segc .row .liveopts .demobtn .endbtn (the gear); [R] the Calls popover (call-calls.css) */
-/* ---- glass layers: the popovers and the toast ---- */
-.pop,.toast{position:absolute;z-index:10;background:var(--glass);border:1px solid var(--glass-line);box-shadow:var(--lift);
-  -webkit-backdrop-filter:blur(24px) saturate(1.5);backdrop-filter:blur(24px) saturate(1.5);animation:up .18s ease-out}
-@keyframes up{from{opacity:0;transform:translateY(6px)}}
-/* a popover opens over the stage, beside the panel, under the header (or level with the rail's gear) */
-.pop{top:56px;right:calc(var(--pw) + 12px);width:300px;max-height:calc(100% - 68px);overflow:auto;padding:14px;border-radius:18px;display:flex;flex-direction:column;gap:14px}
-.app[data-side="left"] .pop{right:auto;left:calc(var(--pw) + 12px)}
-.app[data-rail] .gearpop{top:auto;bottom:12px}
-.pop h4{margin:0 0 6px;font:500 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
-.segc{display:flex;gap:3px;padding:3px;border-radius:11px;background:var(--shade)}
-.segc button{flex:1;display:flex;gap:6px;align-items:center;justify-content:center;padding:6px 4px;border-radius:8px;font:500 12.5px var(--sans);color:var(--muted)}
-.segc button[aria-pressed="true"]{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.18)}
-.row{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;font-size:13.5px}
-.sw{flex:none;width:34px;height:20px;border-radius:999px;background:color-mix(in srgb,var(--ink) 18%,transparent);position:relative;transition:background-color .2s}
-.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s}
-.row[aria-pressed="true"] .sw{background:var(--acc)}
-.row[aria-pressed="true"] .sw::after{transform:translateX(14px)}
-.demobtn{display:flex;gap:10px;align-items:center;padding:9px 12px;border-radius:11px;text-align:left;background:var(--acc-soft);color:var(--acc)}
-.demobtn span{display:flex;flex-direction:column}
-.demobtn b{font:600 13.5px var(--sans)}
-.demobtn small{font:400 12px var(--sans);color:var(--muted)}
-.demobtn:hover{background:color-mix(in srgb,var(--acc-soft) 70%,var(--acc-mid))}
-.endbtn{display:flex;gap:8px;align-items:center;justify-content:center;padding:9px;border-radius:11px;color:var(--bad);background:var(--bad-soft);font-weight:500}
-/* End call stays at the foot of the settings however short the window is, and however big TV size makes the rows: the dialog is a
-   column of a scrolling body (#gearbody) and a footer outside it (.popfoot), so nothing ever lies over the rows. The body fades out
-   at its bottom edge and keeps a visible scrollbar, so a row out of sight is seen to be there. */
-.gearpop{padding:0;gap:0;overflow:hidden}
-.gearpop .popbody{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding:14px 14px 26px;
-  scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--ink) 35%,transparent) transparent;
-  -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent)}
-.gearpop .popfoot{flex:none;padding:10px 14px 14px;border-top:1px solid var(--glass-line)}
-.gearpop .endbtn{width:100%;background:color-mix(in srgb,var(--bad) 12%,var(--panel))}
-.toast{z-index:11;top:16px;left:calc((100% - var(--pw)) / 2);transform:translateX(-50%);animation:none;display:flex;align-items:center;gap:10px;
-  max-width:calc(100% - var(--pw) - 40px);padding:8px 16px;border-radius:999px;font-size:13px}
+/* the toast: an error or a lost connection, over the stage */
+.toast{position:absolute;z-index:11;top:16px;left:calc((100% - var(--pw)) / 2);transform:translateX(-50%);display:flex;align-items:center;gap:10px;
+  max-width:calc(100% - var(--pw) - 40px);padding:8px 16px;border-radius:999px;font-size:13px;background:var(--glass);border:1px solid var(--glass-line);box-shadow:var(--lift);
+  -webkit-backdrop-filter:blur(24px) saturate(1.5);backdrop-filter:blur(24px) saturate(1.5)}
 .app[data-side="left"] .toast{left:calc(var(--pw) + (100% - var(--pw)) / 2)}
 .toast:has(#retry:not([hidden])){padding-right:8px}
 .tbtn{padding:4px 12px;border-radius:999px;background:var(--shade);font:500 12.5px var(--sans)}
-
-/* [I] TV and the phone */
-/* TV: read from across the room. One scale (--tv) for the panel: its words, chips, labels, buttons and time all grow together,
-   and the batches that draw parts of the panel size theirs with it (calc(Npx * var(--tv))). The panel grows with it; the stage
-   zooms itself (stage:zoom). Settings opens as before: Desk or TV in the gear, ?screen=tv in the address, and Full screen on a
-   big display that has not chosen. */
+/* skip links: the first stops of the page, seen only while they hold the focus */
+.skip{position:absolute;left:8px;top:8px;z-index:30;display:flex;gap:8px}
+.skip a:not(:focus){position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+.skip a:focus{padding:8px 14px;border-radius:9px;background:var(--ink);color:var(--panel);font:500 13px var(--sans);text-decoration:none;box-shadow:var(--lift)}
+/* TV: the stage's reader grows; the panel grows in call-panel.css */
 .app{--tv:1}
-.app[data-tv]{--tv:1.4}
-.app[data-tv]:not([data-rail]){--pw:560px}
-.app[data-tv] .phead{min-height:calc(48px * var(--tv))}
-.app[data-tv] .topic{font-size:calc(13.5px * var(--tv))}
-.app[data-tv] .turn .text{font-size:calc(14px * var(--tv))}
-.app[data-tv] .turn.you .text{font-size:calc(13.5px * var(--tv))}
-.app[data-tv] .turn .who{font-size:calc(11px * var(--tv))}
-.app[data-tv] .turn .who small{font-size:calc(11px * var(--tv))}
-.app[data-tv] .turn :is(.play,.fold){font-size:calc(11.5px * var(--tv));padding:6px 12px}
-.app[data-tv] .turn .speech{font-size:calc(12.5px * var(--tv))}
-.app[data-tv] :is(.chip,button.chip.board){font-size:calc(12px * var(--tv));padding:calc(3px * var(--tv)) calc(10px * var(--tv))}
-.app[data-tv] :is(.line.status,.line.system){font-size:calc(12.5px * var(--tv))}
-.app[data-tv] .status{font-size:calc(13px * var(--tv))}
-.app[data-tv] :is(.undo,.preplbl,.tbtn){font-size:calc(12.5px * var(--tv))}
-.app[data-tv] .time{font-size:calc(12px * var(--tv))}
-.app[data-tv] .compose textarea{font-size:calc(14px * var(--tv))}
-.app[data-tv] .ib{width:calc(34px * var(--tv));height:calc(34px * var(--tv))}
-.app[data-tv] .ib.mic{width:calc(40px * var(--tv));height:calc(40px * var(--tv))}
-.app[data-tv] .ib>svg{width:calc(18px * var(--tv));height:calc(18px * var(--tv))}
-.app[data-tv] .rail .ib{width:44px;height:44px}
-.app[data-tv] .rail .ib.mic{width:56px;height:56px}
+.app[data-tv]{--tv:1.35}
 .app[data-tv] .reader:not(.strip) .rtext{font-size:clamp(26px,1.2vw + 14px,40px)}
 .app[data-tv] .reader.strip{--sf:clamp(26px,1.2vw + 14px,40px)}
-@media (min-width:761px){
-  .app[data-tv] .pop{width:calc(300px * var(--tv))}
-  .app[data-tv] .callspop{width:calc(320px * var(--tv))}
-  .app[data-tv] .keyspop{width:calc(360px * var(--tv))}
-}
-.app[data-tv] .pop>*,.app[data-tv] .toast>*{zoom:var(--tv)}
 .app[data-tv] .frame::before{padding:5px}
-
-/* a phone: the stage on top, the panel under it; the rail becomes a bar */
+/* a phone: the stage on top, the panel under it */
 @media (max-width:760px){
   .app{--ph:58%}
-  .app[data-board]{--ph:52%}   /* a board is up: the stage takes more of the height than it does at rest, and the conversation still keeps room to read */
-  .phead{min-height:40px}
-  .foot{padding:4px 10px 5px;gap:3px}
-  /* the mode row and the input give back a few pixels each: the switch and the box keep their buttons whole (the 40 px mic and the 44 px player keys) */
-  .app .modebar .segc{padding:2px}
-  .app .modebar .segc button{padding:4px 4px}
-  .app .compose{padding:3px}
-  .app .compose textarea{padding-block:6px}
-  /* the conversation gets the height the chrome gave back: a title of two lines at most, no state row while the state is only
-     "Waiting for you" (the Your turn pill on the mode row says the same; an autoplay note, other calls waiting and every other state keep it),
-     and tighter padding round the card. (A two-line question was tried: its Show all row costs more than the line it saves.) */
-  .topic{-webkit-line-clamp:2;margin:2px 0}
-  .app .statestrip[data-key="waiting"]:not(.warn):not(:has(.ssmore:not([hidden]),.ssnote:not([hidden]))){display:none}
-  .app .now-text{max-height:calc(min(4, var(--nt-lines)) * 1.55 * 14.5px)}   /* up to four lines of the answer, fewer when fitNowText finds the card would not sit whole above the player (three at least) */
-  .app .convo{padding:3px 8px 2px;gap:6px}
-  /* the echoed question takes two lines, and its Show all sits over the end of the second, so the row it would add costs nothing
-     (a clamped question that kept its own Show all row cost more than the line it saved) */
-  .app .nq:has(>.nq-text.clamped){position:relative}
-  .app .nq-text.clamped{-webkit-line-clamp:2}
-  .app .nq:has(>.nq-text.clamped) .nq-more{position:absolute;right:0;bottom:-2px;margin:0;min-height:28px;padding:0 6px 0 28px;
-    background:linear-gradient(90deg,transparent,var(--panel) 24px)}
+  .app[data-board]{--ph:52%}
   .app,.app[data-side="left"]{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) var(--ph)}
-  .app[data-rail]{grid-template-rows:minmax(0,1fr) 60px}
-  .app[data-side="left"] .panel,.panel{order:0;border:0;border-top:1px solid var(--line)}
-  .grip,.nowline{display:none}
-  /* a finger needs 44 x 44 on the player: the speed chip, the sentence arrows (call-shell.css sets 30 and 38 px; the .app prefix wins) */
-  .app .now-transport .ib,.app .now-transport .ib.pp{width:44px;height:44px}
-  .app .now-transport .speedchip{height:44px;min-width:44px}
-  .rail{flex-direction:row;justify-content:center;padding:0 8px}
-  /* a bottom sheet: it sits on the panel and never grows past the space above it, scrolling inside */
-  .pop,.app[data-side="left"] .pop{top:auto;bottom:calc(var(--ph) + 10px);left:10px;right:10px;width:auto;max-height:calc(100% - var(--ph) - 24px)}
-  .app[data-rail] .pop,.app[data-rail] .gearpop{top:auto;bottom:70px;max-height:calc(100% - 82px)}
   .toast,.app[data-side="left"] .toast{left:50%;max-width:calc(100vw - 40px)}
 }
 @media (prefers-reduced-motion:reduce){
-  .app:not([data-state="idle"]) .frame::before,.status.shimmer,.spin,.pop,.preptrack.queued i{animation:none!important}
-  .status.shimmer{background:none;color:var(--muted)}
-  .bars i{transition:none}
+  .app:not([data-state="idle"]) .frame::before,.spin{animation:none!important}
 }
-/* [C] stops */
-/* A stop of an answer with no board: its question and buttons, above the player */
-.stopcard{display:grid;gap:10px;padding:12px 14px;border-radius:12px;background:var(--panel);border:1px solid var(--acc)}
-.stopcard .sq{margin:0;font:600 15px/1.4 var(--sans);color:var(--ink)}
-.stopcard .sbtns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.stopcard:is([data-type=check],[data-type=deeper]) .btn:first-child{background:var(--acc);color:var(--on-acc);border-color:var(--acc)}
-.stopcard .btn:disabled{opacity:1;cursor:default}
-.stopcard .btn.right{border-color:var(--good);color:var(--good);font-weight:600}
-.stopcard .btn.wrong{border-color:var(--bad);color:var(--bad);text-decoration:line-through}
-.stopcard .shint{margin:0;font-size:13px;color:var(--muted)}
-
-/* [shared] visible to a screen reader only: the live region (#announcer) and any label that has no room on screen */
+/* visible to a screen reader only: the live region (#announcer) and the board as text */
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}

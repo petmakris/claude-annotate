@@ -8,15 +8,16 @@ HTML = (STATIC / "call.html").read_text()
 SCRIPTS = re.findall(r'<script src="/static/(call[\w-]*\.js)"></script>', HTML)
 SHEETS = re.findall(r'<link rel="stylesheet" href="/static/(call[\w-]*\.css)">', HTML)
 
-SLOTS = ["statestrip", "welcome", "nowcard", "nowhead", "nowstate", "nownum", "nowclock", "waitcard", "nowbody", "nowq", "nowtext",
-         "nowchips", "nowtransport", "nowfollow", "queuerow", "earlier", "tlhead", "tlcount", "tlsearch", "tlexpand", "tllist",
-         "searchbtn", "sendnote", "modebar", "modesw", "yourturn", "keyhint", "pKeys", "nextwait", "announcer", "favicon"]
+SLOTS = ["turns", "thinking", "empty", "note", "player", "playpause", "seek", "time", "pill", "text", "sendtext", "talk", "send",
+         "cancel", "wave", "jump", "stopcard", "gear", "pGear", "pKeys", "pCalls", "keysrow", "livemode", "barge", "endpause",
+         "nextwait", "announcer", "favicon", "toast", "audio", "gearbody", "boardtext"]
 
 
 def test_every_script_and_sheet_of_the_page_is_loaded_and_the_core_comes_first():
     assert SCRIPTS[0] == "call.js" and SCRIPTS[-1] == "call-boot.js"
     assert sorted(SCRIPTS) == sorted(p.name for p in STATIC.glob("call*.js"))
-    assert SHEETS[0] == "call.css" and sorted(SHEETS) == sorted(p.name for p in STATIC.glob("call*.css"))
+    assert SHEETS == ["call.css", "call-panel.css"]
+    assert sorted(SHEETS) == sorted(p.name for p in STATIC.glob("call*.css"))
 
 
 def test_no_function_or_top_level_name_is_declared_in_two_files():
@@ -35,13 +36,13 @@ def test_the_slots_the_batches_build_into_are_in_the_markup():
 
 
 def test_the_hooks_each_file_owns_are_declared_where_the_core_calls_them():
-    owners = {"paintNowCard": "call-shell.js", "paintEarlier": "call-shell.js", "shellOnView": "call-shell.js",
+    owners = {"paintAll": "call.js", "paintPill": "call.js",
+              "paintConvo": "call-shell.js", "shellOnView": "call-shell.js",
               "paintWait": "call-wait.js", "waitOnView": "call-wait.js", "turnSent": "call-wait.js", "waitActive": "call-wait.js",
+              "paintNote": "call-wait.js", "skipQueued": "call-wait.js",
               "callsOnView": "call-calls.js", "paintCallsButton": "call-calls.js",
-              "paintInputMode": "call-input.js", "paintMic": "call-input.js",
-              "returnOnView": "call-return.js", "paintWelcome": "call-return.js", "paintStateStrip": "call-return.js",
-              "paintAnnounce": "call-return.js", "announce": "call-return.js", "returnMarkEarlier": "call-return.js",
-              "popChanged": "call-input.js", "setSpeed": "call-input.js"}
+              "paintAnnounce": "call-announce.js", "announce": "call-announce.js", "announceOnView": "call-announce.js",
+              "paintSettings": "call-input.js", "paintMic": "call-input.js", "popChanged": "call-input.js", "setSpeed": "call-input.js"}
     for fn, file in owners.items():
         assert re.search(rf"^function {fn}\(", (STATIC / file).read_text(), flags=re.M), f"{fn} is not in {file}"
 
@@ -68,5 +69,5 @@ def test_the_markup_is_balanced_and_every_layer_is_inside_the_app():
                     self.stack.pop()
     w = Walk(); w.feed(HTML)
     assert w.problems == [] and w.stack == []
-    for layer in ("pGear", "pCalls", "pKeys", "announcer", "audio", "toast", "tvoffer", "micnote", "gearbody"):
+    for layer in ("pGear", "pCalls", "pKeys", "announcer", "audio", "toast", "gearbody"):
         assert w.inside[layer], layer

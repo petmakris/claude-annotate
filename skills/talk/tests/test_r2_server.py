@@ -187,7 +187,7 @@ def test_a_reloaded_page_keeps_its_id_and_a_new_tab_gets_its_own(tmp_path):
     assert reload.run() == [[page_id, False]]
     # a new tab: no storage, a new id, and the first tab still holds the voice
     tab = CallPage(html, [dict(st, player=page_id) for st in states]).js("globalThis.playerReply = () => ({player: %s}); await claimPlayer(false); await serve(1);" % json.dumps(page_id))
-    tab.check("[PAGE_ID !== %s, playingElsewhere(), audio.paused, $('status').textContent]" % json.dumps(page_id))
+    tab.check("[PAGE_ID !== %s, playingElsewhere(), audio.paused, $('note').textContent]" % json.dumps(page_id))
     assert tab.run() == [[True, True, True, "Playing on another screen."]]
 
 
@@ -283,12 +283,11 @@ def test_the_guide_tells_a_session_to_put_a_copy_draft_in_a_txt_page_and_to_clea
     assert len(GUIDE.read_text().splitlines()) < 360
 
 
-def test_the_guide_names_the_copy_icon_by_where_it_is_and_never_the_internal_card_names():
+def test_the_guide_never_uses_the_internal_card_names_of_the_page():
     text = GUIDE.read_text()
-    assert "the copy icon at the top right of the answer card" in text and "copies the whole answer" in text
-    assert "Now card" not in text and "Following strip" not in text
-    assert "Copy button" not in text and "Now card" in (GUIDE.parent / "references" / "call-page.md").read_text()
-    assert "never say these names" in (GUIDE.parent / "references" / "call-page.md").read_text()
+    for gone in ("Now card", "Following strip", "Copy button"):
+        assert gone not in text, gone
+        assert gone not in (GUIDE.parent / "references" / "call-page.md").read_text(), gone
 
 
 def test_the_guide_sends_a_refused_board_back_with_board_for_and_never_says_the_answer_again():

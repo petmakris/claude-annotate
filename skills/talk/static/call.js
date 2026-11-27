@@ -87,7 +87,6 @@ let liveNote = "";          // why live mode is not listening, when it stopped b
 let liveFlash = null;       // a short-lived line: {text, until}
 let screenMode = store.get("screen", "desk") === "tv" ? "tv" : "desk";  // tv: everything read from across the room
 const TV_ZOOM = 1.35;
-let undoable = null;        // {entry, until}: the live turn the Undo button can still take back
 let fillerFor = null, turnSentAt = 0;  // "One moment." is said once per turn, when Claude takes a while
 let clockSkew = 0;          // the server's clock less this page's, in seconds, from the last view that carried `now`
 const serverNow = () => Date.now() / 1000 + clockSkew;  // the server's time now, in seconds: compare it with a server timestamp
@@ -101,22 +100,17 @@ function appState() {
 // The foot's and the rail's controls, each part painted by its owner: the mic and the text field (call-input.js), the
 // player (call-shell.js), the Calls button (call-calls.js).
 function paintPill() {
-  const ended = !!view.ended;
-  paintMic(); paintTransport(); paintCallsButton();
-  $("live").classList.toggle("off", ended); $("raillive").classList.toggle("off", ended);
-  paintNowLine(); paintJump();
+  paintMic(); paintTransport(); paintCallsButton(); paintJump();
 }
 function paintAll() {
   if (view.ended && live) { stopLive(); return; }  // stopLive paints again
   applyLang();   // the page's words follow the language choice before anything is painted (call-i18n.js)
-  paintInfo(); paintPill(); paintSettings();
+  paintPill(); paintSettings();
   $("app").dataset.state = appState(); $("app").toggleAttribute("data-ended", !!view.ended);
   $("app").toggleAttribute("data-live", listening());
   $("app").toggleAttribute("data-tv", screenMode === "tv");
-  paintUndo();
-  // The paint hooks, one per feature, each in its owner's file (empty until that batch fills it). Order: the card of the
-  // current turn and what waits on it, then the list and the strips, then what is said for a screen reader.
-  paintNowCard(); paintWait(); paintEarlier(); paintInputMode(); paintStateStrip(); paintWelcome(); paintAnnounce();
+  // The conversation, Claude thinking at its end, the line above the field, then what is said for a screen reader.
+  paintConvo(); paintWait(); paintNote(); paintAnnounce();
 }
 
 // ---- the connection ------------------------------------------------------
@@ -146,7 +140,7 @@ async function pollOnce() {
       let n = 0; for (const e of view.entries) if (e.who === "claude") e.n = ++n;
       if (current) current = view.entries.find(e => e.id === current.id) || current;
       // A new view arrived (`before` is the one it replaces): each owner reads what changed, before anything is painted.
-      waitOnView(before); callsOnView(before); returnOnView(before); shellOnView(before);
+      waitOnView(before); callsOnView(before); announceOnView(before); shellOnView(before);
       maybeAutoplay();
       showFailedAnswer();
       render();

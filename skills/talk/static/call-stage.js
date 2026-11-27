@@ -78,21 +78,20 @@ window.addEventListener("message", ev => {
     for (const msg of stageOutbox.splice(0)) if (msg.type !== "stage:theme" && msg.type !== "stage:follow" && msg.type !== "stage:lang") toStage(msg);
     resync();
   }
-  else if (m.type === "stage:follow") { follow = !!m.on; paintSettings(); paintFollow(); if (follow) resync(); }
+  else if (m.type === "stage:follow") { follow = !!m.on; paintSettings(); if (follow) resync(); }
   else if (m.type === "stage:views") {
     stageList = m.list || [];
     stageViews = new Set((m.list || []).map(v => String(v.name)));
     boardAnswer = new Map((m.list || []).map(v => [String(v.name), v.answer]));
-    paintMissing(); paintFollow(); paintTransport(); paintStageTitle();
+    paintTransport(); paintStageTitle();
   }
   else if (m.type === "stage:shown") {
     const was = frontBoard;
-    frontBoard = String(m.view || ""); paintFront(); paintFollow(); paintTransport(); paintStageTitle();
+    frontBoard = String(m.view || ""); paintFront(); paintTransport(); paintStageTitle();
     // the stage moves in a frame the page cannot read: say which board it is on, for a screen reader
     const title = frontBoard && frontBoard !== was ? boardTitle(frontBoard) : "";
     if (title) announce(tr("st.shows", {title}));
   }
-  else if (m.type === "stage:missing") paintMissing(String(m.view));
   else if (m.type === "stage:key" && MEDIA_KEYS.has(m.key)) mediaKey(m.key);
   else if (m.type === "stage:play") playFrame(String(m.view || ""), Number(m.answer), Number(m.n));
   else if (m.type === "stage:outline") paintBoardText(m);
@@ -110,19 +109,10 @@ function playFrame(board, n, frameNo) {
   playFrom(e, w[2], true);
 }
 
-// A chip brings its board to the front by hand. The board already in front sends no change, so while the reader's
-// text covers the stage the page turns following off itself (what a chip tap does on the stage) and shows the board.
-function chipTap(view) {
-  toStage({type: "stage:front", view, manual: true});
-  if (follow) { follow = false; toStage({type: "stage:follow", on: false}); paintSettings(); }
-  const title = boardTitle(view);
-  if (title) announce(tr("st.pinned", {title}));
-  paintReader(); paintFollow();
-}
 // Keep the stage on the board in front: following the voice off, said on the card's strip.
 function pinBoard() {
   if (!follow) return;
-  follow = false; toStage({type: "stage:follow", on: false}); paintSettings(); paintReader(); paintFollow();
+  follow = false; toStage({type: "stage:follow", on: false}); paintSettings(); paintReader();
   const title = boardTitle(frontBoard);
   announce(title ? tr("st.pinned", {title}) : tr("st.pinned.bare"));
 }
@@ -153,33 +143,12 @@ function paintBoardText(m) {
 if ($("skipboardtext")) $("skipboardtext").addEventListener("click", askBoardText);
 let boardAnswer = new Map();   // board -> the number of the answer that showed it
 let frontBoard = "";           // the board in front of the stage
-const chipSeen = new Map();
-const MISSING_AFTER_MS = 8000;
-function paintMissing(gone) {
-  const now = Date.now();
-  for (const el of document.querySelectorAll("button.chip.board[data-view]")) {
-    const v = el.dataset.view;
-    if (!v) continue;
-    if (!chipSeen.has(v)) chipSeen.set(v, now);
-    const missing = v === gone || (!!stageViews && !stageViews.has(v) && now - chipSeen.get(v) > MISSING_AFTER_MS);
-    el.classList.toggle("missing", missing);
-    if (missing) { el.title = tr("st.missing"); el.dataset.noStage = "1"; }
-    else if (el.dataset.noStage) { el.removeAttribute("title"); delete el.dataset.noStage; }
-  }
-}
-setInterval(() => { if (stageViews) paintMissing(); }, MISSING_AFTER_MS / 2);
-// The chip of the board in front of the stage is drawn as chosen, wherever it is in the conversation.
-function paintFront() {
-  $("app").toggleAttribute("data-board", !!frontBoard);   // a phone gives the stage more height while a board is up
-  for (const el of document.querySelectorAll("button.chip.board[data-view]")) {
-    const on = !!frontBoard && el.dataset.view === frontBoard;
-    el.classList.toggle("front", on); el.setAttribute("aria-pressed", String(on));
-  }
-}
+// A phone gives the stage more height while a board is up.
+function paintFront() { $("app").toggleAttribute("data-board", !!frontBoard); }
 
 // ---- following the voice: the stage keeps it, the gear shows it -------------
 let follow = true;
-$("follow").onclick = () => { follow = !follow; toStage({type: "stage:follow", on: follow, front: follow}); paintSettings(); paintFollow(); if (follow) resync(); };
+$("follow").onclick = () => { follow = !follow; toStage({type: "stage:follow", on: follow, front: follow}); paintSettings(); if (follow) resync(); };
 
 // ---- the reader: the answer being said, in large type on the stage ----------------------------
 // Each sentence appears as it is said, and the word being said is lit; a tap on a word plays from there. When
@@ -460,7 +429,7 @@ function readerPlays(e) {
 // reader picked by hand, Key points among them, does not keep the stage; a play of the board in front passes false.
 function followAgain(front = true) {
   cueSync = true;
-  if (!follow) { follow = true; toStage({type: "stage:follow", on: true, front}); paintSettings(); paintFollow(); }
+  if (!follow) { follow = true; toStage({type: "stage:follow", on: true, front}); paintSettings(); }
 }
 // The latest real board a front cue fronted (never Key points, which no cue fronts): {view, answer, title}, or null when the
 // stage does not hold it. The Following strip can offer it ("Show <board>") when the stage is on something else.

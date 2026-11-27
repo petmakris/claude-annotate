@@ -17,7 +17,7 @@ function takeFloor(heard) {
     .then(r => r.ok ? r.json() : null).then(b => { if (b && epoch === floorEpoch) { floorN = b.floor_n; if (wake) wake(); } }).catch(() => {});
 }
 function topicOf(id) { const c = (view.calls || []).find(x => x.id === id); return c ? c.topic : ""; }
-// Another call took the voice: this page paused, and says so in the state strip with a way back (floorNote), never
+// Another call took the voice: this page paused, and says so in the line above the field (floorNote), never
 // in a toast over the board. The words name the call, not what it did: the page cannot tell playing from talking.
 let floorNote = null;       // {id, topic}: why this call is paused, until the voice is taken back here or the note is dismissed
 function floorWords(note) { return t("floor.words", {who: note.topic ? "“" + note.topic + "”" : t("floor.another")}); }
@@ -28,8 +28,6 @@ function yieldFloor(id) {
   if (live) parkLive("floor");
   if (busyHere) {
     floorNote = {id, topic: topicOf(id)};
-    // The collapsed rail has no strip to show it in: the toast says it there.
-    if (rail) showError(floorWords(floorNote));
     paintAll();
   }
 }
@@ -197,21 +195,20 @@ function paintTab() {
 // state that needs you most with how many calls do (amber when one is stalled). The words go in the name and the tooltip.
 function paintCallsButton() {
   const calls = view.calls || [], need = callsNeedingYou(), btn = $("callsbtn");
-  btn.hidden = !calls.length;
-  $("callsdot").hidden = $("raildot").hidden = !need.length;
+  btn.hidden = !need.length;   // the button is there only while another call needs you
+  $("callsdot").hidden = !need.length;
   $("callsdot").textContent = need.length ? String(need.length) : "";
   const top = need.length ? need[0].info.key : "";
   btn.dataset.need = top;
   const words = need.map(x => t("c.in", {word: x.info.word, topic: x.c.topic})).join("; ");
   const label = need.length ? t("c.label", {text: otherCallsText(need.length), words}) : t("head.calls");
   if (btn.getAttribute("aria-label") !== label) { btn.setAttribute("aria-label", label); btn.dataset.tip = need.length ? otherCallsText(need.length) : t("head.calls"); }
-  $("callsword").textContent = need.length ? otherCallsText(need.length) : t("head.calls");
   const glyph = $("callsglyph");
   if (glyph.dataset.key !== top) { glyph.dataset.key = top; glyph.innerHTML = top ? glyphOf(top) : STACK_ICON; }
   paintCallsClock();
   // paintPill runs on every tick of the audio: the strip, the popover's rows and the tab follow what the page does at once
   // (a board pinned from the stage, a play, a pause) with nothing to repaint while the words are the same.
-  paintCalls(); paintTab(); paintStateStrip();
+  paintCalls(); paintTab();
 }
 const STACK_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>';
 registerPop("callsbtn", "pCalls");
