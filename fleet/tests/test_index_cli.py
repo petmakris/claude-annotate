@@ -87,3 +87,19 @@ def test_note_journals_a_masked_work_entry_and_bin_fleet_sends_session_to_the_in
     r = subprocess.run([sys.executable, os.path.join(ROOT, "fleet_index_cli.py"), "import", "--dry-run"],
                        capture_output=True, text=True, env=env, timeout=60)
     assert r.returncode in (0, 1)
+
+
+def test_the_stored_rows_come_from_the_hub_without_asking_any_machine_what_runs(cluster):
+    mac, lat, main = cluster["mac"], cluster["lat"], cluster["main"]
+    start(mac, sid(6), "first")
+    start(lat, sid(7), "second")
+    observed = main.file("index", "observed")
+    r = main.cli("list", "--json", "--stored", "--env", "all", "--chains", "all")
+    assert r.returncode == 0, r.stderr
+    assert {x["sid"] for x in json.loads(r.stdout)["rows"]} == {sid(6), sid(7)}
+    assert not os.path.exists(observed)
+    # history ls off the hub reads the stored rows through the same verb: main asks no machine for it
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "fleet.py"), "history", "ls", "--json"],
+                       capture_output=True, text=True, env=mac.env(), timeout=60)
+    assert r.returncode == 0, r.stderr
+    assert not os.path.exists(observed)

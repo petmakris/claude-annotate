@@ -425,7 +425,7 @@ def index_rows():
     try:
         if cli.hub_name() == f.self_machine() or cli.hub_name() not in f.other_machines():
             return _hub_rows(query), True
-        env = f.run_remote_json(cli.hub_name(), ["session", "list", "--json"] + query_args(query),
+        env = f.run_remote_json(cli.hub_name(), ["session", "list", "--json", "--stored"] + query_args(query),
                                 timeout=LIST_TIMEOUT, kind=dict, keys=("rows",))
         if env.get("index") == "up":
             return env["rows"], True

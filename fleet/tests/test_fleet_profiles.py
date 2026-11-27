@@ -455,3 +455,14 @@ def test_folders_also_come_from_transcripts_the_history_never_recorded(pw):
     assert [(f["display"], f["sessions"], f["lastUsed"]) for f in folders] == [
         ("~/projects/old_one", 3, 950), ("~/projects/app", 2, 1000), ("~/projects/group/lib", 1, 200),
         ("~/projects/group", 0, None)]
+
+
+def test_a_transcripts_folder_is_read_once_per_process(tmp_path):
+    import fleet_profiles
+    d = tmp_path / "projects" / "-x"
+    d.mkdir(parents=True)
+    t = d / "a.jsonl"
+    t.write_text('{"type":"user","cwd":"/home/me/first"}\n')
+    assert [u[0] for u in fleet_profiles.transcript_usage(str(tmp_path / "projects"))] == ["/home/me/first"]
+    t.write_text('{"type":"user","cwd":"/home/me/rewritten"}\n')
+    assert [u[0] for u in fleet_profiles.transcript_usage(str(tmp_path / "projects"))] == ["/home/me/first"]

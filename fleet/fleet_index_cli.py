@@ -1,7 +1,7 @@
 """`fleet session <verb>`: the session index's CLI and the hub client.
 
 On the hub every call runs in process on `$FLEET_HOME/index/hub.db`; on any other machine it runs on the hub over
-ssh as `fleet_index_cli.py _hub OP` (JSON on stdin), with `BatchMode=yes` and `ConnectTimeout=5`. When the hub does
+ssh as `fleet_index_cli.py _hub OP` (JSON on stdin), with `BatchMode=yes` and `ConnectTimeout=3`. When the hub does
 not answer, a take fails with exactly one line (`HUB_DOWN`) and exit 3; journal entries stay in this machine's
 journal until the next write or session start sends them. Contract: `fleet/docs/session-index.md`, section 13.
 
@@ -29,7 +29,7 @@ import fleet_index_store as store  # noqa: E402
 import fleet_work  # noqa: E402
 
 HubDown = journal.HubDown
-SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"]
+SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=3"]
 TAKE_TIMEOUT = 30
 OWNER_TIMEOUT = 2.0
 
@@ -434,7 +434,9 @@ def list_reply(query, fleet_home=None):
 def cmd_list(a):
     query = {"env": a.env, "chains": a.chains, "kind": a.kind, "machine": a.machine, "owner": a.owner, "q": a.q,
              "limit": a.limit}
-    if is_hub():
+    if a.stored and is_hub():
+        reply = {"v": 1, "index": "up", "hub": self_name(), "as_of": time.time(), "rows": hub_rows(query)}
+    elif is_hub():
         reply = envelope(query)
     else:
         try:
@@ -728,6 +730,8 @@ def parser():
     s.add_argument("--chains", default="heads"); s.add_argument("--kind"); s.add_argument("--machine")
     s.add_argument("--owner"); s.add_argument("--q"); s.add_argument("--limit", type=int, default=300)
     s.add_argument("--registry", action="store_true")
+    s.add_argument("--stored", action="store_true",
+                   help="on the hub: the stored rows only, without asking any machine what runs now")
     s = sub.add_parser("show"); s.add_argument("sid"); s.add_argument("--json", action="store_true")
     s = sub.add_parser("owner"); s.add_argument("sid"); s.add_argument("--json", action="store_true")
     s.add_argument("--timeout", type=float, default=OWNER_TIMEOUT)

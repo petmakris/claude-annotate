@@ -177,7 +177,7 @@ After the commit, the hub:
 
 - backs up `hub.db` (section 11);
 - writes the new row into the caches of the old owner's machine and the new owner's machine (`_cache-put` over
-  ssh, 5 s to connect, best effort). A cache that missed it learns the truth from its next journal reply.
+  ssh, 3 s to connect, best effort). A cache that missed it learns the truth from its next journal reply.
 
 Reply (`take_reply`), exit 0:
 
@@ -448,7 +448,7 @@ it as `Authorization: Bearer`. The phone holds only the Claude Voice server's ow
 - Stale while refresh: the last answer of each machine is kept in
   `$FLEET_HOME/index/observed/<machine>.json`, answered at once, and fetched again in the background when older
   than 3 s. `fresh=1` waits. A machine that does not answer keeps its last values, and they turn stale after 60 s.
-- 5 s to connect and 8 s in all per machine, as today.
+- 3 s to connect and 8 s in all per machine, as today.
 
 ### 10.4 Off the hub
 
@@ -533,7 +533,7 @@ exit 3.
 | `_import-dump` | Internal: this machine's registry files and `conversations`, work rows masked. | import |
 
 Over ssh, a verb runs as `<python> <folder of machines.json's fleet path>/fleet_index_cli.py <verb>`, with
-`BatchMode=yes` and `ConnectTimeout=5`, like every remote verb of fleet.
+`BatchMode=yes` and `ConnectTimeout=3`, like every remote verb of fleet.
 
 ## 14. Local files
 

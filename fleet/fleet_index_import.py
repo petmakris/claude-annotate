@@ -48,7 +48,7 @@ OWNER_RE = re.compile(r"^(phone:prod|phone:dev:[a-z0-9]+|[a-z0-9][a-z0-9-]{0,62}
 NAME_RANK = ("manual", "custom", "topic", "job", "ai", "agent", "fleet", "registry", "prompt")
 PROMPT_NAME_SOURCES = ("ai", "registry", "prompt")
 # Fields a same-epoch import may fill when the index has them empty.
-SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"]
+SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=3"]
 DUMP_TIMEOUT = 120
 COPY_TIMEOUT = 600
 

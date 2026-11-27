@@ -284,7 +284,19 @@ def resolve_source(folder):
 READ_BYTES = 1 << 20  # transcripts can be hundreds of MB; the cwd is on one of the first lines
 
 
+_CWDS = {}  # path -> the cwd its first lines recorded; a transcript's first lines never change
+
+
 def _first_cwd(path):
+    if path in _CWDS:
+        return _CWDS[path]
+    cwd = _read_first_cwd(path)
+    if cwd:
+        _CWDS[path] = cwd
+    return cwd
+
+
+def _read_first_cwd(path):
     try:
         with open(path, "rb") as f:
             head = f.read(READ_BYTES).decode("utf-8", "replace")

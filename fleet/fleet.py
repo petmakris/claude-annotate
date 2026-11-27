@@ -287,7 +287,7 @@ def session_running(member, agents=_UNSET):
 
 # ---------------------------------------------------------------- machines
 
-SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"]
+SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=3"]
 
 
 class RemoteError(Exception):
@@ -2665,7 +2665,7 @@ def history_search(query, as_json=False):
 # The list comes from the session index (fleet/docs/session-index.md): `GET /api/sessions`, `fleet sessions --json`
 # and the pick plan all read it through fleet_sessions_api, and no surface merges rows itself. What a session is doing
 # is read at that moment from its machine: this file reads this machine's cache of the index, `claude agents --json`, the claude
-# tmux server's panes and `ps`, and asks the other machines over ssh (5 s to connect, 8 s in all). Nothing polls.
+# tmux server's panes and `ps`, and asks the other machines over ssh (3 s to connect, 8 s in all). Nothing polls.
 
 SESSIONS_TIMEOUT = 8
 HUB_TIMEOUT = 30

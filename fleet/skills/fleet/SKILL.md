@@ -134,7 +134,7 @@ the rest (`fleet thread <thread>`).
 ## Across machines
 
 With `$FLEET_HOME/machines.json` (`{"self": "<this machine>", "<machine>": {"ssh": "<ssh host>", "fleet": "<path to fleet.py there>", "python": "python3", "env": {"FLEET_HOME": "<its store, optional>"}}}`,
-listing every other machine; keep it on each machine) the fleet spans machines over ssh (key login; `BatchMode`, 5 s connect timeout).
+listing every other machine; keep it on each machine) the fleet spans machines over ssh (key login; `BatchMode`, 3 s connect timeout).
 Without the file nothing changes. A message is stored in the target machine's store and posted to its socket there; its answer is
 stored there and sent back to the asker's machine, and `fleet wait` / `fleet thread` also fetch answers that could not be sent back.
 A thread id is the same on every machine. An unreachable machine is reported in the output and never stops a command; a message to it
