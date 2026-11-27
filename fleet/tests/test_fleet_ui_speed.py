@@ -35,7 +35,8 @@ def test_a_stale_answer_comes_back_at_once_and_is_refreshed_behind_it():
     assert time.time() - t0 < 1
     gate.set()
     deadline = time.time() + 5
-    while cache.get("/api/members", lambda: "never") != "new" and time.time() < deadline:
+    # Read the stored answer, not through get(): past the 0.05 s ttl a get would start a refresh of its own.
+    while cache.items["/api/members"][1] != "new" and time.time() < deadline:
         time.sleep(0.02)
     assert cache.items["/api/members"][1] == "new"
     assert asked == [1]  # one refresh at a time per endpoint
