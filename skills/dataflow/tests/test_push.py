@@ -76,3 +76,23 @@ def test_main_reports_validation_errors_and_exits_nonzero(tmp_path, capsys):
 
     assert rc == 1
     assert "failed validation" in capsys.readouterr().err
+
+
+# ---- wake by message: never the real daemon --------------------------------
+
+import pytest as _pytest
+
+from skills._shared import webcompanion_client as _wc
+
+
+@_pytest.fixture(autouse=True)
+def _wake_to_is_stubbed(monkeypatch):
+    """The push names this Claude session to the daemon (`wc.wake_to`); a test never reaches a real one."""
+    calls = []
+
+    def fake(sid, *, kind, claude_session_id=None):
+        calls.append((sid, kind, claude_session_id))
+        return {"via": "message", "member": True, "alive": True}
+
+    monkeypatch.setattr(_wc, "wake_to", fake)
+    return calls

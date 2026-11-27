@@ -116,3 +116,34 @@ def test_main_reports_daemon_unreachable_and_exits_nonzero(tmp_path, capsys):
 
     assert rc == 1
     assert "cannot reach the daemon" in capsys.readouterr().err
+
+
+# ---- wake by message: never the real daemon --------------------------------
+
+import pytest as _pytest
+
+from skills._shared import webcompanion_client as _wc
+
+
+@_pytest.fixture(autouse=True)
+def _wake_to_is_stubbed(monkeypatch):
+    """The push names this Claude session to the daemon (`wc.wake_to`); a test never reaches a real one."""
+    calls = []
+
+    def fake(sid, *, kind, claude_session_id=None):
+        calls.append((sid, kind, claude_session_id))
+        return {"via": "message", "member": True, "alive": True}
+
+    monkeypatch.setattr(_wc, "wake_to", fake)
+    return calls
+
+
+def test_push_names_this_claude_session_to_wake_and_returns_the_answer(tmp_path, _wake_to_is_stubbed):
+    steps_path = tmp_path / "steps.json"
+    steps_path.write_text(json.dumps(MINIMAL_STEPS))
+    with patch("skills.walkthrough.push.wc.create_or_attach",
+               return_value={"sid": "s1", "slug": "s1", "kind": "walkthrough"}), \
+         patch("skills.walkthrough.push.wc.put_items"):
+        res = push.push(steps_path, "/repo")
+    assert _wake_to_is_stubbed == [("s1", "walkthrough", None)]
+    assert res["wake"] == {"via": "message", "member": True, "alive": True}

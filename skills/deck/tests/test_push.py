@@ -160,3 +160,23 @@ def test_watch_re_pushes_on_change_and_stops_when_the_session_ends(tmp_path):
     assert code == 0
     assert mock_push.call_count == 2
     assert all(c.kwargs == {"slug": "s1"} for c in mock_push.call_args_list)
+
+
+# ---- wake by message: never the real daemon --------------------------------
+
+import pytest as _pytest
+
+from skills._shared import webcompanion_client as _wc
+
+
+@_pytest.fixture(autouse=True)
+def _wake_to_is_stubbed(monkeypatch):
+    """The push names this Claude session to the daemon (`wc.wake_to`); a test never reaches a real one."""
+    calls = []
+
+    def fake(sid, *, kind, claude_session_id=None):
+        calls.append((sid, kind, claude_session_id))
+        return {"via": "message", "member": True, "alive": True}
+
+    monkeypatch.setattr(_wc, "wake_to", fake)
+    return calls

@@ -196,3 +196,23 @@ def test_push_leaves_minified_files_out_of_the_review():
 def test_the_hard_limit_fits_the_daemons_item_limit():
     # webcompanion items.py refuses a payload over 2 MB.
     assert push.MAX_DIFF_BYTES < 2 * 1024 * 1024
+
+
+# ---- wake by message: never the real daemon --------------------------------
+
+import pytest as _pytest
+
+from skills._shared import webcompanion_client as _wc
+
+
+@_pytest.fixture(autouse=True)
+def _wake_to_is_stubbed(monkeypatch):
+    """The push names this Claude session to the daemon (`wc.wake_to`); a test never reaches a real one."""
+    calls = []
+
+    def fake(sid, *, kind, claude_session_id=None):
+        calls.append((sid, kind, claude_session_id))
+        return {"via": "message", "member": True, "alive": True}
+
+    monkeypatch.setattr(_wc, "wake_to", fake)
+    return calls
