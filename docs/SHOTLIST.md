@@ -555,19 +555,85 @@ second one does not show.
   leaves it, because the daemon's thread holds only replies.
 - A reply is shown as plain text: Markdown marks such as `**` stay visible.
 
-## ca-18: IntelliJ trio and keys (pr-diff, ask-diff, walkthrough, app map overlay)
+## ca-18: IntelliJ: walkthrough, ask-diff, the diff keys and the app map
 
-status: text-only
+- **File:** `docs/img/ca-18.webp`, 800x533, about 20 s, 21 frames, cap 300 KB (P2).
+- **Hook:** Claude's answers live in the IntelliJ editor: a walkthrough step and a PR diff line each take a question and show the answer in place, and the plugin's keys diff a file and map it.
 
-**Text-only.** All five beats need a running IntelliJ window, and the Linux
-machine these clips are recorded on has no IntelliJ screen. The plan gates this
-clip on an installed IntelliJ and, for its screen capture, the macOS Screen
-Recording permission (priority P2, text-only by default). A browser or
-hand-drawn stand-in would show behaviour the tools do not have, so none is made.
+### Beats
 
-### For the README
+1. `/walkthrough`: step 1 of five sits under `pay` in `FlowService.java`. ⌥N moves to step 2.
+2. ⌥A opens the question box on step 2. The question is typed and OK pressed; "waiting for Claude" shows, then the answer under the step.
+3. `/ask-diff 42`: ⌥B opens the file against the base branch. The pointer clicks the ask icon on line 18, the question is typed and Ask pressed, and the answer appears in the popup.
+4. ⌥D on `RetryPolicy.java` shows its last commit; pressed again, one change further back.
+5. ⌘⇧M shows the app map over the editor, with the Retry part of Checkout lit.
 
-- `pr-diff`, `ask_diff` and `walkthrough` each get one sentence in the IDE group.
-- The app map overlay and the plugin's keys go in the key table, each key
-  checked against the IntelliJ plugin's `plugin.xml` first. The browser half of
-  the app map has its own clip, ca-13.
+### Staging
+
+macOS or Linux; the committed clip was recorded on Linux. Everything lives in
+`/tmp/promo-ca18`, with its own HOME, and is removed at the end:
+
+- the invented shop repo from `fixtures/ca-18/make_repo.py` (author Dana
+  Example, remote `acme/shop`, branch `checkout-retry`);
+- a clone of this repo at its committed `main`, which the plugin is built from;
+- a webcompanion daemon of the clip's own on 19190 (`CA18_DAEMON_PORT`);
+- a second IntelliJ IDEA (2026.3) with its own config, system and plugin
+  folders, so no IntelliJ a person uses is touched. Its plugins are this
+  repo's, `tools/promo/ide-driver` and, on Linux, JetBrains' "macOS Keymap".
+
+`ide-driver` is a test-only plugin. Over HTTP on 127.0.0.1:19191
+(`CA18_DRIVER_PORT`) it runs actions by id, posts clicks into the IDE's own
+event queue, fills the question boxes and reports the IDE's state.
+
+On Linux the IDE runs on an Xvfb display of its own (`CA18_DISPLAY`, default
+`:77`) at scale 2, and a frame is that display cut to the IDE window. Two
+things only a window manager would do are done by the script: it parks the
+display's pointer on empty toolbar so the IDE has keyboard focus, and it gives
+the focus back to the editor after a dialog closes. On macOS each frame is
+the IDE window and its popups captured window by window, and the IDE stays a
+background app.
+
+Needs IntelliJ IDEA (`CA18_IDE`: the `.app` on macOS, the unpacked folder on
+Linux), JDK 25 for the two Gradle builds, `webcompanion` and `img2webp`; on
+Linux also `Xvfb`, ImageMagick's `import` and `xdotool`.
+
+### Re-record
+
+    CA18_IDE=<IntelliJ IDEA folder> uv run tools/promo/clips/ca-18-intellij.py
+
+Commit plugin changes first: the plugin is built from a clone of the
+committed `main`.
+
+### Real and scripted
+
+**Real:** the plugin, built from this repo; its walkthrough cards, step bar,
+ask box and answer; the ask-diff session made by `ask_diff.push`, its gutter
+icon, popup and thread; the questions reaching the daemon (the script waits
+for each event); the base-branch diff and the Smart Diff walk, which are git's
+own; the app map built by `app_map build` from `fixtures/ca-13/source.json`.
+
+**Scripted:**
+
+- Both answers are fixed text in the script, posted the way a Claude session
+  posts them, then acknowledged. No model runs.
+- `gh` is a stand-in (`fixtures/ca-18/bin/gh`) that answers `pr view` with an
+  invented PR #42 of `acme/shop`. Its `pr diff` fails, so `ask_diff` falls back
+  to the local `git diff main...checkout-retry`.
+- The keys are drawn as badges and run as the actions they are bound to, so no
+  key is pressed. Each key is checked against the active keymap before
+  recording; on Linux that keymap is "Mac OS X 10.5+", where `plugin.xml`
+  binds them.
+- The questions grow word by word through the driver, and the clicks and the
+  hover are posted by the driver. The pointer is drawn on the frame.
+- The walkthrough is dismissed after its scene, as a person would, so the app
+  map opens on "This file" and not on the walkthrough's steps.
+
+**Left out:** `/pr-diff` needs a GitHub sign-in in IntelliJ and a real PR, so
+it is not in the clip.
+
+### Found while recording
+
+Pressing ⌥D a second time inside the diff tab it opened did nothing: the diff
+tab's file is IntelliJ's diff placeholder, not a file on disk. Fixed in
+`b94ee0f`: a press inside the plugin's own diff tab means the file that tab
+shows.

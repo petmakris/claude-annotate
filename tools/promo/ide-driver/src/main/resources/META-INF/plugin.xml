@@ -1,0 +1,10 @@
+<idea-plugin>
+    <id>promo.ide-driver</id>
+    <name>Promo IDE Driver</name>
+    <vendor>claude-annotate promo kit</vendor>
+    <description>Test only: drives the IDE over HTTP on 127.0.0.1 for the README clip. Never install it in an IDE a person uses.</description>
+    <depends>com.intellij.modules.platform</depends>
+    <applicationListeners>
+        <listener class="promo.driver.Driver" topic="com.intellij.ide.AppLifecycleListener"/>
+    </applicationListeners>
+</idea-plugin>

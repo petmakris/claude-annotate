@@ -1,0 +1,10 @@
+#!/bin/sh
+# gh stand-in for the ca-18 clip: the invented PR #42 of acme/shop. `pr view` answers its
+# metadata; `pr diff` fails, so ask_diff takes its own fallback and builds the diff with
+# git from the local checkout (main...checkout-retry). Nothing reaches GitHub.
+case "$1 $2" in
+  "pr view")
+    oid=$(git rev-parse checkout-retry)
+    printf '{"title":"Retry a timed-out card charge","headRefName":"checkout-retry","baseRefName":"main","author":{"login":"dana-example"},"url":"https://github.com/acme/shop/pull/42","headRefOid":"%s"}\n' "$oid" ;;
+  *) echo "gh stand-in: $*: not staged" >&2; exit 1 ;;
+esac

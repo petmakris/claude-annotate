@@ -28,13 +28,13 @@ links to its section, and every row with a clip shows that clip there.
 | [`journey`](#people-and-fleets) | Pin comments on an app's screens and send them as one batch | clip |
 | [`draw`](#people-and-fleets) | A drawing pad at a fixed link; Update sends the sketch to your session | clip |
 | [`show-diff`](#ide) | Every changed file of a branch in one VS Code scroll; ask on a line | clip |
-| [`ask_diff`](#ide) | Ask questions on a PR diff line in IntelliJ | text only: no IntelliJ screen to record on |
-| [`walkthrough`](#ide) | A codebase answer walked step by step in IntelliJ | text only: no IntelliJ screen to record on |
-| [`pr-diff`](#ide) | Open a PR's diff in the IntelliJ window that has its branch | text only: no IntelliJ screen to record on |
+| [`ask_diff`](#ide) | Ask questions on a PR diff line in IntelliJ | clip |
+| [`walkthrough`](#ide) | A codebase answer walked step by step in IntelliJ | clip |
+| [`pr-diff`](#ide) | Open a PR's diff in the IntelliJ window that has its branch | text only: needs a GitHub sign-in and a real PR |
 | [`annotate-doctor`](#how-it-works) | Check this machine can run everything, and install the daemon | text only: a utility |
 
-Thirteen of the seventeen skills and `fleet` have a clip; `ask_diff`,
-`walkthrough`, `pr-diff` and `annotate-doctor` are described in text. How each
+Fifteen of the seventeen skills and `fleet` have a clip; `pr-diff` and
+`annotate-doctor` are described in text. How each
 clip was made, and how to record it again, is in [docs/SHOTLIST.md](docs/SHOTLIST.md).
 
 ## Requirements
@@ -325,7 +325,13 @@ under it.
 
 ![show-diff opens a branch as one scroll in VS Code; a question on a line of retry.py gets an answer under it](docs/img/ca-17.webp)
 
-The IntelliJ half has three skills and is not recorded:
+The IntelliJ half has three skills. In the clip, a walkthrough step gets a
+question and its answer, a question on a line of a PR's diff is answered under
+the line, ⌥D walks one file back through its changes, and ⌘⇧M shows where the
+file sits in the app.
+
+![In IntelliJ: a walkthrough step answers a question, a PR diff line answers a question, ⌥D walks RetryPolicy.java back, and ⌘⇧M lights its part of the app map](docs/img/ca-18.webp)
+
 
 - **`/ask-diff`** — click a line of a GitHub PR diff in IntelliJ and ask; the
   answer threads under the line.
@@ -333,7 +339,8 @@ The IntelliJ half has three skills and is not recorded:
   the plugin walks you through them in the editor: ⌥N next, ⌥P back, ⌥A to ask
   about a step, ⌥X to close.
 - **`/pr-diff`** — opens a GitHub PR's diff in the IntelliJ window whose
-  checkout has the PR's branch.
+  checkout has the PR's branch. It is not in the clip: it needs a GitHub
+  sign-in and a real PR.
 
 ## How it works
 

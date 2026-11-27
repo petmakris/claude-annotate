@@ -1,0 +1,4 @@
+# Gradle / IntelliJ Platform Gradle plugin
+build/
+.gradle/
+.intellijPlatform/
