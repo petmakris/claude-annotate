@@ -1731,7 +1731,75 @@ def inbox_all(show_all=False, local_only=False):
     if lz and lz["ok"]:
         items += [dict(i) for i in lz["items"]]
     items.sort(key=lambda i: -(i["created_at"] or 0))
+    if not local_only:
+        keep_inbox_counts(items, me, bad, lz)
     return items, bad, lz
+
+
+INBOX_COUNTS_TTL = 60   # seconds the status line uses the other machines' inbox counts before asking again, behind it
+INBOX_COUNTS_RETRY = 120  # seconds between two background asks, so a dead machine is not asked every 5 s
+
+
+def inbox_counts_path():
+    return os.path.join(fleet_home(), "seen", "inbox-counts.json")
+
+
+def keep_inbox_counts(items, me, bad, lz):
+    """seen/inbox-counts.json: how many unanswered items for the user each other machine and Lungo hold, as the
+    page's "For you" badge counts them, so the status line can show the same number without asking anyone.
+    A machine that did not answer keeps its last count."""
+    old = (read_inbox_counts() or {}).get("counts") or {}
+    counts = {m: old[m] for m in bad if m in old}
+    for m in other_machines():
+        if m not in bad:
+            counts[m] = sum(1 for i in items if i.get("machine") == m and i.get("kind") != "lungo"
+                            and i.get("answered_at") is None)
+    if lz is not None:
+        counts["lungo"] = sum(1 for i in items if i.get("kind") == "lungo" and i.get("answered_at") is None) \
+            if lz["ok"] else old.get("lungo", 0)
+    path = inbox_counts_path()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = "%s.%d.tmp" % (path, os.getpid())
+        with open(tmp, "w") as f:
+            json.dump({"as_of": time.time(), "machine": me, "counts": counts}, f)
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+def read_inbox_counts():
+    try:
+        with open(inbox_counts_path()) as f:
+            doc = json.load(f)
+        return doc if isinstance(doc, dict) and isinstance(doc.get("counts"), dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def others_for_petros():
+    """The other machines' and Lungo's unanswered items for the user, from seen/inbox-counts.json. When that is
+    missing or older than INBOX_COUNTS_TTL, one `fleet inbox` starts in the background to write it again (at most
+    every INBOX_COUNTS_RETRY seconds), and the status line shows the last count meanwhile."""
+    doc = read_inbox_counts()
+    if doc is None or time.time() - (doc.get("as_of") or 0) > INBOX_COUNTS_TTL:
+        stamp = inbox_counts_path() + ".asked"
+        try:
+            if time.time() - os.path.getmtime(stamp) > INBOX_COUNTS_RETRY:
+                raise FileNotFoundError
+        except OSError:
+            try:
+                os.makedirs(os.path.dirname(stamp), exist_ok=True)
+                open(stamp, "w").close()
+                subprocess.Popen([sys.executable, os.path.abspath(__file__), "inbox", "--json"],
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
+            except OSError:
+                pass
+    if doc is None:
+        return 0
+    me = self_machine()
+    return sum(int(n) for m, n in doc["counts"].items() if m != me and isinstance(n, int))
 
 
 def inbox(as_json=False, show_all=False, local_only=False):
@@ -4125,7 +4193,8 @@ def cmd_statusline(session_id):
     {} when there is no store. Keys: members (live members here), name (this session's fleet name, or
     null), inbox (tells and asks to it not yet answered), knock (the newest of those arrived in the last
     two minutes), knock_from (its sender), waiting (its own asks not yet answered), todos (to-dos it holds),
-    open_todos (unclaimed to-dos here), for_petros (unanswered items in the user's inbox on this machine)."""
+    open_todos (unclaimed to-dos here), for_petros (unanswered items for the user on every machine and in Lungo, as the
+    page's "For you" badge counts them: this machine's store read now, the others from seen/inbox-counts.json)."""
     path = os.path.join(fleet_home(), "fleet.db")
     if not os.path.exists(path):
         print("{}")
@@ -4157,6 +4226,8 @@ def statusline_object(con, session_id):
            "open_todos": con.execute("SELECT count(*) FROM todos WHERE state='open'").fetchone()[0],
            "for_petros": con.execute("SELECT count(*) FROM messages WHERE recipient=? AND kind IN "
                                      "('ask','tell','notify') AND answered_at IS NULL", (PETROS,)).fetchone()[0]}
+    if other_machines() or lungo_config() is not None:
+        out["for_petros"] += others_for_petros()
     if me:
         inbox = con.execute("SELECT sender, created_at FROM messages WHERE recipient_session=? AND kind IN "
                             "('ask','tell') AND answered_at IS NULL ORDER BY created_at DESC",

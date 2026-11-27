@@ -121,3 +121,37 @@ def test_the_page_shows_lungo_items_and_its_line(world):
     fake_lungo(world, raw="", code=1)
     data = fleet.ui_inbox()
     assert data["open"] == 0 and data["lungo"]["ok"] is False and "unreachable" in data["lungo"]["line"]
+
+
+def test_the_status_line_counts_what_the_page_counts(world):
+    """The pink "N for you" pill and the page's For you badge give one number: every machine and Lungo."""
+    bee = world.host("bee")
+    world.link(bee)
+    fake_lungo(world)
+    b = bee.session("shipper")
+    world.member(b, "shipper")
+    assert world.run(b, "notify", "the ship on bee is done")[0] == 0
+    world.here_env()
+    world.member(world.session("alpha"), "alpha")   # a store here, as every machine with a session has
+    user(world, "inbox")                           # the read the page or `fleet inbox` makes writes the counts
+    started, popen = [], fleet.subprocess.Popen
+    world.mp.setattr(fleet.subprocess, "Popen", lambda *a, **k: started.append(a))
+    world.capsys.readouterr()
+    fleet.main(["statusline", "not-a-member"])
+    pill = json.loads(world.capsys.readouterr().out)["for_petros"]
+    assert started == []                           # the counts were fresh: nothing asked in the background
+    world.mp.setattr(fleet.subprocess, "Popen", popen)
+    assert pill == fleet.ui_inbox()["open"] == 3   # bee's notify and Lungo's two
+
+
+def test_the_status_line_asks_for_the_counts_behind_it_once(world):
+    bee = world.host("bee")
+    world.link(bee)
+    world.member(world.session("alpha"), "alpha")
+    started = []
+    world.mp.setattr(fleet.subprocess, "Popen", lambda *a, **k: started.append(a[0]))
+    for _ in range(3):
+        world.capsys.readouterr()
+        fleet.main(["statusline", "not-a-member"])
+        assert json.loads(world.capsys.readouterr().out)["for_petros"] == 0
+    assert len(started) == 1 and started[0][-2:] == ["inbox", "--json"]
