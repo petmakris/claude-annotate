@@ -36,6 +36,10 @@ public final class SmartDiffActions {
         /** Directories and files outside the local filesystem have no diff worth showing. */
         static @Nullable VirtualFile fileIn(AnActionEvent e) {
             VirtualFile file = e.getData(CommonDataKeys.VIRTUAL_FILE);
+            Project project = e.getProject();
+            if (project != null) {
+                file = SmartDiffService.get(project).fileFor(file);
+            }
             return file != null && !file.isDirectory() && file.isInLocalFileSystem() ? file : null;
         }
 

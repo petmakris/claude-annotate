@@ -14,6 +14,7 @@ import com.intellij.openapi.ui.WindowWrapper;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -57,6 +58,11 @@ final class DiffSurface {
 
     DiffSurface(@NotNull Project project) {
         this.project = project;
+    }
+
+    /** The diff tab the last press opened, or null when it opened a window. */
+    @Nullable VirtualFile tab() {
+        return tab.get();
     }
 
     /** Close whatever the last press opened, then show this. Must run on the EDT. */

@@ -79,6 +79,8 @@ public final class SmartDiffService {
     private final Map<String, DiffWalk.Stop> walks = new ConcurrentHashMap<>();
     /** The one diff on screen. Replaced per press rather than added to. */
     private final DiffSurface surface;
+    /** The file that diff shows, so a press made inside it keeps walking that file. */
+    private volatile VirtualFile shown;
 
     public SmartDiffService(@NotNull Project project) {
         this.project = project;
@@ -87,6 +89,20 @@ public final class SmartDiffService {
 
     public static SmartDiffService get(@NotNull Project project) {
         return project.getService(SmartDiffService.class);
+    }
+
+    /**
+     * The file a press means. The first press moves the focus into the diff it
+     * opens, and there the context's file is the diff tab, not a file on disk, so
+     * "press again to go further back" did nothing. Inside this service's own diff
+     * tab, a press means the file that tab shows.
+     */
+    public @Nullable VirtualFile fileFor(@Nullable VirtualFile context) {
+        return pressTarget(context, surface.tab(), shown);
+    }
+
+    static <F> F pressTarget(F context, F surfaceTab, F shown) {
+        return context != null && shown != null && context.equals(surfaceTab) ? shown : context;
     }
 
     // ---- the two entry points --------------------------------------------
@@ -261,6 +277,7 @@ public final class SmartDiffService {
                     file.getName() + " — " + where + " — " + left.title() + " → " + right.title(),
                     content(file, path, left), content(file, path, right),
                     left.title(), right.title()));
+                shown = file;
             } catch (Exception e) {
                 warn(message(e));
             }
