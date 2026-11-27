@@ -38,11 +38,10 @@ prevent: two PR reviews opened concurrently in different repos from the same
 Claude conversation no longer auto-cancel each other. See this phase's Known
 Limitations section and the program's separate session-leak initiative.
 
-`claude_session_id` stays a required parameter/CLI flag for interface
-symmetry with the old server's payload shape (and so `SKILL.md`'s
-`--claude-session-id` invocation needs no special-casing) but is accepted
-and otherwise unused here -- there is nowhere on the daemon's side to put it
-today, per the ruling above.
+`claude_session_id` is the Claude session the daemon wakes by a fleet message
+when a question is asked in the IDE: `wc.wake_to` names it to the daemon
+(`/s/<sid>/api/wake-to`) and the push's JSON carries the answer as `wake`. It
+is not used for supersede, which stays `(kind, cwd)`-scoped as above.
 
 Usage:
     python3 -m skills.ask_diff.push --pr <ref> --cwd <repo root>
@@ -115,6 +114,8 @@ def push(pr_ref: str, cwd: str, claude_session_id: str, *,
 
     res = wc.create_or_attach(KIND, cwd, title=title, slug=slug, supersede=True)
     sid = res["sid"]
+    # A question asked in the IDE wakes this Claude session by a fleet message.
+    res["wake"] = wc.wake_to(sid, kind=KIND, claude_session_id=claude_session_id)
 
     meta_item = {
         "pr_ref": pr_ref,

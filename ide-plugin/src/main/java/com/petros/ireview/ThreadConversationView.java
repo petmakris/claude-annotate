@@ -220,7 +220,8 @@ final class ThreadConversationView implements Disposable {
         askBtn.setMnemonic(KeyEvent.VK_A);
         java.util.function.Consumer<String> submitText = raw -> {
             ReviewSessionClient.State st = client.state();
-            if (st == ReviewSessionClient.State.PAUSED || st == ReviewSessionClient.State.ENDED
+            // PAUSED still asks: the daemon keeps the question until Claude listens.
+            if (st == ReviewSessionClient.State.ENDED
                     || st == ReviewSessionClient.State.DORMANT
                     || st == ReviewSessionClient.State.OFFLINE) return;
             if (raw == null) return;
@@ -247,8 +248,7 @@ final class ThreadConversationView implements Disposable {
         retryBtn.addActionListener(e -> submitText.accept(lastQuestion.get()));
 
         java.util.function.Consumer<ReviewSessionClient.State> applyLiveness = st -> {
-            boolean frozen = st == ReviewSessionClient.State.PAUSED
-                    || st == ReviewSessionClient.State.ENDED
+            boolean frozen = st == ReviewSessionClient.State.ENDED
                     || st == ReviewSessionClient.State.DORMANT
                     || st == ReviewSessionClient.State.OFFLINE;
             input.setEnabled(!frozen);
@@ -257,12 +257,12 @@ final class ThreadConversationView implements Disposable {
                 if (thinking.get()) { thinking.set(false); stopElapsed.run(); renderCurrent.run(); }
                 input.setToolTipText(switch (st) {
                     case ENDED -> "Session ended — read-only";
-                    case PAUSED -> "Paused — reconnecting…";
                     case OFFLINE -> "Review server offline";
                     default -> "No active review session";
                 });
             } else {
-                input.setToolTipText(null);
+                input.setToolTipText(st == ReviewSessionClient.State.PAUSED
+                        ? DaemonSessionClient.NOT_LISTENING : null);
             }
         };
         applyLiveness.accept(client.state());

@@ -240,3 +240,38 @@ def test_unreachable_daemon_raises(tmp_path, monkeypatch):
     monkeypatch.setattr(wc, "_CONFIG_PATH", cfg_dir / "config.json")
     with pytest.raises(wc.DaemonUnreachable):
         wc.create_or_attach("dataflow", "/repo")
+
+
+# ---- wake by message (webcompanion's wake.py) ------------------------------
+
+CLAUDE_SID = "0f4b8c1e-2d3a-4b5c-8d9e-112233445566"
+
+
+def test_wake_to_names_this_claude_session_and_returns_the_listener(daemon, monkeypatch):
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", CLAUDE_SID)
+    _FakeDaemon.script = [(200, {"ok": True, "listener": {"via": "message", "member": True, "alive": True}})]
+    got = wc.wake_to("260101-000000-0123456789abcdef", kind="walkthrough")
+    assert got == {"via": "message", "member": True, "alive": True}
+    method, path, _, body = _FakeDaemon.seen[0]
+    assert (method, path) == ("POST", "/s/260101-000000-0123456789abcdef/api/wake-to?kind=walkthrough")
+    assert body == {"claude_session_id": CLAUDE_SID}
+
+
+def test_wake_to_says_how_to_join_when_the_session_is_not_in_the_fleet(daemon, monkeypatch):
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", CLAUDE_SID)
+    _FakeDaemon.script = [(200, {"listener": {"via": "message", "member": False, "alive": False}})]
+    assert "fleet join" in wc.wake_to("s", kind="deck")["note"]
+
+
+def test_wake_to_with_no_session_id_or_an_old_daemon_says_so_and_does_not_fail(daemon, monkeypatch):
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
+    assert "CLAUDE_CODE_SESSION_ID" in wc.wake_to("s", kind="deck")["note"]
+    assert _FakeDaemon.seen == []
+    _FakeDaemon.script = [(404, {"error": "not found"})]
+    assert "install-service" in wc.wake_to("s", kind="deck", claude_session_id=CLAUDE_SID)["note"]
+
+
+def test_finish_session_says_the_end_is_claudes_own(daemon):
+    _FakeDaemon.script = [(200, {"ok": True})]
+    wc.finish_session("s", "deck")
+    assert _FakeDaemon.seen[0][3] == {"by": "claude"}

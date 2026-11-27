@@ -1,13 +1,12 @@
 ---
 name: walkthrough
-description: Answer a codebase question as an ordered sequence of anchored steps walked in IntelliJ, not as terminal prose. Claude generates the steps, the IDE plugin walks the user through them, and the user can ask a question on any step which Claude answers in place. Triggered by /walkthrough <question>. Watcher events are WEBCOMPANION_EVENT / WEBCOMPANION_FINISHED / WEBCOMPANION_CANCELLED.
+description: Answer a codebase question as an ordered sequence of anchored steps walked in IntelliJ, not as terminal prose. Claude generates the steps, the IDE plugin walks the user through them, and the user can ask a question on any step which Claude answers in place. Triggered by /walkthrough <question>. Events arrive as fleet messages from webcompanion: WEBCOMPANION_EVENT / WEBCOMPANION_FINISHED / WEBCOMPANION_CANCELLED.
 allowed-tools:
   - Bash
   - Read
   - Write
   - Grep
   - Glob
-  - Monitor
 ---
 
 # /walkthrough — guided code tours in IntelliJ
@@ -160,33 +159,35 @@ One sentence in terminal, then stop:
 
 **"Walkthrough ready — <N> steps for `<question>`. Open the project in IntelliJ; step forward with the walkthrough shortcut and ask on any step."**
 
-## Arm the watcher
+## How a question reaches you
 
-There is no watcher script of walkthrough's own any more — the daemon ships
-its own, and it emits the same banners this skill has always read. Arm it
-**immediately** after telling the user, before any other work.
+Nothing to arm: no watcher, no `Monitor`. The daemon wakes this session with a
+**fleet message** each time a question is asked on a step in the IDE, and a message reaches an
+idle session, however long it has been quiet. The design and every case are in
+"Waking a session by message" in `skills/_shared/README.md` under the plugin root (`claude-annotate root`).
 
-```bash
-webcompanion watch --kind walkthrough --sid "<sid>"
-```
+Check the push's `wake` field once. When it has a `note`, do what it says: not in
+the fleet means `fleet join` (no new push needed); a daemon too old means
+`webcompanion install-service`, then push again.
 
-Pass that as the `Monitor` tool's `command` with `persistent: true` and a
-`description` like `"walkthrough-wait sid=<sid>"`.
+A question arrives as a fleet message whose first line is
+`Fleet tell <n> from webcompanion: WEBCOMPANION_EVENT skill=walkthrough sid=<sid> event_id=<id>`.
+Handle the event as below, ack it with `webcompanion ack`, **then
+`fleet ack <n>`**. An end the user makes in the IDE arrives the same way as
+`WEBCOMPANION_FINISHED` or `WEBCOMPANION_CANCELLED`.
 
-Banners: `WEBCOMPANION_EVENT skill=walkthrough sid=<sid> event_id=<id>`,
-`WEBCOMPANION_FINISHED`, `WEBCOMPANION_CANCELLED`, `WEBCOMPANION_DROPPED`.
-Each stdout line wakes you once; the watcher stays alive across many events.
+While this session is not running, the daemon keeps every question and the
+panel says "Claude isn't listening — your question is saved". After a resume,
+run `fleet join` if the session did not rejoin by itself, and handle every
+message not yet acked.
 
-**Never stop the monitor while the walkthrough is open**, however long it has
-been quiet, and never to save turns. The IDE plugin treats a heartbeat older
-than 180s as an ended session (`DaemonSessionClient.REAP_AFTER_MS`) and latches
-it one-way for that sid; re-arming does not undo it — only a new session does.
-Only `webcompanion end` ends a walkthrough.
+Only `webcompanion end` ends a walkthrough: a quiet session is never ended
+by the IDE.
 
-## Handling a watcher event
+## Handling an event
 
-When a task-notification's first stdout line is `WEBCOMPANION_EVENT`,
-`WEBCOMPANION_FINISHED`, `WEBCOMPANION_CANCELLED` or `WEBCOMPANION_DROPPED`,
+When a fleet message from webcompanion names `WEBCOMPANION_EVENT`,
+`WEBCOMPANION_FINISHED` or `WEBCOMPANION_CANCELLED`,
 **`Read` `references/handling-events.md` and follow it** — it covers reading
 the question, composing the answer, appending it to the step's thread, acking,
 and the reply style.
@@ -200,14 +201,12 @@ done with the tour, end the session:
 webcompanion end --sid "<sid>"
 ```
 
-The watcher prints `WEBCOMPANION_FINISHED` and exits on its own.
+Nothing arrives after it: an end Claude makes itself sends no message.
 
 ## Terminal cancellation
 
-If the user says "scrap it" / "stop the walkthrough" while a watcher is armed,
-run `webcompanion end --sid "<sid>" --cancel`; the watcher prints
-`WEBCOMPANION_CANCELLED` and exits on its own — handle it per
-`references/handling-events.md`.
+If the user says "scrap it" / "stop the walkthrough" while it is open,
+run `webcompanion end --sid "<sid>" --cancel`. No message follows.
 
 The user can also end it from IntelliJ: the panel's Dismiss button (⌥X)
 clears the tour from the panel and the editor and cancels the session, so the

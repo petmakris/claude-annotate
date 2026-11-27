@@ -1,13 +1,12 @@
 ---
 name: deck
-description: Use when the user wants to review or change a single-file HTML presentation deck in a browser — "open the deck", "let me comment on these slides", "show me the deck and let me steer it". Renders every slide, lets any element be commented on, and edits the .html in place. When the deck does not exist yet — /deck with a new path, or with a topic instead of a path — it has the `slides` skill create it from the shared deck framework first, then opens it. Not for generic HTML editing. Triggered by /deck <path or topic>. Watcher events are WEBCOMPANION_EVENT / WEBCOMPANION_FINISHED / WEBCOMPANION_CANCELLED.
+description: Use when the user wants to review or change a single-file HTML presentation deck in a browser — "open the deck", "let me comment on these slides", "show me the deck and let me steer it". Renders every slide, lets any element be commented on, and edits the .html in place. When the deck does not exist yet — /deck with a new path, or with a topic instead of a path — it has the `slides` skill create it from the shared deck framework first, then opens it. Not for generic HTML editing. Triggered by /deck <path or topic>. Events arrive as fleet messages from webcompanion: WEBCOMPANION_EVENT / WEBCOMPANION_FINISHED / WEBCOMPANION_CANCELLED.
 argument-hint: "<path to a deck .html, a folder containing one, or a topic for a new deck>"
 allowed-tools:
   - Bash
   - Read
   - Edit
   - Grep
-  - Monitor
 ---
 
 # /deck — comment on a rendered deck
@@ -129,8 +128,9 @@ claude-annotate deck.push \
   --deck "$DECK_PATH" --cwd "$PWD" --title "$DECK_NAME" --watch
 ```
 
-   Read the JSON from the background task's output: `sid`, `slug`, `kind`, `url`. Save `sid` —
-   you need it to arm the event watcher and to ack.
+   Read the JSON from the background task's output: `sid`, `slug`, `kind`, `url`, `wake`. Save
+   `sid` — you need it to ack. When `wake` has a `note`, do what it says (see "How a comment
+   reaches you" below).
 
    **One deck, one URL.** A push without `--slug` attaches to the live session already showing
    this deck file, so running it again (a new conversation, a restarted watcher) keeps the URL
@@ -138,19 +138,33 @@ claude-annotate deck.push \
    there is no need, and before this was fixed it created a new session on every push.
 
 4. Announce the `url`.
-5. Arm the watcher with `Monitor` (`persistent: true`), using the `sid` from the push response:
+5. End the turn. There is no watcher to arm: see "How a comment reaches you".
 
-```bash
-webcompanion watch --kind deck --sid "<sid>"
-```
+## How a comment reaches you
 
-   Pass that as the `Monitor` tool's `command`, with a `description` like `"deck-wait sid=<sid>"`.
+Nothing to arm: no watcher, no `Monitor`. The daemon wakes this session with a
+**fleet message** each time a comment is asked on the deck's page, and a message reaches an
+idle session, however long it has been quiet. The design and every case are in
+"Waking a session by message" in `skills/_shared/README.md` under the plugin root (`claude-annotate root`).
 
-6. End the turn.
+Check the push's `wake` field once. When it has a `note`, do what it says: not in
+the fleet means `fleet join` (no new push needed); a daemon too old means
+`webcompanion install-service`, then push again.
+
+A question arrives as a fleet message whose first line is
+`Fleet tell <n> from webcompanion: WEBCOMPANION_EVENT skill=deck sid=<sid> event_id=<id>`.
+Handle the event as below, ack it with `webcompanion ack`, **then
+`fleet ack <n>`**. An end the user makes in the IDE arrives the same way as
+`WEBCOMPANION_FINISHED` or `WEBCOMPANION_CANCELLED`.
+
+While this session is not running, the daemon keeps every question and the
+panel says "Claude isn't listening — your question is saved". After a resume,
+run `fleet join` if the session did not rejoin by itself, and handle every
+message not yet acked.
 
 ## Handling a comment
 
-When a task-notification's first stdout line is
+When a fleet message from webcompanion names
 `WEBCOMPANION_EVENT skill=deck sid=<sid> event_id=<id>`, **`Read`
 `references/handling-comments.md` and follow it** before touching the file. It
 covers the envelope's three scopes, reading the line range raw, grounding a

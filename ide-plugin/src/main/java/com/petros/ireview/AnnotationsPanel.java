@@ -417,9 +417,13 @@ public final class AnnotationsPanel implements com.intellij.openapi.Disposable {
         } else if (st == ReviewSessionClient.State.ENDED) {
             footer.setText("● session ended — read-only");
             footer.setForeground(GONE_COLOR);
-        } else if (st == ReviewSessionClient.State.PAUSED
-                || st == ReviewSessionClient.State.DISCONNECTED) {
-            footer.setText("● paused — reconnecting…");
+        } else if (st == ReviewSessionClient.State.PAUSED) {
+            footer.setText("● " + DaemonSessionClient.NOT_LISTENING);
+            footer.setToolTipText("Ask as usual: Claude answers when it listens again. "
+                    + "The panel turns live by itself.");
+            footer.setForeground(JBColor.GRAY);
+        } else if (st == ReviewSessionClient.State.DISCONNECTED) {
+            footer.setText("● reconnecting…");
             footer.setForeground(LIVE_COLOR);
         } else {
             footer.setText("● live");

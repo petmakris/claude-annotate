@@ -61,7 +61,7 @@ public final class ReviewStatusBarWidget implements StatusBarWidget, CustomStatu
                 case CONNECTING -> { dot = AMBER; text = "Review: connecting…"; }
                 case ACTIVE -> { dot = GREEN; text = "Review: " + prRefOr("active") + " ✓"; }
                 case DISCONNECTED -> { dot = AMBER; text = "Review: reconnecting…"; }
-                case PAUSED -> { dot = AMBER; text = "Review: " + prRefOr("paused") + " — paused"; }
+                case PAUSED -> { dot = AMBER; text = "Review: " + prRefOr("review") + " — Claude isn't listening"; }
                 case ENDED -> { dot = RED; text = "Review: " + prRefOr("ended") + " — ended (read-only)"; }
                 case OFFLINE -> { dot = GRAY; text = "Review: ○ server offline"; }
                 default -> { dot = GRAY; text = "Review: idle"; }

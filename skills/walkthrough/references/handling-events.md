@@ -1,8 +1,9 @@
-# walkthrough — handling a watcher event
+# walkthrough — handling an event
 
-Read this when a task-notification arrives whose first stdout line is one of
-the `WEBCOMPANION_*` banners for a `walkthrough` session — every question on a
-step lands here.
+Read this when a fleet message from webcompanion arrives whose first line names
+one of the `WEBCOMPANION_*` banners for a `walkthrough` session
+(`Fleet tell <n> from webcompanion: WEBCOMPANION_EVENT ...`) — every question
+on a step lands here.
 
 ## `WEBCOMPANION_EVENT` (a question on a step)
 
@@ -46,7 +47,8 @@ step lands here.
    ```bash
    webcompanion ack --sid "<sid>" --event-id "<event_id>"
    ```
-5. **End your turn. No terminal output.** The watcher stays armed.
+5. **`fleet ack <n>`** (the number in the message's first line), then **end
+   your turn. No terminal output.**
 
 **Never rewrite the steps document in response to an event.** Steps are
 frozen. If the answer really needs a different path through the code, say so
@@ -62,8 +64,7 @@ Terminal: *"Walkthrough for `<question>` cancelled."*
 
 ## `WEBCOMPANION_DROPPED`
 
-An event went unanswered through every re-emit (an earlier wake-up was
-interrupted or compacted away). Tell the user plainly: *"A walkthrough
+Only a watcher prints this: an event went unanswered through every re-emit. Tell the user plainly: *"A walkthrough
 question went unanswered and was dropped — please re-ask it on the step."*
 
 ## Response style guide

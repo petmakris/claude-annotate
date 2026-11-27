@@ -563,7 +563,7 @@ public final class WalkthroughPanel implements Disposable {
         WalkthroughSessionClient.State s = service.client().state();
         return switch (s) {
             case ENDED -> "session ended — read only";
-            case PAUSED -> "Claude is away — asks disabled";
+            case PAUSED -> DaemonSessionClient.NOT_LISTENING;
             case DISCONNECTED -> "reconnecting…";
             // The header strip already shows "N / M" — no need to repeat it here.
             default -> "";
@@ -618,9 +618,9 @@ public final class WalkthroughPanel implements Disposable {
     }
 
     private void finish(boolean enableControls) {
+        // PAUSED still asks: the daemon keeps the question until Claude listens.
         boolean live = enableControls
-            && service.client().state() != WalkthroughSessionClient.State.ENDED
-            && service.client().state() != WalkthroughSessionClient.State.PAUSED;
+            && service.client().state() != WalkthroughSessionClient.State.ENDED;
         ask.setEnabled(live);
         back.setEnabled(enableControls);
         dismiss.setEnabled(enableControls);

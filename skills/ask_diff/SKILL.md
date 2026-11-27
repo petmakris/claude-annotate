@@ -1,13 +1,12 @@
 ---
 name: ask-diff
-description: Per-line threaded Q&A on a GitHub PR diff, surfaced in IntelliJ via the IDE plugin. User clicks any diff line, asks a question, Claude wakes via WEBCOMPANION_EVENT, appends a reply to the line's thread, and the IDE refreshes that thread. Triggered by /ask-diff <PR> (called /interactive-review before 2026-09-02). Watcher events are WEBCOMPANION_EVENT / WEBCOMPANION_FINISHED / WEBCOMPANION_CANCELLED.
+description: Per-line threaded Q&A on a GitHub PR diff, surfaced in IntelliJ via the IDE plugin. User clicks any diff line, asks a question, Claude is woken by a fleet message (WEBCOMPANION_EVENT), appends a reply to the line's thread, and the IDE refreshes that thread. Triggered by /ask-diff <PR> (called /interactive-review before 2026-09-02). Events arrive as fleet messages from webcompanion: WEBCOMPANION_EVENT / WEBCOMPANION_FINISHED / WEBCOMPANION_CANCELLED.
 allowed-tools:
   - Bash
   - Read
   - Write
   - Grep
   - Glob
-  - Monitor
 ---
 
 # /ask-diff — per-line threaded Q&A on a PR diff
@@ -19,7 +18,7 @@ allowed-tools:
 > `/interactive-review` until 2026-09-02; it was renamed because three separate
 > tools were called "review" and only one of them judges a PR. The daemon
 > `kind` identifier stays the literal string `interactive-review` everywhere
-> below — in `push.py`, `sync.py`, the `webcompanion watch --kind` argument
+> below — in `push.py`, `sync.py`, the daemon's wake messages
 > and the IDE plugin's `KIND` constant — never `ask-diff` or `ask_diff`,
 > because the separately-installed webcompanion daemon and the shipped
 > plugin `.zip` both key off that string. Changing it would need all three
@@ -119,38 +118,39 @@ One sentence in terminal:
 
 **"Review session ready for `<title>` — open the project in IntelliJ; the plugin shows per-line annotations on the diff. Click any line to ask a question and my answer appears as a threaded reply inline."**
 
-## Arm the watcher
+## How a question reaches you
 
-Arm it **immediately** after telling the user, before any other work — before
-seeding threads, before reading code, before answering anything.
+Nothing to arm: no watcher, no `Monitor`. The daemon wakes this session with a
+**fleet message** each time a question is asked on a diff line in the IDE, and a message reaches an
+idle session, however long it has been quiet. The design and every case are in
+"Waking a session by message" in `skills/_shared/README.md` under the plugin root (`claude-annotate root`).
 
-```bash
-webcompanion watch --kind interactive-review --sid "<sid>"
-```
+Check the push's `wake` field once. When it has a `note`, do what it says: not in
+the fleet means `fleet join` (no new push needed); a daemon too old means
+`webcompanion install-service`, then push again.
 
-Pass that as the `Monitor` tool's `command` with `persistent: true` and a
-`description` like `"ask-diff-wait sid=<sid>"`.
+A question arrives as a fleet message whose first line is
+`Fleet tell <n> from webcompanion: WEBCOMPANION_EVENT skill=interactive-review sid=<sid> event_id=<id>`.
+Handle the event as below, ack it with `webcompanion ack`, **then
+`fleet ack <n>`**. An end the user makes in the IDE arrives the same way as
+`WEBCOMPANION_FINISHED` or `WEBCOMPANION_CANCELLED`.
 
-Banners: `WEBCOMPANION_EVENT skill=interactive-review sid=<sid> event_id=<id>`,
-`WEBCOMPANION_FINISHED`, `WEBCOMPANION_CANCELLED`, `WEBCOMPANION_DROPPED`.
-Each stdout line wakes you once; the watcher stays alive across many events
-until the session terminates.
+While this session is not running, the daemon keeps every question and the
+panel says "Claude isn't listening — your question is saved". After a resume,
+run `fleet join` if the session did not rejoin by itself, and handle every
+message not yet acked.
 
-**Never stop the monitor while the review is open**, however long it has been
-quiet, and never to save turns. The IDE plugin treats a heartbeat older than
-180s as an ended session (`DaemonSessionClient.REAP_AFTER_MS`) and latches it
-one-way for that sid: the user sees "session ended — read-only", and re-arming
-does not undo it — only a new session does. Only `webcompanion end` ends a
-review.
+Only `webcompanion end` ends a review: a quiet session is never ended by
+the IDE.
 
-## Handling a watcher event — read the matching reference
+## Handling an event — read the matching reference
 
-Every wake-up after this point is a watcher banner. **`Read` the named file
+Every wake-up after this point is a fleet message from webcompanion. **`Read` the named file
 before doing the work**; do not load one the situation does not need.
 
 | Situation | Read & follow |
 |-----------|---------------|
-| A task-notification's first stdout line is `WEBCOMPANION_EVENT`, `WEBCOMPANION_FINISHED`, `WEBCOMPANION_CANCELLED` or `WEBCOMPANION_DROPPED` | `references/handling-events.md` — payload parsing, composing the answer, appending it and acking |
+| A fleet message from webcompanion names `WEBCOMPANION_EVENT`, `WEBCOMPANION_FINISHED` or `WEBCOMPANION_CANCELLED` | `references/handling-events.md` — payload parsing, composing the answer, appending it and acking |
 | The event's `text` decodes to `"event_kind": "anchor_orphaned"` — `sync.py` could not keep a thread live, no user asked anything | `references/orphaned-anchors.md` — what to tell the user for each `reason` |
 | You are writing a reply into a thread | `references/response-style.md` — length, links, the title, and the markdown the IDE renders specially |
 
@@ -181,19 +181,18 @@ When the user indicates the review is complete — "looks good," "approved,"
 webcompanion end --sid "<sid>"
 ```
 
-The watcher prints `WEBCOMPANION_FINISHED` and exits on its own.
+Nothing arrives after it: an end Claude makes itself sends no message.
 
 ## Terminal cancellation
 
-If the user says "scrap it" / "stop the review" / equivalent while a watcher is armed:
+If the user says "scrap it" / "stop the review" / equivalent while the review is open:
 
 ```bash
 webcompanion end --sid "<sid>" --cancel
 ```
 
-The watcher prints `WEBCOMPANION_CANCELLED` on its next tick and exits on its
-own — handle it per `references/handling-events.md`, then continue with whatever the user actually
-wanted.
+No message follows, since Claude ended it. Tell the user it is cancelled, then
+continue with whatever the user actually wanted.
 
 ## Edge cases
 

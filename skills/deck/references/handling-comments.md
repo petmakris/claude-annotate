@@ -1,15 +1,15 @@
 # deck — handling a comment
 
-Read this when a task-notification's first stdout line is
-`WEBCOMPANION_EVENT skill=deck …`: a user commented on an element, a slide or
+Read this when a fleet message from webcompanion names
+`WEBCOMPANION_EVENT skill=deck …` (`Fleet tell <n> from webcompanion: ...`): a user commented on an element, a slide or
 the whole deck. It covers reading the envelope, grounding the wording,
 holding the edit to the house style, re-pushing and acking.
 
 ## Reading the comment
 
-You wake on a `WEBCOMPANION_EVENT skill=deck sid=<sid> event_id=<id>` banner, followed by
-`---payload---`, the event JSON, and `---end---`. That inline copy may be truncated by the
-notification, so read the event with `webcompanion event --sid <sid> --event-id <event_id>` and never
+You wake on a fleet message naming `WEBCOMPANION_EVENT skill=deck sid=<sid> event_id=<id>`.
+It carries no payload (a watcher, when one runs, prints a copy that may be truncated), so read
+the event with `webcompanion event --sid <sid> --event-id <event_id>` and never
 from the notification body. The daemon stores exactly
 `{"anchor": "...", "text": "...", "images": [...]}`, and `text` is not the comment itself but a
 **JSON-encoded envelope** you must `json.loads()` before reading anything out of it. Its
@@ -139,8 +139,10 @@ green ✓ when clean. Hovering a badge lists the offending elements. Those check
 user's browser, so you do not see them — an edit that made a block longer must still be
 called out, and if the user reports a badge, fix what it names.
 
-Finally ack the event and end the turn with no terminal output:
+Finally ack the event, then the message (`<n>` from its first line), and end the turn with no
+terminal output:
 
 ```bash
 webcompanion ack --sid "<sid>" --event-id "<event_id>"
+fleet ack <n>
 ```

@@ -11,8 +11,8 @@ REQUIRED_SECTIONS = [
     "## Trace the code",
     "## Write the document",
     "## Generation contract",
-    "## Arm the watcher",
-    "## Handling a watcher event",
+    "## How a question reaches you",
+    "## Handling an event",
     "references/handling-events.md",
     "references/field-mode.md",
 ]

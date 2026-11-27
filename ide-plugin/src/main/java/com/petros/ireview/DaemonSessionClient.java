@@ -70,11 +70,14 @@ public abstract class DaemonSessionClient<
 
     /**
      * Session lifecycle, in precedence order ENDED > PAUSED > DISCONNECTED >
-     * ACTIVE. PAUSED = watcher silent past {@link #STALE_AFTER} but
-     * recoverable (the user may re-arm). ENDED = the daemon reported the
-     * session terminal (cancelled/finished), or the watcher heartbeat has gone
-     * stale past the hard {@link #REAP_AFTER_MS} cutoff; it is a one-way latch
-     * — the panel freezes read-only and never un-freezes for the same sid.
+     * ACTIVE. PAUSED = Claude is not listening right now (no fresh watcher
+     * heartbeat, and the daemon's wake-by-message listener says the Claude
+     * session is not running): a soft state, shown as {@link #NOT_LISTENING}.
+     * Questions are still sent and the daemon queues them; the panel returns
+     * to ACTIVE as soon as a watcher beats or the Claude session runs again.
+     * ENDED = the daemon reported the session terminal (finished, cancelled,
+     * or superseded, which the daemon marks finished); only that freezes the
+     * panel read-only, one-way for the sid. No heartbeat age ever ends it.
      * OFFLINE means discovery cannot reach the daemon at all (as opposed to
      * DORMANT: daemon reachable, no session for this cwd).
      */
@@ -109,14 +112,9 @@ public abstract class DaemonSessionClient<
      */
     private static final Duration STALE_AFTER = Duration.ofSeconds(15);
 
-    /**
-     * Hard end-of-life cutoff on watcher-heartbeat age, distinct from the soft
-     * {@link #STALE_AFTER}-driven PAUSED state. The daemon's /poll has no
-     * {@code ended} verdict of its own — only the {@code finished}/{@code
-     * cancelled} marker booleans and {@code watcher_seen_at} — so this client
-     * applies the 180s cutoff itself, on every poll.
-     */
-    private static final long REAP_AFTER_MS = Duration.ofSeconds(180).toMillis();
+    /** What the panel says while PAUSED. A question asked now is kept by the
+     *  daemon and answered when Claude listens again. */
+    public static final String NOT_LISTENING = "Claude isn't listening — your question is saved";
 
     /**
      * How long an anchor may stay pending without an answer before the spinner
@@ -182,9 +180,9 @@ public abstract class DaemonSessionClient<
     private final Map<String, Long> pending = new ConcurrentHashMap<>();
 
     private volatile boolean closed = false;
-    /** One-way latch: once the daemon says the attached session is ENDED, the
-     *  panel freezes read-only. Reset only when a different session attaches
-     *  or the client fully detaches. A returning heartbeat never un-freezes it. */
+    /** One-way latch: once the daemon says the attached session is finished or
+     *  cancelled, the panel freezes read-only. Reset only when a different
+     *  session attaches or the client fully detaches. */
     private volatile boolean endedLatched = false;
     private volatile State state = State.DORMANT;
     private volatile S current = null;
@@ -404,15 +402,16 @@ public abstract class DaemonSessionClient<
     /**
      * POSTs {@code {anchor, text}} to /s/&lt;sid&gt;/api/submit and marks the
      * anchor pending until its answer lands, the submit fails, or
-     * {@link #PENDING_TIMEOUT} passes. Refused while the session is PAUSED or
-     * ENDED: nothing would ever answer it.
+     * {@link #PENDING_TIMEOUT} passes. Refused only while the session is
+     * ENDED. While PAUSED it is sent all the same: the daemon queues it, and
+     * wakes the Claude session by message or hands it to the next watcher.
      */
     protected final CompletableFuture<Void> submit(String anchor, String text) {
         S s = current;
         if (s == null) return CompletableFuture.failedFuture(new IllegalStateException("no session"));
-        if (state == State.PAUSED || state == State.ENDED) {
+        if (state == State.ENDED) {
             return CompletableFuture.failedFuture(new IllegalStateException(
-                "Claude session is gone — re-run " + resumeCommand() + " to resume"));
+                "This session has ended — run " + resumeCommand() + " for a new one"));
         }
         long token = submitSeq.incrementAndGet();
         markPending(anchor, token);
@@ -591,11 +590,13 @@ public abstract class DaemonSessionClient<
     /**
      * Reachability of the daemon does NOT mean the Claude session is alive —
      * the daemon outlives every session. The only liveness signal is the
-     * watcher heartbeat, which the session rewrites every ~1s. {@code
-     * finished}/{@code cancelled} are authoritative marker-file facts (one poll
-     * is proof, latch immediately); a heartbeat older than {@link
-     * #REAP_AFTER_MS} is this client's own hard cutoff; one older than {@link
-     * #STALE_AFTER} pauses the session until the watcher returns.
+     * watcher heartbeat (rewritten every ~1s while a watcher runs) and, for a
+     * session woken by message, the daemon's {@code listener} ({@code alive}:
+     * the Claude session is running and a message reaches it). {@code
+     * finished}/{@code cancelled} are authoritative marker-file facts (one
+     * poll is proof, latch immediately). Nothing else ends a session: a
+     * listener that is not alive and a heartbeat older than {@link
+     * #STALE_AFTER} only pause it, until either comes back.
      */
     private void pollLiveness(String sid) {
         if (endedLatched) return; // frozen; nothing un-freezes the same sid
@@ -611,15 +612,11 @@ public abstract class DaemonSessionClient<
         } catch (Exception e) {
             return; // transient — leave state as-is, the next poll retries
         }
-        long seenAt = num(poll, "watcher_seen_at", 0);
-        long ageMs = seenAt > 0 ? System.currentTimeMillis() - seenAt * 1000 : -1;
-        boolean ended = flag(poll, "finished") || flag(poll, "cancelled")
-            || (seenAt > 0 && ageMs > REAP_AFTER_MS);
-        if (ended) { latchEnded(); return; }
+        if (flag(poll, "finished") || flag(poll, "cancelled")) { latchEnded(); return; }
         onPolled(sid, poll);
-        // No heartbeat written yet (session just armed) → not dead, leave alone.
-        if (seenAt <= 0) return;
-        if (ageMs > STALE_AFTER.toMillis()) {
+        Boolean listening = listening(poll, System.currentTimeMillis());
+        if (listening == null) return; // nothing known yet → not dead, leave alone
+        if (!listening) {
             if (state != State.PAUSED) {
                 // Clear pending so spinners recover — no answer is coming
                 // until the watcher returns.
@@ -627,9 +624,32 @@ public abstract class DaemonSessionClient<
                 setState(State.PAUSED);
             }
         } else if (state == State.PAUSED) {
-            // The watcher came back (the user re-armed the session).
+            // Claude listens again: a watcher beat, or the session runs again.
             setState(State.ACTIVE);
         }
+    }
+
+    /**
+     * Whether Claude would get a question now: TRUE when a watcher beat within
+     * {@link #STALE_AFTER} or the daemon's listener says the Claude session is
+     * alive; FALSE when neither is so and at least one of them says no; null
+     * when there is nothing to go on yet (no heartbeat ever, listener not read
+     * yet), which leaves the state alone.
+     */
+    static Boolean listening(JsonObject poll, long nowMs) {
+        long seenAt = num(poll, "watcher_seen_at", 0);
+        Boolean watcherFresh = seenAt > 0 ? nowMs - seenAt * 1000 <= STALE_AFTER.toMillis() : null;
+        Boolean listenerAlive = null;
+        JsonElement l = poll.get("listener");
+        if (l != null && l.isJsonObject()) {
+            JsonElement a = l.getAsJsonObject().get("alive");
+            if (a != null && a.isJsonPrimitive() && a.getAsJsonPrimitive().isBoolean()) {
+                listenerAlive = a.getAsBoolean();
+            }
+        }
+        if (Boolean.TRUE.equals(watcherFresh) || Boolean.TRUE.equals(listenerAlive)) return true;
+        if (watcherFresh == null && listenerAlive == null) return null;
+        return false;
     }
 
     /** Freeze the current session read-only. One-way: only attach() clears it. */

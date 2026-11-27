@@ -1,13 +1,12 @@
 ---
 name: dataflow
-description: Map one feature's path through a codebase — controller, DTO, mapper, service, domain, repository, table — as an interactive diagram in the browser, where every node opens in the editor and any node can be questioned. Use when someone asks how a feature is wired end to end, what classes are involved in X, where a value goes between the API and the database, or says they cannot follow the flow. Also draws the field-level view — which field of one object becomes which field of another, as a standalone HTML file — when someone asks where a field comes from, how a DTO or payload is built, or what a mapper drops or renames. Triggered by /dataflow <class or feature> or /dataflow fields <source> → <destination>. Watcher events are WEBCOMPANION_EVENT / WEBCOMPANION_FINISHED / WEBCOMPANION_CANCELLED.
+description: Map one feature's path through a codebase — controller, DTO, mapper, service, domain, repository, table — as an interactive diagram in the browser, where every node opens in the editor and any node can be questioned. Use when someone asks how a feature is wired end to end, what classes are involved in X, where a value goes between the API and the database, or says they cannot follow the flow. Also draws the field-level view — which field of one object becomes which field of another, as a standalone HTML file — when someone asks where a field comes from, how a DTO or payload is built, or what a mapper drops or renames. Triggered by /dataflow <class or feature> or /dataflow fields <source> → <destination>. Events arrive as fleet messages from webcompanion: WEBCOMPANION_EVENT / WEBCOMPANION_FINISHED / WEBCOMPANION_CANCELLED.
 allowed-tools:
   - Bash
   - Read
   - Write
   - Grep
   - Glob
-  - Monitor
 ---
 
 # /dataflow — one feature's path through the code, drawn
@@ -136,8 +135,8 @@ repository-relative `file` to build the absolute path it POSTs to
 `/api/open`. The daemon's `/api/open` does no path resolution itself: it only
 accepts an absolute path already inside a session's workspace, so get `--cwd`
 wrong and every "open in editor" click 403s. The output is JSON: `sid`,
-`slug`, `kind`, `url`, `token`. Save `sid` and `url` — you need `sid` to arm
-the watcher and to answer questions, and `url` is what you tell the user.
+`slug`, `kind`, `url`, `token`, `wake`. Save `sid` and `url` — you need `sid` to read
+and ack events, and `url` is what you tell the user.
 
 **Second `/dataflow` in one conversation:** it does not close the first; old sessions pile up as browser tabs. **Regenerating mid-session** (a node is missing): rewrite the draft keeping every existing node id, re-run the validation, then push again with `--slug "<slug>"` added. [`references/pushing-and-regenerating.md`](references/pushing-and-regenerating.md) says why.
 
@@ -181,26 +180,32 @@ One sentence in terminal, then stop:
 
 **"Dataflow ready — `<N>` nodes across `<M>` slices for `<seed>`: `<url>`. Click any node to expand it, ⌘ to open it in your editor, ✻ to ask me about it."**
 
-## Arm the watcher
+## How a question reaches you
 
-There is no watcher script of dataflow's own any more — the daemon ships its
-own, and it emits the same banners this skill has always read. Arm it
-**immediately** after telling the user, before any other work.
+Nothing to arm: no watcher, no `Monitor`. The daemon wakes this session with a
+**fleet message** each time a question is asked on a node of the page, and a message reaches an
+idle session, however long it has been quiet. The design and every case are in
+"Waking a session by message" in `skills/_shared/README.md` under the plugin root (`claude-annotate root`).
 
-```bash
-webcompanion watch --kind dataflow --sid "<sid>"
-```
+Check the push's `wake` field once. When it has a `note`, do what it says: not in
+the fleet means `fleet join` (no new push needed); a daemon too old means
+`webcompanion install-service`, then push again.
 
-Pass that as the `Monitor` tool's `command` with `persistent: true` and a
-`description` like `"dataflow-wait sid=<sid>"`.
+A question arrives as a fleet message whose first line is
+`Fleet tell <n> from webcompanion: WEBCOMPANION_EVENT skill=dataflow sid=<sid> event_id=<id>`.
+Handle the event as below, ack it with `webcompanion ack`, **then
+`fleet ack <n>`**. An end the user makes in the IDE arrives the same way as
+`WEBCOMPANION_FINISHED` or `WEBCOMPANION_CANCELLED`.
 
-Banners: `WEBCOMPANION_EVENT skill=dataflow sid=<sid> event_id=<id>`,
-`WEBCOMPANION_FINISHED`, `WEBCOMPANION_CANCELLED`, `WEBCOMPANION_DROPPED`.
+While this session is not running, the daemon keeps every question and the
+panel says "Claude isn't listening — your question is saved". After a resume,
+run `fleet join` if the session did not rejoin by itself, and handle every
+message not yet acked.
 
-## Handling a watcher event
+## Handling an event
 
-When a task-notification's first stdout line is `WEBCOMPANION_EVENT`,
-`WEBCOMPANION_FINISHED`, `WEBCOMPANION_CANCELLED` or `WEBCOMPANION_DROPPED`,
+When a fleet message from webcompanion names `WEBCOMPANION_EVENT`,
+`WEBCOMPANION_FINISHED` or `WEBCOMPANION_CANCELLED`,
 **`Read` `references/handling-events.md` and follow it** — it covers reading
 the question, composing the answer, appending it to the node's thread, acking,
 and the reply style.
@@ -215,10 +220,9 @@ close it — end the session:
 webcompanion end --sid "<sid>"
 ```
 
-The watcher prints `WEBCOMPANION_FINISHED` and exits on its own.
+Nothing arrives after it: an end Claude makes itself sends no message.
 
 ## Terminal cancellation
 
-If the user says "scrap it" / "close the dataflow" while a watcher is armed,
-run `webcompanion end --sid "<sid>" --cancel`; the watcher prints
-`WEBCOMPANION_CANCELLED` and exits on its own.
+If the user says "scrap it" / "close the dataflow" while the page is open,
+run `webcompanion end --sid "<sid>" --cancel`. No message follows.

@@ -1430,6 +1430,48 @@ def cmd_deliver():
     print(json.dumps({"id": mid, "state": state, "session": m["session_id"], "delivery": delivery_of(con, mid)}))
 
 
+SERVICE_SENDER_RE = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
+
+
+def session_member(con, session_id):
+    """The newest member row of a session id, left or not (a left one waits for the session to join again)."""
+    return con.execute("SELECT * FROM members WHERE session_id=? ORDER BY joined_at DESC", (session_id,)).fetchone()
+
+
+def cmd_deliver_session():
+    """Internal: `fleet _deliver-session`, for a local service that is not a session (webcompanion wakes the
+    session that opened a page when a question is queued for it). JSON on stdin: {session, sender, body}. The
+    message is a tell to that session's member, delivered and confirmed like any tell; a member that is not
+    running now gets it when it joins again (`redeliver`). Prints {id, state, delivery, name} as JSON."""
+    p = json.loads(sys.stdin.read())
+    sender = str(p.get("sender") or "")
+    if not SERVICE_SENDER_RE.match(sender) or sender == PETROS:
+        raise FleetError("fleet: %r is not a service name (lowercase, 2 to 32 characters)." % sender)
+    body = p.get("body")
+    if not isinstance(body, str) or not body.strip():
+        raise FleetError("fleet: the message has no body.")
+    con = db()
+    m = session_member(con, str(p.get("session") or ""))
+    if not m:
+        raise FleetError("fleet: session %r never joined the fleet on %s, so it cannot be woken; run `fleet join` "
+                         "in it." % (p.get("session"), self_machine()))
+    thread = new_thread()
+    mid = insert_message(con, thread, "tell", {"name": sender, "session_id": None}, m, body)
+    state = deliver(con, mid, m, wake_text("tell", mid, sender, body, thread), "fleet:%s" % sender, sender)
+    print(json.dumps({"id": mid, "state": state, "delivery": delivery_of(con, mid), "name": m["name"]}))
+
+
+def cmd_session_state(session_id):
+    """Internal: `fleet _session-state SID` -> {member, name, alive}: whether a tell to this session would reach a
+    running session now. `alive` is read from `claude agents --json` each time, never stored."""
+    con = db()
+    m = session_member(con, session_id)
+    if not m:
+        print(json.dumps({"member": False, "name": None, "alive": False}))
+        return
+    print(json.dumps({"member": True, "name": m["name"], "alive": session_running(m)}))
+
+
 def parse_ref(ref):
     """'12' or '12@machine' -> (12, machine or None)."""
     if str(ref).startswith("lungo:"):
@@ -4192,7 +4234,9 @@ def main(argv=None):
     s.add_argument("what", nargs="?", choices=["url", "token"],
                    help="`url`: print the sign-in link; `token`: the address and token as JSON, for a local server")
     sub.add_parser("_threads").add_argument("limit", type=int, nargs="?", default=30)
-    sub.add_parser("_deliver"); sub.add_parser("_answer"); sub.add_parser("_thread").add_argument("thread")
+    sub.add_parser("_deliver"); sub.add_parser("_deliver-session"); sub.add_parser("_answer");
+    sub.add_parser("_session-state").add_argument("session_id")
+    sub.add_parser("_thread").add_argument("thread")
     sub.add_parser("statusline", help="one JSON line for a status line").add_argument("session_id")
     sub.add_parser("hook-join"); sub.add_parser("hook-leave"); sub.add_parser("hook-name")
     s = sub.add_parser("_rename-here"); s.add_argument("sid"); s.add_argument("name", nargs="+")
@@ -4265,6 +4309,8 @@ def main(argv=None):
             else: ui(a.port, a.host)
         elif a.cmd == "_threads": cmd_threads(a.limit)
         elif a.cmd == "_deliver": cmd_deliver()
+        elif a.cmd == "_deliver-session": cmd_deliver_session()
+        elif a.cmd == "_session-state": cmd_session_state(a.session_id)
         elif a.cmd == "_answer": cmd_answer()
         elif a.cmd == "_thread": cmd_thread(a.thread)
         elif a.cmd == "hook-join": return hook_join()

@@ -1,8 +1,9 @@
-# dataflow — handling a watcher event
+# dataflow — handling an event
 
-Read this when a task-notification arrives whose first stdout line is one of
-the `WEBCOMPANION_*` banners for a `dataflow` session — every question on a
-node lands here.
+Read this when a fleet message from webcompanion arrives whose first line names
+one of the `WEBCOMPANION_*` banners for a `dataflow` session
+(`Fleet tell <n> from webcompanion: WEBCOMPANION_EVENT ...`) — every question
+on a node lands here.
 
 ## `WEBCOMPANION_EVENT` (a question on a node)
 
@@ -45,7 +46,8 @@ node lands here.
    ```bash
    webcompanion ack --sid "<sid>" --event-id "<event_id>"
    ```
-5. **End your turn. No terminal output.** The watcher stays armed.
+5. **`fleet ack <n>`** (the number in the message's first line), then **end
+   your turn. No terminal output.**
 
 **When the answer needs a node that is not on the diagram**, you may
 regenerate the document — see "Regenerating the diagram mid-session" under
@@ -57,7 +59,7 @@ Terminal: *"Dataflow for `<seed>` closed."* / *"…cancelled."*
 
 ## `WEBCOMPANION_DROPPED`
 
-An event went unanswered through every re-emit. Say so plainly: *"A dataflow
+Only a watcher prints this: an event went unanswered through every re-emit. Say so plainly: *"A dataflow
 question went unanswered and was dropped — please re-ask it on the node."*
 
 ## Response style guide

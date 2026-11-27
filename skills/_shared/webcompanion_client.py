@@ -160,7 +160,35 @@ def _rows(answer) -> list:
 
 def finish_session(sid: str, kind: str | None = None) -> None:
     """End a session. Pass `kind` when it is known, like every other session route here."""
-    request("POST", f"/s/{urllib.parse.quote(sid, safe='')}/api/finish" + (_kind_qs(kind) if kind else ""))
+    # `by: claude`: an end Claude makes itself does not wake Claude (the daemon's `_wake_on_end`).
+    request("POST", f"/s/{urllib.parse.quote(sid, safe='')}/api/finish" + (_kind_qs(kind) if kind else ""),
+            {"by": "claude"})
+
+
+def wake_to(sid: str, *, kind: str, claude_session_id: str | None = None) -> dict:
+    """Name the Claude session the daemon wakes by a fleet message when a question is queued for `sid`
+    (webcompanion's `wake.py`; the whole design is "Waking a session by message" in `skills/_shared/README.md`): this session's own id (`CLAUDE_CODE_SESSION_ID`) unless one is given.
+    Sent on create and on attach alike, so a session reopened from another conversation wakes that one.
+
+    Returns the daemon's `listener` ({via, member, alive, checked_at}) and adds `note` when this session
+    cannot be woken yet: not in the fleet (run `fleet join`), or no session id at all."""
+    claude = claude_session_id or os.environ.get("CLAUDE_CODE_SESSION_ID") or ""
+    if not claude:
+        return {"member": None, "alive": None,
+                "note": "no CLAUDE_CODE_SESSION_ID here, so nothing can wake this session"}
+    try:
+        res = request("POST", f"/s/{urllib.parse.quote(sid, safe='')}/api/wake-to" + _kind_qs(kind),
+                      {"claude_session_id": claude})
+    except DaemonHTTPError as e:
+        if e.status != 404:
+            raise
+        return {"member": None, "alive": None,
+                "note": "the daemon is older than wake by message: run `webcompanion install-service`"}
+    listener = dict((res or {}).get("listener") or {})
+    if listener.get("member") is False:
+        listener["note"] = ("this session is not in the fleet, so the daemon cannot wake it: run `fleet join` "
+                            "(and `fleet name <name>` first if it asks); no new push is needed")
+    return listener
 
 
 def create_or_attach(kind: str, cwd: str, *, title: str | None = None,

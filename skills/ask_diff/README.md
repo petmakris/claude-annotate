@@ -42,7 +42,7 @@ Each question is one wake-up; Claude answers that question and goes back to slee
 
 ## Files
 
-- `SKILL.md` — The router: invocation, hook installation, session creation, arming the watcher, edge cases.
+- `SKILL.md` — The router: invocation, hook installation, session creation, how a question reaches the session, edge cases.
 - `references/` — Loaded on demand: `handling-events.md` (every watcher wake-up), `orphaned-anchors.md` (threads `sync.py` could not keep live), `response-style.md` (how a reply is written).
 - `push.py` — Fetches the PR diff/metadata and pushes it to the daemon as a new or attached session.
 - `sync.py` — Live-sync engine invoked by the installed git hooks; also usable as `python3 -m skills.ask_diff.sync` directly.

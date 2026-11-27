@@ -141,6 +141,9 @@ def push(deck_path: Path, cwd: str, slug: str | None = None,
     if res is None:
         res = wc.create_or_attach(KIND, cwd, title=title, slug=slug)
     sid = res["sid"]
+    # A comment on a slide wakes this Claude session by a fleet message; on an
+    # attach too, so a deck reopened from another conversation wakes that one.
+    res["wake"] = wc.wake_to(sid, kind=KIND)
 
     copy_dir = _copy_dir_for(sid)
     _refresh_copy_dir(copy_dir, deck)

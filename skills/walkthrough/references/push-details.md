@@ -9,7 +9,7 @@ that field already reached the daemon safely through the `Write` tool inside
 `.steps.draft.json` — passing `--title "<question>"` here would re-embed the
 same free-form text into a shell argument and reopen the quoting hazard the
 `Write`-tool routing exists to avoid. The output is JSON: `sid`, `slug`,
-`kind`, `url`, `title`. Save `sid` — you need it to arm the watcher and to
+`kind`, `url`, `title`, `wake`. Save `sid` — you need it to read, ack and
 answer questions.
 
 **One active tour per project, atomically.** `push.py` passes `supersede=True`

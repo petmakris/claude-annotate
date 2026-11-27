@@ -96,11 +96,11 @@ class ReviewSessionClientTest {
     }
 
     @Test
-    void pausedWatcherHeartbeatBlocksSubmission() throws Exception {
+    void aPausedSessionStillSendsTheQuestionForTheDaemonToKeep() throws Exception {
         try (FakeReviewServer server = new FakeReviewServer()) {
             server.sessionsJson = sessionsRow("abc");
-            // Watcher last beat 100s ago, but server does not (yet) report
-            // ended → recoverable PAUSED tier.
+            // Watcher last beat 100s ago, but server does not report ended →
+            // the soft PAUSED state: Claude isn't listening, the question is saved.
             server.watcherSeenAt = System.currentTimeMillis() / 1000 - 100;
             CountDownLatch paused = new CountDownLatch(1);
             ReviewSessionClient client = new ReviewSessionClient(
@@ -115,14 +115,91 @@ class ReviewSessionClientTest {
             client.start();
             assertTrue(paused.await(2, TimeUnit.SECONDS), "should detect paused watcher");
 
-            // A submission while paused must fail fast and never reach the server.
-            var f = client.postComment("foo:R:1", "hi", "");
-            assertThrows(Exception.class, () -> f.get(1, TimeUnit.SECONDS));
-            assertEquals(0, server.submitCount.get(),
-                "paused session must not POST submits");
-            assertFalse(client.isPending("foo:R:1"), "must not leave a pending spinner");
+            // A question asked while paused reaches the daemon, which queues it.
+            client.postComment("foo:R:1", "hi", "").get(2, TimeUnit.SECONDS);
+            assertEquals(1, server.submitCount.get(), "a paused session still POSTs the question");
             client.stop();
         }
+    }
+
+    @Test
+    void aHeartbeatOlderThanThreeMinutesPausesAndNeverEnds() throws Exception {
+        // The old one-way latch: a heartbeat past 180s froze the panel
+        // read-only for good, and a watcher coming back could not undo it.
+        try (FakeReviewServer server = new FakeReviewServer()) {
+            server.sessionsJson = sessionsRow("abc");
+            server.watcherSeenAt = System.currentTimeMillis() / 1000 - 3600;
+            ReviewSessionClient client = new ReviewSessionClient(
+                server.baseUrl(), "/proj/acme-shop", Duration.ofMillis(80));
+            client.start();
+            try {
+                awaitState(client, ReviewSessionClient.State.PAUSED);
+                Thread.sleep(300); // several poll cycles
+                assertEquals(ReviewSessionClient.State.PAUSED, client.state(), "stale is never ENDED");
+                // A watcher beats again: the panel is live again by itself.
+                server.watcherSeenAt = System.currentTimeMillis() / 1000;
+                awaitState(client, ReviewSessionClient.State.ACTIVE);
+            } finally {
+                client.stop();
+            }
+        }
+    }
+
+    @Test
+    void aSessionWokenByMessageIsLiveWhileItsClaudeSessionRuns() throws Exception {
+        // No watcher at all, ever stale: the daemon's listener decides.
+        try (FakeReviewServer server = new FakeReviewServer()) {
+            server.sessionsJson = sessionsRow("abc");
+            server.watcherSeenAt = System.currentTimeMillis() / 1000 - 3600;
+            server.listenerAlive = true;
+            ReviewSessionClient client = new ReviewSessionClient(
+                server.baseUrl(), "/proj/acme-shop", Duration.ofMillis(80));
+            client.start();
+            try {
+                awaitState(client, ReviewSessionClient.State.ACTIVE);
+                Thread.sleep(300);
+                assertEquals(ReviewSessionClient.State.ACTIVE, client.state());
+                server.listenerAlive = false; // the Claude session stopped
+                awaitState(client, ReviewSessionClient.State.PAUSED);
+                server.listenerAlive = true; // resumed
+                awaitState(client, ReviewSessionClient.State.ACTIVE);
+            } finally {
+                client.stop();
+            }
+        }
+    }
+
+    @Test
+    void listeningReadsTheHeartbeatAndTheListenerTogether() {
+        long now = 1_000_000_000L;
+        long s = now / 1000;
+        assertNull(DaemonSessionClient.listening(poll(0, null), now), "nothing known yet");
+        assertEquals(Boolean.TRUE, DaemonSessionClient.listening(poll(s - 2, null), now));
+        assertEquals(Boolean.FALSE, DaemonSessionClient.listening(poll(s - 100, null), now));
+        assertEquals(Boolean.TRUE, DaemonSessionClient.listening(poll(s - 100, true), now));
+        assertEquals(Boolean.TRUE, DaemonSessionClient.listening(poll(0, true), now));
+        assertEquals(Boolean.FALSE, DaemonSessionClient.listening(poll(0, false), now));
+        assertEquals(Boolean.TRUE, DaemonSessionClient.listening(poll(s - 2, false), now),
+            "a running watcher is listening whatever the listener says");
+    }
+
+    private static com.google.gson.JsonObject poll(long seenAt, Boolean alive) {
+        com.google.gson.JsonObject o = new com.google.gson.JsonObject();
+        o.addProperty("watcher_seen_at", seenAt);
+        if (alive != null) {
+            com.google.gson.JsonObject l = new com.google.gson.JsonObject();
+            l.addProperty("via", "message");
+            l.addProperty("alive", alive);
+            o.add("listener", l);
+        }
+        return o;
+    }
+
+    private static void awaitState(ReviewSessionClient client, ReviewSessionClient.State want)
+            throws InterruptedException {
+        long end = System.currentTimeMillis() + 3000;
+        while (client.state() != want && System.currentTimeMillis() < end) Thread.sleep(20);
+        assertEquals(want, client.state());
     }
 
     @Test

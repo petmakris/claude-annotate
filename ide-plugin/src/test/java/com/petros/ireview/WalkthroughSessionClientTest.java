@@ -656,9 +656,10 @@ class WalkthroughSessionClientTest {
     }
 
     @Test void aStreamConnectDoesNotReviveAPausedSession() throws Exception {
-        // The watcher heartbeat is 100s old: the session is PAUSED, and asks
-        // must be refused because nothing will answer them. Opening the SSE
-        // stream says nothing about the watcher, yet it set ACTIVE regardless.
+        // The watcher heartbeat is 100s old: the session is PAUSED (Claude
+        // isn't listening; an ask is still sent and the daemon keeps it).
+        // Opening the SSE stream says nothing about the watcher, yet it set
+        // ACTIVE regardless.
         // The slow thread seed makes the stream open after the poll has
         // already paused the session; the long poll interval means no later
         // poll corrects it.
@@ -675,8 +676,9 @@ class WalkthroughSessionClientTest {
                 await(() -> server.streamOpens.get() == 1);
                 Thread.sleep(300);
                 assertEquals(WalkthroughSessionClient.State.PAUSED, client.state());
-                assertThrows(Exception.class, () -> client.postAsk(1, "anyone?").join());
-                assertEquals(0, server.submitCount.get());
+                client.postAsk(1, "anyone?").join();
+                assertEquals(1, server.submitCount.get());
+                assertEquals(WalkthroughSessionClient.State.PAUSED, client.state());
             } finally {
                 client.stop();
             }

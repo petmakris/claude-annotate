@@ -66,6 +66,9 @@ public final class FakeReviewServer implements AutoCloseable {
     public volatile String metaJson = null;
     /** Epoch seconds of the last watcher heartbeat returned by /poll; null → none yet (0). */
     public volatile Long watcherSeenAt = null;
+    /** The daemon's wake-by-message listener: null leaves it out of /poll,
+     *  else its {@code alive}. */
+    public volatile Boolean listenerAlive = null;
     /** The {@code __steps__} item's version, in the {@code /items} route and in
      *  {@code /poll}'s {@code items} map; null → 0. */
     public volatile Long stepsGeneratedAt = null;
@@ -226,7 +229,10 @@ public final class FakeReviewServer implements AutoCloseable {
             // items, threads}. It carries no ended verdict of its own.
             boolean finished = ended && "finished".equals(endedReason);
             boolean cancelled = ended && "cancelled".equals(endedReason);
-            byte[] body = ("{\"threads\":{},\"watcher_seen_at\":" + seen
+            Boolean alive = listenerAlive;
+            String listener = alive == null ? "null"
+                : "{\"via\":\"message\",\"member\":true,\"alive\":" + alive + "}";
+            byte[] body = ("{\"threads\":{},\"listener\":" + listener + ",\"watcher_seen_at\":" + seen
                 + ",\"finished\":" + finished + ",\"cancelled\":" + cancelled
                 + ",\"items\":{\"__steps__\":" + stepsVersion + "}}").getBytes(StandardCharsets.UTF_8);
             ex.getResponseHeaders().add("Content-Type", "application/json");

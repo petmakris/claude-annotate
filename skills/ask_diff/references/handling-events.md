@@ -1,8 +1,10 @@
-# ask-diff — handling a watcher event
+# ask-diff — handling an event
 
-Read this when a task-notification arrives whose first stdout line is one of
-the `WEBCOMPANION_*` banners for an `interactive-review` session — every
-wake-up after the session is open lands here.
+Read this when a fleet message from webcompanion arrives whose first line names
+one of the `WEBCOMPANION_*` banners for an `interactive-review` session
+(`Fleet tell <n> from webcompanion: WEBCOMPANION_EVENT ...`) — every wake-up
+after the session is open lands here. A watcher, when one runs, prints the same
+banners.
 
 ## `WEBCOMPANION_EVENT`
 
@@ -105,29 +107,28 @@ only after the append succeeds — a crashed append means the event is
 re-emitted and retried safely (see "Re-apply safety" below); acking first
 would lose the question.
 
-**End your turn. No terminal output.** The watcher stays armed.
+Then `fleet ack <n>` (the number in the message's first line). **End your
+turn. No terminal output.**
 
 ## `WEBCOMPANION_FINISHED`
 
-The session ended — normally because Claude called `webcompanion end` (see SKILL.md's
-"Ending the review"); `ask_diff` has no IDE-side Done button. Ack in terminal: *"Review session for
+The user ended the session in the IDE (End review). An end Claude makes with
+`webcompanion end` sends no message. Ack in terminal: *"Review session for
 `<title>` closed."*
 
 ## `WEBCOMPANION_CANCELLED`
 
-The user cancelled (IDE, terminal `scrap it`, or superseded by a newer
-review from this Claude session). Ack in terminal: *"Review session for
+The user cancelled the session in the IDE. Ack in terminal: *"Review session for
 `<title>` cancelled."*
 
 ## `WEBCOMPANION_DROPPED`
 
-An event went unanswered through every re-emit (an earlier wake-up was
-interrupted or compacted away). Tell the user plainly: *"A review question
+Only a watcher prints this: an event went unanswered through every re-emit. Tell the user plainly: *"A review question
 went unanswered and was dropped — please re-ask it on the line."*
 
 ## Re-apply safety
 
-`append_thread`'s daemon-side handler dedups by `source_event_id`. If the
-watcher restarts and re-emits an event you've already handled, the second
+`append_thread`'s daemon-side handler dedups by `source_event_id`. If a
+message is sent again (after a resume) for an event you've already handled, the second
 call is a no-op. Process the event normally each time — storage handles
 dedup.

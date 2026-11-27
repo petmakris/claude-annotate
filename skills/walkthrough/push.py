@@ -48,6 +48,8 @@ def push(steps_path: Path, cwd: str, slug: str | None = None,
     # conversation).
     res = wc.create_or_attach(KIND, cwd, title=title, slug=slug, supersede=True)
     sid = res["sid"]
+    # A question asked on a step wakes this Claude session by a fleet message.
+    res["wake"] = wc.wake_to(sid, kind=KIND)
 
     wc.put_items(sid, {STEPS_ANCHOR: doc}, kind=KIND, replace=True)
 
